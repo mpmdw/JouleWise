@@ -468,12 +468,15 @@ def instrument_evidence(
     bindings: Mapping[str, Any],
     validation_id: str,
     artifact_sha256: Mapping[str, str],
+    protocol_pulse_count: int = PULSE_COUNT,
 ) -> dict[str, Any]:
     """Assemble ``instrument_evidence.json`` content, failing closed.
 
     ``bindings`` must supply every :data:`BINDING_FIELDS` entry non-empty;
     production bundles reference the result by sha256, and any bound-field
-    change invalidates the calibration.
+    change invalidates the calibration. The v1 protocol binds ALL
+    ``protocol_pulse_count`` pulses detected: a run with a fitted bound but
+    fewer than the protocol count (or any undetected pulse) is ``invalid``.
     """
 
     missing = [
@@ -481,16 +484,29 @@ def instrument_evidence(
         for name in BINDING_FIELDS
         if bindings.get(name) in (None, "")
     ]
-    valid = detection.b_fiducial_s is not None and not missing
+    pulse_count = len(detection.fits)
+    count_ok = pulse_count == protocol_pulse_count
+    valid = (
+        detection.b_fiducial_s is not None
+        and not missing
+        and detection.all_pulses_detected
+        and count_ok
+    )
     reasons = list(detection.reasons)
     if missing:
         reasons.append("binding_fields_missing:" + ",".join(sorted(missing)))
+    if not detection.all_pulses_detected:
+        reasons.append("not_all_pulses_detected")
+    if not count_ok:
+        reasons.append(
+            f"pulse_count_below_protocol:{pulse_count}!={protocol_pulse_count}"
+        )
     return {
         "schema_version": "joulewise.instrument_evidence.v1",
         "protocol_id": PROTOCOL_ID,
         "validation_id": validation_id,
         "status": "valid" if valid else "invalid",
-        "reasons": sorted(reasons),
+        "reasons": sorted(set(reasons)),
         "anchor_method_version": CLOCK_METHOD_V2,
         "b_fiducial_s": detection.b_fiducial_s,
         "residual_median_s_diagnostic_only": detection.residual_median_s,

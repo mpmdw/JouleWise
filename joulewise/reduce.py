@@ -41,6 +41,8 @@ windows, token events) live in :class:`joulewise.bundle_read.BundleReader`
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import statistics
 from dataclasses import dataclass
@@ -56,6 +58,7 @@ from joulewise.bundle_read import (
 )
 from joulewise.uncertainty_evidence import (
     CLOCK_ANCHOR_UNRESOLVED,
+    CLOCK_METHOD_V2,
     derive_powermetrics_anchor_v2,
     stamp_from_mapping,
 )
@@ -951,6 +954,97 @@ def _unresolved_anchor_context(detail: str) -> _AnchorContext:
     )
 
 
+def _verify_instrument_calibration(
+    reader: BundleReader,
+    metadata: dict[str, Any],
+    calibration: dict[str, Any],
+) -> tuple[float | None, str | None]:
+    """Resolve ``B_fiducial`` only from a hash-verified calibration artifact.
+
+    D-078: ``B_effective = max(B_bundle, B_fiducial from the MATCHING
+    calibration artifact, referenced by sha256)``. ``b_fiducial_s`` is NEVER
+    trusted from the self-asserted metadata scalar alone: the referenced
+    ``instrument_evidence.json`` is loaded from the bundle, its sha256
+    verified, and every bound field matched against the bundle environment.
+    Returns ``(fiducial_bound_s, None)`` on success or ``(None, detail)`` for
+    the ``clock_anchor_unresolved`` barrier (never a silent fallback to
+    ``B_bundle`` alone)."""
+
+    b_fiducial = calibration.get("b_fiducial_s")
+    artifact_sha256 = calibration.get("artifact_sha256")
+    artifact_path = calibration.get("artifact_path")
+    if (
+        isinstance(b_fiducial, bool)
+        or not isinstance(b_fiducial, int | float)
+        or not math.isfinite(float(b_fiducial))
+        or float(b_fiducial) < 0.0
+        or not isinstance(artifact_sha256, str)
+        or len(artifact_sha256) != 64
+        or any(char not in "0123456789abcdef" for char in artifact_sha256)
+        or not isinstance(artifact_path, str)
+        or not artifact_path
+    ):
+        return None, "instrument_calibration_invalid"
+    # Bundle-relative reference only: the pure reducer never reads outside the
+    # bundle tree (no absolute path, no parent traversal).
+    if artifact_path.startswith("/") or ".." in Path(artifact_path).parts:
+        return None, "instrument_calibration_artifact_path_unsafe"
+    artifact_file = reader.path / artifact_path
+    if not artifact_file.is_file():
+        return None, "instrument_calibration_artifact_missing"
+    try:
+        raw = artifact_file.read_bytes()
+    except OSError:
+        return None, "instrument_calibration_artifact_unreadable"
+    if hashlib.sha256(raw).hexdigest() != artifact_sha256:
+        return None, "instrument_calibration_artifact_hash_mismatch"
+    try:
+        evidence = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return None, "instrument_calibration_artifact_unparseable"
+    if not isinstance(evidence, dict):
+        return None, "instrument_calibration_artifact_unparseable"
+
+    from joulewise.powermetrics_fiducial import BINDING_FIELDS, PROTOCOL_ID
+
+    if evidence.get("schema_version") != "joulewise.instrument_evidence.v1":
+        return None, "instrument_calibration_schema_mismatch"
+    if evidence.get("protocol_id") != PROTOCOL_ID:
+        return None, "instrument_calibration_protocol_mismatch"
+    if evidence.get("status") != "valid":
+        return None, "instrument_calibration_artifact_invalid"
+    if evidence.get("anchor_method_version") != CLOCK_METHOD_V2:
+        return None, "instrument_calibration_anchor_method_mismatch"
+    artifact_bound = evidence.get("b_fiducial_s")
+    if (
+        isinstance(artifact_bound, bool)
+        or not isinstance(artifact_bound, int | float)
+        or not math.isfinite(float(artifact_bound))
+        or float(artifact_bound) < 0.0
+        or abs(float(artifact_bound) - float(b_fiducial)) > 1e-12
+    ):
+        return None, "instrument_calibration_bound_mismatch"
+    bindings = evidence.get("bindings")
+    if not isinstance(bindings, dict) or any(
+        bindings.get(name) in (None, "") for name in BINDING_FIELDS
+    ):
+        return None, "instrument_calibration_bindings_incomplete"
+    # Any bound-field change invalidates the calibration: match the artifact's
+    # bindings against the bundle environment for every field the bundle
+    # supplies.
+    device = metadata.get("device")
+    device = device if isinstance(device, dict) else {}
+    expected = {
+        "hardware_model": device.get("hw_model"),
+        "os_build": device.get("kern_osversion"),
+        "anchor_method_version": CLOCK_METHOD_V2,
+    }
+    for name, value in expected.items():
+        if value is not None and bindings.get(name) != value:
+            return None, "instrument_calibration_binding_mismatch"
+    return float(b_fiducial), None
+
+
 def _derive_anchor_context(
     reader: BundleReader, metadata: dict[str, Any]
 ) -> _AnchorContext:
@@ -1021,18 +1115,11 @@ def _derive_anchor_context(
     if calibration is not None:
         if not isinstance(calibration, dict):
             return _unresolved_anchor_context("instrument_calibration_invalid")
-        b_fiducial = calibration.get("b_fiducial_s")
-        artifact_sha256 = calibration.get("artifact_sha256")
-        if (
-            isinstance(b_fiducial, bool)
-            or not isinstance(b_fiducial, int | float)
-            or not math.isfinite(float(b_fiducial))
-            or float(b_fiducial) < 0.0
-            or not isinstance(artifact_sha256, str)
-            or len(artifact_sha256) != 64
-        ):
-            return _unresolved_anchor_context("instrument_calibration_invalid")
-        fiducial_bound_s = float(b_fiducial)
+        fiducial_bound_s, detail = _verify_instrument_calibration(
+            reader, metadata, calibration
+        )
+        if detail is not None:
+            return _unresolved_anchor_context(detail)
     effective_bound_s = max(bundle_bound_s, fiducial_bound_s or 0.0)
     cumulative_s = 0.0
     curve: list[TracePoint] = []
@@ -1402,14 +1489,26 @@ def _apply_anchor_claim_gates(
                     envelopes.get(pointer), request_joint_bound_j
                 ),
             )
-    phases = prechecks.get("phase")
-    if isinstance(phases, dict):
-        for phase, gate in phases.items():
+    # Interval-support traces have exactly-zero interpolation terms; point
+    # traces conservatively reuse the request-level joint bound. Suite
+    # per-item/block/level gross energies are claim-bearing (they feed
+    # floor/MDE extraction), so they carry the same envelope gate as phase
+    # windows: a missing envelope stamps ``anchor_energy_envelope_unrecorded``
+    # (fail closed) and an over-quarter deviation stamps
+    # ``anchor_energy_envelope_exceeds_quarter_metric``.
+    for group_key, pointer_prefix in (
+        ("phase", "/phase_energy_j/"),
+        ("item", "/suite_item_energy_j/"),
+        ("block", "/suite_block_energy_j/"),
+        ("level", "/suite_level_energy_j/"),
+    ):
+        group = prechecks.get(group_key)
+        if not isinstance(group, dict):
+            continue
+        for member, gate in group.items():
             if not isinstance(gate, dict):
                 continue
-            pointer = "/phase_energy_j/" + _json_pointer_token(str(phase))
-            # Interval-support traces have exactly-zero interpolation terms;
-            # point traces conservatively reuse the request-level joint bound.
+            pointer = pointer_prefix + _json_pointer_token(str(member))
             _merge_gate_reasons(
                 gate,
                 _anchor_envelope_gate_reasons(
@@ -1427,13 +1526,19 @@ def _energy_anchor_envelopes_v05(
     total_tokens: int | None,
     output_token_count: int | None,
     bound_s: float | None,
+    item_windows: list[tuple[str, Window]] | None = None,
+    block_windows: dict[str, list[Window]] | None = None,
+    level_windows: dict[str, list[Window]] | None = None,
 ) -> dict[str, Any] | None:
     """JSON-Pointer metric paths -> continuous common-shift envelopes.
 
     One shared shift drives every metric (anchor error is fully correlated);
     idle subtraction translates the gross envelope by ``idle_mean * duration``
-    and fixed token denominators scale it. Disjoint phase intervals are summed
-    as a function of the shared shift, never independently maximized."""
+    and fixed token denominators scale it. Disjoint phase/item/block/level
+    intervals are each summed as a function of the shared shift, never
+    independently maximized. Suite per-item/block/level gross energies
+    (D-078) carry an envelope so their claim gates fail closed under
+    anchor error just like the request-level metrics."""
 
     envelopes: dict[str, Any] = {}
     gross = _anchor_shift_envelope([(curve, [window])], bound_s)
@@ -1457,6 +1562,22 @@ def _energy_anchor_envelopes_v05(
         env = _anchor_shift_envelope([(curve, intervals)], bound_s)
         if env is not None:
             envelopes["/phase_energy_j/" + _json_pointer_token(phase)] = env
+    for key, item_window in item_windows or []:
+        env = _anchor_shift_envelope([(curve, [item_window])], bound_s)
+        if env is not None:
+            envelopes["/suite_item_energy_j/" + _json_pointer_token(key)] = env
+    for block_id, intervals in sorted((block_windows or {}).items()):
+        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        if env is not None:
+            envelopes[
+                "/suite_block_energy_j/" + _json_pointer_token(block_id)
+            ] = env
+    for level_key, intervals in sorted((level_windows or {}).items()):
+        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        if env is not None:
+            envelopes[
+                "/suite_level_energy_j/" + _json_pointer_token(level_key)
+            ] = env
     return envelopes or None
 
 
@@ -2306,6 +2427,17 @@ def _reduce(
                 total_tokens=total_tokens,
                 output_token_count=output_token_count,
                 bound_s=anchor_ctx.bound_s,
+                item_windows=[
+                    (f"{item.item_index}:{item.item_id}", item.window)
+                    for item in reader.item_windows()
+                ],
+                block_windows=reader.block_windows(),
+                level_windows={
+                    f"{block_id}/{level_id}": intervals
+                    for (block_id, level_id), intervals in (
+                        reader.level_windows().items()
+                    )
+                },
             )
             if anchor_ctx.telemetry_is_powermetrics:
                 clock_bound_override_s = anchor_ctx.bound_s

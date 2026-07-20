@@ -10,6 +10,7 @@ controller invokes it before ``finalize()``.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import math
@@ -1493,6 +1494,96 @@ class D078AnchorEnvelopeTests(unittest.TestCase):
         self.assertEqual(scaled["upper_j"], 6.0)
         self.assertEqual(scaled["max_abs_delta_j"], 1.0)
 
+    def test_suite_item_block_level_envelopes_are_emitted(self) -> None:
+        from joulewise.bundle_read import Window
+        from joulewise.reduce import _energy_anchor_envelopes_v05
+
+        # A wide interval-support curve so every suite window stays covered
+        # under +-bound_s.
+        curve = self.interval_curve(
+            [(-0.5 + 0.1 * i, -0.4 + 0.1 * i, 10.0) for i in range(20)]
+        )
+        envelopes = _energy_anchor_envelopes_v05(
+            curve=curve,
+            window=Window(0.0, 1.0),
+            phase_windows={},
+            idle_baseline=None,
+            total_tokens=None,
+            output_token_count=None,
+            bound_s=0.05,
+            item_windows=[("0:itemA", Window(0.0, 0.5))],
+            block_windows={"blk1": [Window(0.0, 0.5)]},
+            level_windows={"blk1/lvl1": [Window(0.0, 0.5)]},
+        )
+        self.assertIn("/suite_item_energy_j/0:itemA", envelopes)
+        self.assertIn("/suite_block_energy_j/blk1", envelopes)
+        # The level key's "/" is JSON-Pointer escaped to "~1".
+        self.assertIn("/suite_level_energy_j/blk1~1lvl1", envelopes)
+
+    def test_resolved_anchor_gates_suite_item_block_level_energy(self) -> None:
+        # Regression: before the fix, the RESOLVED branch of
+        # _apply_anchor_claim_gates never touched item/block/level gates, so a
+        # granular gross-energy claim could stay eligible with no anchor-shift
+        # envelope recorded. Every suite gate must now be enveloped or barred.
+        from joulewise.reduce import _AnchorContext, _apply_anchor_claim_gates
+
+        anchor_ctx = _AnchorContext(
+            telemetry_is_powermetrics=True,
+            unresolved=False,
+            bound_s=0.05,
+            curve=None,
+            anchor_epoch_s=0.0,
+            bundle_bound_s=0.05,
+            fiducial_bound_s=None,
+            detail=None,
+        )
+        prechecks = {
+            "gross_request": {"eligible": True, "reasons": []},
+            "idle_subtracted_request": {"eligible": True, "reasons": []},
+            "item": {"0:itemA": {"eligible": True, "reasons": []}},
+            "block": {"blk1": {"eligible": True, "reasons": []}},
+            "level": {"blk1/lvl1": {"eligible": True, "reasons": []}},
+        }
+        envelopes = {
+            "/gross_energy_j": {
+                "point_j": 10.0,
+                "lower_j": 9.9,
+                "upper_j": 10.1,
+            },
+            # item envelope stays within 25% -> eligible
+            "/suite_item_energy_j/0:itemA": {
+                "point_j": 4.0,
+                "lower_j": 3.9,
+                "upper_j": 4.1,
+            },
+            # block envelope deviates > 25% of its own point energy
+            "/suite_block_energy_j/blk1": {
+                "point_j": 4.0,
+                "lower_j": 1.0,
+                "upper_j": 7.0,
+            },
+            # no level pointer at all -> unrecorded fail-closed
+        }
+        _apply_anchor_claim_gates(
+            prechecks,
+            anchor_ctx,
+            envelopes,
+            gross_pointer="/gross_energy_j",
+            request_joint_bound_j=0.0,
+        )
+        self.assertTrue(prechecks["item"]["0:itemA"]["eligible"])
+        self.assertEqual(prechecks["item"]["0:itemA"]["reasons"], [])
+        self.assertFalse(prechecks["block"]["blk1"]["eligible"])
+        self.assertIn(
+            "anchor_energy_envelope_exceeds_quarter_metric",
+            prechecks["block"]["blk1"]["reasons"],
+        )
+        self.assertFalse(prechecks["level"]["blk1/lvl1"]["eligible"])
+        self.assertIn(
+            "anchor_energy_envelope_unrecorded",
+            prechecks["level"]["blk1/lvl1"]["reasons"],
+        )
+
 
 class D078R01RegressionTests(unittest.TestCase):
     """Sealed-evidence regressions for the D-078 anchor correction."""
@@ -1668,19 +1759,65 @@ class D078R01RegressionTests(unittest.TestCase):
                 summary.window_evidence_precheck["gross_request"]["reasons"],
             )
 
-    def test_051_fiducial_bound_widens_effective_bound(self) -> None:
+    @staticmethod
+    def _valid_instrument_evidence(**overrides) -> dict:
+        evidence = {
+            "schema_version": "joulewise.instrument_evidence.v1",
+            "protocol_id": "powermetrics_pulse_fiducial_v1",
+            "status": "valid",
+            "anchor_method_version": (
+                "powermetrics_native_second_censored_intersection_v1"
+            ),
+            "b_fiducial_s": 0.08,
+            "bindings": {
+                # hardware_model/os_build MUST match the r01 device metadata.
+                "hardware_model": "Mac15,9",
+                "os_build": "25F84",
+                "powermetrics_sha256": "ab" * 32,
+                "sampling_interval_ms": 100,
+                "anchor_method_version": (
+                    "powermetrics_native_second_censored_intersection_v1"
+                ),
+                "mlx_version": "0.31.2",
+                "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
+                "power_policy": "ac_high_power",
+            },
+        }
+        bindings_override = overrides.pop("bindings", None)
+        evidence.update(overrides)
+        if bindings_override:
+            evidence["bindings"] = {**evidence["bindings"], **bindings_override}
+        return evidence
+
+    def _bundle_with_calibration(
+        self, tmp, *, evidence, b_fiducial_s=0.08, mutate_bytes=None
+    ) -> Path:
         import shutil
 
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(self.FIXTURE, bundle)
+        raw = (
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        (bundle / "instrument_evidence.json").write_bytes(raw)
+        artifact_sha256 = hashlib.sha256(raw).hexdigest()
+        if mutate_bytes is not None:
+            (bundle / "instrument_evidence.json").write_bytes(mutate_bytes)
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["instrument_calibration"] = {
+            "artifact_path": "instrument_evidence.json",
+            "artifact_sha256": artifact_sha256,
+            "b_fiducial_s": b_fiducial_s,
+        }
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        return bundle
+
+    def test_051_fiducial_bound_widens_effective_bound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            bundle = Path(tmp) / "bundle"
-            shutil.copytree(self.FIXTURE, bundle)
-            metadata = json.loads((bundle / "metadata.json").read_text())
-            metadata["instrument_calibration"] = {
-                "b_fiducial_s": 0.08,
-                "artifact_sha256": "ab" * 32,
-            }
-            (bundle / "metadata.json").write_text(
-                json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+            bundle = self._bundle_with_calibration(
+                tmp, evidence=self._valid_instrument_evidence()
             )
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
             gross = summary.energy_anchor_shift_envelopes["/gross_energy_j"]
@@ -1690,6 +1827,83 @@ class D078R01RegressionTests(unittest.TestCase):
                     "clock_anchor_bound_s"
                 ],
                 0.08,
+            )
+
+    def test_051_self_asserted_fiducial_without_artifact_fails_closed(self) -> None:
+        # Regression for the exact defect: a bundle supplying a b_fiducial_s and
+        # a 64-hex artifact_sha256 but NO real artifact must NOT suppress the
+        # fiducial floor - it fails closed instead of trusting the scalar.
+        import shutil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(self.FIXTURE, bundle)
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            metadata["instrument_calibration"] = {
+                "artifact_path": "instrument_evidence.json",
+                "b_fiducial_s": 0.0,
+                "artifact_sha256": "ab" * 32,
+            }
+            (bundle / "metadata.json").write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "clock_anchor_unresolved",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
+    def test_051_calibration_artifact_hash_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp,
+                evidence=self._valid_instrument_evidence(),
+                mutate_bytes=b'{"schema_version": "tampered"}\n',
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "clock_anchor_unresolved",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
+    def test_051_calibration_bound_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # Metadata scalar disagrees with the artifact's own b_fiducial_s.
+            bundle = self._bundle_with_calibration(
+                tmp,
+                evidence=self._valid_instrument_evidence(b_fiducial_s=0.08),
+                b_fiducial_s=0.20,
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "clock_anchor_unresolved",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
+    def test_051_calibration_binding_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp,
+                evidence=self._valid_instrument_evidence(
+                    bindings={"hardware_model": "Mac16,1"}
+                ),
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "clock_anchor_unresolved",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
+    def test_051_invalid_status_calibration_artifact_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp,
+                evidence=self._valid_instrument_evidence(status="invalid"),
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "clock_anchor_unresolved",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
             )
 
     def test_051_golden_summary(self) -> None:

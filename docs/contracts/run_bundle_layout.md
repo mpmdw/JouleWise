@@ -504,17 +504,30 @@ replays stay byte-frozen):
   `[-B_effective, +B_effective]`, evaluated at every trace-edge/window-edge
   breakpoint (endpoint-only evaluation is unsound; interior extrema exist).
   Idle subtraction translates the gross envelope; fixed token denominators
-  scale it; disjoint phase intervals sum under the shared shift.
+  scale it; disjoint phase intervals sum under the shared shift. Suite
+  per-item/block/level gross energies carry their own envelopes under the
+  same shared shift at pointers `/suite_item_energy_j/<index:id>`,
+  `/suite_block_energy_j/<block_id>`, and
+  `/suite_level_energy_j/<block_id/level_id>` (they feed floor/MDE
+  extraction, so their claim gates must fail closed under anchor error too).
 - `energy_bound_terms_j.E_clock_anchor_shift_bound_j`: the request-level
   scalar (the gross envelope's max absolute deviation).
 - window-evidence precheck reasons `clock_anchor_unresolved`,
   `anchor_energy_envelope_unrecorded`, and
   `anchor_energy_envelope_exceeds_quarter_metric`
   (`(max(P-lower, upper-P) + I_joint) / |P| <= 0.25`, zero-point/nonzero
-  bound failing closed). `B_effective = max(B_bundle, B_fiducial)`; the
-  optional `metadata.instrument_calibration` block references a
-  `docs/contracts/powermetrics_fiducial.md` artifact by
-  `artifact_sha256` and supplies `b_fiducial_s` (an invalid block is
+  bound failing closed). These reasons apply to the request-level gates AND
+  to every suite item/block/level gate: a resolved anchor no longer exempts
+  granular energy from the envelope requirement (a missing envelope stamps
+  `anchor_energy_envelope_unrecorded`). `B_effective = max(B_bundle,
+  B_fiducial)`; the optional `metadata.instrument_calibration` block
+  references a `docs/contracts/powermetrics_fiducial.md` artifact by
+  `{artifact_path, artifact_sha256, b_fiducial_s}`. The reducer loads the
+  bundle-relative `artifact_path`, verifies its sha256, and fails closed
+  (`clock_anchor_unresolved`) unless the artifact is a `valid`
+  `joulewise.instrument_evidence.v1` whose `b_fiducial_s`,
+  `anchor_method_version`, and environment bindings all match; `B_fiducial`
+  is never trusted from the metadata scalar alone (an invalid block is
   `clock_anchor_unresolved`).
 - `energy_uncertainty_status = "bounded"` only when every required bound
   term (drift, both interpolation terms, anchor shift) is present.

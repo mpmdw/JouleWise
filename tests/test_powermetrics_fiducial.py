@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from dataclasses import replace
 
 from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
@@ -285,11 +286,53 @@ class EvidenceTests(unittest.TestCase):
             bindings=self.bindings(),
             validation_id="v-test",
             artifact_sha256={"raw/powermetrics.plist": "cd" * 32},
+            protocol_pulse_count=3,
         )
         self.assertEqual(payload["status"], "valid")
         self.assertEqual(payload["b_fiducial_s"], detection.b_fiducial_s)
         self.assertEqual(set(payload["bindings"]), set(BINDING_FIELDS))
         self.assertEqual(payload["pulse_count"], 3)
+
+    def test_fitted_bound_below_protocol_pulse_count_is_invalid(self) -> None:
+        # Regression: a 3-pulse run yields a fitted bound and all-detected, but
+        # the default protocol binds all 40 pulses. It must NOT be valid.
+        detection = self.make_detection()
+        self.assertTrue(detection.all_pulses_detected)
+        self.assertIsNotNone(detection.b_fiducial_s)
+        payload = instrument_evidence(
+            detection,
+            bindings=self.bindings(),
+            validation_id="v-test",
+            artifact_sha256={},
+        )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertTrue(
+            any(
+                reason.startswith("pulse_count_below_protocol:")
+                for reason in payload["reasons"]
+            ),
+            payload["reasons"],
+        )
+
+    def test_undetected_pulse_forces_invalid_even_when_bound_present(self) -> None:
+        # A detection with a fitted bound but all_pulses_detected False (e.g.
+        # count matches but a pulse failed) must fail closed.
+        detection = self.make_detection()
+        forced = replace(
+            detection,
+            all_pulses_detected=False,
+            b_fiducial_s=0.01,
+            reasons=("pulse_detection_incomplete",),
+        )
+        payload = instrument_evidence(
+            forced,
+            bindings=self.bindings(),
+            validation_id="v-test",
+            artifact_sha256={},
+            protocol_pulse_count=len(forced.fits),
+        )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertIn("not_all_pulses_detected", payload["reasons"])
 
     def test_missing_binding_field_fails_closed(self) -> None:
         detection = self.make_detection()

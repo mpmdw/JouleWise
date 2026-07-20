@@ -188,11 +188,17 @@ def main() -> int:
         time.sleep(1.5)
     time.sleep(BASELINE_S)
 
+    # Van der Corput spacing is schedule-relative (offsets start at 0 for the
+    # first pulse), so the loop cursor MUST be measured from the pulse-loop
+    # start, not from sampling-start (which precedes it by the baseline +
+    # warmup + baseline preamble). Measuring elapsed against sampling_started
+    # made every gap negative and collapsed the pulses back-to-back.
+    pulse_loop_mono0 = time.monotonic()
     pulses: list[CommandedPulse] = []
     for on_offset_s, off_offset_s in pulse_schedule(args.pulse_count):
-        gap_s = on_offset_s - (pulses[-1].off_s - sampling_started.epoch_s if pulses else 0.0)
         if pulses:
-            time.sleep(max(0.0, gap_s))
+            elapsed_s = time.monotonic() - pulse_loop_mono0
+            time.sleep(max(0.0, on_offset_s - elapsed_s))
         on_stamp = clock.stamp()
         emit(
             "pulse_command_on",
@@ -235,11 +241,16 @@ def main() -> int:
         },
         records=anchor_records_from_powermetrics(native_records),
     )
-    if point_anchor_s is None:
+    anchor_resolved = point_anchor_s is not None
+    if not anchor_resolved:
         print(
             "clock_anchor_unresolved: calibration capture cannot be anchored",
             file=sys.stderr,
         )
+        # Fail closed: an unanchored capture can never be a valid calibration.
+        # Detection still runs against the 1 s-quantized native stamps so the
+        # diagnostic artifact records why, but the evidence is forced invalid
+        # and the script exits nonzero below.
         anchored = native_records
     else:
         anchored = parse_powermetrics_records(
@@ -290,6 +301,12 @@ def main() -> int:
         },
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
+    evidence_payload["clock_anchor_resolved"] = anchor_resolved
+    if not anchor_resolved:
+        evidence_payload["status"] = "invalid"
+        evidence_payload["reasons"] = sorted(
+            set(evidence_payload.get("reasons", [])) | {"clock_anchor_unresolved"}
+        )
     (out_dir / "instrument_evidence.json").write_text(
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

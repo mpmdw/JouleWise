@@ -65,10 +65,31 @@ runs/instrument_validation/<validation_id>/
 (`powermetrics_native_second_censored_intersection_v1`), `mlx_version`,
 `pulse_protocol_id`, `power_policy`. A missing/empty binding field makes the
 artifact `invalid` (fail closed). Production bundles reference the artifact
-via `metadata.instrument_calibration = {artifact_sha256, b_fiducial_s, ...}`;
+via
+`metadata.instrument_calibration = {artifact_path, artifact_sha256, b_fiducial_s}`;
 any bound-field change invalidates the calibration and a new run is
-required. An invalid or malformed reference is `clock_anchor_unresolved` at
-reduce time - never a silent fallback to `B_bundle` alone.
+required. `artifact_path` is the bundle-relative location of the copied
+`instrument_evidence.json` (absolute paths and parent traversal are
+rejected). At reduce time the reducer loads that file, verifies its sha256
+equals `artifact_sha256`, and fails closed (`clock_anchor_unresolved`) unless
+ALL of: `schema_version` is `joulewise.instrument_evidence.v1`; `protocol_id`
+is `powermetrics_pulse_fiducial_v1`; `status` is `valid`;
+`anchor_method_version` equals the reducer's own
+`powermetrics_native_second_censored_intersection_v1`; the artifact's
+`b_fiducial_s` matches the metadata scalar; every binding field is present
+and non-empty; and the bundle-supplied environment fields (`hardware_model`
+from `device.hw_model`, `os_build` from `device.kern_osversion`) match the
+artifact bindings. `B_fiducial` is NEVER trusted from the self-asserted
+metadata scalar alone. An invalid or malformed reference is
+`clock_anchor_unresolved` at reduce time - never a silent fallback to
+`B_bundle` alone.
+
+The v1 protocol's `status = valid` predicate additionally requires ALL
+`protocol_pulse_count` pulses detected (default 40): a run with a fitted
+bound but fewer than the protocol count, or any undetected pulse, is
+`invalid`. A capture whose own clock anchor is unresolved is forced `invalid`
+(the harness exits nonzero) - detection may still run against the native
+1 s-quantized stamps for diagnostics, but never licenses a bound.
 
 ## Execution discipline
 
