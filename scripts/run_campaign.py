@@ -74,6 +74,14 @@ from joulewise.environment import (  # noqa: E402
     empty_environment_snapshot,
     evaluate_environment_policy,
 )
+from joulewise.idle_admission import (  # noqa: E402
+    IdleAdmissionExtension,
+    evaluate_adapter_wattage_continuity,
+    evaluate_cpu_idle_admission,
+    evaluate_neg8_bracket,
+    extract_adapter_observation,
+    neg8_bracket_not_evaluated,
+)
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     cleanup_claim_evidence_flags,
     token_provenance_from_artifacts,
@@ -169,9 +177,10 @@ class CampaignPolicyBinding:
     path: Path
     policy: CampaignPolicy
     sha256: str
+    idle_admission_extension: IdleAdmissionExtension | None = None
 
     def to_metadata(self) -> dict[str, Any]:
-        return {
+        row = {
             "schema_version": self.policy.schema_version,
             "policy_id": self.policy.policy_id,
             "policy_version": self.policy.policy_version,
@@ -179,6 +188,14 @@ class CampaignPolicyBinding:
             "sha256": self.sha256,
             "source": str(self.path),
         }
+        if self.idle_admission_extension is not None:
+            row["idle_admission_extension"] = {
+                "schema_version": self.idle_admission_extension.schema_version,
+                "policy_version": self.idle_admission_extension.policy_version,
+                "claim_bearing": self.idle_admission_extension.claim_bearing,
+                "sha256": self.idle_admission_extension.sha256(),
+            }
+        return row
 
 
 @dataclass(frozen=True)
@@ -469,15 +486,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
+IDLE_ADMISSION_EXTENSION_KEY = "idle_admission_extension"
+
+
 def load_campaign_policy(path_text: str) -> CampaignPolicyBinding:
     path = Path(path_text)
     raw = path.read_bytes()
     payload = json.loads(raw)
+    extension_raw: Any = None
+    if isinstance(payload, dict) and IDLE_ADMISSION_EXTENSION_KEY in payload:
+        # ``CampaignPolicy.from_mapping`` predates the T0.5 extension and
+        # rejects unknown keys; the extension is stripped for the base parse
+        # and parsed by its own fail-closed schema.  The binding hash below
+        # still covers every sidecar byte, extension included, so any change
+        # to the new fields changes the campaign policy identity.
+        extension_raw = payload.pop(IDLE_ADMISSION_EXTENSION_KEY)
     policy = CampaignPolicy.from_mapping(payload)
+    extension = (
+        IdleAdmissionExtension.from_mapping(
+            extension_raw, profile=policy.profile.value
+        )
+        if extension_raw is not None
+        else None
+    )
     return CampaignPolicyBinding(
         path=path,
         policy=policy,
         sha256=hashlib.sha256(raw).hexdigest(),
+        idle_admission_extension=extension,
     )
 
 
@@ -2689,6 +2725,251 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
     return "invalid", reasons or ["no usable members"]
 
 
+IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
+
+
+def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
+    """Attempt number whose idle telemetry matches the recorded admission.
+
+    The controller records the FINAL retry attempt's admission decision, and
+    ``_gpu_admission_outcome`` reads that final decision, so the CPU-idle
+    evaluation must pair with the telemetry captured on that SAME attempt.
+    Attempt 1 lives in ``rich_telemetry_idle.jsonl``; attempt ``n`` (n>1) in
+    ``rich_telemetry_idle_attempt_{n}.jsonl`` (see
+    ``joulewise/adapters/powermetrics.py``).
+
+    Returns the final attempt number, ``1`` when no retry ledger is present
+    (pre-hookup bundles never retried), or ``None`` (fail closed) when the
+    recorded attempt ledger is malformed.
+    """
+
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    admission = metadata.get("environment_admission")
+    if not isinstance(admission, dict):
+        return 1
+    attempts = admission.get("attempts")
+    if attempts is None:
+        return 1
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    numbers: list[int] = []
+    for entry in attempts:
+        if not isinstance(entry, dict):
+            return None
+        value = entry.get("attempt")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            return None
+        numbers.append(value)
+    return max(numbers)
+
+
+def _load_idle_rich_telemetry(
+    bundle_path: Path, attempt: int
+) -> list[dict[str, Any]] | None:
+    """Load the pre-run baseline rich telemetry, or ``None`` when unusable.
+
+    ``attempt`` selects the retry-matched artifact so CPU-idle evaluation
+    never pairs attempt-1 telemetry with a final-attempt GPU decision.
+    Missing files, unreadable bytes, and malformed JSONL all return ``None``
+    so the pure evaluator fails closed under a production policy instead of
+    admitting on partial evidence.  When the retried artifact is absent this
+    returns ``None`` as well (fail closed on exactly the retried admissions).
+    """
+
+    name = (
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+    )
+    path = bundle_path / name
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    records: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(record, dict):
+            return None
+        records.append(record)
+    return records
+
+
+def _gpu_admission_outcome(evaluation: MemberEvaluation) -> bool | None:
+    """Map the recorded per-bundle admission decision onto a tri-state."""
+
+    metadata = evaluation.metadata
+    admission = (
+        metadata.get("environment_admission") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(admission, dict):
+        return None
+    decision = admission.get("decision")
+    if decision == "admitted":
+        return True
+    if decision in {"flagged", "abort"}:
+        return False
+    return None
+
+
+def _adapter_observations_for(
+    evaluation: MemberEvaluation,
+) -> list[dict[str, Any]]:
+    """Collect adapter-wattage observations recorded for one member.
+
+    The pre-run environment snapshot always contributes one observation;
+    admission guard observations contribute theirs when the adapter surface
+    was captured (bundles produced after the T0.5 guard-observation change).
+    """
+
+    observations: list[dict[str, Any]] = []
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    environment = metadata.get("environment")
+    if isinstance(environment, dict):
+        observations.append(
+            extract_adapter_observation(
+                environment.get("power")
+                if isinstance(environment.get("power"), dict)
+                else None,
+                source=f"{evaluation.bundle_id}:environment",
+                power_source=environment.get("power_source"),
+            )
+        )
+    admission = metadata.get("environment_admission")
+    guard_observations = (
+        admission.get("guard_observations") if isinstance(admission, dict) else None
+    )
+    if isinstance(guard_observations, list):
+        for guard in guard_observations:
+            if not isinstance(guard, dict) or "power" not in guard:
+                continue
+            phase = guard.get("phase")
+            label = phase if isinstance(phase, str) else "guard"
+            observations.append(
+                extract_adapter_observation(
+                    guard.get("power") if isinstance(guard.get("power"), dict) else None,
+                    source=f"{evaluation.bundle_id}:guard:{label}",
+                )
+            )
+    return observations
+
+
+def _gross_energy_for(evaluation: MemberEvaluation) -> float | None:
+    summary = evaluation.summary
+    value = summary.get("gross_energy_j") if isinstance(summary, dict) else None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+    ):
+        return None
+    return float(value)
+
+
+def _bundle_matches_neg8_marker(bundle_id: str, marker: str) -> bool:
+    return marker in bundle_id.lower().replace("_", "-")
+
+
+def idle_admission_core_verdict(
+    evaluations: Sequence[MemberEvaluation],
+    policy_binding: CampaignPolicyBinding,
+) -> dict[str, Any]:
+    """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
+
+    Everything here is recorded data with stable named conditions; the
+    collection verdict and exit code are unchanged by this section.  Live
+    (pre-invoke) enforcement belongs to the controller hookup that follows
+    this core.
+    """
+
+    extension = policy_binding.idle_admission_extension
+    section: dict[str, Any] = {
+        "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+        "policy_sha256": policy_binding.sha256,
+        "extension": None,
+        "members": [],
+        "adapter_wattage_continuity": None,
+        "neg8_bracket": None,
+        "conditions": [],
+    }
+    if extension is None:
+        # Named condition, not an abort: pre-extension sidecars remain
+        # valid, but the verdict says the CPU-aware admission never ran.
+        section["conditions"] = ["idle_admission_extension_unconfigured"]
+        return section
+    section["extension"] = {
+        "schema_version": extension.schema_version,
+        "policy_version": extension.policy_version,
+        "claim_bearing": extension.claim_bearing,
+        "sha256": extension.sha256(),
+    }
+    conditions: set[str] = set()
+    adapter_observations: list[dict[str, Any]] = []
+    neg8_start: float | None = None
+    neg8_end: float | None = None
+    neg8_start_seen = False
+    neg8_end_seen = False
+    for evaluation in evaluations:
+        attempt = _final_idle_admission_attempt(evaluation)
+        records = (
+            _load_idle_rich_telemetry(evaluation.bundle_path, attempt)
+            if attempt is not None
+            else None
+        )
+        cpu_admission = evaluate_cpu_idle_admission(
+            records,
+            extension.cpu_criteria,
+            gpu_admitted=_gpu_admission_outcome(evaluation),
+        )
+        conditions.update(cpu_admission["conditions"])
+        member_observations = _adapter_observations_for(evaluation)
+        adapter_observations.extend(member_observations)
+        section["members"].append(
+            {
+                "bundle_id": evaluation.bundle_id,
+                "cpu_admission": cpu_admission,
+                "adapter_observation_count": len(member_observations),
+            }
+        )
+        if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-start"):
+            if not neg8_start_seen:
+                neg8_start = _gross_energy_for(evaluation)
+            neg8_start_seen = True
+        if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-end"):
+            neg8_end = _gross_energy_for(evaluation)
+            neg8_end_seen = True
+    continuity = evaluate_adapter_wattage_continuity(
+        adapter_observations, extension.adapter_wattage
+    )
+    conditions.update(continuity["conditions"])
+    # The NEG-8 bracket is a whole-window drift check: the canonical Window-A
+    # sequence runs the start and end references as SEPARATE run_campaign
+    # invocations, so the comparison is only sound when BOTH reference bundles
+    # are evaluated together.  A per-segment invocation records the non-drift
+    # ``neg8_bracket_not_evaluated`` condition rather than a spurious
+    # ``failed``/``missing``.  A reference bundle that is genuinely absent from
+    # a whole-window invocation is still caught by the collection verdict's
+    # missing-member handling.
+    if neg8_start_seen and neg8_end_seen:
+        bracket = evaluate_neg8_bracket(neg8_start, neg8_end, extension.neg8_bracket)
+    else:
+        bracket = neg8_bracket_not_evaluated(
+            extension.neg8_bracket,
+            start_gross_j=neg8_start,
+            end_gross_j=neg8_end,
+        )
+    conditions.update(bracket["conditions"])
+    section["adapter_wattage_continuity"] = continuity
+    section["neg8_bracket"] = bracket
+    section["conditions"] = sorted(conditions)
+    return section
+
+
 def _manifest_readiness_reasons(state: AnalysisManifestState) -> list[str]:
     reasons = {"analysis_manifest_invalid"}
     for problem in state.problems:
@@ -3039,6 +3320,7 @@ def append_verdict(
     campaign_provenance_path: Path | None,
     warning: str | None,
     preflight: dict[str, Any],
+    idle_admission_core: dict[str, Any] | None = None,
 ) -> None:
     row: dict[str, Any] = {
         "schema_version": CAMPAIGN_VERDICT_SCHEMA,
@@ -3063,6 +3345,8 @@ def append_verdict(
         ),
         "preflight": preflight,
     }
+    if idle_admission_core is not None:
+        row["idle_admission_core"] = idle_admission_core
     if warning is not None:
         row["block_order_warning"] = warning
     append_log(log_path, row)
@@ -4445,12 +4729,19 @@ def run_campaign(args: argparse.Namespace) -> int:
         analysis_manifest, collection_verdict, all_evaluations
     )
     sampling_audit = sampling_audit_for(analysis_manifest)
+    idle_admission_core = idle_admission_core_verdict(all_evaluations, policy_binding)
     print_verdict(
         collection_verdict,
         collection_reasons,
         categories,
         claim_readiness,
     )
+    print("IDLE-ADMISSION CORE:")
+    if idle_admission_core["conditions"]:
+        for condition in idle_admission_core["conditions"]:
+            print(f"  condition: {condition}")
+    else:
+        print("  conditions: <none>")
     if not args.dry_run:
         append_verdict(
             log_path,
@@ -4464,6 +4755,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             campaign_provenance_path=campaign_provenance_path,
             warning=order_warning,
             preflight=preflight,
+            idle_admission_core=idle_admission_core,
         )
     return 1 if failures or collection_verdict in {"blocked", "invalid"} else 0
 

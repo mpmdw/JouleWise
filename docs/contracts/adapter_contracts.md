@@ -321,6 +321,111 @@ Initial telemetry backends:
 - `jetson_rails`
 - `wall_meter`
 
+## Idle-Admission Core Policy Extension (T0.5, audit P1.1/P1.2; additive)
+
+GPU-idle-only admission is no longer sufficient. The pure evaluators in
+`joulewise/idle_admission.py` add three fail-closed surfaces, driven by an
+additive campaign-policy sidecar section keyed `idle_admission_extension`
+(schema `joulewise.idle_admission_extension.v1`):
+
+- **CPU-aware idle admission**: policy-configurable criteria over the
+  pre-run baseline rich telemetry (`rich_telemetry_idle.jsonl`) -
+  nearest-rank p95 of the per-record max per-CPU busy ratio
+  (`1 - idle_ratio - down_ratio`, clamped, so parked CPUs never read as
+  busy) against `cpu_criteria.cpu_busy_ratio_p95_max`, and p95 of
+  `processor_combined_power_w` against
+  `cpu_criteria.processor_combined_power_w_p95_max`, with at least
+  `cpu_criteria.min_samples` records. Admission requires the existing
+  GPU-idle admission AND these criteria. Missing, malformed, or
+  insufficient telemetry FAILS CLOSED when
+  `cpu_criteria.on_missing_telemetry` is `fail` (mandatory for a
+  production profile); an exploratory policy may use `flag` but must set
+  `claim_bearing: false` (explicitly non-claim-bearing).
+- **Adapter-wattage continuity**: `collect_environment_guard_observation`
+  records the adapter surface (`power.adapter_watts`,
+  `power.adapter_description`, plus a normalized
+  `adapter_power_observation`) per admission observation when called with
+  `include_adapter_power=True` (default off so pre-hookup callers keep
+  their exact probe sequence AND their exact observation shape; the
+  controller hookup opts in). Under the default flag the `power` block and
+  `adapter_power_observation` keys are ABSENT entirely - not present as
+  all-None placeholders - so the verdict's continuity scan (which treats any
+  guard observation carrying a `power` key as an adapter observation) never
+  ingests unverifiable unknown-wattage placeholders from callers that did not
+  opt in. The campaign
+  verdict evaluates the ordered observation sequence: wattage
+  discontinuities (the live 140->70->140 W negotiation precedent) and
+  description/power-source changes are NAMED conditions - recorded data,
+  never a silent pass and never an implicit abort. Unknown adapter wattage
+  fails closed when `adapter_wattage.require_known_wattage` is true
+  (mandatory for production); stable known wattage passes.
+- **Prospective NEG-8 bracket acceptance**: the campaign verdict compares
+  the start (`*neg8-reference-start*`) and end (`*neg8-reference-end*`)
+  member gross energies. The bracket passes only when the absolute delta
+  satisfies BOTH `neg8_bracket.max_abs_delta_j` AND
+  `neg8_bracket.max_rel_delta` (relative to the start gross); comparisons
+  are `<=`, so exactly-on-threshold passes and one ULP over fails. A
+  missing bracket fails closed when `neg8_bracket.require_bracket` is true
+  (mandatory for production). The bracket is a WHOLE-WINDOW check: the drift
+  comparison is evaluated only by a verdict pass whose evaluated members
+  include BOTH the start and end reference bundles. The canonical Window-A
+  sequence runs the start and end references as SEPARATE `run_campaign.py`
+  invocations, so a per-segment invocation (only one reference, or neither)
+  records the non-drift condition `neg8_bracket_not_evaluated` with decision
+  `not_evaluated` instead of a spurious `failed`/`missing`; to obtain the
+  bracket comparison, run a whole-window verdict pass over both reference
+  bundles together. A reference bundle that is genuinely absent from a
+  whole-window pass is still caught by the collection verdict's
+  missing/failed member handling, not silently dropped.
+
+Verdict surface: `scripts/run_campaign.py` records the additive
+`idle_admission_core` section (schema
+`joulewise.idle_admission_core_verdict.v1`) on the campaign verdict with
+per-member CPU-admission results, the continuity result, the bracket
+result, and the union of named conditions. A sidecar without the extension
+yields the named condition `idle_admission_extension_unconfigured`.
+
+Hash/version enforcement: the campaign policy binding hash is the sha256
+of the full sidecar bytes, extension included - changing any new field
+changes the policy identity; the extension additionally records its own
+canonical-JSON sha256 and requires exact schema/policy version strings and
+exact keys (unknown or missing keys are rejected).
+
+Deployment note (post-merge hookup required): `CampaignPolicy.from_mapping`
+in `joulewise/schemas.py` currently rejects unknown top-level sidecar keys,
+and the controller re-parses the sidecar from disk for child runs.
+`run_campaign.py` therefore strips and parses the extension itself, but the
+tracked production/exploratory sidecars must not carry the
+`idle_admission_extension` key until the schema hookup lands. Reference
+production extension block (paste at sidecar top level with the hookup):
+
+```json
+"idle_admission_extension": {
+  "schema_version": "joulewise.idle_admission_extension.v1",
+  "policy_version": "idle-admission-core-v1",
+  "claim_bearing": true,
+  "cpu_criteria": {
+    "cpu_busy_ratio_p95_max": 0.5,
+    "processor_combined_power_w_p95_max": 1.0,
+    "min_samples": 30,
+    "on_missing_telemetry": "fail"
+  },
+  "adapter_wattage": {"require_known_wattage": true},
+  "neg8_bracket": {
+    "require_bracket": true,
+    "max_abs_delta_j": 0.05,
+    "max_rel_delta": 0.25
+  }
+}
+```
+
+(Exploratory: `claim_bearing: false`, `on_missing_telemetry: "flag"`,
+`require_known_wattage: false`, `require_bracket: false`. Clean-corpus
+calibration, runs_recal5_20260719 r01 idle window, 300 samples: busy p95
+0.211, combined-power p95 0.143 W - the production thresholds above hold
+comfortable margin while a single pegged core or an active-CPU baseline
+fails.)
+
 ## Structured Failure Reasons
 
 Adapters should report failures with stable reason codes:
