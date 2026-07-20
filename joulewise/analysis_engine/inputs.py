@@ -921,11 +921,37 @@ def _verified_cooldown_raw_artifact(
         return None
     if len(rows) != expected_records or not all(isinstance(row, Mapping) for row in rows):
         return None
+    # The manifest's ``result`` field is mutable text; verifying only the raw
+    # bytes' hash still trusts a relabelled disposition (e.g. a contaminated
+    # ``cap_hit`` edited to ``recovered``).  Re-derive the disposition from the
+    # hash-verified terminal cooldown record and refuse unless it corroborates
+    # the claimed result.  ``recovered`` iff the cooldown released; ``cap_hit``
+    # iff it terminated without releasing; anything indeterminate fails closed.
+    derived = _cooldown_result_from_raw(rows)
+    if derived is None or derived != cooldown.get("result"):
+        return None
     return {
         "path": path_text,
         "sha256": expected_sha,
         "records": expected_records,
     }
+
+
+def _cooldown_result_from_raw(rows: Sequence[Any]) -> str | None:
+    """Derive recovered/cap_hit from the terminal record of a cooldown trace."""
+
+    if not rows:
+        return None
+    terminal = rows[-1]
+    if not isinstance(terminal, Mapping):
+        return None
+    released = terminal.get("release")
+    released_late = terminal.get("release_criteria_met_late")
+    if released is True or released_late is True:
+        return "recovered"
+    if released is False:
+        return "cap_hit"
+    return None
 
 
 def campaign_cooldown_evidence(

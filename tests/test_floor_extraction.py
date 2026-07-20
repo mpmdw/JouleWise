@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
 from joulewise.detection_floor import small_sample_guard_factor
@@ -95,8 +96,16 @@ def install_synthetic_recovered_manifest(
     raw_dir.mkdir(parents=True, exist_ok=True)
     members = []
     for index, bundle_id in enumerate(bundle_ids):
+        # The terminal cooldown record must corroborate the claimed
+        # ``recovered`` disposition: ``release`` true == the gate released.
         trace = (
-            json.dumps({"rolling_mean_power_w": 0.05, "timestamp_s": float(index)})
+            json.dumps(
+                {
+                    "rolling_mean_power_w": 0.05,
+                    "release": True,
+                    "timestamp_s": float(index),
+                }
+            )
             + "\n"
         ).encode("utf-8")
         raw_name = f"{session_id}__cooldown_before_{bundle_id}.jsonl"
@@ -237,6 +246,26 @@ def write_bundle(runs_root: Path, bundle_id: str, summary: dict) -> None:
     )
 
 
+class _PermissiveStrictValidatorMixin:
+    """Neutralise the real D-030 strict validator for the hand-authored,
+    summary-only synthetic bundles these gate tests build.
+
+    Production runs the real ``validate_bundle`` (a summary-only bundle refuses
+    with ``bundle_strict_invalid`` — see :class:`StrictValidationGateTests`);
+    the gates under test here are the cooldown/precheck/anchor gates, so the
+    synthetic bundles opt out of strict validation explicitly.
+    """
+
+    def setUp(self) -> None:  # noqa: D401 - unittest hook
+        super().setUp()
+        patcher = mock.patch(
+            "joulewise.floor_extraction._default_strict_validator",
+            lambda path, strict: [],
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 class RealCapHitJoinTests(unittest.TestCase):
     def test_embedded_fixtures_are_the_four_audited_records(self) -> None:
         self.assertEqual(set(CAP_HIT_RECORDS), set(AUDIT_CAP_HIT_TABLE))
@@ -271,6 +300,32 @@ class RealCapHitJoinTests(unittest.TestCase):
             runs_root = Path(tmp)
             install_real_cap_hit_manifest(runs_root, bundle_id, tamper=True)
             joined = campaign_cooldown_evidence(runs_root)
+            self.assertFalse(joined[bundle_id]["verified"])
+
+    def test_relabelled_result_field_never_verifies(self) -> None:
+        # The mutable manifest ``result`` is edited from the true ``cap_hit``
+        # (raw terminal record has release=False) to a clean ``recovered``,
+        # keeping the raw bytes and their sha256 pin intact.  Hash verification
+        # of the bytes alone would trust the relabel; corroborating the
+        # disposition against the terminal record must refuse it.
+        bundle_id = "p2015-df-rq-long-prompt-abs-r03"
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            install_real_cap_hit_manifest(runs_root, bundle_id)
+            record = CAP_HIT_RECORDS[bundle_id]
+            manifest_path = (
+                runs_root / "campaign_manifests" / f"{record['session_id']}.json"
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["members"][0]["preceding_campaign_cooldown"]["result"] = (
+                "recovered"
+            )
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            joined = campaign_cooldown_evidence(runs_root)
+            self.assertEqual(joined[bundle_id]["result"], "recovered")
             self.assertFalse(joined[bundle_id]["verified"])
 
     def test_ambiguous_duplicate_records_never_verify(self) -> None:
@@ -308,7 +363,7 @@ class RealCapHitJoinTests(unittest.TestCase):
             self.assertEqual(joined[bundle_id]["result"], "unknown")
 
 
-class AbsoluteCellExtractionTests(unittest.TestCase):
+class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def _build_corpus(self, tmp: str) -> tuple[Path, list[dict]]:
         runs_root = Path(tmp)
         cap_hit_id = "p2015-df-rq-long-prompt-abs-r03"
@@ -531,7 +586,7 @@ class AbsoluteCellExtractionTests(unittest.TestCase):
                 )
 
 
-class ComparativeCellExtractionTests(unittest.TestCase):
+class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def _build_blocks(self, runs_root: Path) -> list[dict]:
         cap_hit_id = "p2015-df-cmp-abba-su-b01-b1"
         install_real_cap_hit_manifest(runs_root, cap_hit_id)
@@ -601,7 +656,7 @@ class ComparativeCellExtractionTests(unittest.TestCase):
             self.assertAlmostEqual(delta, expected_delta, places=9)
 
 
-class MetricHygieneTests(unittest.TestCase):
+class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def test_phase_cell_reading_whole_request_gross_fails_loudly(self) -> None:
         with self.assertRaisesRegex(FloorExtractionError, "phase_energy_j"):
             governed_cell_metric("gross_energy_j", "phase")
@@ -663,7 +718,7 @@ class MetricHygieneTests(unittest.TestCase):
             )
 
 
-class ExtractionCliTests(unittest.TestCase):
+class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def test_spec_extraction_report_and_exit_codes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp) / "runs"
@@ -801,6 +856,191 @@ class ExtractionCliTests(unittest.TestCase):
         assert report.floor is not None
         self.assertEqual(report.floor.unguarded_floor_j, 0.0)
         self.assertTrue(math.isfinite(report.floor.guarded_floor_j))
+
+
+class CapHitVerificationGateTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    """Only VERIFIED campaign cap-hit evidence may license same-slot exclusion."""
+
+    def test_summary_only_cap_hit_without_campaign_evidence_refuses_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            clean_ids = [f"clean-r{index:02d}" for index in range(1, 5)]
+            install_synthetic_recovered_manifest(runs_root, clean_ids)
+            for bundle_id in clean_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            # This member self-declares cooldown_cap_hit=true but has NO
+            # campaign cooldown evidence at all: it must REFUSE the cell, never
+            # self-license an exclusion that would drop it at n-1.
+            rogue = "rogue-high-scatter"
+            rogue_summary = make_summary(48.0)
+            rogue_summary["measurement_quality"]["cooldown_cap_hit"] = True
+            write_bundle(runs_root, rogue, rogue_summary)
+            members = [{"slot": b, "bundle_id": b} for b in (*clean_ids, rogue)]
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-MID",
+                metric="gross_energy_j",
+                window_class="request",
+                members=members,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertEqual(report.excluded_slots, ())
+        rogue_member = next(m for m in report.members if m.bundle_id == rogue)
+        self.assertFalse(rogue_member.excluded)
+        self.assertFalse(rogue_member.cap_hit)
+        self.assertIn("cooldown_cap_hit_unverified", rogue_member.reasons)
+        self.assertIn("cooldown_cap_hit_unverified", report.refusal_reasons)
+
+    def test_summary_cap_hit_contradicting_verified_recovered_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            clean_ids = [f"clean-r{index:02d}" for index in range(1, 5)]
+            install_synthetic_recovered_manifest(runs_root, clean_ids)
+            for bundle_id in clean_ids:
+                summary = make_summary(40.0)
+                if bundle_id == "clean-r02":
+                    # Campaign evidence VERIFIES 'recovered'; the summary flag
+                    # contradicts it with cap_hit=true.  Ambiguous evidence
+                    # refuses the cell, never a silent exclusion.
+                    summary["measurement_quality"]["cooldown_cap_hit"] = True
+                write_bundle(runs_root, bundle_id, summary)
+            members = [{"slot": b, "bundle_id": b} for b in clean_ids]
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-MID",
+                metric="gross_energy_j",
+                window_class="request",
+                members=members,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertEqual(report.excluded_slots, ())
+        contradicted = next(m for m in report.members if m.bundle_id == "clean-r02")
+        self.assertTrue(contradicted.cooldown_verified)
+        self.assertEqual(contradicted.cooldown_result, "recovered")
+        self.assertFalse(contradicted.cap_hit)
+        self.assertIn("cooldown_cap_hit_unverified", report.refusal_reasons)
+
+
+class StrictValidationGateTests(unittest.TestCase):
+    """The claim-bearing path runs the real D-030 strict validator (Fix B).
+
+    Deliberately WITHOUT the permissive mixin: these assert that a
+    hand-authored, summary-only bundle (no config/metadata/raw traces) is NOT
+    admissible, and that an unresolvable hash pin refuses instead of failing
+    open to ``bundle_sha256=None``.
+    """
+
+    def test_summary_only_bundle_refuses_via_real_strict_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            clean_ids = [f"clean-r{index:02d}" for index in range(1, 4)]
+            install_synthetic_recovered_manifest(runs_root, clean_ids)
+            for bundle_id in clean_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-MID",
+                metric="gross_energy_j",
+                window_class="request",
+                members=[{"slot": b, "bundle_id": b} for b in clean_ids],
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertIn("bundle_strict_invalid", report.refusal_reasons)
+
+    def test_unresolvable_hash_pin_refuses_instead_of_failing_open(self) -> None:
+        import os
+
+        with mock.patch(
+            "joulewise.floor_extraction._default_strict_validator",
+            lambda path, strict: [],
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                runs_root = Path(tmp)
+                clean_ids = [f"clean-r{index:02d}" for index in range(1, 4)]
+                install_synthetic_recovered_manifest(runs_root, clean_ids)
+                for bundle_id in clean_ids:
+                    write_bundle(runs_root, bundle_id, make_summary(40.0))
+                # A non-regular file makes complete_bundle_sha256 fail closed.
+                os.symlink(
+                    "does-not-exist", runs_root / "clean-r01" / "dangling.link"
+                )
+                report = extract_absolute_cell(
+                    cell_id="DF-RQ-GROSS-MID",
+                    metric="gross_energy_j",
+                    window_class="request",
+                    members=[{"slot": b, "bundle_id": b} for b in clean_ids],
+                    runs_root=runs_root,
+                    cooldowns=campaign_cooldown_evidence(runs_root),
+                    hash_bundles=True,
+                )
+        self.assertFalse(report.extractable)
+        self.assertIn("bundle_hash_unresolved", report.refusal_reasons)
+        pinned = next(m for m in report.members if m.bundle_id == "clean-r01")
+        self.assertIsNone(pinned.bundle_sha256)
+
+
+class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    """A campaign member the spec omits refuses the whole extraction (Fix D)."""
+
+    def test_omitting_a_campaign_member_refuses_the_extraction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            all_ids = [f"plan-r{index:02d}" for index in range(1, 5)]
+            install_synthetic_recovered_manifest(runs_root, all_ids)
+            for bundle_id in all_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            # The spec lists only THREE of the four members the campaign ran;
+            # the omitted high-scatter member must not be silently dropped.
+            listed = all_ids[:-1]
+            omitted = all_ids[-1]
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [{"slot": b, "bundle_id": b} for b in listed],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertFalse(report["all_cells_extractable"])
+        refusals = report["spec_membership_refusals"]
+        self.assertEqual([row["bundle_id"] for row in refusals], [omitted])
+        self.assertEqual(
+            refusals[0]["reason"], "campaign_member_omitted_from_spec"
+        )
+        # The per-cell row itself is otherwise clean: the omission is a
+        # spec-vs-campaign integrity refusal, surfaced at the report level.
+        self.assertTrue(report["cells"][0]["extractable"])
+
+    def test_full_coverage_has_no_membership_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            all_ids = [f"plan-r{index:02d}" for index in range(1, 4)]
+            install_synthetic_recovered_manifest(runs_root, all_ids)
+            for bundle_id in all_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [{"slot": b, "bundle_id": b} for b in all_ids],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertEqual(report["spec_membership_refusals"], [])
+        self.assertTrue(report["all_cells_extractable"])
 
 
 if __name__ == "__main__":

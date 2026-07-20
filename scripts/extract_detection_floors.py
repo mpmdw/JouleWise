@@ -92,11 +92,21 @@ def main(argv: list[str] | None = None) -> int:
     refused = [
         cell["cell_id"] for cell in report["cells"] if not cell["extractable"]
     ]
-    if refused:
-        print(
-            "refused cells (fail-closed): " + ", ".join(sorted(refused)),
-            file=sys.stderr,
-        )
+    omitted = [
+        row["bundle_id"] for row in report.get("spec_membership_refusals", [])
+    ]
+    if refused or omitted:
+        if refused:
+            print(
+                "refused cells (fail-closed): " + ", ".join(sorted(refused)),
+                file=sys.stderr,
+            )
+        if omitted:
+            print(
+                "campaign members omitted from spec (fail-closed): "
+                + ", ".join(sorted(omitted)),
+                file=sys.stderr,
+            )
         return 1
     return 0
 

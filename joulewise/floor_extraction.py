@@ -38,7 +38,21 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
+
+# A strict validator returns the list of D-030 strict-validation problems for a
+# bundle directory (empty == strict-valid).  Signature matches
+# ``joulewise.cli.validate_bundle`` so the real analysis-grade validator is the
+# default; tests inject a stub for hand-authored synthetic bundles.
+StrictValidator = Callable[[Path, bool], Sequence[str]]
+
+
+def _default_strict_validator(path: Path, strict: bool) -> Sequence[str]:
+    """The real D-030 strict validator (imported lazily to avoid an import cycle)."""
+
+    from joulewise.cli import validate_bundle
+
+    return validate_bundle(path, strict=strict)
 
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
@@ -98,12 +112,16 @@ ANCHOR_QUARTER_METRIC_LIMIT = 0.25
 CELL_REFUSAL_CODES = (
     "bundle_missing",
     "summary_unreadable",
+    "bundle_strict_invalid",
+    "bundle_hash_unresolved",
     "bundle_status_not_succeeded",
     "reducer_wire_unknown",
     "idle_method_pair_invalid",
     "metric_missing_or_nonfinite",
     "window_evidence_precheck_failed",
     "campaign_cooldown_evidence_missing",
+    "cooldown_cap_hit_unverified",
+    "campaign_member_omitted_from_spec",
     "cap_hit_drift_term_unavailable",
     "insufficient_members_after_exclusion",
     "anchor_energy_envelope_unrecorded",
@@ -295,6 +313,7 @@ def _evaluate_member(
     window_class: str,
     cooldowns: Mapping[str, Mapping[str, Any]],
     hash_bundles: bool,
+    strict_validator: StrictValidator,
 ) -> MemberReport:
     """Evaluate every governed member gate; reasons are fail-closed evidence."""
 
@@ -315,6 +334,19 @@ def _evaluate_member(
         reasons.append(read_problem)
     else:
         assert summary is not None
+        # A claim-bearing floor may only be extracted from a STRICT-VALID
+        # bundle (D-030): the measured window, summed curve, and re-reduction
+        # of the raw artifacts must all agree with summary_metrics.json.  A
+        # directory holding only a hand-authored summary (no config/metadata/
+        # raw traces, or traces that no longer reduce to the summary) is not
+        # evidence; it refuses the cell.  When the validator cannot run it is
+        # treated as a strict failure, never an implicit pass.
+        try:
+            strict_problems = tuple(strict_validator(path, True))
+        except Exception:  # noqa: BLE001 - validator failure is never a pass
+            strict_problems = ("strict validation raised",)
+        if strict_problems:
+            reasons.append("bundle_strict_invalid")
         if summary.get("status") != "succeeded":
             reasons.append("bundle_status_not_succeeded")
         reducer_version = _summary_reducer_version(summary)
@@ -337,13 +369,17 @@ def _evaluate_member(
         summary_cap_hit = (
             quality.get("cooldown_cap_hit") if isinstance(quality, Mapping) else None
         )
-        # Only VERIFIED cap-hit evidence licenses the same-slot exclusion
-        # disposition.  An unverified/tampered "cap_hit" claim is missing
-        # evidence and refuses the cell through the precheck join gate below.
-        cap_hit = bool(
-            summary_cap_hit is True
-            or (cooldown_verified and cooldown_result == "cap_hit")
-        )
+        # Same-slot exclusion is licensed ONLY by VERIFIED campaign cap-hit
+        # evidence.  A bundle summary that merely SELF-DECLARES
+        # cooldown_cap_hit=true is not proof of the campaign-level gate: if it
+        # has no verified campaign corroboration (or CONTRADICTS a verified
+        # non-cap-hit result) it is missing/ambiguous evidence, never a
+        # licensed exclusion, and it refuses the whole cell.  Letting the
+        # summary flag alone drive exclusion would be an outlier-deletion
+        # channel through a mutable, unverified field.
+        cap_hit = bool(cooldown_verified and cooldown_result == "cap_hit")
+        if summary_cap_hit is True and not cap_hit:
+            reasons.append("cooldown_cap_hit_unverified")
 
         evidence = BundleEvidence(
             entry={},
@@ -421,7 +457,10 @@ def _evaluate_member(
         try:
             bundle_sha256 = complete_bundle_sha256(path)
         except ValueError:
+            # A claim-bearing pin that cannot be computed is a refusal, never a
+            # silent ``None`` (fail-open).
             bundle_sha256 = None
+            reasons.append("bundle_hash_unresolved")
         config_sha256 = _sha256_file(path / "config.json")
 
     return MemberReport(
@@ -503,9 +542,11 @@ def extract_absolute_cell(
     cooldowns: Mapping[str, Mapping[str, Any]],
     cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     hash_bundles: bool = False,
+    strict_validator: StrictValidator | None = None,
 ) -> CellReport:
     """Extract one absolute D-054 cell under the audit gates."""
 
+    validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
     if not members:
@@ -528,6 +569,7 @@ def extract_absolute_cell(
                 window_class=window_class,
                 cooldowns=cooldowns,
                 hash_bundles=hash_bundles,
+                strict_validator=validator,
             )
         )
 
@@ -589,6 +631,7 @@ def extract_comparative_cell(
     cooldowns: Mapping[str, Mapping[str, Any]],
     cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     hash_bundles: bool = False,
+    strict_validator: StrictValidator | None = None,
 ) -> CellReport:
     """Extract one comparative (ABBA) D-054 cell under the audit gates.
 
@@ -598,6 +641,7 @@ def extract_comparative_cell(
     small-sample guard.
     """
 
+    validator = strict_validator or _default_strict_validator
     metric, window_class = governed_cell_metric(metric, window_class)
     _validate_cap_hit_policy(cap_hit_policy)
     if not blocks:
@@ -635,6 +679,7 @@ def extract_comparative_cell(
                 window_class=window_class,
                 cooldowns=cooldowns,
                 hash_bundles=hash_bundles,
+                strict_validator=validator,
             )
             for position in _ABBA_POSITIONS
         ]
@@ -691,9 +736,11 @@ def extract_cells(
     *,
     manifest_id: str | None = None,
     hash_bundles: bool = False,
+    strict_validator: StrictValidator | None = None,
 ) -> dict[str, Any]:
     """Extract every cell in a spec document into one fail-closed report."""
 
+    validator = strict_validator or _default_strict_validator
     if not isinstance(spec, Mapping) or spec.get("schema_version") != (
         EXTRACTION_SPEC_SCHEMA_VERSION
     ):
@@ -706,6 +753,7 @@ def extract_cells(
 
     runs_root = Path(runs_root)
     cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
+    referenced_bundle_ids = _spec_referenced_bundle_ids(cells)
     reports: list[CellReport] = []
     seen_cell_ids: set[str] = set()
     for cell in cells:
@@ -731,6 +779,7 @@ def extract_cells(
                     cooldowns=cooldowns,
                     cap_hit_policy=str(cap_hit_policy),
                     hash_bundles=hash_bundles,
+                    strict_validator=validator,
                 )
             )
         elif kind == "comparative":
@@ -747,12 +796,33 @@ def extract_cells(
                     cooldowns=cooldowns,
                     cap_hit_policy=str(cap_hit_policy),
                     hash_bundles=hash_bundles,
+                    strict_validator=validator,
                 )
             )
         else:
             raise FloorExtractionError(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
+
+    # Bind the caller-authored spec to the frozen campaign manifest: every
+    # invoked member that the hash-verified cooldown join recovered must be
+    # accounted for by some cell.  A member the campaign RAN but the spec
+    # omits is a silent no-outlier-deletion violation (drop the inconvenient
+    # high-scatter bundle, shrink the false-effect floor); it refuses the whole
+    # extraction rather than proceeding at an unrecorded n-1.
+    omitted = sorted(set(cooldowns) - referenced_bundle_ids)
+    spec_membership_refusals = [
+        {
+            "reason": "campaign_member_omitted_from_spec",
+            "bundle_id": bundle_id,
+            "campaign_cooldown_result": (
+                cooldowns[bundle_id].get("result")
+                if isinstance(cooldowns[bundle_id], Mapping)
+                else None
+            ),
+        }
+        for bundle_id in omitted
+    ]
 
     return {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
@@ -769,5 +839,35 @@ def extract_cells(
             ),
         },
         "cells": [report.as_row() for report in reports],
-        "all_cells_extractable": all(report.extractable for report in reports),
+        "spec_membership_refusals": spec_membership_refusals,
+        "all_cells_extractable": (
+            all(report.extractable for report in reports)
+            and not spec_membership_refusals
+        ),
     }
+
+
+def _spec_referenced_bundle_ids(cells: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Every bundle_id the spec names across all absolute members / ABBA blocks."""
+
+    referenced: set[str] = set()
+    for cell in cells:
+        if not isinstance(cell, Mapping):
+            continue
+        members = cell.get("members")
+        if isinstance(members, list):
+            for row in members:
+                bundle_id = row.get("bundle_id") if isinstance(row, Mapping) else None
+                if isinstance(bundle_id, str) and bundle_id:
+                    referenced.add(bundle_id)
+        blocks = cell.get("blocks")
+        if isinstance(blocks, list):
+            for block in blocks:
+                block_members = (
+                    block.get("members") if isinstance(block, Mapping) else None
+                )
+                if isinstance(block_members, Mapping):
+                    for bundle_id in block_members.values():
+                        if isinstance(bundle_id, str) and bundle_id:
+                            referenced.add(bundle_id)
+    return referenced

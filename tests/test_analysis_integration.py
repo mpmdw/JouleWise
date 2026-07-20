@@ -286,7 +286,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         campaign_dir = runs / "campaign_manifests"
         raw_dir = campaign_dir / "raw"
         raw_dir.mkdir(parents=True)
-        trace = b'{"idle_power_w":5.0,"timestamp_s":1.0}\n'
+        trace = b'{"idle_power_w":5.0,"release":true,"timestamp_s":1.0}\n'
         trace_path = raw_dir / "cooldown.jsonl"
         trace_path.write_bytes(trace)
         descriptor = {
@@ -373,7 +373,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             campaign_dir = runs / "campaign_manifests"
             raw_dir = campaign_dir / "raw"
             raw_dir.mkdir(parents=True)
-            trace = b'{"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
+            trace = b'{"release":true,"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
             trace_path = raw_dir / "config-r2.jsonl"
             trace_path.write_bytes(trace)
             descriptor = {
