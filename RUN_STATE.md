@@ -1,28 +1,27 @@
 # JouleWise Run State
 
-Last updated: 2026-07-19 (late night). **SOUNDNESS GATE ACTIVE (D-078
-proposed): the Ed-directed measurement-soundness audit found a
-trace-time-anchor defect — power-trace timestamps are misaligned with
-runtime events (~0.5–1 s), so NO existing powermetrics corpus supports
-claim-bearing floors/MDEs as recorded** (all four P0 findings
-lead-verified from primary evidence; record:
-`docs/reviews/2026-07-19-measurement-soundness-audit.md`). The extended
-re-collection itself executed perfectly: three further bracketed windows
-(`runs_recal4/5/6_20260719/`, 266/266 strict-valid, clean SOURCE
-provenance, one unlock abort quarantined) + recal3 = 288 bundles, all
-planned Window-A cells except DF-TELEM at planned n. The corpus is
-retained as instrument/calibration evidence; arithmetic, token
-accounting, guard behavior, and ABBA execution all verified sound.
-NEXT (ordered; roadmap:
-`docs/phase_2/splitwise_replication_roadmap.md`): (1) [AGENT]
-INSTRUMENT REPAIR — tight causal trace-time anchor + anchor-envelope
-reduction; extraction honors window_evidence_precheck + campaign-log
-cooldown joins; analysis-engine 0.5.0/v2 wire compat; CPU-aware idle
-admission; (2) [QUIET-MAC] re-collect Window A under the fixed anchor
-(tonight proved ~280 bundles/night is routine); (3) then P2-006
-Qwen2.5-1.5B/7B pair campaign per the roadmap (Sol design consult
-adopted). The 2026-07-17 published floor table is caveated pending
-re-adjudication. Prior context: PR #78 MERGED (b52abf3). The
+Last updated: 2026-07-20 (Ed checkpoint stop). **D-078 SOUNDNESS GATE
+remains ACTIVE; Phase 0 instrument repair is BUILT and pushed but NOT
+signed off.** Branch `impl/p0-instrument-repair` @ `ca6861b` (pushed):
+anchor estimator v2 (censored-constraint interval), continuous
+common-shift energy envelopes (reducer 0.5.1 / AXI 0.6.1, additive;
+0.5.0/0.6.0 frozen), engine wire compat + cap-hit joins + extraction
+hygiene, live CPU-aware idle admission (C2 hookup), pulse-fiducial
+harness, convergence round-1 fixes (incl. the adjudicated D-078
+closed-vocabulary amendment). Last lead-run suite at `d1c1538`:
+Ran 1918 tests, OK (skipped=21); the ca6861b suite gate is owed at
+resume. r01 ground truth lead-verified by independent arithmetic
+(defective 0.274 J -> corrected 7.664 J, envelope 6.77-7.68 J, still
+cadence-ineligible). RESUME ORDER: (1) convergence round 2 to
+cross-model sign-off (workflow wf_c5a2e6c8-147 resumable; fix prompts
+must carry exhaustive WRITE_SCOPE — recorded lead error); (2) lead
+final pass + PR; (3) [QUIET-MAC] live pulse-fiducial calibration
+(chain staged in session scratchpad: pulse_run.sh) then the 4-member
+stability probe (staged: stability/); (4) window licenses from
+measured B_effective; (5) only then Window-A re-collection per
+docs/phase_2/splitwise_replication_roadmap.md. Record:
+docs/run_reports/2026-07-20-p0-instrument-repair.md. Prior context:
+PR #78 MERGED (b52abf3). The
 first window's record — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
 comparative blocks, full suite-absolute block), collected under the
