@@ -276,6 +276,56 @@ Text.
         self.assertIn("&lt;Entry &amp; 2&gt;", rendered)
         self.assertNotIn("<Entry & 2>", rendered)
 
+    def test_build_fails_closed_without_project_status_page_marker(self):
+        project_md = build_site.read_source("PROJECT_STATUS.md").replace(
+            build_site.PROJECT_STATUS_PAGE_END_MARKER, ""
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                mock.patch.object(build_site, "OUT", Path(temp_dir) / "site"),
+                mock.patch.object(build_site, "read_source", return_value=project_md),
+                self.assertRaisesRegex(
+                    build_site.SiteBuildError,
+                    build_site.re.escape(build_site.PROJECT_STATUS_PAGE_END_MARKER),
+                ),
+            ):
+                build_site.build(no_marked=True)
+
+    def test_project_status_pages_are_emitted_and_cross_linked(self):
+        project_md = build_site.read_source("PROJECT_STATUS.md")
+        status_markdown = build_site.split_project_status_markdown(project_md)
+        status_docs = {
+            doc.out_name: doc
+            for doc in build_site.doc_pages("docs/run_reports/example.md")
+            if doc.source == "PROJECT_STATUS.md"
+        }
+        expected_outputs = {
+            build_site.PROJECT_STATUS_SUMMARY_OUTPUT,
+            build_site.PROJECT_STATUS_FULL_OUTPUT,
+        }
+        self.assertEqual(set(status_markdown), expected_outputs)
+        self.assertEqual(set(status_docs), expected_outputs)
+
+        stamp = build_site.SourceStamp("PROJECT_STATUS.md", "test")
+        with (
+            mock.patch.object(build_site, "MARKED_UNAVAILABLE", True),
+            mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", True),
+        ):
+            rendered = {
+                out_name: build_site.render_doc_page(
+                    status_docs[out_name], False, stamp, markdown
+                )
+                for out_name, markdown in status_markdown.items()
+            }
+        self.assertIn(
+            f'href="{build_site.PROJECT_STATUS_FULL_OUTPUT}"',
+            rendered[build_site.PROJECT_STATUS_SUMMARY_OUTPUT],
+        )
+        self.assertIn(
+            f'href="{build_site.PROJECT_STATUS_SUMMARY_OUTPUT}"',
+            rendered[build_site.PROJECT_STATUS_FULL_OUTPUT],
+        )
+
     def _assert_production_build_output_packs_below_lakebed_budget(
         self, *, force_offline_renderer: bool
     ):
@@ -350,11 +400,25 @@ Text.
                 "council_log.html", "decision_log.html", "index.html",
                 "latest_run_report.html", "library.html", "measurement_methodology.html",
                 "milestones.html", "orchestration.html", "process.html",
-                "project_status.html", "readme.html", "record.html", "research.html",
+                "project_status.html", "project_status_full.html", "readme.html", "record.html", "research.html",
                 "results.html", "risk_register.html", "roadmap.html", "run_state.html",
                 "status.html", "task_queue.html",
             }
             self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            for status_name in (
+                build_site.PROJECT_STATUS_SUMMARY_OUTPUT,
+                build_site.PROJECT_STATUS_FULL_OUTPUT,
+            ):
+                status_path = pack_capsule.canonical_path(
+                    pack_capsule.page_aliases(site / status_name)
+                )
+                status_size = pack_capsule.encode_page_shard(
+                    pages, [status_path]
+                )[1]["base64"]
+                self.assertLessEqual(
+                    status_size,
+                    pack_capsule.MAX_SHARD_BASE64_BYTES - 3_000,
+                )
             brief_output = (site / build_site.ADVISOR_BRIEF_OUTPUT).read_text(
                 encoding="utf-8"
             )

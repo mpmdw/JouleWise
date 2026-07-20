@@ -25,6 +25,9 @@ OUT = ROOT / "docs" / "site"
 FLOOR_EXTRACTION_SOURCE = "docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"
 ADVISOR_BRIEF_SOURCE = "docs/advisor_briefs/2026-07-17-window-a-brief.html"
 ADVISOR_BRIEF_OUTPUT = "advisor_brief.html"
+PROJECT_STATUS_PAGE_END_MARKER = "<!-- ADVISOR-PAGE-END -->"
+PROJECT_STATUS_SUMMARY_OUTPUT = "project_status.html"
+PROJECT_STATUS_FULL_OUTPUT = "project_status_full.html"
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -131,7 +134,8 @@ class FloorSummary:
 
 BASE_DOC_PAGES = [
     DocPage("README.md", "readme.html", "README", "What the repo is and how to run the mock path end to end.", "Status & Planning"),
-    DocPage("PROJECT_STATUS.md", "project_status.html", "Project Status", "Advisor-facing status, plan, and architecture.", "Status & Planning"),
+    DocPage("PROJECT_STATUS.md", PROJECT_STATUS_SUMMARY_OUTPUT, "Project Status", "Professor-facing project state and latest evidence.", "Status & Planning"),
+    DocPage("PROJECT_STATUS.md", PROJECT_STATUS_FULL_OUTPUT, "Project Status (full)", "Architecture, planning, and historical project-status detail.", "Status & Planning"),
     DocPage("AGENT_PLAN.md", "agent_plan.html", "Agent Plan", "Phase index and per-phase implementation plans.", "Status & Planning"),
     DocPage("RUN_STATE.md", "run_state.html", "Run State", "The live intake pointer: current state, next action.", "Status & Planning"),
     DocPage("TASK_QUEUE.md", "task_queue.html", "Task Queue", "Ranked live queue with machine-state lanes.", "Status & Planning"),
@@ -315,6 +319,38 @@ def doc_pages(latest_report_source: str) -> list[DocPage]:
             "Reports",
         ),
     ]
+
+
+def split_project_status_markdown(md: str) -> dict[str, str]:
+    marker_count = md.count(PROJECT_STATUS_PAGE_END_MARKER)
+    if marker_count != 1:
+        fail(
+            "project status split",
+            "PROJECT_STATUS.md",
+            f"exactly one {PROJECT_STATUS_PAGE_END_MARKER} marker",
+        )
+    summary, full_reference = md.split(PROJECT_STATUS_PAGE_END_MARKER, 1)
+    if not summary.strip() or not full_reference.strip():
+        fail(
+            "project status split",
+            "PROJECT_STATUS.md",
+            f"content on both sides of {PROJECT_STATUS_PAGE_END_MARKER}",
+        )
+    summary = (
+        summary.rstrip()
+        + f"\n\n**[Full project status →]({PROJECT_STATUS_FULL_OUTPUT})**\n"
+    )
+    full_reference = (
+        "# JouleWise: Project Status — Full Reference\n\n"
+        f"**[← Back to project status summary]({PROJECT_STATUS_SUMMARY_OUTPUT})**\n\n"
+        "This page continues the project-status document with its architecture, "
+        "planning, and historical reference material.\n\n"
+        + full_reference.lstrip()
+    )
+    return {
+        PROJECT_STATUS_SUMMARY_OUTPUT: summary,
+        PROJECT_STATUS_FULL_OUTPUT: full_reference,
+    }
 
 
 def git_source_stamp(source: str) -> SourceStamp:
@@ -1534,9 +1570,14 @@ def trim_log_markdown(md: str, heading_re: re.Pattern[str], keep: int, source: s
     return md[: starts[0]] + note + md[starts[-keep] :]
 
 
-def render_doc_page(doc: DocPage, no_marked: bool, stamp: SourceStamp) -> str:
+def render_doc_page(
+    doc: DocPage,
+    no_marked: bool,
+    stamp: SourceStamp,
+    markdown: str | None = None,
+) -> str:
     path = ROOT / doc.source
-    md = path.read_text(encoding="utf-8")
+    md = path.read_text(encoding="utf-8") if markdown is None else markdown
     if doc.source in LOG_TRIM_DOCS:
         heading_re, keep = LOG_TRIM_DOCS[doc.source]
         md = trim_log_markdown(md, heading_re, keep, doc.source)
@@ -1661,6 +1702,7 @@ def write_build_manifest(no_marked: bool) -> None:
 def build(no_marked: bool = False) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     project_md = read_source("PROJECT_STATUS.md")
+    project_status_pages = split_project_status_markdown(project_md)
     run_md = read_source("RUN_STATE.md")
     queue_md = read_source("TASK_QUEUE.md")
     risk_md = read_source("docs/risk_register.md")
@@ -1709,7 +1751,15 @@ def build(no_marked: bool = False) -> None:
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
     write(OUT / ADVISOR_BRIEF_OUTPUT, render_advisor_brief_copy(stamps[ADVISOR_BRIEF_SOURCE]))
     for doc in docs:
-        write(OUT / doc.out_name, render_doc_page(doc, no_marked, stamps[doc.source]))
+        markdown = (
+            project_status_pages[doc.out_name]
+            if doc.source == "PROJECT_STATUS.md"
+            else None
+        )
+        write(
+            OUT / doc.out_name,
+            render_doc_page(doc, no_marked, stamps[doc.source], markdown),
+        )
     write(OUT / "library.html", render_library(docs, stamps))
     update_hand_page_nav()
     write_build_manifest(no_marked)

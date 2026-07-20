@@ -1,6 +1,21 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-19b (DEPLOY-READY, review-corrected: a three-lens Sol
+Refreshed: 2026-07-19c (extended clean-provenance window + status-page
+split). The live capsule is now BEHIND the repo in two ways: (1)
+PROJECT_STATUS gained the night's UPDATE (288 strict-valid,
+claim-eligible bundles across runs_recal3/4/5/6; n=10 suite-ABBA cell
+complete; provenance gate CLOSED; extraction + P2-037 sole remaining
+gates) plus a new dated ledger row; (2) the Status page is now SPLIT at
+the tracked `<!-- ADVISOR-PAGE-END -->` marker into professor-facing
+project_status.html (~12.2 KB shard, was AT the 30 KB cap) and
+project_status_full.html (~21.0 KB shard, cross-linked, no new nav
+tab), so the deployed single Status page no longer matches the build
+output and the A42 capacity pressure on this page is resolved. Site
+parser/capacity tests green (20/20; full suite 1760 OK). Ed's
+three-step publishes it: git pull; build_site + pack_capsule; npx
+lakebed deploy. Automation informs; Ed deploys. Prior note follows.
+
+Prior refresh: 2026-07-19b (DEPLOY-READY, review-corrected: a three-lens Sol
 review corrected two over-promoted claims (floor statistic, -15%
 comparison) and surfaced the source-provenance claim gate before
 publication; the Status page and baked latest run report carry the

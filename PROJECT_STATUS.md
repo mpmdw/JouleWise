@@ -86,11 +86,17 @@ clean (contaminated cells were ~+30%);
 frozen-estimator provisional comparative floor **≈ 1.13 J (~0.77%)**
 from 5 of 10 planned ABBA blocks (~22× tighter, same estimator, than
 the caveated figure); long-decode **83.9 mJ/output-token**,
-matching the 07-17 decode cell to ~0.1%. Gates: claim-ineligible on
-source provenance (dirty collection tree) pending a clean re-run, then
-verified extraction + P2-037. Details:
-`docs/advisor_briefs/2026-07-19-recalibration-update.html` + the
-2026-07-19 run report.
+matching the 07-17 decode cell to ~0.1%. That corpus was
+claim-ineligible on source provenance (dirty collection tree); details:
+`docs/advisor_briefs/2026-07-19-recalibration-update.html`.
+
+UPDATE (2026-07-19 night): the clean re-run is done — **288 strict-valid,
+claim-eligible bundles** (`runs_recal3/4/5/6_20260719/`) cover every planned
+Window-A cell except DF-TELEM at planned n, including the complete n=10
+suite-ABBA comparative cell. The provenance gate is CLOSED; verified
+extraction + P2-037 are the sole remaining gates before claim-bearing
+floors/MDEs. Record:
+`docs/run_reports/2026-07-19-recal456-extended-window.md`.
 
 ### Exploratory follow-on — not a promoted claim
 
@@ -238,6 +244,7 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
+| 2026-07-19 | Extended clean-provenance re-collection | 266/266 strict-valid, claim-eligible bundles from clean main (288 total with the completion window); suite-ABBA comparative cell complete at n=10 eligible blocks; absolutes + all four ABBA families at planned n; one unlock abort quarantined (guard's 4th live catch); Sol recompute audit PASS. | `docs/run_reports/2026-07-19-recal456-extended-window.md` |
 | 2026-07-19 | Suite re-calibration under the guard (preliminary, review-corrected) | 94 strict-valid bundles; suite 147.96 ± 0.39 J clean; provisional comparative floor ≈ 1.13 J (~0.77%, 5/10 blocks); claim-ineligible on provenance pending clean re-run; three-lens review corrected two over-promoted claims. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
 | 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); suite comparative cells caveated pending re-run; the D-077 guard (preflight, idle admission, cooldown v2, claim barrier, anchor custody) was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
 | 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles re-validated and extracted as unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake folded in without promoting evidence; Ed's manual site deployment recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
@@ -248,6 +255,8 @@ implementing the statistical-uncertainty protocol) queued.
 | 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
 | 2026-07-06 | third update / pre-hardware hardening | Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction. | `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md` |
 | 2026-06-12 | first/second updates / mock vertical slice | The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report. | `docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md` |
+
+<!-- ADVISOR-PAGE-END -->
 
 ## Summary
 
