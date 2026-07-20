@@ -1019,6 +1019,86 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
         # spec-vs-campaign integrity refusal, surfaced at the report level.
         self.assertTrue(report["cells"][0]["extractable"])
 
+    def test_sibling_campaign_under_runs_root_does_not_force_refusal(self) -> None:
+        # Fix round 2: a single runs_root holds SEVERAL calibration campaign
+        # manifests (all analysis_manifest_id null) spanning different
+        # metric/window families.  A per-cell spec that fully covers its OWN
+        # campaign must extract cleanly even though the sibling campaign's
+        # members are never referenced.  The old union-scoped check refused the
+        # whole extraction here (every sibling member read as "omitted").
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            addressed_ids = [f"gross-r{index:02d}" for index in range(1, 4)]
+            sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
+            install_synthetic_recovered_manifest(
+                runs_root, addressed_ids, session_id="gross-campaign"
+            )
+            install_synthetic_recovered_manifest(
+                runs_root, sibling_ids, session_id="decode-campaign"
+            )
+            for bundle_id in addressed_ids + sibling_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            # Both campaigns are recovered/attributed, so the union check would
+            # see the sibling members as campaign members.
+            joined = campaign_cooldown_evidence(runs_root)
+            self.assertTrue(set(sibling_ids) <= set(joined))
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": b, "bundle_id": b} for b in addressed_ids
+                        ],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertEqual(report["spec_membership_refusals"], [])
+        self.assertTrue(report["all_cells_extractable"])
+        self.assertTrue(report["cells"][0]["extractable"])
+
+    def test_omission_within_addressed_campaign_still_refuses(self) -> None:
+        # The scoping must NOT weaken the audit guard: dropping one member of a
+        # campaign the spec DOES address is still a no-outlier-deletion refusal,
+        # and it names only the dropped member — never a sibling campaign's.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            addressed_ids = [f"gross-r{index:02d}" for index in range(1, 5)]
+            sibling_ids = [f"decode-r{index:02d}" for index in range(1, 4)]
+            install_synthetic_recovered_manifest(
+                runs_root, addressed_ids, session_id="gross-campaign"
+            )
+            install_synthetic_recovered_manifest(
+                runs_root, sibling_ids, session_id="decode-campaign"
+            )
+            for bundle_id in addressed_ids + sibling_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            listed = addressed_ids[:-1]
+            dropped = addressed_ids[-1]
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [{"slot": b, "bundle_id": b} for b in listed],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertFalse(report["all_cells_extractable"])
+        refusals = report["spec_membership_refusals"]
+        self.assertEqual([row["bundle_id"] for row in refusals], [dropped])
+        self.assertEqual(
+            refusals[0]["reason"], "campaign_member_omitted_from_spec"
+        )
+
     def test_full_coverage_has_no_membership_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)

@@ -804,13 +804,38 @@ def extract_cells(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
 
-    # Bind the caller-authored spec to the frozen campaign manifest: every
-    # invoked member that the hash-verified cooldown join recovered must be
-    # accounted for by some cell.  A member the campaign RAN but the spec
-    # omits is a silent no-outlier-deletion violation (drop the inconvenient
+    # Bind the caller-authored spec to the frozen campaign manifest(s) it
+    # ADDRESSES: within any single campaign the spec draws a member from, every
+    # invoked member the hash-verified cooldown join recovered for THAT campaign
+    # must be accounted for by some cell.  A member the campaign RAN but the
+    # spec omits is a silent no-outlier-deletion violation (drop the inconvenient
     # high-scatter bundle, shrink the false-effect floor); it refuses the whole
     # extraction rather than proceeding at an unrecorded n-1.
-    omitted = sorted(set(cooldowns) - referenced_bundle_ids)
+    #
+    # The completeness check is SCOPED to addressed campaigns, not the whole
+    # runs_root union.  A single runs_root routinely holds several calibration
+    # campaign manifests (all ``analysis_manifest_id`` null) spanning different
+    # metric/window families; a legitimate per-cell/per-metric spec names only
+    # its own campaign's members.  Requiring the union would force one omnibus
+    # spec covering every sibling campaign under the runs_root, which is not the
+    # per-cell contract.  Each resolved cooldown row carries the manifest it was
+    # recovered from (``campaign_cooldown_evidence`` is the ONE join model — we
+    # reuse its attribution, never re-read manifests here); a campaign is
+    # "addressed" iff the spec references at least one of its members.  Members
+    # whose provenance is ambiguous/unattributable (``manifest`` null, e.g.
+    # conflicting duplicate records) cannot be tied to a campaign and so cannot
+    # be completeness-checked; if referenced they still fail their own member
+    # gate, so omitting them is never a fail-open path.
+    campaign_member_ids: dict[str, set[str]] = {}
+    for bundle_id, cooldown in cooldowns.items():
+        manifest = cooldown.get("manifest") if isinstance(cooldown, Mapping) else None
+        if isinstance(manifest, str) and manifest:
+            campaign_member_ids.setdefault(manifest, set()).add(bundle_id)
+    omitted_ids: set[str] = set()
+    for member_ids in campaign_member_ids.values():
+        if member_ids & referenced_bundle_ids:
+            omitted_ids |= member_ids - referenced_bundle_ids
+    omitted = sorted(omitted_ids)
     spec_membership_refusals = [
         {
             "reason": "campaign_member_omitted_from_spec",
