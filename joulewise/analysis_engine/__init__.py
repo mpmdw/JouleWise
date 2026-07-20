@@ -522,6 +522,31 @@ def _prepare_contrast(
         )
         for part in observation_parts[1:]:
             deterministic_names &= set(part["bounds_a"]) & set(part["bounds_b"])
+
+    # The clock-anchor-shift bound is REQUIRED on the anchor-envelope wires and
+    # is consumed by the decision interval.  Term-name intersection silently
+    # drops it whenever ONE side of a pair carries it and the other does not
+    # (e.g. an anchor-era 0.5.1 bundle paired against a pre-anchor bundle that
+    # additively records no such term).  A required bound that any observation
+    # carries but the intersection would erase is under-bounding, exactly the
+    # unsound direction the audit targets: refuse the whole contrast rather
+    # than let the intersection hide it.
+    anchor_term = "E_clock_anchor_shift_bound_j"
+    anchor_present = any(
+        anchor_term in part["bounds_a"] or anchor_term in part["bounds_b"]
+        for part in observation_parts
+    )
+    if anchor_present and anchor_term not in deterministic_names:
+        global_reasons.append("anchor_energy_envelope_unrecorded")
+        for row in block_rows:
+            if row["included"]:
+                row["included"] = False
+                row["reason_codes"] = ordered_reason_codes(
+                    (*row["reason_codes"], "anchor_energy_envelope_unrecorded")
+                )
+        observation_parts.clear()
+        for evidence in included_by_condition.values():
+            evidence.clear()
     if ratio_estimand is None:
         observations = tuple(
             PairedObservation(

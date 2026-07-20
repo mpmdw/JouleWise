@@ -256,3 +256,33 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 validity/sentinel result. Forbidden upgrade: no broad content-neutrality claim outside the five tested equal-shape conditions. Amendment 2026-07-08 (D-046): AP-6 ids-native/no-BOS results do not generalize to the AP-4 text path because `prompt_source` and BOS handling differ; AP-6b text bridge is the named option before making that upgrade. |
 | Disqualifiers + not-resolvable conditions | Realized shape mismatch, stop-policy divergence, below-floor content deltas, or missing prompt hashes force `not resolvable` or capability wording. |
 | Linked manifests/bundle hashes | pending post-execution. |
+
+## Amendment 2026-07-19 (D-078): consumer wire matrix and anchor-bound consumption
+
+Additive; no seeded plan row above is rewritten.
+
+- The P2-037 consumer accepts idle-variance evidence ONLY for the exact
+  reducer-version x method pairs 0.4.1/0.4.2 +
+  `newey_west_bartlett_10s_iid_floor_v1`, 0.5.0/0.5.1 +
+  `duration_weighted_newey_west_bartlett_10s_iid_floor_v2`, and 0.6.0/0.6.1 +
+  the same v2 method. Crossed or unknown pairs fail closed
+  (`required_error_term_unknown`). Stored summaries are never rewritten to
+  fit the consumer.
+- Reducer 0.5.1 / AXI 0.6.1 mint per-metric anchor-shift energy envelopes
+  (`energy_anchor_shift_envelopes`,
+  `energy_bound_terms_j.E_clock_anchor_shift_bound_j`; metadata uncertainty
+  schema p2-038.2). The engine propagates them through absolute and paired
+  contrasts as the deterministic bound term `E_clock_anchor_shift_bound_j`.
+  A per-metric envelope pass never by itself makes a comparative contrast
+  identifiable — the contrast's decision interval consumes the bound
+  explicitly, alongside (never merged with) the interpolation terms.
+- New fail-closed reason codes registered in the reducer vocabulary:
+  `clock_anchor_unresolved`, `anchor_energy_envelope_unrecorded`,
+  `anchor_energy_envelope_exceeds_quarter_metric` (all `not resolvable` for
+  claims).
+- Reader-facing throughput is `inter_token_throughput_tokens_s`; the legacy
+  `throughput_tokens_s` convention is refused in claim-bearing extraction.
+- Floor extraction obligations (cooldown join, cap-hit same-slot exclusion at
+  n-1 under the frozen guard, phase metric-path enforcement) are specified in
+  `docs/phase_2/detection_floor.md` Section 5 — the ONE home; this section
+  only binds the analysis-plan consumers to them.

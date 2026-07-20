@@ -25,6 +25,7 @@ from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
     _campaign_cooldown_evidence,
+    campaign_cooldown_evidence,
     floor_binding_reason_codes,
     floor_request_for_evidence,
     floor_stack_identity,
@@ -285,7 +286,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         campaign_dir = runs / "campaign_manifests"
         raw_dir = campaign_dir / "raw"
         raw_dir.mkdir(parents=True)
-        trace = b'{"idle_power_w":5.0,"timestamp_s":1.0}\n'
+        trace = b'{"idle_power_w":5.0,"release":true,"timestamp_s":1.0}\n'
         trace_path = raw_dir / "cooldown.jsonl"
         trace_path.write_bytes(trace)
         descriptor = {
@@ -372,7 +373,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             campaign_dir = runs / "campaign_manifests"
             raw_dir = campaign_dir / "raw"
             raw_dir.mkdir(parents=True)
-            trace = b'{"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
+            trace = b'{"release":true,"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
             trace_path = raw_dir / "config-r2.jsonl"
             trace_path.write_bytes(trace)
             descriptor = {
@@ -465,6 +466,55 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     evidence,
                     {"name": "gross_energy_j", "metric_tag": "gross_request"},
                 )
+                self.assertNotIn(
+                    "campaign_cooldown_evidence_missing", precheck["reasons"]
+                )
+
+    def test_real_cap_hit_campaign_records_defeat_summary_only_reading(self):
+        """Audit P0.4: the four real cap-hit members carry
+        ``measurement_quality.cooldown_cap_hit=null`` in their summaries, so
+        summary-only extraction would treat them as clean n.  The verified
+        campaign-log join must mark each one ``cooldown_cap_hit``."""
+
+        from tests.test_floor_extraction import (
+            AUDIT_CAP_HIT_TABLE,
+            install_real_cap_hit_manifest,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp)
+            for bundle_id in AUDIT_CAP_HIT_TABLE:
+                install_real_cap_hit_manifest(runs, bundle_id)
+            cooldowns = campaign_cooldown_evidence(runs)
+            for bundle_id in AUDIT_CAP_HIT_TABLE:
+                evidence = BundleEvidence(
+                    entry={},
+                    bundle_id=bundle_id,
+                    relative_path=bundle_id,
+                    path=runs / bundle_id,
+                    summary={
+                        "window_evidence_precheck": {
+                            "gross_request": {"eligible": True, "reasons": []}
+                        },
+                        # The stored summary fact for all four members.
+                        "measurement_quality": {"cooldown_cap_hit": None},
+                    },
+                    metadata={},
+                    raw_config={},
+                    strict_problems=(),
+                    base_reason_codes=(),
+                    config_sha256=None,
+                    summary_sha256=None,
+                    replacement_classification="registered",
+                    inclusion_status="included",
+                    campaign_cooldown=cooldowns[bundle_id],
+                )
+                precheck = window_evidence_precheck(
+                    evidence,
+                    {"name": "gross_energy_j", "metric_tag": "gross_request"},
+                )
+                self.assertFalse(precheck["eligible"])
+                self.assertIn("cooldown_cap_hit", precheck["reasons"])
                 self.assertNotIn(
                     "campaign_cooldown_evidence_missing", precheck["reasons"]
                 )

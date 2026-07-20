@@ -37,17 +37,43 @@ from .claims import REDUCER_REASON_CODES, ordered_reason_codes
 
 StrictValidator = Callable[[Path, bool], list[str]]
 CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
-GOVERNED_IDLE_VARIANCE_METHOD = "newey_west_bartlett_10s_iid_floor_v1"
-GOVERNED_IDLE_VARIANCE_REDUCER = "0.4.1"
+GOVERNED_IDLE_VARIANCE_METHOD_V1 = "newey_west_bartlett_10s_iid_floor_v1"
+GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
+    "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
+)
+
+# T0.3 (2026-07-19 measurement-soundness audit P0.3): the EXACT allowed
+# reducer-version x idle-variance-method matrix.  Every crossed or unknown
+# pair fails closed (``required_error_term_unknown``); no version-range or
+# additive-successor inference is permitted here.  0.5.1 and 0.6.1 are the
+# frozen anchor-envelope wires minted by the trace-time-anchor fix; the
+# byte-frozen 0.5.0/0.6.0 goldens keep the v2 idle method they declared.
+GOVERNED_REDUCER_IDLE_METHOD_PAIRS: Mapping[str, str] = {
+    "0.4.1": GOVERNED_IDLE_VARIANCE_METHOD_V1,
+    "0.4.2": GOVERNED_IDLE_VARIANCE_METHOD_V1,
+    "0.5.0": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+    "0.5.1": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+    "0.6.0": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+    "0.6.1": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+}
+
+# Reducer versions whose wire is REQUIRED to carry the deterministic
+# anchor-shift energy envelopes (frozen field names, p2-038.2 metadata
+# schema).  Older wires read additively: an absent envelope adds no term,
+# while a present-but-malformed one always fails closed.
+ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
+ANCHOR_SHIFT_ENVELOPE_FIELD = "energy_anchor_shift_envelopes"
+ANCHOR_SHIFT_ENVELOPE_METHOD = "common_trace_shift_interval_overlap_v1"
+ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
 
 
-def _governed_idle_variance_reducer(value: object) -> bool:
-    """Accept the 0.4.1 wire and additive 0.4.x successors only."""
+def governed_idle_variance_pair(reducer_version: object, method: object) -> bool:
+    """True only for an exact allowed reducer/idle-method pair (T0.3)."""
 
-    if not isinstance(value, str):
+    if not isinstance(reducer_version, str) or not isinstance(method, str):
         return False
-    match = re.fullmatch(r"0\.4\.(\d+)", value)
-    return match is not None and int(match.group(1)) >= 1
+    expected = GOVERNED_REDUCER_IDLE_METHOD_PAIRS.get(reducer_version)
+    return expected is not None and method == expected
 
 
 class AnalysisInputError(ValueError):
@@ -672,6 +698,21 @@ def bind_floor_artifact_evidence(
         key = cell.get("key")
         metric_name = key.get("metric") if isinstance(key, Mapping) else None
         cell_problems: list[str] = list(global_problems)
+        # T0.6 metric-selection trap (audit P1.4): a phase cell must extract
+        # phase_energy_j.<target>; whole-request gross bound to a phase cell
+        # (or vice versa) refuses the cell instead of silently rebinding.
+        cell_window_class = key.get("window_class") if isinstance(key, Mapping) else None
+        metric_is_phase_path = isinstance(metric_name, str) and metric_name.startswith(
+            "phase_energy_j."
+        )
+        if cell_window_class == "phase" and not metric_is_phase_path:
+            cell_problems.append(
+                f"phase window_class cell must extract phase_energy_j.<target>, got {metric_name!r}"
+            )
+        if metric_is_phase_path and cell_window_class != "phase":
+            cell_problems.append(
+                f"phase metric {metric_name!r} bound to non-phase window_class {cell_window_class!r}"
+            )
         records: list[tuple[Mapping[str, Any], str | None]] = []
         absolute = cell.get("absolute")
         if isinstance(absolute, Mapping) and isinstance(absolute.get("bundle_observations"), list):
@@ -880,6 +921,15 @@ def _verified_cooldown_raw_artifact(
         return None
     if len(rows) != expected_records or not all(isinstance(row, Mapping) for row in rows):
         return None
+    # The manifest's ``result`` field is mutable text; verifying only the raw
+    # bytes' hash still trusts a relabelled disposition (e.g. a contaminated
+    # ``cap_hit`` edited to ``recovered``).  Re-derive the disposition from the
+    # hash-verified terminal cooldown record and refuse unless it corroborates
+    # the claimed result.  ``recovered`` iff the cooldown released; ``cap_hit``
+    # iff it terminated without releasing; anything indeterminate fails closed.
+    derived = _cooldown_result_from_raw(rows)
+    if derived is None or derived != cooldown.get("result"):
+        return None
     return {
         "path": path_text,
         "sha256": expected_sha,
@@ -887,8 +937,41 @@ def _verified_cooldown_raw_artifact(
     }
 
 
+def _cooldown_result_from_raw(rows: Sequence[Any]) -> str | None:
+    """Derive recovered/cap_hit from the terminal record of a cooldown trace."""
+
+    if not rows:
+        return None
+    terminal = rows[-1]
+    if not isinstance(terminal, Mapping):
+        return None
+    released = terminal.get("release")
+    released_late = terminal.get("release_criteria_met_late")
+    if released is True or released_late is True:
+        return "recovered"
+    if released is False:
+        return "cap_hit"
+    return None
+
+
+def campaign_cooldown_evidence(
+    runs_root: Path, manifest_id: str | None = None
+) -> dict[str, Mapping[str, Any]]:
+    """Public reuse point for the hash-verified campaign cooldown join (T0.4).
+
+    This is THE one campaign-cooldown join model; consumers (the analysis
+    engine and ``joulewise.floor_extraction``) must not build a second one.
+    ``manifest_id=None`` selects campaign manifests that are not bound to an
+    analysis manifest (``analysis_manifest_id`` null), which is how
+    calibration campaigns record provenance.  Missing, tampered, duplicated,
+    or ambiguous evidence never verifies.
+    """
+
+    return _campaign_cooldown_evidence(Path(runs_root), manifest_id)
+
+
 def _campaign_cooldown_evidence(
-    runs_root: Path, manifest_id: str
+    runs_root: Path, manifest_id: str | None
 ) -> dict[str, Mapping[str, Any]]:
     """Recover only independently verified per-member campaign provenance."""
 
@@ -1677,7 +1760,37 @@ def load_analysis_inputs(
     )
 
 
+def enforce_metric_window_consistency(metric: Mapping[str, Any]) -> None:
+    """Fail loudly when a metric name contradicts its window class (T0.6).
+
+    The 2026-07-19 audit P1.4 metric-selection trap compared whole-request
+    gross values for phase-named cells.  A phase window class MUST extract
+    ``phase_energy_j.<target>`` and nothing else; a phase-path metric MUST
+    not be attached to a non-phase window.  The legacy
+    ``throughput_tokens_s`` (N/(t_last-t_first)) field is never reader-facing;
+    the governed N-1 form is ``inter_token_throughput_tokens_s``.
+    """
+
+    name = metric.get("name")
+    window_class = metric.get("window_class")
+    is_phase_path = isinstance(name, str) and name.startswith("phase_energy_j.")
+    if window_class == "phase" and not is_phase_path:
+        raise AnalysisInputError(
+            f"phase window metrics must extract phase_energy_j.<target>, got {name!r}"
+        )
+    if is_phase_path and window_class not in (None, "phase"):
+        raise AnalysisInputError(
+            f"metric {name!r} is a phase path but window_class is {window_class!r}"
+        )
+    if name == "throughput_tokens_s":
+        raise AnalysisInputError(
+            "throughput_tokens_s is the legacy N/(t_last-t_first) convention; "
+            "reader-facing throughput must select inter_token_throughput_tokens_s"
+        )
+
+
 def metric_value(summary: Mapping[str, Any], metric: Mapping[str, Any]) -> float | None:
+    enforce_metric_window_consistency(metric)
     name = metric.get("name")
     value: Any
     if isinstance(name, str) and name.startswith("phase_energy_j."):
@@ -1690,6 +1803,94 @@ def metric_value(summary: Mapping[str, Any], metric: Mapping[str, Any]) -> float
         return None
     converted = float(value)
     return converted if math.isfinite(converted) else None
+
+
+def metric_json_pointer(metric_name: str) -> str:
+    """Canonical summary-rooted JSON Pointer for a governed metric name."""
+
+    def escape(token: str) -> str:
+        return token.replace("~", "~0").replace("/", "~1")
+
+    parts = metric_name.split(".", 1)
+    if len(parts) == 2 and parts[0] == "phase_energy_j":
+        return "/phase_energy_j/" + escape(parts[1])
+    return "/" + escape(metric_name)
+
+
+def anchor_shift_envelope(
+    summary: Mapping[str, Any] | None, metric_name: str
+) -> tuple[dict[str, float] | None, str | None]:
+    """Read one frozen per-metric anchor-shift energy envelope additively.
+
+    Returns ``(envelope, problem)`` where ``problem`` is ``None`` on a valid
+    envelope, ``"absent"`` when the summary does not carry one for this
+    metric (legal on pre-anchor wires), and ``"malformed"`` when an envelope
+    is present but fails its own internal consistency (always fail-closed).
+    Field names are FROZEN by the adjudicated 2026-07-19 design:
+    ``energy_anchor_shift_envelopes`` maps summary-rooted JSON-Pointer metric
+    paths to ``{method, anchor_bound_s, point_j, lower_j, upper_j,
+    max_abs_delta_j}`` with method ``common_trace_shift_interval_overlap_v1``.
+    """
+
+    envelopes = (
+        summary.get(ANCHOR_SHIFT_ENVELOPE_FIELD)
+        if isinstance(summary, Mapping)
+        else None
+    )
+    if not isinstance(envelopes, Mapping):
+        return None, "absent" if envelopes is None else "malformed"
+    candidate = envelopes.get(metric_json_pointer(metric_name))
+    if candidate is None:
+        return None, "absent"
+    if not isinstance(candidate, Mapping):
+        return None, "malformed"
+    if candidate.get("method") != ANCHOR_SHIFT_ENVELOPE_METHOD:
+        return None, "malformed"
+
+    def finite(value: object) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        converted = float(value)
+        return converted if math.isfinite(converted) else None
+
+    anchor_bound = finite(candidate.get("anchor_bound_s"))
+    point = finite(candidate.get("point_j"))
+    lower = finite(candidate.get("lower_j"))
+    upper = finite(candidate.get("upper_j"))
+    max_abs_delta = finite(candidate.get("max_abs_delta_j"))
+    if (
+        anchor_bound is None
+        or anchor_bound < 0.0
+        or point is None
+        or lower is None
+        or upper is None
+        or max_abs_delta is None
+        or max_abs_delta < 0.0
+        or not (lower <= point <= upper)
+        # A stated worst-case shift smaller than the envelope's own reach is
+        # internally inconsistent (understated bound), never a pass.
+        or max_abs_delta < max(point - lower, upper - point) - 1e-12
+    ):
+        return None, "malformed"
+    return (
+        {
+            "method": ANCHOR_SHIFT_ENVELOPE_METHOD,
+            "anchor_bound_s": anchor_bound,
+            "point_j": point,
+            "lower_j": lower,
+            "upper_j": upper,
+            "max_abs_delta_j": max_abs_delta,
+        },
+        None,
+    )
+
+
+def _summary_reducer_version(summary: Mapping[str, Any] | None) -> str | None:
+    provenance = (
+        summary.get("summary_provenance") if isinstance(summary, Mapping) else None
+    )
+    value = provenance.get("reducer_version") if isinstance(provenance, Mapping) else None
+    return value if isinstance(value, str) else None
 
 
 def _precheck_path(metric: Mapping[str, Any]) -> tuple[str, str | None]:
@@ -1920,10 +2121,11 @@ def governed_stochastic_variance(
     )
     governed_evidence_present = bool(
         isinstance(provenance, Mapping)
-        and _governed_idle_variance_reducer(provenance.get("reducer_version"))
         and isinstance(uncertainty, Mapping)
         and uncertainty.get("status") == "estimated"
-        and uncertainty.get("method") == GOVERNED_IDLE_VARIANCE_METHOD
+        and governed_idle_variance_pair(
+            provenance.get("reducer_version"), uncertainty.get("method")
+        )
         and variance_present
     )
     if not governed_evidence_present:
@@ -1946,12 +2148,56 @@ def deterministic_bounds(
     evidence: BundleEvidence,
     metric: Mapping[str, Any],
 ) -> tuple[dict[str, float], tuple[str, ...]]:
+    """Collect deterministic bound terms for one bundle/metric pair.
+
+    T0.6 anchor-bound propagation: on the anchor-envelope wires (reducer
+    0.5.1 / AXI 0.6.1) the per-metric ``energy_anchor_shift_envelopes`` entry
+    and — for request metrics — the
+    ``energy_bound_terms_j.E_clock_anchor_shift_bound_j`` scalar are REQUIRED
+    and propagate as the ``E_clock_anchor_shift_bound_j`` deterministic term.
+    Passing the reducer's per-metric envelope gate never makes a comparative
+    contrast identifiable by itself: the contrast consumes this bound
+    explicitly through its decision interval.  Pre-anchor wires read
+    additively (absent adds nothing; present-but-malformed fails closed).
+    """
+
     summary = evidence.summary
     if not isinstance(summary, Mapping):
         return {}, ("required_error_term_unknown",)
     name = metric.get("name")
     result: dict[str, float] = {}
     reasons: list[str] = []
+
+    def record_anchor_term(scalar_terms: Mapping[str, Any] | None) -> None:
+        anchor_required = (
+            _summary_reducer_version(summary) in ANCHOR_ENVELOPE_REDUCER_VERSIONS
+        )
+        envelope, problem = anchor_shift_envelope(summary, str(name))
+        bound: float | None = envelope["max_abs_delta_j"] if envelope else None
+        scalar = (
+            scalar_terms.get(ANCHOR_SHIFT_BOUND_TERM)
+            if isinstance(scalar_terms, Mapping)
+            else None
+        )
+        scalar_valid = (
+            not isinstance(scalar, bool)
+            and isinstance(scalar, (int, float))
+            and math.isfinite(scalar)
+            and float(scalar) >= 0.0
+        )
+        if scalar_terms is not None:
+            # Request-level metrics carry the frozen scalar alongside the
+            # per-metric envelope; consume the larger of the two.
+            if scalar_valid and bound is not None:
+                bound = max(bound, float(scalar))
+            elif anchor_required:
+                bound = None
+        if problem == "malformed" or (anchor_required and bound is None):
+            reasons.append("anchor_energy_envelope_unrecorded")
+            return
+        if bound is not None:
+            result[ANCHOR_SHIFT_BOUND_TERM] = bound
+
     if name in {"gross_energy_j", "energy_request_j"}:
         terms = summary.get("energy_bound_terms_j")
         interpolation = terms.get("E_interpolation_joint_edge_bound_j") if isinstance(terms, Mapping) else None
@@ -1965,6 +2211,7 @@ def deterministic_bounds(
                 result["E_drift_bound_j"] = float(drift)
             else:
                 reasons.append("drift_term_unknown")
+        record_anchor_term(terms if isinstance(terms, Mapping) else {})
     elif isinstance(name, str) and name.startswith("phase_energy_j."):
         precheck = window_evidence_precheck(evidence, metric)
         raw = precheck.get("evidence")
@@ -1983,6 +2230,7 @@ def deterministic_bounds(
                 reasons.append("interpolation_bound_unrecorded")
         else:
             reasons.append("interpolation_bound_unrecorded")
+        record_anchor_term(None)
     return result, tuple(ordered_reason_codes(reasons))
 
 
