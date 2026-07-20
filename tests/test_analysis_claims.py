@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import gzip
 import hashlib
+import json
 import unittest
 from pathlib import Path
 
@@ -19,13 +22,21 @@ from joulewise.analysis_engine.estimators import (
     PairedObservation,
     estimate_paired_blocks,
 )
-from joulewise.analysis_engine.claims import REDUCER_REASON_CODES, evaluate_claim
+from joulewise.analysis_engine.claims import (
+    REDUCER_REASON_CODES,
+    evaluate_claim,
+    ordered_reason_codes,
+)
 from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
     BundleEvidence,
     FloorRequest,
     FloorResolution,
+    GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     LoadedAnalysisInputs,
+    deterministic_bounds,
     governed_stochastic_variance,
+    metric_value,
     resolve_floor,
     window_evidence_precheck,
 )
@@ -39,6 +50,21 @@ from tests.test_detection_floor import make_artifact, make_consumer
 
 HEX = "a" * 64
 MANIFEST_ID = "am-" + "b" * 64
+
+# Byte-exact copy of the stored 0.5.0/v2 corpus wire
+# runs_recal4_20260719/p2015-df-su-sentinel-abs-r01/summary_metrics.json
+# (gzip+base64; never hand-simplified).  The sha256 pin guards the fixture.
+_SENTINEL_SUMMARY_SHA256 = (
+    "8abd820ea4955713897c512cde703c0e05dfe9aa3a1b1daabc4c4062459f42e8"
+)
+_SENTINEL_SUMMARY_B64 = "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"
+
+
+def sentinel_stored_wire() -> dict:
+    raw = gzip.decompress(base64.b64decode(_SENTINEL_SUMMARY_B64))
+    if hashlib.sha256(raw).hexdigest() != _SENTINEL_SUMMARY_SHA256:
+        raise AssertionError("embedded sentinel wire fixture drifted")
+    return json.loads(raw)
 
 
 def bundle_audit_row(bundle_id: str) -> dict:
@@ -646,6 +672,8 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(reasons, ())
         self.assertEqual(terms[0]["variance"], 2.5)
 
+        # 0.4.0 is an unknown wire; 0.5.0 with the v1 method is a CROSSED
+        # pair under the T0.3 exact matrix — both fail closed.
         for rejected_version in ("0.4.0", "0.5.0"):
             with self.subTest(reducer_version=rejected_version):
                 evidence.summary["summary_provenance"]["reducer_version"] = (
@@ -656,6 +684,124 @@ class InputSeamTests(unittest.TestCase):
                 )
                 self.assertEqual(terms, ())
                 self.assertEqual(reasons, ("required_error_term_unknown",))
+
+    def test_t03_exact_reducer_idle_method_pair_matrix(self):
+        """Every allowed pair passes; every crossed or unknown pair fails."""
+
+        v1 = "newey_west_bartlett_10s_iid_floor_v1"
+        v2 = "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
+        self.assertEqual(
+            dict(GOVERNED_REDUCER_IDLE_METHOD_PAIRS),
+            {
+                "0.4.1": v1,
+                "0.4.2": v1,
+                "0.5.0": v2,
+                "0.5.1": v2,
+                "0.6.0": v2,
+                "0.6.1": v2,
+            },
+        )
+
+        def variance_for(reducer_version, method):
+            evidence = BundleEvidence(
+                entry={},
+                bundle_id="bundle",
+                relative_path="bundle",
+                path=Path("bundle"),
+                summary={
+                    "summary_provenance": {"reducer_version": reducer_version},
+                    "idle_mean_uncertainty": {
+                        "status": "estimated",
+                        "method": method,
+                        "correlation_scope": "independent_run",
+                    },
+                    "energy_variance_terms_j2": {"E_idle_mean_j2": 2.5},
+                },
+                metadata={},
+                raw_config={},
+                strict_problems=(),
+                base_reason_codes=(),
+                config_sha256=HEX,
+                summary_sha256=HEX,
+                replacement_classification="registered",
+                inclusion_status="included",
+            )
+            return governed_stochastic_variance(
+                evidence, {"name": "energy_request_j"}
+            )
+
+        for reducer_version, method in GOVERNED_REDUCER_IDLE_METHOD_PAIRS.items():
+            with self.subTest(pair=(reducer_version, method)):
+                terms, reasons = variance_for(reducer_version, method)
+                self.assertEqual(reasons, ())
+                self.assertEqual(terms[0]["variance"], 2.5)
+
+        crossed = [
+            ("0.4.1", v2),
+            ("0.4.2", v2),
+            ("0.5.0", v1),
+            ("0.5.1", v1),
+            ("0.6.0", v1),
+            ("0.6.1", v1),
+            ("0.4.3", v1),
+            ("0.5.2", v2),
+            ("0.6.2", v2),
+            ("0.7.0", v2),
+            ("0.5.1", "some_future_method_v3"),
+        ]
+        for reducer_version, method in crossed:
+            with self.subTest(pair=(reducer_version, method)):
+                terms, reasons = variance_for(reducer_version, method)
+                self.assertEqual(terms, ())
+                self.assertEqual(reasons, ("required_error_term_unknown",))
+
+    def test_t03_exact_stored_recal4_sentinel_wire_is_consumable(self):
+        """The byte-exact stored 0.5.0 corpus wire yields the governed term."""
+
+        summary = sentinel_stored_wire()
+        provenance = summary["summary_provenance"]
+        self.assertEqual(provenance["reducer_version"], "0.5.0")
+        self.assertEqual(
+            summary["idle_mean_uncertainty"]["method"],
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+        )
+        evidence = BundleEvidence(
+            entry={},
+            bundle_id="p2015-df-su-sentinel-abs-r01",
+            relative_path="p2015-df-su-sentinel-abs-r01",
+            path=Path("p2015-df-su-sentinel-abs-r01"),
+            summary=summary,
+            metadata={},
+            raw_config={},
+            strict_problems=(),
+            base_reason_codes=(),
+            config_sha256=HEX,
+            summary_sha256=HEX,
+            replacement_classification="registered",
+            inclusion_status="included",
+        )
+        terms, reasons = governed_stochastic_variance(
+            evidence, {"name": "energy_request_j"}
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(
+            terms,
+            (
+                {
+                    "name": "E_idle_mean_j2",
+                    "variance": summary["energy_variance_terms_j2"]["E_idle_mean_j2"],
+                    "correlation_scope": "independent_run",
+                },
+            ),
+        )
+        # The stored wire predates the anchor fix: deterministic bounds must
+        # NOT invent an anchor term, and must not refuse for lacking one.
+        bounds, bound_reasons = deterministic_bounds(
+            evidence,
+            {"name": "gross_energy_j", "metric_tag": "gross_request", "window_class": "request"},
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertNotIn("anchor_energy_envelope_unrecorded", bound_reasons)
 
     def test_typed_floor_request_resolves_and_tampered_regime_refuses(self):
         artifact = make_artifact()
@@ -758,6 +904,236 @@ class InputSeamTests(unittest.TestCase):
         idle_resolution = resolve_floor(idle, HEX, idle_request)
         self.assertEqual(idle_resolution.status, "refused")
         self.assertIn("consumer_term_unknown", idle_resolution.reason_codes)
+
+
+def _bounds_evidence(summary: dict) -> BundleEvidence:
+    return BundleEvidence(
+        entry={},
+        bundle_id="bundle",
+        relative_path="bundle",
+        path=Path("bundle"),
+        summary=summary,
+        metadata={},
+        raw_config={},
+        strict_problems=(),
+        base_reason_codes=(),
+        config_sha256=HEX,
+        summary_sha256=HEX,
+        replacement_classification="registered",
+        inclusion_status="included",
+    )
+
+
+class AnchorBoundPropagationTests(unittest.TestCase):
+    """T0.6: frozen 0.5.1/0.6.1 anchor-envelope fields as deterministic bounds."""
+
+    GROSS_METRIC = {
+        "name": "gross_energy_j",
+        "metric_tag": "gross_request",
+        "window_class": "request",
+    }
+
+    def _summary(self, reducer_version: str = "0.5.1", **overrides) -> dict:
+        summary = {
+            "summary_provenance": {"reducer_version": reducer_version},
+            "gross_energy_j": 40.0,
+            "energy_bound_terms_j": {
+                "E_interpolation_joint_edge_bound_j": 0.02,
+                "E_drift_bound_j": 0.0,
+                "E_clock_anchor_shift_bound_j": 0.05,
+            },
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "method": "common_trace_shift_interval_overlap_v1",
+                    "anchor_bound_s": 0.05,
+                    "point_j": 40.0,
+                    "lower_j": 39.96,
+                    "upper_j": 40.03,
+                    "max_abs_delta_j": 0.04,
+                }
+            },
+        }
+        summary.update(overrides)
+        return summary
+
+    def test_anchor_wire_propagates_the_larger_of_envelope_and_scalar(self):
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(self._summary()), self.GROSS_METRIC
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(bounds["E_clock_anchor_shift_bound_j"], 0.05)
+        # Interpolation stays a SEPARATE term; never folded into the anchor.
+        self.assertEqual(bounds["E_interpolation_joint_edge_bound_j"], 0.02)
+
+    def test_anchor_wire_without_envelope_fails_closed(self):
+        summary = self._summary()
+        del summary["energy_anchor_shift_envelopes"]
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertIn("anchor_energy_envelope_unrecorded", reasons)
+
+    def test_anchor_wire_without_request_scalar_fails_closed(self):
+        summary = self._summary()
+        del summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"]
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertIn("anchor_energy_envelope_unrecorded", reasons)
+
+    def test_malformed_envelope_fails_closed_even_on_pre_anchor_wires(self):
+        summary = self._summary(reducer_version="0.4.2")
+        envelope = summary["energy_anchor_shift_envelopes"]["/gross_energy_j"]
+        envelope["max_abs_delta_j"] = 0.001  # understates its own reach
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertIn("anchor_energy_envelope_unrecorded", reasons)
+
+    def test_pre_anchor_wire_without_envelope_reads_additively(self):
+        summary = self._summary(reducer_version="0.4.2")
+        del summary["energy_anchor_shift_envelopes"]
+        del summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"]
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertEqual(reasons, ())
+
+    def test_phase_envelope_propagates_through_the_phase_pointer(self):
+        summary = {
+            "summary_provenance": {"reducer_version": "0.5.1"},
+            "phase_energy_j": {"prefill": 5.0},
+            "window_evidence_precheck": {
+                "phase": {
+                    "prefill": {
+                        "eligible": True,
+                        "reasons": [],
+                        "windows": [{"interpolation_joint_edge_bound_j": 0.01}],
+                    }
+                }
+            },
+            "energy_anchor_shift_envelopes": {
+                "/phase_energy_j/prefill": {
+                    "method": "common_trace_shift_interval_overlap_v1",
+                    "anchor_bound_s": 0.05,
+                    "point_j": 5.0,
+                    "lower_j": 4.9,
+                    "upper_j": 5.05,
+                    "max_abs_delta_j": 0.1,
+                }
+            },
+        }
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary),
+            {
+                "name": "phase_energy_j.prefill",
+                "metric_tag": "gross_prefill",
+                "window_class": "phase",
+            },
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(bounds["E_clock_anchor_shift_bound_j"], 0.1)
+
+    def test_envelope_pass_never_makes_a_contrast_identifiable_by_itself(self):
+        """The contrast consumes the anchor bound explicitly (T0.6)."""
+
+        term = DeterministicBoundTerm(
+            "E_clock_anchor_shift_bound_j", bound_a=0.6, bound_b=0.6
+        )
+        observations = tuple(
+            PairedObservation(
+                f"b-{index}", 100.0, 101.0, deterministic_terms=(term,)
+            )
+            for index in range(5)
+        )
+        estimate = estimate_paired_blocks(observations)
+        # Effect 1.0 J with a 1.2 J anchor bound: the decision interval
+        # crosses zero even though every member passed its envelope gate.
+        self.assertLess(estimate.decision_interval.lower, 0.0)
+        self.assertGreater(estimate.metrology_aware_ci95.lower, 0.0)
+
+    def test_new_anchor_reason_codes_are_registered_and_not_resolvable(self):
+        added = {
+            "clock_anchor_unresolved",
+            "anchor_energy_envelope_unrecorded",
+            "anchor_energy_envelope_exceeds_quarter_metric",
+        }
+        self.assertLessEqual(added, REDUCER_REASON_CODES)
+        self.assertEqual(sorted(added), ordered_reason_codes(added))
+        for reason in sorted(added):
+            with self.subTest(reason=reason):
+                result = evaluation(base_reason_codes=[reason])
+                self.assertEqual(result["outcome"], "not_resolvable")
+                self.assertFalse(result["claim_ready_for_l2_l3"])
+
+    def test_stored_precheck_carrying_anchor_reasons_stays_readable(self):
+        """A 0.5.1 precheck with the new barrier reasons must not collapse
+        into ``window_evidence_precheck_missing`` — and no amount of clean
+        source provenance may override the metric-level failure."""
+
+        evidence = _bounds_evidence(
+            {
+                "status": "succeeded",
+                "window_evidence_precheck": {
+                    "gross_request": {
+                        "eligible": False,
+                        "reasons": ["clock_anchor_unresolved"],
+                    }
+                },
+                "measurement_quality": {"cooldown_cap_hit": False},
+            }
+        )
+        result = window_evidence_precheck(evidence, dict(self.GROSS_METRIC))
+        self.assertFalse(result["eligible"])
+        self.assertIn("clock_anchor_unresolved", result["reasons"])
+        self.assertNotIn("window_evidence_precheck_missing", result["reasons"])
+
+
+class MetricWindowHygieneTests(unittest.TestCase):
+    """T0.6 (audit P1.4): metric/window crossings fail loudly."""
+
+    def test_phase_window_with_gross_metric_fails_loudly(self):
+        with self.assertRaisesRegex(AnalysisInputError, "phase_energy_j"):
+            metric_value(
+                {"gross_energy_j": 40.0},
+                {"name": "gross_energy_j", "window_class": "phase"},
+            )
+
+    def test_phase_path_with_request_window_fails_loudly(self):
+        with self.assertRaisesRegex(AnalysisInputError, "phase path"):
+            metric_value(
+                {"phase_energy_j": {"prefill": 5.0}},
+                {"name": "phase_energy_j.prefill", "window_class": "request"},
+            )
+
+    def test_legacy_throughput_field_is_never_extracted(self):
+        with self.assertRaisesRegex(
+            AnalysisInputError, "inter_token_throughput_tokens_s"
+        ):
+            metric_value(
+                {"throughput_tokens_s": 225.0},
+                {"name": "throughput_tokens_s", "window_class": "request"},
+            )
+
+    def test_consistent_pairs_still_extract(self):
+        self.assertEqual(
+            metric_value(
+                {"phase_energy_j": {"decode": 7.5}},
+                {"name": "phase_energy_j.decode", "window_class": "phase"},
+            ),
+            7.5,
+        )
+        self.assertEqual(
+            metric_value(
+                {"gross_energy_j": 40.0},
+                {"name": "gross_energy_j", "window_class": "request"},
+            ),
+            40.0,
+        )
 
 
 class ClaimArtifactTests(unittest.TestCase):

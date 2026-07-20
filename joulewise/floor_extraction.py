@@ -1,0 +1,773 @@
+"""Fail-closed detection-floor extraction gates (2026-07-19 audit T0.4/T0.6).
+
+This module is the prospective, claim-bearing extraction path for D-054
+detection-floor cells.  It composes ONLY existing governed primitives:
+
+* the hash-verified campaign cooldown join
+  (:func:`joulewise.analysis_engine.inputs.campaign_cooldown_evidence`) —
+  there is deliberately no second join model here;
+* the reducer's per-metric :func:`window_evidence_precheck` as a HARD gate —
+  source-clean provenance (``source_provenance.claim_eligible``) NEVER
+  overrides a metric precheck failure (audit P0.2);
+* the frozen anchor-shift energy envelopes
+  (:func:`joulewise.analysis_engine.inputs.anchor_shift_envelope`) — a cell
+  refuses unless every admitted member carries a finite per-metric envelope
+  containing its point value (audit P0.1 / D-078 gate 1);
+* the D-054 false-effect floor math in :mod:`joulewise.detection_floor`.
+
+Cooldown cap-hit members (audit P0.4) are handled by SAME-SLOT EXCLUSION:
+the affected repetition slot (absolute cells) or the entire ABBA block
+(comparative cells) is removed and the cell proceeds at n-1, which the frozen
+small-sample guard factor then penalises automatically.  Retaining a cap-hit
+member behind a governed drift term is predeclared by
+``docs/phase_2/detection_floor.md`` but NOT implemented; requesting it fails
+closed.  Missing, tampered, duplicated, or ambiguous campaign cooldown
+evidence refuses the whole cell — absence of evidence is never clean n.
+
+Governance: per D-078 no claim-bearing floor may be published from corpora
+recorded before the trace-time-anchor fix.  Because those wires (reducer
+<= 0.5.0 / AXI 0.6.0) cannot carry anchor-shift envelopes, they refuse here
+mechanically with ``anchor_energy_envelope_unrecorded``.  Salvage of the
+existing 288-bundle corpus is a separate, explicitly provisional artifact and
+is out of scope for this module.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+from joulewise.analysis_engine.inputs import (
+    BundleEvidence,
+    GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
+    _sha256_file,
+    _summary_reducer_version,
+    anchor_shift_envelope,
+    campaign_cooldown_evidence,
+    deterministic_bounds,
+    governed_idle_variance_pair,
+    window_evidence_precheck,
+)
+from joulewise.detection_floor import (
+    FloorEstimate,
+    abba_delta,
+    absolute_false_effect_floor,
+    comparative_false_effect_floor,
+    complete_bundle_sha256,
+)
+
+__all__ = [
+    "EXTRACTION_SCHEMA_VERSION",
+    "EXTRACTION_SPEC_SCHEMA_VERSION",
+    "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
+    "CELL_REFUSAL_CODES",
+    "READER_THROUGHPUT_FIELD",
+    "LEGACY_THROUGHPUT_FIELD",
+    "ANCHOR_QUARTER_METRIC_LIMIT",
+    "MemberReport",
+    "CellReport",
+    "FloorExtractionError",
+    "governed_cell_metric",
+    "reader_throughput_tokens_s",
+    "extract_absolute_cell",
+    "extract_comparative_cell",
+    "extract_cells",
+]
+
+EXTRACTION_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
+EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
+
+# The only implemented cap-hit disposition.  A governed drift-term retention
+# path exists on paper (docs/phase_2/detection_floor.md) but has no governed
+# bound source yet; naming it fails closed rather than improvising one.
+CAP_HIT_POLICY_EXCLUDE_SAME_SLOT = "exclude_same_slot"
+
+READER_THROUGHPUT_FIELD = "inter_token_throughput_tokens_s"
+LEGACY_THROUGHPUT_FIELD = "throughput_tokens_s"
+
+# Envelope half-width plus joint interpolation bound must stay within a
+# quarter of the point magnitude (adjudicated 2026-07-19 design).
+ANCHOR_QUARTER_METRIC_LIMIT = 0.25
+
+# Closed refusal vocabulary for cell-level extraction refusals.  Member-level
+# ``reasons`` additionally carry governed reducer/engine reason codes
+# verbatim from window_evidence_precheck / deterministic_bounds.
+CELL_REFUSAL_CODES = (
+    "bundle_missing",
+    "summary_unreadable",
+    "bundle_status_not_succeeded",
+    "reducer_wire_unknown",
+    "idle_method_pair_invalid",
+    "metric_missing_or_nonfinite",
+    "window_evidence_precheck_failed",
+    "campaign_cooldown_evidence_missing",
+    "cap_hit_drift_term_unavailable",
+    "insufficient_members_after_exclusion",
+    "anchor_energy_envelope_unrecorded",
+    "anchor_energy_envelope_exceeds_quarter_metric",
+    "clock_anchor_unresolved",
+)
+
+_IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
+_WINDOW_CLASSES = ("request", "phase")
+_ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
+
+
+class FloorExtractionError(ValueError):
+    """Invalid extraction process input: no report row is produced."""
+
+
+def governed_cell_metric(metric: object, window_class: object) -> tuple[str, str]:
+    """Validate a cell's metric/window pairing before touching evidence.
+
+    Fails loudly (T0.6, audit P1.4): phase cells extract ONLY
+    ``phase_energy_j.<target>``; a phase cell naming whole-request gross (or
+    any request metric naming a phase path) is a process error, as is the
+    legacy ``throughput_tokens_s`` field in any position.
+    """
+
+    if not isinstance(metric, str) or not metric:
+        raise FloorExtractionError("cell metric must be a nonempty string")
+    if window_class not in _WINDOW_CLASSES:
+        raise FloorExtractionError(
+            f"cell window_class must be one of {_WINDOW_CLASSES}, got {window_class!r}"
+        )
+    if metric == LEGACY_THROUGHPUT_FIELD:
+        raise FloorExtractionError(
+            "throughput_tokens_s is the legacy N/(t_last-t_first) convention; "
+            f"reader-facing throughput must select {READER_THROUGHPUT_FIELD}"
+        )
+    is_phase_path = metric.startswith("phase_energy_j.")
+    if window_class == "phase" and not is_phase_path:
+        raise FloorExtractionError(
+            f"phase cells extract only phase_energy_j.<target>, got {metric!r}"
+        )
+    if window_class != "phase" and is_phase_path:
+        raise FloorExtractionError(
+            f"phase metric {metric!r} requires window_class 'phase', got {window_class!r}"
+        )
+    if not is_phase_path and metric not in {"gross_energy_j"} | _IDLE_SUBTRACTED_METRICS:
+        raise FloorExtractionError(
+            f"metric {metric!r} is not a governed floor-extraction metric"
+        )
+    return metric, str(window_class)
+
+
+def reader_throughput_tokens_s(summary: Mapping[str, Any] | None) -> float | None:
+    """Return the governed N-1 reader-facing throughput, never the legacy field."""
+
+    value = (
+        summary.get(READER_THROUGHPUT_FIELD) if isinstance(summary, Mapping) else None
+    )
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) and converted >= 0.0 else None
+
+
+@dataclass(frozen=True)
+class MemberReport:
+    slot: str
+    bundle_id: str
+    block_id: str | None
+    position: str | None
+    value_j: float | None
+    cooldown_result: str | None
+    cooldown_verified: bool
+    cap_hit: bool
+    excluded: bool
+    reasons: tuple[str, ...]
+    anchor_shift_bound_j: float | None
+    bundle_sha256: str | None
+    config_sha256: str | None
+
+    def as_row(self) -> dict[str, Any]:
+        return {
+            "slot": self.slot,
+            "bundle_id": self.bundle_id,
+            "block_id": self.block_id,
+            "position": self.position,
+            "metric_value_j": self.value_j,
+            "cooldown_result": self.cooldown_result,
+            "cooldown_verified": self.cooldown_verified,
+            "cap_hit": self.cap_hit,
+            "excluded": self.excluded,
+            "reasons": list(self.reasons),
+            "anchor_shift_bound_j": self.anchor_shift_bound_j,
+            "bundle_sha256": self.bundle_sha256,
+            "config_sha256": self.config_sha256,
+        }
+
+
+@dataclass(frozen=True)
+class CellReport:
+    cell_id: str
+    kind: str
+    metric: str
+    window_class: str
+    cap_hit_policy: str
+    members: tuple[MemberReport, ...]
+    excluded_slots: tuple[str, ...]
+    n_planned: int
+    n_admitted: int
+    refusal_reasons: tuple[str, ...]
+    floor: FloorEstimate | None
+    anchor_shift_bound_max_j: float | None
+
+    @property
+    def extractable(self) -> bool:
+        return not self.refusal_reasons and self.floor is not None
+
+    def as_row(self) -> dict[str, Any]:
+        floor_row: dict[str, Any] | None = None
+        if self.floor is not None:
+            floor_row = {
+                "kind": self.floor.kind,
+                "n": self.floor.n,
+                "mean_j": self.floor.mean_j,
+                "deviations_j": list(self.floor.deviations_j),
+                "sample_stddev_j": self.floor.sample_stddev_j,
+                "max_abs_deviation_j": self.floor.max_abs_deviation_j,
+                "t_critical": self.floor.t_critical,
+                "prediction_component_j": self.floor.prediction_component_j,
+                "unguarded_floor_j": self.floor.unguarded_floor_j,
+                "guard_factor": self.floor.guard_factor,
+                "guarded_floor_j": self.floor.guarded_floor_j,
+                "smoke_only": self.floor.guarded_floor_j is None,
+            }
+        return {
+            "cell_id": self.cell_id,
+            "kind": self.kind,
+            "metric": self.metric,
+            "window_class": self.window_class,
+            "cap_hit_policy": self.cap_hit_policy,
+            "n_planned": self.n_planned,
+            "n_admitted": self.n_admitted,
+            "excluded_slots": list(self.excluded_slots),
+            "extractable": self.extractable,
+            "refusal_reasons": list(self.refusal_reasons),
+            "floor": floor_row,
+            "anchor_shift_bound_max_j": self.anchor_shift_bound_max_j,
+            "members": [member.as_row() for member in self.members],
+        }
+
+
+def _read_summary(path: Path) -> tuple[Mapping[str, Any] | None, str | None]:
+    if not path.is_dir():
+        return None, "bundle_missing"
+    summary_path = path / "summary_metrics.json"
+    try:
+        parsed = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "summary_unreadable"
+    if not isinstance(parsed, Mapping):
+        return None, "summary_unreadable"
+    return parsed, None
+
+
+def _finite(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | None:
+    if metric.startswith("phase_energy_j."):
+        phases = summary.get("phase_energy_j")
+        raw = phases.get(metric.split(".", 1)[1]) if isinstance(phases, Mapping) else None
+    else:
+        raw = summary.get(metric)
+    return _finite(raw)
+
+
+def _evaluate_member(
+    *,
+    slot: str,
+    bundle_id: str,
+    block_id: str | None,
+    position: str | None,
+    runs_root: Path,
+    metric: str,
+    window_class: str,
+    cooldowns: Mapping[str, Mapping[str, Any]],
+    hash_bundles: bool,
+) -> MemberReport:
+    """Evaluate every governed member gate; reasons are fail-closed evidence."""
+
+    path = runs_root / bundle_id
+    summary, read_problem = _read_summary(path)
+    cooldown = cooldowns.get(bundle_id)
+    cooldown_result = (
+        cooldown.get("result") if isinstance(cooldown, Mapping) else None
+    )
+    cooldown_verified = bool(
+        isinstance(cooldown, Mapping) and cooldown.get("verified") is True
+    )
+    reasons: list[str] = []
+    value: float | None = None
+    anchor_bound: float | None = None
+    cap_hit = False
+    if read_problem is not None:
+        reasons.append(read_problem)
+    else:
+        assert summary is not None
+        if summary.get("status") != "succeeded":
+            reasons.append("bundle_status_not_succeeded")
+        reducer_version = _summary_reducer_version(summary)
+        if reducer_version not in GOVERNED_REDUCER_IDLE_METHOD_PAIRS:
+            reasons.append("reducer_wire_unknown")
+        if metric in _IDLE_SUBTRACTED_METRICS:
+            uncertainty = summary.get("idle_mean_uncertainty")
+            method = (
+                uncertainty.get("method") if isinstance(uncertainty, Mapping) else None
+            )
+            status = (
+                uncertainty.get("status") if isinstance(uncertainty, Mapping) else None
+            )
+            if status != "estimated" or not governed_idle_variance_pair(
+                reducer_version, method
+            ):
+                reasons.append("idle_method_pair_invalid")
+
+        quality = summary.get("measurement_quality")
+        summary_cap_hit = (
+            quality.get("cooldown_cap_hit") if isinstance(quality, Mapping) else None
+        )
+        # Only VERIFIED cap-hit evidence licenses the same-slot exclusion
+        # disposition.  An unverified/tampered "cap_hit" claim is missing
+        # evidence and refuses the cell through the precheck join gate below.
+        cap_hit = bool(
+            summary_cap_hit is True
+            or (cooldown_verified and cooldown_result == "cap_hit")
+        )
+
+        evidence = BundleEvidence(
+            entry={},
+            bundle_id=bundle_id,
+            relative_path=bundle_id,
+            path=path,
+            summary=summary,
+            metadata=None,
+            raw_config=None,
+            strict_problems=(),
+            base_reason_codes=(),
+            config_sha256=None,
+            summary_sha256=None,
+            replacement_classification="registered",
+            inclusion_status="included",
+            campaign_cooldown=cooldown,
+        )
+        precheck_metric = {
+            "name": _precheck_metric_name(metric),
+            "metric_tag": f"{slot}:{metric}",
+            "window_class": window_class,
+        }
+        precheck = window_evidence_precheck(evidence, precheck_metric)
+        precheck_reasons = [
+            reason
+            for reason in precheck.get("reasons", [])
+            # cap-hit is dispositioned by same-slot exclusion below, not by
+            # refusing the whole cell.
+            if reason != "cooldown_cap_hit"
+        ]
+        reasons.extend(precheck_reasons)
+
+        value = _member_metric_value(summary, _precheck_metric_name(metric))
+        if value is None:
+            reasons.append("metric_missing_or_nonfinite")
+        else:
+            envelope, _envelope_problem = anchor_shift_envelope(
+                summary, _precheck_metric_name(metric)
+            )
+            if envelope is None:
+                # Anchor-shift envelopes are REQUIRED for claim-bearing floor
+                # extraction on every wire (D-078 gate 1); pre-anchor corpora
+                # refuse here mechanically.
+                reasons.append("anchor_energy_envelope_unrecorded")
+            elif not math.isclose(
+                envelope["point_j"], value, rel_tol=1e-9, abs_tol=1e-12
+            ):
+                reasons.append("anchor_energy_envelope_unrecorded")
+            else:
+                bounds, bound_reasons = deterministic_bounds(evidence, precheck_metric)
+                reasons.extend(bound_reasons)
+                if not bound_reasons:
+                    half_width = max(
+                        envelope["point_j"] - envelope["lower_j"],
+                        envelope["upper_j"] - envelope["point_j"],
+                    )
+                    anchor_bound = bounds.get(
+                        "E_clock_anchor_shift_bound_j", envelope["max_abs_delta_j"]
+                    )
+                    joint = bounds.get("E_interpolation_joint_edge_bound_j", 0.0)
+                    total = half_width + joint
+                    if value == 0.0:
+                        if total > 0.0:
+                            reasons.append(
+                                "anchor_energy_envelope_exceeds_quarter_metric"
+                            )
+                    elif total / abs(value) > ANCHOR_QUARTER_METRIC_LIMIT:
+                        reasons.append(
+                            "anchor_energy_envelope_exceeds_quarter_metric"
+                        )
+
+    bundle_sha256: str | None = None
+    config_sha256: str | None = None
+    if hash_bundles and read_problem is None:
+        try:
+            bundle_sha256 = complete_bundle_sha256(path)
+        except ValueError:
+            bundle_sha256 = None
+        config_sha256 = _sha256_file(path / "config.json")
+
+    return MemberReport(
+        slot=slot,
+        bundle_id=bundle_id,
+        block_id=block_id,
+        position=position,
+        value_j=value,
+        cooldown_result=cooldown_result if isinstance(cooldown_result, str) else None,
+        cooldown_verified=cooldown_verified,
+        cap_hit=cap_hit,
+        excluded=False,
+        reasons=tuple(dict.fromkeys(reasons)),
+        anchor_shift_bound_j=anchor_bound,
+        bundle_sha256=bundle_sha256,
+        config_sha256=config_sha256,
+    )
+
+
+def _precheck_metric_name(metric: str) -> str:
+    # ``idle_subtracted_energy_j`` shares the idle-subtracted request window
+    # evidence and point value with ``energy_request_j`` (same reducer path).
+    return "energy_request_j" if metric == "idle_subtracted_energy_j" else metric
+
+
+def _exclude(member: MemberReport) -> MemberReport:
+    return MemberReport(
+        slot=member.slot,
+        bundle_id=member.bundle_id,
+        block_id=member.block_id,
+        position=member.position,
+        value_j=member.value_j,
+        cooldown_result=member.cooldown_result,
+        cooldown_verified=member.cooldown_verified,
+        cap_hit=member.cap_hit,
+        excluded=True,
+        reasons=member.reasons,
+        anchor_shift_bound_j=member.anchor_shift_bound_j,
+        bundle_sha256=member.bundle_sha256,
+        config_sha256=member.config_sha256,
+    )
+
+
+def _member_fatal_reasons(member: MemberReport) -> tuple[str, ...]:
+    """Every recorded reason on an admitted member is fatal (HARD gate)."""
+
+    return member.reasons
+
+
+def _validate_cap_hit_policy(cap_hit_policy: str) -> None:
+    if cap_hit_policy != CAP_HIT_POLICY_EXCLUDE_SAME_SLOT:
+        # Drift-term retention is predeclared but has no governed bound
+        # source yet; anything else fails closed rather than inventing one.
+        raise FloorExtractionError(
+            f"unsupported cap-hit policy {cap_hit_policy!r}; only "
+            f"{CAP_HIT_POLICY_EXCLUDE_SAME_SLOT!r} is governed"
+        )
+
+
+def _unique_bundle_ids(bundle_ids: Sequence[str]) -> None:
+    seen: set[str] = set()
+    for bundle_id in bundle_ids:
+        if not isinstance(bundle_id, str) or not bundle_id:
+            raise FloorExtractionError("member bundle_id must be a nonempty string")
+        if bundle_id in seen:
+            raise FloorExtractionError(
+                f"duplicate member bundle_id {bundle_id!r}: pseudo-replication refused"
+            )
+        seen.add(bundle_id)
+
+
+def extract_absolute_cell(
+    *,
+    cell_id: str,
+    metric: str,
+    window_class: str,
+    members: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    cooldowns: Mapping[str, Mapping[str, Any]],
+    cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
+    hash_bundles: bool = False,
+) -> CellReport:
+    """Extract one absolute D-054 cell under the audit gates."""
+
+    metric, window_class = governed_cell_metric(metric, window_class)
+    _validate_cap_hit_policy(cap_hit_policy)
+    if not members:
+        raise FloorExtractionError("absolute cell requires at least one member")
+    slots = [str(row.get("slot", row.get("bundle_id", ""))) for row in members]
+    if len(set(slots)) != len(slots):
+        raise FloorExtractionError("absolute cell member slots must be unique")
+    _unique_bundle_ids([str(row.get("bundle_id", "")) for row in members])
+
+    reports: list[MemberReport] = []
+    for row, slot in zip(members, slots):
+        reports.append(
+            _evaluate_member(
+                slot=slot,
+                bundle_id=str(row["bundle_id"]),
+                block_id=None,
+                position=None,
+                runs_root=runs_root,
+                metric=metric,
+                window_class=window_class,
+                cooldowns=cooldowns,
+                hash_bundles=hash_bundles,
+            )
+        )
+
+    refusals: list[str] = []
+    excluded_slots: list[str] = []
+    admitted: list[MemberReport] = []
+    final_reports: list[MemberReport] = []
+    for member in reports:
+        if member.cap_hit:
+            excluded_slots.append(member.slot)
+            final_reports.append(_exclude(member))
+            continue
+        final_reports.append(member)
+        fatal = _member_fatal_reasons(member)
+        if fatal:
+            refusals.extend(fatal)
+            continue
+        admitted.append(member)
+
+    floor: FloorEstimate | None = None
+    anchor_max: float | None = None
+    if not refusals:
+        if len(admitted) < 2:
+            refusals.append("insufficient_members_after_exclusion")
+        else:
+            floor = absolute_false_effect_floor(
+                [member.value_j for member in admitted]  # type: ignore[list-item]
+            )
+            anchor_values = [
+                member.anchor_shift_bound_j
+                for member in admitted
+                if member.anchor_shift_bound_j is not None
+            ]
+            anchor_max = max(anchor_values) if anchor_values else None
+
+    return CellReport(
+        cell_id=cell_id,
+        kind="absolute",
+        metric=metric,
+        window_class=window_class,
+        cap_hit_policy=cap_hit_policy,
+        members=tuple(final_reports),
+        excluded_slots=tuple(excluded_slots),
+        n_planned=len(reports),
+        n_admitted=len(admitted) if not refusals else 0,
+        refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
+        floor=floor if not refusals else None,
+        anchor_shift_bound_max_j=anchor_max,
+    )
+
+
+def extract_comparative_cell(
+    *,
+    cell_id: str,
+    metric: str,
+    window_class: str,
+    blocks: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    cooldowns: Mapping[str, Mapping[str, Any]],
+    cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
+    hash_bundles: bool = False,
+) -> CellReport:
+    """Extract one comparative (ABBA) D-054 cell under the audit gates.
+
+    A cap-hit member excludes its WHOLE block (same-slot exclusion): the
+    remaining three members of that block never contribute to any delta, and
+    the comparative floor proceeds at n_blocks - 1 under the frozen
+    small-sample guard.
+    """
+
+    metric, window_class = governed_cell_metric(metric, window_class)
+    _validate_cap_hit_policy(cap_hit_policy)
+    if not blocks:
+        raise FloorExtractionError("comparative cell requires at least one block")
+    block_ids = [str(block.get("block_id", "")) for block in blocks]
+    if len(set(block_ids)) != len(block_ids) or "" in block_ids:
+        raise FloorExtractionError("comparative blocks need unique nonempty block_ids")
+    all_bundle_ids: list[str] = []
+    for block in blocks:
+        block_members = block.get("members")
+        if not isinstance(block_members, Mapping) or set(block_members) != set(
+            _ABBA_POSITIONS
+        ):
+            raise FloorExtractionError(
+                "each ABBA block requires exactly the members A1/B1/B2/A2"
+            )
+        all_bundle_ids.extend(str(block_members[pos]) for pos in _ABBA_POSITIONS)
+    _unique_bundle_ids(all_bundle_ids)
+
+    refusals: list[str] = []
+    excluded_slots: list[str] = []
+    final_reports: list[MemberReport] = []
+    block_deltas: list[float] = []
+    admitted_members: list[MemberReport] = []
+    for block, block_id in zip(blocks, block_ids):
+        block_members = block["members"]
+        evaluated = [
+            _evaluate_member(
+                slot=f"{block_id}:{position}",
+                bundle_id=str(block_members[position]),
+                block_id=block_id,
+                position=position,
+                runs_root=runs_root,
+                metric=metric,
+                window_class=window_class,
+                cooldowns=cooldowns,
+                hash_bundles=hash_bundles,
+            )
+            for position in _ABBA_POSITIONS
+        ]
+        if any(member.cap_hit for member in evaluated):
+            excluded_slots.append(block_id)
+            final_reports.extend(_exclude(member) for member in evaluated)
+            continue
+        final_reports.extend(evaluated)
+        block_fatal: list[str] = []
+        for member in evaluated:
+            block_fatal.extend(_member_fatal_reasons(member))
+        if block_fatal:
+            refusals.extend(block_fatal)
+            continue
+        values = {member.position: member.value_j for member in evaluated}
+        block_deltas.append(
+            abba_delta(values["A1"], values["B1"], values["B2"], values["A2"])
+        )
+        admitted_members.extend(evaluated)
+
+    floor: FloorEstimate | None = None
+    anchor_max: float | None = None
+    if not refusals:
+        if len(block_deltas) < 2:
+            refusals.append("insufficient_members_after_exclusion")
+        else:
+            floor = comparative_false_effect_floor(block_deltas)
+            anchor_values = [
+                member.anchor_shift_bound_j
+                for member in admitted_members
+                if member.anchor_shift_bound_j is not None
+            ]
+            anchor_max = max(anchor_values) if anchor_values else None
+
+    return CellReport(
+        cell_id=cell_id,
+        kind="comparative",
+        metric=metric,
+        window_class=window_class,
+        cap_hit_policy=cap_hit_policy,
+        members=tuple(final_reports),
+        excluded_slots=tuple(excluded_slots),
+        n_planned=len(blocks),
+        n_admitted=len(block_deltas) if not refusals else 0,
+        refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
+        floor=floor if not refusals else None,
+        anchor_shift_bound_max_j=anchor_max,
+    )
+
+
+def extract_cells(
+    runs_root: Path,
+    spec: Mapping[str, Any],
+    *,
+    manifest_id: str | None = None,
+    hash_bundles: bool = False,
+) -> dict[str, Any]:
+    """Extract every cell in a spec document into one fail-closed report."""
+
+    if not isinstance(spec, Mapping) or spec.get("schema_version") != (
+        EXTRACTION_SPEC_SCHEMA_VERSION
+    ):
+        raise FloorExtractionError(
+            f"extraction spec schema_version must be {EXTRACTION_SPEC_SCHEMA_VERSION!r}"
+        )
+    cells = spec.get("cells")
+    if not isinstance(cells, list) or not cells:
+        raise FloorExtractionError("extraction spec requires a nonempty cells array")
+
+    runs_root = Path(runs_root)
+    cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
+    reports: list[CellReport] = []
+    seen_cell_ids: set[str] = set()
+    for cell in cells:
+        if not isinstance(cell, Mapping):
+            raise FloorExtractionError("each cell spec must be an object")
+        cell_id = cell.get("cell_id")
+        if not isinstance(cell_id, str) or not cell_id or cell_id in seen_cell_ids:
+            raise FloorExtractionError("cell_id must be a unique nonempty string")
+        seen_cell_ids.add(cell_id)
+        kind = cell.get("kind")
+        cap_hit_policy = cell.get("cap_hit_policy", CAP_HIT_POLICY_EXCLUDE_SAME_SLOT)
+        if kind == "absolute":
+            members = cell.get("members")
+            if not isinstance(members, list):
+                raise FloorExtractionError(f"{cell_id}: members must be an array")
+            reports.append(
+                extract_absolute_cell(
+                    cell_id=cell_id,
+                    metric=cell.get("metric"),
+                    window_class=cell.get("window_class"),
+                    members=members,
+                    runs_root=runs_root,
+                    cooldowns=cooldowns,
+                    cap_hit_policy=str(cap_hit_policy),
+                    hash_bundles=hash_bundles,
+                )
+            )
+        elif kind == "comparative":
+            blocks = cell.get("blocks")
+            if not isinstance(blocks, list):
+                raise FloorExtractionError(f"{cell_id}: blocks must be an array")
+            reports.append(
+                extract_comparative_cell(
+                    cell_id=cell_id,
+                    metric=cell.get("metric"),
+                    window_class=cell.get("window_class"),
+                    blocks=blocks,
+                    runs_root=runs_root,
+                    cooldowns=cooldowns,
+                    cap_hit_policy=str(cap_hit_policy),
+                    hash_bundles=hash_bundles,
+                )
+            )
+        else:
+            raise FloorExtractionError(
+                f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
+            )
+
+    return {
+        "schema_version": EXTRACTION_SCHEMA_VERSION,
+        "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+        "runs_root": str(runs_root),
+        "manifest_id": manifest_id,
+        "governance": {
+            "d078_gate": (
+                "No claim-bearing floor or MDE may be published from corpora "
+                "recorded before the trace-time-anchor fix; wires without "
+                "anchor-shift envelopes refuse mechanically. Salvage of "
+                "pre-anchor corpora is a separate provisional artifact "
+                "(historical_salvage_provisional, claim_bearing=false)."
+            ),
+        },
+        "cells": [report.as_row() for report in reports],
+        "all_cells_extractable": all(report.extractable for report in reports),
+    }

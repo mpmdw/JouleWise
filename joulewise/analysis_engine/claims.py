@@ -24,7 +24,11 @@ CLAIM_OUTCOMES = frozenset(
 
 # D-057 reducer vocabulary currently present on main.  The analysis engine
 # copies these spellings verbatim and never treats an unknown spelling as a
-# passing gate.
+# passing gate.  The three ``anchor``/``clock_anchor`` barriers are the
+# 2026-07-19 measurement-soundness-audit additions (D-078): reducer 0.5.1 and
+# AXI 0.6.1 mint them for the trace-time-anchor gate, registered here like the
+# D-077 environment barriers so stored prechecks carrying them stay readable
+# and fail-closed instead of collapsing into ``window_evidence_precheck_missing``.
 REDUCER_REASON_CODES = frozenset(
     {
         "nonpositive_window_duration",
@@ -39,6 +43,9 @@ REDUCER_REASON_CODES = frozenset(
         "cooldown_cap_hit",
         "environment_admission_failed",
         "environment_override",
+        "clock_anchor_unresolved",
+        "anchor_energy_envelope_unrecorded",
+        "anchor_energy_envelope_exceeds_quarter_metric",
     }
 )
 

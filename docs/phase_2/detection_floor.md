@@ -566,3 +566,78 @@ Claim ceilings while absent:
   turning off the only energy telemetry removes the energy trace. Until
   wall/PD hardware exists, P2-015 can measure extra-sampler perturbation but
   must mark full telemetry-on/off energy perturbation `unknown`.
+
+## 5. EXTRACTION GATES (2026-07-19 AUDIT AMENDMENTS, T0.3/T0.4/T0.6)
+
+Additive amendment adopted with the 2026-07-19 measurement-soundness audit
+(`docs/reviews/2026-07-19-measurement-soundness-audit.md`, D-078). These gates
+bind every claim-bearing floor extraction; the implementation is
+`joulewise/floor_extraction.py` plus `scripts/extract_detection_floors.py`,
+composing the existing engine primitives rather than re-deriving them.
+
+### Consumer wire compatibility (audit P0.3)
+
+The analysis consumer accepts EXACTLY these reducer-version x idle-variance
+method pairs (`GOVERNED_REDUCER_IDLE_METHOD_PAIRS` in
+`joulewise/analysis_engine/inputs.py`):
+
+| Reducer version | Idle-variance method |
+|---|---|
+| `0.4.1`, `0.4.2` | `newey_west_bartlett_10s_iid_floor_v1` |
+| `0.5.0`, `0.5.1` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
+| `0.6.0`, `0.6.1` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
+
+Every crossed or unknown pair fails closed (`required_error_term_unknown`).
+No version-range inference: a future wire is added to the matrix by an
+explicit governed edit, never by pattern match. Stored 0.5.0/0.6.0 summaries
+are never rewritten. The earlier P2-044 sentence "P2-037 must require reducer
+0.4.1" is superseded by this matrix for the reducer-version component only;
+every other clause of that predeclaration is unchanged.
+
+### Campaign cooldown join and cap-hit disposition (audit P0.4)
+
+- Bundle summaries alone never prove the cooldown gate:
+  `measurement_quality.cooldown_cap_hit=null` on all four real 2026-07-19
+  cap-hit members. Extraction MUST join the hash-verified campaign
+  provenance (`campaign_cooldown_evidence` — the ONE join model). Missing,
+  tampered, duplicated, or ambiguous campaign evidence refuses the whole
+  cell; absence of evidence is never clean `n`.
+- A VERIFIED cap-hit member is dispositioned by SAME-SLOT EXCLUSION: the
+  affected repetition slot (absolute cells) or the entire ABBA block
+  (comparative cells) is excluded, and the cell proceeds at `n-1` where the
+  frozen small-sample guard factor applies at the reduced `n` (below `n=5`
+  the cell degrades to smoke-only per the estimator rule above).
+- Retaining a cap-hit member behind a drift term remains predeclared (Section
+  2 idle-drift row) but has no governed bound source yet; naming that policy
+  fails closed instead of improvising a bound.
+- An UNVERIFIED "cap_hit" claim is missing evidence, not a licensed
+  exclusion: it refuses the cell through the join gate.
+
+### Extraction hygiene (audit P1.4 / P0.2)
+
+- `window_evidence_precheck` is a HARD extraction gate per metric. Source
+  provenance cleanliness (`source_provenance.claim_eligible=true`) is a
+  SOURCE fact and never overrides a metric precheck failure.
+- Phase cells extract ONLY `phase_energy_j.<target>`; a phase cell bound to
+  whole-request gross (or a phase path bound to a non-phase window) fails
+  loudly in `metric_value`, floor-evidence binding, and
+  `governed_cell_metric` alike.
+- Reader-facing throughput selects `inter_token_throughput_tokens_s` (the
+  governed N-1 form). The legacy `throughput_tokens_s`
+  (N/(t_last-t_first)) field stays on the wire for byte-frozen compatibility
+  but is refused everywhere reader-facing. No reducer formula changed.
+- Anchor-shift energy envelopes (frozen 0.5.1/0.6.1 fields
+  `energy_anchor_shift_envelopes` and
+  `energy_bound_terms_j.E_clock_anchor_shift_bound_j`) are REQUIRED for
+  claim-bearing floor extraction on every wire; pre-anchor corpora therefore
+  refuse mechanically with `anchor_energy_envelope_unrecorded` (D-078 gate
+  1). Admitted members additionally satisfy
+  `(max(P - lower_j, upper_j - P) + E_interpolation_joint_edge_bound_j) / |P| <= 0.25`
+  with a zero point and nonzero bound failing closed
+  (`anchor_energy_envelope_exceeds_quarter_metric`).
+- The engine consumes the anchor bound as the deterministic term
+  `E_clock_anchor_shift_bound_j` in absolute and paired contrasts. Passing
+  the per-metric envelope gate does NOT make a comparative contrast
+  identifiable: the contrast's decision interval consumes the bound
+  explicitly, and interpolation terms stay separate (never double-counted
+  into the anchor term).
