@@ -220,10 +220,11 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   file is written last and is the bundle completion marker (decision
   D-011): a directory without a schema-valid `summary_metrics.json` is an
   incomplete bundle (harness died), distinct from a failed run, which gets
-  a complete bundle with `status=failed`. Rewriting this file via the
-  post-hoc `reduce` verb is the ONE sanctioned post-finalize bundle
-  mutation (decision D-028): the summary is derived, never evidence; every
-  other artifact in a finalized bundle stays immutable.
+  a complete bundle with `status=failed`. D-078 supersedes D-028's former
+  rewrite exception: stored summary bytes are immutable evidence. The
+  post-hoc `reduce` verb writes an exclusive-create prospective artifact
+  outside the input bundle (the current working directory by default, or an
+  explicit external `--output`) and never mutates a finalized bundle.
 
 Backend-native raw artifacts under `raw/` are preserved verbatim and are
 the source of truth for the derived `power_trace.csv`; a parser bug can be

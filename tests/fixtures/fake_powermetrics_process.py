@@ -94,7 +94,10 @@ def main() -> int:
                 gpu["idle_ratio"] = 0.0
                 gpu["freq_hz"] = 1200.0
                 document["gpu"] = gpu
-            if mode == "rail_only":
+            # Keep the pre-run admission capture complete so this mode proves
+            # CPU/GPU idle on merit.  Only the post-run sentinel is rail-only,
+            # which withholds the drift term without laundering admission.
+            if mode == "rail_only" and invocation >= 3:
                 document.pop("gpu", None)
             if mode == "extreme_post" and invocation >= 4:
                 processor = dict(document["processor"])

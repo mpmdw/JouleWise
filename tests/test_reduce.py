@@ -1451,6 +1451,27 @@ class D078AnchorEnvelopeTests(unittest.TestCase):
         self.assertEqual(envelope["upper_j"], envelope["point_j"])
         self.assertEqual(envelope["max_abs_delta_j"], 0.0)
 
+    def test_clock_step_span_adds_independent_opposite_edge_shift_bound(self) -> None:
+        # F14 audit reproduction: two 100 W supports touch opposite request
+        # edges.  A common +/-4 ms translation leaves their summed 0.8 J
+        # overlap unchanged, while a piecewise wall-clock step can move the
+        # two edges in opposite directions for a 1.6 J energy excursion.
+        from joulewise.bundle_read import Window
+        from joulewise.reduce import _anchor_shift_envelope
+
+        curve = self.interval_curve(
+            [(0.0, 1.004, 100.0), (3.996, 5.0, 100.0)]
+        )
+        envelope = _anchor_shift_envelope(
+            [(curve, [Window(1.0, 2.0), Window(3.0, 4.0)])],
+            0.0,
+            independent_edge_span_s=0.004,
+        )
+        self.assertIsNotNone(envelope)
+        self.assertAlmostEqual(envelope["point_j"], 0.8, places=9)
+        self.assertGreaterEqual(envelope["independent_edge_shift_bound_j"], 1.6)
+        self.assertGreaterEqual(envelope["max_abs_delta_j"], 1.6)
+
     def test_point_curve_quadratic_refinement_matches_dense_grid(self) -> None:
         from joulewise.bundle_read import TracePoint, Window
         from joulewise.reduce import _anchor_shift_envelope, _shift_energy_j
@@ -1628,7 +1649,7 @@ class D078R01RegressionTests(unittest.TestCase):
         self.assertIsNotNone(envelopes)
         gross = envelopes["/gross_energy_j"]
         self.assertEqual(
-            gross["method"], "common_trace_shift_interval_overlap_v1"
+            gross["method"], "common_trace_shift_plus_independent_edge_span_v2"
         )
         self.assertAlmostEqual(gross["lower_j"], 6.765943, delta=1e-3)
         self.assertAlmostEqual(gross["upper_j"], 7.682065, delta=1e-3)
@@ -1680,6 +1701,7 @@ class D078R01RegressionTests(unittest.TestCase):
         # The corrected anchor bound replaces the stale 1.13 s recorded bound.
         self.assertLess(gate["clock_anchor_bound_s"], 0.06)
         self.assertNotIn("clock_bound_exceeds_quarter_window", gate["reasons"])
+        self.assertIn("instrument_calibration_missing", gate["reasons"])
 
     def test_051_trace_tamper_fails_closed(self) -> None:
         import shutil
@@ -1759,6 +1781,31 @@ class D078R01RegressionTests(unittest.TestCase):
                 summary.window_evidence_precheck["gross_request"]["reasons"],
             )
 
+    def test_051_missing_cpu_admission_record_is_claim_ineligible(self) -> None:
+        summary = reduce_module.reduce_bundle(self.FIXTURE, reducer_version="0.5.1")
+        reasons = summary.window_evidence_precheck["gross_request"]["reasons"]
+        self.assertIn("environment_admission_missing", reasons)
+
+    def test_051_explicit_cpu_admission_bypass_is_claim_ineligible(self) -> None:
+        import shutil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(self.FIXTURE, bundle)
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            final = metadata["environment_admission"]["attempts"][-1]
+            final["cpu_admission"] = {"admitted": True, "decision": "admitted"}
+            final["cpu_admission_enforced"] = False
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            self.assertIn(
+                "cpu_admission_unenforced",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
     @staticmethod
     def _valid_instrument_evidence(**overrides) -> dict:
         evidence = {
@@ -1769,6 +1816,24 @@ class D078R01RegressionTests(unittest.TestCase):
                 "powermetrics_native_second_censored_intersection_v1"
             ),
             "b_fiducial_s": 0.08,
+            "pulse_count": 40,
+            "all_pulses_detected": True,
+            "spurious_plateau_count": 0,
+            "artifact_sha256": {
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+            },
+            "pulses": [
+                {
+                    "pulse_index": index,
+                    "detected": True,
+                    "onset_residual_lower_s": -0.08,
+                    "onset_residual_upper_s": 0.08,
+                    "offset_residual_lower_s": -0.08,
+                    "offset_residual_upper_s": 0.08,
+                }
+                for index in range(40)
+            ],
             "bindings": {
                 # hardware_model/os_build MUST match the r01 device metadata.
                 "hardware_model": "Mac15,9",
@@ -1787,6 +1852,18 @@ class D078R01RegressionTests(unittest.TestCase):
         evidence.update(overrides)
         if bindings_override:
             evidence["bindings"] = {**evidence["bindings"], **bindings_override}
+        canonical = json.dumps(
+            evidence["bindings"], sort_keys=True, separators=(",", ":")
+        ).encode()
+        evidence["binding_evidence"] = {
+            "schema_version": "joulewise.instrument_binding_evidence.v1",
+            "binding_vector_sha256": hashlib.sha256(canonical).hexdigest(),
+            "powermetrics_binary": {
+                "path": "/usr/bin/powermetrics",
+                "sha256": evidence["bindings"]["powermetrics_sha256"],
+            },
+            "power_policy": {"id": evidence["bindings"]["power_policy"]},
+        }
         return evidence
 
     def _bundle_with_calibration(
@@ -1796,6 +1873,17 @@ class D078R01RegressionTests(unittest.TestCase):
 
         bundle = Path(tmp) / "bundle"
         shutil.copytree(self.FIXTURE, bundle)
+        evidence = json.loads(json.dumps(evidence))
+        hashes = evidence.get("artifact_sha256")
+        if isinstance(hashes, dict) and set(
+            ("raw/powermetrics.plist", "events.jsonl")
+        ).issubset(hashes):
+            hashes["raw/powermetrics.plist"] = hashlib.sha256(
+                (bundle / "raw" / "powermetrics.plist").read_bytes()
+            ).hexdigest()
+            hashes["events.jsonl"] = hashlib.sha256(
+                (bundle / "events.jsonl").read_bytes()
+            ).hexdigest()
         raw = (
             json.dumps(evidence, indent=2, sort_keys=True) + "\n"
         ).encode("utf-8")
@@ -1804,10 +1892,23 @@ class D078R01RegressionTests(unittest.TestCase):
         if mutate_bytes is not None:
             (bundle / "instrument_evidence.json").write_bytes(mutate_bytes)
         metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.setdefault("device", {})["powermetrics"] = {
+            "executable_path": "/usr/bin/powermetrics",
+            "executable_sha256": evidence.get("bindings", {}).get(
+                "powermetrics_sha256"
+            )
+        }
         metadata["instrument_calibration"] = {
             "artifact_path": "instrument_evidence.json",
             "artifact_sha256": artifact_sha256,
             "b_fiducial_s": b_fiducial_s,
+            "bindings": evidence.get("bindings"),
+            "binding_observations": {
+                "powermetrics_sha256": evidence.get("bindings", {}).get(
+                    "powermetrics_sha256"
+                ),
+                "power_policy": evidence.get("bindings", {}).get("power_policy"),
+            },
         }
         (bundle / "metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n"
@@ -1893,6 +1994,73 @@ class D078R01RegressionTests(unittest.TestCase):
                 "clock_anchor_unresolved",
                 summary.window_evidence_precheck["gross_request"]["reasons"],
             )
+            self.assertIn(
+                "instrument_calibration_mismatch",
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+            )
+
+    def test_051_every_declared_calibration_binding_is_enforced(self) -> None:
+        # W2 defect shape: pre-fix only hardware/OS/anchor were compared, so
+        # changing any of these five fields still admitted the calibration.
+        for field, changed in (
+            ("powermetrics_sha256", "ff" * 32),
+            ("sampling_interval_ms", 200),
+            ("mlx_version", "999.0"),
+            ("pulse_protocol_id", "wrong-protocol"),
+            ("power_policy", "battery-low-power"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                evidence = self._valid_instrument_evidence()
+                bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text())
+                metadata["instrument_calibration"]["bindings"][field] = changed
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+                )
+                summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+                self.assertIn(
+                    "instrument_calibration_mismatch",
+                    summary.window_evidence_precheck["gross_request"]["reasons"],
+                )
+
+    def test_051_forged_valid_status_cannot_bypass_pulse_predicate(self) -> None:
+        # W2 defect shape: status='valid' was trusted despite impossible pulse
+        # evidence.  Each internal predicate violation now maps to invalid.
+        mutations = (
+            lambda value: value.update(pulse_count=0, pulses=[]),
+            lambda value: value.update(all_pulses_detected=False),
+            lambda value: value.update(spurious_plateau_count=1),
+            lambda value: value.update(pulses=[]),
+            lambda value: value.update(artifact_sha256={}),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index), tempfile.TemporaryDirectory() as tmp:
+                evidence = self._valid_instrument_evidence()
+                mutate(evidence)
+                bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+                summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+                self.assertIn(
+                    "instrument_calibration_invalid",
+                    summary.window_evidence_precheck["gross_request"]["reasons"],
+                )
+
+    def test_051_detected_only_pulses_without_residual_intervals_refuse(self) -> None:
+        # F1 defect shape: forty detected bits, plausible hashes, and B=0 used
+        # to return a trusted zero bound despite containing no timing evidence.
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = self._valid_instrument_evidence(b_fiducial_s=0.0)
+            evidence["pulses"] = [
+                {"pulse_index": index, "detected": True} for index in range(40)
+            ]
+            bundle = self._bundle_with_calibration(
+                tmp, evidence=evidence, b_fiducial_s=0.0
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
 
     def test_051_invalid_status_calibration_artifact_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

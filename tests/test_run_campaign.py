@@ -14,6 +14,7 @@ import tempfile
 import textwrap
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +24,7 @@ from scripts.run_campaign import (
     execute_production_uncertainty_gate,
     failed_shakedown_record,
 )
+from joulewise.environment import evaluate_environment_policy
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -822,6 +824,25 @@ class RunCampaignTests(unittest.TestCase):
                 child_experiment.call_args.kwargs["frozen_cooldown_anchor"], anchor
             )
 
+    def test_campaign_command_forwards_instrument_calibration_attachment(self) -> None:
+        # F7/F9 production plumbing regression: the campaign layer must not
+        # strand a validated directory outside the benchmark controller.
+        command = run_campaign_module.command_for(
+            BASE_CONFIG,
+            Path("runs"),
+            None,
+            instrument_calibration_dir="validated/calibration",
+            instrument_power_policy="ac_high_power",
+        )
+        self.assertEqual(
+            command[command.index("--instrument-calibration-dir") + 1],
+            "validated/calibration",
+        )
+        self.assertEqual(
+            command[command.index("--instrument-power-policy") + 1],
+            "ac_high_power",
+        )
+
     def test_parent_anchor_validator_has_canonical_child_parity(self) -> None:
         from joulewise.cooldown_anchor import cooldown_anchor_eligibility
 
@@ -1256,6 +1277,207 @@ class RunCampaignTests(unittest.TestCase):
             "first_run_exempt",
         )
         self.assertEqual(len(provenance["cooldown_gates"]), 3)
+        selection = provenance["attempt_ledger_selection"]
+        self.assertEqual(
+            {row["bundle_id"] for row in selection["selected_bundles"]},
+            set(selection["selected_bundle_ids"]),
+        )
+
+    def test_axi_runner_emits_campaign_wide_idle_admission_verdict(self) -> None:
+        # F5 defect shape: the AXI path formerly returned immediately after
+        # attempt-ledger/output-identity work, never constructing the core
+        # whole-window barrier at all.
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        binding = run_campaign_module.load_campaign_policy(
+            str(ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json")
+        )
+        snapshot = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "fixture",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 1200.0,
+            "thermal_pressure": "nominal",
+            "load_average_1m": 0.0,
+            "capture_scope": "provided_test_fixture",
+            "python_packages": {"mlx": {"version": "test"}},
+        }
+        admitted = {
+            "schema_version": "joulewise.campaign_environment_preflight.v1",
+            "policy_sha256": binding.sha256,
+            "snapshot": snapshot,
+            "evaluation": evaluate_environment_policy(
+                snapshot, binding.policy.environment_guard
+            ),
+            "override": None,
+            "admitted": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            log_path = runs_dir / "campaign_log.jsonl"
+            real_subprocess_run = subprocess.run
+
+            def run_child_without_policy_environment(command, *, check, env):
+                clean_env = dict(env or {})
+                for name in (
+                    run_campaign_module.CAMPAIGN_POLICY_PATH_ENV,
+                    run_campaign_module.CAMPAIGN_POLICY_SHA256_ENV,
+                    run_campaign_module.CAMPAIGN_PREFLIGHT_JSON_ENV,
+                ):
+                    clean_env.pop(name, None)
+                return real_subprocess_run(command, check=check, env=clean_env)
+
+            with (
+                patch.object(
+                    run_campaign_module,
+                    "campaign_environment_preflight",
+                    return_value=admitted,
+                ),
+                patch.object(
+                    run_campaign_module.subprocess,
+                    "run",
+                    side_effect=run_child_without_policy_environment,
+                ),
+                patch.object(
+                    run_campaign_module,
+                    "campaign_cooldown_before_member",
+                    return_value={"result": "recovered"},
+                ),
+            ):
+                result = run_campaign_module.run_axi_spec_campaign(
+                    run_campaign_module.argparse.Namespace(
+                        dry_run=False,
+                        cli_cmd=None,
+                        arm_quiet_mode=False,
+                        arm_countdown_s=0,
+                        environment_override=None,
+                    ),
+                    state,
+                    runs_dir=runs_dir,
+                    policy_binding=binding,
+                    log_path=log_path,
+                )
+            rows = read_all_jsonl(log_path)
+        self.assertEqual(result, 0)
+        whole = [
+            row
+            for row in rows
+            if row.get("record_type") == "idle_admission_whole_window_verdict"
+        ]
+        self.assertEqual(len(whole), 1)
+        self.assertEqual(
+            whole[0]["idle_admission_core"]["schema_version"],
+            run_campaign_module.IDLE_ADMISSION_CORE_SCHEMA,
+        )
+
+    def test_axi_restart_after_quarantined_attempt_cannot_reuse_first_run_exemption(self) -> None:
+        # F15 audit reproduction: a fresh process has a new provenance object,
+        # but the persisted technical-invalid attempt row is durable physical
+        # evidence and therefore forbids another first-run exemption.
+        fresh_provenance = {"first_physical_run_id": None}
+        quarantined = {
+            "entry_id": "entry-a",
+            "attempt_ordinal": 0,
+            "eligible_for_analysis": False,
+            "technical_invalid_reason_code": "strict_bundle_invalid",
+        }
+        self.assertFalse(
+            run_campaign_module._axi_first_run_exemption_allowed(
+                fresh_provenance, [quarantined]
+            )
+        )
+        self.assertTrue(
+            run_campaign_module._axi_first_run_exemption_allowed(
+                fresh_provenance, []
+            )
+        )
+
+    def test_governed_retry_selection_excludes_quarantine_from_whole_window(self) -> None:
+        # F17 defect shape: raw invoked membership contains one legitimately
+        # quarantined attempt plus clean successors.  Hash-bound ledger
+        # selection, with verified recovery continuity, owns membership.
+        binding = run_campaign_module.load_campaign_policy(str(TEST_CAMPAIGN_POLICY))
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp)
+            selected_ids = [
+                "p2-neg8-reference-start__a1__start",
+                "p2-neg8-reference-end__a0__end",
+            ]
+            selected_paths = []
+            for index, bundle_id in enumerate(selected_ids):
+                path = runs_dir / "axi_attempt_bundles" / f"selected-{index}"
+                path.mkdir(parents=True)
+                selected_paths.append(path)
+            evidence_dir = runs_dir / "axi_attempt_evidence" / "m"
+            evidence_dir.mkdir(parents=True)
+            ledger_path = evidence_dir / "attempt_ledger.jsonl"
+            ledger_path.write_text('{"persisted":true}\n')
+            manifest_dir = runs_dir / "campaign_manifests"
+            manifest_dir.mkdir()
+            selection = {
+                "schema_version": "joulewise.attempt_ledger_selection.v1",
+                "attempt_ledger_path": ledger_path.relative_to(runs_dir).as_posix(),
+                "attempt_ledger_sha256": hashlib.sha256(
+                    ledger_path.read_bytes()
+                ).hexdigest(),
+                "selected_bundle_ids": sorted(selected_ids),
+                "selected_membership_sha256": hashlib.sha256(
+                    json.dumps(
+                        sorted(selected_ids),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+                "selected_bundles": [
+                    {
+                        "bundle_id": bundle_id,
+                        "path": path.relative_to(runs_dir).as_posix(),
+                    }
+                    for bundle_id, path in zip(selected_ids, selected_paths)
+                ],
+                "quarantined_attempts": [
+                    {
+                        "properly_quarantined": True,
+                        "recovery_continuity_verified": True,
+                    }
+                ],
+            }
+            (manifest_dir / "retry.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": run_campaign_module.CAMPAIGN_PROVENANCE_SCHEMA,
+                        "analysis_manifest_id": "m",
+                        "campaign_policy": {"sha256": binding.sha256},
+                        "attempt_ledger_selection": selection,
+                        "members": [
+                            {
+                                "execution": "invoked",
+                                "bundle_ids": [
+                                    "p2-neg8-reference-start__a0__quarantined",
+                                    *selected_ids,
+                                ],
+                            }
+                        ],
+                    }
+                )
+                + "\n"
+            )
+            paths, _sources, conditions = (
+                run_campaign_module._whole_window_campaign_membership(
+                    runs_dir, binding.sha256
+                )
+            )
+        self.assertEqual(conditions, [])
+        self.assertEqual(
+            {path.resolve() for path in paths},
+            {path.resolve() for path in selected_paths},
+        )
 
     def test_anchor_freezes_first_eligible_repetition_in_execution_order(self) -> None:
         binding = run_campaign_module.load_campaign_policy(
@@ -4577,13 +4799,35 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "adapter_watts": adapter_watts,
                     "adapter_description": adapter_description,
                 },
+                "post_run_observation": {
+                    "power_source": "AC Power",
+                    "power": {
+                        "adapter_watts": adapter_watts,
+                        "adapter_description": adapter_description,
+                    },
+                    "errors": {},
+                },
             }
         }
         if admission_decision is not None:
-            metadata["environment_admission"] = {"decision": admission_decision}
-        summary = (
-            {"gross_energy_j": gross_energy_j} if gross_energy_j is not None else {}
-        )
+            metadata["environment_admission"] = {
+                "decision": admission_decision,
+                "attempts": [
+                    {"attempt": 1, "admitted": admission_decision == "admitted"}
+                ],
+            }
+        summary = {}
+        if gross_energy_j is not None:
+            summary = {
+                "gross_energy_j": gross_energy_j,
+                "energy_anchor_shift_envelopes": {
+                    "/gross_energy_j": {
+                        "point_j": gross_energy_j,
+                        "lower_j": gross_energy_j,
+                        "upper_j": gross_energy_j,
+                    }
+                },
+            }
         return run_campaign_module.MemberEvaluation(
             bundle_id=bundle_id,
             bundle_path=bundle_path,
@@ -4736,6 +4980,30 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             [(140.0, 70.0), (70.0, 140.0)],
         )
 
+    def test_final_member_post_workload_adapter_renegotiation_is_observed(self) -> None:
+        # F6 audit reproduction: the final workload renegotiates 140 W -> 70 W
+        # after its pre-run sample.  With no post sample the old campaign
+        # verdict incorrectly called the entire campaign stable.
+        binding = self._binding()
+        first = self._member("m1__r1", records=_clean_idle_records())
+        final = self._member("m2__r1", records=_clean_idle_records())
+        final.metadata["environment"]["post_run_observation"]["power"][
+            "adapter_watts"
+        ] = 70
+        section = run_campaign_module.idle_admission_core_verdict(
+            [first, final], binding
+        )
+        continuity = section["adapter_wattage_continuity"]
+        self.assertNotEqual(continuity["decision"], "stable")
+        self.assertIn("adapter_wattage_discontinuity", section["conditions"])
+        self.assertIn(
+            (140.0, 70.0),
+            [
+                (row["from_watts"], row["to_watts"])
+                for row in continuity["wattage_transitions"]
+            ],
+        )
+
     def test_unknown_adapter_wattage_fails_closed_under_production(self) -> None:
         binding = self._binding()
         section = run_campaign_module.idle_admission_core_verdict(
@@ -4852,7 +5120,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "environment_admission": {
                 "decision": admission_decision,
                 "attempts": [
-                    {"attempt": n} for n in range(1, final_attempt + 1)
+                    {
+                        "attempt": n,
+                        "admitted": (
+                            admission_decision == "admitted" and n == final_attempt
+                        ),
+                    }
+                    for n in range(1, final_attempt + 1)
                 ],
             },
         }
@@ -4915,6 +5189,117 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(member["decision"], "failed")
         self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
 
+    def test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound(self) -> None:
+        # W12 exact defect: max(attempts) silently selected rows from duplicate,
+        # reordered, skipped, or decision-inconsistent ledgers.
+        binding = self._binding()
+        cases = (
+            ([1, 1], [False, True], "admitted"),
+            ([2, 1], [False, True], "admitted"),
+            ([1, 3], [False, True], "admitted"),
+            ([1, 2], [False, False], "admitted"),
+        )
+        for index, (numbers, admitted, decision) in enumerate(cases):
+            with self.subTest(case=index):
+                evaluation = self._member_with_attempts(
+                    f"malformed-{index}",
+                    attempt1_records=_clean_idle_records(),
+                    attempt2_records=_clean_idle_records(),
+                    final_attempt=2,
+                    admission_decision=decision,
+                )
+                evaluation.metadata["environment_admission"]["attempts"] = [
+                    {"attempt": number, "admitted": outcome}
+                    for number, outcome in zip(numbers, admitted)
+                ]
+                section = run_campaign_module.idle_admission_core_verdict(
+                    [evaluation], binding
+                )
+                self.assertIn(
+                    "idle_admission_attempt_ledger_invalid", section["conditions"]
+                )
+
+    def test_duplicate_neg8_markers_are_ambiguous_not_order_selected(self) -> None:
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "a-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                ),
+                self._member(
+                    "z-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=99.0,
+                ),
+                self._member(
+                    "neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.1,
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertIn("neg8_bracket_ambiguous_reference", section["conditions"])
+        self.assertNotEqual(section["neg8_bracket"]["decision"], "passed")
+
+    def test_idle_core_failure_removes_claim_readiness(self) -> None:
+        # W6 defect shape: readiness was finalized before the core, so an
+        # adapter discontinuity/absent whole-window bracket left a ready claim.
+        readiness = {
+            "verdict": "ready_for_analysis",
+            "reasons": [],
+            "required_contrast_ids": ["c1"],
+            "ready_contrast_ids": ["c1"],
+            "not_ready_contrasts": [],
+            "note": "test",
+        }
+        core = {
+            "members": [
+                {"cpu_admission": {"decision": "admitted"}}
+            ],
+            "adapter_wattage_continuity": {"decision": "failed"},
+            "neg8_bracket": {"decision": "not_evaluated"},
+        }
+        blocked = run_campaign_module.apply_idle_admission_claim_barrier(
+            readiness, core, claim_bearing=True
+        )
+        self.assertEqual(blocked["verdict"], "not_ready_for_analysis")
+        self.assertEqual(blocked["ready_contrast_ids"], [])
+        self.assertIn("adapter_continuity_failed", blocked["reasons"])
+        self.assertIn("whole_window_neg8_verdict_missing", blocked["reasons"])
+
+    def test_invalid_reference_summary_cannot_supply_gross_energy(self) -> None:
+        member = self._member(
+            "neg8-reference-start__r1",
+            records=_clean_idle_records(),
+            gross_energy_j=8.0,
+        )
+        invalid = replace(member, strict_valid=False)
+        self.assertIsNone(run_campaign_module._gross_energy_for(invalid))
+
+    def _install_whole_window_manifest(self, binding, bundle_ids) -> None:
+        manifest_dir = self.root / "campaign_manifests"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        (manifest_dir / "window.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.campaign_provenance.v1",
+                    "analysis_manifest_id": "window-a",
+                    "campaign_policy": {"sha256": binding.sha256},
+                    "members": [
+                        {
+                            "execution": "invoked",
+                            "bundle_ids": list(bundle_ids),
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+
     def test_neg8_bracket_not_evaluated_for_per_segment_invocations(self) -> None:
         """Fix round 1 (blocker): the bracket is a whole-window check.
 
@@ -4974,8 +5359,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "neg8_bracket_not_evaluated", whole_window["conditions"]
         )
 
-    def test_whole_window_cli_scans_runs_root_and_emits_named_neg8_verdict(self) -> None:
+    def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
         binding = self._binding()
+        bundle_ids = [
+            "p2-neg8-reference-start__r1",
+            "p2-neg8-reference-end__r1",
+        ]
         for bundle_id, gross_energy_j in (
             ("p2-neg8-reference-start__r1", 8.0),
             ("p2-neg8-reference-end__r1", 8.04),
@@ -4991,6 +5380,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             (member.bundle_path / "metadata.json").write_text(
                 json.dumps(member.metadata) + "\n"
             )
+        self._install_whole_window_manifest(binding, bundle_ids)
 
         args = run_campaign_module.parse_args(
             [
@@ -5001,7 +5391,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 str(binding.path),
             ]
         )
-        self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        with patch.object(run_campaign_module, "validate_bundle", return_value=[]):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
         verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
         self.assertEqual(
             verdict["record_type"], "idle_admission_whole_window_verdict"
@@ -5013,6 +5404,48 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertNotIn(
             "neg8_bracket_not_evaluated",
+            verdict["idle_admission_core"]["conditions"],
+        )
+
+    def test_whole_window_invalid_reference_is_excluded_and_cannot_pass(self) -> None:
+        binding = self._binding()
+        bundle_ids = [
+            "p2-neg8-reference-start__r1",
+            "p2-neg8-reference-end__r1",
+        ]
+        for bundle_id, gross in zip(bundle_ids, (8.0, 8.04)):
+            member = self._member(
+                bundle_id, records=_clean_idle_records(), gross_energy_j=gross
+            )
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, bundle_ids)
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+
+        def validate(path, strict):
+            return ["quarantined reference"] if "start" in path.name else []
+
+        with patch.object(run_campaign_module, "validate_bundle", side_effect=validate):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "failed")
+        self.assertEqual(
+            verdict["excluded_bundles"][0]["bundle_id"], bundle_ids[0]
+        )
+        self.assertIn(
+            "whole_window_bundle_invalid",
             verdict["idle_admission_core"]["conditions"],
         )
 

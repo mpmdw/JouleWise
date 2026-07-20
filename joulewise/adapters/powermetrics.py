@@ -1051,6 +1051,12 @@ class PowermetricsTelemetryAdapter:
             )
 
     def _base_device_metadata(self, config: BenchmarkConfig | None) -> dict[str, Any]:
+        try:
+            executable_sha256 = hashlib.sha256(
+                Path(self._executable).read_bytes()
+            ).hexdigest()
+        except OSError:
+            executable_sha256 = None
         return {
             "device": config.hardware_target.id if config is not None else None,
             "telemetry": self.name,
@@ -1059,6 +1065,8 @@ class PowermetricsTelemetryAdapter:
             "timestamp_derivation": TIMESTAMP_DERIVATION,
             "power_units": "powermetrics milliwatts converted to watts",
             "powermetrics": {
+                "executable_path": self._executable,
+                "executable_sha256": executable_sha256,
                 "samplers_requested": SAMPLERS,
                 "samplers_available": "probe-unavailable",
                 "samplers_probe": {"ok": False, "reason": "not_probed"},

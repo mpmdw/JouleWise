@@ -4050,3 +4050,76 @@ Binding until amended:
 
 Revisit trigger: Phase 0 repair lands with live pulse-validation evidence,
 or Ed rules a different salvage/disposition for existing corpora.
+
+### D-078 amendment — 2026-07-20: fail-closed vocabulary and immutable summaries
+
+Additive amendment under the adversarial soundness fix round.  The following
+spellings are the binding, closed registry for D-078 claim refusals and
+campaign conditions.  Consumers preserve these strings verbatim; an unknown
+claim/refusal spelling never becomes a pass.
+
+- Reducer/analysis claim barriers: `nonpositive_window_duration`,
+  `insufficient_in_window_samples`, `cadence_ratio_unrecorded`,
+  `cadence_ratio_below_threshold`, `clock_bound_unrecorded`,
+  `clock_bound_exceeds_quarter_window`, `interpolation_bound_unrecorded`,
+  `drift_term_unknown`, `idle_baseline_unrecorded`, `cooldown_cap_hit`,
+  `environment_admission_failed`, `environment_override`,
+  `environment_admission_missing`, `cpu_admission_unenforced`,
+  `clock_anchor_unresolved`, `anchor_energy_envelope_unrecorded`,
+  `anchor_energy_envelope_exceeds_quarter_metric`,
+  `instrument_calibration_missing`, `instrument_calibration_mismatch`, and
+  `instrument_calibration_invalid`.
+- Floor-extraction refusals: `bundle_missing`, `summary_unreadable`,
+  `bundle_strict_invalid`, `bundle_hash_unresolved`,
+  `bundle_status_not_succeeded`, `reducer_wire_unknown`,
+  `idle_method_pair_invalid`, `metric_missing_or_nonfinite`,
+  `window_evidence_precheck_failed`, `campaign_cooldown_evidence_missing`,
+  `cooldown_cap_hit_unverified`, `campaign_member_omitted_from_spec`,
+  `campaign_member_unattributable`, `cap_hit_drift_term_unavailable`,
+  `insufficient_members_after_exclusion`, plus every applicable reducer
+  barrier above and `whole_window_neg8_verdict_missing`,
+  `whole_window_neg8_verdict_failed`,
+  `adapter_continuity_evidence_missing`, `adapter_continuity_failed`,
+  `cpu_admission_core_missing`, and `cpu_admission_core_failed`.
+- Idle-admission/campaign conditions: `cpu_baseline_telemetry_missing`,
+  `cpu_baseline_telemetry_malformed`,
+  `cpu_baseline_sample_count_insufficient`, `cpu_busy_ratio_p95_exceeded`,
+  `processor_combined_power_w_p95_exceeded`,
+  `gpu_idle_admission_not_passed`, `gpu_idle_admission_unknown`,
+  `adapter_observations_missing`, `adapter_wattage_unknown`,
+  `adapter_wattage_discontinuity`, `adapter_description_changed`,
+  `adapter_power_source_changed`, `neg8_bracket_missing`,
+  `neg8_bracket_reference_invalid`, `neg8_bracket_abs_delta_exceeded`,
+  `neg8_bracket_rel_delta_exceeded`, `neg8_bracket_not_evaluated`,
+  `neg8_bracket_ambiguous_reference`,
+  `idle_admission_attempt_ledger_invalid`,
+  `idle_admission_extension_unconfigured`, `whole_window_bundle_invalid`,
+  `whole_window_campaign_membership_unresolved`, and
+  `whole_window_campaign_membership_ambiguous`.
+- Instrument-evidence diagnostics: `pulse_detection_incomplete`,
+  `spurious_plateau_detected`, `residual_interval_unbounded`,
+  `not_all_pulses_detected`, `binding_fields_missing:`,
+  `pulse_count_below_protocol:`, and
+  `raw_or_event_hash_missing_or_invalid`.  These diagnostics can only make
+  `instrument_calibration_invalid`; they never directly license a claim.
+
+Governance ruling GOV-02: D-078 supersedes only D-028's former exception that
+allowed `summary_metrics.json` to be rewritten after finalization.  Stored
+summary bytes are now immutable evidence.  Post-hoc reduction writes a new,
+non-clobbering artifact (including the repaired anchor envelope) or refuses;
+the raw-artifact immutability and pure-reducer portions of D-002/D-028 remain
+in force.  Frozen 0.5.0/0.6.0 numeric semantics remain replayable and are not
+claim-bearing merely because they can be read.
+
+### D-078 additive registry addendum — 2026-07-20: causal-set repair
+
+The closed registry additionally includes floor/whole-window barriers
+`admissible_set_uncertainty_dominates_point_floor`,
+`whole_window_verdict_coverage_incomplete`,
+`whole_window_verdict_provenance_invalid`, and
+`whole_window_verdict_conflict`. Instrument-evidence diagnostics additionally
+include `no_plateau_interior_intervals`, `plateau_below_minimum`,
+`robust_snr_below_minimum`, `edge_coverage_missing`,
+`model_fit_not_significant`, and
+`fitted_shift_exceeds_validation_limit`. These additions only refuse or widen
+uncertainty; none can license a claim.

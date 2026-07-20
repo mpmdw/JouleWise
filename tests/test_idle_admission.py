@@ -381,8 +381,16 @@ class Neg8BracketTests(unittest.TestCase):
             require_bracket=True, max_abs_delta_j=0.5, max_rel_delta=0.0625
         )
 
+    @staticmethod
+    def energy(value: float, half_width: float = 0.0) -> dict[str, float]:
+        return {
+            "point_j": value,
+            "lower_j": value - half_width,
+            "upper_j": value + half_width,
+        }
+
     def test_exactly_on_both_thresholds_passes(self) -> None:
-        result = evaluate_neg8_bracket(8.0, 8.5, self.policy)
+        result = evaluate_neg8_bracket(self.energy(8.0), self.energy(8.5), self.policy)
         self.assertEqual(result["schema_version"], NEG8_BRACKET_SCHEMA)
         self.assertEqual(result["decision"], "passed")
         self.assertTrue(result["passed"])
@@ -391,7 +399,7 @@ class Neg8BracketTests(unittest.TestCase):
 
     def test_one_ulp_over_fails(self) -> None:
         result = evaluate_neg8_bracket(
-            8.0, math.nextafter(8.5, math.inf), self.policy
+            self.energy(8.0), self.energy(math.nextafter(8.5, math.inf)), self.policy
         )
         self.assertEqual(result["decision"], "failed")
         self.assertIn("neg8_bracket_abs_delta_exceeded", result["conditions"])
@@ -401,7 +409,7 @@ class Neg8BracketTests(unittest.TestCase):
         policy = Neg8BracketPolicy(
             require_bracket=True, max_abs_delta_j=1.0, max_rel_delta=0.01
         )
-        result = evaluate_neg8_bracket(8.0, 8.5, policy)
+        result = evaluate_neg8_bracket(self.energy(8.0), self.energy(8.5), policy)
         self.assertEqual(result["decision"], "failed")
         self.assertEqual(
             result["conditions"], ["neg8_bracket_rel_delta_exceeded"]
@@ -411,14 +419,18 @@ class Neg8BracketTests(unittest.TestCase):
         policy = Neg8BracketPolicy(
             require_bracket=True, max_abs_delta_j=0.25, max_rel_delta=0.25
         )
-        result = evaluate_neg8_bracket(8.0, 8.5, policy)
+        result = evaluate_neg8_bracket(self.energy(8.0), self.energy(8.5), policy)
         self.assertEqual(result["decision"], "failed")
         self.assertEqual(
             result["conditions"], ["neg8_bracket_abs_delta_exceeded"]
         )
 
     def test_missing_bracket_fails_closed_when_required(self) -> None:
-        for start, end in ((None, 8.5), (8.0, None), (None, None)):
+        for start, end in (
+            (None, self.energy(8.5)),
+            (self.energy(8.0), None),
+            (None, None),
+        ):
             result = evaluate_neg8_bracket(start, end, self.policy)
             self.assertEqual(result["decision"], "failed")
             self.assertIn("neg8_bracket_missing", result["conditions"])
@@ -429,10 +441,33 @@ class Neg8BracketTests(unittest.TestCase):
         self.assertEqual(flagged["decision"], "flagged")
 
     def test_invalid_reference_fails_closed(self) -> None:
-        for start, end in ((0.0, 8.5), (-1.0, 8.5), (float("nan"), 8.5), (8.0, float("inf"))):
+        for start, end in (
+            (0.0, self.energy(8.5)),
+            (-1.0, self.energy(8.5)),
+            (self.energy(float("nan")), self.energy(8.5)),
+            (self.energy(8.0), self.energy(float("inf"))),
+        ):
             result = evaluate_neg8_bracket(start, end, self.policy)
             self.assertEqual(result["decision"], "failed")
             self.assertIn("neg8_bracket_reference_invalid", result["conditions"])
+
+    def test_equal_points_with_wide_envelopes_fail_worst_case_stability(self) -> None:
+        # F3 audit reproduction: equal 8 J point estimates hid a possible
+        # 0.4 J start/end difference across [7.8, 8.2] admissible sets.
+        policy = Neg8BracketPolicy(
+            require_bracket=True, max_abs_delta_j=0.05, max_rel_delta=0.01
+        )
+        result = evaluate_neg8_bracket(
+            self.energy(8.0, 0.2), self.energy(8.0, 0.2), policy
+        )
+        self.assertEqual(result["decision"], "failed")
+        self.assertAlmostEqual(result["abs_delta_j"], 0.4)
+        self.assertIn("neg8_bracket_abs_delta_exceeded", result["conditions"])
+
+    def test_point_only_values_fail_closed_without_envelopes(self) -> None:
+        result = evaluate_neg8_bracket(8.0, 8.0, self.policy)
+        self.assertEqual(result["decision"], "failed")
+        self.assertIn("neg8_bracket_reference_invalid", result["conditions"])
 
 
 if __name__ == "__main__":

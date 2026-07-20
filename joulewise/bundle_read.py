@@ -939,14 +939,15 @@ def axi_v2_validation_problems(
     reducer_opted = (
         isinstance(summary, dict)
         and isinstance(summary.get("summary_provenance"), dict)
-        and summary["summary_provenance"].get("reducer_version") == "0.6.0"
+        and summary["summary_provenance"].get("reducer_version")
+        in {"0.6.0", "0.6.1"}
     )
     if allow_unfinalized_summary and summary is None and config_opted and event_opted:
         reducer_opted = True
     if not any((config_opted, event_opted, reducer_opted)):
         return []
     if not all((config_opted, event_opted, reducer_opted)):
-        return [_axi_problem("axi_partial_opt_in", "config extension, event v2, and reducer 0.6.0 must appear together")]
+        return [_axi_problem("axi_partial_opt_in", "config extension, event v2, and reducer 0.6.0/0.6.1 must appear together")]
 
     problems: list[str] = []
     try:

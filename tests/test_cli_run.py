@@ -1443,7 +1443,7 @@ class StrictValidateTests(CliRunTestCase):
 
 
 class ReduceVerbTests(CliRunTestCase):
-    """Slice 2N.6 (D-028): post-hoc re-reduction of an existing bundle."""
+    """D-078/GOV-02: post-hoc reduction is a new immutable artifact."""
 
     def make_bundle(self, run_id: str) -> Path:
         exit_code, out, _ = self.run_verb(self.write_config(run_id))
@@ -1452,27 +1452,62 @@ class ReduceVerbTests(CliRunTestCase):
 
     def test_reduce_rederives_identical_summary_exit_0(self) -> None:
         bundle = self.make_bundle("reduce-identical")
+        output_path = self.tmp / "reduce-identical.rereduced.json"
         original = json.loads((bundle / "summary_metrics.json").read_text())
-        # Clobber the summary to prove reduce rewrites it from raw evidence.
-        (bundle / "summary_metrics.json").write_text('{"status": "failed"}')
-        exit_code, out, err = _run(["reduce", str(bundle)])
+        original_bytes = (bundle / "summary_metrics.json").read_bytes()
+        exit_code, out, err = _run(
+            ["reduce", str(bundle), "--output", str(output_path)]
+        )
         self.assertEqual(exit_code, 0, err)
         self.assertRegex(out.splitlines()[0], SUCCEEDED_LINE)
-        rederived = json.loads((bundle / "summary_metrics.json").read_text())
+        self.assertEqual((bundle / "summary_metrics.json").read_bytes(), original_bytes)
+        rederived = json.loads(output_path.read_text())
         self.assertEqual(rederived, original)
+        self.assertFalse(
+            (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+        )
         # The re-reduced bundle still validates structurally.
         self.assertEqual(validate_bundle(bundle), [])
 
     def test_reduce_corrupt_metadata_exit_3_structured_summary(self) -> None:
         bundle = self.make_bundle("reduce-corrupt")
+        output_path = self.tmp / "reduce-corrupt.rereduced.json"
         (bundle / "metadata.json").write_text("{broken")
-        exit_code, out, _ = _run(["reduce", str(bundle)])
+        exit_code, out, _ = _run(
+            ["reduce", str(bundle), "--output", str(output_path)]
+        )
         self.assertEqual(exit_code, 3)
         self.assertIn("status=failed", out)
         self.assertIn("reason=unknown_error", out)
-        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary = json.loads(output_path.read_text())
         self.assertEqual(summary["status"], "failed")
         self.assertIn("metadata.json", summary["failure_message"])
+
+    def test_reduce_default_sidecar_is_outside_immutable_input_bundle(self) -> None:
+        # F10 defect shape: the old default wrote a new file into the finalized
+        # input bundle.  Run from an external directory and prove the bundle
+        # remains byte-layout unchanged.
+        bundle = self.make_bundle("reduce-default-external")
+        expected = self.tmp / (
+            f"{bundle.name}.summary_metrics.rereduced.0.5.1.json"
+        )
+        with patch("joulewise.cli.Path.cwd", return_value=self.tmp):
+            exit_code, _out, err = _run(["reduce", str(bundle)])
+        self.assertEqual(exit_code, 0, err)
+        self.assertTrue(expected.is_file())
+        self.assertFalse(
+            (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+        )
+
+    def test_reduce_explicit_output_inside_bundle_is_refused(self) -> None:
+        bundle = self.make_bundle("reduce-explicit-inside-refused")
+        inside = bundle / "prospective.json"
+        exit_code, _out, err = _run(
+            ["reduce", str(bundle), "--output", str(inside)]
+        )
+        self.assertEqual(exit_code, 2)
+        self.assertIn("outside the immutable input bundle", err)
+        self.assertFalse(inside.exists())
 
     def test_reduce_non_bundle_directory_exit_2_no_write(self) -> None:
         not_a_bundle = self.tmp / "not-a-bundle"

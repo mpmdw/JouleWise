@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -72,6 +72,7 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
 )
+from joulewise.whole_window import whole_window_refusal_reasons
 
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
@@ -128,6 +129,18 @@ CELL_REFUSAL_CODES = (
     "anchor_energy_envelope_unrecorded",
     "anchor_energy_envelope_exceeds_quarter_metric",
     "clock_anchor_unresolved",
+    "environment_admission_missing",
+    "cpu_admission_unenforced",
+    "whole_window_neg8_verdict_missing",
+    "whole_window_neg8_verdict_failed",
+    "adapter_continuity_evidence_missing",
+    "adapter_continuity_failed",
+    "cpu_admission_core_missing",
+    "cpu_admission_core_failed",
+    "whole_window_verdict_coverage_incomplete",
+    "whole_window_verdict_provenance_invalid",
+    "whole_window_verdict_conflict",
+    "admissible_set_uncertainty_dominates_point_floor",
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
@@ -303,6 +316,30 @@ def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | Non
     return _finite(raw)
 
 
+def _cpu_admission_bundle_reasons(
+    path: Path, summary: Mapping[str, Any]
+) -> tuple[str, ...]:
+    quality = summary.get("measurement_quality")
+    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
+        return ()
+    try:
+        metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return ("environment_admission_missing",)
+    admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
+    attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+    final = attempts[-1] if isinstance(attempts, list) and attempts else None
+    if not isinstance(final, Mapping) or not isinstance(final.get("cpu_admission"), Mapping):
+        return ("environment_admission_missing",)
+    if final.get("cpu_admission_enforced") is False:
+        return ("cpu_admission_unenforced",)
+    if final.get("cpu_admission_enforced") is not True:
+        return ("environment_admission_missing",)
+    if final["cpu_admission"].get("admitted") is not True:
+        return ("cpu_admission_core_failed",)
+    return ()
+
+
 def _evaluate_member(
     *,
     slot: str,
@@ -350,9 +387,12 @@ def _evaluate_member(
             reasons.append("bundle_strict_invalid")
         if summary.get("status") != "succeeded":
             reasons.append("bundle_status_not_succeeded")
+        reasons.extend(_cpu_admission_bundle_reasons(path, summary))
         reducer_version = _summary_reducer_version(summary)
         if reducer_version not in GOVERNED_REDUCER_IDLE_METHOD_PAIRS:
             reasons.append("reducer_wire_unknown")
+        if reducer_version in {"0.5.0", "0.6.0"}:
+            reasons.append("clock_anchor_unresolved")
         if metric in _IDLE_SUBTRACTED_METRICS:
             uncertainty = summary.get("idle_mean_uncertainty")
             method = (
@@ -436,12 +476,15 @@ def _evaluate_member(
                     half_width = max(
                         envelope["point_j"] - envelope["lower_j"],
                         envelope["upper_j"] - envelope["point_j"],
-                    )
-                    anchor_bound = bounds.get(
-                        "E_clock_anchor_shift_bound_j", envelope["max_abs_delta_j"]
+                        envelope.get("max_abs_delta_j", 0.0),
                     )
                     joint = bounds.get("E_interpolation_joint_edge_bound_j", 0.0)
                     total = half_width + joint
+                    # This is the half-width of the member's admissible energy
+                    # set, not merely a diagnostic clock term.  Floor math
+                    # consumes it below; discarding it would let tightly
+                    # clustered point estimates hide wide causal uncertainty.
+                    anchor_bound = total
                     if value == 0.0:
                         if total > 0.0:
                             reasons.append(
@@ -596,15 +639,28 @@ def extract_absolute_cell(
         if len(admitted) < 2:
             refusals.append("insufficient_members_after_exclusion")
         else:
-            floor = absolute_false_effect_floor(
-                [member.value_j for member in admitted]  # type: ignore[list-item]
-            )
             anchor_values = [
                 member.anchor_shift_bound_j
                 for member in admitted
                 if member.anchor_shift_bound_j is not None
             ]
             anchor_max = max(anchor_values) if anchor_values else None
+            values = [member.value_j for member in admitted]  # type: ignore[list-item]
+            widths = [member.anchor_shift_bound_j for member in admitted]
+            point_floor = absolute_false_effect_floor(values)
+            floor = absolute_false_effect_floor(
+                values,
+                admissible_half_widths_j=widths,  # type: ignore[arg-type]
+            )
+            point_gate = (
+                point_floor.guarded_floor_j
+                if point_floor.guarded_floor_j is not None
+                else point_floor.unguarded_floor_j
+            )
+            if anchor_max is not None and anchor_max > point_gate:
+                refusals.append(
+                    "admissible_set_uncertainty_dominates_point_floor"
+                )
 
     return CellReport(
         cell_id=cell_id,
@@ -615,9 +671,23 @@ def extract_absolute_cell(
         members=tuple(final_reports),
         excluded_slots=tuple(excluded_slots),
         n_planned=len(reports),
-        n_admitted=len(admitted) if not refusals else 0,
+        n_admitted=(
+            len(admitted)
+            if not refusals
+            or set(refusals)
+            == {"admissible_set_uncertainty_dominates_point_floor"}
+            else 0
+        ),
         refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
-        floor=floor if not refusals else None,
+        # Preserve the conservative widened number as a diagnostic even when
+        # it proves that the point-scatter floor itself is not extractable.
+        floor=(
+            floor
+            if not refusals
+            or set(refusals)
+            == {"admissible_set_uncertainty_dominates_point_floor"}
+            else None
+        ),
         anchor_shift_bound_max_j=anchor_max,
     )
 
@@ -666,6 +736,7 @@ def extract_comparative_cell(
     excluded_slots: list[str] = []
     final_reports: list[MemberReport] = []
     block_deltas: list[float] = []
+    block_half_widths: list[float] = []
     admitted_members: list[MemberReport] = []
     for block, block_id in zip(blocks, block_ids):
         block_members = block["members"]
@@ -699,6 +770,15 @@ def extract_comparative_cell(
         block_deltas.append(
             abba_delta(values["A1"], values["B1"], values["B2"], values["A2"])
         )
+        # Worst-case ABBA delta excursion over the four independent member
+        # admissible sets: (w_A1 + w_B1 + w_B2 + w_A2) / 2.
+        block_half_widths.append(
+            math.fsum(
+                member.anchor_shift_bound_j  # type: ignore[arg-type]
+                for member in evaluated
+            )
+            / 2.0
+        )
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
@@ -707,13 +787,26 @@ def extract_comparative_cell(
         if len(block_deltas) < 2:
             refusals.append("insufficient_members_after_exclusion")
         else:
-            floor = comparative_false_effect_floor(block_deltas)
             anchor_values = [
                 member.anchor_shift_bound_j
                 for member in admitted_members
                 if member.anchor_shift_bound_j is not None
             ]
             anchor_max = max(anchor_values) if anchor_values else None
+            point_floor = comparative_false_effect_floor(block_deltas)
+            floor = comparative_false_effect_floor(
+                block_deltas,
+                admissible_half_widths_j=block_half_widths,
+            )
+            point_gate = (
+                point_floor.guarded_floor_j
+                if point_floor.guarded_floor_j is not None
+                else point_floor.unguarded_floor_j
+            )
+            if max(block_half_widths) > point_gate:
+                refusals.append(
+                    "admissible_set_uncertainty_dominates_point_floor"
+                )
 
     return CellReport(
         cell_id=cell_id,
@@ -724,9 +817,21 @@ def extract_comparative_cell(
         members=tuple(final_reports),
         excluded_slots=tuple(excluded_slots),
         n_planned=len(blocks),
-        n_admitted=len(block_deltas) if not refusals else 0,
+        n_admitted=(
+            len(block_deltas)
+            if not refusals
+            or set(refusals)
+            == {"admissible_set_uncertainty_dominates_point_floor"}
+            else 0
+        ),
         refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
-        floor=floor if not refusals else None,
+        floor=(
+            floor
+            if not refusals
+            or set(refusals)
+            == {"admissible_set_uncertainty_dominates_point_floor"}
+            else None
+        ),
         anchor_shift_bound_max_j=anchor_max,
     )
 
@@ -804,6 +909,23 @@ def extract_cells(
             raise FloorExtractionError(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
+
+    whole_window_refusals = _whole_window_extraction_refusals(
+        runs_root, referenced_bundle_ids
+    )
+    if whole_window_refusals:
+        reports = [
+            replace(
+                report,
+                refusal_reasons=tuple(
+                    sorted(set(report.refusal_reasons) | set(whole_window_refusals))
+                ),
+                floor=None,
+                n_admitted=0,
+                anchor_shift_bound_max_j=None,
+            )
+            for report in reports
+        ]
 
     # Bind the caller-authored spec to the frozen campaign manifest(s) it
     # ADDRESSES: within any single campaign the spec draws a member from, every
@@ -887,11 +1009,20 @@ def extract_cells(
         },
         "cells": [report.as_row() for report in reports],
         "spec_membership_refusals": spec_membership_refusals,
+        "idle_admission_refusals": list(whole_window_refusals),
         "all_cells_extractable": (
             all(report.extractable for report in reports)
             and not spec_membership_refusals
         ),
     }
+
+
+def _whole_window_extraction_refusals(
+    runs_root: Path, referenced_bundle_ids: set[str]
+) -> tuple[str, ...]:
+    """Consume a hash-bound verdict that covers every referenced bundle."""
+
+    return whole_window_refusal_reasons(runs_root, referenced_bundle_ids)
 
 
 def _spec_referenced_bundle_ids(cells: Sequence[Mapping[str, Any]]) -> set[str]:

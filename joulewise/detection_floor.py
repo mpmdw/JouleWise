@@ -293,15 +293,77 @@ def _floor_estimate(kind: str, deviations: Sequence[float], mean: float, predict
     )
 
 
-def absolute_false_effect_floor(values_j: Sequence[float]) -> FloorEstimate:
-    """D-054 absolute false-effect floor over bundle-clustered energies."""
+def _admissible_half_width_max(
+    widths_j: Sequence[float] | None, *, expected_n: int
+) -> float:
+    if widths_j is None:
+        return 0.0
+    widths = _clean_values(widths_j, "admissible-set half-widths")
+    if len(widths) != expected_n:
+        raise ValueError("admissible-set half-width count must match point estimates")
+    if any(value < 0.0 for value in widths):
+        raise ValueError("admissible-set half-widths must be >= 0")
+    return max(widths)
+
+
+def _apply_admissible_set_guard(
+    estimate: FloorEstimate, uncertainty_floor_j: float
+) -> FloorEstimate:
+    """Raise a point-estimate floor to cover admitted energy sets.
+
+    The D-054 scatter calculation remains visible in its component fields, but
+    the operative unguarded/guarded floors can never be smaller than the
+    largest member-level admissible-set half-width.  Otherwise a near-identical
+    set of point estimates could claim a millijoule floor while each member is
+    scientifically compatible with tens of joules of anchor displacement.
+    """
+
+    if uncertainty_floor_j <= estimate.unguarded_floor_j:
+        return estimate
+    unguarded = uncertainty_floor_j
+    guarded = (
+        estimate.guard_factor * unguarded
+        if estimate.guard_factor is not None
+        else None
+    )
+    return FloorEstimate(
+        kind=estimate.kind,
+        n=estimate.n,
+        mean_j=estimate.mean_j,
+        deviations_j=estimate.deviations_j,
+        sample_stddev_j=estimate.sample_stddev_j,
+        max_abs_deviation_j=estimate.max_abs_deviation_j,
+        t_critical=estimate.t_critical,
+        prediction_component_j=estimate.prediction_component_j,
+        unguarded_floor_j=unguarded,
+        guard_factor=estimate.guard_factor,
+        guarded_floor_j=guarded,
+    )
+
+
+def absolute_false_effect_floor(
+    values_j: Sequence[float],
+    *,
+    admissible_half_widths_j: Sequence[float] | None = None,
+) -> FloorEstimate:
+    """D-054 absolute floor, widened by member admissible-set uncertainty."""
     values = _clean_values(values_j, "energies")
     mean = sum(values) / len(values)
     residuals = [v - mean for v in values]
-    return _floor_estimate("absolute", residuals, mean, 0.0)
+    estimate = _floor_estimate("absolute", residuals, mean, 0.0)
+    return _apply_admissible_set_guard(
+        estimate,
+        _admissible_half_width_max(
+            admissible_half_widths_j, expected_n=len(values)
+        ),
+    )
 
 
-def comparative_false_effect_floor(block_deltas_j: Sequence[float]) -> FloorEstimate:
+def comparative_false_effect_floor(
+    block_deltas_j: Sequence[float],
+    *,
+    admissible_half_widths_j: Sequence[float] | None = None,
+) -> FloorEstimate:
     """D-054 comparative false-effect floor over ABBA block deltas.
 
     The prediction component includes ``abs(mean_delta)`` — deltas are never
@@ -309,7 +371,13 @@ def comparative_false_effect_floor(block_deltas_j: Sequence[float]) -> FloorEsti
     """
     deltas = _clean_values(block_deltas_j, "block deltas")
     mean = sum(deltas) / len(deltas)
-    return _floor_estimate("comparative", deltas, mean, abs(mean))
+    estimate = _floor_estimate("comparative", deltas, mean, abs(mean))
+    return _apply_admissible_set_guard(
+        estimate,
+        _admissible_half_width_max(
+            admissible_half_widths_j, expected_n=len(deltas)
+        ),
+    )
 
 
 def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:

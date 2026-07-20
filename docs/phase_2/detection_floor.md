@@ -571,7 +571,12 @@ Claim ceilings while absent:
 
 Additive amendment adopted with the 2026-07-19 measurement-soundness audit
 (`docs/reviews/2026-07-19-measurement-soundness-audit.md`, D-078). These gates
-bind every claim-bearing floor extraction; the implementation is
+bind every claim-bearing floor extraction and also require a campaign-bound
+whole-window NEG-8 verdict, stable adapter
+wattage continuity, and admitted CPU-idle evidence.  Missing or failed
+evidence refuses extraction with the registered D-078 reasons; a per-segment
+`neg8_bracket_not_evaluated` record is collection evidence, not a claim pass.
+The implementation is
 `joulewise/floor_extraction.py` plus `scripts/extract_detection_floors.py`,
 composing the existing engine primitives rather than re-deriving them.
 
@@ -635,6 +640,12 @@ every other clause of that predeclaration is unchanged.
   `(max(P - lower_j, upper_j - P) + E_interpolation_joint_edge_bound_j) / |P| <= 0.25`
   with a zero point and nonzero bound failing closed
   (`anchor_energy_envelope_exceeds_quarter_metric`).
+- Floor estimation operates on admissible energy sets, not point estimates
+  alone. The operative absolute floor is no smaller than the largest admitted
+  member half-width; an ABBA block uses the propagated half-width of its four
+  signed members. If that set width exceeds the guarded point-only floor, the
+  cell records the widened floor diagnostically but refuses extraction with
+  `admissible_set_uncertainty_dominates_point_floor`.
 - The engine consumes the anchor bound as the deterministic term
   `E_clock_anchor_shift_bound_j` in absolute and paired contrasts. Passing
   the per-metric envelope gate does NOT make a comparative contrast

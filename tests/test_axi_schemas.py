@@ -332,7 +332,10 @@ class AxiSummarySchemaTests(unittest.TestCase):
         self.assertEqual(schema["title"], "JouleWise SummaryMetricsV060")
         self.assertFalse(schema["$defs"]["decode_counter_rollup"]["additionalProperties"])
         self.assertFalse(schema["$defs"]["request_decode_metric"]["additionalProperties"])
-        self.assertEqual(schema["$defs"]["summary_provenance"]["properties"]["reducer_version"], {"const": "0.6.0"})
+        self.assertEqual(
+            schema["$defs"]["summary_provenance"]["properties"]["reducer_version"],
+            {"enum": ["0.6.0", "0.6.1"]},
+        )
 
     @unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed")
     def test_summary_schema_accepts_golden_and_rejects_extra_counter_key(self) -> None:

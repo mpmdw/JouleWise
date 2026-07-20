@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import traceback
 from collections.abc import Callable
@@ -240,6 +241,8 @@ def run_benchmark(
     campaign_policy: CampaignPolicy | None = None,
     campaign_policy_binding: dict[str, Any] | None = None,
     campaign_environment_preflight: dict[str, Any] | None = None,
+    instrument_calibration_dir: Path | None = None,
+    instrument_power_policy: str | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -258,6 +261,10 @@ def run_benchmark(
     which the reducer copies into the run's ``measurement_quality``.
     """
     config.validate()
+    attachment = _load_instrument_calibration_attachment(
+        instrument_calibration_dir,
+        power_policy=instrument_power_policy,
+    )
     if campaign_policy is None:
         (
             campaign_policy,
@@ -270,6 +277,8 @@ def run_benchmark(
     if registry is None:
         registry = joulewise.adapters
     writer = RunBundleWriter.create(runs_root, config, clock)
+    if attachment is not None:
+        attachment.install(writer.path)
     return _Execution(
         config,
         writer,
@@ -283,7 +292,118 @@ def run_benchmark(
         campaign_policy,
         campaign_policy_binding,
         campaign_environment_preflight,
+        attachment.metadata if attachment is not None else None,
     ).execute()
+
+
+@dataclass(frozen=True)
+class _InstrumentCalibrationAttachment:
+    files: dict[str, bytes]
+    metadata: dict[str, Any]
+
+    def install(self, bundle_path: Path) -> None:
+        root = bundle_path / "instrument_calibration"
+        for relative, raw in sorted(self.files.items()):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("xb") as handle:
+                handle.write(raw)
+
+
+def _load_instrument_calibration_attachment(
+    directory: Path | None, *, power_policy: str | None
+) -> _InstrumentCalibrationAttachment | None:
+    """Authenticate a validation directory before a bundle is created."""
+
+    if directory is None:
+        if power_policy is not None:
+            raise ValueError("instrument power policy requires a calibration directory")
+        return None
+    if not isinstance(power_policy, str) or not power_policy.strip():
+        raise ValueError(
+            "instrument calibration attachment requires --instrument-power-policy"
+        )
+    root = Path(directory)
+    try:
+        resolved_root = root.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"instrument calibration directory is unavailable: {exc}") from exc
+    manifest_path = root / "manifest.json"
+    try:
+        manifest_raw = manifest_path.read_bytes()
+        manifest = json.loads(manifest_raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"instrument calibration manifest is unavailable: {exc}") from exc
+    artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version")
+        != "joulewise.instrument_validation_manifest.v1"
+        or not isinstance(artifacts, dict)
+    ):
+        raise ValueError("instrument calibration manifest schema is invalid")
+    files: dict[str, bytes] = {"manifest.json": manifest_raw}
+    for relative, expected_sha in artifacts.items():
+        path_value = Path(relative) if isinstance(relative, str) else None
+        if (
+            path_value is None
+            or path_value.is_absolute()
+            or ".." in path_value.parts
+            or not isinstance(expected_sha, str)
+            or len(expected_sha) != 64
+        ):
+            raise ValueError("instrument calibration artifact descriptor is invalid")
+        try:
+            candidate = (resolved_root / path_value).resolve(strict=True)
+            if resolved_root not in candidate.parents:
+                raise ValueError(
+                    f"instrument calibration artifact escapes directory: {relative}"
+                )
+            raw = candidate.read_bytes()
+        except OSError as exc:
+            raise ValueError(
+                f"instrument calibration artifact is unavailable: {relative}"
+            ) from exc
+        if hashlib.sha256(raw).hexdigest() != expected_sha:
+            raise ValueError(
+                f"instrument calibration artifact hash mismatch: {relative}"
+            )
+        files[path_value.as_posix()] = raw
+    evidence_raw = files.get("instrument_evidence.json")
+    if evidence_raw is None:
+        raise ValueError("instrument calibration manifest omits instrument_evidence.json")
+    try:
+        evidence = json.loads(evidence_raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("instrument calibration evidence is invalid JSON") from exc
+    bindings = evidence.get("bindings") if isinstance(evidence, dict) else None
+    bound = evidence.get("b_fiducial_s") if isinstance(evidence, dict) else None
+    if (
+        not isinstance(evidence, dict)
+        or evidence.get("status") != "valid"
+        or not isinstance(bindings, dict)
+        or bindings.get("power_policy") != power_policy
+        or isinstance(bound, bool)
+        or not isinstance(bound, int | float)
+        or not math.isfinite(float(bound))
+        or float(bound) < 0.0
+    ):
+        raise ValueError("instrument calibration evidence/power-policy binding is invalid")
+    return _InstrumentCalibrationAttachment(
+        files=files,
+        metadata={
+            "artifact_path": "instrument_calibration/instrument_evidence.json",
+            "artifact_sha256": hashlib.sha256(evidence_raw).hexdigest(),
+            "validation_manifest_path": "instrument_calibration/manifest.json",
+            "validation_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+            "b_fiducial_s": float(bound),
+            "bindings": dict(bindings),
+            "binding_observations": {
+                "powermetrics_sha256": bindings.get("powermetrics_sha256"),
+                "power_policy": power_policy,
+            },
+        },
+    )
 
 
 def _campaign_policy_from_environment() -> tuple[
@@ -457,6 +577,7 @@ class _Execution:
         campaign_policy: CampaignPolicy | None = None,
         campaign_policy_binding: dict[str, Any] | None = None,
         campaign_environment_preflight: dict[str, Any] | None = None,
+        instrument_calibration: dict[str, Any] | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -475,6 +596,9 @@ class _Execution:
             dict(campaign_environment_preflight)
             if campaign_environment_preflight
             else None
+        )
+        self._instrument_calibration = (
+            dict(instrument_calibration) if instrument_calibration else None
         )
         self._environment_admission: dict[str, Any] | None = None
         # D-024: one immutable context, constructed after bundle creation,
@@ -1726,6 +1850,8 @@ class _Execution:
             )
         if self._environment_admission is not None:
             extra["environment_admission"] = self._environment_admission
+        if self._instrument_calibration is not None:
+            extra["instrument_calibration"] = self._instrument_calibration
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -1866,7 +1992,12 @@ class _Execution:
             }
             return
         started_at_s = self._clock.now()
-        observation = collect_environment_guard_observation()
+        # Adapter continuity must bracket the workload.  In particular, a
+        # renegotiation during the final member is invisible without this
+        # post-workload power observation.
+        observation = collect_environment_guard_observation(
+            include_adapter_power=True
+        )
         captured_at_s = self._clock.now()
         observation.update(
             {
@@ -2383,6 +2514,8 @@ def run_experiment(
     clock: Clock,
     registry: AdapterRegistry | None = None,
     frozen_cooldown_anchor: dict[str, Any] | None = None,
+    instrument_calibration_dir: Path | None = None,
+    instrument_power_policy: str | None = None,
 ) -> tuple[Path, list[tuple[Path, SummaryMetrics]]]:
     """Run ``repetitions`` measured runs and group them by an experiment manifest.
 
@@ -2488,6 +2621,8 @@ def run_experiment(
             campaign_policy=campaign_policy,
             campaign_policy_binding=policy_binding,
             campaign_environment_preflight=preflight,
+            instrument_calibration_dir=instrument_calibration_dir,
+            instrument_power_policy=instrument_power_policy,
         )
         previous_member_end_s = clock.now()
         next_extra_metadata = None

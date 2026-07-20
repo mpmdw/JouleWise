@@ -1115,10 +1115,10 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        # 22 = full snapshot probes + the guard observation's display
-        # inventory (added 2026-07-18: macOS 26 systemstate cannot prove
-        # display sleep without per-display profiler evidence).
-        self.assertEqual(len(environment_calls), 22)
+        # 23 = full snapshot probes + the post-workload guard's display
+        # inventory and adapter-power probe.  F6 requires the latter so a
+        # final-member renegotiation cannot disappear after the workload.
+        self.assertEqual(len(environment_calls), 23)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
         self.assertEqual(environment["memory"]["pageins"], 2000)
@@ -1139,6 +1139,9 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(environment["display_power_state"], "all_asleep")
         self.assertIs(environment["screensaver_engaged"], False)
         self.assertEqual(environment["post_run_observation"]["display_power_state"], "all_asleep")
+        self.assertEqual(
+            environment["post_run_observation"]["power"]["adapter_watts"], 96
+        )
 
     def test_idle_baseline_failure_preserves_prepare_end_environment(self) -> None:
         config = make_config("controller-idle-failure-env")

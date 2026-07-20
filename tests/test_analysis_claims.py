@@ -1003,6 +1003,19 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
         self.assertEqual(reasons, ())
 
+    def test_point_anchor_wires_always_refuse_even_when_all_observations_are_old(self):
+        # W3 defect shape: the mixed-wire guard only noticed an anchor term on
+        # one side, so an all-0.5.0/all-0.6.0 analysis silently dropped D-078.
+        for reducer_version in ("0.5.0", "0.6.0"):
+            with self.subTest(reducer_version=reducer_version):
+                summary = self._summary(reducer_version=reducer_version)
+                del summary["energy_anchor_shift_envelopes"]
+                del summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"]
+                _bounds, reasons = deterministic_bounds(
+                    _bounds_evidence(summary), self.GROSS_METRIC
+                )
+                self.assertIn("clock_anchor_unresolved", reasons)
+
     def test_phase_envelope_propagates_through_the_phase_pointer(self):
         summary = {
             "summary_provenance": {"reducer_version": "0.5.1"},

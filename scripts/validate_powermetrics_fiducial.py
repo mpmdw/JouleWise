@@ -72,6 +72,26 @@ def stamp_half_width_s(stamp) -> float:
     )
 
 
+def trim_trace_after_warmups(
+    intervals: list[TraceInterval], warmups: list[CommandedPulse]
+) -> list[TraceInterval]:
+    """Remove captured warmup plateaus before measured-pulse detection.
+
+    Warmups are deliberately inside the raw capture but are not protocol
+    pulses.  Leaving them in the detector's ``outside`` baseline launders no
+    evidence: they are classified as spurious plateaus and make every clean
+    live validation invalid.  Trim only through the final commanded warmup
+    edge; the second BASELINE_S pause remains available to fit the first
+    measured edge, and any genuinely uncommanded plateau after that edge is
+    still detected.
+    """
+
+    if not warmups:
+        return list(intervals)
+    cutoff_s = max(pulse.off_s for pulse in warmups)
+    return [interval for interval in intervals if interval.start_s >= cutoff_s]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -183,8 +203,27 @@ def main() -> int:
     emit("sampling_started", {})
 
     time.sleep(BASELINE_S)
-    for _warmup in range(WARMUP_PULSE_COUNT):
+    warmups: list[CommandedPulse] = []
+    for warmup_index in range(WARMUP_PULSE_COUNT):
+        on_stamp = clock.stamp()
+        emit(
+            "warmup_command_on",
+            {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
+        )
         run_matmul_pulse(PULSE_DURATION_S, buffers)
+        off_stamp = clock.stamp()
+        emit(
+            "warmup_command_off",
+            {"warmup_index": warmup_index, "clock_stamp": asdict(off_stamp)},
+        )
+        warmups.append(
+            CommandedPulse(
+                on_s=on_stamp.epoch_s,
+                off_s=off_stamp.epoch_s,
+                on_uncertainty_s=stamp_half_width_s(on_stamp),
+                off_uncertainty_s=stamp_half_width_s(off_stamp),
+            )
+        )
         time.sleep(1.5)
     time.sleep(BASELINE_S)
 
@@ -276,7 +315,7 @@ def main() -> int:
         )
         for record in anchored
     ]
-    detection = detect_pulses(intervals, pulses)
+    detection = detect_pulses(trim_trace_after_warmups(intervals, warmups), pulses)
     events.close()
 
     device_meta = native_records[0].metadata if native_records else {}

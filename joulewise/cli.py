@@ -261,6 +261,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     the controller finalizes it for every outcome (D-011); this verb then maps
     the run status to the process exit code.
     """
+    if (args.instrument_calibration_dir is None) != (
+        args.instrument_power_policy is None
+    ):
+        raise SchemaError(
+            "--instrument-calibration-dir and --instrument-power-policy must be supplied together"
+        )
     config = BenchmarkConfig.from_mapping(_load_config(Path(args.config)))
     clock = _select_clock(config)
     frozen_cooldown_anchor = None
@@ -298,6 +304,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if frozen_cooldown_anchor is not None
             else {}
         )
+        if args.instrument_calibration_dir is not None:
+            experiment_kwargs.update(
+                {
+                    "instrument_calibration_dir": Path(
+                        args.instrument_calibration_dir
+                    ),
+                    "instrument_power_policy": args.instrument_power_policy,
+                }
+            )
         manifest_path, members = run_experiment(
             config,
             Path(args.runs_dir),
@@ -315,7 +330,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         raise SchemaError(
             "--frozen-cooldown-anchor-json requires workload_profile.repetitions > 1"
         )
-    bundle_path, summary = run_benchmark(config, Path(args.runs_dir), clock)
+    bundle_path, summary = run_benchmark(
+        config,
+        Path(args.runs_dir),
+        clock,
+        instrument_calibration_dir=(
+            Path(args.instrument_calibration_dir)
+            if args.instrument_calibration_dir is not None
+            else None
+        ),
+        instrument_power_policy=args.instrument_power_policy,
+    )
     print(_bundle_line(bundle_path, summary))
     return 0 if summary.status == RunStatus.SUCCEEDED else 3
 
@@ -1701,20 +1726,12 @@ def _cmd_validate_bundle(args: argparse.Namespace) -> int:
 
 # ---------------------------------------------------------------------------
 # reduce verb (Slice 2N.6) - post-hoc re-reduction: a reducer bug never
-# re-runs hardware (D-002); the bundle is re-reduced in place.
+# re-runs hardware (D-002).  D-078 supersedes D-028's in-place-summary carveout:
+# stored summaries are immutable and prospective reductions are new artifacts.
 
 
 def _cmd_reduce(args: argparse.Namespace) -> int:
-    """Re-derive and rewrite ``summary_metrics.json`` for an existing bundle.
-
-    Rewriting the summary is the one sanctioned post-finalize bundle mutation
-    (D-028): the raw artifacts stay immutable evidence, and the summary is by
-    definition derived from them. A path that is not a bundle directory (no
-    ``config.json``) is refused with exit 2 and no write, so evidence is never
-    invented inside an arbitrary directory. Degenerate bundle contents reduce
-    to a structured FAILED summary (exit 3), matching ``run``'s exit scheme:
-    0 succeeded, 2 usage/not-a-bundle, 3 reduced-to-failure.
-    """
+    """Write a prospective reduction without mutating stored summary bytes."""
     bundle_path = Path(args.path)
     if not bundle_path.is_dir() or not (bundle_path / "config.json").is_file():
         print(
@@ -1722,16 +1739,75 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    summary = reduce_bundle(bundle_path)
+    stored_path = bundle_path / "summary_metrics.json"
+    recorded_version: str | None = None
+    if stored_path.is_file():
+        try:
+            stored = json.loads(stored_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            stored = None
+        provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
+        value = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+        recorded_version = value if isinstance(value, str) else None
+    requested_version = args.reducer_version
+    if requested_version is None and stored_path.is_file():
+        requested_version = (
+            AXI_REDUCER_VERSION
+            if recorded_version in AXI_REDUCER_VERSIONS
+            else SUMMARY_REDUCER_VERSION
+        )
+    summary = reduce_bundle(bundle_path, reducer_version=requested_version)
     try:
         payload = summary.to_dict()
     except SchemaError as exc:
         print(f"reduced summary is not admissible: {exc}", file=sys.stderr)
         return 3
-    (bundle_path / "summary_metrics.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    )
+    reducer_version = payload.get("summary_provenance", {}).get("reducer_version")
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        try:
+            cwd = Path.cwd().resolve()
+            resolved_bundle = bundle_path.resolve()
+        except OSError as exc:
+            print(f"error: cannot resolve safe reduction output location: {exc}", file=sys.stderr)
+            return 2
+        if cwd == resolved_bundle or resolved_bundle in cwd.parents:
+            print(
+                "error: current directory is inside the input bundle; choose an "
+                "external --output for immutable evidence",
+                file=sys.stderr,
+            )
+            return 2
+        output_path = cwd / (
+            f"{bundle_path.name}.summary_metrics.rereduced.{reducer_version}.json"
+        )
+    try:
+        resolved_output = output_path.resolve()
+        resolved_bundle = bundle_path.resolve()
+    except OSError as exc:
+        print(f"error: cannot resolve safe reduction output path: {exc}", file=sys.stderr)
+        return 2
+    if resolved_output == resolved_bundle or resolved_bundle in resolved_output.parents:
+        print(
+            "error: reduction output must be outside the immutable input bundle",
+            file=sys.stderr,
+        )
+        return 2
+    if resolved_output == stored_path.resolve() and stored_path.is_file():
+        print(
+            "error: refusing to overwrite stored summary_metrics.json; choose a new --output",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        with output_path.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    except FileExistsError:
+        print(f"error: refusing to overwrite existing reduction artifact: {output_path}", file=sys.stderr)
+        return 2
     print(_bundle_line(bundle_path, summary))
+    print(f"reduction artifact: {output_path}")
     return 0 if is_admissible_succeeded_summary(payload) else 3
 
 
@@ -1989,6 +2065,17 @@ def build_parser() -> argparse.ArgumentParser:
             "to a multi-repetition experiment"
         ),
     )
+    run.add_argument(
+        "--instrument-calibration-dir",
+        help=(
+            "hash-verified powermetrics fiducial validation directory copied "
+            "into the new bundle"
+        ),
+    )
+    run.add_argument(
+        "--instrument-power-policy",
+        help="current run power-policy id (must match calibration binding)",
+    )
     run.set_defaults(func=_cmd_run)
 
     validate_bundle_parser = subparsers.add_parser(
@@ -2008,9 +2095,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     reduce_parser = subparsers.add_parser(
         "reduce",
-        help="re-derive summary_metrics.json for an existing bundle (post-hoc reduction)",
+        help="write a prospective summary artifact without rewriting stored evidence",
     )
     reduce_parser.add_argument("path", help="path to a run bundle directory")
+    reduce_parser.add_argument(
+        "--output",
+        help="new output path (must not be an existing stored summary/artifact)",
+    )
+    reduce_parser.add_argument(
+        "--reducer-version",
+        help="explicit reducer wire (frozen historical arms remain replay-only)",
+    )
     reduce_parser.set_defaults(func=_cmd_reduce)
 
     output_identity = subparsers.add_parser(

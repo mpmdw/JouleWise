@@ -19,6 +19,8 @@ capture is lead-owned and driven by ``scripts/validate_powermetrics_fiducial.py`
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import statistics
 from dataclasses import dataclass, field
@@ -41,6 +43,7 @@ MIN_ROBUST_SNR = 10.0
 FIT_HALF_RANGE_S = 0.75
 FIT_COARSE_STEP_S = 0.005
 FIT_FINE_STEP_S = 0.0005
+MAX_VALIDATED_EDGE_SHIFT_S = 0.50
 HUBER_DELTA = 1.345
 PLATEAU_INSET_S = 0.25
 LOCAL_MARGIN_S = 0.75
@@ -55,6 +58,26 @@ BINDING_FIELDS = (
     "mlx_version",
     "pulse_protocol_id",
     "power_policy",
+)
+
+# Closed serializer vocabulary.  Prefix-coded diagnostics are represented by
+# their registered prefix including the trailing colon.
+FIDUCIAL_DIAGNOSTIC_CODES = frozenset(
+    {
+        "no_plateau_interior_intervals",
+        "plateau_below_minimum",
+        "robust_snr_below_minimum",
+        "edge_coverage_missing",
+        "model_fit_not_significant",
+        "fitted_shift_exceeds_validation_limit",
+        "pulse_detection_incomplete",
+        "spurious_plateau_detected",
+        "residual_interval_unbounded",
+        "not_all_pulses_detected",
+        "binding_fields_missing:",
+        "pulse_count_below_protocol:",
+        "raw_or_event_hash_missing_or_invalid",
+    }
 )
 
 
@@ -324,34 +347,52 @@ def _fit_pulse(
             amplitude_w=amplitude_w,
             robust_snr=robust_snr,
         )
+    if (
+        abs(delta_on_s) >= MAX_VALIDATED_EDGE_SHIFT_S
+        or abs(delta_off_s) >= MAX_VALIDATED_EDGE_SHIFT_S
+    ):
+        return PulseFit(
+            pulse_index=pulse_index,
+            detected=False,
+            reasons=("fitted_shift_exceeds_validation_limit",),
+            amplitude_w=amplitude_w,
+            robust_snr=robust_snr,
+            delta_on_s=delta_on_s,
+            delta_off_s=delta_off_s,
+        )
 
     # Residual intervals: the contiguous loss-tolerance region around each
     # fitted edge, widened by the commanded-event stamp uncertainty.
     tolerance = max(1.0, 0.05 * best_loss)
 
-    def residual_interval(
-        fitted_s: float, evaluate: Any, stamp_uncertainty_s: float
-    ) -> tuple[float, float]:
-        lower = fitted_s
-        upper = fitted_s
-        for delta in _grid(fitted_s, FIT_HALF_RANGE_S, FIT_FINE_STEP_S):
-            if abs(delta) > FIT_HALF_RANGE_S:
-                continue
-            if evaluate(delta) <= best_loss + tolerance:
-                lower = min(lower, delta)
-                upper = max(upper, delta)
-        return lower - stamp_uncertainty_s, upper + stamp_uncertainty_s
+    onset_candidates = [delta_on_s]
+    offset_candidates = [delta_off_s]
 
-    onset_lower_s, onset_upper_s = residual_interval(
-        delta_on_s,
-        lambda delta: loss(delta, delta_off_s),
-        pulse.on_uncertainty_s,
-    )
-    offset_lower_s, offset_upper_s = residual_interval(
-        delta_off_s,
-        lambda delta: loss(delta_on_s, delta),
-        pulse.off_uncertainty_s,
-    )
+    def admit(onset: float, offset: float) -> None:
+        if (
+            abs(onset) <= FIT_HALF_RANGE_S
+            and abs(offset) <= FIT_HALF_RANGE_S
+            and loss(onset, offset) <= best_loss + tolerance
+        ):
+            onset_candidates.append(onset)
+            offset_candidates.append(offset)
+
+    # Project a joint acceptance scan onto both axes.  The two coordinate
+    # slices preserve edge-local resolution; the common-shift diagonal is the
+    # load-bearing correlated-delay direction omitted by the former 1-D
+    # contour, and the opposite diagonal covers duration-change correlation.
+    for value in _grid(delta_on_s, FIT_HALF_RANGE_S, FIT_FINE_STEP_S):
+        admit(value, delta_off_s)
+    for value in _grid(delta_off_s, FIT_HALF_RANGE_S, FIT_FINE_STEP_S):
+        admit(delta_on_s, value)
+    for shift in _grid(0.0, FIT_HALF_RANGE_S, FIT_FINE_STEP_S):
+        admit(delta_on_s + shift, delta_off_s + shift)
+        admit(delta_on_s + shift, delta_off_s - shift)
+
+    onset_lower_s = min(onset_candidates) - pulse.on_uncertainty_s
+    onset_upper_s = max(onset_candidates) + pulse.on_uncertainty_s
+    offset_lower_s = min(offset_candidates) - pulse.off_uncertainty_s
+    offset_upper_s = max(offset_candidates) + pulse.off_uncertainty_s
     return PulseFit(
         pulse_index=pulse_index,
         detected=True,
@@ -486,11 +527,19 @@ def instrument_evidence(
     ]
     pulse_count = len(detection.fits)
     count_ok = pulse_count == protocol_pulse_count
+    required_hashes_ok = all(
+        isinstance(artifact_sha256.get(name), str)
+        and len(artifact_sha256[name]) == 64
+        and all(char in "0123456789abcdef" for char in artifact_sha256[name])
+        for name in ("raw/powermetrics.plist", "events.jsonl")
+    )
     valid = (
         detection.b_fiducial_s is not None
         and not missing
         and detection.all_pulses_detected
+        and detection.spurious_plateau_count == 0
         and count_ok
+        and required_hashes_ok
     )
     reasons = list(detection.reasons)
     if missing:
@@ -501,6 +550,10 @@ def instrument_evidence(
         reasons.append(
             f"pulse_count_below_protocol:{pulse_count}!={protocol_pulse_count}"
         )
+    if detection.spurious_plateau_count != 0:
+        reasons.append("spurious_plateau_detected")
+    if not required_hashes_ok:
+        reasons.append("raw_or_event_hash_missing_or_invalid")
     return {
         "schema_version": "joulewise.instrument_evidence.v1",
         "protocol_id": PROTOCOL_ID,
@@ -511,12 +564,38 @@ def instrument_evidence(
         "b_fiducial_s": detection.b_fiducial_s,
         "residual_median_s_diagnostic_only": detection.residual_median_s,
         "residual_p95_s_diagnostic_only": detection.residual_p95_s,
+        "residual_region_method": (
+            "joint_axis_plus_common_and_opposite_diagonal_projection_v1"
+        ),
+        "residual_region_coverage_assumption": (
+            "The accepted joint loss region is projected along both coordinate "
+            "axes and both correlated shift diagonals. This explicitly covers "
+            "common onset/offset latency and duration-change valleys; unscanned "
+            "curvature is not claimed as probabilistic coverage."
+        ),
         "baseline_w": detection.baseline_w,
         "robust_sigma_w": detection.robust_sigma_w,
         "pulse_count": len(detection.fits),
         "all_pulses_detected": detection.all_pulses_detected,
         "spurious_plateau_count": detection.spurious_plateau_count,
         "bindings": {name: bindings.get(name) for name in BINDING_FIELDS},
+        "binding_evidence": {
+            "schema_version": "joulewise.instrument_binding_evidence.v1",
+            "binding_vector_sha256": hashlib.sha256(
+                json.dumps(
+                    {name: bindings.get(name) for name in BINDING_FIELDS},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest(),
+            "powermetrics_binary": {
+                "path": "/usr/bin/powermetrics",
+                "sha256": bindings.get("powermetrics_sha256"),
+            },
+            "power_policy": {"id": bindings.get("power_policy")},
+        },
         "artifact_sha256": dict(artifact_sha256),
         "pulses": [
             {

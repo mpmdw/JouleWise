@@ -45,7 +45,9 @@ From the soundness audit; all prospective, no stored-summary rewrites:
   power-pulse fiducial at window start; powermetrics interval-timestamp
   alignment against a synchronized start barrier; both). Acceptance: anchor
   uncertainty small relative to a quarter of the SHORTEST claimed window,
-  live-validated against a known-shape pulse.
+  live-validated against a known-shape pulse. Reducer enforcement is
+  fail-closed: missing, binding-mismatched, stale, or internally impossible
+  instrument evidence bars claims while retaining numeric salvage outputs.
 - **T0.2 Anchor-envelope reduction:** every reduced energy carries a
   conservative anchor-shift joule envelope; `window_evidence_precheck`
   becomes a hard extraction gate (no narrative may call a corpus

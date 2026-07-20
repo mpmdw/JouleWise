@@ -10,6 +10,7 @@ lead shakedown against true /usr/bin/powermetrics and approved backup.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 import tempfile
@@ -27,11 +28,177 @@ from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
 from joulewise.clock import SystemClock
 from joulewise.controller import run_benchmark
+from joulewise.environment import evaluate_environment_policy
 from joulewise.reduce import reduce_bundle
-from joulewise.schemas import BenchmarkConfig
+from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 
 
 FIXTURE_PROCESS = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
+
+
+def claim_admission_fixture():
+    """Return a complete claim-bearing policy binding over fixture telemetry."""
+
+    policy = CampaignPolicy.from_mapping(
+        {
+            "schema_version": "joulewise.campaign_policy.v1",
+            "policy_id": "p2038-production-path-test",
+            "policy_version": "p2038-production-path-test-v1",
+            "profile": "production",
+            "environment_guard": {
+                "require_ac_power": True,
+                "require_external_connected": True,
+                "require_low_power_mode_off": True,
+                "require_displays_asleep": True,
+                "require_screensaver_disengaged": True,
+                "require_thermal_nominal": True,
+                "critical_unknown_fail_closed": True,
+            },
+            "idle_admission": {
+                "enabled": True,
+                "on_fail": "abort",
+                "retry_attempts": 1,
+            },
+            "idle_admission_extension": {
+                "schema_version": "joulewise.idle_admission_extension.v1",
+                "policy_version": "idle-admission-core-v1",
+                "claim_bearing": True,
+                "cpu_criteria": {
+                    "cpu_busy_ratio_p95_max": 1.0,
+                    "processor_combined_power_w_p95_max": 100.0,
+                    "min_samples": 5,
+                    "on_missing_telemetry": "fail",
+                },
+                "adapter_wattage": {"require_known_wattage": True},
+                "neg8_bracket": {
+                    "require_bracket": True,
+                    "max_abs_delta_j": 0.05,
+                    "max_rel_delta": 0.25,
+                },
+            },
+            "cooldown": {
+                "policy_version": "cooldown-v2",
+                "subwindow_s": 1.0,
+                "sustained_window_s": 2.0,
+                "coverage_fraction": 0.8,
+                "tolerance_fraction": 0.1,
+                "cap_s": 30.0,
+                "absolute_ceiling_w": None,
+                "require_thermal_nominal": False,
+            },
+        }
+    )
+    snapshot = {
+        "power_source": "AC Power",
+        "power": {"external_connected": True},
+        "low_power_mode": False,
+        "display_power_state": "all_asleep",
+        "screensaver_engaged": False,
+        "screensaver_module": "Ventura",
+        "screensaver_delay_s": 1200,
+        "hid_idle_s": 1200.0,
+        "thermal_pressure": "nominal",
+        "load_average_1m": 0.0,
+        "capture_scope": "provided_test_fixture",
+        "python_packages": {"mlx": {"version": "p2038-test-mlx"}},
+    }
+    evaluation = evaluate_environment_policy(snapshot, policy.environment_guard)
+    policy_sha256 = "a" * 64
+    binding = {
+        "schema_version": policy.schema_version,
+        "policy_id": policy.policy_id,
+        "policy_version": policy.policy_version,
+        "profile": policy.profile.value,
+        "sha256": policy_sha256,
+        "source": "tests/test_p2038_production_path.py",
+    }
+    preflight = {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": policy_sha256,
+        "snapshot": snapshot,
+        "evaluation": evaluation,
+        "override": None,
+        "admitted": True,
+    }
+    return policy, binding, preflight, snapshot
+
+
+def install_complete_calibration(directory: Path) -> None:
+    """Build a hash-bound validation directory for the production attach path."""
+
+    raw_dir = directory / "raw"
+    raw_dir.mkdir(parents=True)
+    raw_bytes = (Path(__file__).parent / "fixtures" / "powermetrics_sample.plist").read_bytes()
+    event_bytes = b'{"event_type":"pulse_fixture"}\n'
+    (raw_dir / "powermetrics.plist").write_bytes(raw_bytes)
+    (directory / "events.jsonl").write_bytes(event_bytes)
+    bindings = {
+        "hardware_model": "Mac15,9",
+        "os_build": "24G720",
+        "powermetrics_sha256": hashlib.sha256(
+            FIXTURE_PROCESS.read_bytes()
+        ).hexdigest(),
+        "sampling_interval_ms": 50.0,
+        "anchor_method_version": (
+            "powermetrics_native_second_censored_intersection_v1"
+        ),
+        "mlx_version": "p2038-test-mlx",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
+        "power_policy": "fixture_ac_stable",
+    }
+    evidence = {
+        "schema_version": "joulewise.instrument_evidence.v1",
+        "protocol_id": "powermetrics_pulse_fiducial_v1",
+        "status": "valid",
+        "anchor_method_version": bindings["anchor_method_version"],
+        "b_fiducial_s": 0.001,
+        "pulse_count": 40,
+        "all_pulses_detected": True,
+        "spurious_plateau_count": 0,
+        "artifact_sha256": {
+            "raw/powermetrics.plist": hashlib.sha256(raw_bytes).hexdigest(),
+            "events.jsonl": hashlib.sha256(event_bytes).hexdigest(),
+        },
+        "pulses": [
+            {
+                "pulse_index": index,
+                "detected": True,
+                "onset_residual_lower_s": -0.001,
+                "onset_residual_upper_s": 0.001,
+                "offset_residual_lower_s": -0.001,
+                "offset_residual_upper_s": 0.001,
+            }
+            for index in range(40)
+        ],
+        "bindings": bindings,
+    }
+    canonical_bindings = json.dumps(
+        bindings, sort_keys=True, separators=(",", ":")
+    ).encode()
+    evidence["binding_evidence"] = {
+        "schema_version": "joulewise.instrument_binding_evidence.v1",
+        "binding_vector_sha256": hashlib.sha256(canonical_bindings).hexdigest(),
+        "powermetrics_binary": {
+            "path": str(FIXTURE_PROCESS),
+            "sha256": bindings["powermetrics_sha256"],
+        },
+        "power_policy": {"id": bindings["power_policy"]},
+    }
+    evidence_raw = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode()
+    artifact_path = directory / "instrument_evidence.json"
+    artifact_path.write_bytes(evidence_raw)
+    artifacts = {
+        "instrument_evidence.json": hashlib.sha256(evidence_raw).hexdigest(),
+        "raw/powermetrics.plist": hashlib.sha256(raw_bytes).hexdigest(),
+        "events.jsonl": hashlib.sha256(event_bytes).hexdigest(),
+    }
+    manifest = {
+        "schema_version": "joulewise.instrument_validation_manifest.v1",
+        "artifacts": artifacts,
+    }
+    (directory / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
 
 
 class LogicalDrainTimer:
@@ -95,19 +262,45 @@ def production_config() -> BenchmarkConfig:
 class P2038ProductionPathTests(unittest.TestCase):
     def run_mode(self, root: Path, mode: str):
         state_path = root / f"{mode}.state"
-        with patch.dict(
-            os.environ,
-            {
-                "P2038_FAKE_POWERMETRICS_MODE": mode,
-                "P2038_FAKE_POWERMETRICS_STATE": str(state_path),
-            },
+        policy, binding, preflight, snapshot = claim_admission_fixture()
+        guard_observation = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "Ventura",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 1200.0,
+            "power_source": "AC Power",
+            "adapter_wattage_w": 140.0,
+            "adapter_description": "fixture adapter",
+            "errors": {},
+        }
+        calibration_dir = root / "calibration"
+        install_complete_calibration(calibration_dir)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "P2038_FAKE_POWERMETRICS_MODE": mode,
+                    "P2038_FAKE_POWERMETRICS_STATE": str(state_path),
+                },
+            ),
+            patch(
+                "joulewise.controller.collect_environment_guard_observation",
+                side_effect=lambda **_kwargs: dict(guard_observation),
+            ),
         ):
             return run_benchmark(
                 production_config(),
                 root,
                 SystemClock(),
                 registry=ProductionShapedRegistry(),
-                environment_snapshot=None,
+                reducer=reduce_bundle,
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+                instrument_calibration_dir=calibration_dir,
+                instrument_power_policy="fixture_ac_stable",
             )
 
     def test_real_powermetrics_evidence_path_passes_p2029_p2040_gates(self) -> None:
@@ -118,6 +311,21 @@ class P2038ProductionPathTests(unittest.TestCase):
             self.assertEqual(summary.status.value, "succeeded")
             self.assertEqual(validate_bundle(bundle, strict=True), [])
             metadata = json.loads((bundle / "metadata.json").read_text())
+            calibration = metadata["instrument_calibration"]
+            self.assertEqual(
+                calibration["artifact_path"],
+                "instrument_calibration/instrument_evidence.json",
+            )
+            self.assertEqual(
+                calibration["bindings"]["power_policy"], "fixture_ac_stable"
+            )
+            self.assertEqual(
+                calibration["binding_observations"]["powermetrics_sha256"],
+                hashlib.sha256(FIXTURE_PROCESS.read_bytes()).hexdigest(),
+            )
+            self.assertTrue(
+                (bundle / "instrument_calibration" / "manifest.json").is_file()
+            )
             stored = json.loads((bundle / "summary_metrics.json").read_text())
             events = [
                 json.loads(line)
@@ -299,16 +507,18 @@ class P2038ProductionPathTests(unittest.TestCase):
                 ]
                 self.assertIs(request_gate["eligible"], False)
                 self.assertIn(reason, request_gate["reasons"])
-        # D-078: a wide first sampling interval no longer poisons the anchor
-        # bound - the censored intersection pins record 0 from the native
-        # stamps, so the request gate stays legitimately eligible.
+        # D-078: a wide first sampling interval no longer makes the anchor
+        # unresolved. Host scheduling can still trip an independent cadence
+        # or envelope-ratio gate, so assert the causal anchor property itself
+        # rather than laundering those independent refusals into a pass.
         with self.subTest(mode="wide"), tempfile.TemporaryDirectory() as tmp:
             bundle, summary = self.run_mode(Path(tmp), "wide")
             self.assertEqual(summary.status.value, "succeeded")
             self.assertEqual(validate_bundle(bundle, strict=True), [])
             stored = json.loads((bundle / "summary_metrics.json").read_text())
             request_gate = stored["window_evidence_precheck"]["gross_request"]
-            self.assertIs(request_gate["eligible"], True)
+            self.assertNotIn("clock_anchor_unresolved", request_gate["reasons"])
+            self.assertIn("/gross_energy_j", stored["energy_anchor_shift_envelopes"])
             self.assertLess(
                 request_gate["clock_anchor_bound_s"],
                 0.25 * request_gate["window_duration_s"],

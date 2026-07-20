@@ -361,9 +361,12 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   (mandatory for production); stable known wattage passes.
 - **Prospective NEG-8 bracket acceptance**: the campaign verdict compares
   the start (`*neg8-reference-start*`) and end (`*neg8-reference-end*`)
-  member gross energies. The bracket passes only when the absolute delta
+  member gross-energy admissible sets from their anchor-shift envelopes.
+  Point-only references are unverifiable and fail closed. The bracket passes
+  only when the worst-case endpoint-pair absolute delta
   satisfies BOTH `neg8_bracket.max_abs_delta_j` AND
-  `neg8_bracket.max_rel_delta` (relative to the start gross); comparisons
+  `neg8_bracket.max_rel_delta` (maximized over the positive start set);
+  comparisons
   are `<=`, so exactly-on-threshold passes and one ULP over fails. A
   missing bracket fails closed when `neg8_bracket.require_bracket` is true
   (mandatory for production). The bracket is a WHOLE-WINDOW check: the drift
@@ -404,7 +407,12 @@ explicit, so the final admission decision and final CPU telemetry cannot be
 paired across retries. Missing adapter telemetry fails closed on live clocks;
 `FakeClock` fixture runs retain the pre-hookup GPU decision and record
 `cpu_admission_enforced: false` alongside the named missing-telemetry result.
-Live guard observations opt in to adapter-power capture.
+That field is an unconditional claim barrier in reducers/extraction; it is
+never evidence that GPU-only admission was scientifically sufficient. Live
+guard observations opt in to adapter-power capture, including a mandatory
+post-workload observation for every member. A missing post sample is unknown
+wattage (and therefore a production refusal), so renegotiation during the
+final workload cannot be hidden by an earlier clean sample.
 
 At window end, chain scripts can run:
 
@@ -413,7 +421,9 @@ python3 scripts/run_campaign.py --whole-window-verdict \
   --runs-dir RUNS_ROOT --campaign-policy POLICY_SIDECAR
 ```
 
-This scans finalized top-level bundles in the runs root, appends an
+This resolves finalized members from the matching campaign provenance
+ledger (falling back to a diagnostic-only scan that cannot pass when
+membership is unbound), applies ordinary strict bundle validation, appends an
 `idle_admission_whole_window_verdict` row to the campaign log, and evaluates
 NEG-8 in explicit whole-window mode. A required missing reference or a
 threshold failure returns nonzero under production; exploratory remains
@@ -446,6 +456,34 @@ calibration, runs_recal5_20260719 r01 idle window, 300 samples: busy p95
 0.211, combined-power p95 0.143 W - the production thresholds above hold
 comfortable margin while a single pegged core or an active-CPU baseline
 fails.)
+
+### D-078 instrument-calibration binding (2026-07-20 additive repair)
+
+A claim-bearing powermetrics 0.5.1/0.6.1 bundle must reference a hash-verified
+`joulewise.instrument_evidence.v1` artifact and repeat its complete binding
+vector in `metadata.instrument_calibration.bindings`: hardware model, OS build,
+powermetrics binary sha256, sampling interval, anchor-method version, MLX
+version, pulse-protocol ID, and power policy.  Every field is compared; an
+absent vector or any mismatch is claim-ineligible.  The reducer independently
+rechecks `pulse_count == 40`, a present detected row for every pulse,
+`all_pulses_detected == true`, zero spurious plateaus, a finite bound, and
+valid referenced raw-powermetrics/events hashes.  `status: "valid"` is never
+trusted by itself.  Metrics/envelopes remain available for diagnostic salvage
+when calibration is absent/invalid, but claim eligibility does not.
+
+Each pulse row is indexed exactly once in protocol order and carries finite,
+ordered onset and offset residual interval endpoints. `b_fiducial_s` must
+dominate the magnitude of every endpoint. The reducer rehashes the referenced
+validation `raw/powermetrics.plist` and `events.jsonl` bytes, verifies the
+artifact's canonical binding-vector digest, and matches its recorded
+powermetrics executable path/digest and power-policy id to runtime-observed
+bundle metadata. An unverifiable observation refuses calibration; copying the
+same unverified values into two metadata objects is not corroboration.
+
+For an accepted nonzero wall-minus-monotonic span, the reducer treats the span
+as independent start/end edge uncertainty in addition to the common trace
+translation. Opposite pre/post-step edge shifts are therefore covered by the
+reported joule envelope. Spans above the 5 ms ceiling remain hard refusals.
 
 ## Structured Failure Reasons
 

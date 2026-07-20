@@ -523,22 +523,23 @@ if __name__ == "__main__":
 class AxiV061AnchorEraTests(unittest.TestCase):
     """D-078: 0.6.1 is the anchor-era AXI arm; 0.6.0 stays byte-frozen."""
 
-    def test_default_dispatch_stays_frozen_0_6_0_but_0_6_1_is_explicit(self) -> None:
-        # Controller finalization keeps the byte-frozen burst arm so the
-        # event-v2 opt-in gate (config + event + reducer 0.6.0) holds; the
-        # D-078 anchor era (0.6.1) is an explicit re-reduction target.
+    def test_new_event_v2_default_is_0_6_1_and_0_6_0_is_historical_only(self) -> None:
+        # W8 defect shape: deleting the stored historical summary made a new
+        # event-v2 bundle default to the defective 0.6.0 wire.
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         path = Path(temporary.name) / "bundle"
         shutil.copytree(AXI_FIXTURE, path)
         (path / "summary_metrics.json").unlink()
         summary = reduce_bundle(path)
-        self.assertEqual(summary.summary_provenance["reducer_version"], "0.6.0")
+        self.assertEqual(summary.summary_provenance["reducer_version"], "0.6.1")
         self.assertEqual(AXI_REDUCER_VERSION, "0.6.1")
         explicit = reduce_bundle(path, reducer_version="0.6.1")
         self.assertEqual(
             explicit.summary_provenance["reducer_version"], "0.6.1"
         )
+        with self.assertRaisesRegex(ValueError, "historical re-reduction only"):
+            reduce_bundle(path, reducer_version="0.6.0")
 
     def test_0_6_1_matches_golden_and_0_6_0_stays_byte_frozen(self) -> None:
         frozen = reduce_bundle(AXI_FIXTURE, reducer_version="0.6.0")

@@ -29,6 +29,7 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     validate_floor_artifact,
 )
+from joulewise.whole_window import whole_window_refusal_reasons
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -62,6 +63,7 @@ GOVERNED_REDUCER_IDLE_METHOD_PAIRS: Mapping[str, str] = {
 # schema).  Older wires read additively: an absent envelope adds no term,
 # while a present-but-malformed one always fails closed.
 ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
+PRE_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.0", "0.6.0"})
 ANCHOR_SHIFT_ENVELOPE_FIELD = "energy_anchor_shift_envelopes"
 ANCHOR_SHIFT_ENVELOPE_METHOD = "common_trace_shift_interval_overlap_v1"
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
@@ -1745,6 +1747,18 @@ def load_analysis_inputs(
     )
     for evidence in (*registered.values(), *extras):
         evidence.campaign_cooldown = cooldown_by_bundle.get(evidence.bundle_id)
+    whole_window_reasons = whole_window_refusal_reasons(
+        runs_root,
+        {evidence.bundle_id for evidence in effective.values()},
+    )
+    if whole_window_reasons:
+        # The whole-window NEG-8/adapter/CPU verdict is a campaign-wide causal
+        # prerequisite.  Attach every missing/failed barrier to every possible
+        # claim input so no contrast can route around it through replacement
+        # selection or a different downstream consumer.
+        for evidence in (*registered.values(), *extras):
+            for reason in whole_window_reasons:
+                _exclude_evidence(evidence, reason)
     return LoadedAnalysisInputs(
         manifest=manifest,
         manifest_sha256=manifest_sha,
@@ -2167,6 +2181,12 @@ def deterministic_bounds(
     name = metric.get("name")
     result: dict[str, float] = {}
     reasons: list[str] = []
+    if _summary_reducer_version(summary) in PRE_ANCHOR_REDUCER_VERSIONS:
+        # Universal D-078 barrier: accepting the frozen numeric wire for
+        # replay does not license it as claim-bearing evidence.  This applies
+        # even when every observation in a contrast is old (the mixed-wire
+        # intersection guard cannot see that case).
+        reasons.append("clock_anchor_unresolved")
 
     def record_anchor_term(scalar_terms: Mapping[str, Any] | None) -> None:
         anchor_required = (

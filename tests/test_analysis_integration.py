@@ -32,6 +32,13 @@ from joulewise.analysis_engine.inputs import (
     load_analysis_inputs,
     window_evidence_precheck,
 )
+from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
+from joulewise.whole_window import (
+    IDLE_ADMISSION_CORE_SCHEMA,
+    WHOLE_WINDOW_SCHEMA,
+    build_row_provenance,
+    source_manifest_descriptors,
+)
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
     abba_delta,
@@ -59,6 +66,66 @@ CLEAN_SOURCE_STATE = {
     "untracked": "clean",
     "diff_sha256": "2" * 64,
 }
+
+
+def install_passing_analysis_whole_window(
+    runs_root: Path, bundle_ids: list[str], *, source_name: str
+) -> None:
+    """Install one provenance-bound passing verdict for a synthetic corpus."""
+
+    bundle_ids = sorted(bundle_ids)
+    policy_sha = "7" * 64
+    campaign_dir = runs_root / "campaign_manifests"
+    campaign_dir.mkdir(parents=True, exist_ok=True)
+    source_path = campaign_dir / f"{source_name}.json"
+    source_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "session_id": source_name,
+                "analysis_manifest_id": None,
+                "campaign_policy": {"sha256": policy_sha},
+                "members": [{"execution": "invoked", "bundle_ids": bundle_ids}],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    descriptors = source_manifest_descriptors(runs_root, [source_path])
+    row = {
+        "schema_version": WHOLE_WINDOW_SCHEMA,
+        "record_type": "idle_admission_whole_window_verdict",
+        "status": "passed",
+        "campaign_policy": {"sha256": policy_sha},
+        "bundle_ids": bundle_ids,
+        "idle_admission_core": {
+            "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+            "policy_sha256": policy_sha,
+            "members": [
+                {
+                    "bundle_id": bundle_id,
+                    "cpu_admission": {"decision": "admitted"},
+                }
+                for bundle_id in bundle_ids
+            ],
+            "adapter_wattage_continuity": {
+                "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                "decision": "stable",
+            },
+            "neg8_bracket": {
+                "schema_version": NEG8_BRACKET_SCHEMA,
+                "decision": "passed",
+            },
+            "conditions": [],
+        },
+    }
+    row["row_provenance"] = build_row_provenance(
+        policy_sha256=policy_sha,
+        bundle_ids=bundle_ids,
+        source_manifests=descriptors,
+    )
+    (runs_root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
@@ -105,6 +172,67 @@ class AnalysisIntegrationTests(unittest.TestCase):
             json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
         )
         cls.manifest_path = cls.config_dir / "analysis_manifest.json"
+        manifest = json.loads(cls.manifest_path.read_text())
+        bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
+        policy_sha = "7" * 64
+        campaign_dir = cls.runs_root / "campaign_manifests"
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        source_path = campaign_dir / "analysis-whole-window-source.json"
+        source_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.campaign_provenance.v1",
+                    "session_id": "analysis-whole-window-source",
+                    "analysis_manifest_id": None,
+                    "campaign_policy": {"sha256": policy_sha},
+                    "members": [
+                        {
+                            "execution": "invoked",
+                            "bundle_ids": bundle_ids,
+                        }
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        descriptors = source_manifest_descriptors(cls.runs_root, [source_path])
+        whole_row = {
+            "schema_version": WHOLE_WINDOW_SCHEMA,
+            "record_type": "idle_admission_whole_window_verdict",
+            "status": "passed",
+            "campaign_policy": {"sha256": policy_sha},
+            "bundle_ids": bundle_ids,
+            "idle_admission_core": {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": policy_sha,
+                "members": [
+                    {
+                        "bundle_id": bundle_id,
+                        "cpu_admission": {"decision": "admitted"},
+                    }
+                    for bundle_id in bundle_ids
+                ],
+                "adapter_wattage_continuity": {
+                    "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                    "decision": "stable",
+                },
+                "neg8_bracket": {
+                    "schema_version": NEG8_BRACKET_SCHEMA,
+                    "decision": "passed",
+                },
+                "conditions": [],
+            },
+        }
+        whole_row["row_provenance"] = build_row_provenance(
+            policy_sha256=policy_sha,
+            bundle_ids=bundle_ids,
+            source_manifests=descriptors,
+        )
+        (cls.runs_root / "campaign_log.jsonl").write_text(
+            json.dumps(whole_row) + "\n"
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -148,6 +276,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 self.assertNotIn("loo_magnitude_influential", evaluation["reason_codes"])
                 self.assertEqual(contrast["estimator"]["n"], 5)
                 self.assertEqual(contrast["estimator"]["df"], 4)
+
                 self.assertEqual(len(contrast["loo"]["rows"]), 5)
                 self.assertTrue(
                     all(
@@ -172,6 +301,26 @@ class AnalysisIntegrationTests(unittest.TestCase):
         omitted_loo["contrasts"][0]["loo"] = {"status": "not_run", "rows": []}
         omitted_loo["claim_verdicts_id"] = calculate_claim_verdicts_id(omitted_loo)
         self.assertTrue(validate_claim_verdicts(omitted_loo))
+
+    def test_analysis_loader_refuses_when_whole_window_verdict_is_missing(self):
+        # F5 defect shape: P2-037 formerly loaded cleanup/cooldown/bundles/floor
+        # while routing entirely around the campaign-wide causal verdict.
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_runs = Path(tmp) / "runs-without-whole-window"
+            shutil.copytree(self.runs_root, copied_runs)
+            (copied_runs / "campaign_log.jsonl").unlink()
+            loaded = load_analysis_inputs(
+                self.manifest_path,
+                copied_runs,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+            self.assertTrue(loaded.registered)
+            for evidence in loaded.registered.values():
+                self.assertFalse(evidence.included)
+                self.assertIn(
+                    "whole_window_neg8_verdict_missing", evidence.base_reason_codes
+                )
 
     def test_production_request_factory_reaches_predeclared_transport(self):
         loaded = load_analysis_inputs(
@@ -805,8 +954,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
             encoding="utf-8",
         )
         campaign_path = calibration_root / "campaign_log.jsonl"
+        whole_window_lines = [
+            line
+            for line in campaign_path.read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("record_type")
+            == "idle_admission_whole_window_verdict"
+        ]
         campaign_path.write_text(
-            "".join(json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows),
+            "".join(line + "\n" for line in whole_window_lines)
+            + "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows
+            ),
             encoding="utf-8",
         )
         provenance = make_artifact()["provenance"]
@@ -1205,6 +1363,16 @@ class AnalysisIntegrationTests(unittest.TestCase):
         config_path.write_text(json.dumps(replacement, indent=2) + "\n", encoding="utf-8")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+        install_passing_analysis_whole_window(
+            runs,
+            [
+                replacement["run_id"]
+                if entry["entry_id"] == target["entry_id"]
+                else entry["run_id"]
+                for entry in manifest["entries"]
+            ],
+            source_name="replacement-whole-window-source",
+        )
         artifact = analyze_claims(
             self.manifest_path,
             runs,

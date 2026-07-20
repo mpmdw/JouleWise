@@ -102,7 +102,7 @@ AXI_REDUCER_VERSION = "0.6.1"
 AXI_REDUCER_VERSIONS = frozenset(
     {AXI_FROZEN_REDUCER_VERSION, AXI_REDUCER_VERSION}
 )
-ANCHOR_SHIFT_METHOD = "common_trace_shift_interval_overlap_v1"
+ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_span_v2"
 RAW_POWERMETRICS_NAME = "powermetrics.plist"
 MIN_PHASE_SAMPLES = 3
 SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
@@ -710,6 +710,53 @@ def _apply_environment_claim_barrier(
     }
 
 
+def _apply_cpu_admission_claim_barrier(
+    prechecks: dict[str, Any], metadata: dict[str, Any]
+) -> None:
+    if _telemetry_source(metadata) == "mock":
+        return
+    admission = metadata.get("environment_admission")
+    reasons: list[str] = []
+    if not isinstance(admission, dict):
+        reasons.append("environment_admission_missing")
+    else:
+        attempts = admission.get("attempts")
+        final_attempt = attempts[-1] if isinstance(attempts, list) and attempts else None
+        if not isinstance(final_attempt, dict) or not isinstance(
+            final_attempt.get("cpu_admission"), dict
+        ):
+            reasons.append("environment_admission_missing")
+        elif final_attempt["cpu_admission"].get("admitted") is not True:
+            reasons.append("environment_admission_failed")
+        if (
+            isinstance(final_attempt, dict)
+            and final_attempt.get("cpu_admission_enforced") is False
+        ):
+            reasons.append("cpu_admission_unenforced")
+    if not reasons:
+        return
+    for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
+        gate = prechecks.get(key)
+        if isinstance(gate, dict):
+            _merge_gate_reasons(gate, reasons)
+    for group_key in ("phase", "item", "block", "level"):
+        group = prechecks.get(group_key)
+        if isinstance(group, dict):
+            for gate in group.values():
+                if isinstance(gate, dict):
+                    _merge_gate_reasons(gate, reasons)
+    prechecks["throughput"] = {
+        "eligible": False,
+        "reasons": sorted(reasons),
+        "metric_names": [
+            "throughput_tokens_s",
+            "inter_token_throughput_tokens_s",
+            "decode_phase_output_throughput_tokens_s",
+        ],
+        "universal_claim_barrier": True,
+    }
+
+
 def _windows_evidence_precheck(
     curve: list[TracePoint],
     metadata: dict[str, Any],
@@ -939,6 +986,7 @@ class _AnchorContext:
     bundle_bound_s: float | None
     fiducial_bound_s: float | None
     detail: str | None
+    edge_span_s: float = 0.0
 
 
 def _unresolved_anchor_context(detail: str) -> _AnchorContext:
@@ -950,6 +998,7 @@ def _unresolved_anchor_context(detail: str) -> _AnchorContext:
         anchor_epoch_s=None,
         bundle_bound_s=None,
         fiducial_bound_s=None,
+        edge_span_s=0.0,
         detail=detail,
     )
 
@@ -1005,7 +1054,11 @@ def _verify_instrument_calibration(
     if not isinstance(evidence, dict):
         return None, "instrument_calibration_artifact_unparseable"
 
-    from joulewise.powermetrics_fiducial import BINDING_FIELDS, PROTOCOL_ID
+    from joulewise.powermetrics_fiducial import (
+        BINDING_FIELDS,
+        PROTOCOL_ID,
+        PULSE_COUNT,
+    )
 
     if evidence.get("schema_version") != "joulewise.instrument_evidence.v1":
         return None, "instrument_calibration_schema_mismatch"
@@ -1028,20 +1081,168 @@ def _verify_instrument_calibration(
     if not isinstance(bindings, dict) or any(
         bindings.get(name) in (None, "") for name in BINDING_FIELDS
     ):
-        return None, "instrument_calibration_bindings_incomplete"
-    # Any bound-field change invalidates the calibration: match the artifact's
-    # bindings against the bundle environment for every field the bundle
-    # supplies.
+        return None, "instrument_calibration_invalid"
+
+    def valid_sha256(value: Any) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and all(char in "0123456789abcdef" for char in value)
+        )
+
+    # ``status: valid`` is not trusted.  Re-evaluate the artifact's pulse
+    # predicate and its raw/event custody references from the stored rows.
+    pulses = evidence.get("pulses")
+    pulse_count = evidence.get("pulse_count")
+    artifact_hashes = evidence.get("artifact_sha256")
+    if (
+        isinstance(pulse_count, bool)
+        or not isinstance(pulse_count, int)
+        or pulse_count != PULSE_COUNT
+        or not isinstance(pulses, list)
+        or len(pulses) != pulse_count
+        or evidence.get("all_pulses_detected") is not True
+        or evidence.get("spurious_plateau_count") != 0
+        or not isinstance(artifact_hashes, dict)
+        or not valid_sha256(artifact_hashes.get("raw/powermetrics.plist"))
+        or not valid_sha256(artifact_hashes.get("events.jsonl"))
+    ):
+        return None, "instrument_calibration_invalid"
+
+    # A detected bit alone is not physical calibration evidence.  Require one
+    # ordered row for every protocol pulse and finite, ordered residual
+    # intervals whose extrema are actually dominated by B_fiducial.
+    residual_fields = (
+        ("onset_residual_lower_s", "onset_residual_upper_s"),
+        ("offset_residual_lower_s", "offset_residual_upper_s"),
+    )
+    for expected_index, pulse in enumerate(pulses):
+        if (
+            not isinstance(pulse, dict)
+            or pulse.get("pulse_index") != expected_index
+            or pulse.get("detected") is not True
+        ):
+            return None, "instrument_calibration_invalid"
+        for lower_name, upper_name in residual_fields:
+            lower = pulse.get(lower_name)
+            upper = pulse.get(upper_name)
+            if (
+                isinstance(lower, bool)
+                or isinstance(upper, bool)
+                or not isinstance(lower, int | float)
+                or not isinstance(upper, int | float)
+                or not math.isfinite(float(lower))
+                or not math.isfinite(float(upper))
+                or float(lower) > float(upper)
+                or max(abs(float(lower)), abs(float(upper)))
+                > float(b_fiducial) + 1e-12
+            ):
+                return None, "instrument_calibration_invalid"
+
+    artifact_dir = artifact_file.parent
+    for relative in ("raw/powermetrics.plist", "events.jsonl"):
+        referenced = artifact_dir / relative
+        try:
+            referenced_raw = referenced.read_bytes()
+        except OSError:
+            return None, "instrument_calibration_invalid"
+        if hashlib.sha256(referenced_raw).hexdigest() != artifact_hashes[relative]:
+            return None, "instrument_calibration_invalid"
+
+    # Any bound-field change invalidates the calibration.  The measuring
+    # bundle records the complete binding vector beside the calibration
+    # reference; compare ALL fields, then independently cross-check the fields
+    # derivable from ordinary bundle metadata/config.
+    measured_bindings = calibration.get("bindings")
+    if not isinstance(measured_bindings, dict) or any(
+        measured_bindings.get(name) in (None, "") for name in BINDING_FIELDS
+    ):
+        return None, "instrument_calibration_mismatch"
+    if any(bindings.get(name) != measured_bindings.get(name) for name in BINDING_FIELDS):
+        return None, "instrument_calibration_mismatch"
+
     device = metadata.get("device")
     device = device if isinstance(device, dict) else {}
+    raw_config = reader.raw_config()
+    sampling = raw_config.get("sampling") if isinstance(raw_config, dict) else None
+    power_hz = sampling.get("power_hz") if isinstance(sampling, dict) else None
+    sampling_interval_ms = (
+        1000.0 / float(power_hz)
+        if isinstance(power_hz, int | float)
+        and not isinstance(power_hz, bool)
+        and math.isfinite(float(power_hz))
+        and float(power_hz) > 0.0
+        else None
+    )
+    preflight = metadata.get("campaign_environment_preflight")
+    snapshot = preflight.get("snapshot") if isinstance(preflight, dict) else None
+    packages = snapshot.get("python_packages") if isinstance(snapshot, dict) else None
+    mlx = packages.get("mlx") if isinstance(packages, dict) else None
     expected = {
         "hardware_model": device.get("hw_model"),
         "os_build": device.get("kern_osversion"),
+        "sampling_interval_ms": sampling_interval_ms,
         "anchor_method_version": CLOCK_METHOD_V2,
+        "mlx_version": mlx.get("version") if isinstance(mlx, dict) else None,
+        "pulse_protocol_id": PROTOCOL_ID,
     }
     for name, value in expected.items():
-        if value is not None and bindings.get(name) != value:
-            return None, "instrument_calibration_binding_mismatch"
+        if value is None or bindings.get(name) != value:
+            return None, "instrument_calibration_mismatch"
+    if not valid_sha256(bindings.get("powermetrics_sha256")):
+        return None, "instrument_calibration_invalid"
+    if not isinstance(bindings.get("power_policy"), str):
+        return None, "instrument_calibration_invalid"
+
+    # These two bindings were previously checked only against a second
+    # metadata copy.  Bind the artifact's canonical vector and compare it to
+    # runtime observations: the actual telemetry executable digest and the
+    # explicitly selected run power policy.
+    binding_evidence = evidence.get("binding_evidence")
+    canonical_bindings = json.dumps(
+        {name: bindings.get(name) for name in BINDING_FIELDS},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    binary_evidence = (
+        binding_evidence.get("powermetrics_binary")
+        if isinstance(binding_evidence, dict)
+        else None
+    )
+    policy_evidence = (
+        binding_evidence.get("power_policy")
+        if isinstance(binding_evidence, dict)
+        else None
+    )
+    if (
+        not isinstance(binding_evidence, dict)
+        or binding_evidence.get("schema_version")
+        != "joulewise.instrument_binding_evidence.v1"
+        or binding_evidence.get("binding_vector_sha256")
+        != hashlib.sha256(canonical_bindings).hexdigest()
+        or not isinstance(binary_evidence, dict)
+        or not isinstance(binary_evidence.get("path"), str)
+        or not binary_evidence.get("path")
+        or binary_evidence.get("sha256") != bindings.get("powermetrics_sha256")
+        or not isinstance(policy_evidence, dict)
+        or policy_evidence.get("id") != bindings.get("power_policy")
+    ):
+        return None, "instrument_calibration_invalid"
+    powermetrics_meta = device.get("powermetrics")
+    observed_bindings = calibration.get("binding_observations")
+    if (
+        not isinstance(powermetrics_meta, dict)
+        or powermetrics_meta.get("executable_path") != binary_evidence.get("path")
+        or powermetrics_meta.get("executable_sha256")
+        != bindings.get("powermetrics_sha256")
+        or not isinstance(observed_bindings, dict)
+        or observed_bindings.get("powermetrics_sha256")
+        != bindings.get("powermetrics_sha256")
+        or observed_bindings.get("power_policy") != bindings.get("power_policy")
+    ):
+        return None, "instrument_calibration_mismatch"
     return float(b_fiducial), None
 
 
@@ -1066,6 +1267,7 @@ def _derive_anchor_context(
             anchor_epoch_s=None,
             bundle_bound_s=None,
             fiducial_bound_s=None,
+            edge_span_s=0.0,
             detail=None,
         )
     evidence = metadata.get("uncertainty_evidence")
@@ -1110,16 +1312,25 @@ def _derive_anchor_context(
         )
     anchor_s = float(derivation["first_sample_end_point_epoch_s"])
     bundle_bound_s = float(derivation["effective_clock_anchor_bound_s"])
+    edge_span_s = float(derivation.get("wall_minus_monotonic_span_s", 0.0))
     fiducial_bound_s: float | None = None
     calibration = metadata.get("instrument_calibration")
-    if calibration is not None:
-        if not isinstance(calibration, dict):
-            return _unresolved_anchor_context("instrument_calibration_invalid")
+    calibration_reason: str | None = None
+    if calibration is None:
+        calibration_reason = "instrument_calibration_missing"
+    elif not isinstance(calibration, dict):
+        return _unresolved_anchor_context("instrument_calibration_invalid")
+    else:
         fiducial_bound_s, detail = _verify_instrument_calibration(
             reader, metadata, calibration
         )
         if detail is not None:
-            return _unresolved_anchor_context(detail)
+            stable = (
+                "instrument_calibration_mismatch"
+                if detail == "instrument_calibration_mismatch"
+                else "instrument_calibration_invalid"
+            )
+            return _unresolved_anchor_context(stable)
     effective_bound_s = max(bundle_bound_s, fiducial_bound_s or 0.0)
     cumulative_s = 0.0
     curve: list[TracePoint] = []
@@ -1144,7 +1355,8 @@ def _derive_anchor_context(
         anchor_epoch_s=anchor_s,
         bundle_bound_s=bundle_bound_s,
         fiducial_bound_s=fiducial_bound_s,
-        detail=None,
+        edge_span_s=edge_span_s,
+        detail=calibration_reason,
     )
 
 
@@ -1304,6 +1516,7 @@ def _anchor_shift_breakpoints(
 def _anchor_shift_envelope(
     contributions: list[tuple[list[TracePoint], list[Window]]],
     bound_s: float | None,
+    independent_edge_span_s: float = 0.0,
 ) -> dict[str, float | str] | None:
     """Continuous envelope of the summed energy under one common anchor shift.
 
@@ -1314,14 +1527,20 @@ def _anchor_shift_envelope(
     each segment's quadratic is reconstructed exactly from its endpoints and
     midpoint and its interior vertex included."""
 
-    if bound_s is None or not math.isfinite(bound_s) or bound_s < 0.0:
+    if (
+        bound_s is None
+        or not math.isfinite(bound_s)
+        or bound_s < 0.0
+        or not math.isfinite(independent_edge_span_s)
+        or independent_edge_span_s < 0.0
+    ):
         return None
     if not contributions or any(
         not curve or not windows for curve, windows in contributions
     ):
         return None
     point_j = _shift_energy_j(contributions, 0.0)
-    if not _anchor_coverage_ok(contributions, bound_s):
+    if not _anchor_coverage_ok(contributions, bound_s + independent_edge_span_s):
         return None
     breakpoints = _anchor_shift_breakpoints(contributions, bound_s)
     values = [_shift_energy_j(contributions, delta) for delta in breakpoints]
@@ -1357,6 +1576,15 @@ def _anchor_shift_envelope(
         and lower_j <= point_j <= upper_j
     ):
         return None
+    independent_edge_bound_j = math.fsum(
+        2.0
+        * independent_edge_span_s
+        * max(abs(point.power_w) for point in curve)
+        * len(windows)
+        for curve, windows in contributions
+    )
+    lower_j = max(0.0, lower_j - independent_edge_bound_j)
+    upper_j += independent_edge_bound_j
     return {
         "method": ANCHOR_SHIFT_METHOD,
         "anchor_bound_s": bound_s,
@@ -1364,6 +1592,8 @@ def _anchor_shift_envelope(
         "lower_j": lower_j,
         "upper_j": upper_j,
         "max_abs_delta_j": max(point_j - lower_j, upper_j - point_j),
+        "wall_minus_monotonic_independent_edge_span_s": independent_edge_span_s,
+        "independent_edge_shift_bound_j": independent_edge_bound_j,
     }
 
 
@@ -1459,7 +1689,17 @@ def _apply_anchor_claim_gates(
 ) -> None:
     """Stamp the D-078 anchor barrier/envelope reasons onto the energy gates."""
 
+    calibration_reasons = (
+        [anchor_ctx.detail]
+        if anchor_ctx.detail in {
+            "instrument_calibration_missing",
+            "instrument_calibration_mismatch",
+            "instrument_calibration_invalid",
+        }
+        else []
+    )
     if anchor_ctx.unresolved:
+        unresolved_reasons = [CLOCK_ANCHOR_UNRESOLVED, *calibration_reasons]
         for key in (
             "gross_request",
             "gross_batch_group",
@@ -1467,15 +1707,26 @@ def _apply_anchor_claim_gates(
         ):
             gate = prechecks.get(key)
             if isinstance(gate, dict):
-                _merge_gate_reasons(gate, [CLOCK_ANCHOR_UNRESOLVED])
+                _merge_gate_reasons(gate, unresolved_reasons)
         for group_key in ("phase", "item", "block", "level"):
             group = prechecks.get(group_key)
             if not isinstance(group, dict):
                 continue
             for gate in group.values():
                 if isinstance(gate, dict):
-                    _merge_gate_reasons(gate, [CLOCK_ANCHOR_UNRESOLVED])
+                    _merge_gate_reasons(gate, unresolved_reasons)
         return
+    if calibration_reasons:
+        for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
+            gate = prechecks.get(key)
+            if isinstance(gate, dict):
+                _merge_gate_reasons(gate, calibration_reasons)
+        for group_key in ("phase", "item", "block", "level"):
+            group = prechecks.get(group_key)
+            if isinstance(group, dict):
+                for gate in group.values():
+                    if isinstance(gate, dict):
+                        _merge_gate_reasons(gate, calibration_reasons)
     for key, pointer in (
         ("gross_request", gross_pointer),
         ("gross_batch_group", gross_pointer),
@@ -1526,6 +1777,7 @@ def _energy_anchor_envelopes_v05(
     total_tokens: int | None,
     output_token_count: int | None,
     bound_s: float | None,
+    independent_edge_span_s: float = 0.0,
     item_windows: list[tuple[str, Window]] | None = None,
     block_windows: dict[str, list[Window]] | None = None,
     level_windows: dict[str, list[Window]] | None = None,
@@ -1541,7 +1793,9 @@ def _energy_anchor_envelopes_v05(
     anchor error just like the request-level metrics."""
 
     envelopes: dict[str, Any] = {}
-    gross = _anchor_shift_envelope([(curve, [window])], bound_s)
+    gross = _anchor_shift_envelope(
+        [(curve, [window])], bound_s, independent_edge_span_s
+    )
     if gross is not None:
         envelopes["/gross_energy_j"] = gross
         if idle_baseline is not None:
@@ -1559,21 +1813,29 @@ def _energy_anchor_envelopes_v05(
                     idle_env, 1.0 / output_token_count
                 )
     for phase, intervals in sorted((phase_windows or {}).items()):
-        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        env = _anchor_shift_envelope(
+            [(curve, intervals)], bound_s, independent_edge_span_s
+        )
         if env is not None:
             envelopes["/phase_energy_j/" + _json_pointer_token(phase)] = env
     for key, item_window in item_windows or []:
-        env = _anchor_shift_envelope([(curve, [item_window])], bound_s)
+        env = _anchor_shift_envelope(
+            [(curve, [item_window])], bound_s, independent_edge_span_s
+        )
         if env is not None:
             envelopes["/suite_item_energy_j/" + _json_pointer_token(key)] = env
     for block_id, intervals in sorted((block_windows or {}).items()):
-        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        env = _anchor_shift_envelope(
+            [(curve, intervals)], bound_s, independent_edge_span_s
+        )
         if env is not None:
             envelopes[
                 "/suite_block_energy_j/" + _json_pointer_token(block_id)
             ] = env
     for level_key, intervals in sorted((level_windows or {}).items()):
-        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        env = _anchor_shift_envelope(
+            [(curve, intervals)], bound_s, independent_edge_span_s
+        )
         if env is not None:
             envelopes[
                 "/suite_level_energy_j/" + _json_pointer_token(level_key)
@@ -1687,6 +1949,7 @@ def _resolve_reducer_version(
 ) -> str:
     """Dispatch before interpreting events or metrics (§8.1)."""
 
+    explicitly_requested = requested is not None
     summary = reader.raw_summary()
     summary_exists = (reader.path / "summary_metrics.json").is_file()
     recorded: Any = None
@@ -1710,12 +1973,10 @@ def _resolve_reducer_version(
                 "finalized bundle reducer version is missing; dispatch refuses to guess"
             )
         elif reader.is_event_v2():
-            # Controller finalization stays on the byte-frozen 0.6.0 burst
-            # arm. The D-078 anchor era (0.6.1) is powermetrics-specific and
-            # AXI runs use mock telemetry today, so 0.6.1 is reached only by
-            # an explicit re-reduction request, keeping the event-v2 opt-in
-            # gate (config + event + reducer 0.6.0) satisfied by default.
-            requested = AXI_FROZEN_REDUCER_VERSION
+            # New event-v2 bundles are born on the repaired 0.6.1 wire.  The
+            # byte-frozen 0.6.0 arm remains replayable only when an existing
+            # historical summary already records that exact wire.
+            requested = AXI_REDUCER_VERSION
         else:
             requested = REDUCER_VERSION
 
@@ -1726,6 +1987,15 @@ def _resolve_reducer_version(
     )
     if requested not in supported:
         raise ValueError(f"unsupported reducer version: {requested!r}")
+    if (
+        explicitly_requested
+        and requested == AXI_FROZEN_REDUCER_VERSION
+        and recorded != AXI_FROZEN_REDUCER_VERSION
+    ):
+        raise ValueError(
+            "reducer 0.6.0 is frozen for historical re-reduction only; "
+            "new event-v2 bundles require reducer 0.6.1"
+        )
 
     raw_config = reader.raw_config()
     config_v2 = (
@@ -1845,7 +2115,10 @@ def _reduce_v060(
     # defect and stays byte-frozen; 0.6.1 re-anchors the shared timeline.
     anchor_ctx: _AnchorContext | None = None
     anchor_shift_s = 0.0
-    if reducer_version == AXI_REDUCER_VERSION:
+    if (
+        reducer_version == AXI_REDUCER_VERSION
+        and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+    ):
         anchor_ctx = _derive_anchor_context(reader, metadata)
         if not anchor_ctx.telemetry_is_powermetrics:
             # See the 0.5.1 arm: anchor-era semantics are powermetrics-only.
@@ -2098,7 +2371,11 @@ def _reduce_v060(
     if anchor_ctx is not None:
         if not anchor_ctx.unresolved:
             envelopes: dict[str, Any] = {}
-            gross_env = _anchor_shift_envelope([(curve, [window])], anchor_ctx.bound_s)
+            gross_env = _anchor_shift_envelope(
+                [(curve, [window])],
+                anchor_ctx.bound_s,
+                anchor_ctx.edge_span_s,
+            )
             if gross_env is not None:
                 envelopes["/gross_energy_j"] = gross_env
                 if group_gross is not None:
@@ -2114,7 +2391,11 @@ def _reduce_v060(
                     for (source, candidate), windows in sorted(group_unions.items())
                     if candidate == phase
                 ]
-                phase_env = _anchor_shift_envelope(contributions, anchor_ctx.bound_s)
+                phase_env = _anchor_shift_envelope(
+                    contributions,
+                    anchor_ctx.bound_s,
+                    anchor_ctx.edge_span_s,
+                )
                 if phase_env is not None:
                     envelopes[
                         "/phase_energy_j/" + _json_pointer_token(phase)
@@ -2154,6 +2435,11 @@ def _reduce_v060(
         static_batch=group_gross is not None,
         clock_bound_override_s=clock_bound_override_s,
     )
+    if (
+        reducer_version == AXI_REDUCER_VERSION
+        and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+    ):
+        _apply_cpu_admission_claim_barrier(window_precheck, metadata)
     if anchor_ctx is not None:
         _apply_anchor_claim_gates(
             window_precheck,
@@ -2342,7 +2628,10 @@ def _reduce(
     # raw capture and move the whole timeline onto it; frozen arms keep the
     # stored point-anchor timeline byte-identically.
     anchor_ctx: _AnchorContext | None = None
-    if reducer_version == REDUCER_VERSION:
+    if (
+        reducer_version == REDUCER_VERSION
+        and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+    ):
         anchor_ctx = _derive_anchor_context(reader, metadata)
         if not anchor_ctx.telemetry_is_powermetrics:
             # The D-078 anchor defect and its envelope are native-stamped
@@ -2427,6 +2716,7 @@ def _reduce(
                 total_tokens=total_tokens,
                 output_token_count=output_token_count,
                 bound_s=anchor_ctx.bound_s,
+                independent_edge_span_s=anchor_ctx.edge_span_s,
                 item_windows=[
                     (f"{item.item_index}:{item.item_id}", item.window)
                     for item in reader.item_windows()
@@ -2471,6 +2761,11 @@ def _reduce(
         idle_baseline,
         clock_bound_override_s=clock_bound_override_s,
     )
+    if (
+        reducer_version == REDUCER_VERSION
+        and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+    ):
+        _apply_cpu_admission_claim_barrier(window_evidence_precheck, metadata)
     if anchor_ctx is not None:
         _apply_anchor_claim_gates(
             window_evidence_precheck,

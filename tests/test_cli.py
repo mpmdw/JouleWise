@@ -2,6 +2,7 @@ import io
 import json
 import math
 import plistlib
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -48,6 +49,28 @@ def _idle_powermetrics_stream(
 
 
 class CliTests(unittest.TestCase):
+    def test_reduce_never_rewrites_stored_point_anchor_summary(self) -> None:
+        # W10 exact defect: the public verb used write_text on the canonical
+        # summary path, replacing frozen 0.5.0 bytes in place.
+        source = Path("tests/fixtures/d078_r01")
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(source, bundle)
+            summary_path = bundle / "summary_metrics.json"
+            before = summary_path.read_bytes()
+            salvage = Path(tmp) / "rereduced.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(
+                    main(["reduce", str(bundle), "--output", str(salvage)]), 0
+                )
+            self.assertEqual(summary_path.read_bytes(), before)
+            self.assertTrue(salvage.is_file())
+            self.assertFalse(
+                (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+            )
+            payload = json.loads(salvage.read_text())
+            self.assertIn("energy_anchor_shift_envelopes", payload)
+
     def test_dirty_source_bundle_still_completes_and_remains_structurally_valid(self) -> None:
         config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
         config_data["run_id"] = "dirty-source-completes"
@@ -349,11 +372,20 @@ class CliTests(unittest.TestCase):
                 with self.subTest(label=label), mock.patch(
                     "joulewise.cli.reduce_bundle", return_value=summary
                 ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    self.assertEqual(main(["reduce", str(bundle)]), expected)
+                    output = Path(tmp) / f"{label}.json"
                     self.assertEqual(
-                        (bundle / "summary_metrics.json").is_file(),
-                        label != "invalid-succeeded",
+                        main(
+                            [
+                                "reduce",
+                                str(bundle),
+                                "--output",
+                                str(output),
+                            ]
+                        ),
+                        expected,
                     )
+                    self.assertFalse((bundle / "summary_metrics.json").exists())
+                    self.assertEqual(output.is_file(), label != "invalid-succeeded")
 
 
 if __name__ == "__main__":

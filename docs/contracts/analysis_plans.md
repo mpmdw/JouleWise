@@ -276,10 +276,12 @@ Additive; no seeded plan row above is rewritten.
   A per-metric envelope pass never by itself makes a comparative contrast
   identifiable — the contrast's decision interval consumes the bound
   explicitly, alongside (never merged with) the interpolation terms.
-- New fail-closed reason codes registered in the reducer vocabulary:
-  `clock_anchor_unresolved`, `anchor_energy_envelope_unrecorded`,
-  `anchor_energy_envelope_exceeds_quarter_metric` (all `not resolvable` for
-  claims).
+- D-078's closed reason/condition vocabulary is registered in the
+  2026-07-20 D-078 decision-log amendment.  In particular, every pre-anchor
+  0.5.0/0.6.0 observation refuses with `clock_anchor_unresolved` even when a
+  contrast is all-old; repaired wires additionally enforce calibration,
+  CPU-admission, anchor-envelope, whole-window NEG-8, and adapter-continuity
+  barriers from that registry.  All are `not resolvable` for claims.
 - Reader-facing throughput is `inter_token_throughput_tokens_s`; the legacy
   `throughput_tokens_s` convention is refused in claim-bearing extraction.
 - Floor extraction obligations (cooldown join, cap-hit same-slot exclusion at

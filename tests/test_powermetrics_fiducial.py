@@ -22,6 +22,7 @@ from joulewise.powermetrics_fiducial import (
     van_der_corput,
     window_license_min_duration_s,
 )
+from scripts.validate_powermetrics_fiducial import trim_trace_after_warmups
 
 CADENCE_S = 0.1
 BASELINE_W = 2.0
@@ -164,6 +165,33 @@ class DetectorTests(unittest.TestCase):
             self.assertLess(abs(fit.delta_on_s - shift_s), 0.03)
             self.assertLess(abs(fit.delta_off_s - shift_s), 0.03)
 
+    def test_validated_tenth_and_three_tenth_second_delays_are_recovered(self) -> None:
+        # F8 contract boundary: the production fiducial must still recover
+        # the synthetic 0.10 s and 0.30 s delay fixtures after replacing the
+        # one-dimensional loss slices with a joint acceptance projection.
+        for shift_s in (0.10, 0.30):
+            with self.subTest(shift_s=shift_s):
+                trace, pulses = self.make_case(shift_s=shift_s, count=3)
+                detection = detect_pulses(trace, pulses)
+                self.assertTrue(detection.all_pulses_detected, detection.reasons)
+                self.assertGreaterEqual(detection.b_fiducial_s, shift_s - 0.02)
+                for fit in detection.fits:
+                    self.assertLess(abs(fit.delta_on_s - shift_s), 0.03)
+                    self.assertLess(abs(fit.delta_off_s - shift_s), 0.03)
+
+    def test_half_second_delay_fails_closed_outside_validated_region(self) -> None:
+        trace, pulses = self.make_case(shift_s=0.50, count=3)
+        detection = detect_pulses(trace, pulses)
+        self.assertFalse(detection.all_pulses_detected)
+        self.assertIsNone(detection.b_fiducial_s)
+        self.assertIn("pulse_detection_incomplete", detection.reasons)
+        self.assertTrue(
+            any(
+                "fitted_shift_exceeds_validation_limit" in fit.reasons
+                for fit in detection.fits
+            )
+        )
+
     def test_event_stamp_uncertainty_widens_residuals(self) -> None:
         trace, _ = self.make_case(shift_s=0.0)
         true_pulses = [
@@ -211,6 +239,35 @@ class DetectorTests(unittest.TestCase):
         self.assertGreater(detection.spurious_plateau_count, 0)
         self.assertIsNone(detection.b_fiducial_s)
         self.assertIn("spurious_plateau_detected", detection.reasons)
+
+    def test_harness_warmups_are_trimmed_but_real_spurious_plateau_remains(self) -> None:
+        # W7 exact harness shape: three captured warmups precede a second
+        # baseline and the measured train.  Before the harness fix, those
+        # warmups lived in detector ``outside`` and made every clean run
+        # spuriously invalid.
+        warmup_edges = [(5.0, 6.0), (7.5, 8.5), (10.0, 11.0)]
+        measured_edges = [
+            (on_s + 16.0, off_s + 16.0) for on_s, off_s in pulse_schedule(3)
+        ]
+        trace = synthetic_trace(
+            [*warmup_edges, *measured_edges], end_s=measured_edges[-1][1] + 5.0
+        )
+        trimmed = trim_trace_after_warmups(
+            trace, commanded(warmup_edges)
+        )
+        clean = detect_pulses(trimmed, commanded(measured_edges))
+        self.assertIsNotNone(clean.b_fiducial_s, clean.reasons)
+        self.assertEqual(clean.spurious_plateau_count, 0)
+
+        spurious = [
+            replace(interval, power_w=interval.power_w + AMPLITUDE_W)
+            if 13.0 <= interval.start_s and interval.end_s <= 14.0
+            else interval
+            for interval in trimmed
+        ]
+        contaminated = detect_pulses(spurious, commanded(measured_edges))
+        self.assertGreater(contaminated.spurious_plateau_count, 0)
+        self.assertIsNone(contaminated.b_fiducial_s)
 
     def test_low_plateau_and_low_snr_fail_closed(self) -> None:
         true_pulses = [
@@ -285,7 +342,10 @@ class EvidenceTests(unittest.TestCase):
             detection,
             bindings=self.bindings(),
             validation_id="v-test",
-            artifact_sha256={"raw/powermetrics.plist": "cd" * 32},
+            artifact_sha256={
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+            },
             protocol_pulse_count=3,
         )
         self.assertEqual(payload["status"], "valid")

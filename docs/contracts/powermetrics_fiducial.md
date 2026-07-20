@@ -31,7 +31,12 @@ fixes the artifact layout, binding rules, and fail-closed semantics.
 Fit the interval-average model
 `y_i = b + A * |I_i INTERSECT [t_on + d_on, t_off + d_off]| / |I_i|`
 with a robust constrained loss (Huber; amplitude pinned to the plateau
-median; coordinate descent over the two edge shifts). NEVER timestamp the
+median; coordinate descent over the two edge shifts). The reported residual
+projection scans both coordinate slices plus the common-shift and
+opposite-shift joint diagonals. The common-shift diagonal is mandatory because
+correlated onset/offset latency valleys are invisible to fixed-other-edge
+slices; the artifact records this coverage assumption and does not claim a
+probabilistic confidence region. NEVER timestamp the
 first above-threshold interval endpoint - that bakes in up to one cadence of
 bias. Per-pulse onset/offset residual intervals are the contiguous
 loss-tolerance regions around the fitted shifts, widened by the event-stamp
@@ -66,7 +71,16 @@ runs/instrument_validation/<validation_id>/
 `pulse_protocol_id`, `power_policy`. A missing/empty binding field makes the
 artifact `invalid` (fail closed). Production bundles reference the artifact
 via
-`metadata.instrument_calibration = {artifact_path, artifact_sha256, b_fiducial_s}`;
+`metadata.instrument_calibration = {artifact_path, artifact_sha256,
+validation_manifest_path, validation_manifest_sha256, b_fiducial_s,
+bindings, binding_observations}`. `bindings` repeats the complete eight-field
+artifact vector (`hardware_model`, `os_build`, `powermetrics_sha256`,
+`sampling_interval_ms`, `anchor_method_version`, `mlx_version`,
+`pulse_protocol_id`, `power_policy`); `binding_observations` records the
+runtime-observed powermetrics executable digest and explicitly selected run
+power-policy id. The referenced validation directory's `events.jsonl` and
+`raw/powermetrics.plist` bytes are copied with the evidence artifact and their
+hashes are reverified during reduction;
 any bound-field change invalidates the calibration and a new run is
 required. `artifact_path` is the bundle-relative location of the copied
 `instrument_evidence.json` (absolute paths and parent traversal are

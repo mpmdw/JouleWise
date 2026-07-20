@@ -2096,7 +2096,9 @@ class SummaryMetricsV060(SummaryMetrics):
         provenance = schema["$defs"]["summary_provenance"]
         provenance["required"].append("event_semantics_version")
         provenance["properties"]["event_semantics_version"] = {"const": EVENT_SEMANTICS_VERSION}
-        provenance["properties"]["reducer_version"] = {"const": "0.6.0"}
+        provenance["properties"]["reducer_version"] = {
+            "enum": ["0.6.0", "0.6.1"]
+        }
         provenance["additionalProperties"] = False
         return schema
 

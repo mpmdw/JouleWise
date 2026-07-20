@@ -63,6 +63,8 @@ CONDITION_NEG8_REL_EXCEEDED = "neg8_bracket_rel_delta_exceeded"
 # invocations, so any invocation lacking both references records this and
 # leaves the drift comparison for a whole-window verdict pass.
 CONDITION_NEG8_BRACKET_NOT_EVALUATED = "neg8_bracket_not_evaluated"
+CONDITION_NEG8_AMBIGUOUS_REFERENCE = "neg8_bracket_ambiguous_reference"
+CONDITION_IDLE_ATTEMPT_LEDGER_INVALID = "idle_admission_attempt_ledger_invalid"
 
 
 class IdleAdmissionPolicyError(ValueError):
@@ -606,6 +608,26 @@ def _finite_positive(value: Any) -> float | None:
     return float(value)
 
 
+def _admissible_energy_set(value: Any) -> tuple[float, float, float] | None:
+    """Validate a positive ``{point_j,lower_j,upper_j}`` admissible set."""
+
+    if isinstance(value, Mapping):
+        raw = (value.get("point_j"), value.get("lower_j"), value.get("upper_j"))
+    else:
+        return None
+    if any(
+        isinstance(item, bool)
+        or not isinstance(item, int | float)
+        or not math.isfinite(float(item))
+        for item in raw
+    ):
+        return None
+    point, lower, upper = (float(item) for item in raw)
+    if lower <= 0.0 or not lower <= point <= upper:
+        return None
+    return point, lower, upper
+
+
 def evaluate_neg8_bracket(
     start_gross_j: Any,
     end_gross_j: Any,
@@ -621,26 +643,36 @@ def evaluate_neg8_bracket(
     """
 
     conditions: set[str] = set()
-    start = _finite_positive(start_gross_j)
-    end = (
-        None
-        if isinstance(end_gross_j, bool)
-        or not isinstance(end_gross_j, int | float)
-        or not math.isfinite(float(end_gross_j))
-        else float(end_gross_j)
-    )
+    start_set = _admissible_energy_set(start_gross_j)
+    end_set = _admissible_energy_set(end_gross_j)
+    start = start_set[0] if start_set is not None else None
+    end = end_set[0] if end_set is not None else None
     abs_delta_j: float | None = None
     rel_delta: float | None = None
     if start_gross_j is None or end_gross_j is None:
         conditions.add(CONDITION_NEG8_BRACKET_MISSING)
-    elif start is None or end is None:
+    elif start_set is None or end_set is None:
         conditions.add(CONDITION_NEG8_REFERENCE_INVALID)
     else:
-        abs_delta_j = abs(end - start)
-        rel_delta = abs_delta_j / start
+        # Establish stability over the Cartesian product of the two admitted
+        # energy sets.  Point equality is irrelevant when opposite envelope
+        # endpoints can differ materially.  The extrema of |end-start| and
+        # |end-start|/start over positive intervals occur at corners.
+        _start_point, start_lower, start_upper = start_set
+        _end_point, end_lower, end_upper = end_set
+        corners = [
+            (start_edge, end_edge)
+            for start_edge in (start_lower, start_upper)
+            for end_edge in (end_lower, end_upper)
+        ]
+        abs_delta_j = max(abs(end_edge - start_edge) for start_edge, end_edge in corners)
+        rel_delta = max(
+            abs(end_edge - start_edge) / start_edge
+            for start_edge, end_edge in corners
+        )
         if abs_delta_j > policy.max_abs_delta_j:
             conditions.add(CONDITION_NEG8_ABS_EXCEEDED)
-        if abs_delta_j > policy.max_rel_delta * start:
+        if rel_delta > policy.max_rel_delta:
             conditions.add(CONDITION_NEG8_REL_EXCEEDED)
 
     evidence_conditions = conditions & {
@@ -658,8 +690,18 @@ def evaluate_neg8_bracket(
         "decision": decision,
         "passed": decision == "passed",
         "conditions": sorted(conditions),
-        "start_gross_j": start_gross_j if isinstance(start_gross_j, int | float) and not isinstance(start_gross_j, bool) else None,
-        "end_gross_j": end_gross_j if isinstance(end_gross_j, int | float) and not isinstance(end_gross_j, bool) else None,
+        "start_gross_j": start,
+        "end_gross_j": end,
+        "start_admissible_set_j": (
+            {"point_j": start_set[0], "lower_j": start_set[1], "upper_j": start_set[2]}
+            if start_set is not None
+            else None
+        ),
+        "end_admissible_set_j": (
+            {"point_j": end_set[0], "lower_j": end_set[1], "upper_j": end_set[2]}
+            if end_set is not None
+            else None
+        ),
         "abs_delta_j": abs_delta_j,
         "rel_delta": rel_delta,
         "policy": asdict(policy),
