@@ -1062,13 +1062,17 @@ class _Execution:
         self, attempt: int, attempts: list[dict[str, Any]]
     ) -> IdleBaseline:
         assert self._telemetry is not None
+        attempt_start_s = self._clock.now()
         baseline = self._telemetry.measure_idle(self._config, self._context)
+        attempt_end_s = self._clock.now()
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         if self._campaign_policy is not None:
             gpu_admitted = baseline.idle_window_suspect is False
             row: dict[str, Any] = {
                 "attempt": attempt,
+                "start_s": attempt_start_s,
+                "end_s": attempt_end_s,
                 "baseline": _jsonable(asdict(baseline)),
                 "admitted": gpu_admitted,
             }

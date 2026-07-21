@@ -53,6 +53,7 @@ from joulewise.powermetrics_fiducial import (  # noqa: E402
     TraceInterval,
     WARMUP_PULSE_COUNT,
     allocate_matmul_buffers,
+    capture_wall_time_from_events,
     clock_stamp_half_width_s,
     detect_pulses,
     instrument_evidence,
@@ -143,33 +144,6 @@ def trim_trace_after_warmups(
     """
 
     return trim_trace_after_pulses(intervals, warmups)
-
-
-def capture_wall_time_from_events(events_raw: bytes) -> float:
-    """Recover the original capture start from immutable source events."""
-
-    timestamps: list[float] = []
-    try:
-        rows = [
-            json.loads(line)
-            for line in events_raw.decode("utf-8").splitlines()
-            if line.strip()
-        ]
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("source calibration events are malformed") from exc
-    for row in rows:
-        value = row.get("timestamp_s") if isinstance(row, dict) else None
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, int | float)
-            or not math.isfinite(float(value))
-            or float(value) < 0.0
-        ):
-            raise ValueError("source calibration event time is malformed")
-        timestamps.append(float(value))
-    if not timestamps:
-        raise ValueError("source calibration events omit capture time")
-    return min(timestamps)
 
 
 def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:

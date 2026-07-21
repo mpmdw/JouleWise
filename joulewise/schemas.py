@@ -35,6 +35,29 @@ SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
 SUMMARY_REDUCER_VERSION = "0.5.2"
 
+# Validation-time dispatch vocabulary.  This intentionally is not an enum in
+# the exported wire schema: historical summaries keep their exact bytes and
+# serializers, while generic readers still refuse unknown or crossed labels.
+KNOWN_SUMMARY_REDUCER_VERSIONS = frozenset(
+    {"0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2", "0.6.0", "0.6.1", "0.6.2"}
+)
+AXI_SUMMARY_REDUCER_VERSIONS = frozenset({"0.6.0", "0.6.1", "0.6.2"})
+AXI_SUMMARY_SHAPE_FIELDS = frozenset(
+    {
+        "decode_counter_rollup",
+        "batch_group_gross_energy_j",
+        "gross_energy_per_committed_output_token_j",
+        "gross_energy_per_accepted_draft_token_j",
+        "decode_phase_output_throughput_tokens_s",
+        "decode_emission_event_rate_events_s",
+        "decode_emission_burst_size_mean_tokens",
+        "decode_emission_burst_size_p50_tokens",
+        "decode_emission_burst_size_p95_tokens",
+        "decode_emission_burst_size_max_tokens",
+        "request_decode_metrics",
+    }
+)
+
 _PROMPT_SOURCE_FIELDS = (
     "prompt_text",
     "prompt_tokens",
@@ -1253,12 +1276,13 @@ def summary_validation_problems(summary: Any) -> list[str]:
 
     if not isinstance(summary, Mapping):
         return ["summary_metrics.json is not a JSON object"]
-    problems: list[str] = []
+    problems = _summary_version_problems(summary)
     raw_status = summary.get("status")
     try:
         status = RunStatus(raw_status)
     except (TypeError, ValueError):
-        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
+        problems.append(f"summary status is not a valid RunStatus: {raw_status!r}")
+        return problems
 
     # These fields have the same nullable-number shape for every status in
     # the exported schema. Failure summaries may omit or null them, but a
@@ -1410,6 +1434,58 @@ def summary_validation_problems(summary: Any) -> list[str]:
             problems.append(
                 "summary status is succeeded but nullable numeric field "
                 f"{key} is not null or finite: {value!r}"
+            )
+    return problems
+
+
+def _summary_version_problems(summary: Mapping[str, Any]) -> list[str]:
+    """Validate §8.1 version/shape coherence without changing wire schemas."""
+
+    provenance = summary.get("summary_provenance")
+    if provenance is None:
+        # The six sealed pre-D-033 bundle identities are provenance-less.  A
+        # summary-only validator cannot identify them; strict bundle dispatch
+        # owns that compatibility decision.
+        return []
+    if not isinstance(provenance, Mapping):
+        return ["summary provenance is not null or an object"]
+    reducer_version = provenance.get("reducer_version")
+    if (
+        not isinstance(reducer_version, str)
+        or reducer_version not in KNOWN_SUMMARY_REDUCER_VERSIONS
+    ):
+        return [
+            "summary provenance reducer_version is unsupported: "
+            f"{reducer_version!r}"
+        ]
+
+    problems: list[str] = []
+    event_semantics_version = provenance.get("event_semantics_version")
+    present_axi_fields = AXI_SUMMARY_SHAPE_FIELDS.intersection(summary)
+    if reducer_version in AXI_SUMMARY_REDUCER_VERSIONS:
+        if event_semantics_version != EVENT_SEMANTICS_VERSION:
+            problems.append(
+                "summary provenance reducer/event semantics pairing is invalid: "
+                f"{reducer_version} requires {EVENT_SEMANTICS_VERSION!r}"
+            )
+        missing_axi_fields = sorted(AXI_SUMMARY_SHAPE_FIELDS - set(summary))
+        if missing_axi_fields:
+            problems.append(
+                "summary provenance reducer/shape pairing is invalid: "
+                f"{reducer_version} requires AXI summary fields "
+                + ", ".join(missing_axi_fields)
+            )
+    else:
+        if event_semantics_version is not None:
+            problems.append(
+                "summary provenance reducer/event semantics pairing is invalid: "
+                f"{reducer_version} must not carry event_semantics_version"
+            )
+        if present_axi_fields:
+            problems.append(
+                "summary provenance reducer/shape pairing is invalid: "
+                f"{reducer_version} must not carry AXI summary fields "
+                + ", ".join(sorted(present_axi_fields))
             )
     return problems
 

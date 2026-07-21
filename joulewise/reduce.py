@@ -129,12 +129,17 @@ __all__ = [
     "POINT_ANCHOR_FROZEN_REDUCER_VERSION",
     "REDUCER_ID",
     "REDUCER_VERSION",
+    "ReducerVersionError",
     "reduce_bundle",
 ]
 
 
 class _ReduceError(Exception):
     """A structured, non-crashing reduction failure (mapped to FAILED)."""
+
+
+class ReducerVersionError(ValueError):
+    """Governed reducer dispatch refusal, distinct from unrelated ValueError."""
 
 
 # ----------------------------------------------------------------------------
@@ -689,7 +694,11 @@ def _environment_claim_reasons(
     if strict:
         telemetry_source = _telemetry_source(metadata)
         if admission is not None or telemetry_source != "mock":
-            reasons.extend(environment_admission_refusals(admission))
+            reasons.extend(
+                environment_admission_refusals(
+                    admission, require_attempt_timing=strict
+                )
+            )
         if telemetry_source != "mock":
             reasons.extend(post_run_environment_refusals(metadata))
     elif (
@@ -747,7 +756,11 @@ def _apply_cpu_admission_claim_barrier(
     admission = metadata.get("environment_admission")
     reasons: list[str] = []
     if strict:
-        reasons.extend(environment_admission_refusals(admission))
+        reasons.extend(
+            environment_admission_refusals(
+                admission, require_attempt_timing=strict
+            )
+        )
         if reasons:
             for key in (
                 "gross_request",
@@ -1259,11 +1272,13 @@ def _verify_instrument_calibration(
         MAX_AGE_S,
         PROTOCOL_ID,
         PROTOCOL_V2_SHA256,
+        REGION_COVERAGE_RESOLUTION_S,
         REPLAY_PROTOCOL_V2_SHA256,
         PULSE_COUNT,
         RESIDUAL_REGION_METHOD,
         SUPPORTED_PROTOCOL_IDS,
         V2_BINDING_FIELDS,
+        capture_wall_time_from_events,
         diagnostic_reason_registered,
         rederive_detection_from_artifacts,
     )
@@ -1275,14 +1290,9 @@ def _verify_instrument_calibration(
         return None, "instrument_calibration_protocol_mismatch"
     if strict_physics and evidence_protocol_id != PROTOCOL_ID:
         return None, "instrument_calibration_invalid"
-    if strict_physics:
+    if strict_physics and evidence_protocol_id == PROTOCOL_ID:
         capture_wall_time_s = evidence.get(CAPTURE_TIME_FIELD)
         max_age_s = evidence.get("max_age_s")
-        collection_times = [
-            row.get("timestamp_s")
-            for row in reader.events()
-            if row.get("event_type") == "run_started"
-        ]
         if (
             isinstance(capture_wall_time_s, bool)
             or not isinstance(capture_wall_time_s, int | float)
@@ -1291,17 +1301,24 @@ def _verify_instrument_calibration(
             or isinstance(max_age_s, bool)
             or not isinstance(max_age_s, int | float)
             or float(max_age_s) != float(MAX_AGE_S)
-            or len(collection_times) != 1
-            or isinstance(collection_times[0], bool)
-            or not isinstance(collection_times[0], int | float)
-            or not math.isfinite(float(collection_times[0]))
-            or not (
-                float(capture_wall_time_s)
-                <= float(collection_times[0])
-                <= float(capture_wall_time_s) + float(MAX_AGE_S)
+            or evidence.get("residual_region_method") != RESIDUAL_REGION_METHOD
+            or not isinstance(
+                evidence.get("residual_region_coverage_assumption"), str
             )
+            or not evidence.get("residual_region_coverage_assumption")
+            or isinstance(
+                evidence.get("residual_region_coverage_resolution_s"), bool
+            )
+            or not isinstance(
+                evidence.get("residual_region_coverage_resolution_s"), int | float
+            )
+            or not math.isfinite(
+                float(evidence.get("residual_region_coverage_resolution_s"))
+            )
+            or float(evidence.get("residual_region_coverage_resolution_s"))
+            != float(REGION_COVERAGE_RESOLUTION_S)
         ):
-            return None, "instrument_calibration_stale"
+            return None, "instrument_calibration_invalid"
     binding_fields = (
         V2_BINDING_FIELDS
         if evidence_protocol_id == PROTOCOL_ID
@@ -1411,6 +1428,32 @@ def _verify_instrument_calibration(
         if hashlib.sha256(referenced_raw).hexdigest() != artifact_hashes[relative]:
             return None, "instrument_calibration_invalid"
         primary_bytes[relative] = referenced_raw
+
+    if strict_physics:
+        try:
+            derived_capture_wall_time_s = capture_wall_time_from_events(
+                primary_bytes["events.jsonl"]
+            )
+            collection_times = [
+                row.get("timestamp_s")
+                for row in reader.events()
+                if row.get("event_type") == "run_started"
+            ]
+            measured_window = reader.measured_window()
+        except (BundleReadError, KeyError, TypeError, ValueError):
+            return None, "instrument_calibration_stale"
+        if (
+            abs(float(capture_wall_time_s) - derived_capture_wall_time_s) > 1.0
+            or len(collection_times) != 1
+            or isinstance(collection_times[0], bool)
+            or not isinstance(collection_times[0], int | float)
+            or not math.isfinite(float(collection_times[0]))
+            or measured_window is None
+            or float(capture_wall_time_s) > float(collection_times[0])
+            or measured_window.end_s
+            > float(capture_wall_time_s) + float(MAX_AGE_S)
+        ):
+            return None, "instrument_calibration_stale"
 
     if not strict_physics:
         fresh = None
@@ -1720,15 +1763,20 @@ def _derive_anchor_context(
     tail_reason = calibration_reason
     if reducer_version in {REDUCER_VERSION, AXI_REDUCER_VERSION}:
         measured_window = reader.measured_window()
-        achieved_post_tail_s = (
-            curve[-1].support_end_s - measured_window.end_s
-            if curve and measured_window is not None
-            else None
-        )
-        if (
-            achieved_post_tail_s is None
-            or achieved_post_tail_s + 1e-12 < effective_bound_s
-        ):
+        tail_covers_bound = False
+        if curve and measured_window is not None:
+            # Compare epoch endpoints directly.  Subtracting two ~1e9 epoch
+            # floats first can erase enough low bits to reject an intended
+            # exact-equality tail.  One endpoint ULP admits only that rounding
+            # ambiguity; a genuinely shorter tail still fails closed.
+            required_tail_end_s = math.fsum(
+                (measured_window.end_s, effective_bound_s)
+            )
+            endpoint_ulp_s = math.ulp(required_tail_end_s)
+            tail_covers_bound = curve[-1].support_end_s >= (
+                required_tail_end_s - endpoint_ulp_s
+            )
+        if not tail_covers_bound:
             tail_reason = "post_window_trace_tail_shorter_than_anchor_bound"
     return _AnchorContext(
         telemetry_is_powermetrics=True,
@@ -2522,7 +2570,7 @@ def _resolve_reducer_version(
                 and summary != {"status": "failed"}
             )
         ):
-            raise ValueError(
+            raise ReducerVersionError(
                 "finalized bundle reducer version is missing; dispatch refuses to guess"
             )
         elif reader.is_event_v2():
@@ -2540,13 +2588,13 @@ def _resolve_reducer_version(
         | AXI_REDUCER_VERSIONS
     )
     if requested not in supported:
-        raise ValueError(f"unsupported reducer version: {requested!r}")
+        raise ReducerVersionError(f"unsupported reducer version: {requested!r}")
     if (
         explicitly_requested
         and requested == AXI_FROZEN_REDUCER_VERSION
         and recorded != AXI_FROZEN_REDUCER_VERSION
     ):
-        raise ValueError(
+        raise ReducerVersionError(
             "reducer 0.6.0 is frozen for historical re-reduction only; "
             f"new event-v2 bundles require reducer {AXI_REDUCER_VERSION}"
         )
@@ -2568,12 +2616,12 @@ def _resolve_reducer_version(
     )
     if requested in AXI_REDUCER_VERSIONS:
         if not config_v2 or not event_v2:
-            raise ValueError(
+            raise ReducerVersionError(
                 f"reducer {requested} requires AXI config extension and "
                 "event semantics v2"
             )
     elif config_v2 or event_v2 or v060_shape:
-        raise ValueError(
+        raise ReducerVersionError(
             "0.6.0-only bundle shape cannot enter a frozen historical reducer arm"
         )
     return requested

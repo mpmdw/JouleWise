@@ -34,6 +34,7 @@ is out of scope for this module.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass, replace
@@ -214,6 +215,7 @@ class MemberReport:
     excluded: bool
     reasons: tuple[str, ...]
     anchor_shift_bound_j: float | None
+    summary_sha256: str | None
     bundle_sha256: str | None
     config_sha256: str | None
 
@@ -230,6 +232,7 @@ class MemberReport:
             "excluded": self.excluded,
             "reasons": list(self.reasons),
             "anchor_shift_bound_j": self.anchor_shift_bound_j,
+            "summary_sha256": self.summary_sha256,
             "bundle_sha256": self.bundle_sha256,
             "config_sha256": self.config_sha256,
         }
@@ -288,17 +291,26 @@ class CellReport:
         }
 
 
-def _read_summary(path: Path) -> tuple[Mapping[str, Any] | None, str | None]:
+def _read_summary(
+    path: Path,
+) -> tuple[Mapping[str, Any] | None, str | None, str | None]:
     if not path.is_dir():
-        return None, "bundle_missing"
+        return None, None, "bundle_missing"
     summary_path = path / "summary_metrics.json"
     try:
-        parsed = json.loads(summary_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None, "summary_unreadable"
+        raw = summary_path.read_bytes()
+    except OSError:
+        return None, None, "summary_unreadable"
+    digest = hashlib.sha256(raw).hexdigest()
+    try:
+        # Strict UTF-8 only: json.loads on bytes auto-detects BOM/UTF-16/32,
+        # which would admit encodings the committed reader refused.
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None, digest, "summary_unreadable"
     if not isinstance(parsed, Mapping):
-        return None, "summary_unreadable"
-    return parsed, None
+        return None, digest, "summary_unreadable"
+    return parsed, digest, None
 
 
 def _finite(value: object) -> float | None:
@@ -347,7 +359,7 @@ def _evaluate_member(
     """Evaluate every governed member gate; reasons are fail-closed evidence."""
 
     path = runs_root / bundle_id
-    summary, read_problem = _read_summary(path)
+    summary, summary_sha256, read_problem = _read_summary(path)
     cooldown = cooldowns.get(bundle_id)
     cooldown_result = (
         cooldown.get("result") if isinstance(cooldown, Mapping) else None
@@ -424,7 +436,7 @@ def _evaluate_member(
             strict_problems=(),
             base_reason_codes=(),
             config_sha256=None,
-            summary_sha256=None,
+            summary_sha256=summary_sha256,
             replacement_classification="registered",
             inclusion_status="included",
             campaign_cooldown=cooldown,
@@ -510,6 +522,7 @@ def _evaluate_member(
         excluded=False,
         reasons=tuple(dict.fromkeys(reasons)),
         anchor_shift_bound_j=anchor_bound,
+        summary_sha256=summary_sha256,
         bundle_sha256=bundle_sha256,
         config_sha256=config_sha256,
     )
@@ -534,6 +547,7 @@ def _exclude(member: MemberReport) -> MemberReport:
         excluded=True,
         reasons=member.reasons,
         anchor_shift_bound_j=member.anchor_shift_bound_j,
+        summary_sha256=member.summary_sha256,
         bundle_sha256=member.bundle_sha256,
         config_sha256=member.config_sha256,
     )

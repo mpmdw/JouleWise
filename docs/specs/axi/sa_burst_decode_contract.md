@@ -644,8 +644,11 @@ For v2, evidence precedence is:
 4. derived `summary_metrics.json`.
 
 The validator proves agreement among levels 1-3. The reducer consumes only
-strictly paired evidence. Summary is derived and remains the one sanctioned
-post-finalize rewrite; it never overrides output evidence.
+strictly paired evidence. Summary is derived; under D-078 stored summary
+bytes are immutable evidence once a bundle is finalized — post-hoc
+re-reduction mints a NEW artifact outside the bundle (exclusive-create,
+never clobbering), and no path rewrites finalized evidence. Summary never
+overrides output evidence.
 
 ## 8. Reducer version arms (0.6.0 frozen origin through the 0.6.2 mint)
 

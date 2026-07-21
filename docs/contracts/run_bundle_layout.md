@@ -191,7 +191,12 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   and re-probe evidence, and an exact-bound override when one was required.
   `environment_admission` records the per-run evaluation, critical-probe and
   provenance status, guard observations, every idle attempt, the final
-  decision, and the optional unwaivable claim reason. These fields are absent
+  decision, and the optional unwaivable claim reason. On the current mint,
+  every attempt also records finite monotonic-clock `start_s` and `end_s`
+  with `start_s < end_s`; ledger order is physical order and requires
+  `end_i <= start_(i+1)`. Missing, malformed, overlapping, or non-monotonic
+  attempt windows refuse with `environment_admission_missing`. Frozen replay
+  arms retain their prior attempt-row semantics. These fields are absent
   for legacy direct runs without a campaign policy; no new section enters
   normalized `config.json`, so historical config serialization and hashes are
   unchanged.
@@ -595,10 +600,16 @@ replays stay byte-frozen):
   `anchor_method_version`, and environment bindings all match; `B_fiducial`
   is never trusted from the metadata scalar alone (an invalid block is
   `clock_anchor_unresolved`). Current 0.5.2/0.6.2 claims require a v2
-  calibration artifact with `capture_wall_time_s` and `max_age_s = 86400`;
-  the measuring bundle's `run_started` time must be in the inclusive interval
-  `[capture_wall_time_s, capture_wall_time_s + max_age_s]`, otherwise
-  `instrument_calibration_stale` refuses the claim. Claim-time verification
+  calibration artifact with the v2 estimator identity and residual-region
+  fields, `capture_wall_time_s`, and `max_age_s = 86400`; missing v2 shape is
+  `instrument_calibration_invalid`. Claim-time verification independently
+  derives the capture time as the minimum finite timestamp in the
+  hash-verified calibration `events.jsonl` and requires it to agree with the
+  declaration within 1.0 s. The measuring bundle must satisfy both
+  `capture_wall_time_s <= run_started` and
+  `measured_window.end_s <= capture_wall_time_s + max_age_s`, inclusively;
+  disagreement or underivable timing is `instrument_calibration_stale`.
+  Claim-time verification
   also re-reads `validation_manifest_path`, verifies its recorded SHA-256,
   and verifies the presence and SHA-256 of every manifest member within the
   bundle before trusting the calibration attachment.
@@ -719,6 +730,14 @@ explicitly compatible re-reduction. Historical event bundles cannot acquire
 burst semantics by re-reduction. The frozen meanings are not rewritten. The
 six frozen legacy identities keep their provenance-less additive-absence
 tolerance unchanged.
+
+Generic summary validation recognizes only reducer versions `0.4.1`, `0.4.2`,
+`0.5.0`, `0.5.1`, `0.5.2`, `0.6.0`, `0.6.1`, and `0.6.2`. Every `0.6.x`
+summary requires `summary_provenance.event_semantics_version` equal to
+`joulewise.events.v2` and the AXI summary shape; `0.4.x`/`0.5.x` summaries
+must carry neither. This is a validation-time coherence check, not a wire
+schema enum, so frozen serialized summaries remain unchanged.
+
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;

@@ -49,6 +49,40 @@ def _idle_powermetrics_stream(
 
 
 class CliTests(unittest.TestCase):
+    def test_reduce_unsupported_or_crossed_version_is_structured_refusal(self) -> None:
+        # F4 defect shape: resolver ValueError escaped main and printed a raw
+        # traceback instead of the governed CLI refusal surface.
+        cases = (
+            (
+                Path("tests/fixtures/d078_r01"),
+                "9.9.9",
+                "unsupported reducer version: '9.9.9'",
+            ),
+            (
+                Path("tests/fixtures/axi_valid_burst"),
+                "0.5.2",
+                "0.6.0-only bundle shape cannot enter a frozen historical reducer arm",
+            ),
+        )
+        for source, version, expected in cases:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
+                output = Path(tmp) / "must-not-exist.json"
+                stderr = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    code = main(
+                        [
+                            "reduce",
+                            str(source),
+                            "--reducer-version",
+                            version,
+                            "--output",
+                            str(output),
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertEqual(stderr.getvalue(), f"error: {expected}\n")
+                self.assertFalse(output.exists())
+
     def test_reduce_default_replays_recorded_060_and_051_versions(self) -> None:
         cases = (
             (

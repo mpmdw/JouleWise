@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import math
 from typing import Any
 
 
@@ -47,7 +48,9 @@ def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
     return ()
 
 
-def environment_admission_refusals(admission: Any) -> tuple[str, ...]:
+def environment_admission_refusals(
+    admission: Any, *, require_attempt_timing: bool = False
+) -> tuple[str, ...]:
     """Validate all claim-bearing admission evidence, failing closed."""
 
     if not isinstance(admission, Mapping):
@@ -72,6 +75,7 @@ def environment_admission_refusals(admission: Any) -> tuple[str, ...]:
     attempts = admission.get("attempts")
     if not isinstance(attempts, list) or not attempts:
         return ("environment_admission_missing",)
+    previous_end_s: float | None = None
     for index, row in enumerate(attempts, start=1):
         if (
             not isinstance(row, Mapping)
@@ -79,6 +83,24 @@ def environment_admission_refusals(admission: Any) -> tuple[str, ...]:
             or row.get("attempt") != index
         ):
             return ("environment_admission_missing",)
+        if require_attempt_timing:
+            start_s = row.get("start_s")
+            end_s = row.get("end_s")
+            if (
+                isinstance(start_s, bool)
+                or isinstance(end_s, bool)
+                or not isinstance(start_s, int | float)
+                or not isinstance(end_s, int | float)
+                or not math.isfinite(float(start_s))
+                or not math.isfinite(float(end_s))
+                or float(start_s) >= float(end_s)
+                or (
+                    previous_end_s is not None
+                    and previous_end_s > float(start_s)
+                )
+            ):
+                return ("environment_admission_missing",)
+            previous_end_s = float(end_s)
     guards = admission.get("guard_observations")
     expected_phases = [
         phase

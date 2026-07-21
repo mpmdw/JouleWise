@@ -117,6 +117,39 @@ def diagnostic_reason_registered(reason: Any) -> bool:
     )
 
 
+def capture_wall_time_from_events(events_raw: bytes) -> float:
+    """Recover the capture start from the immutable calibration event bytes.
+
+    Every non-empty row must be a JSON object carrying a finite, non-negative
+    ``timestamp_s``.  The capture wall time is the minimum timestamp across
+    the complete ledger; malformed or empty evidence is never partially
+    interpreted.
+    """
+
+    timestamps: list[float] = []
+    try:
+        rows = [
+            json.loads(line)
+            for line in events_raw.decode("utf-8").splitlines()
+            if line.strip()
+        ]
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("source calibration events are malformed") from exc
+    for row in rows:
+        value = row.get("timestamp_s") if isinstance(row, Mapping) else None
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise ValueError("source calibration event time is malformed")
+        timestamps.append(float(value))
+    if not timestamps:
+        raise ValueError("source calibration events omit capture time")
+    return min(timestamps)
+
+
 def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
     """Canonical executable description for one immutable protocol identity."""
 

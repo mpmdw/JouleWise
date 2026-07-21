@@ -74,7 +74,36 @@ def install_passing_analysis_whole_window(
     """Install one provenance-bound passing verdict for a synthetic corpus."""
 
     bundle_ids = sorted(bundle_ids)
-    policy_sha = "7" * 64
+    reference_ids = [
+        f"{source_name}-neg8-reference-start",
+        f"{source_name}-neg8-reference-end",
+    ]
+    for bundle_id in reference_ids:
+        bundle = runs_root / bundle_id
+        bundle.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "gross_energy_j": 1.0,
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "point_j": 1.0,
+                    "lower_j": 0.99,
+                    "upper_j": 1.01,
+                }
+            },
+        }
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+    covered_ids = sorted([*bundle_ids, *reference_ids])
+    # Anchor to the repo-registered production policy: re-derivation resolves
+    # tolerances from tracked policy files only (fail-closed on unknown shas).
+    registered_policy_path = (
+        ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+    )
+    policy_sha = hashlib.sha256(registered_policy_path.read_bytes()).hexdigest()
+    registered_bracket = json.loads(registered_policy_path.read_text())[
+        "idle_admission_extension"
+    ]["neg8_bracket"]
     campaign_dir = runs_root / "campaign_manifests"
     campaign_dir.mkdir(parents=True, exist_ok=True)
     source_path = campaign_dir / f"{source_name}.json"
@@ -85,7 +114,24 @@ def install_passing_analysis_whole_window(
                 "session_id": source_name,
                 "analysis_manifest_id": None,
                 "campaign_policy": {"sha256": policy_sha},
-                "members": [{"execution": "invoked", "bundle_ids": bundle_ids}],
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": [reference_ids[0]],
+                        "role": "neg8_daily_reference_start",
+                        "sentinel_position": "start",
+                    },
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": bundle_ids,
+                    },
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": [reference_ids[1]],
+                        "role": "neg8_daily_reference_end",
+                        "sentinel_position": "end",
+                    },
+                ],
             },
             indent=2,
             sort_keys=True,
@@ -98,7 +144,7 @@ def install_passing_analysis_whole_window(
         "record_type": "idle_admission_whole_window_verdict",
         "status": "passed",
         "campaign_policy": {"sha256": policy_sha},
-        "bundle_ids": bundle_ids,
+        "bundle_ids": covered_ids,
         "idle_admission_core": {
             "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
             "policy_sha256": policy_sha,
@@ -107,7 +153,7 @@ def install_passing_analysis_whole_window(
                     "bundle_id": bundle_id,
                     "cpu_admission": {"decision": "admitted"},
                 }
-                for bundle_id in bundle_ids
+                for bundle_id in covered_ids
             ],
             "adapter_wattage_continuity": {
                 "schema_version": ADAPTER_CONTINUITY_SCHEMA,
@@ -116,13 +162,14 @@ def install_passing_analysis_whole_window(
             "neg8_bracket": {
                 "schema_version": NEG8_BRACKET_SCHEMA,
                 "decision": "passed",
+                "policy": dict(registered_bracket),
             },
             "conditions": [],
         },
     }
     row["row_provenance"] = build_row_provenance(
         policy_sha256=policy_sha,
-        bundle_ids=bundle_ids,
+        bundle_ids=covered_ids,
         source_manifests=descriptors,
     )
     (runs_root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
@@ -174,64 +221,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         cls.manifest_path = cls.config_dir / "analysis_manifest.json"
         manifest = json.loads(cls.manifest_path.read_text())
         bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
-        policy_sha = "7" * 64
-        campaign_dir = cls.runs_root / "campaign_manifests"
-        campaign_dir.mkdir(parents=True, exist_ok=True)
-        source_path = campaign_dir / "analysis-whole-window-source.json"
-        source_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "joulewise.campaign_provenance.v1",
-                    "session_id": "analysis-whole-window-source",
-                    "analysis_manifest_id": None,
-                    "campaign_policy": {"sha256": policy_sha},
-                    "members": [
-                        {
-                            "execution": "invoked",
-                            "bundle_ids": bundle_ids,
-                        }
-                    ],
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n"
-        )
-        descriptors = source_manifest_descriptors(cls.runs_root, [source_path])
-        whole_row = {
-            "schema_version": WHOLE_WINDOW_SCHEMA,
-            "record_type": "idle_admission_whole_window_verdict",
-            "status": "passed",
-            "campaign_policy": {"sha256": policy_sha},
-            "bundle_ids": bundle_ids,
-            "idle_admission_core": {
-                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
-                "policy_sha256": policy_sha,
-                "members": [
-                    {
-                        "bundle_id": bundle_id,
-                        "cpu_admission": {"decision": "admitted"},
-                    }
-                    for bundle_id in bundle_ids
-                ],
-                "adapter_wattage_continuity": {
-                    "schema_version": ADAPTER_CONTINUITY_SCHEMA,
-                    "decision": "stable",
-                },
-                "neg8_bracket": {
-                    "schema_version": NEG8_BRACKET_SCHEMA,
-                    "decision": "passed",
-                },
-                "conditions": [],
-            },
-        }
-        whole_row["row_provenance"] = build_row_provenance(
-            policy_sha256=policy_sha,
-            bundle_ids=bundle_ids,
-            source_manifests=descriptors,
-        )
-        (cls.runs_root / "campaign_log.jsonl").write_text(
-            json.dumps(whole_row) + "\n"
+        install_passing_analysis_whole_window(
+            cls.runs_root,
+            bundle_ids,
+            source_name="analysis-whole-window-source",
         )
 
     @classmethod

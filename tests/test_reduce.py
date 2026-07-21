@@ -56,11 +56,14 @@ DEFAULT_IDLE = {
 _SELF_CONSISTENT_CALIBRATION: tuple[dict, bytes, bytes] | None = None
 
 
-def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
+def self_consistent_calibration(
+    *, first_endpoint_s: float | None = None
+) -> tuple[dict, bytes, bytes]:
     """Build one cached 40-pulse plist/event calibration for reducer tests."""
 
     global _SELF_CONSISTENT_CALIBRATION
-    if _SELF_CONSISTENT_CALIBRATION is not None:
+    use_cache = first_endpoint_s is None
+    if use_cache and _SELF_CONSISTENT_CALIBRATION is not None:
         evidence, raw, events = _SELF_CONSISTENT_CALIBRATION
         return json.loads(json.dumps(evidence)), raw, events
 
@@ -79,10 +82,19 @@ def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
     )
     from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v2
 
-    first_endpoint_s = 1000.05
+    # Keep the synthetic calibration on the same epoch scale as the retained
+    # D-078 measuring bundle.  Freshness now covers the measured-window end,
+    # so a calibration living near epoch 1000 would be correctly stale for a
+    # 2026 bundle even though its relative pulse geometry is self-consistent.
+    if first_endpoint_s is None:
+        first_endpoint_s = 1_784_490_850.05
     cadence_s = 0.1
-    warmup_edges = [(1002.0, 1003.0), (1004.5, 1005.5), (1007.0, 1008.0)]
-    commanded_edges = pulse_schedule(PULSE_COUNT, start_s=1015.0)
+    warmup_edges = [
+        (first_endpoint_s + 1.95, first_endpoint_s + 2.95),
+        (first_endpoint_s + 4.45, first_endpoint_s + 5.45),
+        (first_endpoint_s + 6.95, first_endpoint_s + 7.95),
+    ]
+    commanded_edges = pulse_schedule(PULSE_COUNT, start_s=first_endpoint_s + 14.95)
     true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
     capture_end_s = true_edges[-1][1] + 5.0
 
@@ -118,7 +130,7 @@ def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
     raw = b"\0".join(plistlib.dumps(document) for document in documents)
 
     def stamp(epoch_s: float) -> ClockStamp:
-        mono = epoch_s - 1000.0
+        mono = epoch_s - (first_endpoint_s - 50.0)
         return ClockStamp(
             epoch_s=epoch_s,
             monotonic_before_s=mono - 1e-6,
@@ -131,9 +143,9 @@ def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
         # Tight but non-zero causal bracket around the true 1000.05 endpoint;
         # this keeps the synthetic production calibration representative of a
         # usable live bound rather than a deliberately wide 50 ms half-width.
-        "pre_spawn": stamp(999.949),
-        "first_parse": stamp(1000.051),
-        "sampling_started": stamp(1000.2),
+        "pre_spawn": stamp(first_endpoint_s - 0.101),
+        "first_parse": stamp(first_endpoint_s + 0.001),
+        "sampling_started": stamp(first_endpoint_s + 0.15),
         "sampling_stopped": stamp(capture_end_s + 0.5),
         "post_parse": stamp(capture_end_s + 1.0),
     }
@@ -196,7 +208,8 @@ def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
     evidence["clock_anchor_resolved"] = True
     if evidence["status"] != "valid":
         raise AssertionError(evidence["reasons"])
-    _SELF_CONSISTENT_CALIBRATION = (evidence, raw, events)
+    if use_cache:
+        _SELF_CONSISTENT_CALIBRATION = (evidence, raw, events)
     return json.loads(json.dumps(evidence)), raw, events
 
 
@@ -1974,6 +1987,8 @@ class D078R01RegressionTests(unittest.TestCase):
             "attempts": [
                 {
                     "attempt": 1,
+                    "start_s": 1.0,
+                    "end_s": 2.0,
                     "admitted": True,
                     "cpu_admission_enforced": True,
                     "cpu_admission": {"admitted": True},
@@ -2027,6 +2042,88 @@ class D078R01RegressionTests(unittest.TestCase):
         for label, admission in cases.items():
             with self.subTest(label=label):
                 self.assertTrue(environment_admission_refusals(admission))
+
+    def test_current_attempt_timing_rejects_missing_overlap_and_nonmonotonic_rows(
+        self,
+    ) -> None:
+        # F7 defect shape: ordinals were contiguous but the declared physical
+        # attempt windows could overlap, run backwards, or be absent.  Frozen
+        # replay keeps the pre-timing default; current-mint validation opts in.
+        from joulewise.environment_admission import environment_admission_refusals
+
+        missing = self._clean_environment_admission()
+        missing["attempts"][0].pop("start_s")
+        missing["attempts"][0].pop("end_s")
+        self.assertEqual(environment_admission_refusals(missing), ())
+        self.assertEqual(
+            environment_admission_refusals(
+                missing, require_attempt_timing=True
+            ),
+            ("environment_admission_missing",),
+        )
+
+        for label, windows in (
+            ("overlap", ((1.0, 3.0), (2.0, 4.0))),
+            ("reversed", ((3.0, 2.0),)),
+            ("nonmonotonic", ((4.0, 5.0), (1.0, 2.0))),
+        ):
+            admission = self._clean_environment_admission()
+            template = admission["attempts"][0]
+            admission["attempts"] = [
+                {
+                    **template,
+                    "attempt": index,
+                    "start_s": start_s,
+                    "end_s": end_s,
+                }
+                for index, (start_s, end_s) in enumerate(windows, start=1)
+            ]
+            admission["guard_observations"] = [
+                {
+                    "phase": phase,
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                }
+                for index in range(1, len(windows) + 1)
+                for phase in (f"before_attempt_{index}", f"after_attempt_{index}")
+            ]
+            with self.subTest(label=label):
+                self.assertEqual(
+                    environment_admission_refusals(
+                        admission, require_attempt_timing=True
+                    ),
+                    ("environment_admission_missing",),
+                )
+
+        boundary = self._clean_environment_admission()
+        template = boundary["attempts"][0]
+        boundary["attempts"] = [
+            {**template, "attempt": 1, "start_s": 1.0, "end_s": 2.0},
+            {**template, "attempt": 2, "start_s": 2.0, "end_s": 3.0},
+        ]
+        boundary["guard_observations"] = [
+            {
+                "phase": phase,
+                "capture_skipped": False,
+                "display_power_state": "all_asleep",
+                "screensaver_engaged": False,
+                "errors": {},
+            }
+            for phase in (
+                "before_attempt_1",
+                "after_attempt_1",
+                "before_attempt_2",
+                "after_attempt_2",
+            )
+        ]
+        self.assertEqual(
+            environment_admission_refusals(
+                boundary, require_attempt_timing=True
+            ),
+            (),
+        )
 
     def test_post_run_critical_environment_failure_bars_claim(self) -> None:
         metadata = {
@@ -2091,6 +2188,8 @@ class D078R01RegressionTests(unittest.TestCase):
         # three claim gates, while a single clean row remains admitted.
         clean_row = {
             "attempt": 1,
+            "start_s": 1.0,
+            "end_s": 2.0,
             "admitted": True,
             "cpu_admission_enforced": True,
             "cpu_admission": {"admitted": True},
@@ -2470,11 +2569,18 @@ class D078R01RegressionTests(unittest.TestCase):
             run_started = next(
                 row for row in rows if row["event_type"] == "run_started"
             )
-            run_started["timestamp_s"] = evidence["capture_wall_time_s"] + 1.0
-            events_path.write_text(
-                "".join(json.dumps(row) + "\n" for row in rows),
-                encoding="utf-8",
-            )
+            capture_s = float(evidence["capture_wall_time_s"])
+            if not capture_s <= float(run_started["timestamp_s"]) <= (
+                capture_s + 86400.0
+            ):
+                # Relabel-fresh tests deliberately move the declaration while
+                # keeping primary calibration bytes fixed.  Preserve the old
+                # attack shape by moving only the declared measuring start.
+                run_started["timestamp_s"] = capture_s + 1.0
+                events_path.write_text(
+                    "".join(json.dumps(row) + "\n" for row in rows),
+                    encoding="utf-8",
+                )
         metadata = json.loads((bundle / "metadata.json").read_text())
         metadata.setdefault("device", {})["powermetrics"] = {
             "executable_path": "/usr/bin/powermetrics",
@@ -2674,6 +2780,49 @@ class D078R01RegressionTests(unittest.TestCase):
             reason, mint.window_evidence_precheck["gross_request"]["reasons"]
         )
 
+    def test_052_post_window_tail_exact_epoch_equality_is_inclusive(self) -> None:
+        # F8c defect shape: subtracting epoch-valued floats first could make
+        # an exact composed-bound tail appear fractionally short.
+        import shutil
+        from joulewise.bundle_read import BundleReader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(self.FIXTURE, bundle)
+            reader = BundleReader(bundle)
+            context = reduce_module._derive_anchor_context(
+                reader, reader.metadata(), reducer_version="0.5.2"
+            )
+            assert context.curve is not None and context.bound_s is not None
+            trace_end_s = context.curve[-1].support_end_s
+            exact_stop_s = trace_end_s - context.bound_s
+            events_path = bundle / "events.jsonl"
+            rows = [json.loads(line) for line in events_path.read_text().splitlines()]
+            stopped = next(
+                row for row in rows if row["event_type"] == "sampling_stopped"
+            )
+            stopped["timestamp_s"] = exact_stop_s
+            events_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            equal = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+
+            stopped["timestamp_s"] = exact_stop_s + 4.0 * math.ulp(exact_stop_s)
+            events_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            short = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+
+        reason = "post_window_trace_tail_shorter_than_anchor_bound"
+        self.assertNotIn(
+            reason, equal.window_evidence_precheck["gross_request"]["reasons"]
+        )
+        self.assertIn(
+            reason, short.window_evidence_precheck["gross_request"]["reasons"]
+        )
+
     def test_051_forged_zero_residual_calibration_is_physically_rejected(self) -> None:
         # F2 exact exploit: valid hashes plus forty hand-authored detected rows,
         # zero residuals, and B=0 used to pass without fitting the raw bytes.
@@ -2757,16 +2906,16 @@ class D078R01RegressionTests(unittest.TestCase):
             + context.edge_span_s,
         )
 
-    def test_052_missing_max_age_refuses_as_stale(self) -> None:
-        # Delta re-audit P2 fold-in: an otherwise-v2 artifact that omits
-        # max_age_s must refuse via the staleness gate, not silently pass.
+    def test_052_missing_max_age_refuses_invalid_v2_shape(self) -> None:
+        # F6: max_age_s is authenticated v2 protocol shape.  Omitting it is
+        # invalid evidence, distinct from a well-shaped artifact that is old.
         evidence = self._valid_instrument_evidence()
         del evidence["max_age_s"]
         with tempfile.TemporaryDirectory() as tmp:
             bundle = self._bundle_with_calibration(tmp, evidence=evidence)
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
         self.assertIn(
-            "instrument_calibration_stale",
+            "instrument_calibration_invalid",
             summary.window_evidence_precheck["gross_request"]["reasons"],
         )
 
@@ -2850,6 +2999,8 @@ class D078R01RegressionTests(unittest.TestCase):
     def test_052_environment_attacks_refuse_through_reducer_path(self) -> None:
         clean_row = {
             "attempt": 1,
+            "start_s": 1.0,
+            "end_s": 2.0,
             "admitted": True,
             "cpu_admission_enforced": True,
             "cpu_admission": {"admitted": True},
@@ -2993,12 +3144,16 @@ class D078R01RegressionTests(unittest.TestCase):
             events_path = bundle / "events.jsonl"
             rows = [json.loads(line) for line in events_path.read_text().splitlines()]
             started = next(row for row in rows if row["event_type"] == "run_started")
-            started["timestamp_s"] = capture_s + MAX_AGE_S
+            stopped = next(
+                row for row in rows if row["event_type"] == "sampling_stopped"
+            )
+            started["timestamp_s"] = capture_s + 1.0
+            stopped["timestamp_s"] = capture_s + MAX_AGE_S
             events_path.write_text(
                 "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
             )
             boundary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
-            started["timestamp_s"] = capture_s + MAX_AGE_S + 0.001
+            stopped["timestamp_s"] = capture_s + MAX_AGE_S + 0.001
             events_path.write_text(
                 "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
             )
@@ -3010,6 +3165,74 @@ class D078R01RegressionTests(unittest.TestCase):
         self.assertIn(
             "instrument_calibration_stale",
             stale.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_relabelled_capture_time_disagrees_with_hashed_events(self) -> None:
+        # F1 defect shape: an attacker moved only the declared capture time far
+        # into the future and re-hashed both evidence and custody manifest.
+        # The measuring run_started declaration moves with it, so the old age
+        # check passed; immutable calibration event bytes still prove the lie.
+        evidence = self._valid_instrument_evidence()
+        evidence["capture_wall_time_s"] += 10_000_000.0
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_stale",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_relabelled_v1_body_as_v2_refuses_protocol_shape(self) -> None:
+        # F6 defect shape: protocol_id and bindings were re-keyed to v2 while
+        # the body retained the legacy residual-region shape.
+        from joulewise.powermetrics_fiducial import (
+            MAX_AGE_S,
+            PROTOCOL_ID,
+            PROTOCOL_V2_SHA256,
+            RESIDUAL_REGION_METHOD,
+            capture_wall_time_from_events,
+        )
+
+        evidence = self._valid_instrument_evidence(
+            protocol_id="powermetrics_pulse_fiducial_v1"
+        )
+        _source, _raw, calibration_events = self_consistent_calibration()
+        evidence["protocol_id"] = PROTOCOL_ID
+        evidence["capture_wall_time_s"] = capture_wall_time_from_events(
+            calibration_events
+        )
+        evidence["max_age_s"] = MAX_AGE_S
+        evidence["bindings"].update(
+            {
+                "pulse_protocol_id": PROTOCOL_ID,
+                "estimator_revision": RESIDUAL_REGION_METHOD,
+                "protocol_sha256": PROTOCOL_V2_SHA256,
+            }
+        )
+        for field in (
+            "residual_region_method",
+            "residual_region_coverage_assumption",
+            "residual_region_coverage_resolution_s",
+        ):
+            evidence.pop(field, None)
+        canonical = json.dumps(
+            evidence["bindings"], sort_keys=True, separators=(",", ":")
+        ).encode()
+        evidence["binding_evidence"] = {
+            "schema_version": "joulewise.instrument_binding_evidence.v1",
+            "binding_vector_sha256": hashlib.sha256(canonical).hexdigest(),
+            "powermetrics_binary": {
+                "path": "/usr/bin/powermetrics",
+                "sha256": evidence["bindings"]["powermetrics_sha256"],
+            },
+            "power_policy": {"id": evidence["bindings"]["power_policy"]},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
         )
 
     def test_052_current_claim_refuses_v1_calibration_artifact(self) -> None:
@@ -3024,14 +3247,14 @@ class D078R01RegressionTests(unittest.TestCase):
             summary.window_evidence_precheck["gross_request"]["reasons"],
         )
 
-    def test_052_missing_capture_time_refuses_as_stale(self) -> None:
+    def test_052_missing_capture_time_refuses_invalid_v2_shape(self) -> None:
         evidence = self._valid_instrument_evidence()
         del evidence["capture_wall_time_s"]
         with tempfile.TemporaryDirectory() as tmp:
             bundle = self._bundle_with_calibration(tmp, evidence=evidence)
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
         self.assertIn(
-            "instrument_calibration_stale",
+            "instrument_calibration_invalid",
             summary.window_evidence_precheck["gross_request"]["reasons"],
         )
 

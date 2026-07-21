@@ -4238,3 +4238,52 @@ P0). Rulings:
    cap-first precedence rule ("the cap is causal and wins"), and rejection
    semantics are contract text in `docs/contracts/run_bundle_layout.md`,
    matching `joulewise/cooldown.py` exactly.
+
+### D-078 amendment — 2026-07-21 (third): provenance authentication rulings
+
+Recorded by the lead after confirmation round 2 over `233e9e3` withheld
+sign-off (9 confirmed; the physics verified clean from every lens — all
+findings are provenance/governance). Rulings, implemented in the round-3 fix
+wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
+
+1. **Declared facts are authenticated against primary bytes.** The
+   calibration's declared `capture_wall_time_s` must agree (±1 s) with the
+   capture time independently derived from the hash-verified source events —
+   a stale calibration can no longer be relabeled fresh (the P0).
+2. **Freshness covers the whole measurement.** The 24 h horizon binds both
+   `run_started` and the measured window END: `capture <= run_started` and
+   `window_end <= capture + max_age_s`, inclusive. Pre-run delays cannot
+   carry sampling past the declared validity of its calibration.
+3. **Version identity is validated generically.** Generic bundle validation
+   checks `reducer_version` against the closed known set and the §8.1
+   version/event-semantics pairing rules as a validation-time structured
+   problem (no wire-schema enum — frozen-arm byte replay preserved); an
+   unsupported `--reducer-version` yields the standard structured refusal,
+   never a traceback.
+4. **Stored verdicts are re-derived, never trusted.** The whole-window
+   verifier rejects duplicated NEG-8 core members (occurrence-count
+   semantics) and re-derives the bracket verdict from member evidence;
+   disagreement with the stored row is `whole_window_verdict_conflict`.
+   Delta-review strengthening (lead ruling): the re-derivation tolerances
+   come from the repo-REGISTERED campaign policy whose file hash matches the
+   row's `policy_sha256` — the one trust anchor that does not terminate at
+   bundle custody. Unknown policy hashes, and rows whose self-asserted
+   tolerances disagree with the registered policy, refuse
+   `whole_window_verdict_provenance_invalid` before re-derivation. The
+   custody boundary is otherwise explicit: a forger with bundle write access
+   can rewrite row-internal hashes consistently, but cannot mint a matching
+   tracked policy file.
+5. **Protocol identity is shape-authenticated.** A v2 `protocol_id` requires
+   the v2 estimator identity, capture/horizon fields, and v2 residual shape;
+   v1-shaped bodies relabeled v2 refuse `instrument_calibration_invalid`.
+6. **Admission attempts have timing semantics.** Attempt-ledger rows carry
+   strictly increasing, non-overlapping declared windows on the strict path;
+   violations refuse `environment_admission_missing`.
+7. **Sign-off evidence must be head-minted.** Any artifact or re-reduction
+   quoted as validation evidence for a head must be regenerated AT that head
+   (the pre-233e9e3 rederived calibration artifact lacks the horizon fields
+   the head requires, and the probe re-reductions predate the strict
+   calibration gates — both are re-minted at the final head before the
+   sign-off record is written). Claim-bearing measurement additionally
+   requires a fresh live [QUIET-MAC] v2 calibration within 24 h of
+   collection.

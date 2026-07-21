@@ -78,6 +78,7 @@ from joulewise.output_identity import (
 from joulewise.reduce import (
     AXI_REDUCER_VERSION,
     AXI_REDUCER_VERSIONS,
+    ReducerVersionError,
     reduce_bundle,
 )
 from joulewise.report import ReportError, generate_report
@@ -2220,6 +2221,7 @@ def main(argv: list[str] | None = None) -> int:
         SchemaError,
         BundleError,
         OutputIdentityError,
+        ReducerVersionError,
         ReportError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

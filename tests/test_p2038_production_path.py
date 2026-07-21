@@ -137,11 +137,14 @@ def install_complete_calibration(directory: Path) -> None:
         PROTOCOL_ID,
         PROTOCOL_V2_SHA256,
         RESIDUAL_REGION_METHOD,
+        capture_wall_time_from_events,
     )
 
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True)
-    evidence, raw_bytes, event_bytes = self_consistent_calibration()
+    evidence, raw_bytes, event_bytes = self_consistent_calibration(
+        first_endpoint_s=time.time() - 60.0
+    )
     (raw_dir / "powermetrics.plist").write_bytes(raw_bytes)
     (directory / "events.jsonl").write_bytes(event_bytes)
     bindings = {
@@ -161,7 +164,7 @@ def install_complete_calibration(directory: Path) -> None:
         "protocol_sha256": PROTOCOL_V2_SHA256,
     }
     evidence["protocol_id"] = PROTOCOL_ID
-    evidence["capture_wall_time_s"] = time.time()
+    evidence["capture_wall_time_s"] = capture_wall_time_from_events(event_bytes)
     evidence["max_age_s"] = MAX_AGE_S
     evidence["bindings"] = bindings
     canonical_bindings = json.dumps(

@@ -404,7 +404,14 @@ the controller evaluates CPU/combined-power criteria before workload invoke,
 records the result in the existing `environment_admission.attempts` ledger,
 and retries/aborts or flags according to the base policy. Attempt selection is
 explicit, so the final admission decision and final CPU telemetry cannot be
-paired across retries. Missing adapter telemetry fails closed on live clocks;
+paired across retries. Current-mint attempt rows bind each measurement to a
+finite `start_s`/`end_s` wall-clock (epoch) window; the ordered ledger must be
+strictly increasing and non-overlapping (`end_i <= start_(i+1)`). Missing or
+malformed timing refuses current claims, while frozen replay semantics remain
+unchanged. Because the windows are wall-clock, a backwards clock step between
+attempts mints an out-of-order ledger that strict validation permanently
+refuses — a fail-closed false refusal, never an admission; re-run the
+campaign member if this occurs. Missing adapter telemetry fails closed on live clocks;
 `FakeClock` fixture runs retain the pre-hookup GPU decision and record
 `cpu_admission_enforced: false` alongside the named missing-telemetry result.
 That field is an unconditional claim barrier in reducers/extraction; it is
@@ -427,7 +434,12 @@ membership is unbound), applies ordinary strict bundle validation, appends an
 `idle_admission_whole_window_verdict` row to the campaign log, and evaluates
 NEG-8 in explicit whole-window mode. A required missing reference or a
 threshold failure returns nonzero under production; exploratory remains
-non-claim-bearing and emits a labeled `flagged` verdict. The deployed
+non-claim-bearing and emits a labeled `flagged` verdict. At consumption, core
+member occurrences are counted rather than set-collapsed: byte-identical or
+same-ID duplicates invalidate provenance. The consumer also reloads the
+source-member gross-energy admissible sets and re-runs the bracket policy; a
+stored decision that disagrees with that result refuses
+`whole_window_verdict_conflict`. The deployed
 production extension is:
 
 ```json

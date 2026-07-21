@@ -139,6 +139,42 @@ class BundleValidationBugPins(BundleAuditCase):
                 self.assertEqual(reader.is_complete(), should_be_complete)
                 self.assertEqual(summary_problems == [], should_be_complete, summary_problems)
 
+    def test_generic_validation_rejects_052_summary_retagged_as_061(self) -> None:
+        # F3 defect shape: generic validation used to accept the closed-version
+        # label without checking the event-semantics/AXI shape paired to it.
+        bundle = self.make_complete_bundle("audit-crossed-061-label")
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.6.1"
+        summary_path.write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = BundleReader(bundle).problems()
+        self.assertTrue(
+            any("reducer/event semantics pairing is invalid" in item for item in problems),
+            problems,
+        )
+        self.assertTrue(
+            any("requires AXI summary fields" in item for item in problems),
+            problems,
+        )
+
+    def test_generic_validation_reports_unhashable_reducer_label(self) -> None:
+        bundle = self.make_complete_bundle("audit-list-reducer-label")
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["summary_provenance"]["reducer_version"] = ["0.6.1"]
+        summary_path.write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = BundleReader(bundle).problems()
+        self.assertTrue(
+            any("reducer_version is unsupported" in item for item in problems),
+            problems,
+        )
+
     # B3: default bundle validation parses metadata.json but never requires it to be an object.
     def test_validate_bundle_rejects_metadata_non_object(self) -> None:
         bundle = self.make_complete_bundle("audit-metadata-list")

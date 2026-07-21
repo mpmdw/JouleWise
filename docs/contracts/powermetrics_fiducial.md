@@ -4,10 +4,11 @@ Contract for `runs/instrument_validation/<validation_id>/` artifacts and the
 `B_fiducial` bound consumed by reducer 0.5.1/0.6.1 under their frozen replay
 rule `B_effective = max(B_bundle, B_fiducial)`. Reducer 0.5.2/0.6.2 replaces
 that under-composed mint rule with
-`B_effective = B_bundle + B_fiducial`: the bundle-local censored anchor
-interval and calibrated instrument emission lag constrain disjoint causal
-links, so neither interval is proven to contain the other. The full composed
-bound drives both the continuous anchor-shift scan and every timing license.
+`B_effective = B_bundle + B_fiducial + wall_minus_monotonic_span`: the
+bundle-local censored anchor interval, calibrated instrument emission lag,
+and wall/monotonic clock-span discrepancy constrain distinct causal links, so
+none is proven to contain another. The full composed bound drives both the
+continuous anchor-shift scan and every timing license.
 
 The ONE home for the estimator and protocol constants is
 `joulewise/powermetrics_fiducial.py` plus the executable protocol file
@@ -35,31 +36,23 @@ rules, and fail-closed semantics.
 
 ## Estimator
 
-Fit the interval-average model
+The current v2 estimator fits the interval-average model
 `y_i = b + A * |I_i INTERSECT [t_on + d_on, t_off + d_off]| / |I_i|`
 with a robust constrained loss (Huber; amplitude pinned to the plateau
-median; coordinate descent over the two edge shifts). The reported residual
-projection scans both coordinate slices plus the common-shift and
-opposite-shift joint diagonals. The common-shift diagonal is mandatory because
-correlated onset/offset latency valleys are invisible to fixed-other-edge
-slices; the artifact records this coverage assumption and does not claim a
-probabilistic confidence region. NEVER timestamp the
-first above-threshold interval endpoint - that bakes in up to one cadence of
-bias. Per-pulse onset/offset residual intervals are the contiguous
-loss-tolerance regions around the fitted shifts, widened by the event-stamp
-uncertainty.
-
-Estimator revision `joint_loss_sublevel_interval_branch_v2` additively
-supersedes the preceding directional-projection coverage assumption. It uses
+median). Estimator revision `joint_loss_sublevel_interval_branch_v2` uses
 analytic interval branch-and-bound over the full accepted two-dimensional
 loss region: overlap monotonicity supplies a rigorous loss lower bound for
 each rectangle; a rectangle is discarded only when that lower bound exceeds
 the acceptance threshold; retained rectangles are bisected to at most
 0.1 ms on both axes and their full extents are included. This dominates all
 points between resolution cells and therefore proves deterministic coverage
-of the complete accepted region. The older axis/common/opposite-diagonal
-description remains the historical v1 artifact method, not a coverage claim
-for v2.
+of the complete accepted region. The older v1 estimator scanned the two
+coordinate slices plus common- and opposite-shift diagonals; that scan
+geometry describes historical v1 artifacts only and is not a coverage claim
+for the current estimator. NEVER timestamp the first above-threshold interval
+endpoint - that bakes in up to one cadence of bias. Per-pulse onset/offset
+residual intervals are the contiguous loss-tolerance regions around the
+fitted shifts, widened by the event-stamp uncertainty.
 
 `B_fiducial = max over all onset/offset residual intervals of
 max(|r_lower|, |r_upper|)`. Median/p95 are recorded as diagnostics only and
@@ -177,12 +170,13 @@ deterministic branch-and-bound coverage of the accepted two-edge loss region.
 
 V2 extends the binding vector with `estimator_revision` and
 `protocol_sha256`; those fields are mandatory only for v2 so the sealed v1
-artifact remains verifiable. Claim-bearing reduction never trusts either
-identity's stored status or scalar alone: it refits the hash-verified raw
-plist and event ledger and consumes
-`max(B_stored, B_fresh_current_estimator)`. Thus legacy v1 evidence can remain
-auditable without retroactively rewriting it, while its older stored bound can
-only be widened by the current physical re-derivation.
+artifact remains historically auditable. Current claim-bearing mint and
+strict-physics reduction require protocol v2; a v1-shaped body relabeled as
+v2 is invalid. The sealed v1 identity remains usable only under the frozen
+historical replay semantics, not as evidence for a newly minted claim. To use
+the same primary bytes on the current path, re-derive them into a hash-bound
+v2 artifact, which refits the raw plist and event ledger and consumes
+`max(B_stored, B_fresh_current_estimator)`.
 
 The live harness now loads protocol v2. Its `--rederive-from ... --output ...`
 mode performs no live capture: it verifies the source manifest and primary

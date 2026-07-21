@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -17,6 +18,8 @@ from typing import Any
 from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
     NEG8_BRACKET_SCHEMA,
+    Neg8BracketPolicy,
+    evaluate_neg8_bracket,
 )
 from joulewise.bundle import sanitize_id_component
 
@@ -341,6 +344,148 @@ def _manifest_members(
     return result
 
 
+def _neg8_position(role: Any, sentinel_position: Any) -> str | None:
+    """Interpret the three campaign-manifest NEG-8 role spellings."""
+
+    if role == "neg8_daily_reference_start":
+        return "start" if sentinel_position in (None, "start") else "invalid"
+    if role == "neg8_daily_reference_end":
+        return "end" if sentinel_position in (None, "end") else "invalid"
+    if role == "neg8_daily_reference":
+        return sentinel_position if sentinel_position in {"start", "end"} else "invalid"
+    return None
+
+
+def _gross_energy_evidence(bundle_path: Path) -> dict[str, float] | None:
+    """Re-read the NEG-8 admissible set from one member summary."""
+
+    try:
+        # Strict UTF-8 only (json.loads on bytes auto-detects wider encodings).
+        summary = json.loads(
+            (bundle_path / "summary_metrics.json").read_bytes().decode("utf-8")
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(summary, Mapping):
+        return None
+    gross = summary.get("gross_energy_j")
+    envelopes = summary.get("energy_anchor_shift_envelopes")
+    envelope = (
+        envelopes.get("/gross_energy_j") if isinstance(envelopes, Mapping) else None
+    )
+    if not isinstance(envelope, Mapping):
+        return None
+    fields = (gross, envelope.get("point_j"), envelope.get("lower_j"), envelope.get("upper_j"))
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        for value in fields
+    ):
+        return None
+    gross_value, point, lower, upper = (float(value) for value in fields)
+    if (
+        not math.isclose(point, gross_value, rel_tol=1e-9, abs_tol=1e-12)
+        or lower <= 0.0
+        or not lower <= point <= upper
+    ):
+        return None
+    return {"point_j": point, "lower_j": lower, "upper_j": upper}
+
+
+REGISTERED_POLICY_DIR = (
+    Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
+)
+
+
+def _registered_bracket_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
+    """Resolve NEG-8 bracket tolerances from a repo-registered policy.
+
+    The verdict row's ``policy_sha256`` is the hash of the campaign-policy
+    file bytes.  Registered policy files are the only trust anchor the
+    claim-time verifier has that does not terminate at bundle custody: a
+    forged row can rewrite its own tolerances and hashes consistently, but it
+    cannot mint a matching tracked policy file.  Unknown hashes fail closed.
+    """
+
+    if not isinstance(policy_sha256, str) or len(policy_sha256) != 64:
+        return None
+    try:
+        candidates = sorted(REGISTERED_POLICY_DIR.glob("*.json"))
+    except OSError:
+        return None
+    for path in candidates:
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        if hashlib.sha256(raw).hexdigest() != policy_sha256:
+            continue
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, ValueError):
+            return None
+        extension = (
+            payload.get("idle_admission_extension")
+            if isinstance(payload, Mapping)
+            else None
+        )
+        bracket = (
+            extension.get("neg8_bracket")
+            if isinstance(extension, Mapping)
+            else None
+        )
+        return bracket if isinstance(bracket, Mapping) else None
+    return None
+
+
+def _derived_neg8_decision(
+    manifests: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    policy_value: Any,
+) -> str | None:
+    """Re-derive a verdict from source-member summaries, never the stored row."""
+
+    try:
+        policy = Neg8BracketPolicy.from_mapping(policy_value)
+    except (TypeError, ValueError):
+        return None
+    references: dict[str, list[dict[str, float] | None]] = {
+        "start": [],
+        "end": [],
+    }
+    invalid_role = False
+    for manifest in manifests:
+        members = manifest.get("members")
+        if not isinstance(members, list):
+            return None
+        for member in members:
+            if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                continue
+            position = _neg8_position(
+                member.get("role"), member.get("sentinel_position")
+            )
+            if position is None:
+                continue
+            if position == "invalid":
+                invalid_role = True
+                continue
+            bundle_ids = member.get("bundle_ids")
+            if not isinstance(bundle_ids, list):
+                return None
+            for bundle_id in bundle_ids:
+                if not isinstance(bundle_id, str) or not bundle_id:
+                    return None
+                references[position].append(
+                    _gross_energy_evidence(runs_root / bundle_id)
+                )
+    start = references["start"][0] if len(references["start"]) == 1 else None
+    end = references["end"][0] if len(references["end"]) == 1 else None
+    if invalid_role or len(references["start"]) > 1 or len(references["end"]) > 1:
+        start = end = None
+    return evaluate_neg8_bracket(start, end, policy)["decision"]
+
+
 def _validate_row(
     row: Mapping[str, Any], runs_root: Path, referenced: set[str]
 ) -> tuple[bool, tuple[str, ...]]:
@@ -383,6 +528,7 @@ def _validate_row(
         else None
     )
     covered_by_sources: set[str] = set()
+    verified_source_manifests: list[Mapping[str, Any]] = []
     if not isinstance(descriptors, list) or not descriptors:
         reasons.add("whole_window_verdict_provenance_invalid")
     else:
@@ -429,6 +575,7 @@ def _validate_row(
                 reasons.add("whole_window_verdict_provenance_invalid")
                 continue
             covered_by_sources.update(members)
+            verified_source_manifests.append(manifest)
     if not set(bundle_ids).issubset(covered_by_sources):
         reasons.add("whole_window_verdict_provenance_invalid")
 
@@ -440,6 +587,26 @@ def _validate_row(
             reasons.add("whole_window_neg8_verdict_missing")
         elif row.get("status") != "passed" or bracket.get("decision") != "passed":
             reasons.add("whole_window_neg8_verdict_failed")
+        if isinstance(bracket, Mapping):
+            # Tolerances come from the repo-registered policy matching the
+            # row's policy_sha256, never from the row's self-asserted copy —
+            # and the self-asserted copy must agree with the registered one
+            # (a loosened-tolerance forgery is provenance-invalid even before
+            # re-derivation).
+            registered_policy = _registered_bracket_policy(policy_sha)
+            if (
+                registered_policy is None
+                or bracket.get("policy") != registered_policy
+            ):
+                reasons.add("whole_window_verdict_provenance_invalid")
+            else:
+                derived_decision = _derived_neg8_decision(
+                    verified_source_manifests, runs_root, registered_policy
+                )
+                if derived_decision is None:
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                elif bracket.get("decision") != derived_decision:
+                    reasons.add("whole_window_verdict_conflict")
         if not isinstance(continuity, Mapping) or continuity.get("schema_version") != ADAPTER_CONTINUITY_SCHEMA:
             reasons.add("adapter_continuity_evidence_missing")
         elif continuity.get("decision") != "stable":
@@ -447,12 +614,27 @@ def _validate_row(
         if not isinstance(members, list) or not members:
             reasons.add("cpu_admission_core_missing")
         else:
-            member_ids = {
-                member.get("bundle_id")
-                for member in members
-                if isinstance(member, Mapping)
-                and isinstance(member.get("bundle_id"), str)
-            }
+            member_ids: list[str] = []
+            member_digests: list[str] = []
+            for member in members:
+                if not isinstance(member, Mapping):
+                    continue
+                bundle_id = member.get("bundle_id")
+                if isinstance(bundle_id, str) and bundle_id:
+                    member_ids.append(bundle_id)
+                try:
+                    member_digests.append(canonical_sha256(member))
+                except (TypeError, ValueError):
+                    pass
+            # Occurrence count is evidence.  Set collapse must not turn two
+            # byte-identical or same-ID members into one authoritative row.
+            if (
+                len(member_ids) != len(members)
+                or len(set(member_ids)) != len(member_ids)
+                or len(member_digests) != len(members)
+                or len(set(member_digests)) != len(member_digests)
+            ):
+                reasons.add("whole_window_verdict_provenance_invalid")
             if not referenced.issubset(member_ids):
                 reasons.add("whole_window_verdict_coverage_incomplete")
             if any(
