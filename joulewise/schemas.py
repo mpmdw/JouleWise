@@ -555,7 +555,7 @@ class CampaignPolicy:
     idle_admission: IdleAdmissionPolicy
     cooldown: CooldownPolicy
     idle_admission_extension: IdleAdmissionExtension | None = None
-    post_window_sampling_dwell_s: float = 0.0
+    post_window_sampling_dwell_s: float = 1.0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
@@ -626,11 +626,11 @@ class CampaignPolicy:
             idle_admission_extension=extension,
             post_window_sampling_dwell_s=(
                 _optional_float(
-                    data.get("post_window_sampling_dwell_s", 0.0),
+                    data.get("post_window_sampling_dwell_s", 1.0),
                     "campaign_policy.post_window_sampling_dwell_s",
-                    minimum=0.0,
+                    minimum=1.0,
                 )
-                or 0.0
+                or 1.0
             ),
         )
 

@@ -163,6 +163,26 @@ class RunVerbTests(CliRunTestCase):
             1.0,
         )
 
+    def test_run_rejects_subsecond_powermetrics_dwell_before_controller(self) -> None:
+        config_path = self.write_config("cli-post-window-dwell-short")
+        payload = json.loads(config_path.read_text())
+        payload["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_path.write_text(json.dumps(payload))
+        with patch("joulewise.cli.run_benchmark") as controller_run:
+            code, _out, err = _run(
+                [
+                    "run",
+                    str(config_path),
+                    "--runs-dir",
+                    str(self.runs_dir),
+                    "--post-window-sampling-dwell-s",
+                    "0.999",
+                ]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("must be at least 1.0", err)
+        controller_run.assert_not_called()
+
     def test_run_verb_binds_fake_clock_only_for_all_mock_backends(self) -> None:
         cases = [
             ("mock", "mock", FakeClock),

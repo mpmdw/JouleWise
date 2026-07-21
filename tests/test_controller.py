@@ -2076,6 +2076,11 @@ class RunContextSeamTests(ControllerTestCase):
 
 
 class SamplingWindowTests(ControllerTestCase):
+    def test_non_campaign_powermetrics_dwell_default_is_one_second(self) -> None:
+        from joulewise.controller import DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S
+
+        self.assertEqual(DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S, 1.0)
+
     """2N.2 (D-026): the measured window excludes sampler start/stop latency."""
 
     def run_with_latency(
@@ -2214,6 +2219,21 @@ class SamplingWindowTests(ControllerTestCase):
             if event["event_type"] == "sampling_stopped"
         )
         self.assertEqual(zero_stopped, dwell_stopped)
+
+    def test_powermetrics_rejects_subsecond_post_window_dwell_before_collection(self) -> None:
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = "tail-subsecond-refusal"
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config = BenchmarkConfig.from_mapping(data)
+
+        with self.assertRaisesRegex(ValueError, "at least 1.0 s"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                FakeClock(start=1_700_000_000.0),
+                post_window_sampling_dwell_s=0.999,
+            )
+        self.assertFalse((self.runs_root / "tail-subsecond-refusal").exists())
 
     def test_stage_window_still_contains_the_latency(self) -> None:
         # The stage boundaries DO include the simulated latency - proving the

@@ -422,6 +422,29 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             "cpu_admission_enforced": True,
             "cpu_admission": {"admitted": True},
         }
+        clean_admission = {
+            "schema_version": "joulewise.environment_admission.v1",
+            "critical_environment_passed": True,
+            "reference_provenance_present": True,
+            "per_run_environment_evaluation": {
+                "schema_version": "joulewise.environment_evaluation.v1",
+                "eligible": True,
+                "snapshot_sha256": "ab" * 32,
+            },
+            "decision": "admitted",
+            "claim_reason": None,
+            "attempts": [clean_row],
+            "guard_observations": [
+                {
+                    "phase": phase,
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                }
+                for phase in ("before_attempt_1", "after_attempt_1")
+            ],
+        }
         cases = (
             ([clean_row, {**clean_row, "attempt": 1}], "admitted"),
             ([{**clean_row, "attempt": 2}, clean_row], "admitted"),
@@ -461,10 +484,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             (bundle / "metadata.json").write_text(
                 json.dumps(
                     {
-                        "environment_admission": {
-                            "decision": "admitted",
-                            "attempts": [clean_row],
-                        }
+                        "environment_admission": clean_admission
                     }
                 )
                 + "\n",

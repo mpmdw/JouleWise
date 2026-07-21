@@ -28,7 +28,7 @@ The implementation MUST use these independent version axes:
 | Config base schema | `0.1` | Remains `0.1`; AXI does not consume reserved config `0.2`. |
 | Config extension | `joulewise.axi_decode_config.v1` | Present only on AXI request/burst configs and included in normalized `config.json` identity. |
 | Event semantics | `joulewise.events.v2` | Recorded in `metadata.event_semantics_version`; absent means the historical event arm, never an inferred v2. |
-| Summary reducer | `0.6.0` | First request/burst-aware reducer; `0.4.1`, `0.4.2`, and `0.5.0` retain exact frozen arms. |
+| Summary reducer | `0.6.2` (current claim-eligible mint) | `0.6.0` was the first request/burst-aware reducer and stays byte-frozen, as do replay-only `0.6.1` and the pre-AXI `0.4.1`/`0.4.2`/`0.5.0` arms; see §8.1 for the full version matrix. |
 | Generic analysis registry | `joulewise.analysis_registry.v2` | Sibling of the AP-2-specific v1 registry. |
 | Generic analysis manifest | `joulewise.analysis_manifest.v2` | Sibling of AP-2 v1; it does not reinterpret v1 bytes. |
 | Campaign attempt ledger | `joulewise.attempt_ledger.v1` | Complete deterministic attempt history for each generic-manifest Entry/cell. |
@@ -647,7 +647,7 @@ The validator proves agreement among levels 1-3. The reducer consumes only
 strictly paired evidence. Summary is derived and remains the one sanctioned
 post-finalize rewrite; it never overrides output evidence.
 
-## 8. Reducer 0.6.0
+## 8. Reducer version arms (0.6.0 frozen origin through the 0.6.2 mint)
 
 ### 8.1 Dispatch before interpretation
 

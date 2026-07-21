@@ -274,6 +274,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if config.hardware_target.telemetry_backend == TelemetryBackend.POWERMETRICS
         else None
     )
+    if (
+        post_window_sampling_dwell_s is not None
+        and post_window_sampling_dwell_s < 1.0
+    ):
+        raise SchemaError(
+            "--post-window-sampling-dwell-s must be at least 1.0 for powermetrics"
+        )
     frozen_cooldown_anchor = None
     if args.frozen_cooldown_anchor_json is not None:
         try:

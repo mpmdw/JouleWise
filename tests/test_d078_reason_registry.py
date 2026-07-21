@@ -12,8 +12,9 @@ from joulewise import idle_admission
 from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
 
 
-# F11 exception retired: the 2026-07-21 D-078 amendment registered the last
-# pending spellings, so every code vocabulary entry must appear in the log.
+# Pending-registration exception retired: the 2026-07-21 (second) D-078
+# amendment registered the confirmation-round spellings, so every code
+# vocabulary entry must appear in the decision log.
 PENDING_DECISION_LOG_REGISTRATION: set[str] = set()
 
 
@@ -149,6 +150,19 @@ class D078ReasonRegistryTests(unittest.TestCase):
         self.assertIn("member-level union over every", contract)
         self.assertIn("130 ms phase window under a 44 ms clock bound", contract)
         self.assertIn("intentional conservative gating", contract)
+
+    def test_cooldown_terminal_row_normativity_is_explicit(self) -> None:
+        contract = Path("docs/contracts/run_bundle_layout.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("final row of every cooldown raw JSONL", contract)
+        self.assertIn("`release` and `release_criteria_met_late`", contract)
+        self.assertIn("Cap-first precedence is exact", contract)
+        self.assertIn(
+            "`release == true` with `release_criteria_met_late == true`",
+            contract,
+        )
+        self.assertIn("rejected as unknown evidence", contract)
 
 
 if __name__ == "__main__":

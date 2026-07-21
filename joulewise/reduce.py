@@ -46,7 +46,7 @@ import json
 import math
 import statistics
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from joulewise.bundle_read import (
@@ -89,7 +89,10 @@ from joulewise.schemas import (
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
-from joulewise.environment_admission import environment_admission_refusals
+from joulewise.environment_admission import (
+    environment_admission_refusals,
+    post_run_environment_refusals,
+)
 
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
@@ -106,7 +109,8 @@ AXI_REDUCER_VERSION = "0.6.2"
 AXI_REDUCER_VERSIONS = frozenset(
     {AXI_FROZEN_REDUCER_VERSION, AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
 )
-ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_span_v2"
+FROZEN_ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_span_v2"
+ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_corners_v3"
 RAW_POWERMETRICS_NAME = "powermetrics.plist"
 MIN_PHASE_SAMPLES = 3
 SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
@@ -682,20 +686,12 @@ def _environment_claim_reasons(
 ) -> list[str]:
     reasons: list[str] = []
     admission = metadata.get("environment_admission")
-    if isinstance(admission, dict) and strict:
-        decision = admission.get("decision")
-        claim_reason = admission.get("claim_reason")
-        # This is a closed channel: null is legal only for a clean admission,
-        # and the sole governed refusal spelling is the value below. Unknown
-        # spellings and decision/reason contradictions are malformed evidence,
-        # so they reuse the existing fail-closed refusal code.
-        clean = decision == "admitted" and claim_reason is None
-        refused = (
-            decision in {"flagged", "abort", "failed"}
-            and claim_reason == "environment_admission_failed"
-        )
-        if refused or not clean:
-            reasons.append("environment_admission_failed")
+    if strict:
+        telemetry_source = _telemetry_source(metadata)
+        if admission is not None or telemetry_source != "mock":
+            reasons.extend(environment_admission_refusals(admission))
+        if telemetry_source != "mock":
+            reasons.extend(post_run_environment_refusals(metadata))
     elif (
         isinstance(admission, dict)
         and admission.get("claim_reason") == "environment_admission_failed"
@@ -704,7 +700,7 @@ def _environment_claim_reasons(
     preflight = metadata.get("campaign_environment_preflight")
     if isinstance(preflight, dict) and isinstance(preflight.get("override"), dict):
         reasons.append("environment_override")
-    return reasons
+    return sorted(set(reasons))
 
 
 def _apply_environment_claim_barrier(
@@ -719,11 +715,18 @@ def _apply_environment_claim_barrier(
         gate = prechecks.get(key)
         if not isinstance(gate, dict):
             continue
-        existing = gate.get("reasons")
-        merged = set(existing if isinstance(existing, list) else [])
-        merged.update(reasons)
-        gate["reasons"] = sorted(merged)
-        gate["eligible"] = False
+        _merge_gate_reasons(
+            gate, reasons, include_inner_windows=strict
+        )
+    if strict:
+        for group_key in ("phase", "item", "block", "level"):
+            group = prechecks.get(group_key)
+            if isinstance(group, dict):
+                for gate in group.values():
+                    if isinstance(gate, dict):
+                        _merge_gate_reasons(
+                            gate, reasons, include_inner_windows=True
+                        )
     prechecks["throughput"] = {
         "eligible": False,
         "reasons": sorted(reasons),
@@ -753,13 +756,17 @@ def _apply_cpu_admission_claim_barrier(
             ):
                 gate = prechecks.get(key)
                 if isinstance(gate, dict):
-                    _merge_gate_reasons(gate, reasons)
+                    _merge_gate_reasons(
+                        gate, reasons, include_inner_windows=True
+                    )
             for group_key in ("phase", "item", "block", "level"):
                 group = prechecks.get(group_key)
                 if isinstance(group, dict):
                     for gate in group.values():
                         if isinstance(gate, dict):
-                            _merge_gate_reasons(gate, reasons)
+                            _merge_gate_reasons(
+                                gate, reasons, include_inner_windows=True
+                            )
             prechecks["throughput"] = {
                 "eligible": False,
                 "reasons": sorted(set(reasons)),
@@ -830,6 +837,42 @@ def _apply_cpu_admission_claim_barrier(
         ],
         "universal_claim_barrier": True,
     }
+
+
+def _negative_power_sample_present(reader: BundleReader) -> bool:
+    """Whether any finite rail sample could violate energy monotonicity."""
+
+    for index, row in enumerate(reader.trace_rows(), start=2):
+        try:
+            power_w = finite_float(
+                row.get("power_w"), f"power_trace.csv row {index} power_w"
+            )
+        except ValueError:
+            # The strict trace parser independently rejects malformed rows.
+            continue
+        if power_w < 0.0:
+            return True
+    return False
+
+
+def _apply_negative_power_claim_barrier(
+    prechecks: dict[str, Any], reader: BundleReader
+) -> None:
+    if not _negative_power_sample_present(reader):
+        return
+    reasons = ["negative_power_sample"]
+    for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
+        gate = prechecks.get(key)
+        if isinstance(gate, dict):
+            _merge_gate_reasons(gate, reasons, include_inner_windows=True)
+    for group_key in ("phase", "item", "block", "level"):
+        group = prechecks.get(group_key)
+        if isinstance(group, dict):
+            for gate in group.values():
+                if isinstance(gate, dict):
+                    _merge_gate_reasons(
+                        gate, reasons, include_inner_windows=True
+                    )
 
 
 def _windows_evidence_precheck(
@@ -1096,6 +1139,71 @@ def _verify_instrument_calibration(
     the ``clock_anchor_unresolved`` barrier (never a silent fallback to
     ``B_bundle`` alone)."""
 
+    def contained_file(
+        relative: Any, *, base: Path
+    ) -> Path | None:
+        if not isinstance(relative, str) or not relative:
+            return None
+        pure = PurePosixPath(relative)
+        if pure.is_absolute() or ".." in pure.parts or "." in pure.parts:
+            return None
+        try:
+            root = reader.path.resolve(strict=True)
+            candidate = (base / Path(*pure.parts)).resolve(strict=True)
+            candidate.relative_to(root)
+        except (OSError, ValueError):
+            return None
+        return candidate if candidate.is_file() else None
+
+    # The controller records the calibration custody manifest, but claim-time
+    # verification must independently authenticate it and every attached
+    # member.  This closes deletion/substitution after collection and refuses
+    # path traversal or symlink escapes before reading any bytes.  Custody is
+    # a current-mint (0.5.2/0.6.2) gate: the frozen 0.5.1/0.6.1 replay arms
+    # predate the manifest reference and must keep their committed semantics.
+    manifest_file: Path | None = None
+    manifest: dict[str, Any] | None = None
+    if strict_physics:
+        manifest_path = calibration.get("validation_manifest_path")
+        manifest_sha256 = calibration.get("validation_manifest_sha256")
+        manifest_file = contained_file(manifest_path, base=reader.path)
+        if (
+            manifest_file is None
+            or not isinstance(manifest_sha256, str)
+            or len(manifest_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in manifest_sha256)
+        ):
+            return None, "instrument_calibration_invalid"
+        try:
+            manifest_raw = manifest_file.read_bytes()
+            manifest = json.loads(manifest_raw)
+        except (OSError, UnicodeDecodeError, ValueError):
+            return None, "instrument_calibration_invalid"
+        if (
+            hashlib.sha256(manifest_raw).hexdigest() != manifest_sha256
+            or not isinstance(manifest, dict)
+            or manifest.get("schema_version")
+            != "joulewise.instrument_validation_manifest.v1"
+            or not isinstance(manifest.get("artifacts"), dict)
+            or not manifest["artifacts"]
+        ):
+            return None, "instrument_calibration_invalid"
+        for relative, expected_sha256 in manifest["artifacts"].items():
+            member = contained_file(relative, base=manifest_file.parent)
+            if (
+                member is None
+                or not isinstance(expected_sha256, str)
+                or len(expected_sha256) != 64
+                or any(char not in "0123456789abcdef" for char in expected_sha256)
+            ):
+                return None, "instrument_calibration_invalid"
+            try:
+                member_raw = member.read_bytes()
+            except OSError:
+                return None, "instrument_calibration_invalid"
+            if hashlib.sha256(member_raw).hexdigest() != expected_sha256:
+                return None, "instrument_calibration_invalid"
+
     b_fiducial = calibration.get("b_fiducial_s")
     artifact_sha256 = calibration.get("artifact_sha256")
     artifact_path = calibration.get("artifact_path")
@@ -1111,13 +1219,27 @@ def _verify_instrument_calibration(
         or not artifact_path
     ):
         return None, "instrument_calibration_invalid"
-    # Bundle-relative reference only: the pure reducer never reads outside the
-    # bundle tree (no absolute path, no parent traversal).
-    if artifact_path.startswith("/") or ".." in Path(artifact_path).parts:
-        return None, "instrument_calibration_artifact_path_unsafe"
-    artifact_file = reader.path / artifact_path
-    if not artifact_file.is_file():
-        return None, "instrument_calibration_artifact_missing"
+    if strict_physics:
+        assert manifest_file is not None and manifest is not None
+        artifact_file = contained_file(artifact_path, base=reader.path)
+        if artifact_file is None:
+            return None, "instrument_calibration_invalid"
+        try:
+            artifact_member = artifact_file.relative_to(
+                manifest_file.parent
+            ).as_posix()
+        except ValueError:
+            return None, "instrument_calibration_invalid"
+        if manifest["artifacts"].get(artifact_member) != artifact_sha256:
+            return None, "instrument_calibration_invalid"
+    else:
+        # Frozen replay arms: the committed bundle-relative reference checks,
+        # byte-for-byte semantics with distinct reason spellings.
+        if artifact_path.startswith("/") or ".." in Path(artifact_path).parts:
+            return None, "instrument_calibration_artifact_path_unsafe"
+        artifact_file = reader.path / artifact_path
+        if not artifact_file.is_file():
+            return None, "instrument_calibration_artifact_missing"
     try:
         raw = artifact_file.read_bytes()
     except OSError:
@@ -1132,9 +1254,12 @@ def _verify_instrument_calibration(
         return None, "instrument_calibration_artifact_unparseable"
 
     from joulewise.powermetrics_fiducial import (
+        CAPTURE_TIME_FIELD,
         LEGACY_BINDING_FIELDS,
+        MAX_AGE_S,
         PROTOCOL_ID,
         PROTOCOL_V2_SHA256,
+        REPLAY_PROTOCOL_V2_SHA256,
         PULSE_COUNT,
         RESIDUAL_REGION_METHOD,
         SUPPORTED_PROTOCOL_IDS,
@@ -1148,6 +1273,35 @@ def _verify_instrument_calibration(
     evidence_protocol_id = evidence.get("protocol_id")
     if evidence_protocol_id not in SUPPORTED_PROTOCOL_IDS:
         return None, "instrument_calibration_protocol_mismatch"
+    if strict_physics and evidence_protocol_id != PROTOCOL_ID:
+        return None, "instrument_calibration_invalid"
+    if strict_physics:
+        capture_wall_time_s = evidence.get(CAPTURE_TIME_FIELD)
+        max_age_s = evidence.get("max_age_s")
+        collection_times = [
+            row.get("timestamp_s")
+            for row in reader.events()
+            if row.get("event_type") == "run_started"
+        ]
+        if (
+            isinstance(capture_wall_time_s, bool)
+            or not isinstance(capture_wall_time_s, int | float)
+            or not math.isfinite(float(capture_wall_time_s))
+            or float(capture_wall_time_s) < 0.0
+            or isinstance(max_age_s, bool)
+            or not isinstance(max_age_s, int | float)
+            or float(max_age_s) != float(MAX_AGE_S)
+            or len(collection_times) != 1
+            or isinstance(collection_times[0], bool)
+            or not isinstance(collection_times[0], int | float)
+            or not math.isfinite(float(collection_times[0]))
+            or not (
+                float(capture_wall_time_s)
+                <= float(collection_times[0])
+                <= float(capture_wall_time_s) + float(MAX_AGE_S)
+            )
+        ):
+            return None, "instrument_calibration_stale"
     binding_fields = (
         V2_BINDING_FIELDS
         if evidence_protocol_id == PROTOCOL_ID
@@ -1354,7 +1508,11 @@ def _verify_instrument_calibration(
         expected.update(
             {
                 "estimator_revision": RESIDUAL_REGION_METHOD,
-                "protocol_sha256": PROTOCOL_V2_SHA256,
+                "protocol_sha256": (
+                    PROTOCOL_V2_SHA256
+                    if strict_physics
+                    else REPLAY_PROTOCOL_V2_SHA256
+                ),
             }
         )
     for name, value in expected.items():
@@ -1424,17 +1582,21 @@ def _compose_causal_anchor_bound_s(
     fiducial_bound_s: float | None,
     *,
     reducer_version: str,
+    edge_span_s: float = 0.0,
 ) -> float:
     """Compose disjoint anchor-error links under the selected replay wire.
 
     Reducers 0.5.1/0.6.1 are frozen with their historical ``max`` rule.
     Current mint reducers 0.5.2/0.6.2 conservatively add the bundle-local
-    anchor interval to the independently calibrated emission-lag bound.
+    anchor interval, the independently calibrated emission-lag bound, and
+    the wall-minus-monotonic edge span (a third disjoint per-edge error
+    source), so the tail-sufficiency gate and the corner envelope cover the
+    same maximum edge excursion.
     """
 
     fiducial = fiducial_bound_s or 0.0
     if reducer_version in {REDUCER_VERSION, AXI_REDUCER_VERSION}:
-        return bundle_bound_s + fiducial
+        return bundle_bound_s + fiducial + edge_span_s
     return max(bundle_bound_s, fiducial)
 
 
@@ -1525,8 +1687,12 @@ def _derive_anchor_context(
         )
         if detail is not None:
             stable = (
-                "instrument_calibration_mismatch"
-                if detail == "instrument_calibration_mismatch"
+                detail
+                if detail
+                in {
+                    "instrument_calibration_mismatch",
+                    "instrument_calibration_stale",
+                }
                 else "instrument_calibration_invalid"
             )
             return _unresolved_anchor_context(stable)
@@ -1534,6 +1700,7 @@ def _derive_anchor_context(
         bundle_bound_s,
         fiducial_bound_s,
         reducer_version=reducer_version,
+        edge_span_s=edge_span_s,
     )
     cumulative_s = 0.0
     curve: list[TracePoint] = []
@@ -1802,7 +1969,7 @@ def _anchor_shift_envelope(
     lower_j = max(0.0, lower_j - independent_edge_bound_j)
     upper_j += independent_edge_bound_j
     return {
-        "method": ANCHOR_SHIFT_METHOD,
+        "method": FROZEN_ANCHOR_SHIFT_METHOD,
         "anchor_bound_s": bound_s,
         "point_j": point_j,
         "lower_j": lower_j,
@@ -1813,15 +1980,124 @@ def _anchor_shift_envelope(
     }
 
 
+def _corner_composed_anchor_shift_envelope(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    bundle_bound_s: float | None,
+    fiducial_bound_s: float | None,
+    wall_minus_monotonic_span_s: float = 0.0,
+) -> dict[str, float | str] | None:
+    """Current-wire envelope over common shift and two independent edges.
+
+    With nonnegative power, integrated energy is monotonically nonincreasing
+    in every window start and monotonically nondecreasing in every window
+    stop.  Therefore the extrema over independent ``eps_on``/``eps_off``
+    intervals occur at their four corners.  At each corner the remaining
+    ``delta_common`` dimension is evaluated by the existing breakpoint-exact
+    scanner above, so no continuous common-shift extremum is skipped.
+    """
+
+    if (
+        bundle_bound_s is None
+        or fiducial_bound_s is None
+        or not math.isfinite(bundle_bound_s)
+        or not math.isfinite(fiducial_bound_s)
+        or bundle_bound_s < 0.0
+        or fiducial_bound_s < 0.0
+        or not math.isfinite(wall_minus_monotonic_span_s)
+        or wall_minus_monotonic_span_s < 0.0
+        or not contributions
+        or any(
+            not curve
+            or not windows
+            or any(point.power_w < 0.0 for point in curve)
+            for curve, windows in contributions
+        )
+    ):
+        return None
+
+    point_j = _shift_energy_j(contributions, 0.0)
+    common_only = _anchor_shift_envelope(contributions, bundle_bound_s)
+    # The wall-minus-monotonic span is an independent per-edge clock error
+    # just like the fiducial emission lag, so it widens the corner offsets;
+    # corner evaluation stays exact under the same monotonicity argument and
+    # is tighter than the frozen v2 arm's 2*span*maxP additive term.
+    edge_bound_s = fiducial_bound_s + wall_minus_monotonic_span_s
+    corner_envelopes: list[dict[str, float | str]] = []
+    for eps_on_s in (-edge_bound_s, edge_bound_s):
+        for eps_off_s in (-edge_bound_s, edge_bound_s):
+            corner_contributions: list[tuple[list[TracePoint], list[Window]]] = []
+            for curve, windows in contributions:
+                shifted_windows = [
+                    Window(
+                        start_s=window.start_s + eps_on_s,
+                        end_s=window.end_s + eps_off_s,
+                    )
+                    for window in windows
+                ]
+                if any(window.end_s < window.start_s for window in shifted_windows):
+                    return None
+                corner_contributions.append((curve, shifted_windows))
+            corner = _anchor_shift_envelope(corner_contributions, bundle_bound_s)
+            if corner is None:
+                return None
+            corner_envelopes.append(corner)
+
+    if common_only is None or not corner_envelopes:
+        return None
+    lower_j = min(float(envelope["lower_j"]) for envelope in corner_envelopes)
+    upper_j = max(float(envelope["upper_j"]) for envelope in corner_envelopes)
+    if not (
+        math.isfinite(point_j)
+        and math.isfinite(lower_j)
+        and math.isfinite(upper_j)
+        and lower_j <= point_j <= upper_j
+    ):
+        return None
+    independent_edge_bound_j = max(
+        0.0,
+        float(common_only["lower_j"]) - lower_j,
+        upper_j - float(common_only["upper_j"]),
+    )
+    return {
+        "method": ANCHOR_SHIFT_METHOD,
+        "anchor_bound_s": bundle_bound_s + edge_bound_s,
+        "point_j": point_j,
+        "lower_j": lower_j,
+        "upper_j": upper_j,
+        "max_abs_delta_j": max(point_j - lower_j, upper_j - point_j),
+        "wall_minus_monotonic_independent_edge_span_s": (
+            wall_minus_monotonic_span_s
+        ),
+        "independent_edge_shift_bound_j": independent_edge_bound_j,
+    }
+
+
 def _translate_envelope(
     envelope: dict[str, float | str] | None,
     offset_j: float,
+    widen_j: float = 0.0,
 ) -> dict[str, float | str] | None:
-    if envelope is None:
+    """Translate an envelope, optionally widening both ends.
+
+    Idle subtraction removes ``P_idle * duration``, but under independent
+    edge shifts the effective duration varies by up to ``2 * edge_bound``,
+    so the subtracted term itself carries ``+/- widen_j = 2 * edge_bound *
+    P_idle`` of additional attainable range that pure translation of the
+    gross envelope omits (delta re-audit P1, 2026-07-21).
+    """
+
+    if envelope is None or not math.isfinite(widen_j) or widen_j < 0.0:
         return None
     translated = dict(envelope)
     for key in ("point_j", "lower_j", "upper_j"):
         translated[key] = float(envelope[key]) + offset_j
+    if widen_j:
+        translated["lower_j"] = float(translated["lower_j"]) - widen_j
+        translated["upper_j"] = float(translated["upper_j"]) + widen_j
+        translated["max_abs_delta_j"] = max(
+            float(translated["point_j"]) - float(translated["lower_j"]),
+            float(translated["upper_j"]) - float(translated["point_j"]),
+        )
     return translated
 
 
@@ -1885,7 +2161,12 @@ def _anchor_envelope_gate_reasons(
     return []
 
 
-def _merge_gate_reasons(gate: dict[str, Any], reasons: list[str]) -> None:
+def _merge_gate_reasons(
+    gate: dict[str, Any],
+    reasons: list[str],
+    *,
+    include_inner_windows: bool = False,
+) -> None:
     if not reasons:
         return
     existing = gate.get("reasons")
@@ -1893,6 +2174,14 @@ def _merge_gate_reasons(gate: dict[str, Any], reasons: list[str]) -> None:
     merged.update(reasons)
     gate["reasons"] = sorted(merged)
     gate["eligible"] = False
+    if include_inner_windows:
+        windows = gate.get("windows")
+        if isinstance(windows, list):
+            for inner in windows:
+                if isinstance(inner, dict):
+                    _merge_gate_reasons(
+                        inner, reasons, include_inner_windows=True
+                    )
 
 
 def _apply_anchor_claim_gates(
@@ -1902,8 +2191,14 @@ def _apply_anchor_claim_gates(
     *,
     gross_pointer: str,
     request_joint_bound_j: float | None,
+    include_inner_windows: bool = False,
 ) -> None:
     """Stamp the D-078 anchor barrier/envelope reasons onto the energy gates."""
+
+    def merge(gate: dict[str, Any], reasons: list[str]) -> None:
+        _merge_gate_reasons(
+            gate, reasons, include_inner_windows=include_inner_windows
+        )
 
     calibration_reasons = (
         [anchor_ctx.detail]
@@ -1911,6 +2206,7 @@ def _apply_anchor_claim_gates(
             "instrument_calibration_missing",
             "instrument_calibration_mismatch",
             "instrument_calibration_invalid",
+            "instrument_calibration_stale",
         }
         else []
     )
@@ -1928,14 +2224,14 @@ def _apply_anchor_claim_gates(
         ):
             gate = prechecks.get(key)
             if isinstance(gate, dict):
-                _merge_gate_reasons(gate, unresolved_reasons)
+                merge(gate, unresolved_reasons)
         for group_key in ("phase", "item", "block", "level"):
             group = prechecks.get(group_key)
             if not isinstance(group, dict):
                 continue
             for gate in group.values():
                 if isinstance(gate, dict):
-                    _merge_gate_reasons(gate, unresolved_reasons)
+                    merge(gate, unresolved_reasons)
         # Unresolved anchors stop here: envelope-gate stamping below is only
         # meaningful for resolved contexts, and the frozen 0.5.1/0.6.1 replay
         # arms pin this exact reason set for unresolved bundles.
@@ -1948,26 +2244,26 @@ def _apply_anchor_claim_gates(
         ):
             gate = prechecks.get(key)
             if isinstance(gate, dict):
-                _merge_gate_reasons(gate, resolved_refusal_reasons)
+                merge(gate, resolved_refusal_reasons)
         for group_key in ("phase", "item", "block", "level"):
             group = prechecks.get(group_key)
             if not isinstance(group, dict):
                 continue
             for gate in group.values():
                 if isinstance(gate, dict):
-                    _merge_gate_reasons(gate, resolved_refusal_reasons)
+                    merge(gate, resolved_refusal_reasons)
         return
     if calibration_reasons:
         for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
             gate = prechecks.get(key)
             if isinstance(gate, dict):
-                _merge_gate_reasons(gate, calibration_reasons)
+                merge(gate, calibration_reasons)
         for group_key in ("phase", "item", "block", "level"):
             group = prechecks.get(group_key)
             if isinstance(group, dict):
                 for gate in group.values():
                     if isinstance(gate, dict):
-                        _merge_gate_reasons(gate, calibration_reasons)
+                        merge(gate, calibration_reasons)
     for key, pointer in (
         ("gross_request", gross_pointer),
         ("gross_batch_group", gross_pointer),
@@ -1975,7 +2271,7 @@ def _apply_anchor_claim_gates(
     ):
         gate = prechecks.get(key)
         if isinstance(gate, dict):
-            _merge_gate_reasons(
+            merge(
                 gate,
                 _anchor_envelope_gate_reasons(
                     envelopes.get(pointer), request_joint_bound_j
@@ -2001,7 +2297,7 @@ def _apply_anchor_claim_gates(
             if not isinstance(gate, dict):
                 continue
             pointer = pointer_prefix + _json_pointer_token(str(member))
-            _merge_gate_reasons(
+            merge(
                 gate,
                 _anchor_envelope_gate_reasons(
                     envelopes.get(pointer), request_joint_bound_j
@@ -2019,6 +2315,9 @@ def _energy_anchor_envelopes_v05(
     output_token_count: int | None,
     bound_s: float | None,
     independent_edge_span_s: float = 0.0,
+    bundle_bound_s: float | None = None,
+    fiducial_bound_s: float | None = None,
+    current_wire: bool = False,
     item_windows: list[tuple[str, Window]] | None = None,
     block_windows: dict[str, list[Window]] | None = None,
     level_windows: dict[str, list[Window]] | None = None,
@@ -2033,15 +2332,36 @@ def _energy_anchor_envelopes_v05(
     (D-078) carry an envelope so their claim gates fail closed under
     anchor error just like the request-level metrics."""
 
+    def envelope(
+        contributions: list[tuple[list[TracePoint], list[Window]]],
+    ) -> dict[str, float | str] | None:
+        if current_wire:
+            return _corner_composed_anchor_shift_envelope(
+                contributions,
+                bundle_bound_s,
+                fiducial_bound_s or 0.0,
+                independent_edge_span_s,
+            )
+        return _anchor_shift_envelope(
+            contributions, bound_s, independent_edge_span_s
+        )
+
     envelopes: dict[str, Any] = {}
-    gross = _anchor_shift_envelope(
-        [(curve, [window])], bound_s, independent_edge_span_s
-    )
+    gross = envelope([(curve, [window])])
     if gross is not None:
         envelopes["/gross_energy_j"] = gross
         if idle_baseline is not None:
+            idle_widen_j = (
+                2.0
+                * ((fiducial_bound_s or 0.0) + independent_edge_span_s)
+                * idle_baseline.power_w_mean
+                if current_wire
+                else 0.0
+            )
             idle_env = _translate_envelope(
-                gross, -idle_baseline.power_w_mean * window.duration_s
+                gross,
+                -idle_baseline.power_w_mean * window.duration_s,
+                idle_widen_j,
             )
             envelopes["/idle_subtracted_energy_j"] = idle_env
             envelopes["/energy_request_j"] = dict(idle_env)
@@ -2054,29 +2374,21 @@ def _energy_anchor_envelopes_v05(
                     idle_env, 1.0 / output_token_count
                 )
     for phase, intervals in sorted((phase_windows or {}).items()):
-        env = _anchor_shift_envelope(
-            [(curve, intervals)], bound_s, independent_edge_span_s
-        )
+        env = envelope([(curve, intervals)])
         if env is not None:
             envelopes["/phase_energy_j/" + _json_pointer_token(phase)] = env
     for key, item_window in item_windows or []:
-        env = _anchor_shift_envelope(
-            [(curve, [item_window])], bound_s, independent_edge_span_s
-        )
+        env = envelope([(curve, [item_window])])
         if env is not None:
             envelopes["/suite_item_energy_j/" + _json_pointer_token(key)] = env
     for block_id, intervals in sorted((block_windows or {}).items()):
-        env = _anchor_shift_envelope(
-            [(curve, intervals)], bound_s, independent_edge_span_s
-        )
+        env = envelope([(curve, intervals)])
         if env is not None:
             envelopes[
                 "/suite_block_energy_j/" + _json_pointer_token(block_id)
             ] = env
     for level_key, intervals in sorted((level_windows or {}).items()):
-        env = _anchor_shift_envelope(
-            [(curve, intervals)], bound_s, independent_edge_span_s
-        )
+        env = envelope([(curve, intervals)])
         if env is not None:
             envelopes[
                 "/suite_level_energy_j/" + _json_pointer_token(level_key)
@@ -2619,10 +2931,15 @@ def _reduce_v060(
         if not anchor_ctx.unresolved:
             envelopes: dict[str, Any] = {}
             gross_env = _anchor_shift_envelope(
-                [(curve, [window])],
-                anchor_ctx.bound_s,
-                anchor_ctx.edge_span_s,
+                [(curve, [window])], anchor_ctx.bound_s, anchor_ctx.edge_span_s
             )
+            if reducer_version == AXI_REDUCER_VERSION:
+                gross_env = _corner_composed_anchor_shift_envelope(
+                    [(curve, [window])],
+                    anchor_ctx.bundle_bound_s,
+                    anchor_ctx.fiducial_bound_s or 0.0,
+                    anchor_ctx.edge_span_s,
+                )
             if gross_env is not None:
                 envelopes["/gross_energy_j"] = gross_env
                 if group_gross is not None:
@@ -2631,6 +2948,16 @@ def _reduce_v060(
                     envelopes["/idle_subtracted_energy_j"] = _translate_envelope(
                         gross_env,
                         -idle_baseline.power_w_mean * window.duration_s,
+                        (
+                            2.0
+                            * (
+                                (anchor_ctx.fiducial_bound_s or 0.0)
+                                + anchor_ctx.edge_span_s
+                            )
+                            * idle_baseline.power_w_mean
+                            if reducer_version == AXI_REDUCER_VERSION
+                            else 0.0
+                        ),
                     )
             for phase in sorted({phase for _source, phase in group_unions}):
                 contributions = [
@@ -2639,10 +2966,15 @@ def _reduce_v060(
                     if candidate == phase
                 ]
                 phase_env = _anchor_shift_envelope(
-                    contributions,
-                    anchor_ctx.bound_s,
-                    anchor_ctx.edge_span_s,
+                    contributions, anchor_ctx.bound_s, anchor_ctx.edge_span_s
                 )
+                if reducer_version == AXI_REDUCER_VERSION:
+                    phase_env = _corner_composed_anchor_shift_envelope(
+                        contributions,
+                        anchor_ctx.bundle_bound_s,
+                        anchor_ctx.fiducial_bound_s or 0.0,
+                        anchor_ctx.edge_span_s,
+                    )
                 if phase_env is not None:
                     envelopes[
                         "/phase_energy_j/" + _json_pointer_token(phase)
@@ -2681,7 +3013,10 @@ def _reduce_v060(
         _source_curve,
         static_batch=group_gross is not None,
         clock_bound_override_s=clock_bound_override_s,
-        strict_environment=reducer_version == AXI_REDUCER_VERSION,
+        strict_environment=(
+            reducer_version == AXI_REDUCER_VERSION
+            and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+        ),
     )
     if (
         reducer_version in {AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
@@ -2701,7 +3036,10 @@ def _reduce_v060(
             request_joint_bound_j=bound_terms.get(
                 "E_interpolation_joint_edge_bound_j"
             ),
+            include_inner_windows=reducer_version == AXI_REDUCER_VERSION,
         )
+    if reducer_version == AXI_REDUCER_VERSION:
+        _apply_negative_power_claim_barrier(window_precheck, reader)
     idle_mean_uncertainty = derive_idle_mean_uncertainty(
         reader,
         idle_baseline,
@@ -2977,6 +3315,9 @@ def _reduce(
                 output_token_count=output_token_count,
                 bound_s=anchor_ctx.bound_s,
                 independent_edge_span_s=anchor_ctx.edge_span_s,
+                bundle_bound_s=anchor_ctx.bundle_bound_s,
+                fiducial_bound_s=anchor_ctx.fiducial_bound_s,
+                current_wire=reducer_version == REDUCER_VERSION,
                 item_windows=[
                     (f"{item.item_index}:{item.item_id}", item.window)
                     for item in reader.item_windows()
@@ -3020,7 +3361,10 @@ def _reduce(
         energy_bound_terms_j,
         idle_baseline,
         clock_bound_override_s=clock_bound_override_s,
-        strict_environment=reducer_version == REDUCER_VERSION,
+        strict_environment=(
+            reducer_version == REDUCER_VERSION
+            and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
+        ),
     )
     if (
         reducer_version in ANCHOR_REDUCER_VERSIONS
@@ -3040,7 +3384,10 @@ def _reduce(
             request_joint_bound_j=energy_bound_terms_j.get(
                 "E_interpolation_joint_edge_bound_j"
             ),
+            include_inner_windows=reducer_version == REDUCER_VERSION,
         )
+    if reducer_version == REDUCER_VERSION:
+        _apply_negative_power_claim_barrier(window_evidence_precheck, reader)
     if idle_baseline is None:
         window_evidence_precheck["idle_subtracted_request"]["energy_evidence"] = (
             EnergyEvidence.ABSENT.value

@@ -74,6 +74,7 @@ ANCHOR_SHIFT_ENVELOPE_METHODS = frozenset(
     {
         ANCHOR_SHIFT_ENVELOPE_METHOD,
         "common_trace_shift_plus_independent_edge_span_v2",
+        "common_trace_shift_plus_independent_edge_corners_v3",
     }
 )
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"

@@ -113,7 +113,10 @@ from joulewise.whole_window import (  # noqa: E402
     validated_attempt_selection,
 )
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
-from joulewise.environment_admission import environment_admission_refusals  # noqa: E402
+from joulewise.environment_admission import (  # noqa: E402
+    environment_admission_refusals,
+    post_run_environment_refusals,
+)
 
 
 STATUSES = (
@@ -3256,6 +3259,18 @@ def idle_admission_core_verdict(
     neg8_starts: list[tuple[dict[str, float] | None, str | None]] = []
     neg8_ends: list[tuple[dict[str, float] | None, str | None]] = []
     for evaluation in evaluations:
+        if isinstance(evaluation.metadata, dict):
+            adapters = evaluation.metadata.get("adapters")
+            telemetry = (
+                adapters.get("telemetry") if isinstance(adapters, dict) else None
+            )
+            telemetry_name = (
+                telemetry.get("name") if isinstance(telemetry, dict) else None
+            )
+            if telemetry_name != "mock":
+                conditions.update(
+                    post_run_environment_refusals(evaluation.metadata)
+                )
         attempt = _final_idle_admission_attempt(evaluation)
         if attempt is None:
             conditions.add("idle_admission_attempt_ledger_invalid")
@@ -3764,6 +3779,12 @@ def _member_readiness_reasons(
         reasons.add("bundle_strict_invalid")
     if evaluation.status != "succeeded":
         reasons.add("bundle_status_not_succeeded")
+    if isinstance(evaluation.metadata, dict):
+        adapters = evaluation.metadata.get("adapters")
+        telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
+        telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
+        if telemetry_name != "mock":
+            reasons.update(post_run_environment_refusals(evaluation.metadata))
     cleanup_flags = {
         "runtime_cleanup_ok",
         "remote_cleanup_failed",
@@ -3967,6 +3988,9 @@ def _idle_admission_claim_barrier_reasons(core: Mapping[str, Any]) -> list[str]:
     """Map the advisory core surface onto claim-bearing refusal reasons."""
 
     reasons: set[str] = set()
+    conditions = core.get("conditions")
+    if isinstance(conditions, list) and "environment_admission_failed" in conditions:
+        reasons.add("environment_admission_failed")
     members = core.get("members")
     if not isinstance(members, list) or not members:
         reasons.add("cpu_admission_core_missing")

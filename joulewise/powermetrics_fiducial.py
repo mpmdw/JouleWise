@@ -35,7 +35,15 @@ from joulewise.uncertainty_evidence import (
 LEGACY_PROTOCOL_ID = "powermetrics_pulse_fiducial_v1"
 PROTOCOL_ID = "powermetrics_pulse_fiducial_v2"
 SUPPORTED_PROTOCOL_IDS = frozenset({LEGACY_PROTOCOL_ID, PROTOCOL_ID})
-PROTOCOL_V2_SHA256 = "7c7cebd0ee5c117cd4edc196eae37a037015474c972767ae9bf594e2e0e7e3da"
+PROTOCOL_V2_SHA256 = "82d8c3125ef25437a89916429578d60fe47cbba2beb5bf54eb39b55935cc3783"
+# The 0.5.1/0.6.1 replay arms froze their binding expectation at the
+# protocol_v2.json bytes current when they were minted; re-keying the live
+# constant must never change frozen replay dispositions.
+REPLAY_PROTOCOL_V2_SHA256 = (
+    "7c7cebd0ee5c117cd4edc196eae37a037015474c972767ae9bf594e2e0e7e3da"
+)
+CAPTURE_TIME_FIELD = "capture_wall_time_s"
+MAX_AGE_S = 86400
 PULSE_COUNT = 40
 WARMUP_PULSE_COUNT = 3
 PULSE_DURATION_S = 1.0
@@ -91,6 +99,7 @@ FIDUCIAL_DIAGNOSTIC_CODES = frozenset(
         "binding_fields_missing:",
         "pulse_count_below_protocol:",
         "raw_or_event_hash_missing_or_invalid",
+        "capture_time_missing_or_invalid",
     }
 )
 
@@ -169,6 +178,8 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
         "baseline_before_s": BASELINE_S,
         "baseline_after_s": BASELINE_S,
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
+        "capture_time_field": CAPTURE_TIME_FIELD,
+        "max_age_s": MAX_AGE_S,
         "primary_rail": PRIMARY_RAIL,
         "corroboration": (
             "cpu_power + gpu_power combined, corroboration only"
@@ -988,6 +999,7 @@ def instrument_evidence(
     artifact_sha256: Mapping[str, str],
     protocol_pulse_count: int = PULSE_COUNT,
     protocol_id: str = PROTOCOL_ID,
+    capture_wall_time_s: float | None = None,
 ) -> dict[str, Any]:
     """Assemble ``instrument_evidence.json`` content, failing closed.
 
@@ -1017,6 +1029,15 @@ def instrument_evidence(
         for name in ("raw/powermetrics.plist", "events.jsonl")
     )
     detection_reasons_ok = not detection.reasons
+    capture_time_ok = (
+        protocol_id != PROTOCOL_ID
+        or (
+            not isinstance(capture_wall_time_s, bool)
+            and isinstance(capture_wall_time_s, int | float)
+            and math.isfinite(float(capture_wall_time_s))
+            and float(capture_wall_time_s) >= 0.0
+        )
+    )
     valid = (
         detection.b_fiducial_s is not None
         and not missing
@@ -1025,6 +1046,7 @@ def instrument_evidence(
         and count_ok
         and required_hashes_ok
         and detection_reasons_ok
+        and capture_time_ok
     )
     reasons = list(detection.reasons)
     if missing:
@@ -1039,7 +1061,9 @@ def instrument_evidence(
         reasons.append("spurious_plateau_detected")
     if not required_hashes_ok:
         reasons.append("raw_or_event_hash_missing_or_invalid")
-    return {
+    if not capture_time_ok:
+        reasons.append("capture_time_missing_or_invalid")
+    payload = {
         "schema_version": "joulewise.instrument_evidence.v1",
         "protocol_id": protocol_id,
         "validation_id": validation_id,
@@ -1100,6 +1124,10 @@ def instrument_evidence(
             for fit in detection.fits
         ],
     }
+    if protocol_id == PROTOCOL_ID:
+        payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
+        payload["max_age_s"] = MAX_AGE_S
+    return payload
 
 
 def run_matmul_pulse(duration_s: float, buffers: Any = None) -> int:

@@ -494,6 +494,32 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(set(payload["bindings"]), set(self.bindings()))
         self.assertEqual(payload["pulse_count"], 3)
 
+    def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
+        detection = self.make_detection()
+        bindings = self.bindings(
+            pulse_protocol_id=PROTOCOL_ID,
+            estimator_revision=RESIDUAL_REGION_METHOD,
+            protocol_sha256=PROTOCOL_V2_SHA256,
+        )
+        kwargs = {
+            "bindings": bindings,
+            "validation_id": "v2-capture-time",
+            "artifact_sha256": {
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+            },
+            "protocol_pulse_count": 3,
+        }
+        missing = instrument_evidence(detection, **kwargs)
+        recorded = instrument_evidence(
+            detection, capture_wall_time_s=1_784_491_000.25, **kwargs
+        )
+
+        self.assertEqual(missing["status"], "invalid")
+        self.assertEqual(recorded["status"], "valid")
+        self.assertEqual(recorded["capture_wall_time_s"], 1_784_491_000.25)
+        self.assertEqual(recorded["max_age_s"], 86400)
+
     def test_any_detection_reason_forces_invalid_status(self) -> None:
         # F5 exact defect: structural fields and B were clean, but a registered
         # refusal reason still serialized status=valid.
@@ -685,6 +711,12 @@ class FrozenProtocolTests(unittest.TestCase):
             self.assertEqual(
                 fresh["bindings"]["protocol_sha256"], PROTOCOL_V2_SHA256
             )
+            source_times = [
+                float(json.loads(line)["timestamp_s"])
+                for line in events.splitlines()
+            ]
+            self.assertEqual(fresh["capture_wall_time_s"], min(source_times))
+            self.assertEqual(fresh["max_age_s"], 86400)
             (source / "events.jsonl").write_bytes(events + b"{}\n")
             with self.assertRaisesRegex(ValueError, "hash mismatch"):
                 validation_script.rederive_artifact(source, output)

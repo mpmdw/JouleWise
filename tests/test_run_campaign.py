@@ -747,6 +747,17 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(binding.policy.idle_admission.on_fail.value, "abort")
         self.assertEqual(binding.policy.post_window_sampling_dwell_s, 1.0)
 
+    def test_campaign_policy_rejects_subsecond_post_window_dwell(self) -> None:
+        from joulewise.schemas import SchemaError
+
+        payload = json.loads(TEST_CAMPAIGN_POLICY.read_text())
+        payload["post_window_sampling_dwell_s"] = 0.999
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "policy.json"
+            path.write_text(json.dumps(payload) + "\n")
+            with self.assertRaisesRegex(SchemaError, ">= 1.0"):
+                run_campaign_module.load_campaign_policy(str(path))
+
     def test_frozen_campaign_anchor_is_explicit_child_experiment_argument(self) -> None:
         from joulewise import cli as cli_module
         from joulewise.clock import FakeClock
@@ -858,11 +869,11 @@ class RunCampaignTests(unittest.TestCase):
             BASE_CONFIG,
             Path("runs"),
             None,
-            post_window_sampling_dwell_s=0.75,
+            post_window_sampling_dwell_s=1.0,
         )
         self.assertEqual(
             command[command.index("--post-window-sampling-dwell-s") + 1],
-            "0.75",
+            "1.0",
         )
 
     def test_parent_anchor_validator_has_canonical_child_parity(self) -> None:
@@ -5035,6 +5046,9 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "adapter_description": adapter_description,
                 },
                 "post_run_observation": {
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
                     "power_source": "AC Power",
                     "power": {
                         "adapter_watts": adapter_watts,
@@ -5046,6 +5060,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         }
         if admission_decision is not None:
             metadata["environment_admission"] = {
+                "schema_version": "joulewise.environment_admission.v1",
+                "critical_environment_passed": True,
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "schema_version": "joulewise.environment_evaluation.v1",
+                    "eligible": True,
+                    "snapshot_sha256": "ab" * 32,
+                },
                 "decision": admission_decision,
                 "claim_reason": (
                     None
@@ -5061,6 +5083,16 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                             "admitted": admission_decision == "admitted"
                         },
                     }
+                ],
+                "guard_observations": [
+                    {
+                        "phase": phase,
+                        "capture_skipped": False,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
+                    }
+                    for phase in ("before_attempt_1", "after_attempt_1")
                 ],
             }
         summary = {}
@@ -5160,6 +5192,18 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             section["conditions"], ["idle_admission_extension_unconfigured"]
         )
         self.assertIsNone(section["extension"])
+
+    def test_post_run_environment_condition_is_claim_barrier(self) -> None:
+        core = {
+            "conditions": ["environment_admission_failed"],
+            "members": [{"cpu_admission": {"decision": "admitted"}}],
+            "adapter_wattage_continuity": {"decision": "stable"},
+            "neg8_bracket": {"decision": "passed"},
+        }
+        self.assertIn(
+            "environment_admission_failed",
+            run_campaign_module._idle_admission_claim_barrier_reasons(core),
+        )
 
     def test_clean_members_pass_with_stable_wattage_and_neg8_bracket(self) -> None:
         binding = self._binding()
@@ -5463,8 +5507,22 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "adapter_watts": 140,
                     "adapter_description": "140W USB-C Power Adapter",
                 },
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                },
             },
             "environment_admission": {
+                "schema_version": "joulewise.environment_admission.v1",
+                "critical_environment_passed": True,
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "schema_version": "joulewise.environment_evaluation.v1",
+                    "eligible": True,
+                    "snapshot_sha256": "ab" * 32,
+                },
                 "decision": admission_decision,
                 "claim_reason": (
                     None
@@ -5486,6 +5544,17 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                         },
                     }
                     for n in range(1, final_attempt + 1)
+                ],
+                "guard_observations": [
+                    {
+                        "phase": phase,
+                        "capture_skipped": False,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
+                    }
+                    for n in range(1, final_attempt + 1)
+                    for phase in (f"before_attempt_{n}", f"after_attempt_{n}")
                 ],
             },
         }

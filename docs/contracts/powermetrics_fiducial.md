@@ -10,9 +10,11 @@ links, so neither interval is proven to contain the other. The full composed
 bound drives both the continuous anchor-shift scan and every timing license.
 
 The ONE home for the estimator and protocol constants is
-`joulewise/powermetrics_fiducial.py` plus the frozen protocol file
-`configs/calibration/powermetrics_fiducial/protocol_v1.json`; this contract
-fixes the artifact layout, binding rules, and fail-closed semantics.
+`joulewise/powermetrics_fiducial.py` plus the executable protocol file
+`configs/calibration/powermetrics_fiducial/protocol_v2.json`
+(`protocol_v1.json` remains byte-frozen as the historical v1 identity and is
+not loaded for execution); this contract fixes the artifact layout, binding
+rules, and fail-closed semantics.
 
 ## Protocol (`powermetrics_pulse_fiducial_v1`)
 

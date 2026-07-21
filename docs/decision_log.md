@@ -4164,3 +4164,77 @@ the layer accounting). Six rulings:
    fail-safe (it can only over-flag, never over-admit) and gating decisions
    read the per-metric leaves. Scope documented in
    `docs/contracts/run_bundle_layout.md`; no wire rename.
+
+### D-078 amendment — 2026-07-21 (second): two-edge envelope and confirmation-round rulings
+
+Recorded by the lead after the first confirmation round over `5093355`
+correctly withheld sign-off (fresh Sol xhigh audit; 8 confirmed findings, one
+P0). Rulings:
+
+1. **Corner-composed two-edge envelope (P0 repair).** The calibration fits
+   independent start-edge and stop-edge emission lags; a single common trace
+   shift under-covers because independent endpoint errors move energy by up
+   to `2·P·B_fiducial` even when a common shift cancels. The claim envelope
+   is now the extrema over start = `delta_common + eps_on`, stop =
+   `delta_common + eps_off` with `|delta_common| <= B_bundle` and
+   `|eps_on|, |eps_off| <= B_fiducial` independent. For nonnegative power the
+   energy is monotone in each edge separately, so exact extrema are attained
+   at the four edge corners with the common shift scanned continuously — the
+   existing breakpoint-exact scan run per corner. The per-edge corner offset
+   is `±(B_fiducial + wall_minus_monotonic_span)`: the span is a third
+   disjoint per-edge error source, folded into the corners (delta-review
+   amendment) rather than the frozen arms' cruder `2·span·maxP` additive
+   term, and the composed `anchor_bound_s` = `B_bundle + B_fiducial + span`
+   governs the tail-sufficiency gate identically. Idle-subtracted and
+   per-token envelopes additionally widen by `2·(B_fiducial + span)·P_idle`
+   because independent edges vary the subtracted idle duration (delta
+   re-audit catch). New registered method spelling for the 0.5.2/0.6.2
+   mints; v1/v2 spellings remain replay-read-only.
+2. **In-place revision of the unreleased mints.** Reducer 0.5.2 / AXI 0.6.2
+   were never merged or used for stored artifacts; their envelope semantics
+   are revised in place (no 0.5.3/0.6.3 inflation). Goldens regenerated and
+   hand-verified against the formula.
+3. **Registry additions.** The closed refusal vocabulary additionally
+   includes `negative_power_sample` (negative rail power reaching the
+   envelope/energy path breaks the monotonicity argument and refuses
+   fail-closed) and `instrument_calibration_stale` (calibration artifacts
+   now record capture wall time and a 24 h `max_age_s` validity horizon in
+   protocol_v2; claim-time verification refuses missing/invalid capture time
+   or age exceeded — a finite 40-pulse residual maximum is not an
+   out-of-sample bound without recency enforcement). Instrument-evidence
+   diagnostics additionally include `capture_time_missing_or_invalid`
+   (a v2 capture without a valid recorded capture wall time is invalid at
+   minting, with the reason stated rather than silent). All only refuse; the
+   PENDING_DECISION_LOG_REGISTRATION exception is retired with this entry.
+   Replay purity note: the 0.5.1/0.6.1 arms keep their frozen binding
+   expectation against the protocol_v2.json bytes current at their mint
+   (`REPLAY_PROTOCOL_V2_SHA256`); custody-manifest verification and the
+   staleness horizon are current-mint gates only.
+4. **Environment admission consumes the full evidence object.** The shared
+   validator fails closed on `critical_environment_passed`,
+   `reference_provenance_present`, per-run evaluation eligibility, guard
+   observations, and schema identity — and the post-run environment
+   observation passes through the failure predicate on claim/whole-window
+   paths (a post-run critical-environment failure refuses claim
+   eligibility). This closes the Window-A screensaver contamination class
+   end-to-end.
+5. **Calibration custody verified at claim time.** The reducer enforces the
+   validation-manifest reference: in-bundle containment, manifest hash, and
+   presence + sha256 of every manifest member; any failure refuses as
+   `instrument_calibration_invalid`. Current-era (0.5.2/0.6.2) claim-bearing
+   use requires a protocol_v2 calibration artifact.
+6. **Collection floors.** The 1.0 s post-window dwell minimum is enforced on
+   every collection path (controller default, schema minimum, campaign-policy
+   validation); sub-minimum configs refuse at validation. Scope spelling
+   (delta-review adjudication): controller/CLI pre-collection rejection
+   applies wherever powermetrics telemetry collects; mock-backend runs are
+   not dwell-gated at the controller (mock telemetry cannot reach any claim
+   path), while the campaign-policy schema minimum applies universally. Inner
+   phase/item/block/level window entries carry the whole-trace
+   anchor/calibration/tail barrier stamps whenever the top-level barrier
+   fires.
+7. **Cooldown terminal-evidence normativity documented.** The required
+   terminal JSONL row fields (`release`, `release_criteria_met_late`), the
+   cap-first precedence rule ("the cap is causal and wins"), and rejection
+   semantics are contract text in `docs/contracts/run_bundle_layout.md`,
+   matching `joulewise/cooldown.py` exactly.

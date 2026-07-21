@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import subprocess
 import sys
 import time
@@ -144,6 +145,33 @@ def trim_trace_after_warmups(
     return trim_trace_after_pulses(intervals, warmups)
 
 
+def capture_wall_time_from_events(events_raw: bytes) -> float:
+    """Recover the original capture start from immutable source events."""
+
+    timestamps: list[float] = []
+    try:
+        rows = [
+            json.loads(line)
+            for line in events_raw.decode("utf-8").splitlines()
+            if line.strip()
+        ]
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("source calibration events are malformed") from exc
+    for row in rows:
+        value = row.get("timestamp_s") if isinstance(row, dict) else None
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise ValueError("source calibration event time is malformed")
+        timestamps.append(float(value))
+    if not timestamps:
+        raise ValueError("source calibration events omit capture time")
+    return min(timestamps)
+
+
 def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     """Re-emit v2 evidence from an immutable capture without live collection."""
 
@@ -217,6 +245,9 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
             relative: hashlib.sha256(raw_by_name[relative]).hexdigest()
             for relative in ("raw/powermetrics.plist", "events.jsonl")
         },
+        capture_wall_time_s=capture_wall_time_from_events(
+            raw_by_name["events.jsonl"]
+        ),
     )
     payload["clock_anchor"] = stored.get("clock_anchor")
     payload["clock_anchor_resolved"] = True
@@ -496,6 +527,7 @@ def main() -> int:
             "events.jsonl": sha256_path(events_path),
             "power_trace.csv": sha256_path(trace_path),
         },
+        capture_wall_time_s=sampling_started.epoch_s,
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
     evidence_payload["clock_anchor_resolved"] = anchor_resolved

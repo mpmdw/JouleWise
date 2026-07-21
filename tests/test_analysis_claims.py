@@ -997,7 +997,7 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         self.assertIsNone(problem)
         self.assertEqual(
             envelope["method"],
-            "common_trace_shift_plus_independent_edge_span_v2",
+            "common_trace_shift_plus_independent_edge_corners_v3",
         )
         bounds, reasons = deterministic_bounds(
             _bounds_evidence(summary), self.GROSS_METRIC

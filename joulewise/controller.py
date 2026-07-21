@@ -86,6 +86,7 @@ from joulewise.environment import (
     empty_environment_snapshot,
     evaluate_environment_policy,
 )
+from joulewise.environment_admission import environment_observation_failure
 from joulewise.idle_admission import evaluate_cpu_idle_admission
 from joulewise.interfaces import (
     AttemptIdentity,
@@ -157,7 +158,7 @@ COOLDOWN_ROLLING_WINDOW_S = 30.0
 COOLDOWN_TOLERANCE = 0.10
 COOLDOWN_CAP_S = 300.0
 PRE_IDLE_SETTLE_S = 2.0
-DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S = 0.75
+DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S = 1.0
 CAMPAIGN_POLICY_PATH_ENV = "JOULEWISE_CAMPAIGN_POLICY_PATH"
 CAMPAIGN_POLICY_SHA256_ENV = "JOULEWISE_CAMPAIGN_POLICY_SHA256"
 CAMPAIGN_PREFLIGHT_JSON_ENV = "JOULEWISE_CAMPAIGN_PREFLIGHT_JSON"
@@ -314,9 +315,17 @@ def run_benchmark(
         isinstance(post_window_sampling_dwell_s, bool)
         or not isinstance(post_window_sampling_dwell_s, int | float)
         or not math.isfinite(float(post_window_sampling_dwell_s))
-        or float(post_window_sampling_dwell_s) < 0.0
+        or float(post_window_sampling_dwell_s) < (
+            1.0
+            if config.hardware_target.telemetry_backend
+            == TelemetryBackend.POWERMETRICS
+            else 0.0
+        )
     ):
-        raise ValueError("post-window sampling dwell must be a finite nonnegative number")
+        raise ValueError(
+            "post-window sampling dwell must be finite and at least 1.0 s "
+            "for powermetrics collection"
+        )
     writer = RunBundleWriter.create(runs_root, config, clock)
     if attachment is not None:
         attachment.install(writer.path)
@@ -1135,17 +1144,7 @@ class _Execution:
     def _admission_environment_failure(
         observation: dict[str, Any],
     ) -> str | None:
-        display_state = observation.get("display_power_state")
-        screensaver = observation.get("screensaver_engaged")
-        if display_state == "any_awake":
-            return "display became or remained awake during idle admission"
-        if screensaver is True:
-            return "screensaver became or remained engaged during idle admission"
-        if display_state not in {"all_asleep"}:
-            return "display power state is unknown during idle admission"
-        if screensaver is not False:
-            return "screensaver engagement state is unknown during idle admission"
-        return None
+        return environment_observation_failure(observation)
 
     def _stage_warmup(self) -> None:
         self._begin_stage("warmup")

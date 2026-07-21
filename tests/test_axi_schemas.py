@@ -117,6 +117,14 @@ def v060_summary() -> SummaryMetricsV060:
 
 
 class AxiConfigSchemaTests(unittest.TestCase):
+    def test_frozen_060_reducer_identity_is_explicitly_named(self) -> None:
+        import joulewise.axi_decode_config as axi_config
+
+        self.assertEqual(
+            axi_config.FROZEN_AXI_060_SUMMARY_REDUCER_VERSION, "0.6.0"
+        )
+        self.assertFalse(hasattr(axi_config, "SUMMARY_REDUCER_VERSION"))
+
     def test_non_axi_normalized_config_bytes_remain_pinned(self) -> None:
         raw = load(ROOT / "configs" / "examples" / "mock_local.json")
         emitted = normalized_json_bytes(BenchmarkConfig.from_mapping(raw).to_dict())

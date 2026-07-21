@@ -132,6 +132,12 @@ def install_complete_calibration(directory: Path) -> None:
     # frame and a dummy event with forty invented zero-residual rows; F2 now
     # correctly rejects that non-physical combination.
     from tests.test_reduce import self_consistent_calibration
+    from joulewise.powermetrics_fiducial import (
+        MAX_AGE_S,
+        PROTOCOL_ID,
+        PROTOCOL_V2_SHA256,
+        RESIDUAL_REGION_METHOD,
+    )
 
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True)
@@ -149,9 +155,14 @@ def install_complete_calibration(directory: Path) -> None:
             "powermetrics_native_second_censored_intersection_v1"
         ),
         "mlx_version": "p2038-test-mlx",
-        "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
+        "pulse_protocol_id": PROTOCOL_ID,
         "power_policy": "ac_high_power",
+        "estimator_revision": RESIDUAL_REGION_METHOD,
+        "protocol_sha256": PROTOCOL_V2_SHA256,
     }
+    evidence["protocol_id"] = PROTOCOL_ID
+    evidence["capture_wall_time_s"] = time.time()
+    evidence["max_age_s"] = MAX_AGE_S
     evidence["bindings"] = bindings
     canonical_bindings = json.dumps(
         bindings, sort_keys=True, separators=(",", ":")
@@ -168,10 +179,15 @@ def install_complete_calibration(directory: Path) -> None:
     evidence_raw = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode()
     artifact_path = directory / "instrument_evidence.json"
     artifact_path.write_bytes(evidence_raw)
+    power_trace_raw = (
+        b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+    )
+    (directory / "power_trace.csv").write_bytes(power_trace_raw)
     artifacts = {
         "instrument_evidence.json": hashlib.sha256(evidence_raw).hexdigest(),
         "raw/powermetrics.plist": hashlib.sha256(raw_bytes).hexdigest(),
         "events.jsonl": hashlib.sha256(event_bytes).hexdigest(),
+        "power_trace.csv": hashlib.sha256(power_trace_raw).hexdigest(),
     }
     manifest = {
         "schema_version": "joulewise.instrument_validation_manifest.v1",

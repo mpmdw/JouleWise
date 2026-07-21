@@ -517,8 +517,9 @@ Current collection also records `metadata.trace_window_margins` with
 `achieved_post_window_margin_s`. The requested dwell occurs after the
 `sampling_stopped` measured-window stamp and before sampler termination, so it
 does not enter energy integration. Production admission compares both achieved
-margins against `B_bundle + B_fiducial` and fails closed before campaign use if
-either side lacks support.
+margins against the composed causal bound
+`B_bundle + B_fiducial + wall_minus_monotonic_span` and fails closed before
+campaign use if either side lacks support.
 
 Reducers `0.5.1` (and AXI `0.6.1`) re-derive this anchor from the raw
 capture, re-anchor the summed curve, and add (additively; `0.5.0`/`0.6.0`
@@ -541,11 +542,34 @@ replays stay byte-frozen):
   `common_trace_shift_plus_independent_edge_span_v2` is the reducer-emitted
   method for envelopes that combine the common continuous trace shift with
   the independently observed wall-minus-monotonic edge span. Analysis
-  consumers accept the closed set `{common_trace_shift_interval_overlap_v1,
-  common_trace_shift_plus_independent_edge_span_v2}`; every other method
-  string is malformed evidence and fails closed. The v1 registration above
-  remains readable and is not renamed because the estimators have distinct
-  provenance.
+  consumers accept the closed replay-read set
+  `{common_trace_shift_interval_overlap_v1,
+  common_trace_shift_plus_independent_edge_span_v2}`. Current reducer `0.5.2`
+  and AXI `0.6.2` mint
+  `common_trace_shift_plus_independent_edge_corners_v3`. Every other method
+  string is malformed evidence and fails closed; v1/v2 remain accepted only
+  to read their already-defined replay wires.
+- The current v3 envelope uses the causal decomposition
+  `start = delta_common + eps_on` and
+  `stop = delta_common + eps_off`, with
+  `|delta_common| <= B_bundle` and independently
+  `|eps_on|, |eps_off| <= B_edge`, where
+  `B_edge = B_fiducial + wall_minus_monotonic_span` (the span is a third
+  disjoint per-edge clock error source, folded into the corners rather than
+  the frozen arms' `2*span*maxP` additive term). For nonnegative power,
+  integrated window energy is monotone nonincreasing in each start edge and
+  monotone nondecreasing in each stop edge. Consequently the extrema over
+  the full three-dimensional box occur among the four
+  `(eps_on, eps_off) in {-B_edge, +B_edge}^2` corners. The reducer
+  pre-offsets every window at each corner, runs the existing continuous,
+  breakpoint-exact common-shift scan over `[-B_bundle, +B_bundle]`, and takes
+  the minimum/maximum across corners. Idle-subtracted and per-token
+  envelopes additionally widen by `2 * B_edge * P_idle`: independent edges
+  vary the subtracted idle duration, so pure translation of the gross
+  envelope under-covers whenever edge power is below the idle mean. A
+  negative rail-power sample invalidates
+  this monotonicity proof and is the fail-closed `negative_power_sample`
+  refusal; it is never silently integrated into a licensed envelope.
 - `energy_bound_terms_j.E_clock_anchor_shift_bound_j`: the request-level
   scalar (the gross envelope's max absolute deviation).
 - window-evidence precheck reasons `clock_anchor_unresolved`,
@@ -557,9 +581,11 @@ replays stay byte-frozen):
   granular energy from the envelope requirement (a missing envelope stamps
   `anchor_energy_envelope_unrecorded`). The frozen 0.5.1/0.6.1 replay wires
   retain `B_effective = max(B_bundle, B_fiducial)`; the 0.5.2/0.6.2 mint wires
-  use `B_effective = B_bundle + B_fiducial` because those bounds constrain
-  disjoint causal links. The composed mint bound is the anchor-shift scan
-  range and the bound recorded in every affected precheck/envelope. The
+  use `B_effective = B_bundle + B_fiducial + wall_minus_monotonic_span`
+  because those bounds constrain disjoint causal links. The composed mint
+  bound remains the bound recorded in every affected precheck/envelope, while
+  v3 scans only `B_bundle` as the common component and composes `B_edge`
+  through the independent edge corners above. The
   optional `metadata.instrument_calibration` block
   references a `docs/contracts/powermetrics_fiducial.md` artifact by
   `{artifact_path, artifact_sha256, b_fiducial_s}`. The reducer loads the
@@ -568,7 +594,14 @@ replays stay byte-frozen):
   `joulewise.instrument_evidence.v1` whose `b_fiducial_s`,
   `anchor_method_version`, and environment bindings all match; `B_fiducial`
   is never trusted from the metadata scalar alone (an invalid block is
-  `clock_anchor_unresolved`).
+  `clock_anchor_unresolved`). Current 0.5.2/0.6.2 claims require a v2
+  calibration artifact with `capture_wall_time_s` and `max_age_s = 86400`;
+  the measuring bundle's `run_started` time must be in the inclusive interval
+  `[capture_wall_time_s, capture_wall_time_s + max_age_s]`, otherwise
+  `instrument_calibration_stale` refuses the claim. Claim-time verification
+  also re-reads `validation_manifest_path`, verifies its recorded SHA-256,
+  and verifies the presence and SHA-256 of every manifest member within the
+  bundle before trusting the calibration attachment.
 - `energy_uncertainty_status = "bounded"` only when every required bound
   term (drift, both interpolation terms, anchor shift) is present.
   Interval-support traces keep both interpolation terms exactly 0; point
@@ -879,7 +912,18 @@ trace is treated as unknown on resume. At final verdict time, the runner
 re-resolves every recovered or cap-hit trace path relative to the campaign
 manifest and re-verifies file existence, current-byte SHA-256, JSONL
 parseability, and exact positive declared record count for both fresh and
-resumed evidence. The campaign JSONL repeats the following-member gate object
+resumed evidence.
+
+The final row of every cooldown raw JSONL is normative terminal evidence. It
+MUST contain both `release` and `release_criteria_met_late`, and both values
+MUST be JSON booleans. Cap-first precedence is exact: `release == false`
+classifies `cap_hit` regardless of `release_criteria_met_late`; only
+`release == true` with `release_criteria_met_late == false` classifies
+`recovered`. A missing/malformed terminal row, either non-boolean field, or
+`release == true` with `release_criteria_met_late == true` is unclassifiable
+and is rejected as unknown evidence, never relabelled recovered or cap-hit.
+
+The campaign JSONL repeats the following-member gate object
 and ends with a
 `joulewise.campaign_verdict.v2` row. That row separates `collection.verdict`
 (`usable`, `partial`, `blocked`, `invalid`) from
