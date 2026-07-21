@@ -1,8 +1,33 @@
 # JouleWise Run State
 
-Last updated: 2026-07-20 (Ed checkpoint stop). **D-078 SOUNDNESS GATE
-remains ACTIVE; Phase 0 instrument repair is BUILT and pushed but NOT
-signed off.** Branch `impl/p0-instrument-repair` @ `ca6861b` (pushed):
+Last updated: 2026-07-21 (Ed checkpoint stop #2). **D-078 SOUNDNESS GATE
+remains ACTIVE; Phase 0 instrument repair: convergence rounds 2-3 COMPLETE
+and committed/pushed @ `5093355` (suite 2003 passed/0 fail), but the first
+confirmation round over that head correctly WITHHELD sign-off — 8 confirmed
+findings incl. one P0 (two-edge calibration collapsed into a 1-D common-shift
+envelope; independent start/stop edge lags add up to 2·P·B_fiducial that the
+envelope omitted — NEG-8 attainable 38.831 J vs licensed upper 38.574 J).**
+A Sol xhigh confirmation-fix round with binding lead rulings (corner-composed
+two-edge envelope; in-place revision of the UNRELEASED 0.5.2/0.6.2 mints;
+negative-power + 24 h calibration-staleness refusals; environment-admission
+full-object fail-closed incl. post-run observation; claim-time custody
+verification; universal 1.0 s dwell floor) was MID-FLIGHT at this stop —
+codex thread `019f84bf-78c8-77c1-b504-e5721fd00ea4`, it-p0 worktree DIRTY
+(~26 files, mid-fix, do NOT commit until collected + delta re-audited). The
+second 2026-07-21 D-078 amendment (all rulings) is already written in the
+worktree decision log. Live evidence this arc: pulse calibration 40/40 valid,
+B_fiducial 27.373 ms under protocol_v2 (rederived from sealed 07-20 raw
+bytes); probe cells re-reduced at 0.5.2 — shorts 7.278/7.750/7.688 J
+(cadence-ineligible by design), mid gross 38.060 J honestly refused on tail
+support, NEG-8 admitted. RESUME: full pointers file in session-08f326a8
+scratchpad SESSION_RESUME_POINTERS.md (rejoin Sol thread -> lead diff review
+-> delta re-audit -> commit -> confirmation round 2 -> PR -> bookkeeping;
+run report 2026-07-20-p0-instrument-repair.md is still the stale
+pre-live-validation draft). NOTE: the new 24 h calibration validity horizon
+means Window-A re-collection needs a FRESH [QUIET-MAC] pulse calibration
+(ping Ed first).
+
+Prior checkpoint (2026-07-20): branch @ `ca6861b`:
 anchor estimator v2 (censored-constraint interval), continuous
 common-shift energy envelopes (reducer 0.5.1 / AXI 0.6.1, additive;
 0.5.0/0.6.0 frozen), engine wire compat + cap-hit joins + extraction
