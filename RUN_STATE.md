@@ -7,13 +7,17 @@ confirmation round over that head correctly WITHHELD sign-off — 8 confirmed
 findings incl. one P0 (two-edge calibration collapsed into a 1-D common-shift
 envelope; independent start/stop edge lags add up to 2·P·B_fiducial that the
 envelope omitted — NEG-8 attainable 38.831 J vs licensed upper 38.574 J).**
-A Sol xhigh confirmation-fix round with binding lead rulings (corner-composed
-two-edge envelope; in-place revision of the UNRELEASED 0.5.2/0.6.2 mints;
-negative-power + 24 h calibration-staleness refusals; environment-admission
-full-object fail-closed incl. post-run observation; claim-time custody
-verification; universal 1.0 s dwell floor) was MID-FLIGHT at this stop —
-codex thread `019f84bf-78c8-77c1-b504-e5721fd00ea4`, it-p0 worktree DIRTY
-(~26 files, mid-fix, do NOT commit until collected + delta re-audited). The
+The Sol xhigh confirmation-fix round with binding lead rulings
+(corner-composed two-edge envelope; in-place revision of the UNRELEASED
+0.5.2/0.6.2 mints; negative-power + 24 h calibration-staleness refusals;
+environment-admission full-object fail-closed incl. post-run observation;
+claim-time custody verification; universal 1.0 s dwell floor) COMPLETED and
+was collected before this stop closed: all 9 ruling groups implemented with
+named regressions, Sol in-session suite tail 2020 passed / 18 skipped /
+0 failures, frozen bytes verified untouched, both P0 corner-envelope
+regressions independently re-run green. The it-p0 worktree is DIRTY and
+READY FOR LEAD REVIEW (owed: full 26-file diff read, PENDING-set retirement,
+lead suite gate, MANDATORY delta re-audit) — do NOT commit before those. The
 second 2026-07-21 D-078 amendment (all rulings) is already written in the
 worktree decision log. Live evidence this arc: pulse calibration 40/40 valid,
 B_fiducial 27.373 ms under protocol_v2 (rederived from sealed 07-20 raw
