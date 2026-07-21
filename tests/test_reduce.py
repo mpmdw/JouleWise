@@ -17,6 +17,7 @@ import math
 import plistlib
 import tempfile
 import unittest
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -51,6 +52,152 @@ DEFAULT_IDLE = {
     "sample_count": 2,
     "telemetry_backend": "mock",
 }
+
+_SELF_CONSISTENT_CALIBRATION: tuple[dict, bytes, bytes] | None = None
+
+
+def self_consistent_calibration() -> tuple[dict, bytes, bytes]:
+    """Build one cached 40-pulse plist/event calibration for reducer tests."""
+
+    global _SELF_CONSISTENT_CALIBRATION
+    if _SELF_CONSISTENT_CALIBRATION is not None:
+        evidence, raw, events = _SELF_CONSISTENT_CALIBRATION
+        return json.loads(json.dumps(evidence)), raw, events
+
+    from joulewise.adapters.powermetrics import (
+        anchor_records_from_powermetrics,
+        parse_powermetrics_records,
+    )
+    from joulewise.clock import ClockStamp
+    from joulewise.powermetrics_fiducial import (
+        PULSE_COUNT,
+        CommandedPulse,
+    instrument_evidence,
+    LEGACY_PROTOCOL_ID,
+        pulse_schedule,
+        rederive_detection_from_artifacts,
+    )
+    from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v2
+
+    first_endpoint_s = 1000.05
+    cadence_s = 0.1
+    warmup_edges = [(1002.0, 1003.0), (1004.5, 1005.5), (1007.0, 1008.0)]
+    commanded_edges = pulse_schedule(PULSE_COUNT, start_s=1015.0)
+    true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
+    capture_end_s = true_edges[-1][1] + 5.0
+
+    documents: list[dict] = []
+    endpoint_s = first_endpoint_s
+    while endpoint_s <= capture_end_s + 1e-12:
+        start_s = endpoint_s - cadence_s
+        overlap = math.fsum(
+            max(0.0, min(endpoint_s, off_s) - max(start_s, on_s)) / cadence_s
+            for on_s, off_s in (*warmup_edges, *true_edges)
+        )
+        gpu_w = 2.0 + 20.0 * overlap
+        documents.append(
+            {
+                "timestamp": datetime.fromtimestamp(
+                    math.floor(endpoint_s), tz=timezone.utc
+                ),
+                "elapsed_ns": 100_000_000,
+                "is_delta": True,
+                "hw_model": "Mac15,9",
+                "kern_osversion": "25F84",
+                "processor": {
+                    "cpu_power": 0.0,
+                    "gpu_power": gpu_w * 1000.0,
+                    "ane_power": 0.0,
+                    "cpu_energy": 0,
+                    "gpu_energy": round(gpu_w * cadence_s * 1000.0),
+                    "ane_energy": 0,
+                },
+            }
+        )
+        endpoint_s += cadence_s
+    raw = b"\0".join(plistlib.dumps(document) for document in documents)
+
+    def stamp(epoch_s: float) -> ClockStamp:
+        mono = epoch_s - 1000.0
+        return ClockStamp(
+            epoch_s=epoch_s,
+            monotonic_before_s=mono - 1e-6,
+            monotonic_after_s=mono + 1e-6,
+            wall_resolution_s=1e-6,
+            monotonic_resolution_s=1e-6,
+        )
+
+    anchor_stamps = {
+        # Tight but non-zero causal bracket around the true 1000.05 endpoint;
+        # this keeps the synthetic production calibration representative of a
+        # usable live bound rather than a deliberately wide 50 ms half-width.
+        "pre_spawn": stamp(999.949),
+        "first_parse": stamp(1000.051),
+        "sampling_started": stamp(1000.2),
+        "sampling_stopped": stamp(capture_end_s + 0.5),
+        "post_parse": stamp(capture_end_s + 1.0),
+    }
+    native = parse_powermetrics_records(raw)
+    clock_anchor = derive_powermetrics_anchor_v2(
+        stamps=anchor_stamps,
+        records=anchor_records_from_powermetrics(native),
+    )
+    if clock_anchor.get("status") != "bounded":
+        raise AssertionError(clock_anchor)
+
+    event_rows: list[dict] = []
+
+    def add_pair(kind: str, on_s: float, off_s: float, index: int) -> None:
+        for edge, epoch_s in (("on", on_s), ("off", off_s)):
+            event_rows.append(
+                {
+                    "timestamp_s": epoch_s,
+                    "event_type": f"{kind}_command_{edge}",
+                    "phase": "instrument_validation",
+                    "message": f"{kind}_command_{edge}",
+                    "metadata": {
+                        "clock_stamp": asdict(stamp(epoch_s)),
+                        f"{kind}_index": index,
+                    },
+                }
+            )
+
+    for index, (on_s, off_s) in enumerate(warmup_edges):
+        add_pair("warmup", on_s, off_s, index)
+    for index, (on_s, off_s) in enumerate(commanded_edges):
+        add_pair("pulse", on_s, off_s, index)
+    events = "".join(
+        json.dumps(row, sort_keys=True) + "\n" for row in event_rows
+    ).encode("utf-8")
+    detection = rederive_detection_from_artifacts(raw, events, clock_anchor)
+    bindings = {
+        "hardware_model": "Mac15,9",
+        "os_build": "25F84",
+        "powermetrics_sha256": "ab" * 32,
+        "sampling_interval_ms": 100,
+        "anchor_method_version": (
+            "powermetrics_native_second_censored_intersection_v1"
+        ),
+        "mlx_version": "0.31.2",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
+        "power_policy": "ac_high_power",
+    }
+    evidence = instrument_evidence(
+        detection,
+        bindings=bindings,
+        validation_id="synthetic-self-consistent-v1",
+        artifact_sha256={
+            "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
+            "events.jsonl": hashlib.sha256(events).hexdigest(),
+        },
+        protocol_id=LEGACY_PROTOCOL_ID,
+    )
+    evidence["clock_anchor"] = clock_anchor
+    evidence["clock_anchor_resolved"] = True
+    if evidence["status"] != "valid":
+        raise AssertionError(evidence["reasons"])
+    _SELF_CONSISTENT_CALIBRATION = (evidence, raw, events)
+    return json.loads(json.dumps(evidence)), raw, events
 
 
 def load_config(**overrides) -> BenchmarkConfig:
@@ -890,7 +1037,7 @@ class TokenFallbackTests(ReduceTestCase):
             summary.window_evidence_precheck["per_token"],
             {
                 "eligible": False,
-                "reasons": ["stream_chunk_fallback"],
+                "reasons": ["token_count_stream_chunk_fallback"],
                 "token_count_source": "stream_chunk_fallback",
             },
         )
@@ -1612,6 +1759,98 @@ class D078R01RegressionTests(unittest.TestCase):
     FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
 
+    @staticmethod
+    def _claim_gates() -> dict:
+        return {
+            name: {"eligible": True, "reasons": []}
+            for name in (
+                "gross_request",
+                "gross_batch_group",
+                "idle_subtracted_request",
+            )
+        }
+
+    def test_environment_claim_reason_channel_is_closed_and_decision_bound(self) -> None:
+        # F1 exact defect: the misspelling on a flagged decision used to return
+        # no reason; the inverse contradiction minted a refusal on admitted.
+        cases = (
+            ("flagged", "environment_admisson_failed"),
+            ("flagged", None),
+            ("admitted", "environment_admission_failed"),
+        )
+        for decision, claim_reason in cases:
+            with self.subTest(decision=decision, claim_reason=claim_reason):
+                gates = self._claim_gates()
+                reduce_module._apply_environment_claim_barrier(
+                    gates,
+                    {
+                        "environment_admission": {
+                            "decision": decision,
+                            "claim_reason": claim_reason,
+                        }
+                    },
+                )
+                for gate in gates.values():
+                    self.assertFalse(gate["eligible"])
+                    self.assertIn("environment_admission_failed", gate["reasons"])
+
+        clean = self._claim_gates()
+        reduce_module._apply_environment_claim_barrier(
+            clean,
+            {
+                "environment_admission": {
+                    "decision": "admitted",
+                    "claim_reason": None,
+                }
+            },
+        )
+        self.assertTrue(all(gate["eligible"] for gate in clean.values()))
+
+    def test_cpu_admission_ledger_shape_and_top_decision_are_fail_closed(self) -> None:
+        # F8 exact reproduced ledgers: every malformed shape must stamp all
+        # three claim gates, while a single clean row remains admitted.
+        clean_row = {
+            "attempt": 1,
+            "admitted": True,
+            "cpu_admission_enforced": True,
+            "cpu_admission": {"admitted": True},
+        }
+        cases = (
+            ([clean_row, {**clean_row, "attempt": 1}], "admitted"),
+            ([{**clean_row, "attempt": 2}, clean_row], "admitted"),
+            ([clean_row], "failed"),
+            ([{key: value for key, value in clean_row.items() if key != "cpu_admission_enforced"}], "admitted"),
+        )
+        for attempts, decision in cases:
+            with self.subTest(attempts=attempts, decision=decision):
+                gates = self._claim_gates()
+                reduce_module._apply_cpu_admission_claim_barrier(
+                    gates,
+                    {
+                        "adapters": {"telemetry": {"name": "powermetrics"}},
+                        "environment_admission": {
+                            "decision": decision,
+                            "attempts": attempts,
+                        },
+                    },
+                )
+                for gate in gates.values():
+                    self.assertFalse(gate["eligible"])
+                    self.assertTrue(gate["reasons"])
+
+        gates = self._claim_gates()
+        reduce_module._apply_cpu_admission_claim_barrier(
+            gates,
+            {
+                "adapters": {"telemetry": {"name": "powermetrics"}},
+                "environment_admission": {
+                    "decision": "admitted",
+                    "attempts": [clean_row],
+                },
+            },
+        )
+        self.assertTrue(all(gate["eligible"] for gate in gates.values()))
+
     def test_fixture_raw_matches_sealed_evidence(self) -> None:
         import hashlib
 
@@ -1677,7 +1916,9 @@ class D078R01RegressionTests(unittest.TestCase):
         )
 
         reader = BundleReader(self.FIXTURE)
-        context = _derive_anchor_context(reader, reader.metadata())
+        context = _derive_anchor_context(
+            reader, reader.metadata(), reducer_version="0.5.1"
+        )
         self.assertFalse(context.unresolved)
         window = reader.measured_window()
         contributions = [(context.curve, [window])]
@@ -1714,7 +1955,7 @@ class D078R01RegressionTests(unittest.TestCase):
             row[1] = str(float(row[1]) + 0.5)
             trace[2] = ",".join(row)
             (bundle / "power_trace.csv").write_text("\n".join(trace) + "\n")
-            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
             self.assertEqual(summary.status, RunStatus.FAILED)
             self.assertIn(
                 "does not match raw powermetrics evidence",
@@ -1734,7 +1975,7 @@ class D078R01RegressionTests(unittest.TestCase):
             (bundle / "metadata.json").write_text(
                 json.dumps(metadata, indent=2, sort_keys=True) + "\n"
             )
-            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             self.assertIsNone(summary.energy_anchor_shift_envelopes)
             self.assertIsNone(
@@ -1759,8 +2000,21 @@ class D078R01RegressionTests(unittest.TestCase):
             (bundle / "raw" / "powermetrics.plist").unlink()
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-            self.assertIn(
-                "clock_anchor_unresolved",
+            # Frozen 0.5.1 replay pins this EXACT unresolved-anchor reason set;
+            # in particular the envelope-gate stamp must never reach an
+            # unresolved context (lost-early-return regression, 2026-07-21
+            # delta re-audit).
+            self.assertEqual(
+                summary.window_evidence_precheck["gross_request"]["reasons"],
+                [
+                    "cadence_ratio_below_threshold",
+                    "clock_anchor_unresolved",
+                    "clock_bound_exceeds_quarter_window",
+                    "environment_admission_missing",
+                ],
+            )
+            self.assertNotIn(
+                "anchor_energy_envelope_unrecorded",
                 summary.window_evidence_precheck["gross_request"]["reasons"],
             )
 
@@ -1808,46 +2062,7 @@ class D078R01RegressionTests(unittest.TestCase):
 
     @staticmethod
     def _valid_instrument_evidence(**overrides) -> dict:
-        evidence = {
-            "schema_version": "joulewise.instrument_evidence.v1",
-            "protocol_id": "powermetrics_pulse_fiducial_v1",
-            "status": "valid",
-            "anchor_method_version": (
-                "powermetrics_native_second_censored_intersection_v1"
-            ),
-            "b_fiducial_s": 0.08,
-            "pulse_count": 40,
-            "all_pulses_detected": True,
-            "spurious_plateau_count": 0,
-            "artifact_sha256": {
-                "raw/powermetrics.plist": "cd" * 32,
-                "events.jsonl": "ef" * 32,
-            },
-            "pulses": [
-                {
-                    "pulse_index": index,
-                    "detected": True,
-                    "onset_residual_lower_s": -0.08,
-                    "onset_residual_upper_s": 0.08,
-                    "offset_residual_lower_s": -0.08,
-                    "offset_residual_upper_s": 0.08,
-                }
-                for index in range(40)
-            ],
-            "bindings": {
-                # hardware_model/os_build MUST match the r01 device metadata.
-                "hardware_model": "Mac15,9",
-                "os_build": "25F84",
-                "powermetrics_sha256": "ab" * 32,
-                "sampling_interval_ms": 100,
-                "anchor_method_version": (
-                    "powermetrics_native_second_censored_intersection_v1"
-                ),
-                "mlx_version": "0.31.2",
-                "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
-                "power_policy": "ac_high_power",
-            },
-        }
+        evidence, _raw, _events = self_consistent_calibration()
         bindings_override = overrides.pop("bindings", None)
         evidence.update(overrides)
         if bindings_override:
@@ -1867,30 +2082,40 @@ class D078R01RegressionTests(unittest.TestCase):
         return evidence
 
     def _bundle_with_calibration(
-        self, tmp, *, evidence, b_fiducial_s=0.08, mutate_bytes=None
+        self, tmp, *, evidence, b_fiducial_s=None, mutate_bytes=None
     ) -> Path:
         import shutil
 
         bundle = Path(tmp) / "bundle"
         shutil.copytree(self.FIXTURE, bundle)
         evidence = json.loads(json.dumps(evidence))
+        _canonical_evidence, calibration_raw, calibration_events = (
+            self_consistent_calibration()
+        )
+        artifact_dir = bundle / "calibration"
+        (artifact_dir / "raw").mkdir(parents=True)
+        (artifact_dir / "raw" / "powermetrics.plist").write_bytes(
+            calibration_raw
+        )
+        (artifact_dir / "events.jsonl").write_bytes(calibration_events)
         hashes = evidence.get("artifact_sha256")
         if isinstance(hashes, dict) and set(
             ("raw/powermetrics.plist", "events.jsonl")
         ).issubset(hashes):
             hashes["raw/powermetrics.plist"] = hashlib.sha256(
-                (bundle / "raw" / "powermetrics.plist").read_bytes()
+                calibration_raw
             ).hexdigest()
             hashes["events.jsonl"] = hashlib.sha256(
-                (bundle / "events.jsonl").read_bytes()
+                calibration_events
             ).hexdigest()
         raw = (
             json.dumps(evidence, indent=2, sort_keys=True) + "\n"
         ).encode("utf-8")
-        (bundle / "instrument_evidence.json").write_bytes(raw)
+        artifact_file = artifact_dir / "instrument_evidence.json"
+        artifact_file.write_bytes(raw)
         artifact_sha256 = hashlib.sha256(raw).hexdigest()
         if mutate_bytes is not None:
-            (bundle / "instrument_evidence.json").write_bytes(mutate_bytes)
+            artifact_file.write_bytes(mutate_bytes)
         metadata = json.loads((bundle / "metadata.json").read_text())
         metadata.setdefault("device", {})["powermetrics"] = {
             "executable_path": "/usr/bin/powermetrics",
@@ -1899,9 +2124,13 @@ class D078R01RegressionTests(unittest.TestCase):
             )
         }
         metadata["instrument_calibration"] = {
-            "artifact_path": "instrument_evidence.json",
+            "artifact_path": "calibration/instrument_evidence.json",
             "artifact_sha256": artifact_sha256,
-            "b_fiducial_s": b_fiducial_s,
+            "b_fiducial_s": (
+                evidence.get("b_fiducial_s")
+                if b_fiducial_s is None
+                else b_fiducial_s
+            ),
             "bindings": evidence.get("bindings"),
             "binding_observations": {
                 "powermetrics_sha256": evidence.get("bindings", {}).get(
@@ -1916,19 +2145,325 @@ class D078R01RegressionTests(unittest.TestCase):
         return bundle
 
     def test_051_fiducial_bound_widens_effective_bound(self) -> None:
+        from joulewise.bundle_read import BundleReader
+
+        evidence = self._valid_instrument_evidence()
         with tempfile.TemporaryDirectory() as tmp:
             bundle = self._bundle_with_calibration(
-                tmp, evidence=self._valid_instrument_evidence()
+                tmp, evidence=evidence
             )
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            reader = BundleReader(bundle)
+            context = reduce_module._derive_anchor_context(
+                reader,
+                reader.metadata(),
+                reducer_version="0.5.2",
+            )
             gross = summary.energy_anchor_shift_envelopes["/gross_energy_j"]
-            self.assertEqual(gross["anchor_bound_s"], 0.08)
+            self.assertEqual(context.fiducial_bound_s, evidence["b_fiducial_s"])
+            self.assertEqual(
+                gross["anchor_bound_s"],
+                max(context.bundle_bound_s, context.fiducial_bound_s),
+            )
             self.assertEqual(
                 summary.window_evidence_precheck["gross_request"][
                     "clock_anchor_bound_s"
                 ],
-                0.08,
+                gross["anchor_bound_s"],
             )
+
+    def test_052_causal_bounds_add_while_frozen_replay_uses_max(self) -> None:
+        from joulewise.bundle_read import BundleReader
+
+        evidence = self._valid_instrument_evidence()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            replay = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            mint = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+            reader = BundleReader(bundle)
+            replay_context = reduce_module._derive_anchor_context(
+                reader,
+                reader.metadata(),
+                reducer_version="0.5.1",
+            )
+            mint_context = reduce_module._derive_anchor_context(
+                reader,
+                reader.metadata(),
+                reducer_version="0.5.2",
+            )
+        bundle_bound = replay_context.bundle_bound_s
+        fiducial_bound = replay_context.fiducial_bound_s
+        self.assertIsNotNone(bundle_bound)
+        self.assertIsNotNone(fiducial_bound)
+        self.assertEqual(replay_context.bound_s, max(bundle_bound, fiducial_bound))
+        self.assertEqual(mint_context.bound_s, bundle_bound + fiducial_bound)
+        self.assertEqual(
+            replay.energy_anchor_shift_envelopes["/gross_energy_j"]["anchor_bound_s"],
+            replay_context.bound_s,
+        )
+        self.assertEqual(
+            mint.energy_anchor_shift_envelopes["/gross_energy_j"]["anchor_bound_s"],
+            mint_context.bound_s,
+        )
+        for version, expected in (
+            ("0.6.1", max(bundle_bound, fiducial_bound)),
+            ("0.6.2", bundle_bound + fiducial_bound),
+        ):
+            with self.subTest(version=version):
+                self.assertEqual(
+                    reduce_module._compose_causal_anchor_bound_s(
+                        bundle_bound,
+                        fiducial_bound,
+                        reducer_version=version,
+                    ),
+                    expected,
+                )
+
+    def test_052_four_b_license_refuses_case_accepted_by_051_max(self) -> None:
+        evidence = self._valid_instrument_evidence()
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            events_path = bundle / "events.jsonl"
+            rows = [json.loads(line) for line in events_path.read_text().splitlines()]
+            started = next(row for row in rows if row["event_type"] == "sampling_started")
+            stopped = next(row for row in rows if row["event_type"] == "sampling_stopped")
+            stopped["timestamp_s"] = started["timestamp_s"] + 0.3
+            events_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            replay = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            mint = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        replay_gate = replay.window_evidence_precheck["gross_request"]
+        mint_gate = mint.window_evidence_precheck["gross_request"]
+        self.assertNotIn("clock_bound_exceeds_quarter_window", replay_gate["reasons"])
+        self.assertIn("clock_bound_exceeds_quarter_window", mint_gate["reasons"])
+
+    def test_052_post_window_trace_tail_shorter_than_composed_bound_refuses(self) -> None:
+        # R4 defect shape: the causal envelope needs trace support after the
+        # measured stop.  A current mint must not claim through a short tail,
+        # while the frozen 0.5.1 replay wire remains byte-semantics compatible.
+        import shutil
+        from joulewise.bundle_read import BundleReader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(self.FIXTURE, bundle)
+            reader = BundleReader(bundle)
+            original = reduce_module._derive_anchor_context(
+                reader, reader.metadata(), reducer_version="0.5.2"
+            )
+            self.assertIsNotNone(original.curve)
+            self.assertIsNotNone(original.bound_s)
+            short_stop_s = original.curve[-1].support_end_s - original.bound_s / 2
+            events_path = bundle / "events.jsonl"
+            rows = [json.loads(line) for line in events_path.read_text().splitlines()]
+            stopped = next(row for row in rows if row["event_type"] == "sampling_stopped")
+            stopped["timestamp_s"] = short_stop_s
+            events_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            replay = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
+            mint = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        reason = "post_window_trace_tail_shorter_than_anchor_bound"
+        self.assertNotIn(
+            reason, replay.window_evidence_precheck["gross_request"]["reasons"]
+        )
+        self.assertIn(
+            reason, mint.window_evidence_precheck["gross_request"]["reasons"]
+        )
+
+    def test_051_forged_zero_residual_calibration_is_physically_rejected(self) -> None:
+        # F2 exact exploit: valid hashes plus forty hand-authored detected rows,
+        # zero residuals, and B=0 used to pass without fitting the raw bytes.
+        evidence = self._valid_instrument_evidence(b_fiducial_s=0.0)
+        for pulse in evidence["pulses"]:
+            for field in (
+                "onset_residual_lower_s",
+                "onset_residual_upper_s",
+                "offset_residual_lower_s",
+                "offset_residual_upper_s",
+            ):
+                pulse[field] = 0.0
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp, evidence=evidence, b_fiducial_s=0.0
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_051_freshly_wider_bound_cannot_be_shrunk_by_declaration(self) -> None:
+        from joulewise.bundle_read import BundleReader
+
+        # The old live artifact shape can declare the fit/event residual bound
+        # without the newly added capture-anchor component. Structural rows
+        # remain valid, but downstream must consume the freshly wider bound.
+        evidence = self._valid_instrument_evidence()
+        fresh_bound = evidence["b_fiducial_s"]
+        declared = max(
+            abs(float(pulse[field]))
+            for pulse in evidence["pulses"]
+            for field in (
+                "onset_residual_lower_s",
+                "onset_residual_upper_s",
+                "offset_residual_lower_s",
+                "offset_residual_upper_s",
+            )
+        )
+        self.assertLess(declared, fresh_bound)
+        evidence["b_fiducial_s"] = declared
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp, evidence=evidence, b_fiducial_s=declared
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+            reader = BundleReader(bundle)
+            context = reduce_module._derive_anchor_context(
+                reader, reader.metadata(), reducer_version="0.5.2"
+            )
+        gross = summary.energy_anchor_shift_envelopes["/gross_energy_j"]
+        self.assertAlmostEqual(context.fiducial_bound_s, fresh_bound, places=12)
+        self.assertAlmostEqual(
+            gross["anchor_bound_s"],
+            context.bundle_bound_s + fresh_bound,
+            places=12,
+        )
+
+    def test_051_conservatively_wider_declared_bound_remains_valid(self) -> None:
+        from joulewise.bundle_read import BundleReader
+
+        evidence = self._valid_instrument_evidence()
+        evidence["b_fiducial_s"] += 0.05
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+            reader = BundleReader(bundle)
+            context = reduce_module._derive_anchor_context(
+                reader,
+                reader.metadata(),
+                reducer_version="0.5.2",
+            )
+        self.assertEqual(
+            summary.energy_anchor_shift_envelopes["/gross_energy_j"][
+                "anchor_bound_s"
+            ],
+            context.bundle_bound_s + evidence["b_fiducial_s"],
+        )
+
+    def test_051_unregistered_instrument_reason_spelling_refuses(self) -> None:
+        # F5 exact defect: a status=valid artifact with an unknown diagnostic
+        # spelling formerly survived reducer consumption.
+        evidence = self._valid_instrument_evidence(
+            reasons=["pulse_detecton_incomplete"]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_valid_status_with_registered_reason_refuses(self) -> None:
+        # A known diagnostic is still incompatible with status=valid.  The
+        # vocabulary check must not turn a physically adverse reason into an
+        # accepted calibration merely because its spelling is registered.
+        evidence = self._valid_instrument_evidence(
+            reasons=["pulse_detection_incomplete"]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_valid_status_with_any_per_pulse_reason_refuses(self) -> None:
+        for reason in ("pulse_detecton_incomplete", "pulse_detection_incomplete"):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as tmp:
+                evidence = self._valid_instrument_evidence()
+                evidence["pulses"][0]["reasons"] = [reason]
+                bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+                summary = reduce_module.reduce_bundle(
+                    bundle, reducer_version="0.5.2"
+                )
+                self.assertIn(
+                    "instrument_calibration_invalid",
+                    summary.window_evidence_precheck["gross_request"]["reasons"],
+                )
+
+    def test_052_environment_attacks_refuse_through_reducer_path(self) -> None:
+        clean_row = {
+            "attempt": 1,
+            "admitted": True,
+            "cpu_admission_enforced": True,
+            "cpu_admission": {"admitted": True},
+        }
+        cases = {
+            "flagged_typo": {
+                "decision": "flagged",
+                "claim_reason": "environment_admisson_failed",
+                "attempts": [{**clean_row, "admitted": False}],
+            },
+            "flagged_null": {
+                "decision": "flagged",
+                "claim_reason": None,
+                "attempts": [{**clean_row, "admitted": False}],
+            },
+            "duplicate": {
+                "decision": "admitted",
+                "claim_reason": None,
+                "attempts": [clean_row, clean_row],
+            },
+            "reordered": {
+                "decision": "admitted",
+                "claim_reason": None,
+                "attempts": [{**clean_row, "attempt": 2}, clean_row],
+            },
+            "cpu_unenforced": {
+                "decision": "admitted",
+                "claim_reason": None,
+                "attempts": [
+                    {
+                        key: value
+                        for key, value in clean_row.items()
+                        if key != "cpu_admission_enforced"
+                    }
+                ],
+            },
+        }
+        import shutil
+
+        for label, admission in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "bundle"
+                shutil.copytree(self.FIXTURE, bundle)
+                metadata_path = bundle / "metadata.json"
+                metadata = json.loads(metadata_path.read_text())
+                metadata["environment_admission"] = admission
+                metadata_path.write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                summary = reduce_module.reduce_bundle(
+                    bundle, reducer_version="0.5.2"
+                )
+                reasons = summary.window_evidence_precheck["gross_request"][
+                    "reasons"
+                ]
+                self.assertTrue(reasons)
+                if label == "cpu_unenforced":
+                    self.assertIn("cpu_admission_unenforced", reasons)
+                else:
+                    self.assertTrue(
+                        {"environment_admission_failed", "environment_admission_missing"}
+                        & set(reasons)
+                    )
 
     def test_051_self_asserted_fiducial_without_artifact_fails_closed(self) -> None:
         # Regression for the exact defect: a bundle supplying a b_fiducial_s and
@@ -2076,7 +2611,44 @@ class D078R01RegressionTests(unittest.TestCase):
 
     def test_051_golden_summary(self) -> None:
         golden_path = REPO_ROOT / "tests" / "goldens" / "d078_r01_reducer_051.json"
-        summary = reduce_module.reduce_bundle(
+        summary_object = reduce_module.reduce_bundle(
             self.FIXTURE, reducer_version="0.5.1"
-        ).to_dict()
+        )
+        summary = summary_object.to_dict()
         self.assertEqual(summary, json.loads(golden_path.read_text()))
+        self.assertEqual(
+            (json.dumps(summary, indent=2, sort_keys=True) + "\n").encode(),
+            golden_path.read_bytes(),
+        )
+
+    def test_052_golden_mints_strict_semantics_without_changing_physics(self) -> None:
+        golden_path = REPO_ROOT / "tests" / "goldens" / "d078_r01_reducer_052.json"
+        summary = reduce_module.reduce_bundle(
+            self.FIXTURE, reducer_version="0.5.2"
+        )
+        payload = summary.to_dict()
+        self.assertEqual(
+            (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(),
+            golden_path.read_bytes(),
+        )
+        self.assertAlmostEqual(payload["gross_energy_j"], 7.664158853340149)
+        gross = payload["energy_anchor_shift_envelopes"]["/gross_energy_j"]
+        self.assertAlmostEqual(gross["lower_j"], 6.765301175622224)
+        self.assertAlmostEqual(gross["upper_j"], 7.682492621646166)
+        self.assertFalse(payload["window_evidence_precheck"]["gross_request"]["eligible"])
+
+    def test_d078_golden_filename_version_matches_minter(self) -> None:
+        for suffix in ("051", "052"):
+            with self.subTest(suffix=suffix):
+                payload = json.loads(
+                    (
+                        REPO_ROOT
+                        / "tests"
+                        / "goldens"
+                        / f"d078_r01_reducer_{suffix}.json"
+                    ).read_text()
+                )
+                expected = f"0.5.{int(suffix[-1])}"
+                self.assertEqual(
+                    payload["summary_provenance"]["reducer_version"], expected
+                )

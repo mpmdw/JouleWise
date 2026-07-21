@@ -334,7 +334,7 @@ class AxiSummarySchemaTests(unittest.TestCase):
         self.assertFalse(schema["$defs"]["request_decode_metric"]["additionalProperties"])
         self.assertEqual(
             schema["$defs"]["summary_provenance"]["properties"]["reducer_version"],
-            {"enum": ["0.6.0", "0.6.1"]},
+            {"enum": ["0.6.0", "0.6.1", "0.6.2"]},
         )
 
     @unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed")

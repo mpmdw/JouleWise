@@ -449,6 +449,38 @@ class AxiAttemptLedgerTests(unittest.TestCase):
             )
         self.assertEqual(topup.exception.code, "outcome_dependent_topup_forbidden")
 
+    def test_duplicate_and_reversed_attempt_rows_refuse(self) -> None:
+        failed = self.receipt(
+            entry_index=0, attempt=0, run_id=None, failed=True
+        )
+        eligible = self.receipt(
+            entry_index=0, attempt=1, run_id="run-first", failed=False
+        )
+        row0, hash0, bytes0 = self.row(
+            failed,
+            reason="dispatch_failed_before_bundle_creation",
+            reason_hash=None,
+            eligible=False,
+        )
+        row1, hash1, bytes1 = self.row(
+            eligible, reason=None, reason_hash=None, eligible=True
+        )
+        receipts = {hash0: bytes0, hash1: bytes1}
+        finalized = self.finalized_bundles(row0, row1)
+        for label, rows in (
+            ("duplicate", [row0, row0, row1]),
+            ("reversed", [row1, row0]),
+        ):
+            with self.subTest(label=label), self.assertRaises(
+                AnalysisManifestError
+            ):
+                validate_attempt_ledger(
+                    rows,
+                    self.manifest,
+                    receipts=receipts,
+                    finalized_bundles=finalized,
+                )
+
     def test_any_attempt_after_first_eligible_refuses_even_if_later_invalid(self) -> None:
         eligible = self.receipt(entry_index=0, attempt=0, run_id="run-first")
         failed = self.receipt(

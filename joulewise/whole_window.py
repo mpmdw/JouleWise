@@ -18,12 +18,23 @@ from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
     NEG8_BRACKET_SCHEMA,
 )
+from joulewise.bundle import sanitize_id_component
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 WHOLE_WINDOW_PROVENANCE_SCHEMA = (
     "joulewise.idle_admission_whole_window_provenance.v1"
 )
+
+
+def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
+    """Lazily delegate to the single authoritative registry validator."""
+
+    # ``analysis_engine.inputs`` consumes whole-window results, so importing
+    # the package-level registry while this module initializes creates a cycle.
+    from joulewise.analysis_engine.registry import validate_attempt_ledger as shared
+
+    return shared(*args, **kwargs)
 
 
 def canonical_sha256(value: Any) -> str:
@@ -92,11 +103,176 @@ def _safe_source_path(root: Path, text: Any) -> Path | None:
     return path
 
 
+def _evidence_map(path: Path) -> dict[str, bytes]:
+    result: dict[str, bytes] = {}
+    if not path.is_dir():
+        return result
+    for candidate in sorted(path.glob("*.json")):
+        raw = candidate.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest in result:
+            raise ValueError("duplicate attempt evidence digest")
+        result[digest] = raw
+    return result
+
+
+def validated_attempt_selection(
+    selection: Mapping[str, Any], runs_root: Path
+) -> set[str] | None:
+    """Re-run the authoritative attempt-ledger validator at consumption."""
+
+    ledger = _safe_source_path(runs_root, selection.get("attempt_ledger_path"))
+    manifest_path = _safe_source_path(
+        runs_root, selection.get("analysis_manifest_path")
+    )
+    if ledger is None or manifest_path is None:
+        return None
+    try:
+        ledger_raw = ledger.read_bytes()
+        manifest_raw = manifest_path.read_bytes()
+        manifest = json.loads(manifest_raw)
+        rows = [
+            json.loads(line)
+            for line in ledger_raw.decode("utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if (
+        hashlib.sha256(ledger_raw).hexdigest()
+        != selection.get("attempt_ledger_sha256")
+        or hashlib.sha256(manifest_raw).hexdigest()
+        != selection.get("analysis_manifest_sha256")
+        or not isinstance(manifest, Mapping)
+        or not rows
+        or any(not isinstance(row, Mapping) for row in rows)
+    ):
+        return None
+    evidence_root = ledger.parent
+    try:
+        receipts = _evidence_map(evidence_root / "dispatch_receipts")
+        strict_evidence = _evidence_map(evidence_root / "strict_validation")
+        finalized: dict[tuple[str, int, str], Path] = {}
+        for row in rows:
+            run_id = row.get("run_id")
+            entry_id = row.get("entry_id")
+            ordinal = row.get("attempt_ordinal")
+            if not isinstance(run_id, str):
+                continue
+            if (
+                not isinstance(entry_id, str)
+                or isinstance(ordinal, bool)
+                or not isinstance(ordinal, int)
+            ):
+                return None
+            path = (
+                runs_root
+                / "axi_attempt_bundles"
+                / str(manifest.get("manifest_id"))
+                / sanitize_id_component(entry_id)
+                / f"a{ordinal}"
+                / sanitize_id_component(run_id)
+            )
+            finalized[(entry_id, ordinal, run_id)] = path
+        selected = validate_attempt_ledger(
+            rows,
+            manifest,
+            receipts=receipts,
+            strict_evidence=strict_evidence,
+            finalized_bundles=finalized,
+        )
+    except (OSError, TypeError, ValueError):
+        return None
+    expected_descriptors = {
+        (
+            entry_id,
+            row.get("attempt_ordinal"),
+            row.get("run_id"),
+            (
+                f"{sanitize_id_component(entry_id)}__a{row.get('attempt_ordinal')}__"
+                f"{sanitize_id_component(str(row.get('run_id')))}"
+            ),
+            (
+                Path("axi_attempt_bundles")
+                / str(manifest.get("manifest_id"))
+                / sanitize_id_component(entry_id)
+                / f"a{row.get('attempt_ordinal')}"
+                / sanitize_id_component(str(row.get("run_id")))
+            ).as_posix(),
+        )
+        for entry_id, row in selected.items()
+        if row is not None
+    }
+    descriptors = selection.get("selected_bundles")
+    if not isinstance(descriptors, list):
+        return None
+    actual: set[tuple[Any, Any, Any, Any, Any]] = set()
+    selected_ids: set[str] = set()
+    selected_paths: set[str] = set()
+    for descriptor in descriptors:
+        if not isinstance(descriptor, Mapping):
+            return None
+        identity = (
+            descriptor.get("entry_id"),
+            descriptor.get("attempt_ordinal"),
+            descriptor.get("run_id"),
+            descriptor.get("bundle_id"),
+            descriptor.get("path"),
+        )
+        bundle_id = descriptor.get("bundle_id")
+        path_text = descriptor.get("path")
+        if (
+            identity in actual
+            or not isinstance(bundle_id, str)
+            or bundle_id in selected_ids
+            or not isinstance(path_text, str)
+            or path_text in selected_paths
+        ):
+            return None
+        actual.add(identity)
+        selected_ids.add(bundle_id)
+        selected_paths.add(path_text)
+    if actual != expected_descriptors:
+        return None
+    quarantined = selection.get("quarantined_attempts")
+    if not isinstance(quarantined, list):
+        return None
+    expected_quarantined = {
+        (row.get("entry_id"), row.get("attempt_ordinal"), row.get("run_id"))
+        for row in rows
+        if row.get("eligible_for_analysis") is False
+    }
+    actual_quarantined: set[tuple[Any, Any, Any]] = set()
+    for row in quarantined:
+        if (
+            not isinstance(row, Mapping)
+            or row.get("properly_quarantined") is not True
+            or row.get("recovery_continuity_verified") is not True
+        ):
+            return None
+        identity = (
+            row.get("entry_id"),
+            row.get("attempt_ordinal"),
+            row.get("run_id"),
+        )
+        if identity in actual_quarantined:
+            return None
+        actual_quarantined.add(identity)
+    if actual_quarantined != expected_quarantined or {
+        identity[:3] for identity in actual
+    } & actual_quarantined:
+        return None
+    return selected_ids
+
+
 def _manifest_members(
     value: Mapping[str, Any], runs_root: Path
 ) -> set[str] | None:
     selection = value.get("attempt_ledger_selection")
     if isinstance(selection, Mapping):
+        validated_selected = validated_attempt_selection(selection, runs_root)
+        if validated_selected is None:
+            return None
         selected = selection.get("selected_bundle_ids")
         if not isinstance(selected, list) or any(
             not isinstance(item, str) or not item for item in selected
@@ -146,7 +322,7 @@ def _manifest_members(
             for row in quarantined
         ):
             return None
-        if descriptor_ids != set(selected):
+        if descriptor_ids != set(selected) or descriptor_ids != validated_selected:
             return None
         return set(selected)
     members = value.get("members")

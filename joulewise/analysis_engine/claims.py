@@ -49,8 +49,11 @@ REDUCER_REASON_CODES = frozenset(
         "instrument_calibration_missing",
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
+        "post_window_trace_tail_shorter_than_anchor_bound",
         "anchor_energy_envelope_unrecorded",
         "anchor_energy_envelope_exceeds_quarter_metric",
+        "token_count_stream_chunk_fallback",
+        "pulse_calibration_rollover_gate_timeout",
     }
 )
 

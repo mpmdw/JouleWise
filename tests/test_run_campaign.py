@@ -623,12 +623,19 @@ def write_prior_campaign_provenance(
     manifest_dir = runs_dir / "campaign_manifests"
     raw_dir = manifest_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    raw_payload = json.dumps({"rolling_mean_power_w": 5.0}) + "\n"
-    (raw_dir / "fixture.jsonl").write_text(raw_payload, encoding="utf-8")
-    raw_sha = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
     session_id = "campaign-fixture"
     members = []
-    for bundle_id, result in evidence_by_bundle.items():
+    for index, (bundle_id, result) in enumerate(evidence_by_bundle.items()):
+        raw_name = f"fixture-{index}.jsonl"
+        raw_payload = json.dumps(
+            {
+                "rolling_mean_power_w": 5.0,
+                "release": result == "recovered",
+                "release_criteria_met_late": False,
+            }
+        ) + "\n"
+        (raw_dir / raw_name).write_text(raw_payload, encoding="utf-8")
+        raw_sha = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
         cooldown: dict[str, object] = {
             "result": result,
             "session_id": session_id,
@@ -636,7 +643,7 @@ def write_prior_campaign_provenance(
         }
         if result in {"recovered", "cap_hit"}:
             cooldown["raw_artifact"] = {
-                "path": "raw/fixture.jsonl",
+                "path": f"raw/{raw_name}",
                 "sha256": raw_sha,
                 "records": 1,
             }
@@ -738,6 +745,7 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(binding.policy.policy_id, "quiet-mac-p2-production")
         self.assertEqual(binding.policy.profile.value, "production")
         self.assertEqual(binding.policy.idle_admission.on_fail.value, "abort")
+        self.assertEqual(binding.policy.post_window_sampling_dwell_s, 1.0)
 
     def test_frozen_campaign_anchor_is_explicit_child_experiment_argument(self) -> None:
         from joulewise import cli as cli_module
@@ -841,6 +849,20 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--instrument-power-policy") + 1],
             "ac_high_power",
+        )
+
+    def test_campaign_command_forwards_policy_post_window_dwell(self) -> None:
+        # R4 defect shape: the sidecar formerly had no route to the existing
+        # controller dwell, so live campaigns stopped sampling immediately.
+        command = run_campaign_module.command_for(
+            BASE_CONFIG,
+            Path("runs"),
+            None,
+            post_window_sampling_dwell_s=0.75,
+        )
+        self.assertEqual(
+            command[command.index("--post-window-sampling-dwell-s") + 1],
+            "0.75",
         )
 
     def test_parent_anchor_validator_has_canonical_child_parity(self) -> None:
@@ -1398,10 +1420,9 @@ class RunCampaignTests(unittest.TestCase):
             )
         )
 
-    def test_governed_retry_selection_excludes_quarantine_from_whole_window(self) -> None:
-        # F17 defect shape: raw invoked membership contains one legitimately
-        # quarantined attempt plus clean successors.  Hash-bound ledger
-        # selection, with verified recovery continuity, owns membership.
+    def test_truncated_self_hashed_attempt_ledger_is_refused(self) -> None:
+        # F5 exact defect: self-consistent bytes are not selection semantics.
+        # This deliberately truncated ledger used to admit the selected set.
         binding = run_campaign_module.load_campaign_policy(str(TEST_CAMPAIGN_POLICY))
         with tempfile.TemporaryDirectory() as tmp:
             runs_dir = Path(tmp)
@@ -1473,11 +1494,8 @@ class RunCampaignTests(unittest.TestCase):
                     runs_dir, binding.sha256
                 )
             )
-        self.assertEqual(conditions, [])
-        self.assertEqual(
-            {path.resolve() for path in paths},
-            {path.resolve() for path in selected_paths},
-        )
+        self.assertEqual(paths, [])
+        self.assertIn("whole_window_campaign_membership_unresolved", conditions)
 
     def test_anchor_freezes_first_eligible_repetition_in_execution_order(self) -> None:
         binding = run_campaign_module.load_campaign_policy(
@@ -2702,7 +2720,17 @@ class RunCampaignTests(unittest.TestCase):
                 evidence,
                 analysis_manifest_id(config_dir),
             )
-            (runs_dir / "campaign_manifests" / "raw" / "fixture.jsonl").unlink()
+            provenance = json.loads(
+                (runs_dir / "campaign_manifests" / "fixture.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            raw_path = next(
+                member["preceding_campaign_cooldown"]["raw_artifact"]["path"]
+                for member in provenance["members"]
+                if "raw_artifact" in member["preceding_campaign_cooldown"]
+            )
+            (runs_dir / "campaign_manifests" / raw_path).unlink()
 
             result = run_campaign(config_dir, runs_dir)
 
@@ -2760,7 +2788,13 @@ class RunCampaignTests(unittest.TestCase):
                 raw_artifact = run_campaign_module._write_campaign_cooldown_trace(
                     provenance_path,
                     "member",
-                    [{"rolling_mean_power_w": 5.0}],
+                    [
+                        {
+                            "rolling_mean_power_w": 5.0,
+                            "release": True,
+                            "release_criteria_met_late": False,
+                        }
+                    ],
                 )
                 raw_path = provenance_path.parent / raw_artifact["path"]
                 if mutation == "hash_mismatch":
@@ -2804,6 +2838,56 @@ class RunCampaignTests(unittest.TestCase):
                     self.assertNotIn("campaign_cooldown_evidence_missing", reasons)
                 else:
                     self.assertIn("campaign_cooldown_evidence_missing", reasons)
+
+    def test_cooldown_verifier_authenticates_raw_terminal_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_dir = Path(tmp) / "campaign_manifests"
+            raw_dir = manifest_dir / "raw"
+            raw_dir.mkdir(parents=True)
+            fixture_events = Path("tests/fixtures/d078_r01/events.jsonl").read_bytes()
+            cases = (
+                ("workload", fixture_events, "recovered", False),
+                (
+                    "cap",
+                    (
+                        json.dumps(
+                            {"release": False, "release_criteria_met_late": True}
+                        )
+                        + "\n"
+                    ).encode(),
+                    "recovered",
+                    False,
+                ),
+                (
+                    "honest-cap",
+                    (
+                        json.dumps(
+                            {"release": False, "release_criteria_met_late": True}
+                        )
+                        + "\n"
+                    ).encode(),
+                    "cap_hit",
+                    True,
+                ),
+            )
+            for name, payload, claim, accepted in cases:
+                path = raw_dir / f"{name}.jsonl"
+                path.write_bytes(payload)
+                cooldown = {
+                    "result": claim,
+                    "raw_artifact": {
+                        "path": f"raw/{name}.jsonl",
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "records": len(payload.splitlines()),
+                    },
+                }
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        run_campaign_module.verify_cooldown_raw_provenance(
+                            cooldown, manifest_dir
+                        ),
+                        accepted,
+                    )
 
     def test_cooldown_provenance_symlink_loop_fails_closed(self) -> None:
         # Path.resolve() may raise (RuntimeError, or OSError ELOOP depending
@@ -2849,8 +2933,18 @@ class RunCampaignTests(unittest.TestCase):
                 )
                 provenance_path = runs_dir / "campaign_manifests" / "fixture.json"
                 if mutation == "hash_mismatch":
-                    (provenance_path.parent / "raw" / "fixture.jsonl").write_text(
-                        '{"rolling_mean_power_w": 6.0}\n', encoding="utf-8"
+                    provenance = json.loads(
+                        provenance_path.read_text(encoding="utf-8")
+                    )
+                    raw_path = next(
+                        member["preceding_campaign_cooldown"]["raw_artifact"]["path"]
+                        for member in provenance["members"]
+                        if "raw_artifact" in member["preceding_campaign_cooldown"]
+                    )
+                    (provenance_path.parent / raw_path).write_text(
+                        '{"rolling_mean_power_w": 6.0, "release": true, '
+                        '"release_criteria_met_late": false}\n',
+                        encoding="utf-8",
                     )
                 else:
                     provenance = json.loads(
@@ -4473,6 +4567,34 @@ class RunCampaignTests(unittest.TestCase):
             ]
             self.assertEqual([row["status"] for row in parsed], ["ok"])
 
+    def test_explicit_log_inside_stored_bundle_is_refused_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            bundle = runs_dir / "sealed"
+            config_dir.mkdir()
+            bundle.mkdir(parents=True)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded"}) + "\n",
+                encoding="utf-8",
+            )
+            write_config(config_dir, "one.json", "one")
+            log_path = bundle / "derived" / "campaign.jsonl"
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                log_path=log_path,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("outside the immutable stored run bundle", result.stderr)
+            self.assertFalse(log_path.exists())
+            self.assertFalse((runs_dir / "order.log").exists())
+
     def test_lock_blocks_real_run_is_removed_after_success_and_dry_run_ignores_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -4740,6 +4862,102 @@ def _busy_idle_records(count: int = 5) -> list[dict]:
     ]
 
 
+class ProductionUncertaintyAssertionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.bundle = Path(self._tmp.name) / "bundle"
+        (self.bundle / "raw").mkdir(parents=True)
+        for name in (
+            "powermetrics_idle.plist",
+            "powermetrics.plist",
+            "powermetrics_idle_post.plist",
+        ):
+            (self.bundle / "raw" / name).write_bytes(b"fixture")
+        from tests.test_p2038_production_path import production_config
+
+        self.config = production_config()
+        self.metadata = {
+            "uncertainty_evidence": {
+                "schema_version": "p2-038.2",
+                "clock_anchor": {
+                    "status": "bounded",
+                    "method": "powermetrics_native_second_censored_intersection_v1",
+                },
+                "sample_phase": {"status": "bounded"},
+                "idle_drift": {
+                    "status": "bounded",
+                    "method": "pre_post_idle_observed_envelope_v1",
+                },
+            },
+            "clock_anchor_bound_s": 0.03,
+            "marker_to_first_sample_phase_bound_s": 0.01,
+            "marker_to_last_sample_phase_bound_s": 0.01,
+            "idle_drift_bound_w": 0.01,
+            "instrument_calibration": {"verified_effective_b_fiducial_s": 0.04},
+            "trace_window_margins": {
+                "achieved_pre_window_margin_s": 0.5,
+                "achieved_post_window_margin_s": 0.7,
+            },
+        }
+        self.summary = {
+            "status": "succeeded",
+            "window_evidence_precheck": {
+                "idle_subtracted_request": {"eligible": True, "reasons": []}
+            },
+            "energy_bound_terms_j": {"E_drift_bound_j": 0.01},
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "method": "common_trace_shift_plus_independent_edge_span_v2"
+                }
+            },
+        }
+
+    def _assertion(self):
+        config = self.config
+        metadata = self.metadata
+        summary = self.summary
+
+        class Reader:
+            def __init__(self, _path):
+                pass
+
+            def config(self):
+                return config
+
+            def metadata(self):
+                return metadata
+
+            def raw_summary(self):
+                return summary
+
+        with patch.object(run_campaign_module, "BundleReader", Reader):
+            return run_campaign_module.assert_production_uncertainty(
+                self.bundle, allow_mock_runtime=True
+            )
+
+    def test_current_p2038_2_with_composed_margin_and_envelope_passes(self) -> None:
+        result = self._assertion()
+        self.assertEqual(result["clock_method"], self.metadata["uncertainty_evidence"]["clock_anchor"]["method"])
+        self.assertEqual(result["composed_anchor_bound_s"], 0.07)
+
+    def test_spawn_envelope_only_evidence_is_rejected(self) -> None:
+        self.metadata["uncertainty_evidence"]["schema_version"] = "p2-038.1"
+        self.metadata["uncertainty_evidence"]["clock_anchor"][
+            "method"
+        ] = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_missing")
+
+    def test_margin_below_composed_anchor_bound_is_rejected(self) -> None:
+        self.metadata["trace_window_margins"]["achieved_post_window_margin_s"] = 0.06
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_invalid")
+        self.assertIn("trace pre/post margins", raised.exception.detail)
+
+
 class IdleAdmissionCoreVerdictTests(unittest.TestCase):
     """T0.5 idle-admission core: sidecar binding + campaign-verdict surface."""
 
@@ -4785,9 +5003,26 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         adapter_description="140W USB-C Power Adapter",
         gross_energy_j: float | None = None,
         admission_decision: str | None = "admitted",
+        scientific_sampling_hz: float = 10.0,
+        neg8_position: str | None = None,
     ):
         bundle_path = self.root / bundle_id
         bundle_path.mkdir(parents=True, exist_ok=True)
+        config = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        config["run_id"] = bundle_id
+        config["sampling"]["power_hz"] = scientific_sampling_hz
+        (bundle_path / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         if records is not None:
             (bundle_path / "rich_telemetry_idle.jsonl").write_text(
                 "".join(json.dumps(record) + "\n" for record in records)
@@ -4812,8 +5047,20 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         if admission_decision is not None:
             metadata["environment_admission"] = {
                 "decision": admission_decision,
+                "claim_reason": (
+                    None
+                    if admission_decision == "admitted"
+                    else "environment_admission_failed"
+                ),
                 "attempts": [
-                    {"attempt": 1, "admitted": admission_decision == "admitted"}
+                    {
+                        "attempt": 1,
+                        "admitted": admission_decision == "admitted",
+                        "cpu_admission_enforced": True,
+                        "cpu_admission": {
+                            "admitted": admission_decision == "admitted"
+                        },
+                    }
                 ],
             }
         summary = {}
@@ -4828,6 +5075,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     }
                 },
             }
+        normalized = run_campaign_module._normalized_benchmark_config(config)
         return run_campaign_module.MemberEvaluation(
             bundle_id=bundle_id,
             bundle_path=bundle_path,
@@ -4836,6 +5084,22 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             strict_valid=True,
             summary=summary,
             metadata=metadata,
+            declared_role=(
+                run_campaign_module.NEG8_REFERENCE_ROLE
+                if neg8_position is not None
+                else None
+            ),
+            sentinel_position=neg8_position,
+            scientific_config_sha256=(
+                run_campaign_module._scientific_config_sha256(normalized)
+                if neg8_position is not None
+                else None
+            ),
+            canonical_neg8_workload=(
+                run_campaign_module._declares_canonical_neg8_workload(normalized)
+                if neg8_position is not None
+                else False
+            ),
         )
 
     def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
@@ -4904,12 +5168,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 "p2-neg8-reference-start__r1",
                 records=_clean_idle_records(),
                 gross_energy_j=8.0,
+                neg8_position="start",
             ),
             self._member("p2-work-a__r1", records=_clean_idle_records()),
             self._member(
                 "p2-neg8-reference-end__r1",
                 records=_clean_idle_records(),
                 gross_energy_j=8.5,
+                neg8_position="end",
             ),
         ]
         section = run_campaign_module.idle_admission_core_verdict(
@@ -4924,6 +5190,85 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(section["neg8_bracket"]["decision"], "passed")
         self.assertEqual(section["neg8_bracket"]["abs_delta_j"], 0.5)
+        self.assertIsNotNone(
+            section["neg8_reference_scientific_config_sha256"]
+        )
+
+    def test_neg8_substring_without_declared_role_confers_no_reference(self) -> None:
+        # R5 defect shape: these IDs formerly conferred both reference roles.
+        # With no suite-declared role provenance they are ordinary members.
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_bracket_missing", section["conditions"])
+        self.assertIsNone(section["neg8_reference_scientific_config_sha256"])
+
+    def test_declared_neg8_role_with_noncanonical_workload_is_config_error(self) -> None:
+        source = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        source["workload_profile"]["prompt_tokens"] = 999
+        path = self.root / "declared-invalid-neg8.json"
+        path.write_text(json.dumps(source) + "\n", encoding="utf-8")
+        entry = run_campaign_module.OrderEntry(
+            index=1,
+            config=path.name,
+            role=run_campaign_module.NEG8_REFERENCE_ROLE,
+            sentinel_position="start",
+        )
+        with self.assertRaisesRegex(ValueError, "canonical NEG-8 workload"):
+            run_campaign_module.load_config_info(path, order_entry=entry)
+
+    def test_neg8_reference_scientific_config_mismatch_fails_closed(self) -> None:
+        # T2 defect shape: ID substrings plus similar energy formerly licensed
+        # a bracket even when the end reference used a different collection
+        # configuration.  Canonical workload identity alone is not enough;
+        # the complete normalized scientific hashes must also match.
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                    scientific_sampling_hz=5.0,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_bracket_reference_invalid", section["conditions"])
+        self.assertIsNone(section["neg8_reference_scientific_config_sha256"])
 
     def test_missing_idle_telemetry_fails_closed_under_production(self) -> None:
         binding = self._binding()
@@ -5031,6 +5376,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "p2-neg8-reference-start__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.0,
+                    neg8_position="start",
                 )
             ]
             if end_gross is not None:
@@ -5039,6 +5385,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                         "p2-neg8-reference-end__r1",
                         records=_clean_idle_records(),
                         gross_energy_j=end_gross,
+                        neg8_position="end",
                     )
                 )
             return run_campaign_module.idle_admission_core_verdict(
@@ -5119,12 +5466,24 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             },
             "environment_admission": {
                 "decision": admission_decision,
+                "claim_reason": (
+                    None
+                    if admission_decision == "admitted"
+                    else "environment_admission_failed"
+                ),
                 "attempts": [
                     {
                         "attempt": n,
                         "admitted": (
                             admission_decision == "admitted" and n == final_attempt
                         ),
+                        "cpu_admission_enforced": True,
+                        "cpu_admission": {
+                            "admitted": (
+                                admission_decision == "admitted"
+                                and n == final_attempt
+                            )
+                        },
                     }
                     for n in range(1, final_attempt + 1)
                 ],
@@ -5227,16 +5586,19 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "a-neg8-reference-start__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.0,
+                    neg8_position="start",
                 ),
                 self._member(
                     "z-neg8-reference-start__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=99.0,
+                    neg8_position="start",
                 ),
                 self._member(
                     "neg8-reference-end__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.1,
+                    neg8_position="end",
                 ),
             ],
             binding,
@@ -5280,7 +5642,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         invalid = replace(member, strict_valid=False)
         self.assertIsNone(run_campaign_module._gross_energy_for(invalid))
 
-    def _install_whole_window_manifest(self, binding, bundle_ids) -> None:
+    def _install_whole_window_manifest(self, binding, bundle_roles) -> None:
         manifest_dir = self.root / "campaign_manifests"
         manifest_dir.mkdir(parents=True, exist_ok=True)
         (manifest_dir / "window.json").write_text(
@@ -5292,8 +5654,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "members": [
                         {
                             "execution": "invoked",
-                            "bundle_ids": list(bundle_ids),
+                            "bundle_ids": [bundle_id],
+                            "role": run_campaign_module.NEG8_REFERENCE_ROLE,
+                            "sentinel_position": position,
+                            "scientific_config_sha256": evaluation.scientific_config_sha256,
+                            "canonical_neg8_workload": True,
                         }
+                        for bundle_id, position, evaluation in bundle_roles
                     ],
                 }
             )
@@ -5320,6 +5687,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "p2-neg8-reference-end__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.5,
+                    neg8_position="end",
                 )
             ],
             binding,
@@ -5345,11 +5713,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "p2-neg8-reference-start__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.0,
+                    neg8_position="start",
                 ),
                 self._member(
                     "p2-neg8-reference-end__r1",
                     records=_clean_idle_records(),
                     gross_energy_j=8.5,
+                    neg8_position="end",
                 ),
             ],
             binding,
@@ -5365,22 +5735,25 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "p2-neg8-reference-start__r1",
             "p2-neg8-reference-end__r1",
         ]
-        for bundle_id, gross_energy_j in (
-            ("p2-neg8-reference-start__r1", 8.0),
-            ("p2-neg8-reference-end__r1", 8.04),
+        manifest_members = []
+        for bundle_id, gross_energy_j, position in (
+            ("p2-neg8-reference-start__r1", 8.0, "start"),
+            ("p2-neg8-reference-end__r1", 8.04, "end"),
         ):
             member = self._member(
                 bundle_id,
                 records=_clean_idle_records(),
                 gross_energy_j=gross_energy_j,
+                neg8_position=position,
             )
+            manifest_members.append((bundle_id, position, member))
             (member.bundle_path / "summary_metrics.json").write_text(
                 json.dumps({"status": "succeeded", **member.summary}) + "\n"
             )
             (member.bundle_path / "metadata.json").write_text(
                 json.dumps(member.metadata) + "\n"
             )
-        self._install_whole_window_manifest(binding, bundle_ids)
+        self._install_whole_window_manifest(binding, manifest_members)
 
         args = run_campaign_module.parse_args(
             [
@@ -5413,17 +5786,24 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "p2-neg8-reference-start__r1",
             "p2-neg8-reference-end__r1",
         ]
-        for bundle_id, gross in zip(bundle_ids, (8.0, 8.04)):
+        manifest_members = []
+        for bundle_id, gross, position in zip(
+            bundle_ids, (8.0, 8.04), ("start", "end")
+        ):
             member = self._member(
-                bundle_id, records=_clean_idle_records(), gross_energy_j=gross
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross,
+                neg8_position=position,
             )
+            manifest_members.append((bundle_id, position, member))
             (member.bundle_path / "summary_metrics.json").write_text(
                 json.dumps({"status": "succeeded", **member.summary}) + "\n"
             )
             (member.bundle_path / "metadata.json").write_text(
                 json.dumps(member.metadata) + "\n"
             )
-        self._install_whole_window_manifest(binding, bundle_ids)
+        self._install_whole_window_manifest(binding, manifest_members)
         args = run_campaign_module.parse_args(
             [
                 "--whole-window-verdict",
@@ -5455,6 +5835,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "p2-neg8-reference-start__r1",
             records=_clean_idle_records(),
             gross_energy_j=8.0,
+            neg8_position="start",
         )
         (member.bundle_path / "summary_metrics.json").write_text(
             json.dumps({"status": "succeeded", **member.summary}) + "\n"

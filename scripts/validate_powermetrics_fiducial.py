@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -44,32 +44,87 @@ from joulewise.clock import SystemClock  # noqa: E402
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
     PROTOCOL_ID,
+    RESIDUAL_REGION_METHOD,
     PULSE_COUNT,
     PULSE_DURATION_S,
+    SAMPLING_INTERVAL_MS,
     CommandedPulse,
     TraceInterval,
     WARMUP_PULSE_COUNT,
     allocate_matmul_buffers,
+    clock_stamp_half_width_s,
     detect_pulses,
     instrument_evidence,
+    protocol_definition_matches,
     pulse_schedule,
     run_matmul_pulse,
+    trim_trace_after_pulses,
+    rederive_detection_from_artifacts,
 )
 from joulewise.uncertainty_evidence import (  # noqa: E402
     derive_powermetrics_clock_evidence_v2,
 )
 
-SAMPLING_INTERVAL_MS = 100
+PROTOCOL_PATH = (
+    REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v2.json"
+)
+ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 
 
 def sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def stamp_half_width_s(stamp) -> float:
-    return (stamp.monotonic_after_s - stamp.monotonic_before_s) / 2.0 + max(
-        stamp.wall_resolution_s, stamp.monotonic_resolution_s
-    )
+def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
+    """Load and field-bind the frozen JSON to executable module constants."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return protocol_definition_matches(payload)
+
+
+def _terminate_powermetrics(process: subprocess.Popen) -> None:
+    """Best-effort bounded termination for a calibration sampler."""
+
+    process.terminate()
+    try:
+        process.communicate(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+
+
+def wait_for_preworkload_rollover(
+    capture_path: Path,
+    process: subprocess.Popen,
+    *,
+    timeout_s: float = 15.0,
+    poll_s: float = 0.05,
+) -> None:
+    """Require an advancing native plist timestamp before any workload.
+
+    Timeout is a governed refusal, not permission to fall through. The
+    sampler is terminated here so callers cannot accidentally continue with
+    baseline, warmup, or pulse work after the gate fails.
+    """
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            records = parse_powermetrics_records(capture_path.read_bytes())
+        except (OSError, ValueError):
+            records = []
+        stamps = [
+            float(record.metadata["plist_timestamp_s"])
+            for record in records
+        ]
+        if any(later > earlier for earlier, later in zip(stamps, stamps[1:])):
+            return
+        time.sleep(poll_s)
+    _terminate_powermetrics(process)
+    raise RuntimeError(ROLLOVER_GATE_TIMEOUT_REASON)
 
 
 def trim_trace_after_warmups(
@@ -86,10 +141,91 @@ def trim_trace_after_warmups(
     still detected.
     """
 
-    if not warmups:
-        return list(intervals)
-    cutoff_s = max(pulse.off_s for pulse in warmups)
-    return [interval for interval in intervals if interval.start_s >= cutoff_s]
+    return trim_trace_after_pulses(intervals, warmups)
+
+
+def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
+    """Re-emit v2 evidence from an immutable capture without live collection."""
+
+    source_dir = Path(source_dir)
+    manifest_path = source_dir / "manifest.json"
+    evidence_path = source_dir / "instrument_evidence.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("source calibration metadata is unreadable") from exc
+    artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
+    if not isinstance(artifacts, dict) or not isinstance(stored, dict):
+        raise ValueError("source calibration metadata is malformed")
+    raw_by_name: dict[str, bytes] = {}
+    for relative in (
+        "raw/powermetrics.plist",
+        "events.jsonl",
+        "instrument_evidence.json",
+    ):
+        expected = artifacts.get(relative)
+        candidate = source_dir / relative
+        try:
+            raw = candidate.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"source artifact missing: {relative}") from exc
+        if (
+            not isinstance(expected, str)
+            or hashlib.sha256(raw).hexdigest() != expected
+        ):
+            raise ValueError(f"source artifact hash mismatch: {relative}")
+        raw_by_name[relative] = raw
+    stored_hashes = stored.get("artifact_sha256")
+    if not isinstance(stored_hashes, dict):
+        raise ValueError("source evidence omits primary artifact hashes")
+    for relative in ("raw/powermetrics.plist", "events.jsonl"):
+        if hashlib.sha256(raw_by_name[relative]).hexdigest() != stored_hashes.get(
+            relative
+        ):
+            raise ValueError(f"source evidence hash mismatch: {relative}")
+    fresh = rederive_detection_from_artifacts(
+        raw_by_name["raw/powermetrics.plist"],
+        raw_by_name["events.jsonl"],
+        stored.get("clock_anchor"),
+    )
+    stored_bound = stored.get("b_fiducial_s")
+    if (
+        isinstance(stored_bound, bool)
+        or not isinstance(stored_bound, int | float)
+        or fresh.b_fiducial_s is None
+    ):
+        raise ValueError("source calibration bound is malformed")
+    fresh = replace(
+        fresh,
+        b_fiducial_s=max(float(stored_bound), float(fresh.b_fiducial_s)),
+    )
+    bindings = dict(stored.get("bindings", {}))
+    bindings.update(
+        {
+            "pulse_protocol_id": PROTOCOL_ID,
+            "estimator_revision": RESIDUAL_REGION_METHOD,
+            "protocol_sha256": sha256_path(PROTOCOL_PATH),
+        }
+    )
+    validation_id = str(stored.get("validation_id") or source_dir.name) + "-v2"
+    payload = instrument_evidence(
+        fresh,
+        bindings=bindings,
+        validation_id=validation_id,
+        artifact_sha256={
+            relative: hashlib.sha256(raw_by_name[relative]).hexdigest()
+            for relative in ("raw/powermetrics.plist", "events.jsonl")
+        },
+    )
+    payload["clock_anchor"] = stored.get("clock_anchor")
+    payload["clock_anchor_resolved"] = True
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Exclusive create: re-derivation must never clobber an existing evidence
+    # artifact (same rule as the extraction and campaign-log outputs).
+    with output.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return payload
 
 
 def main() -> int:
@@ -104,6 +240,8 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "runs" / "instrument_validation",
     )
+    parser.add_argument("--rederive-from", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--pulse-count", type=int, default=PULSE_COUNT)
     parser.add_argument(
         "--power-policy",
@@ -111,6 +249,27 @@ def main() -> int:
         help="operator-recorded power policy identity (e.g. 'ac_high_power'); required",
     )
     args = parser.parse_args()
+    if not verify_frozen_protocol():
+        print(
+            "refusing: frozen powermetrics fiducial protocol is missing, "
+            "incomplete, or disagrees with executable constants",
+            file=sys.stderr,
+        )
+        return 2
+    if args.rederive_from is not None:
+        if args.output is None:
+            print("refusing: --rederive-from requires --output", file=sys.stderr)
+            return 2
+        try:
+            payload = rederive_artifact(args.rederive_from, args.output)
+        except ValueError as exc:
+            print(f"refusing: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"status": payload["status"], "output": str(args.output)}))
+        return 0 if payload["status"] == "valid" else 1
+    if args.output is not None:
+        print("refusing: --output requires --rederive-from", file=sys.stderr)
+        return 2
     if not args.allow_live:
         print(
             "refusing: live [QUIET-MAC] calibration is lead-owned; "
@@ -186,19 +345,13 @@ def main() -> int:
         process.terminate()
         print("powermetrics never became ready", file=sys.stderr)
         return 1
-    # D-078: wait for a native whole-second rollover before any pulse.
-    deadline = time.monotonic() + 15.0
-    while time.monotonic() < deadline:
-        try:
-            records = parse_powermetrics_records(capture_path.read_bytes())
-        except ValueError:
-            records = []
-        stamps = [
-            float(record.metadata["plist_timestamp_s"]) for record in records
-        ]
-        if any(later > earlier for earlier, later in zip(stamps, stamps[1:])):
-            break
-        time.sleep(0.05)
+    # D-078: wait for a native whole-second rollover before any workload.
+    try:
+        wait_for_preworkload_rollover(capture_path, process)
+    except RuntimeError as exc:
+        events.close()
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 1
     sampling_started = clock.stamp()
     emit("sampling_started", {})
 
@@ -220,8 +373,8 @@ def main() -> int:
             CommandedPulse(
                 on_s=on_stamp.epoch_s,
                 off_s=off_stamp.epoch_s,
-                on_uncertainty_s=stamp_half_width_s(on_stamp),
-                off_uncertainty_s=stamp_half_width_s(off_stamp),
+                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
         time.sleep(1.5)
@@ -253,19 +406,14 @@ def main() -> int:
             CommandedPulse(
                 on_s=on_stamp.epoch_s,
                 off_s=off_stamp.epoch_s,
-                on_uncertainty_s=stamp_half_width_s(on_stamp),
-                off_uncertainty_s=stamp_half_width_s(off_stamp),
+                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
     time.sleep(BASELINE_S)
     sampling_stopped = clock.stamp()
     emit("sampling_stopped", {})
-    process.terminate()
-    try:
-        process.communicate(timeout=10.0)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.communicate()
+    _terminate_powermetrics(process)
     post_parse = clock.stamp()
 
     data = capture_path.read_bytes()
@@ -315,7 +463,15 @@ def main() -> int:
         )
         for record in anchored
     ]
-    detection = detect_pulses(trim_trace_after_warmups(intervals, warmups), pulses)
+    detection = detect_pulses(
+        trim_trace_after_warmups(intervals, warmups),
+        pulses,
+        trace_anchor_bound_s=(
+            float(evidence["clock_anchor"]["effective_clock_anchor_bound_s"])
+            if anchor_resolved
+            else 0.0
+        ),
+    )
     events.close()
 
     device_meta = native_records[0].metadata if native_records else {}
@@ -328,6 +484,8 @@ def main() -> int:
         "mlx_version": getattr(mx, "__version__", None),
         "pulse_protocol_id": PROTOCOL_ID,
         "power_policy": args.power_policy,
+        "estimator_revision": RESIDUAL_REGION_METHOD,
+        "protocol_sha256": sha256_path(PROTOCOL_PATH),
     }
     evidence_payload = instrument_evidence(
         detection,

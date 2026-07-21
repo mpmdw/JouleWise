@@ -79,6 +79,7 @@ from joulewise.cooldown_anchor import (
     cooldown_anchor_eligibility,
     idle_baseline_from_anchor,
 )
+from joulewise.cooldown import cooldown_disposition_from_raw
 from joulewise.environment import (
     collect_environment_guard_observation,
     collect_environment_snapshot,
@@ -156,6 +157,7 @@ COOLDOWN_ROLLING_WINDOW_S = 30.0
 COOLDOWN_TOLERANCE = 0.10
 COOLDOWN_CAP_S = 300.0
 PRE_IDLE_SETTLE_S = 2.0
+DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S = 0.75
 CAMPAIGN_POLICY_PATH_ENV = "JOULEWISE_CAMPAIGN_POLICY_PATH"
 CAMPAIGN_POLICY_SHA256_ENV = "JOULEWISE_CAMPAIGN_POLICY_SHA256"
 CAMPAIGN_PREFLIGHT_JSON_ENV = "JOULEWISE_CAMPAIGN_PREFLIGHT_JSON"
@@ -243,6 +245,7 @@ def run_benchmark(
     campaign_environment_preflight: dict[str, Any] | None = None,
     instrument_calibration_dir: Path | None = None,
     instrument_power_policy: str | None = None,
+    post_window_sampling_dwell_s: float | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -261,21 +264,59 @@ def run_benchmark(
     which the reducer copies into the run's ``measurement_quality``.
     """
     config.validate()
-    attachment = _load_instrument_calibration_attachment(
-        instrument_calibration_dir,
-        power_policy=instrument_power_policy,
-    )
+    if registry is None:
+        registry = joulewise.adapters
+    pre_resolved_telemetry: TelemetryAdapter | None = None
+    runtime_powermetrics_sha256: str | None = None
+    if instrument_calibration_dir is not None:
+        pre_resolved_telemetry, failure = registry.resolve_telemetry(config, clock)
+        if pre_resolved_telemetry is None:
+            detail = failure.message if failure is not None else "unknown resolution failure"
+            raise ValueError(
+                "instrument calibration attachment cannot observe the selected "
+                f"telemetry executable: {detail}"
+            )
+        runtime_powermetrics_sha256 = _runtime_powermetrics_digest(
+            pre_resolved_telemetry.device_metadata(config)
+        )
     if campaign_policy is None:
         (
             campaign_policy,
             campaign_policy_binding,
             campaign_environment_preflight,
         ) = _campaign_policy_from_environment()
+    runtime_power_policy = _runtime_power_policy_observation(
+        campaign_environment_preflight
+    )
+    attachment = _load_instrument_calibration_attachment(
+        instrument_calibration_dir,
+        power_policy=instrument_power_policy,
+        runtime_powermetrics_sha256=runtime_powermetrics_sha256,
+        runtime_power_policy=runtime_power_policy,
+    )
     config, suite_preparation, suite_preparation_failure = (
         _prepare_suite_manifest_for_new_bundle(config)
     )
-    if registry is None:
-        registry = joulewise.adapters
+    if post_window_sampling_dwell_s is None:
+        post_window_sampling_dwell_s = (
+            campaign_policy.post_window_sampling_dwell_s
+            if campaign_policy is not None
+            and config.hardware_target.telemetry_backend
+            == TelemetryBackend.POWERMETRICS
+            else (
+                DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S
+                if config.hardware_target.telemetry_backend
+                == TelemetryBackend.POWERMETRICS
+                else 0.0
+            )
+        )
+    if (
+        isinstance(post_window_sampling_dwell_s, bool)
+        or not isinstance(post_window_sampling_dwell_s, int | float)
+        or not math.isfinite(float(post_window_sampling_dwell_s))
+        or float(post_window_sampling_dwell_s) < 0.0
+    ):
+        raise ValueError("post-window sampling dwell must be a finite nonnegative number")
     writer = RunBundleWriter.create(runs_root, config, clock)
     if attachment is not None:
         attachment.install(writer.path)
@@ -293,6 +334,8 @@ def run_benchmark(
         campaign_policy_binding,
         campaign_environment_preflight,
         attachment.metadata if attachment is not None else None,
+        pre_resolved_telemetry,
+        float(post_window_sampling_dwell_s),
     ).execute()
 
 
@@ -311,7 +354,11 @@ class _InstrumentCalibrationAttachment:
 
 
 def _load_instrument_calibration_attachment(
-    directory: Path | None, *, power_policy: str | None
+    directory: Path | None,
+    *,
+    power_policy: str | None,
+    runtime_powermetrics_sha256: str | None = None,
+    runtime_power_policy: str | None = None,
 ) -> _InstrumentCalibrationAttachment | None:
     """Authenticate a validation directory before a bundle is created."""
 
@@ -389,6 +436,38 @@ def _load_instrument_calibration_attachment(
         or float(bound) < 0.0
     ):
         raise ValueError("instrument calibration evidence/power-policy binding is invalid")
+    bound_powermetrics_sha256 = bindings.get("powermetrics_sha256")
+    if (
+        not isinstance(runtime_powermetrics_sha256, str)
+        or runtime_powermetrics_sha256 != bound_powermetrics_sha256
+    ):
+        raise ValueError(
+            "instrument calibration powermetrics binding does not match the "
+            "runtime-observed executable digest"
+        )
+    if (
+        not isinstance(runtime_power_policy, str)
+        or runtime_power_policy != power_policy
+        or runtime_power_policy != bindings.get("power_policy")
+    ):
+        raise ValueError(
+            "instrument calibration power-policy binding does not match a "
+            "runtime-observed power policy"
+        )
+    from joulewise.powermetrics_fiducial import (  # noqa: PLC0415
+        verify_stored_evidence_physics,
+    )
+
+    try:
+        effective_bound = verify_stored_evidence_physics(
+            evidence,
+            files["raw/powermetrics.plist"],
+            files["events.jsonl"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "instrument calibration evidence does not reproduce the raw physics"
+        ) from exc
     return _InstrumentCalibrationAttachment(
         files=files,
         metadata={
@@ -397,13 +476,66 @@ def _load_instrument_calibration_attachment(
             "validation_manifest_path": "instrument_calibration/manifest.json",
             "validation_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
             "b_fiducial_s": float(bound),
+            "verified_effective_b_fiducial_s": effective_bound,
             "bindings": dict(bindings),
             "binding_observations": {
-                "powermetrics_sha256": bindings.get("powermetrics_sha256"),
-                "power_policy": power_policy,
+                "powermetrics_sha256": runtime_powermetrics_sha256,
+                "power_policy": runtime_power_policy,
             },
         },
     )
+
+
+def _runtime_power_policy_observation(
+    campaign_environment_preflight: object,
+) -> str | None:
+    """Classify the live campaign snapshot into a canonical power policy.
+
+    A CLI/config label is not an observation.  Only the campaign environment
+    snapshot can establish the currently supported ``ac_high_power`` policy;
+    missing or contradictory fields leave the binding unverifiable.
+    """
+
+    snapshot = (
+        campaign_environment_preflight.get("snapshot")
+        if isinstance(campaign_environment_preflight, dict)
+        else None
+    )
+    power = snapshot.get("power") if isinstance(snapshot, dict) else None
+    if (
+        isinstance(snapshot, dict)
+        and snapshot.get("power_source") == "AC Power"
+        and isinstance(power, dict)
+        and power.get("external_connected") is True
+        and snapshot.get("low_power_mode") is False
+    ):
+        return "ac_high_power"
+    return None
+
+
+def _runtime_powermetrics_digest(device_metadata: object) -> str:
+    """Return the selected adapter's runtime-observed executable digest."""
+
+    powermetrics = (
+        device_metadata.get("powermetrics")
+        if isinstance(device_metadata, dict)
+        else None
+    )
+    digest = (
+        powermetrics.get("executable_sha256")
+        if isinstance(powermetrics, dict)
+        else None
+    )
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError(
+            "selected telemetry adapter did not expose a valid runtime-observed "
+            "powermetrics executable digest"
+        )
+    return digest
 
 
 def _campaign_policy_from_environment() -> tuple[
@@ -578,6 +710,8 @@ class _Execution:
         campaign_policy_binding: dict[str, Any] | None = None,
         campaign_environment_preflight: dict[str, Any] | None = None,
         instrument_calibration: dict[str, Any] | None = None,
+        pre_resolved_telemetry: TelemetryAdapter | None = None,
+        post_window_sampling_dwell_s: float = 0.0,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -600,6 +734,9 @@ class _Execution:
         self._instrument_calibration = (
             dict(instrument_calibration) if instrument_calibration else None
         )
+        self._pre_resolved_telemetry = pre_resolved_telemetry
+        self._post_window_sampling_dwell_s = post_window_sampling_dwell_s
+        self._trace_window_margins: dict[str, float] | None = None
         self._environment_admission: dict[str, Any] | None = None
         # D-024: one immutable context, constructed after bundle creation,
         # passed to every adapter lifecycle call. Context is data (paths and
@@ -731,7 +868,12 @@ class _Execution:
         self._runtime = runtime
         self._log(self._runtime_log, f"resolved runtime adapter '{runtime.name}'")
         self._validate_suite_manifest_if_present(runtime)
-        telemetry, failure = self._registry.resolve_telemetry(self._config, self._clock)
+        if self._pre_resolved_telemetry is not None:
+            telemetry, failure = self._pre_resolved_telemetry, None
+        else:
+            telemetry, failure = self._registry.resolve_telemetry(
+                self._config, self._clock
+            )
         if telemetry is None:
             raise self._resolution_failure("validate", "telemetry", failure)
         self._telemetry = telemetry
@@ -1086,8 +1228,13 @@ class _Execution:
         # window; the event itself is appended after the runtime events so
         # the stable flush-sort keeps it bracketing them.
         sampling_stopped_stamp = _clock_stamp(self._clock)
+        if self._post_window_sampling_dwell_s > 0.0:
+            self._clock.sleep(self._post_window_sampling_dwell_s)
         self._capture_adapter_alignments()
         self._stop_sampling_once(sampling_stopped_stamp)
+        self._record_trace_window_margins(
+            sampling_started_stamp, sampling_stopped_stamp
+        )
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         self._sampling_active = False
@@ -1108,7 +1255,7 @@ class _Execution:
                 timestamp_s=sampling_stopped_stamp.epoch_s,
                 event_type="sampling_stopped",
                 phase="measured_run",
-                message="telemetry sampling stopped",
+                message="measured window stopped; telemetry tail retained outside window",
                 metadata={},
             )
         )
@@ -1417,6 +1564,7 @@ class _Execution:
                     self._context,
                     sampling_started=self._sampling_started_stamp,
                     sampling_stopped=sampling_stopped_stamp,
+                    required_post_window_tail_s=self._post_window_sampling_dwell_s,
                 )
                 self._samples = result.samples
                 self._uncertainty_evidence = dict(result.uncertainty_evidence)
@@ -1429,6 +1577,37 @@ class _Execution:
             self._sampling_stop_claimed = False
             raise
         return True
+
+    def _record_trace_window_margins(
+        self,
+        sampling_started_stamp: ClockStamp,
+        sampling_stopped_stamp: ClockStamp,
+    ) -> None:
+        """Record achieved trace support outside the measured window."""
+
+        if not self._samples:
+            return
+        support_starts = [
+            sample.interval_start_s
+            if sample.interval_start_s is not None
+            else sample.timestamp_s
+            for sample in self._samples
+        ]
+        support_ends = [
+            sample.interval_end_s
+            if sample.interval_end_s is not None
+            else sample.timestamp_s
+            for sample in self._samples
+        ]
+        self._trace_window_margins = {
+            "requested_post_window_dwell_s": self._post_window_sampling_dwell_s,
+            "achieved_pre_window_margin_s": (
+                sampling_started_stamp.epoch_s - min(support_starts)
+            ),
+            "achieved_post_window_margin_s": (
+                max(support_ends) - sampling_stopped_stamp.epoch_s
+            ),
+        }
 
     def _salvage_adapter_custody(self) -> None:
         for adapter in (self._telemetry, self._runtime):
@@ -1852,6 +2031,8 @@ class _Execution:
             extra["environment_admission"] = self._environment_admission
         if self._instrument_calibration is not None:
             extra["instrument_calibration"] = self._instrument_calibration
+        if self._trace_window_margins is not None:
+            extra["trace_window_margins"] = self._trace_window_margins
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -2345,18 +2526,20 @@ def cooldown_gate(
                 ),
             },
         }
-        if cap_hit:
-            return {
-                "result": "cap_hit",
-                **common,
-                "_trace": trace,
-            }
-        if release_criteria_met:
-            return {
-                "result": "recovered",
-                **common,
-                "_trace": trace,
-            }
+        if cap_hit or release_criteria_met:
+            disposition = cooldown_disposition_from_raw(trace)
+            if disposition == "cap_hit":
+                return {
+                    "result": "cap_hit",
+                    **common,
+                    "_trace": trace,
+                }
+            if disposition == "recovered":
+                return {
+                    "result": "recovered",
+                    **common,
+                    "_trace": trace,
+                }
 
 
 def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
@@ -2516,6 +2699,7 @@ def run_experiment(
     frozen_cooldown_anchor: dict[str, Any] | None = None,
     instrument_calibration_dir: Path | None = None,
     instrument_power_policy: str | None = None,
+    post_window_sampling_dwell_s: float | None = None,
 ) -> tuple[Path, list[tuple[Path, SummaryMetrics]]]:
     """Run ``repetitions`` measured runs and group them by an experiment manifest.
 
@@ -2623,6 +2807,7 @@ def run_experiment(
             campaign_environment_preflight=preflight,
             instrument_calibration_dir=instrument_calibration_dir,
             instrument_power_policy=instrument_power_policy,
+            post_window_sampling_dwell_s=post_window_sampling_dwell_s,
         )
         previous_member_end_s = clock.now()
         next_extra_metadata = None

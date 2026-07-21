@@ -269,6 +269,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
     config = BenchmarkConfig.from_mapping(_load_config(Path(args.config)))
     clock = _select_clock(config)
+    post_window_sampling_dwell_s = (
+        args.post_window_sampling_dwell_s
+        if config.hardware_target.telemetry_backend == TelemetryBackend.POWERMETRICS
+        else None
+    )
     frozen_cooldown_anchor = None
     if args.frozen_cooldown_anchor_json is not None:
         try:
@@ -313,6 +318,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     "instrument_power_policy": args.instrument_power_policy,
                 }
             )
+        experiment_kwargs["post_window_sampling_dwell_s"] = (
+            post_window_sampling_dwell_s
+        )
         manifest_path, members = run_experiment(
             config,
             Path(args.runs_dir),
@@ -340,6 +348,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             else None
         ),
         instrument_power_policy=args.instrument_power_policy,
+        post_window_sampling_dwell_s=post_window_sampling_dwell_s,
     )
     print(_bundle_line(bundle_path, summary))
     return 0 if summary.status == RunStatus.SUCCEEDED else 3
@@ -797,6 +806,8 @@ def _strict_reducer_version_dispatch(
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
         return [], set(ADDED_DURING_0_5_0), False, None
+    if reducer_version == "0.5.1":
+        return [], set(ADDED_DURING_0_5_0), False, "0.5.1"
     frozen_absence: set[str]
     relabel_markers: set[str]
     if reducer_version == "0.5.0":
@@ -1751,11 +1762,7 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
         recorded_version = value if isinstance(value, str) else None
     requested_version = args.reducer_version
     if requested_version is None and stored_path.is_file():
-        requested_version = (
-            AXI_REDUCER_VERSION
-            if recorded_version in AXI_REDUCER_VERSIONS
-            else SUMMARY_REDUCER_VERSION
-        )
+        requested_version = recorded_version
     summary = reduce_bundle(bundle_path, reducer_version=requested_version)
     try:
         payload = summary.to_dict()
@@ -2075,6 +2082,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--instrument-power-policy",
         help="current run power-policy id (must match calibration binding)",
+    )
+    run.add_argument(
+        "--post-window-sampling-dwell-s",
+        type=float,
+        help=(
+            "retain telemetry sampling for this many seconds after the measured "
+            "stop marker without extending the measured window"
+        ),
     )
     run.set_defaults(func=_cmd_run)
 

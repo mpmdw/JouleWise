@@ -523,7 +523,7 @@ if __name__ == "__main__":
 class AxiV061AnchorEraTests(unittest.TestCase):
     """D-078: 0.6.1 is the anchor-era AXI arm; 0.6.0 stays byte-frozen."""
 
-    def test_new_event_v2_default_is_0_6_1_and_0_6_0_is_historical_only(self) -> None:
+    def test_new_event_v2_default_is_0_6_2_and_0_6_0_is_historical_only(self) -> None:
         # W8 defect shape: deleting the stored historical summary made a new
         # event-v2 bundle default to the defective 0.6.0 wire.
         temporary = tempfile.TemporaryDirectory()
@@ -532,8 +532,8 @@ class AxiV061AnchorEraTests(unittest.TestCase):
         shutil.copytree(AXI_FIXTURE, path)
         (path / "summary_metrics.json").unlink()
         summary = reduce_bundle(path)
-        self.assertEqual(summary.summary_provenance["reducer_version"], "0.6.1")
-        self.assertEqual(AXI_REDUCER_VERSION, "0.6.1")
+        self.assertEqual(summary.summary_provenance["reducer_version"], "0.6.2")
+        self.assertEqual(AXI_REDUCER_VERSION, "0.6.2")
         explicit = reduce_bundle(path, reducer_version="0.6.1")
         self.assertEqual(
             explicit.summary_provenance["reducer_version"], "0.6.1"
@@ -567,3 +567,13 @@ class AxiV061AnchorEraTests(unittest.TestCase):
             "E_clock_anchor_shift_bound_j", frozen_payload["energy_bound_terms_j"]
         )
         self.assertNotIn("energy_anchor_shift_envelopes", frozen_payload)
+
+    def test_0_6_2_matches_its_identity_locked_golden(self) -> None:
+        current = reduce_bundle(AXI_FIXTURE, reducer_version="0.6.2")
+        self.assertEqual(
+            current.canonical_bytes(),
+            (GOLDENS / "axi_summary_v062.json").read_bytes(),
+        )
+        self.assertEqual(
+            current.summary_provenance["reducer_version"], "0.6.2"
+        )

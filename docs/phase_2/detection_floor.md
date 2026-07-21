@@ -589,8 +589,8 @@ method pairs (`GOVERNED_REDUCER_IDLE_METHOD_PAIRS` in
 | Reducer version | Idle-variance method |
 |---|---|
 | `0.4.1`, `0.4.2` | `newey_west_bartlett_10s_iid_floor_v1` |
-| `0.5.0`, `0.5.1` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
-| `0.6.0`, `0.6.1` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
+| `0.5.0`, `0.5.2` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
+| `0.6.0`, `0.6.2` | `duration_weighted_newey_west_bartlett_10s_iid_floor_v2` |
 
 Every crossed or unknown pair fails closed (`required_error_term_unknown`).
 No version-range inference: a future wire is added to the matrix by an
@@ -598,6 +598,12 @@ explicit governed edit, never by pattern match. Stored 0.5.0/0.6.0 summaries
 are never rewritten. The earlier P2-044 sentence "P2-037 must require reducer
 0.4.1" is superseded by this matrix for the reducer-version component only;
 every other clause of that predeclaration is unchanged.
+
+Reducer 0.5.1/0.6.1 remains replay-readable but is not claim-eligible: its
+stored anchor envelope used the superseded `max(B_bundle, B_fiducial)` causal
+composition. Consumers preserve its fields but stop on the registered
+`clock_anchor_unresolved` version barrier. Current 0.5.2/0.6.2 evidence uses
+the additive composition and is the only repaired claim-bearing mint.
 
 ### Campaign cooldown join and cap-hit disposition (audit P0.4)
 

@@ -1,8 +1,13 @@
 # Powermetrics Pulse-Fiducial Instrument Calibration (D-078)
 
 Contract for `runs/instrument_validation/<validation_id>/` artifacts and the
-`B_fiducial` bound consumed by reducer 0.5.1/0.6.1 as
-`B_effective = max(B_bundle, B_fiducial)`.
+`B_fiducial` bound consumed by reducer 0.5.1/0.6.1 under their frozen replay
+rule `B_effective = max(B_bundle, B_fiducial)`. Reducer 0.5.2/0.6.2 replaces
+that under-composed mint rule with
+`B_effective = B_bundle + B_fiducial`: the bundle-local censored anchor
+interval and calibrated instrument emission lag constrain disjoint causal
+links, so neither interval is proven to contain the other. The full composed
+bound drives both the continuous anchor-shift scan and every timing license.
 
 The ONE home for the estimator and protocol constants is
 `joulewise/powermetrics_fiducial.py` plus the frozen protocol file
@@ -42,9 +47,27 @@ bias. Per-pulse onset/offset residual intervals are the contiguous
 loss-tolerance regions around the fitted shifts, widened by the event-stamp
 uncertainty.
 
+Estimator revision `joint_loss_sublevel_interval_branch_v2` additively
+supersedes the preceding directional-projection coverage assumption. It uses
+analytic interval branch-and-bound over the full accepted two-dimensional
+loss region: overlap monotonicity supplies a rigorous loss lower bound for
+each rectangle; a rectangle is discarded only when that lower bound exceeds
+the acceptance threshold; retained rectangles are bisected to at most
+0.1 ms on both axes and their full extents are included. This dominates all
+points between resolution cells and therefore proves deterministic coverage
+of the complete accepted region. The older axis/common/opposite-diagonal
+description remains the historical v1 artifact method, not a coverage claim
+for v2.
+
 `B_fiducial = max over all onset/offset residual intervals of
 max(|r_lower|, |r_upper|)`. Median/p95 are recorded as diagnostics only and
 never license anything.
+
+The calibration capture's own freshly derived
+`effective_clock_anchor_bound_s` is added to that residual maximum. This is
+the conservative causal composition (not the anchor half-width alone), so the
+new physical bound is monotone and cannot be smaller than the former
+event-stamp/fit-only bound.
 
 ## Window license
 
@@ -77,8 +100,12 @@ bindings, binding_observations}`. `bindings` repeats the complete eight-field
 artifact vector (`hardware_model`, `os_build`, `powermetrics_sha256`,
 `sampling_interval_ms`, `anchor_method_version`, `mlx_version`,
 `pulse_protocol_id`, `power_policy`); `binding_observations` records the
-runtime-observed powermetrics executable digest and explicitly selected run
-power-policy id. The referenced validation directory's `events.jsonl` and
+runtime-observed powermetrics executable digest and the canonical power-policy
+classification derived from the live campaign environment snapshot. A CLI or
+config power-policy label is not an observation: the currently supported
+`ac_high_power` classification requires observed AC power, an external power
+connection, and low-power mode off; missing or contradictory live fields make
+the binding unverifiable and refuse attachment. The referenced validation directory's `events.jsonl` and
 `raw/powermetrics.plist` bytes are copied with the evidence artifact and their
 hashes are reverified during reduction;
 any bound-field change invalidates the calibration and a new run is
@@ -98,6 +125,28 @@ metadata scalar alone. An invalid or malformed reference is
 `clock_anchor_unresolved` at reduce time - never a silent fallback to
 `B_bundle` alone.
 
+Hash verification is not by itself calibration verification. Reducer
+consumption re-parses the hash-verified raw plist, re-derives its v2 trace
+anchor from the recorded ClockStamps, reconstructs all warmup and protocol
+pulses from the hash-verified event ledger, and re-runs the shared fiducial
+detector. Pulse count, detected flags, spurious-plateau count, and containment
+of each freshly fitted edge by its declared per-pulse residual enclosure must
+agree structurally. A newly wider coverage revision does not invalidate an
+older self-consistent enclosure merely because its width grows. The effective
+consumed calibration bound is `max(B_declared, B_freshly_rederived)`; a
+conservatively wider declaration remains valid, while a declaration can never
+shrink physics re-derived from primary bytes. Unknown diagnostic spellings or
+any non-empty reason list on `status = valid` are invalid evidence and reduce
+only to `instrument_calibration_invalid`.
+
+The live harness loads
+`configs/calibration/powermetrics_fiducial/protocol_v2.json` before calibration
+and field-compares the complete JSON object with the executable module pins
+(`protocol_v1.json` stays byte-frozen as the historical v1 identity and is not
+loaded for execution). A missing, incomplete, or tampered protocol file
+refuses the run before any live capture. The JSON's estimator revision records
+the v2 coverage and trace-anchor-widening rules above.
+
 The v1 protocol's `status = valid` predicate additionally requires ALL
 `protocol_pulse_count` pulses detected (default 40): a run with a fitted
 bound but fewer than the protocol count, or any undetected pulse, is
@@ -111,3 +160,35 @@ Live captures are lead-owned `[QUIET-MAC]` operations
 (`scripts/validate_powermetrics_fiducial.py --allow-live --power-policy ...`);
 never run while any agent session is active. CI exercises only the pure
 estimator via synthetic traces (`tests/test_powermetrics_fiducial.py`).
+
+## Protocol v2 identity and legacy-v1 backstop (additive clarification)
+
+`powermetrics_pulse_fiducial_v1` remains byte-frozen at
+`configs/calibration/powermetrics_fiducial/protocol_v1.json`; its identity
+continues to describe the original directional-region estimator and the
+fit/event residual-only stored scalar. New capture and re-derivation output
+uses `powermetrics_pulse_fiducial_v2`, bound to
+`configs/calibration/powermetrics_fiducial/protocol_v2.json`. V2 fixes the
+estimator as `joint_loss_sublevel_interval_branch_v2`, adds the capture's own
+effective trace-anchor bound to the residual maximum, and requires complete
+deterministic branch-and-bound coverage of the accepted two-edge loss region.
+
+V2 extends the binding vector with `estimator_revision` and
+`protocol_sha256`; those fields are mandatory only for v2 so the sealed v1
+artifact remains verifiable. Claim-bearing reduction never trusts either
+identity's stored status or scalar alone: it refits the hash-verified raw
+plist and event ledger and consumes
+`max(B_stored, B_fresh_current_estimator)`. Thus legacy v1 evidence can remain
+auditable without retroactively rewriting it, while its older stored bound can
+only be widened by the current physical re-derivation.
+
+The live harness now loads protocol v2. Its `--rederive-from ... --output ...`
+mode performs no live capture: it verifies the source manifest and primary
+hashes, reruns the current estimator over the same bytes, and emits a new v2
+`instrument_evidence.json`. It refuses any hash mismatch.
+
+Before baseline, warmup, or protocol pulses, the live harness must observe an
+advancing native plist timestamp. Failure to observe rollover within the
+bounded gate terminates powermetrics and refuses with
+`pulse_calibration_rollover_gate_timeout`; no calibration evidence artifact is
+minted from that capture.

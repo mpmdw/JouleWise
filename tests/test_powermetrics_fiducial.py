@@ -8,21 +8,38 @@ bounds against them.
 from __future__ import annotations
 
 import math
+import json
+import hashlib
+import tempfile
 import unittest
+import sys
 from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
+from joulewise import powermetrics_fiducial as fiducial_module
 from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
+    LEGACY_PROTOCOL_ID,
+    PROTOCOL_ID,
+    PROTOCOL_V2_SHA256,
+    RESIDUAL_REGION_METHOD,
     CommandedPulse,
     TraceInterval,
     detect_pulses,
     instrument_evidence,
+    protocol_definition,
     pulse_gap_s,
     pulse_schedule,
     van_der_corput,
     window_license_min_duration_s,
 )
-from scripts.validate_powermetrics_fiducial import trim_trace_after_warmups
+from scripts.validate_powermetrics_fiducial import (
+    trim_trace_after_warmups,
+    verify_frozen_protocol,
+)
+from scripts import validate_powermetrics_fiducial as validation_script
 
 CADENCE_S = 0.1
 BASELINE_W = 2.0
@@ -208,6 +225,129 @@ class DetectorTests(unittest.TestCase):
             wide.b_fiducial_s, tight.b_fiducial_s + 0.049
         )
 
+    def test_live_shaped_bound_includes_capture_trace_anchor(self) -> None:
+        # F4 live-calibration shape: the fit/event component is ~24.0 ms and
+        # the capture's own effective trace anchor is 2.926 ms. Pre-fix the
+        # latter was omitted and the physical bound stopped near 24.0 ms.
+        trace, pulses = self.make_case(shift_s=0.02, count=3)
+        pulses = [
+            replace(
+                pulse,
+                on_uncertainty_s=0.0035,
+                off_uncertainty_s=0.0035,
+            )
+            for pulse in pulses
+        ]
+        detection = detect_pulses(
+            trace, pulses, trace_anchor_bound_s=0.002926
+        )
+        self.assertAlmostEqual(detection.b_fiducial_s, 0.0269, delta=0.0002)
+        self.assertGreaterEqual(detection.b_fiducial_s, 0.026039)
+
+    def test_trace_anchor_widening_is_monotone_for_clean_inputs(self) -> None:
+        # Property-style regression over different accepted pulse phases: the
+        # fixed estimator can only add the causal anchor component.
+        for shift_s in (-0.04, 0.0, 0.03):
+            with self.subTest(shift_s=shift_s):
+                trace, pulses = self.make_case(shift_s=shift_s, count=3)
+                old = detect_pulses(trace, pulses)
+                new = detect_pulses(
+                    trace, pulses, trace_anchor_bound_s=0.002926
+                )
+                self.assertGreaterEqual(new.b_fiducial_s, old.b_fiducial_s)
+                self.assertAlmostEqual(
+                    new.b_fiducial_s,
+                    old.b_fiducial_s + 0.002926,
+                    places=12,
+                )
+
+    def test_full_region_projection_dominates_legacy_directional_scan(self) -> None:
+        # F4 monotonicity across the estimator revision itself: every point
+        # admitted by the former axes/two-diagonals scan must lie inside the
+        # analytic full-region projection on the same input.
+        trace, pulses = self.make_case(shift_s=0.037, count=3)
+        detection = detect_pulses(trace, pulses)
+        strict_excursion_found = False
+        for pulse, fit in zip(pulses, detection.fits, strict=True):
+            local = [
+                interval
+                for interval in trace
+                if min(
+                    interval.end_s,
+                    pulse.off_s + fiducial_module.LOCAL_MARGIN_S,
+                )
+                > max(
+                    interval.start_s,
+                    pulse.on_s - fiducial_module.LOCAL_MARGIN_S,
+                )
+            ]
+            loss = lambda onset, offset: fiducial_module._pulse_loss(
+                local,
+                detection.baseline_w,
+                fit.amplitude_w,
+                detection.robust_sigma_w,
+                pulse.on_s + onset,
+                pulse.off_s + offset,
+            )
+            best_loss = loss(fit.delta_on_s, fit.delta_off_s)
+            limit = best_loss + max(1.0, 0.05 * best_loss)
+            old_onsets = [fit.delta_on_s]
+            old_offsets = [fit.delta_off_s]
+
+            def admit(onset, offset):
+                if (
+                    abs(onset) <= fiducial_module.FIT_HALF_RANGE_S
+                    and abs(offset) <= fiducial_module.FIT_HALF_RANGE_S
+                    and loss(onset, offset) <= limit
+                ):
+                    old_onsets.append(onset)
+                    old_offsets.append(offset)
+
+            for value in fiducial_module._grid(
+                fit.delta_on_s,
+                fiducial_module.FIT_HALF_RANGE_S,
+                fiducial_module.FIT_FINE_STEP_S,
+            ):
+                admit(value, fit.delta_off_s)
+            for value in fiducial_module._grid(
+                fit.delta_off_s,
+                fiducial_module.FIT_HALF_RANGE_S,
+                fiducial_module.FIT_FINE_STEP_S,
+            ):
+                admit(fit.delta_on_s, value)
+            for shift in fiducial_module._grid(
+                0.0,
+                fiducial_module.FIT_HALF_RANGE_S,
+                fiducial_module.FIT_FINE_STEP_S,
+            ):
+                admit(fit.delta_on_s + shift, fit.delta_off_s + shift)
+                admit(fit.delta_on_s + shift, fit.delta_off_s - shift)
+
+            self.assertLessEqual(
+                fit.onset_residual_lower_s, min(old_onsets) + 1e-12
+            )
+            self.assertGreaterEqual(
+                fit.onset_residual_upper_s, max(old_onsets) - 1e-12
+            )
+            self.assertLessEqual(
+                fit.offset_residual_lower_s, min(old_offsets) + 1e-12
+            )
+            self.assertGreaterEqual(
+                fit.offset_residual_upper_s, max(old_offsets) - 1e-12
+            )
+            strict_excursion_found |= any(
+                (
+                    fit.onset_residual_lower_s < min(old_onsets) - 5e-5,
+                    fit.onset_residual_upper_s > max(old_onsets) + 5e-5,
+                    fit.offset_residual_lower_s < min(old_offsets) - 5e-5,
+                    fit.offset_residual_upper_s > max(old_offsets) + 5e-5,
+                )
+            )
+        self.assertTrue(
+            strict_excursion_found,
+            "fixture must expose an accepted off-axis excursion missed by axes/diagonals",
+        )
+
     def test_missing_edge_fails_closed(self) -> None:
         trace, pulses = self.make_case(shift_s=0.0)
         # Truncate the capture before the final pulse's off edge margin.
@@ -347,11 +487,31 @@ class EvidenceTests(unittest.TestCase):
                 "events.jsonl": "ef" * 32,
             },
             protocol_pulse_count=3,
+            protocol_id=LEGACY_PROTOCOL_ID,
         )
         self.assertEqual(payload["status"], "valid")
         self.assertEqual(payload["b_fiducial_s"], detection.b_fiducial_s)
-        self.assertEqual(set(payload["bindings"]), set(BINDING_FIELDS))
+        self.assertEqual(set(payload["bindings"]), set(self.bindings()))
         self.assertEqual(payload["pulse_count"], 3)
+
+    def test_any_detection_reason_forces_invalid_status(self) -> None:
+        # F5 exact defect: structural fields and B were clean, but a registered
+        # refusal reason still serialized status=valid.
+        detection = replace(
+            self.make_detection(), reasons=("pulse_detection_incomplete",)
+        )
+        payload = instrument_evidence(
+            detection,
+            bindings=self.bindings(),
+            validation_id="v-reasoned",
+            artifact_sha256={
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+            },
+            protocol_pulse_count=3,
+        )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertIn("pulse_detection_incomplete", payload["reasons"])
 
     def test_fitted_bound_below_protocol_pulse_count_is_invalid(self) -> None:
         # Regression: a 3-pulse run yields a fitted bound and all-detected, but
@@ -421,6 +581,198 @@ class EvidenceTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             window_license_min_duration_s(-1.0, 0.46)
+
+    def test_trace_anchor_component_flips_four_b_window_license(self) -> None:
+        # F2 defect shape using the sealed-capture magnitudes: residual-only
+        # B licensed a 100 ms window, while the physically complete composite
+        # B (including capture trace-anchor uncertainty) must refuse it.
+        residual_only_s = 0.024002791515387596
+        trace_anchor_s = 0.002926038
+        composite_s = residual_only_s + trace_anchor_s
+        window_s = 0.100
+        self.assertLessEqual(
+            window_license_min_duration_s(residual_only_s, 0.0), window_s
+        )
+        self.assertGreater(
+            window_license_min_duration_s(composite_s, 0.0), window_s
+        )
+
+    def test_trace_anchor_term_flips_four_b_window_license(self) -> None:
+        # F2 live-shaped defect: residual-only B licensed a 100 ms window,
+        # while the physically complete residual+capture-anchor B must refuse.
+        residual_only_s = 0.024002791515387596
+        trace_anchor_s = 0.002926038
+        composite_s = residual_only_s + trace_anchor_s
+        window_s = 0.100
+        old_min_s = window_license_min_duration_s(residual_only_s, 0.0)
+        new_min_s = window_license_min_duration_s(composite_s, 0.0)
+        self.assertAlmostEqual(old_min_s, 0.09601116606155038, places=14)
+        self.assertAlmostEqual(new_min_s, 0.10771531806155038, places=14)
+        self.assertLessEqual(old_min_s, window_s)
+        self.assertGreater(new_min_s, window_s)
+
+
+class FrozenProtocolTests(unittest.TestCase):
+    def test_shared_controller_verifier_rejects_forged_zero_residual_rows(self) -> None:
+        from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration()
+        evidence["b_fiducial_s"] = 0.0
+        for pulse in evidence["pulses"]:
+            for field in (
+                "onset_residual_lower_s",
+                "onset_residual_upper_s",
+                "offset_residual_lower_s",
+                "offset_residual_upper_s",
+            ):
+                pulse[field] = 0.0
+        with self.assertRaisesRegex(ValueError, "residual does not contain"):
+            verify_stored_evidence_physics(evidence, raw, events)
+
+    def test_consistent_protocol_json_matches_executable_pins(self) -> None:
+        self.assertTrue(verify_frozen_protocol())
+
+    def test_v1_protocol_bytes_remain_frozen_and_v2_hash_is_bound(self) -> None:
+        v1 = Path("configs/calibration/powermetrics_fiducial/protocol_v1.json")
+        v2 = Path("configs/calibration/powermetrics_fiducial/protocol_v2.json")
+        self.assertEqual(
+            hashlib.sha256(v1.read_bytes()).hexdigest(),
+            "14a7b5d82f446ba76609dafb0773ea1c3588ab6247919518e50c275e8b99eff9",
+        )
+        self.assertEqual(hashlib.sha256(v2.read_bytes()).hexdigest(), PROTOCOL_V2_SHA256)
+        self.assertEqual(protocol_definition()["protocol_id"], PROTOCOL_ID)
+
+    def test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration()
+        stored_only = max(
+            abs(float(pulse[field]))
+            for pulse in evidence["pulses"]
+            for field in (
+                "onset_residual_lower_s",
+                "onset_residual_upper_s",
+                "offset_residual_lower_s",
+                "offset_residual_upper_s",
+            )
+        )
+        evidence["b_fiducial_s"] = stored_only
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            (source / "raw").mkdir(parents=True)
+            (source / "raw" / "powermetrics.plist").write_bytes(raw)
+            (source / "events.jsonl").write_bytes(events)
+            evidence_raw = (
+                json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+            ).encode()
+            (source / "instrument_evidence.json").write_bytes(evidence_raw)
+            artifacts = {
+                "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
+                "events.jsonl": hashlib.sha256(events).hexdigest(),
+                "instrument_evidence.json": hashlib.sha256(evidence_raw).hexdigest(),
+            }
+            (source / "manifest.json").write_text(
+                json.dumps({"artifacts": artifacts}) + "\n"
+            )
+            output = Path(tmp) / "fresh" / "instrument_evidence.json"
+            fresh = validation_script.rederive_artifact(source, output)
+            self.assertEqual(fresh["protocol_id"], PROTOCOL_ID)
+            self.assertGreater(fresh["b_fiducial_s"], stored_only)
+            self.assertEqual(
+                fresh["bindings"]["estimator_revision"], RESIDUAL_REGION_METHOD
+            )
+            self.assertEqual(
+                fresh["bindings"]["protocol_sha256"], PROTOCOL_V2_SHA256
+            )
+            (source / "events.jsonl").write_bytes(events + b"{}\n")
+            with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                validation_script.rederive_artifact(source, output)
+
+    def test_incomplete_or_tampered_protocol_refuses(self) -> None:
+        # F7 defect shape: the harness formerly never loaded this file, so
+        # removing a gate or changing an estimator rule had no effect.
+        for mutation in ("missing_edge_gate", "wrong_estimator"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                payload = protocol_definition()
+                if mutation == "missing_edge_gate":
+                    del payload["gates"]["edge_coverage_across_full_fit_range"]
+                else:
+                    payload["estimator_revision"] = "axes_only_v0"
+                path = Path(tmp) / "protocol.json"
+                path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                self.assertFalse(verify_frozen_protocol(path))
+
+    def test_calibration_entrypoint_refuses_protocol_mismatch_before_live_import(self) -> None:
+        with patch.object(
+            validation_script, "verify_frozen_protocol", return_value=False
+        ), patch.object(
+            sys,
+            "argv",
+            [
+                "validate_powermetrics_fiducial.py",
+                "--allow-live",
+                "--power-policy",
+                "ac_high_power",
+            ],
+        ):
+            self.assertEqual(validation_script.main(), 2)
+
+    def test_preworkload_rollover_timeout_terminates_and_mints_no_artifact(self) -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.terminated = False
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def communicate(self, timeout=None):
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            capture = root / "raw.plist"
+            capture.write_bytes(b"incomplete but parse-patched")
+            artifact = root / "instrument_evidence.json"
+            process = FakeProcess()
+            records = [
+                SimpleNamespace(metadata={"plist_timestamp_s": 100.0}),
+                SimpleNamespace(metadata={"plist_timestamp_s": 100.0}),
+            ]
+            with (
+                patch.object(
+                    validation_script,
+                    "parse_powermetrics_records",
+                    return_value=records,
+                ),
+                patch.object(
+                    validation_script.time,
+                    "monotonic",
+                    side_effect=[0.0, 0.1, 1.0],
+                ),
+                patch.object(validation_script.time, "sleep"),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    validation_script.ROLLOVER_GATE_TIMEOUT_REASON,
+                ):
+                    validation_script.wait_for_preworkload_rollover(
+                        capture,
+                        process,
+                        timeout_s=0.5,
+                    )
+            self.assertTrue(process.terminated)
+            self.assertFalse(artifact.exists())
+            self.assertIn(
+                validation_script.ROLLOVER_GATE_TIMEOUT_REASON,
+                __import__(
+                    "joulewise.analysis_engine.claims",
+                    fromlist=["REDUCER_REASON_CODES"],
+                ).REDUCER_REASON_CODES,
+            )
 
 
 if __name__ == "__main__":

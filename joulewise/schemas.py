@@ -33,7 +33,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.5.1"
+SUMMARY_REDUCER_VERSION = "0.5.2"
 
 _PROMPT_SOURCE_FIELDS = (
     "prompt_text",
@@ -555,6 +555,7 @@ class CampaignPolicy:
     idle_admission: IdleAdmissionPolicy
     cooldown: CooldownPolicy
     idle_admission_extension: IdleAdmissionExtension | None = None
+    post_window_sampling_dwell_s: float = 0.0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
@@ -572,6 +573,7 @@ class CampaignPolicy:
                     "idle_admission",
                     "cooldown",
                     "idle_admission_extension",
+                    "post_window_sampling_dwell_s",
                 }
             ),
         )
@@ -622,6 +624,14 @@ class CampaignPolicy:
             idle_admission=admission,
             cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
             idle_admission_extension=extension,
+            post_window_sampling_dwell_s=(
+                _optional_float(
+                    data.get("post_window_sampling_dwell_s", 0.0),
+                    "campaign_policy.post_window_sampling_dwell_s",
+                    minimum=0.0,
+                )
+                or 0.0
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1975,7 +1985,7 @@ class SummaryMetricsV060(SummaryMetrics):
             "config_schema_version", "event_semantics_version",
         }:
             raise SchemaError("0.6.0 summary_provenance exact keys mismatch")
-        if provenance.get("reducer_version") not in {"0.6.0", "0.6.1"} or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
+        if provenance.get("reducer_version") not in {"0.6.0", "0.6.1", "0.6.2"} or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
             raise SchemaError("0.6.0 summary provenance version mismatch")
         if self.decode_counter_rollup is None:
             raise SchemaError("0.6.0 succeeded summary requires decode_counter_rollup")
@@ -2097,7 +2107,7 @@ class SummaryMetricsV060(SummaryMetrics):
         provenance["required"].append("event_semantics_version")
         provenance["properties"]["event_semantics_version"] = {"const": EVENT_SEMANTICS_VERSION}
         provenance["properties"]["reducer_version"] = {
-            "enum": ["0.6.0", "0.6.1"]
+            "enum": ["0.6.0", "0.6.1", "0.6.2"]
         }
         provenance["additionalProperties"] = False
         return schema

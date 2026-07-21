@@ -30,6 +30,16 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.floor_extraction import FloorExtractionError, extract_cells  # noqa: E402
 
 
+def _stored_bundle_containing(path: Path) -> Path | None:
+    """Return the finalized bundle ancestor of a prospective output path."""
+
+    resolved = path.resolve(strict=False)
+    for parent in resolved.parents:
+        if (parent / "summary_metrics.json").is_file():
+            return parent
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -73,6 +83,20 @@ def main(argv: list[str] | None = None) -> int:
     if not args.runs_root.is_dir():
         print(f"error: runs root is not a directory: {args.runs_root}", file=sys.stderr)
         return 2
+    if args.out.exists():
+        print(
+            f"error: refusing to overwrite existing extraction artifact: {args.out}",
+            file=sys.stderr,
+        )
+        return 2
+    bundle_ancestor = _stored_bundle_containing(args.out)
+    if bundle_ancestor is not None:
+        print(
+            "error: extraction output must be outside the immutable stored "
+            f"run bundle: {bundle_ancestor}",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         report = extract_cells(
@@ -86,9 +110,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    try:
+        with args.out.open("x", encoding="utf-8") as handle:
+            handle.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    except FileExistsError:
+        print(
+            f"error: refusing to overwrite existing extraction artifact: {args.out}",
+            file=sys.stderr,
+        )
+        return 2
     refused = [
         cell["cell_id"] for cell in report["cells"] if not cell["extractable"]
     ]

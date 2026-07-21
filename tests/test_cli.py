@@ -49,6 +49,39 @@ def _idle_powermetrics_stream(
 
 
 class CliTests(unittest.TestCase):
+    def test_reduce_default_replays_recorded_060_and_051_versions(self) -> None:
+        cases = (
+            (
+                Path("tests/fixtures/axi_valid_burst"),
+                None,
+                "0.6.0",
+            ),
+            (
+                Path("tests/fixtures/d078_r01"),
+                Path("tests/goldens/d078_r01_reducer_051.json"),
+                "0.5.1",
+            ),
+        )
+        for source, recorded_summary, expected_version in cases:
+            with self.subTest(expected_version=expected_version), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "bundle"
+                shutil.copytree(source, bundle)
+                if recorded_summary is not None:
+                    (bundle / "summary_metrics.json").write_bytes(
+                        recorded_summary.read_bytes()
+                    )
+                output = Path(tmp) / "replayed.json"
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(
+                        main(["reduce", str(bundle), "--output", str(output)]),
+                        0,
+                    )
+                payload = json.loads(output.read_text())
+                self.assertEqual(
+                    payload["summary_provenance"]["reducer_version"],
+                    expected_version,
+                )
+
     def test_reduce_never_rewrites_stored_point_anchor_summary(self) -> None:
         # W10 exact defect: the public verb used write_text on the canonical
         # summary path, replacing frozen 0.5.0 bytes in place.
@@ -69,7 +102,10 @@ class CliTests(unittest.TestCase):
                 (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
             )
             payload = json.loads(salvage.read_text())
-            self.assertIn("energy_anchor_shift_envelopes", payload)
+            self.assertNotIn("energy_anchor_shift_envelopes", payload)
+            self.assertEqual(
+                payload["summary_provenance"]["reducer_version"], "0.5.0"
+            )
 
     def test_dirty_source_bundle_still_completes_and_remains_structurally_valid(self) -> None:
         config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
@@ -206,7 +242,7 @@ class CliTests(unittest.TestCase):
                 current_summary["summary_provenance"]["reducer_version"],
                 SUMMARY_REDUCER_VERSION,
             )
-            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.1")
+            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.2")
             self.assertEqual(validate_bundle(current_bundle, strict=True), [])
 
     def test_weighted_idle_drift_flips_strict_verdict_from_legacy_counterfactual(

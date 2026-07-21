@@ -113,6 +113,7 @@ def install_synthetic_recovered_manifest(
                 {
                     "rolling_mean_power_w": 0.05,
                     "release": True,
+                    "release_criteria_met_late": False,
                     "timestamp_s": float(index),
                 }
             )
@@ -169,7 +170,7 @@ def make_summary(
     value: float,
     *,
     metric: str = "gross_energy_j",
-    reducer: str = "0.5.1",
+    reducer: str = "0.5.2",
     anchor_bound: float | None = 0.01,
     envelope_point: float | None = None,
     interpolation_bound: float = 0.0,
@@ -380,12 +381,101 @@ class RealCapHitJoinTests(unittest.TestCase):
             self.assertFalse(joined[bundle_id]["verified"])
             self.assertEqual(joined[bundle_id]["result"], "unknown")
 
+    def test_byte_identical_duplicate_member_records_never_verify(self) -> None:
+        # F9 defect shape: canonical-set collapse used to turn two identical
+        # member occurrences into one apparently unambiguous verified row.
+        bundle_id = "p2015-df-rq-long-prompt-abs-r03"
+        record = CAP_HIT_RECORDS[bundle_id]
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            install_real_cap_hit_manifest(runs_root, bundle_id)
+            manifest_path = (
+                runs_root / "campaign_manifests" / f"{record['session_id']}.json"
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["members"].append(
+                json.loads(json.dumps(manifest["members"][0]))
+            )
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            joined = campaign_cooldown_evidence(runs_root)
+        self.assertEqual(joined[bundle_id]["result"], "unknown")
+        self.assertFalse(joined[bundle_id]["verified"])
+
 
 class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
     def _powermetrics_summary(self, value: float) -> dict:
         summary = make_summary(value)
         summary["measurement_quality"]["telemetry_source"] = "powermetrics"
         return summary
+
+    def test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence(self) -> None:
+        # F8 floor-side reproduction of the same four ledgers exercised by the
+        # reducer; no consumer may bless a final row the other rejects.
+        from joulewise import floor_extraction as floor_module
+
+        clean_row = {
+            "attempt": 1,
+            "admitted": True,
+            "cpu_admission_enforced": True,
+            "cpu_admission": {"admitted": True},
+        }
+        cases = (
+            ([clean_row, {**clean_row, "attempt": 1}], "admitted"),
+            ([{**clean_row, "attempt": 2}, clean_row], "admitted"),
+            ([clean_row], "failed"),
+            (
+                [
+                    {
+                        key: value
+                        for key, value in clean_row.items()
+                        if key != "cpu_admission_enforced"
+                    }
+                ],
+                "admitted",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            for attempts, decision in cases:
+                with self.subTest(attempts=attempts, decision=decision):
+                    (bundle / "metadata.json").write_text(
+                        json.dumps(
+                            {
+                                "environment_admission": {
+                                    "decision": decision,
+                                    "attempts": attempts,
+                                }
+                            }
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    self.assertTrue(
+                        floor_module._cpu_admission_bundle_reasons(
+                            bundle, self._powermetrics_summary(40.0)
+                        )
+                    )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "environment_admission": {
+                            "decision": "admitted",
+                            "attempts": [clean_row],
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                floor_module._cpu_admission_bundle_reasons(
+                    bundle, self._powermetrics_summary(40.0)
+                ),
+                (),
+            )
 
     def test_floor_refuses_missing_and_explicitly_unenforced_cpu_admission(self) -> None:
         # W4 defect shape: both bundles had finite metrics/envelopes and clean
@@ -399,9 +489,11 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 json.dumps(
                     {
                         "environment_admission": {
+                            "decision": "admitted",
                             "attempts": [
                                 {
                                     "attempt": 1,
+                                    "admitted": True,
                                     "cpu_admission_enforced": False,
                                     "cpu_admission": {"admitted": True},
                                 }
@@ -667,6 +759,41 @@ class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.Test
         self.assertFalse(report.extractable)
         self.assertIn("clock_anchor_unresolved", report.refusal_reasons)
 
+    def test_actual_052_golden_envelope_reaches_floor_extraction(self) -> None:
+        # V3 end-to-end wire regression: the real current-mint reducer golden
+        # is cadence-ineligible by design, but its v2 envelope must survive the
+        # engine loader and floor extraction without being called unrecorded.
+        golden = json.loads(
+            Path("tests/goldens/d078_r01_reducer_052.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root, members = self._build_corpus(tmp)
+            write_bundle(runs_root, "clean-r01", golden)
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-LONG-PROMPT",
+                metric="gross_energy_j",
+                window_class="request",
+                members=members,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertIn("cadence_ratio_below_threshold", report.refusal_reasons)
+        self.assertNotIn(
+            "anchor_energy_envelope_unrecorded", report.refusal_reasons
+        )
+        golden_member = next(
+            member for member in report.members if member.bundle_id == "clean-r01"
+        )
+        self.assertAlmostEqual(
+            golden_member.anchor_shift_bound_j,
+            golden["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+                "max_abs_delta_j"
+            ],
+        )
+
     def test_pre_anchor_wire_refuses_with_envelope_unrecorded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root, members = self._build_corpus(tmp)
@@ -917,6 +1044,20 @@ class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
 
 
 class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_floor_consumer_accepts_the_reducer_mint_envelope_method(self) -> None:
+        from joulewise import floor_extraction as floor_module
+        from joulewise.reduce import ANCHOR_SHIFT_METHOD
+
+        summary = make_summary(40.0)
+        summary["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+            "method"
+        ] = ANCHOR_SHIFT_METHOD
+        envelope, problem = floor_module.anchor_shift_envelope(
+            summary, "gross_energy_j"
+        )
+        self.assertIsNone(problem)
+        self.assertEqual(envelope["method"], ANCHOR_SHIFT_METHOD)
+
     def test_spec_extraction_report_and_exit_codes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp) / "runs"
@@ -960,12 +1101,9 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             self.assertEqual(report["cells"][0]["n_admitted"], 3)
             self.assertTrue(report["cells"][0]["floor"]["smoke_only"])
 
-            # Remove the campaign evidence: the same spec must now refuse
-            # (exit 1) while still writing the fail-closed report.
-            import shutil
-
-            shutil.rmtree(runs_root / "campaign_manifests")
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            original = out_path.read_bytes()
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
                 code = extract_main(
                     [
                         "--runs-root",
@@ -976,8 +1114,46 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                         str(out_path),
                     ]
                 )
+            self.assertEqual(code, 2)
+            self.assertIn("refusing to overwrite existing", stderr.getvalue())
+            self.assertEqual(out_path.read_bytes(), original)
+
+            inside = runs_root / bundle_ids[0] / "derived-floor.json"
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                code = extract_main(
+                    [
+                        "--runs-root",
+                        str(runs_root),
+                        "--spec",
+                        str(spec_path),
+                        "--out",
+                        str(inside),
+                    ]
+                )
+            self.assertEqual(code, 2)
+            self.assertIn("outside the immutable stored run bundle", stderr.getvalue())
+            self.assertFalse(inside.exists())
+
+            # Remove the campaign evidence: the same spec must now refuse
+            # (exit 1) while still writing the fail-closed report.
+            import shutil
+
+            shutil.rmtree(runs_root / "campaign_manifests")
+            refused_path = Path(tmp) / "refused-report.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = extract_main(
+                    [
+                        "--runs-root",
+                        str(runs_root),
+                        "--spec",
+                        str(spec_path),
+                        "--out",
+                        str(refused_path),
+                    ]
+                )
             self.assertEqual(code, 1)
-            refused = json.loads(out_path.read_text(encoding="utf-8"))
+            refused = json.loads(refused_path.read_text(encoding="utf-8"))
             self.assertFalse(refused["all_cells_extractable"])
             self.assertIn(
                 "campaign_cooldown_evidence_missing",

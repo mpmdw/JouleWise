@@ -49,7 +49,7 @@
     "config_schema_version": "0.1",
     "event_semantics_version": "joulewise.events.v2",
     "reducer_id": "joulewise.reduce_bundle",
-    "reducer_version": "0.6.1",
+    "reducer_version": "0.6.2",
     "summary_schema_version": "0.1"
   }
 }

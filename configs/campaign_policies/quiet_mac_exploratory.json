@@ -43,6 +43,7 @@
   },
   "policy_id": "quiet-mac-exploratory",
   "policy_version": "environment-guard-cooldown-v2",
+  "post_window_sampling_dwell_s": 1.0,
   "profile": "exploratory",
   "schema_version": "joulewise.campaign_policy.v1"
 }

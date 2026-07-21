@@ -2177,6 +2177,44 @@ class SamplingWindowTests(ControllerTestCase):
         )
         self.assertAlmostEqual(stopped_s - last_runtime_s, 0.0, places=9)
 
+    def test_post_window_dwell_changes_tail_support_without_moving_marker(self) -> None:
+        # T1 defect shape: immediate sampler stop leaves the last sample before
+        # the stop marker; an injected dwell retains post-window support while
+        # the measured marker (and therefore energy window) stays unchanged.
+        zero_bundle, _ = run_benchmark(
+            make_config("tail-zero"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+            post_window_sampling_dwell_s=0.0,
+        )
+        dwell_bundle, _ = run_benchmark(
+            make_config("tail-dwell"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+            post_window_sampling_dwell_s=0.75,
+        )
+        zero_metadata = json.loads((zero_bundle / "metadata.json").read_text())
+        dwell_metadata = json.loads((dwell_bundle / "metadata.json").read_text())
+        zero_margins = zero_metadata["trace_window_margins"]
+        dwell_margins = dwell_metadata["trace_window_margins"]
+
+        self.assertLess(zero_margins["achieved_post_window_margin_s"], 0.0)
+        self.assertGreaterEqual(
+            dwell_margins["achieved_post_window_margin_s"], 0.60
+        )
+        self.assertEqual(dwell_margins["requested_post_window_dwell_s"], 0.75)
+        zero_stopped = next(
+            event["timestamp_s"]
+            for event in self.read_events(zero_bundle)
+            if event["event_type"] == "sampling_stopped"
+        )
+        dwell_stopped = next(
+            event["timestamp_s"]
+            for event in self.read_events(dwell_bundle)
+            if event["event_type"] == "sampling_stopped"
+        )
+        self.assertEqual(zero_stopped, dwell_stopped)
+
     def test_stage_window_still_contains_the_latency(self) -> None:
         # The stage boundaries DO include the simulated latency - proving the
         # markers (not the stage span) are what keep it out of the metrics.

@@ -73,6 +73,7 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.whole_window import whole_window_refusal_reasons
+from joulewise.environment_admission import environment_admission_refusals
 
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
@@ -327,17 +328,7 @@ def _cpu_admission_bundle_reasons(
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return ("environment_admission_missing",)
     admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
-    attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
-    final = attempts[-1] if isinstance(attempts, list) and attempts else None
-    if not isinstance(final, Mapping) or not isinstance(final.get("cpu_admission"), Mapping):
-        return ("environment_admission_missing",)
-    if final.get("cpu_admission_enforced") is False:
-        return ("cpu_admission_unenforced",)
-    if final.get("cpu_admission_enforced") is not True:
-        return ("environment_admission_missing",)
-    if final["cpu_admission"].get("admitted") is not True:
-        return ("cpu_admission_core_failed",)
-    return ()
+    return environment_admission_refusals(admission)
 
 
 def _evaluate_member(

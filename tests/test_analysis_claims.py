@@ -34,6 +34,7 @@ from joulewise.analysis_engine.inputs import (
     FloorResolution,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     LoadedAnalysisInputs,
+    anchor_shift_envelope,
     deterministic_bounds,
     governed_stochastic_variance,
     metric_value,
@@ -696,9 +697,9 @@ class InputSeamTests(unittest.TestCase):
                 "0.4.1": v1,
                 "0.4.2": v1,
                 "0.5.0": v2,
-                "0.5.1": v2,
+                "0.5.2": v2,
                 "0.6.0": v2,
-                "0.6.1": v2,
+                "0.6.2": v2,
             },
         )
 
@@ -744,8 +745,6 @@ class InputSeamTests(unittest.TestCase):
             ("0.6.0", v1),
             ("0.6.1", v1),
             ("0.4.3", v1),
-            ("0.5.2", v2),
-            ("0.6.2", v2),
             ("0.7.0", v2),
             ("0.5.1", "some_future_method_v3"),
         ]
@@ -754,6 +753,27 @@ class InputSeamTests(unittest.TestCase):
                 terms, reasons = variance_for(reducer_version, method)
                 self.assertEqual(terms, ())
                 self.assertEqual(reasons, ("required_error_term_unknown",))
+
+    def test_cooldown_disposition_matches_controller_over_boolean_grid(self):
+        from joulewise.analysis_engine.inputs import _cooldown_result_from_raw
+        from joulewise.cooldown import cooldown_disposition_from_raw
+
+        expected = {
+            (False, False): "cap_hit",
+            (False, True): "cap_hit",
+            (True, False): "recovered",
+            (True, True): None,
+        }
+        for terminal_state, disposition in expected.items():
+            with self.subTest(terminal_state=terminal_state):
+                terminal = {
+                    "release": terminal_state[0],
+                    "release_criteria_met_late": terminal_state[1],
+                }
+                self.assertEqual(
+                    cooldown_disposition_from_raw([terminal]), disposition
+                )
+                self.assertEqual(_cooldown_result_from_raw([terminal]), disposition)
 
     def test_t03_exact_stored_recal4_sentinel_wire_is_consumable(self):
         """The byte-exact stored 0.5.0 corpus wire yields the governed term."""
@@ -925,7 +945,7 @@ def _bounds_evidence(summary: dict) -> BundleEvidence:
 
 
 class AnchorBoundPropagationTests(unittest.TestCase):
-    """T0.6: frozen 0.5.1/0.6.1 anchor-envelope fields as deterministic bounds."""
+    """T0.6: current anchor-envelope fields become deterministic bounds."""
 
     GROSS_METRIC = {
         "name": "gross_energy_j",
@@ -933,7 +953,7 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         "window_class": "request",
     }
 
-    def _summary(self, reducer_version: str = "0.5.1", **overrides) -> dict:
+    def _summary(self, reducer_version: str = "0.5.2", **overrides) -> dict:
         summary = {
             "summary_provenance": {"reducer_version": reducer_version},
             "gross_energy_j": 40.0,
@@ -964,6 +984,52 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         self.assertEqual(bounds["E_clock_anchor_shift_bound_j"], 0.05)
         # Interpolation stays a SEPARATE term; never folded into the anchor.
         self.assertEqual(bounds["E_interpolation_joint_edge_bound_j"], 0.02)
+
+    def test_reducer_v2_golden_envelope_propagates_end_to_end(self):
+        # F3 defect shape: reducer 0.5.2 emits v2, but the consumer formerly
+        # accepted only v1 and silently turned this committed golden malformed.
+        summary = json.loads(
+            Path("tests/goldens/d078_r01_reducer_052.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        envelope, problem = anchor_shift_envelope(summary, "gross_energy_j")
+        self.assertIsNone(problem)
+        self.assertEqual(
+            envelope["method"],
+            "common_trace_shift_plus_independent_edge_span_v2",
+        )
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(
+            bounds["E_clock_anchor_shift_bound_j"],
+            max(
+                envelope["max_abs_delta_j"],
+                summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"],
+            ),
+        )
+
+    def test_reducer_mint_method_is_registered_by_every_consumer(self):
+        from joulewise.reduce import ANCHOR_SHIFT_METHOD
+        from joulewise.analysis_engine.inputs import ANCHOR_SHIFT_ENVELOPE_METHODS
+
+        self.assertIn(ANCHOR_SHIFT_METHOD, ANCHOR_SHIFT_ENVELOPE_METHODS)
+
+    def test_v1_remains_registered_and_unknown_method_is_malformed(self):
+        summary = self._summary()
+        envelope, problem = anchor_shift_envelope(summary, "gross_energy_j")
+        self.assertIsNone(problem)
+        self.assertEqual(
+            envelope["method"], "common_trace_shift_interval_overlap_v1"
+        )
+        summary["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+            "method"
+        ] = "common_trace_shift_typo_v99"
+        envelope, problem = anchor_shift_envelope(summary, "gross_energy_j")
+        self.assertIsNone(envelope)
+        self.assertEqual(problem, "malformed")
 
     def test_anchor_wire_without_envelope_fails_closed(self):
         summary = self._summary()
@@ -1016,9 +1082,31 @@ class AnchorBoundPropagationTests(unittest.TestCase):
                 )
                 self.assertIn("clock_anchor_unresolved", reasons)
 
+    def test_superseded_anchor_composition_wire_refuses_by_version(self):
+        # T3 defect shape: 0.5.1 formerly consumed its stored max-composed
+        # envelope exactly like 0.5.2.  It remains parseable, but claim use is
+        # barred by version and is not mislabeled as malformed envelope data.
+        summary = self._summary(reducer_version="0.5.1")
+        summary["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+            "method"
+        ] = "historical-spelling-does-not-control-version-barrier"
+        bounds, reasons = deterministic_bounds(
+            _bounds_evidence(summary), self.GROSS_METRIC
+        )
+        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+        self.assertIn("clock_anchor_unresolved", reasons)
+        self.assertNotIn("anchor_energy_envelope_unrecorded", reasons)
+
+        current_bounds, current_reasons = deterministic_bounds(
+            _bounds_evidence(self._summary(reducer_version="0.5.2")),
+            self.GROSS_METRIC,
+        )
+        self.assertNotIn("clock_anchor_unresolved", current_reasons)
+        self.assertEqual(current_bounds["E_clock_anchor_shift_bound_j"], 0.05)
+
     def test_phase_envelope_propagates_through_the_phase_pointer(self):
         summary = {
-            "summary_provenance": {"reducer_version": "0.5.1"},
+            "summary_provenance": {"reducer_version": "0.5.2"},
             "phase_energy_j": {"prefill": 5.0},
             "window_evidence_precheck": {
                 "phase": {

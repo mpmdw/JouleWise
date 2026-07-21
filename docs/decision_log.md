@@ -4123,3 +4123,44 @@ include `no_plateau_interior_intervals`, `plateau_below_minimum`,
 `model_fit_not_significant`, and
 `fitted_shift_exceeds_validation_limit`. These additions only refuse or widen
 uncertainty; none can license a claim.
+
+### D-078 amendment — 2026-07-21: convergence fix wave (lead adjudications)
+
+Recorded by the lead after the two-round cross-model convergence loop over
+`impl/p0-instrument-repair` (round-2 and round-3 fix waves; council log carries
+the layer accounting). Six rulings:
+
+1. **Additive causal-bound composition.** `B_effective = B_bundle +
+   B_fiducial` replaces `max(B_bundle, B_fiducial)`. The bundle-local
+   censored-constraint anchor interval and the instrument's emission-lag bound
+   sit on disjoint causal links; no containment proof exists, so `max()`
+   under-composes. `B_fiducial` itself additively folds in the calibration
+   capture's own trace-anchor bound. The prior `max()` text in this log is
+   superseded prospectively; stored summaries are never rewritten.
+2. **Identity bump, not in-place semantics change.** The additive composition,
+   fiducial protocol_v2 physics (`joint_loss_sublevel_interval_branch_v2`
+   full 2-D branch-and-bound region), and the stricter evidence-admission
+   semantics are minted as reducer `0.5.2` / AXI `0.6.2` with
+   `configs/calibration/powermetrics_fiducial/protocol_v2.json`. `0.5.1` /
+   `0.6.1` and `protocol_v1.json` remain byte-frozen replay arms.
+3. **Superseded arms are claim-ineligible.** `0.5.1`/`0.6.1` summaries refuse
+   claim-bearing use with a registered refusal (superseded max-composition
+   envelope semantics); `0.5.2`/`0.6.2` are the sole claim-eligible mints.
+4. **Registry additions (closing the F11/PENDING exception).** The closed
+   refusal vocabulary additionally includes
+   `token_count_stream_chunk_fallback` (renamed from the source-label reuse of
+   `stream_chunk_fallback`), `pulse_calibration_rollover_gate_timeout`
+   (pre-workload rollover gate timeout now refuses fail-closed, no artifact
+   minting), and `post_window_trace_tail_shorter_than_anchor_bound`
+   (reduce-time refusal when the post-window trace tail cannot support the
+   composed anchor bound; collection policy raises the minimum post-window
+   dwell to 1.0 s). These only refuse; none can license a claim.
+5. **Registry closure is one-way by design.** Every emitted spelling must be
+   registered here; a registered spelling with no current emission site (e.g.
+   `window_evidence_precheck_failed`, `cap_hit_drift_term_unavailable`) is
+   permitted — unemittable names cannot launder anything.
+6. **Member-level `claim_evidence_flags` is an all-leaf union — documented,
+   not changed.** Adjudicated a documentation defect only: the union is
+   fail-safe (it can only over-flag, never over-admit) and gating decisions
+   read the per-metric leaves. Scope documented in
+   `docs/contracts/run_bundle_layout.md`; no wire rename.

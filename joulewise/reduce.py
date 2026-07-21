@@ -89,18 +89,22 @@ from joulewise.schemas import (
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
+from joulewise.environment_admission import environment_admission_refusals
 
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
 FROZEN_REDUCER_VERSIONS = frozenset({"0.4.1", "0.4.2"})
 # D-078: 0.5.0 (point-anchor era) and 0.6.0 (frozen AXI burst arm) replay
-# byte-identically; 0.5.1/0.6.1 add the censored-intersection anchor
-# re-derivation plus the continuous common-shift energy envelopes.
+# byte-identically; 0.5.1/0.6.1 retain their committed D-078 semantics, while
+# 0.5.2/0.6.2 add the stricter round-2 evidence admission semantics.
 POINT_ANCHOR_FROZEN_REDUCER_VERSION = "0.5.0"
+ANCHOR_REDUCER_VERSION = "0.5.1"
+ANCHOR_REDUCER_VERSIONS = frozenset({ANCHOR_REDUCER_VERSION, REDUCER_VERSION})
 AXI_FROZEN_REDUCER_VERSION = "0.6.0"
-AXI_REDUCER_VERSION = "0.6.1"
+AXI_ANCHOR_REDUCER_VERSION = "0.6.1"
+AXI_REDUCER_VERSION = "0.6.2"
 AXI_REDUCER_VERSIONS = frozenset(
-    {AXI_FROZEN_REDUCER_VERSION, AXI_REDUCER_VERSION}
+    {AXI_FROZEN_REDUCER_VERSION, AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
 )
 ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_span_v2"
 RAW_POWERMETRICS_NAME = "powermetrics.plist"
@@ -112,6 +116,9 @@ ANCHOR_ENVELOPE_METRIC_RATIO_MAX = 0.25
 __all__ = [
     "MIN_PHASE_SAMPLES",
     "ANCHOR_SHIFT_METHOD",
+    "ANCHOR_REDUCER_VERSION",
+    "ANCHOR_REDUCER_VERSIONS",
+    "AXI_ANCHOR_REDUCER_VERSION",
     "AXI_FROZEN_REDUCER_VERSION",
     "AXI_REDUCER_VERSION",
     "AXI_REDUCER_VERSIONS",
@@ -564,6 +571,7 @@ def _window_evidence_precheck(
     idle_baseline: IdleBaseline | None,
     *,
     clock_bound_override_s: float | None = None,
+    strict_environment: bool = False,
 ) -> dict[str, Any]:
     # P2-040 FIX-2 (STA-5): metric-specific request gates. ``gross_request``
     # never requires idle/drift evidence; ``idle_subtracted_request`` requires
@@ -663,14 +671,32 @@ def _window_evidence_precheck(
             )
             for (block_id, level_id), intervals in sorted(level_windows.items())
         }
-    _apply_environment_claim_barrier(result, metadata)
+    _apply_environment_claim_barrier(
+        result, metadata, strict=strict_environment
+    )
     return result
 
 
-def _environment_claim_reasons(metadata: dict[str, Any]) -> list[str]:
+def _environment_claim_reasons(
+    metadata: dict[str, Any], *, strict: bool = True
+) -> list[str]:
     reasons: list[str] = []
     admission = metadata.get("environment_admission")
-    if (
+    if isinstance(admission, dict) and strict:
+        decision = admission.get("decision")
+        claim_reason = admission.get("claim_reason")
+        # This is a closed channel: null is legal only for a clean admission,
+        # and the sole governed refusal spelling is the value below. Unknown
+        # spellings and decision/reason contradictions are malformed evidence,
+        # so they reuse the existing fail-closed refusal code.
+        clean = decision == "admitted" and claim_reason is None
+        refused = (
+            decision in {"flagged", "abort", "failed"}
+            and claim_reason == "environment_admission_failed"
+        )
+        if refused or not clean:
+            reasons.append("environment_admission_failed")
+    elif (
         isinstance(admission, dict)
         and admission.get("claim_reason") == "environment_admission_failed"
     ):
@@ -682,11 +708,11 @@ def _environment_claim_reasons(metadata: dict[str, Any]) -> list[str]:
 
 
 def _apply_environment_claim_barrier(
-    prechecks: dict[str, Any], metadata: dict[str, Any]
+    prechecks: dict[str, Any], metadata: dict[str, Any], *, strict: bool = True
 ) -> None:
     """Stamp unwaivable reasons on gross, idle-subtracted, and throughput claims."""
 
-    reasons = _environment_claim_reasons(metadata)
+    reasons = _environment_claim_reasons(metadata, strict=strict)
     if not reasons:
         return
     for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
@@ -711,26 +737,75 @@ def _apply_environment_claim_barrier(
 
 
 def _apply_cpu_admission_claim_barrier(
-    prechecks: dict[str, Any], metadata: dict[str, Any]
+    prechecks: dict[str, Any], metadata: dict[str, Any], *, strict: bool = True
 ) -> None:
     if _telemetry_source(metadata) == "mock":
         return
     admission = metadata.get("environment_admission")
     reasons: list[str] = []
+    if strict:
+        reasons.extend(environment_admission_refusals(admission))
+        if reasons:
+            for key in (
+                "gross_request",
+                "gross_batch_group",
+                "idle_subtracted_request",
+            ):
+                gate = prechecks.get(key)
+                if isinstance(gate, dict):
+                    _merge_gate_reasons(gate, reasons)
+            for group_key in ("phase", "item", "block", "level"):
+                group = prechecks.get(group_key)
+                if isinstance(group, dict):
+                    for gate in group.values():
+                        if isinstance(gate, dict):
+                            _merge_gate_reasons(gate, reasons)
+            prechecks["throughput"] = {
+                "eligible": False,
+                "reasons": sorted(set(reasons)),
+                "metric_names": [
+                    "throughput_tokens_s",
+                    "inter_token_throughput_tokens_s",
+                    "decode_phase_output_throughput_tokens_s",
+                ],
+                "universal_claim_barrier": True,
+            }
+        return
     if not isinstance(admission, dict):
         reasons.append("environment_admission_missing")
     else:
         attempts = admission.get("attempts")
-        final_attempt = attempts[-1] if isinstance(attempts, list) and attempts else None
-        if not isinstance(final_attempt, dict) or not isinstance(
+        ledger_valid = isinstance(attempts, list) and bool(attempts)
+        if ledger_valid and strict:
+            ledger_valid = all(
+                isinstance(row, dict)
+                and not isinstance(row.get("attempt"), bool)
+                and row.get("attempt") == index
+                for index, row in enumerate(attempts, start=1)
+            )
+        final_attempt = attempts[-1] if ledger_valid else None
+        decision = admission.get("decision")
+        final_admitted = (
+            final_attempt.get("admitted") if isinstance(final_attempt, dict) else None
+        )
+        if strict and (
+            not isinstance(final_attempt, dict)
+            or not isinstance(final_attempt.get("cpu_admission"), dict)
+            or not isinstance(final_admitted, bool)
+            or decision not in {"admitted", "flagged", "abort"}
+            or ((decision == "admitted") != final_admitted)
+        ):
+            reasons.append("environment_admission_missing")
+        elif not isinstance(final_attempt, dict) or not isinstance(
             final_attempt.get("cpu_admission"), dict
         ):
             reasons.append("environment_admission_missing")
         elif final_attempt["cpu_admission"].get("admitted") is not True:
             reasons.append("environment_admission_failed")
-        if (
-            isinstance(final_attempt, dict)
-            and final_attempt.get("cpu_admission_enforced") is False
+        if isinstance(final_attempt, dict) and (
+            final_attempt.get("cpu_admission_enforced") is not True
+            if strict
+            else final_attempt.get("cpu_admission_enforced") is False
         ):
             reasons.append("cpu_admission_unenforced")
     if not reasons:
@@ -1007,6 +1082,8 @@ def _verify_instrument_calibration(
     reader: BundleReader,
     metadata: dict[str, Any],
     calibration: dict[str, Any],
+    *,
+    strict_physics: bool = True,
 ) -> tuple[float | None, str | None]:
     """Resolve ``B_fiducial`` only from a hash-verified calibration artifact.
 
@@ -1055,15 +1132,34 @@ def _verify_instrument_calibration(
         return None, "instrument_calibration_artifact_unparseable"
 
     from joulewise.powermetrics_fiducial import (
-        BINDING_FIELDS,
+        LEGACY_BINDING_FIELDS,
         PROTOCOL_ID,
+        PROTOCOL_V2_SHA256,
         PULSE_COUNT,
+        RESIDUAL_REGION_METHOD,
+        SUPPORTED_PROTOCOL_IDS,
+        V2_BINDING_FIELDS,
+        diagnostic_reason_registered,
+        rederive_detection_from_artifacts,
     )
 
     if evidence.get("schema_version") != "joulewise.instrument_evidence.v1":
         return None, "instrument_calibration_schema_mismatch"
-    if evidence.get("protocol_id") != PROTOCOL_ID:
+    evidence_protocol_id = evidence.get("protocol_id")
+    if evidence_protocol_id not in SUPPORTED_PROTOCOL_IDS:
         return None, "instrument_calibration_protocol_mismatch"
+    binding_fields = (
+        V2_BINDING_FIELDS
+        if evidence_protocol_id == PROTOCOL_ID
+        else LEGACY_BINDING_FIELDS
+    )
+    evidence_reasons = evidence.get("reasons")
+    if strict_physics and (
+        not isinstance(evidence_reasons, list)
+        or evidence_reasons
+        or any(not diagnostic_reason_registered(reason) for reason in evidence_reasons)
+    ):
+        return None, "instrument_calibration_invalid"
     if evidence.get("status") != "valid":
         return None, "instrument_calibration_artifact_invalid"
     if evidence.get("anchor_method_version") != CLOCK_METHOD_V2:
@@ -1079,7 +1175,7 @@ def _verify_instrument_calibration(
         return None, "instrument_calibration_bound_mismatch"
     bindings = evidence.get("bindings")
     if not isinstance(bindings, dict) or any(
-        bindings.get(name) in (None, "") for name in BINDING_FIELDS
+        bindings.get(name) in (None, "") for name in binding_fields
     ):
         return None, "instrument_calibration_invalid"
 
@@ -1121,6 +1217,17 @@ def _verify_instrument_calibration(
             not isinstance(pulse, dict)
             or pulse.get("pulse_index") != expected_index
             or pulse.get("detected") is not True
+            or (
+                strict_physics
+                and (
+                    not isinstance(pulse.get("reasons"), list)
+                    or pulse.get("reasons")
+                    or any(
+                        not diagnostic_reason_registered(reason)
+                        for reason in pulse.get("reasons", [])
+                    )
+                )
+            )
         ):
             return None, "instrument_calibration_invalid"
         for lower_name, upper_name in residual_fields:
@@ -1140,6 +1247,7 @@ def _verify_instrument_calibration(
                 return None, "instrument_calibration_invalid"
 
     artifact_dir = artifact_file.parent
+    primary_bytes: dict[str, bytes] = {}
     for relative in ("raw/powermetrics.plist", "events.jsonl"):
         referenced = artifact_dir / relative
         try:
@@ -1148,6 +1256,62 @@ def _verify_instrument_calibration(
             return None, "instrument_calibration_invalid"
         if hashlib.sha256(referenced_raw).hexdigest() != artifact_hashes[relative]:
             return None, "instrument_calibration_invalid"
+        primary_bytes[relative] = referenced_raw
+
+    if not strict_physics:
+        fresh = None
+
+    # Hash custody is necessary but not physical verification. Re-anchor the
+    # raw capture, reconstruct commanded pulses from the event ClockStamps,
+    # and run the shared estimator again. The declared residual rows must
+    # contain the freshly fitted edge locations. Their old coverage width is
+    # not required to enclose a newly wider estimator revision: that wider
+    # fresh B_fiducial is accepted and becomes effective, so a self-consistent
+    # older artifact remains usable without shrinking the downstream bound.
+    if strict_physics:
+        try:
+            fresh = rederive_detection_from_artifacts(
+                primary_bytes["raw/powermetrics.plist"],
+                primary_bytes["events.jsonl"],
+                evidence.get("clock_anchor"),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None, "instrument_calibration_invalid"
+        if (
+            len(fresh.fits) != pulse_count
+            or fresh.all_pulses_detected is not True
+            or fresh.spurious_plateau_count != evidence.get("spurious_plateau_count")
+            or fresh.b_fiducial_s is None
+            or fresh.reasons
+        ):
+            return None, "instrument_calibration_invalid"
+        for declared, derived in zip(pulses, fresh.fits, strict=True):
+            if derived.detected is not True or derived.reasons:
+                return None, "instrument_calibration_invalid"
+            for lower_name, upper_name, fitted_name in (
+                (
+                    "onset_residual_lower_s",
+                    "onset_residual_upper_s",
+                    "delta_on_s",
+                ),
+                (
+                    "offset_residual_lower_s",
+                    "offset_residual_upper_s",
+                    "delta_off_s",
+                ),
+            ):
+                declared_lower = float(declared[lower_name])
+                declared_upper = float(declared[upper_name])
+                fitted = getattr(derived, fitted_name)
+                if (
+                    fitted is None
+                    or not (
+                        declared_lower - 1e-12
+                        <= fitted
+                        <= declared_upper + 1e-12
+                    )
+                ):
+                    return None, "instrument_calibration_invalid"
 
     # Any bound-field change invalidates the calibration.  The measuring
     # bundle records the complete binding vector beside the calibration
@@ -1155,10 +1319,10 @@ def _verify_instrument_calibration(
     # derivable from ordinary bundle metadata/config.
     measured_bindings = calibration.get("bindings")
     if not isinstance(measured_bindings, dict) or any(
-        measured_bindings.get(name) in (None, "") for name in BINDING_FIELDS
+        measured_bindings.get(name) in (None, "") for name in binding_fields
     ):
         return None, "instrument_calibration_mismatch"
-    if any(bindings.get(name) != measured_bindings.get(name) for name in BINDING_FIELDS):
+    if any(bindings.get(name) != measured_bindings.get(name) for name in binding_fields):
         return None, "instrument_calibration_mismatch"
 
     device = metadata.get("device")
@@ -1184,8 +1348,15 @@ def _verify_instrument_calibration(
         "sampling_interval_ms": sampling_interval_ms,
         "anchor_method_version": CLOCK_METHOD_V2,
         "mlx_version": mlx.get("version") if isinstance(mlx, dict) else None,
-        "pulse_protocol_id": PROTOCOL_ID,
+        "pulse_protocol_id": evidence_protocol_id,
     }
+    if evidence_protocol_id == PROTOCOL_ID:
+        expected.update(
+            {
+                "estimator_revision": RESIDUAL_REGION_METHOD,
+                "protocol_sha256": PROTOCOL_V2_SHA256,
+            }
+        )
     for name, value in expected.items():
         if value is None or bindings.get(name) != value:
             return None, "instrument_calibration_mismatch"
@@ -1200,7 +1371,7 @@ def _verify_instrument_calibration(
     # explicitly selected run power policy.
     binding_evidence = evidence.get("binding_evidence")
     canonical_bindings = json.dumps(
-        {name: bindings.get(name) for name in BINDING_FIELDS},
+        {name: bindings.get(name) for name in binding_fields},
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -1243,11 +1414,36 @@ def _verify_instrument_calibration(
         or observed_bindings.get("power_policy") != bindings.get("power_policy")
     ):
         return None, "instrument_calibration_mismatch"
-    return float(b_fiducial), None
+    if fresh is None:
+        return float(b_fiducial), None
+    return max(float(b_fiducial), float(fresh.b_fiducial_s)), None
+
+
+def _compose_causal_anchor_bound_s(
+    bundle_bound_s: float,
+    fiducial_bound_s: float | None,
+    *,
+    reducer_version: str,
+) -> float:
+    """Compose disjoint anchor-error links under the selected replay wire.
+
+    Reducers 0.5.1/0.6.1 are frozen with their historical ``max`` rule.
+    Current mint reducers 0.5.2/0.6.2 conservatively add the bundle-local
+    anchor interval to the independently calibrated emission-lag bound.
+    """
+
+    fiducial = fiducial_bound_s or 0.0
+    if reducer_version in {REDUCER_VERSION, AXI_REDUCER_VERSION}:
+        return bundle_bound_s + fiducial
+    return max(bundle_bound_s, fiducial)
 
 
 def _derive_anchor_context(
-    reader: BundleReader, metadata: dict[str, Any]
+    reader: BundleReader,
+    metadata: dict[str, Any],
+    *,
+    strict_calibration: bool = True,
+    reducer_version: str,
 ) -> _AnchorContext:
     """Re-derive the D-078 censored-intersection anchor from primary evidence.
 
@@ -1322,7 +1518,10 @@ def _derive_anchor_context(
         return _unresolved_anchor_context("instrument_calibration_invalid")
     else:
         fiducial_bound_s, detail = _verify_instrument_calibration(
-            reader, metadata, calibration
+            reader,
+            metadata,
+            calibration,
+            strict_physics=strict_calibration,
         )
         if detail is not None:
             stable = (
@@ -1331,7 +1530,11 @@ def _derive_anchor_context(
                 else "instrument_calibration_invalid"
             )
             return _unresolved_anchor_context(stable)
-    effective_bound_s = max(bundle_bound_s, fiducial_bound_s or 0.0)
+    effective_bound_s = _compose_causal_anchor_bound_s(
+        bundle_bound_s,
+        fiducial_bound_s,
+        reducer_version=reducer_version,
+    )
     cumulative_s = 0.0
     curve: list[TracePoint] = []
     for index, record in enumerate(raw_records):
@@ -1347,6 +1550,19 @@ def _derive_anchor_context(
                 support_end_s=end_s,
             )
         )
+    tail_reason = calibration_reason
+    if reducer_version in {REDUCER_VERSION, AXI_REDUCER_VERSION}:
+        measured_window = reader.measured_window()
+        achieved_post_tail_s = (
+            curve[-1].support_end_s - measured_window.end_s
+            if curve and measured_window is not None
+            else None
+        )
+        if (
+            achieved_post_tail_s is None
+            or achieved_post_tail_s + 1e-12 < effective_bound_s
+        ):
+            tail_reason = "post_window_trace_tail_shorter_than_anchor_bound"
     return _AnchorContext(
         telemetry_is_powermetrics=True,
         unresolved=False,
@@ -1356,7 +1572,7 @@ def _derive_anchor_context(
         bundle_bound_s=bundle_bound_s,
         fiducial_bound_s=fiducial_bound_s,
         edge_span_s=edge_span_s,
-        detail=calibration_reason,
+        detail=tail_reason,
     )
 
 
@@ -1698,6 +1914,11 @@ def _apply_anchor_claim_gates(
         }
         else []
     )
+    resolved_refusal_reasons = (
+        [anchor_ctx.detail]
+        if anchor_ctx.detail == "post_window_trace_tail_shorter_than_anchor_bound"
+        else []
+    )
     if anchor_ctx.unresolved:
         unresolved_reasons = [CLOCK_ANCHOR_UNRESOLVED, *calibration_reasons]
         for key in (
@@ -1715,6 +1936,26 @@ def _apply_anchor_claim_gates(
             for gate in group.values():
                 if isinstance(gate, dict):
                     _merge_gate_reasons(gate, unresolved_reasons)
+        # Unresolved anchors stop here: envelope-gate stamping below is only
+        # meaningful for resolved contexts, and the frozen 0.5.1/0.6.1 replay
+        # arms pin this exact reason set for unresolved bundles.
+        return
+    if resolved_refusal_reasons:
+        for key in (
+            "gross_request",
+            "gross_batch_group",
+            "idle_subtracted_request",
+        ):
+            gate = prechecks.get(key)
+            if isinstance(gate, dict):
+                _merge_gate_reasons(gate, resolved_refusal_reasons)
+        for group_key in ("phase", "item", "block", "level"):
+            group = prechecks.get(group_key)
+            if not isinstance(group, dict):
+                continue
+            for gate in group.values():
+                if isinstance(gate, dict):
+                    _merge_gate_reasons(gate, resolved_refusal_reasons)
         return
     if calibration_reasons:
         for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
@@ -1973,7 +2214,7 @@ def _resolve_reducer_version(
                 "finalized bundle reducer version is missing; dispatch refuses to guess"
             )
         elif reader.is_event_v2():
-            # New event-v2 bundles are born on the repaired 0.6.1 wire.  The
+            # New event-v2 bundles are born on the repaired current AXI wire. The
             # byte-frozen 0.6.0 arm remains replayable only when an existing
             # historical summary already records that exact wire.
             requested = AXI_REDUCER_VERSION
@@ -1982,7 +2223,8 @@ def _resolve_reducer_version(
 
     supported = (
         FROZEN_REDUCER_VERSIONS
-        | {POINT_ANCHOR_FROZEN_REDUCER_VERSION, REDUCER_VERSION}
+        | {POINT_ANCHOR_FROZEN_REDUCER_VERSION}
+        | ANCHOR_REDUCER_VERSIONS
         | AXI_REDUCER_VERSIONS
     )
     if requested not in supported:
@@ -1994,7 +2236,7 @@ def _resolve_reducer_version(
     ):
         raise ValueError(
             "reducer 0.6.0 is frozen for historical re-reduction only; "
-            "new event-v2 bundles require reducer 0.6.1"
+            f"new event-v2 bundles require reducer {AXI_REDUCER_VERSION}"
         )
 
     raw_config = reader.raw_config()
@@ -2111,15 +2353,20 @@ def _reduce_v060(
         )
     curve = reader.summed_curve()
 
-    # D-078 (0.6.1 only): the frozen 0.6.0 burst arm has the same point-anchor
-    # defect and stays byte-frozen; 0.6.1 re-anchors the shared timeline.
+    # D-078 anchor-era arm: frozen 0.6.0 retains the point-anchor defect;
+    # replay-only 0.6.1 and current-mint 0.6.2 re-anchor the shared timeline.
     anchor_ctx: _AnchorContext | None = None
     anchor_shift_s = 0.0
     if (
-        reducer_version == AXI_REDUCER_VERSION
+        reducer_version in {AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
     ):
-        anchor_ctx = _derive_anchor_context(reader, metadata)
+        anchor_ctx = _derive_anchor_context(
+            reader,
+            metadata,
+            strict_calibration=reducer_version == AXI_REDUCER_VERSION,
+            reducer_version=reducer_version,
+        )
         if not anchor_ctx.telemetry_is_powermetrics:
             # See the 0.5.1 arm: anchor-era semantics are powermetrics-only.
             anchor_ctx = None
@@ -2434,12 +2681,17 @@ def _reduce_v060(
         _source_curve,
         static_batch=group_gross is not None,
         clock_bound_override_s=clock_bound_override_s,
+        strict_environment=reducer_version == AXI_REDUCER_VERSION,
     )
     if (
-        reducer_version == AXI_REDUCER_VERSION
+        reducer_version in {AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
     ):
-        _apply_cpu_admission_claim_barrier(window_precheck, metadata)
+        _apply_cpu_admission_claim_barrier(
+            window_precheck,
+            metadata,
+            strict=reducer_version == AXI_REDUCER_VERSION,
+        )
     if anchor_ctx is not None:
         _apply_anchor_claim_gates(
             window_precheck,
@@ -2539,6 +2791,7 @@ def _window_evidence_precheck_v060(
     *,
     static_batch: bool,
     clock_bound_override_s: float | None = None,
+    strict_environment: bool = False,
 ) -> dict[str, Any]:
     gross = _window_evidence_precheck_for_window(
         curve,
@@ -2603,7 +2856,9 @@ def _window_evidence_precheck_v060(
                 "window_count": len(windows),
                 "windows": windows,
             }
-    _apply_environment_claim_barrier(result, metadata)
+    _apply_environment_claim_barrier(
+        result, metadata, strict=strict_environment
+    )
     return result
 
 
@@ -2624,15 +2879,20 @@ def _reduce(
 
     curve = reader.summed_curve()
 
-    # D-078 (0.5.1 only): re-derive the censored-intersection anchor from the
-    # raw capture and move the whole timeline onto it; frozen arms keep the
-    # stored point-anchor timeline byte-identically.
+    # D-078 anchor-era arm: replay-only 0.5.1 and current-mint 0.5.2 re-derive
+    # the censored-intersection anchor and move the whole timeline onto it;
+    # frozen earlier arms keep the stored point-anchor timeline byte-identical.
     anchor_ctx: _AnchorContext | None = None
     if (
-        reducer_version == REDUCER_VERSION
+        reducer_version in ANCHOR_REDUCER_VERSIONS
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
     ):
-        anchor_ctx = _derive_anchor_context(reader, metadata)
+        anchor_ctx = _derive_anchor_context(
+            reader,
+            metadata,
+            strict_calibration=reducer_version == REDUCER_VERSION,
+            reducer_version=reducer_version,
+        )
         if not anchor_ctx.telemetry_is_powermetrics:
             # The D-078 anchor defect and its envelope are native-stamped
             # powermetrics phenomena; other backends keep 0.5.0 semantics.
@@ -2760,12 +3020,17 @@ def _reduce(
         energy_bound_terms_j,
         idle_baseline,
         clock_bound_override_s=clock_bound_override_s,
+        strict_environment=reducer_version == REDUCER_VERSION,
     )
     if (
-        reducer_version == REDUCER_VERSION
+        reducer_version in ANCHOR_REDUCER_VERSIONS
         and config.hardware_target.telemetry_backend != TelemetryBackend.MOCK
     ):
-        _apply_cpu_admission_claim_barrier(window_evidence_precheck, metadata)
+        _apply_cpu_admission_claim_barrier(
+            window_evidence_precheck,
+            metadata,
+            strict=reducer_version == REDUCER_VERSION,
+        )
     if anchor_ctx is not None:
         _apply_anchor_claim_gates(
             window_evidence_precheck,
@@ -2785,7 +3050,7 @@ def _reduce(
         fallback = runtime_token_source == "stream_chunk_fallback"
         window_evidence_precheck["per_token"] = {
             "eligible": not fallback,
-            "reasons": ["stream_chunk_fallback"] if fallback else [],
+            "reasons": ["token_count_stream_chunk_fallback"] if fallback else [],
             "token_count_source": runtime_token_source,
         }
 

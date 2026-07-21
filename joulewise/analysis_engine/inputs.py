@@ -34,6 +34,7 @@ from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
 from .claims import REDUCER_REASON_CODES, ordered_reason_codes
+from joulewise.cooldown import cooldown_disposition_from_raw
 
 
 StrictValidator = Callable[[Path, bool], list[str]]
@@ -46,26 +47,35 @@ GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
 # T0.3 (2026-07-19 measurement-soundness audit P0.3): the EXACT allowed
 # reducer-version x idle-variance-method matrix.  Every crossed or unknown
 # pair fails closed (``required_error_term_unknown``); no version-range or
-# additive-successor inference is permitted here.  0.5.1 and 0.6.1 are the
-# frozen anchor-envelope wires minted by the trace-time-anchor fix; the
-# byte-frozen 0.5.0/0.6.0 goldens keep the v2 idle method they declared.
+# additive-successor inference is permitted here.  The superseded 0.5.1/0.6.1
+# anchor-composition wires remain parsable below but are deliberately absent
+# from this claim-eligible matrix.
 GOVERNED_REDUCER_IDLE_METHOD_PAIRS: Mapping[str, str] = {
     "0.4.1": GOVERNED_IDLE_VARIANCE_METHOD_V1,
     "0.4.2": GOVERNED_IDLE_VARIANCE_METHOD_V1,
     "0.5.0": GOVERNED_IDLE_VARIANCE_METHOD_V2,
-    "0.5.1": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+    "0.5.2": GOVERNED_IDLE_VARIANCE_METHOD_V2,
     "0.6.0": GOVERNED_IDLE_VARIANCE_METHOD_V2,
-    "0.6.1": GOVERNED_IDLE_VARIANCE_METHOD_V2,
+    "0.6.2": GOVERNED_IDLE_VARIANCE_METHOD_V2,
 }
+SUPERSEDED_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
 
 # Reducer versions whose wire is REQUIRED to carry the deterministic
 # anchor-shift energy envelopes (frozen field names, p2-038.2 metadata
 # schema).  Older wires read additively: an absent envelope adds no term,
 # while a present-but-malformed one always fails closed.
-ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
+ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset(
+    {"0.5.2", "0.6.2"}
+)
 PRE_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.0", "0.6.0"})
 ANCHOR_SHIFT_ENVELOPE_FIELD = "energy_anchor_shift_envelopes"
 ANCHOR_SHIFT_ENVELOPE_METHOD = "common_trace_shift_interval_overlap_v1"
+ANCHOR_SHIFT_ENVELOPE_METHODS = frozenset(
+    {
+        ANCHOR_SHIFT_ENVELOPE_METHOD,
+        "common_trace_shift_plus_independent_edge_span_v2",
+    }
+)
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
 
 
@@ -76,6 +86,17 @@ def governed_idle_variance_pair(reducer_version: object, method: object) -> bool
         return False
     expected = GOVERNED_REDUCER_IDLE_METHOD_PAIRS.get(reducer_version)
     return expected is not None and method == expected
+
+
+def _replayable_superseded_idle_variance_pair(
+    reducer_version: object, method: object
+) -> bool:
+    """Parse the frozen 0.5.1/0.6.1 variance wire without licensing claims."""
+
+    return (
+        reducer_version in SUPERSEDED_ANCHOR_REDUCER_VERSIONS
+        and method == GOVERNED_IDLE_VARIANCE_METHOD_V2
+    )
 
 
 class AnalysisInputError(ValueError):
@@ -942,18 +963,7 @@ def _verified_cooldown_raw_artifact(
 def _cooldown_result_from_raw(rows: Sequence[Any]) -> str | None:
     """Derive recovered/cap_hit from the terminal record of a cooldown trace."""
 
-    if not rows:
-        return None
-    terminal = rows[-1]
-    if not isinstance(terminal, Mapping):
-        return None
-    released = terminal.get("release")
-    released_late = terminal.get("release_criteria_met_late")
-    if released is True or released_late is True:
-        return "recovered"
-    if released is False:
-        return "cap_hit"
-    return None
+    return cooldown_disposition_from_raw(rows)
 
 
 def campaign_cooldown_evidence(
@@ -1097,10 +1107,10 @@ def _campaign_cooldown_evidence(
 
     resolved: dict[str, Mapping[str, Any]] = {}
     for bundle_id, rows in candidates.items():
-        canonical = {
-            json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows
-        }
-        if len(canonical) == 1:
+        # Candidate occurrence count is evidence: two member records for one
+        # bundle are ambiguous even when their bytes normalize identically.
+        # Canonical-set collapse used to launder byte-identical duplicates.
+        if len(rows) == 1:
             resolved[bundle_id] = rows[0]
         else:
             resolved[bundle_id] = {
@@ -1843,7 +1853,8 @@ def anchor_shift_envelope(
     Field names are FROZEN by the adjudicated 2026-07-19 design:
     ``energy_anchor_shift_envelopes`` maps summary-rooted JSON-Pointer metric
     paths to ``{method, anchor_bound_s, point_j, lower_j, upper_j,
-    max_abs_delta_j}`` with method ``common_trace_shift_interval_overlap_v1``.
+    max_abs_delta_j}`` with a method from the closed
+    :data:`ANCHOR_SHIFT_ENVELOPE_METHODS` registry.
     """
 
     envelopes = (
@@ -1858,7 +1869,8 @@ def anchor_shift_envelope(
         return None, "absent"
     if not isinstance(candidate, Mapping):
         return None, "malformed"
-    if candidate.get("method") != ANCHOR_SHIFT_ENVELOPE_METHOD:
+    method = candidate.get("method")
+    if method not in ANCHOR_SHIFT_ENVELOPE_METHODS:
         return None, "malformed"
 
     def finite(value: object) -> float | None:
@@ -1888,7 +1900,7 @@ def anchor_shift_envelope(
         return None, "malformed"
     return (
         {
-            "method": ANCHOR_SHIFT_ENVELOPE_METHOD,
+            "method": method,
             "anchor_bound_s": anchor_bound,
             "point_j": point,
             "lower_j": lower,
@@ -2133,13 +2145,22 @@ def governed_stochastic_variance(
         and math.isfinite(float(variance))
         and float(variance) >= 0.0
     )
-    governed_evidence_present = bool(
+    idle_pair_readable = bool(
         isinstance(provenance, Mapping)
         and isinstance(uncertainty, Mapping)
-        and uncertainty.get("status") == "estimated"
-        and governed_idle_variance_pair(
-            provenance.get("reducer_version"), uncertainty.get("method")
+        and (
+            governed_idle_variance_pair(
+                provenance.get("reducer_version"), uncertainty.get("method")
+            )
+            or _replayable_superseded_idle_variance_pair(
+                provenance.get("reducer_version"), uncertainty.get("method")
+            )
         )
+    )
+    governed_evidence_present = bool(
+        isinstance(uncertainty, Mapping)
+        and uncertainty.get("status") == "estimated"
+        and idle_pair_readable
         and variance_present
     )
     if not governed_evidence_present:
@@ -2164,15 +2185,17 @@ def deterministic_bounds(
 ) -> tuple[dict[str, float], tuple[str, ...]]:
     """Collect deterministic bound terms for one bundle/metric pair.
 
-    T0.6 anchor-bound propagation: on the anchor-envelope wires (reducer
-    0.5.1 / AXI 0.6.1) the per-metric ``energy_anchor_shift_envelopes`` entry
+    T0.6 anchor-bound propagation: on the current anchor-envelope wires
+    (reducer 0.5.2 / AXI 0.6.2) the per-metric
+    ``energy_anchor_shift_envelopes`` entry
     and — for request metrics — the
     ``energy_bound_terms_j.E_clock_anchor_shift_bound_j`` scalar are REQUIRED
     and propagate as the ``E_clock_anchor_shift_bound_j`` deterministic term.
     Passing the reducer's per-metric envelope gate never makes a comparative
     contrast identifiable by itself: the contrast consumes this bound
-    explicitly through its decision interval.  Pre-anchor wires read
-    additively (absent adds nothing; present-but-malformed fails closed).
+    explicitly through its decision interval.  The superseded 0.5.1/0.6.1
+    wires remain replay-readable but stop at ``clock_anchor_unresolved``;
+    pre-anchor wires likewise carry that universal claim barrier.
     """
 
     summary = evidence.summary
@@ -2181,7 +2204,10 @@ def deterministic_bounds(
     name = metric.get("name")
     result: dict[str, float] = {}
     reasons: list[str] = []
-    if _summary_reducer_version(summary) in PRE_ANCHOR_REDUCER_VERSIONS:
+    reducer_version = _summary_reducer_version(summary)
+    if reducer_version in (
+        PRE_ANCHOR_REDUCER_VERSIONS | SUPERSEDED_ANCHOR_REDUCER_VERSIONS
+    ):
         # Universal D-078 barrier: accepting the frozen numeric wire for
         # replay does not license it as claim-bearing evidence.  This applies
         # even when every observation in a contrast is old (the mixed-wire
@@ -2189,8 +2215,13 @@ def deterministic_bounds(
         reasons.append("clock_anchor_unresolved")
 
     def record_anchor_term(scalar_terms: Mapping[str, Any] | None) -> None:
+        if reducer_version in SUPERSEDED_ANCHOR_REDUCER_VERSIONS:
+            # The frozen envelope remains independently parseable for replay,
+            # but claim admission stops on the version barrier above.  Do not
+            # misclassify this historical wire as malformed current evidence.
+            return
         anchor_required = (
-            _summary_reducer_version(summary) in ANCHOR_ENVELOPE_REDUCER_VERSIONS
+            reducer_version in ANCHOR_ENVELOPE_REDUCER_VERSIONS
         )
         envelope, problem = anchor_shift_envelope(summary, str(name))
         bound: float | None = envelope["max_abs_delta_j"] if envelope else None

@@ -378,7 +378,7 @@ class MixedWireAnchorTermIntersectionTests(unittest.TestCase):
             inclusion_status="included",
         )
 
-    def test_mixed_wire_pair_refuses_with_anchor_envelope_unrecorded(self) -> None:
+    def test_superseded_anchor_wire_refuses_by_version_not_method(self) -> None:
         from unittest import mock
 
         import joulewise.analysis_engine as engine
@@ -459,15 +459,17 @@ class MixedWireAnchorTermIntersectionTests(unittest.TestCase):
                 evidence_class="current",
             )
 
-        self.assertIn(
+        self.assertNotIn(
             "anchor_energy_envelope_unrecorded", prepared["global_reason_codes"]
         )
-        # The under-bounded contrast is fully withheld: no observations survive.
-        self.assertEqual(prepared["observations"], ())
-        self.assertIsNone(prepared["estimate"])
+        # Point estimation remains replay-readable, while every contributing
+        # row carries the universal version barrier into claim evaluation.
+        self.assertEqual(len(prepared["observations"]), 2)
+        self.assertIsNotNone(prepared["estimate"])
         for row in prepared["block_rows"]:
-            self.assertFalse(row["included"])
-            self.assertIn(
+            self.assertTrue(row["included"])
+            self.assertIn("clock_anchor_unresolved", row["reason_codes"])
+            self.assertNotIn(
                 "anchor_energy_envelope_unrecorded", row["reason_codes"]
             )
 

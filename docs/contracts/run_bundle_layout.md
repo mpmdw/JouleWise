@@ -50,6 +50,12 @@ runs/<run_id>/
     (backend-native artifacts, e.g. powermetrics.plist,
      powermetrics_idle.plist,
      powermetrics_idle_attempt_2.plist, nvidia_smi.csv)
+  instrument_calibration/     (powermetrics fiducial attachment only)
+    manifest.json             (hash manifest for the copied custody set)
+    instrument_evidence.json  (validated bound + binding evidence)
+    events.jsonl              (calibration pulse event source)
+    raw/
+      powermetrics.plist       (immutable calibration capture)
   logs/
     controller.log
     runtime.log
@@ -61,6 +67,12 @@ runs/<run_id>/
     request_tokens.jsonl     (event semantics v2)
     suite_items.jsonl        (suite runs only)
 ```
+
+`instrument_calibration/` is a custody subtree, not a reconstructable cache.
+An archiver preserving a bundle with `metadata.instrument_calibration` MUST
+preserve the complete subtree: the manifest authenticates the evidence, pulse
+events, and native capture that the reducer independently replays. Omitting
+any member breaks the calibration binding and makes the bundle claim-ineligible.
 
 The bundle stores the normalized config as sorted-key JSON (`config.json`);
 its SHA-256 hash is recorded in `metadata.config_sha256` and identifies the
@@ -225,6 +237,12 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   post-hoc `reduce` verb writes an exclusive-create prospective artifact
   outside the input bundle (the current working directory by default, or an
   explicit external `--output`) and never mutates a finalized bundle.
+
+Derived-output tools preserve the same boundary. Detection-floor extraction
+uses exclusive-create output and refuses both an existing target and any
+target resolving beneath a finalized bundle. Campaign `--log` paths likewise
+must resolve outside every finalized bundle; the default sibling
+`<runs-root>/campaign_log.jsonl` remains the campaign-owned append ledger.
 
 Backend-native raw artifacts under `raw/` are preserved verbatim and are
 the source of truth for the derived `power_trace.csv`; a parser bug can be
@@ -494,6 +512,14 @@ and measured-run `rich_telemetry.jsonl` timestamps move with the corrected
 anchor. The retained stop prefix keeps a record that brackets the stop marker
 under the EARLIEST admissible anchor.
 
+Current collection also records `metadata.trace_window_margins` with
+`requested_post_window_dwell_s`, `achieved_pre_window_margin_s`, and
+`achieved_post_window_margin_s`. The requested dwell occurs after the
+`sampling_stopped` measured-window stamp and before sampler termination, so it
+does not enter energy integration. Production admission compares both achieved
+margins against `B_bundle + B_fiducial` and fails closed before campaign use if
+either side lacks support.
+
 Reducers `0.5.1` (and AXI `0.6.1`) re-derive this anchor from the raw
 capture, re-anchor the summed curve, and add (additively; `0.5.0`/`0.6.0`
 replays stay byte-frozen):
@@ -511,6 +537,15 @@ replays stay byte-frozen):
   `/suite_block_energy_j/<block_id>`, and
   `/suite_level_energy_j/<block_id/level_id>` (they feed floor/MDE
   extraction, so their claim gates must fail closed under anchor error too).
+- Additive method registration for reducer `0.5.1` / AXI `0.6.1`:
+  `common_trace_shift_plus_independent_edge_span_v2` is the reducer-emitted
+  method for envelopes that combine the common continuous trace shift with
+  the independently observed wall-minus-monotonic edge span. Analysis
+  consumers accept the closed set `{common_trace_shift_interval_overlap_v1,
+  common_trace_shift_plus_independent_edge_span_v2}`; every other method
+  string is malformed evidence and fails closed. The v1 registration above
+  remains readable and is not renamed because the estimators have distinct
+  provenance.
 - `energy_bound_terms_j.E_clock_anchor_shift_bound_j`: the request-level
   scalar (the gross envelope's max absolute deviation).
 - window-evidence precheck reasons `clock_anchor_unresolved`,
@@ -520,8 +555,12 @@ replays stay byte-frozen):
   bound failing closed). These reasons apply to the request-level gates AND
   to every suite item/block/level gate: a resolved anchor no longer exempts
   granular energy from the envelope requirement (a missing envelope stamps
-  `anchor_energy_envelope_unrecorded`). `B_effective = max(B_bundle,
-  B_fiducial)`; the optional `metadata.instrument_calibration` block
+  `anchor_energy_envelope_unrecorded`). The frozen 0.5.1/0.6.1 replay wires
+  retain `B_effective = max(B_bundle, B_fiducial)`; the 0.5.2/0.6.2 mint wires
+  use `B_effective = B_bundle + B_fiducial` because those bounds constrain
+  disjoint causal links. The composed mint bound is the anchor-shift scan
+  range and the bound recorded in every affected precheck/envelope. The
+  optional `metadata.instrument_calibration` block
   references a `docs/contracts/powermetrics_fiducial.md` artifact by
   `{artifact_path, artifact_sha256, b_fiducial_s}`. The reducer loads the
   bundle-relative `artifact_path`, verifies its sha256, and fails closed
@@ -858,6 +897,17 @@ deciding inclusion, and applies `required_error_term_unknown` whenever a fresh
 cleanup flag is present. A recorded-versus-re-derived cleanup-flag mismatch is
 also fail-closed, while malformed `bundle_id` or `claim_evidence_flags` input is
 an analysis-input error rather than a skipped record.
+
+`claim_evidence_flags` is intentionally a member-level union over every
+claim-bearing metric leaf in that member's reducer prechecks, not a projection
+of only the metric later selected by a contrast. A member-level flag may
+therefore originate from a phase, item, block, or level leaf even when the
+request-window leaf is clean. For example,
+`clock_bound_exceeds_quarter_window` may be contributed by an approximately
+130 ms phase window under a 44 ms clock bound while the enclosing request
+window remains clean. This all-leaf union is intentional conservative gating;
+consumers must neither relabel it as request-only nor discard a flag because
+the selected request leaf does not reproduce it.
 
 For a contrast with a non-null `metric.ratio_estimand`, campaign readiness uses
 the same numerator routing and per-token evidence gate as P2-037. The numerator

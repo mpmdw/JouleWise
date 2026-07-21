@@ -31,7 +31,12 @@ from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundl
 from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
 from joulewise.reduce import reduce_bundle
-from joulewise.schemas import BenchmarkConfig, RunStatus
+from joulewise.schemas import (
+    BenchmarkConfig,
+    RunStatus,
+    SUMMARY_REDUCER_VERSION,
+    SummaryMetrics,
+)
 from tests.test_powermetrics import (
     FIXTURE_D0_S,
     SPAWN_ADVANCE_S,
@@ -129,6 +134,35 @@ class CliRunTestCase(unittest.TestCase):
 
 
 class RunVerbTests(CliRunTestCase):
+    def test_run_forwards_post_window_dwell_to_powermetrics_controller(self) -> None:
+        config_path = self.write_config("cli-post-window-dwell")
+        payload = json.loads(config_path.read_text())
+        payload["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_path.write_text(json.dumps(payload))
+        expected_bundle = self.runs_dir / "cli-post-window-dwell"
+        with patch(
+            "joulewise.cli.run_benchmark",
+            return_value=(
+                expected_bundle,
+                SummaryMetrics(status=RunStatus.SUCCEEDED),
+            ),
+        ) as controller_run:
+            code, _out, _err = _run(
+                [
+                    "run",
+                    str(config_path),
+                    "--runs-dir",
+                    str(self.runs_dir),
+                    "--post-window-sampling-dwell-s",
+                    "1.0",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            controller_run.call_args.kwargs["post_window_sampling_dwell_s"],
+            1.0,
+        )
+
     def test_run_verb_binds_fake_clock_only_for_all_mock_backends(self) -> None:
         cases = [
             ("mock", "mock", FakeClock),
@@ -562,7 +596,7 @@ class StrictValidateTests(CliRunTestCase):
             "strict: unsupported reducer version "
             "'0.4.1' for current-era bundle; superseded versions "
             "cannot claim the current inter_token_throughput_tokens_s "
-            "reduction shape and explicit re-reduction with 0.5.1 is "
+            "reduction shape and explicit re-reduction with 0.5.2 is "
             "required",
             validate_bundle(bundle, strict=True),
         )
@@ -580,7 +614,7 @@ class StrictValidateTests(CliRunTestCase):
             "strict: unsupported reducer version "
             "'0.4.1' for current-era bundle; superseded versions "
             "cannot claim the current inter_token_throughput_tokens_s "
-            "reduction shape and explicit re-reduction with 0.5.1 is "
+            "reduction shape and explicit re-reduction with 0.5.2 is "
             "required",
             validate_bundle(bundle, strict=True),
         )
@@ -1464,7 +1498,7 @@ class ReduceVerbTests(CliRunTestCase):
         rederived = json.loads(output_path.read_text())
         self.assertEqual(rederived, original)
         self.assertFalse(
-            (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+            (bundle / f"summary_metrics.rereduced.{SUMMARY_REDUCER_VERSION}.json").exists()
         )
         # The re-reduced bundle still validates structurally.
         self.assertEqual(validate_bundle(bundle), [])
@@ -1489,14 +1523,14 @@ class ReduceVerbTests(CliRunTestCase):
         # remains byte-layout unchanged.
         bundle = self.make_bundle("reduce-default-external")
         expected = self.tmp / (
-            f"{bundle.name}.summary_metrics.rereduced.0.5.1.json"
+            f"{bundle.name}.summary_metrics.rereduced.{SUMMARY_REDUCER_VERSION}.json"
         )
         with patch("joulewise.cli.Path.cwd", return_value=self.tmp):
             exit_code, _out, err = _run(["reduce", str(bundle)])
         self.assertEqual(exit_code, 0, err)
         self.assertTrue(expected.is_file())
         self.assertFalse(
-            (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+            (bundle / f"summary_metrics.rereduced.{SUMMARY_REDUCER_VERSION}.json").exists()
         )
 
     def test_reduce_explicit_output_inside_bundle_is_refused(self) -> None:

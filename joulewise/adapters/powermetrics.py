@@ -357,6 +357,7 @@ class PowermetricsTelemetryAdapter:
         *,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> TelemetryStopResult:
         """Stop the real sampler and derive current-era clock/phase evidence."""
 
@@ -366,6 +367,7 @@ class PowermetricsTelemetryAdapter:
                 config,
                 sampling_started=sampling_started,
                 sampling_stopped=sampling_stopped,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
         finally:
             data, _ = self._take_measured_capture()
@@ -403,6 +405,7 @@ class PowermetricsTelemetryAdapter:
                 ),
                 sampling_stopped=sampling_stopped,
                 deadline=bracket_deadline,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
             if bracketed_data is not None:
                 data = bracketed_data
@@ -448,6 +451,7 @@ class PowermetricsTelemetryAdapter:
         *,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> float | None:
         """Bound sampler wind-down by a trace-domain right-edge sample."""
 
@@ -472,6 +476,7 @@ class PowermetricsTelemetryAdapter:
                 deadline=deadline,
                 sampling_started=sampling_started,
                 sampling_stopped=sampling_stopped,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
             if brackets_stop:
                 return deadline
@@ -563,6 +568,7 @@ class PowermetricsTelemetryAdapter:
         deadline: float,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> bool:
         if self._drain_monotonic() >= deadline:
             return False
@@ -612,7 +618,11 @@ class PowermetricsTelemetryAdapter:
         earliest_anchor_s = float(
             evidence["clock_anchor"]["admissible_lower_epoch_s"]
         )
-        projected_stop_endpoint_s = sampling_stopped.epoch_s - earliest_anchor_s
+        projected_stop_endpoint_s = (
+            sampling_stopped.epoch_s
+            + required_post_window_tail_s
+            - earliest_anchor_s
+        )
         if (
             not math.isfinite(projected_stop_endpoint_s)
             or projected_stop_endpoint_s <= 0.0
@@ -637,6 +647,7 @@ class PowermetricsTelemetryAdapter:
         earliest_anchor_s: float,
         sampling_stopped: ClockStamp,
         deadline: float,
+        required_post_window_tail_s: float = 0.0,
     ) -> bytes | None:
         """Select the final-anchor prefix without working past the drain deadline.
 
@@ -653,7 +664,9 @@ class PowermetricsTelemetryAdapter:
                 return None
             if index > 0:
                 relative_endpoint_s += record.elapsed_ns / 1_000_000_000.0
-            if earliest_anchor_s + relative_endpoint_s >= sampling_stopped.epoch_s:
+            if earliest_anchor_s + relative_endpoint_s >= (
+                sampling_stopped.epoch_s + required_post_window_tail_s
+            ):
                 bracket_index = index
                 break
         if bracket_index is None or self._drain_monotonic() >= deadline:

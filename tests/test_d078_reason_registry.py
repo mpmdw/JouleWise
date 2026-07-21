@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import unittest
+import re
 from pathlib import Path
 
 from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
 from joulewise.floor_extraction import CELL_REFUSAL_CODES
 from joulewise import idle_admission
 from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
+
+
+# F11 exception retired: the 2026-07-21 D-078 amendment registered the last
+# pending spellings, so every code vocabulary entry must appear in the log.
+PENDING_DECISION_LOG_REGISTRATION: set[str] = set()
 
 
 class D078ReasonRegistryTests(unittest.TestCase):
@@ -35,8 +41,41 @@ class D078ReasonRegistryTests(unittest.TestCase):
             | campaign_conditions
             | set(FIDUCIAL_DIAGNOSTIC_CODES)
         ):
+            if reason in PENDING_DECISION_LOG_REGISTRATION:
+                continue
             with self.subTest(reason=reason):
                 self.assertIn(f"`{reason}`", amendment)
+
+    def test_reducer_reason_registry_and_emission_sites_are_bidirectional(self) -> None:
+        reducer_source = Path("joulewise/reduce.py").read_text(encoding="utf-8")
+        source_paths = (
+            "joulewise/reduce.py",
+            "joulewise/analysis_engine/inputs.py",
+            "scripts/validate_powermetrics_fiducial.py",
+        )
+        source_by_path = {
+            path: Path(path).read_text(encoding="utf-8")
+            for path in source_paths
+        }
+        emitted = set(
+            re.findall(
+                r'(?:reasons\.append\(|"reasons"\s*:\s*\[)'
+                r'\s*["\']([A-Za-z0-9_]+)["\']',
+                reducer_source,
+            )
+        )
+        self.assertLessEqual(emitted, set(REDUCER_REASON_CODES))
+        emission_sites = {
+            reason: tuple(
+                path
+                for path, source in source_by_path.items()
+                if re.search(rf'["\']{re.escape(reason)}["\']', source)
+            )
+            for reason in REDUCER_REASON_CODES
+        }
+        for reason in REDUCER_REASON_CODES:
+            with self.subTest(reason=reason):
+                self.assertTrue(emission_sites[reason], f"no emission site for {reason}")
 
     def test_every_fiducial_serializer_spelling_is_registered(self) -> None:
         decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
@@ -66,6 +105,24 @@ class D078ReasonRegistryTests(unittest.TestCase):
         self.assertIn("stored summary bytes are immutable evidence", contract)
         self.assertIn("outside the input bundle", contract)
 
+    def test_run_bundle_directory_shape_preserves_calibration_custody_subtree(self) -> None:
+        # T6 regression: an archiver implementing only the former directory
+        # diagram could silently omit the attached calibration evidence.
+        contract = Path("docs/contracts/run_bundle_layout.md").read_text(
+            encoding="utf-8"
+        )
+        for entry in (
+            "instrument_calibration/",
+            "manifest.json",
+            "instrument_evidence.json",
+            "events.jsonl",
+            "raw/powermetrics.plist",
+        ):
+            with self.subTest(entry=entry):
+                self.assertIn(entry, contract)
+        self.assertIn("custody subtree", contract)
+        self.assertIn("MUST\npreserve the complete subtree", contract)
+
     def test_fiducial_contract_names_complete_calibration_binding_object(self) -> None:
         # F13 regression: a literal implementation of the old contract omitted
         # bindings and was therefore rejected by the reducer.
@@ -84,6 +141,14 @@ class D078ReasonRegistryTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.assertIn(field, contract)
+
+    def test_claim_evidence_flags_contract_declares_all_leaf_union_scope(self) -> None:
+        contract = Path("docs/contracts/run_bundle_layout.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("member-level union over every", contract)
+        self.assertIn("130 ms phase window under a 44 ms clock bound", contract)
+        self.assertIn("intentional conservative gating", contract)
 
 
 if __name__ == "__main__":

@@ -84,6 +84,7 @@ from joulewise.idle_admission import (  # noqa: E402
     neg8_bracket_not_evaluated,
 )
 from joulewise.analysis_engine.inputs import (  # noqa: E402
+    ANCHOR_SHIFT_ENVELOPE_METHODS,
     cleanup_claim_evidence_flags,
     token_provenance_from_artifacts,
 )
@@ -92,6 +93,7 @@ from joulewise.analysis_engine.ratio import (  # noqa: E402
     ratio_collection_evidence_reasons,
     ratio_evidence_reasons,
 )
+from joulewise.analysis_engine.claims import REASON_CODES  # noqa: E402
 from joulewise.schemas import (  # noqa: E402
     CampaignPolicy,
     CooldownPolicy,
@@ -108,7 +110,10 @@ from joulewise.output_identity import (  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     build_row_provenance,
     source_manifest_descriptors,
+    validated_attempt_selection,
 )
+from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
+from joulewise.environment_admission import environment_admission_refusals  # noqa: E402
 
 
 STATUSES = (
@@ -140,6 +145,9 @@ KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
         "affine_smoke_annotations.v1",
     }
 )
+NEG8_REFERENCE_ROLE = "neg8_daily_reference"
+NEG8_REFERENCE_START_ROLE = "neg8_daily_reference_start"
+NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
 
 
 @dataclass(frozen=True)
@@ -151,6 +159,10 @@ class ConfigInfo:
     generator_sidecar_ref: str | None = None
     suite_manifest_ref: str | None = None
     prompt_token_evidence_policy: PromptTokenEvidencePolicy | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
+    role: str | None = None
+    sentinel_position: str | None = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +170,15 @@ class ConfigError:
     path: Path
     message: str
     run_id: str | None = None
+
+
+@dataclass(frozen=True)
+class WholeWindowMemberSource:
+    path: Path
+    role: str | None = None
+    sentinel_position: str | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
 
 
 @dataclass(frozen=True)
@@ -264,6 +285,10 @@ class MemberEvaluation:
     preceding_campaign_cooldown: dict[str, Any] | None = field(
         default=None, repr=False, compare=False
     )
+    declared_role: str | None = None
+    sentinel_position: str | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -342,6 +367,12 @@ class MemberEvaluation:
             row["suite_order_seed"] = self.suite_order_seed
         if self.preceding_campaign_cooldown is not None:
             row["preceding_campaign_cooldown"] = self.preceding_campaign_cooldown
+        if self.declared_role is not None:
+            row["declared_role"] = self.declared_role
+        if self.sentinel_position is not None:
+            row["sentinel_position"] = self.sentinel_position
+        if self.scientific_config_sha256 is not None:
+            row["scientific_config_sha256"] = self.scientific_config_sha256
         return row
 
 
@@ -732,7 +763,23 @@ def prompt_token_evidence_policy_from_config(
         ) from exc
 
 
-def load_config_info(config_path: Path) -> ConfigInfo:
+def _declared_neg8_reference_position(
+    role: str | None, sentinel_position: str | None
+) -> str | None:
+    """Return an explicitly declared NEG-8 position; IDs confer nothing."""
+
+    if role == NEG8_REFERENCE_START_ROLE:
+        return "start" if sentinel_position in (None, "start") else "invalid"
+    if role == NEG8_REFERENCE_END_ROLE:
+        return "end" if sentinel_position in (None, "end") else "invalid"
+    if role == NEG8_REFERENCE_ROLE:
+        return sentinel_position if sentinel_position in {"start", "end"} else "invalid"
+    return None
+
+
+def load_config_info(
+    config_path: Path, *, order_entry: OrderEntry | None = None
+) -> ConfigInfo:
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
     except OSError as exc:
@@ -758,6 +805,26 @@ def load_config_info(config_path: Path) -> ConfigInfo:
     repetitions = workload_profile.get("repetitions", 1)
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise ValueError(f"workload_profile.repetitions must be a positive integer: {config_path}")
+    normalized = _normalized_benchmark_config(data)
+    scientific_config_sha256 = _scientific_config_sha256(normalized)
+    role = order_entry.role if order_entry is not None else None
+    sentinel_position = (
+        order_entry.sentinel_position if order_entry is not None else None
+    )
+    neg8_position = _declared_neg8_reference_position(role, sentinel_position)
+    canonical_neg8_workload = _declares_canonical_neg8_workload(normalized)
+    if neg8_position == "invalid":
+        raise ValueError(
+            "declared NEG-8 reference role requires an unambiguous start/end position: "
+            f"{config_path}"
+        )
+    if neg8_position is not None and (
+        not canonical_neg8_workload or scientific_config_sha256 is None
+    ):
+        raise ValueError(
+            "declared NEG-8 reference role requires the canonical NEG-8 workload "
+            f"and scientific config identity: {config_path}"
+        )
     return ConfigInfo(
         path=config_path,
         run_id=sanitized_run_id,
@@ -766,6 +833,10 @@ def load_config_info(config_path: Path) -> ConfigInfo:
         generator_sidecar_ref=generator_sidecar_ref_from_config(data),
         suite_manifest_ref=suite_manifest_ref_from_config(data),
         prompt_token_evidence_policy=prompt_token_evidence_policy_from_config(data),
+        scientific_config_sha256=scientific_config_sha256,
+        canonical_neg8_workload=canonical_neg8_workload,
+        role=role,
+        sentinel_position=sentinel_position,
     )
 
 
@@ -778,6 +849,40 @@ def _normalized_benchmark_config(value: Any) -> dict[str, Any] | None:
         return BenchmarkConfig.from_mapping(value).to_dict()
     except Exception:  # noqa: BLE001 - malformed identities fail closed at callers.
         return None
+
+
+def _scientific_config_sha256(
+    normalized_config: dict[str, Any] | None,
+) -> str | None:
+    """Hash normalized scientific config after removing run identity only."""
+
+    if normalized_config is None:
+        return None
+    scientific = dict(normalized_config)
+    scientific.pop("run_id", None)
+    return hashlib.sha256(
+        json.dumps(scientific, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _declares_canonical_neg8_workload(
+    normalized_config: dict[str, Any] | None,
+) -> bool:
+    """Recognize the prospectively frozen NEG-8 whole-window workload."""
+
+    workload = (
+        normalized_config.get("workload_profile")
+        if isinstance(normalized_config, dict)
+        else None
+    )
+    return bool(
+        isinstance(workload, dict)
+        and workload.get("name") == "df_rq_mid"
+        and workload.get("prompt_tokens") == 1024
+        and workload.get("output_tokens") == 256
+        and workload.get("dataset_ref") is None
+        and workload.get("suite_manifest_ref") is None
+    )
 
 
 def _bundle_config_binding_problem(
@@ -880,6 +985,7 @@ def command_for(
     frozen_cooldown_anchor: dict[str, Any] | None = None,
     instrument_calibration_dir: str | None = None,
     instrument_power_policy: str | None = None,
+    post_window_sampling_dwell_s: float | None = None,
 ) -> list[str]:
     prefix = shlex.split(cli_cmd) if cli_cmd else [sys.executable, "-m", "joulewise"]
     command = prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
@@ -898,6 +1004,13 @@ def command_for(
         command.extend(["--instrument-calibration-dir", instrument_calibration_dir])
     if instrument_power_policy is not None:
         command.extend(["--instrument-power-policy", instrument_power_policy])
+    if post_window_sampling_dwell_s is not None:
+        command.extend(
+            [
+                "--post-window-sampling-dwell-s",
+                str(post_window_sampling_dwell_s),
+            ]
+        )
     return command
 
 
@@ -905,7 +1018,27 @@ def shell_quote(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _stored_bundle_containing(path: Path) -> Path | None:
+    """Return the finalized run-bundle ancestor of a prospective log path."""
+
+    resolved = path.resolve(strict=False)
+    for parent in resolved.parents:
+        if (parent / "summary_metrics.json").is_file():
+            return parent
+    return None
+
+
+def _require_external_campaign_log(log_path: Path) -> None:
+    bundle = _stored_bundle_containing(log_path)
+    if bundle is not None:
+        raise ValueError(
+            "--log must be outside the immutable stored run bundle: "
+            f"{bundle}"
+        )
+
+
 def append_log(log_path: Path, row: dict[str, Any]) -> None:
+    _require_external_campaign_log(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if log_path.exists() and log_path.stat().st_size > 0:
         with log_path.open("rb+") as handle:
@@ -1030,16 +1163,16 @@ def assert_production_uncertainty(
                 f"missing raw/{name}",
             )
     evidence = metadata.get("uncertainty_evidence")
-    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.1":
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.2":
         raise _shakedown_fail(
-            "clock_evidence_missing", bundle, "missing p2-038.1 uncertainty evidence"
+            "clock_evidence_missing", bundle, "missing p2-038.2 uncertainty evidence"
         )
     clock = evidence.get("clock_anchor")
     phase = evidence.get("sample_phase")
     idle = evidence.get("idle_drift")
     if not isinstance(clock, dict) or clock.get("status") != "bounded":
         raise _shakedown_fail("clock_evidence_invalid", bundle, "clock evidence is not bounded")
-    if clock.get("method") != "powermetrics_spawn_ready_wall_monotonic_envelope_v1":
+    if clock.get("method") != "powermetrics_native_second_censored_intersection_v1":
         raise _shakedown_fail("clock_evidence_invalid", bundle, "unexpected clock method")
     if not isinstance(phase, dict) or phase.get("status") != "bounded":
         raise _shakedown_fail("phase_evidence_missing", bundle, "phase evidence is not bounded")
@@ -1093,12 +1226,70 @@ def assert_production_uncertainty(
         raise _shakedown_fail(
             "drift_evidence_missing", bundle, "E_drift_bound_j is missing"
         )
+    margins = metadata.get("trace_window_margins")
+    calibration = metadata.get("instrument_calibration")
+    bundle_bound = metadata.get("clock_anchor_bound_s")
+    fiducial_bound = (
+        calibration.get("verified_effective_b_fiducial_s")
+        if isinstance(calibration, dict)
+        else None
+    )
+    bound_parts = (bundle_bound, fiducial_bound)
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+        for value in bound_parts
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "composed bundle-plus-fiducial anchor bound is unavailable",
+        )
+    composed_anchor_bound_s = sum(float(value) for value in bound_parts)
+    margin_values = (
+        margins.get("achieved_pre_window_margin_s")
+        if isinstance(margins, dict)
+        else None,
+        margins.get("achieved_post_window_margin_s")
+        if isinstance(margins, dict)
+        else None,
+    )
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        or float(value) < composed_anchor_bound_s
+        for value in margin_values
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "trace pre/post margins do not cover the composed anchor bound",
+        )
+    envelopes = raw_summary.get("energy_anchor_shift_envelopes")
+    gross_envelope = (
+        envelopes.get("/gross_energy_j") if isinstance(envelopes, dict) else None
+    )
+    if (
+        not isinstance(gross_envelope, dict)
+        or gross_envelope.get("method") not in ANCHOR_SHIFT_ENVELOPE_METHODS
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "current-mint gross anchor-shift envelope is unavailable",
+        )
     return {
         "bundle_id": bundle.name,
         "clock_method": clock["method"],
         "idle_method": idle["method"],
         "request_eligible": True,
         "request_reasons": [],
+        "composed_anchor_bound_s": composed_anchor_bound_s,
+        "achieved_pre_window_margin_s": float(margin_values[0]),
+        "achieved_post_window_margin_s": float(margin_values[1]),
     }
 
 
@@ -1623,7 +1814,11 @@ def _stable_precheck_reasons(value: Any) -> set[str]:
     if isinstance(value, dict):
         raw_reasons = value.get("reasons")
         if isinstance(raw_reasons, list):
-            reasons.update(reason for reason in raw_reasons if isinstance(reason, str))
+            for reason in raw_reasons:
+                if isinstance(reason, str) and reason in REASON_CODES:
+                    reasons.add(reason)
+                else:
+                    reasons.add("window_evidence_precheck_missing")
         for child in value.values():
             reasons.update(_stable_precheck_reasons(child))
     elif isinstance(value, list):
@@ -1765,6 +1960,10 @@ def evaluate_member(
         summary=summary,
         metadata=metadata,
         preceding_campaign_cooldown=cooldown_evidence,
+        declared_role=info.role,
+        sentinel_position=info.sentinel_position,
+        scientific_config_sha256=info.scientific_config_sha256,
+        canonical_neg8_workload=info.canonical_neg8_workload,
     )
 
 
@@ -1855,11 +2054,20 @@ def existing_state(info: ConfigInfo, runs_dir: Path) -> ExistingState:
     return ExistingState(action="would run")
 
 
-def read_config_infos(config_paths: list[Path]) -> list[ConfigInfo | ConfigError]:
+def read_config_infos(
+    config_paths: list[Path],
+    order_by_config: Mapping[str, OrderEntry] | None = None,
+) -> list[ConfigInfo | ConfigError]:
     items: list[ConfigInfo | ConfigError] = []
+    order_by_config = order_by_config or {}
     for config_path in config_paths:
         try:
-            items.append(load_config_info(config_path))
+            items.append(
+                load_config_info(
+                    config_path,
+                    order_entry=order_by_config.get(config_path.name),
+                )
+            )
         except Exception as exc:
             items.append(
                 ConfigError(
@@ -2093,7 +2301,12 @@ def verify_cooldown_raw_provenance(
         parsed_rows = [json.loads(line) for line in lines]
     except (UnicodeDecodeError, json.JSONDecodeError):
         return False
-    return len(parsed_rows) == raw_records
+    if len(parsed_rows) != raw_records or not all(
+        isinstance(row, dict) for row in parsed_rows
+    ):
+        return False
+    derived = cooldown_disposition_from_raw(parsed_rows)
+    return derived is not None and derived == cooldown.get("result")
 
 
 def prior_campaign_cooldown_evidence(
@@ -2407,8 +2620,11 @@ def _first_eligible_cooldown_anchor(
 
 
 def _is_neg8_reference_start(info: ConfigInfo) -> bool:
-    normalized = info.run_id.lower().replace("_", "-")
-    return "neg8-reference-start" in normalized
+    return (
+        _declared_neg8_reference_position(info.role, info.sentinel_position) == "start"
+        and info.canonical_neg8_workload
+        and info.scientific_config_sha256 is not None
+    )
 
 
 def _cooldown_anchor_eligibility(
@@ -2679,9 +2895,13 @@ def record_campaign_member_provenance(
             }
         )
     member_row = {
-            "config": info.path.name,
-            "run_id": info.run_id,
-            "bundle_ids": bundle_ids,
+        "config": info.path.name,
+        "run_id": info.run_id,
+        "role": info.role,
+        "sentinel_position": info.sentinel_position,
+        "scientific_config_sha256": info.scientific_config_sha256,
+        "canonical_neg8_workload": info.canonical_neg8_workload,
+        "bundle_ids": bundle_ids,
             "execution": execution,
             "preceding_campaign_cooldown": recorded_cooldown,
             "claim_evidence": claim_evidence,
@@ -2793,6 +3013,8 @@ def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
 
     metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
     admission = metadata.get("environment_admission")
+    if environment_admission_refusals(admission):
+        return None
     if not isinstance(admission, dict):
         return None
     attempts = admission.get("attempts")
@@ -2968,8 +3190,30 @@ def _gross_energy_for(evaluation: MemberEvaluation) -> dict[str, float] | None:
     return {"point_j": point, "lower_j": lower, "upper_j": upper}
 
 
-def _bundle_matches_neg8_marker(bundle_id: str, marker: str) -> bool:
-    return marker in bundle_id.lower().replace("_", "-")
+def _neg8_reference_scientific_config_sha256(
+    evaluation: MemberEvaluation,
+) -> str | None:
+    """Authenticate a declared role against the bundle's scientific config."""
+
+    if (
+        not evaluation.canonical_neg8_workload
+        or evaluation.scientific_config_sha256 is None
+    ):
+        return None
+
+    try:
+        raw = json.loads(
+            (evaluation.bundle_path / "config.json").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    normalized = _normalized_benchmark_config(raw)
+    if not _declares_canonical_neg8_workload(normalized):
+        return None
+    observed = _scientific_config_sha256(normalized)
+    if observed != evaluation.scientific_config_sha256:
+        return None
+    return observed
 
 
 def idle_admission_core_verdict(
@@ -3009,8 +3253,8 @@ def idle_admission_core_verdict(
     }
     conditions: set[str] = set()
     adapter_observations: list[dict[str, Any]] = []
-    neg8_starts: list[dict[str, float] | None] = []
-    neg8_ends: list[dict[str, float] | None] = []
+    neg8_starts: list[tuple[dict[str, float] | None, str | None]] = []
+    neg8_ends: list[tuple[dict[str, float] | None, str | None]] = []
     for evaluation in evaluations:
         attempt = _final_idle_admission_attempt(evaluation)
         if attempt is None:
@@ -3035,10 +3279,25 @@ def idle_admission_core_verdict(
                 "adapter_observation_count": len(member_observations),
             }
         )
-        if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-start"):
-            neg8_starts.append(_gross_energy_for(evaluation))
-        if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-end"):
-            neg8_ends.append(_gross_energy_for(evaluation))
+        neg8_position = _declared_neg8_reference_position(
+            evaluation.declared_role, evaluation.sentinel_position
+        )
+        if neg8_position == "invalid":
+            conditions.add("neg8_bracket_reference_invalid")
+        elif neg8_position == "start":
+            neg8_starts.append(
+                (
+                    _gross_energy_for(evaluation),
+                    _neg8_reference_scientific_config_sha256(evaluation),
+                )
+            )
+        elif neg8_position == "end":
+            neg8_ends.append(
+                (
+                    _gross_energy_for(evaluation),
+                    _neg8_reference_scientific_config_sha256(evaluation),
+                )
+            )
     continuity = evaluate_adapter_wattage_continuity(
         adapter_observations, extension.adapter_wattage
     )
@@ -3054,10 +3313,27 @@ def idle_admission_core_verdict(
     ambiguous = len(neg8_starts) > 1 or len(neg8_ends) > 1
     if ambiguous:
         conditions.add("neg8_bracket_ambiguous_reference")
-    neg8_start = neg8_starts[0] if len(neg8_starts) == 1 else None
-    neg8_end = neg8_ends[0] if len(neg8_ends) == 1 else None
+    neg8_start = neg8_starts[0][0] if len(neg8_starts) == 1 else None
+    neg8_end = neg8_ends[0][0] if len(neg8_ends) == 1 else None
+    start_identity = neg8_starts[0][1] if len(neg8_starts) == 1 else None
+    end_identity = neg8_ends[0][1] if len(neg8_ends) == 1 else None
+    identity_invalid = bool(
+        len(neg8_starts) == 1
+        and len(neg8_ends) == 1
+        and (
+            start_identity is None
+            or end_identity is None
+            or start_identity != end_identity
+        )
+    )
+    if identity_invalid:
+        conditions.add("neg8_bracket_reference_invalid")
     if whole_window or (neg8_starts and neg8_ends):
-        bracket = evaluate_neg8_bracket(neg8_start, neg8_end, extension.neg8_bracket)
+        bracket = evaluate_neg8_bracket(
+            {} if identity_invalid else neg8_start,
+            {} if identity_invalid else neg8_end,
+            extension.neg8_bracket,
+        )
     else:
         bracket = neg8_bracket_not_evaluated(
             extension.neg8_bracket,
@@ -3067,11 +3343,17 @@ def idle_admission_core_verdict(
     conditions.update(bracket["conditions"])
     section["adapter_wattage_continuity"] = continuity
     section["neg8_bracket"] = bracket
+    section["neg8_reference_scientific_config_sha256"] = (
+        start_identity
+        if start_identity is not None and start_identity == end_identity
+        else None
+    )
     section["conditions"] = sorted(conditions)
     return section
 
 
-def _whole_window_member(bundle_path: Path) -> MemberEvaluation:
+def _whole_window_member(source: WholeWindowMemberSource) -> MemberEvaluation:
+    bundle_path = source.path
     """Strictly validate an existing bundle before whole-window admission."""
 
     summary, _summary_problem = _load_json_object(
@@ -3094,12 +3376,16 @@ def _whole_window_member(bundle_path: Path) -> MemberEvaluation:
         validation_problems=tuple(problems),
         summary=summary,
         metadata=metadata,
+        declared_role=source.role,
+        sentinel_position=source.sentinel_position,
+        scientific_config_sha256=source.scientific_config_sha256,
+        canonical_neg8_workload=source.canonical_neg8_workload,
     )
 
 
 def _whole_window_campaign_membership(
     runs_dir: Path, policy_sha256: str
-) -> tuple[list[Path], list[str], list[str]]:
+) -> tuple[list[WholeWindowMemberSource], list[str], list[str]]:
     """Resolve bundle paths from campaign ledgers, never directory order.
 
     Matching manifests are grouped by analysis-manifest identity.  Exactly one
@@ -3132,6 +3418,7 @@ def _whole_window_campaign_membership(
                     "selected_bundle_paths": {},
                     "selection_manifests": [],
                     "selection_invalid": False,
+                    "bundle_provenance": {},
                 },
             )
             selection = manifest.get("attempt_ledger_selection")
@@ -3194,6 +3481,8 @@ def _whole_window_campaign_membership(
                             )
                         )
                         and runs_dir.resolve() in ledger_path.parents
+                        and validated_attempt_selection(selection, runs_dir)
+                        == set(selected_ids)
                     )
                 except (OSError, RuntimeError):
                     selection_ok = False
@@ -3216,9 +3505,31 @@ def _whole_window_campaign_membership(
                     continue
                 bundle_ids = member.get("bundle_ids")
                 if isinstance(bundle_ids, list):
-                    group["bundle_ids"].extend(
+                    valid_bundle_ids = [
                         value for value in bundle_ids if isinstance(value, str) and value
-                    )
+                    ]
+                    group["bundle_ids"].extend(valid_bundle_ids)
+                    provenance = {
+                        "role": member.get("role") if isinstance(member.get("role"), str) else None,
+                        "sentinel_position": (
+                            member.get("sentinel_position")
+                            if isinstance(member.get("sentinel_position"), str)
+                            else None
+                        ),
+                        "scientific_config_sha256": (
+                            member.get("scientific_config_sha256")
+                            if isinstance(member.get("scientific_config_sha256"), str)
+                            else None
+                        ),
+                        "canonical_neg8_workload": (
+                            member.get("canonical_neg8_workload") is True
+                        ),
+                    }
+                    for bundle_id in valid_bundle_ids:
+                        prior = group["bundle_provenance"].get(bundle_id)
+                        if prior is not None and prior != provenance:
+                            group["selection_invalid"] = True
+                        group["bundle_provenance"][bundle_id] = provenance
     candidates = []
     for identity, group in groups.items():
         if group["selection_invalid"]:
@@ -3234,14 +3545,15 @@ def _whole_window_campaign_membership(
         source_manifests = (
             group["selection_manifests"] if using_selection else group["manifests"]
         )
-        has_start = any(
-            _bundle_matches_neg8_marker(value, "neg8-reference-start")
+        positions = {
+            _declared_neg8_reference_position(
+                group["bundle_provenance"].get(value, {}).get("role"),
+                group["bundle_provenance"].get(value, {}).get("sentinel_position"),
+            )
             for value in bundle_ids
-        )
-        has_end = any(
-            _bundle_matches_neg8_marker(value, "neg8-reference-end")
-            for value in bundle_ids
-        )
+        }
+        has_start = "start" in positions
+        has_end = "end" in positions
         if has_start and has_end:
             candidates.append((identity, bundle_ids, source_manifests))
     if len(candidates) == 1:
@@ -3252,7 +3564,23 @@ def _whole_window_campaign_membership(
             if group["selected_bundle_ids"]
             else [runs_dir / value for value in bundle_ids]
         )
-        return paths, manifests, []
+        sources = []
+        for bundle_id, path in zip(bundle_ids, paths, strict=True):
+            provenance = group["bundle_provenance"].get(bundle_id, {})
+            sources.append(
+                WholeWindowMemberSource(
+                    path=path,
+                    role=provenance.get("role"),
+                    sentinel_position=provenance.get("sentinel_position"),
+                    scientific_config_sha256=provenance.get(
+                        "scientific_config_sha256"
+                    ),
+                    canonical_neg8_workload=(
+                        provenance.get("canonical_neg8_workload") is True
+                    ),
+                )
+            )
+        return sources, manifests, []
     fallback = sorted(
         path
         for path in runs_dir.iterdir()
@@ -3263,7 +3591,7 @@ def _whole_window_campaign_membership(
         if len(candidates) > 1
         else "whole_window_campaign_membership_unresolved"
     )
-    return fallback, [], [condition]
+    return [WholeWindowMemberSource(path=path) for path in fallback], [], [condition]
 
 
 def run_whole_window_verdict(args: argparse.Namespace) -> int:
@@ -3272,11 +3600,13 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
     policy_binding = load_campaign_policy(args.campaign_policy)
-    bundle_paths, source_manifests, selection_conditions = (
+    bundle_sources, source_manifests, selection_conditions = (
         _whole_window_campaign_membership(runs_dir, policy_binding.sha256)
     )
-    evaluations = [_whole_window_member(path) for path in bundle_paths]
+    evaluations = [_whole_window_member(source) for source in bundle_sources]
     included = [evaluation for evaluation in evaluations if evaluation.usable]
     excluded = [evaluation for evaluation in evaluations if not evaluation.usable]
     core = idle_admission_core_verdict(
@@ -3340,7 +3670,6 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         bundle_ids=row["bundle_ids"],
         source_manifests=source_descriptors,
     )
-    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     append_log(log_path, row)
     print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
     print(f"  decision: {bracket_decision}")
@@ -4039,9 +4368,22 @@ def run_axi_spec_campaign(
                 args.cli_cmd,
                 instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
                 instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
+                ),
             )
             print(f"dry_run {entry['entry_id']} attempt=0: {shell_quote(command)}")
         return 0
+
+    manifest_copy_path = evidence_root / "analysis_manifest.json"
+    manifest_copy_raw = state.path.read_bytes()
+    if manifest_copy_path.exists():
+        if manifest_copy_path.read_bytes() != manifest_copy_raw:
+            raise FileExistsError("immutable AXI analysis manifest differs")
+    else:
+        _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
     lock_path: Path | None = None
     try:
@@ -4226,6 +4568,11 @@ def run_axi_spec_campaign(
                 args.cli_cmd,
                 instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
                 instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
+                ),
             )
             cooldown_note: dict[str, Any] | None = None
             if policy_binding is not None:
@@ -4502,6 +4849,9 @@ def run_axi_spec_campaign(
                     {
                         "bundle_id": physical_id,
                         "path": bundle_path.relative_to(runs_dir).as_posix(),
+                        "entry_id": entry_id,
+                        "attempt_ordinal": row["attempt_ordinal"],
+                        "run_id": row["run_id"],
                     }
                 )
             cooldown_evidence = prior_campaign_cooldown_evidence(
@@ -4570,6 +4920,10 @@ def run_axi_spec_campaign(
                 "schema_version": "joulewise.attempt_ledger_selection.v1",
                 "attempt_ledger_path": ledger_path.relative_to(runs_dir).as_posix(),
                 "attempt_ledger_sha256": axi_sha256_bytes(ledger_raw),
+                "analysis_manifest_path": manifest_copy_path.relative_to(
+                    runs_dir
+                ).as_posix(),
+                "analysis_manifest_sha256": axi_sha256_bytes(manifest_copy_raw),
                 "selected_bundle_ids": sorted(selected_bundle_ids),
                 "selected_bundles": sorted(
                     selected_bundles, key=lambda row: row["bundle_id"]
@@ -4727,6 +5081,7 @@ def run_campaign(args: argparse.Namespace) -> int:
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
 
     policy_binding = load_campaign_policy(args.campaign_policy)
 
@@ -4801,7 +5156,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             log_path=log_path,
             preflight=preflight,
         )
-    items = read_config_infos(configs)
+    items = read_config_infos(configs, order_by_config)
     waivers = load_waivers(args.waivers)
     config_errors = [item for item in items if isinstance(item, ConfigError)]
     if config_errors:
@@ -5020,6 +5375,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                 ),
                 instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
                 instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
+                ),
             )
 
             if args.dry_run:
