@@ -1,6 +1,20 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-19d (SOUNDNESS AUDIT — deploy priority raised). The
+Refreshed: 2026-07-20a (advisor-readability corrections — deploy
+priority remains raised). Responding to the professor's direct
+feedback: the Status page's audit update is rewritten in plain
+language (two-clocks explanation; explicit "nothing measured negative";
+short-workload resolution limit stated as a design fact, not a
+workaround), a dedicated plain-English explainer ships at
+docs/advisor_briefs/2026-07-20-timing-defect-explainer.md, and the
+run-report banner phrasing that invited a "-8 J" misreading is
+corrected. The deployed capsule still shows the pre-audit claim
+posture AND the jargon-heavy update; deploying picks up both fixes.
+Standing rule adopted: advisor-facing surfaces use plain language with
+defined terms. Three-step: git pull; build_site + pack_capsule; npx
+lakebed deploy. Automation informs; Ed deploys.
+
+Prior refresh: 2026-07-19d (SOUNDNESS AUDIT — deploy priority raised). The
 live capsule now shows SUPERSEDED claim posture: the deployed Status
 page presents the 07-17 floor table uncaveated and the night's corpus
 as claim-ready. Repo truth: D-078 soundness gate — a trace-time-anchor
