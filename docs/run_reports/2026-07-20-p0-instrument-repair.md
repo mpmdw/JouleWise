@@ -3,8 +3,9 @@
 Ed-directed ("spend serious time making sure the measurement instruments are
 rigorous"; ultracode authorized). Executes roadmap Phase 0
 (`docs/phase_2/splitwise_replication_roadmap.md`) against the D-078 soundness
-gate. Branch: `impl/p0-instrument-repair` (from main `ccfa5c2`); final head
-pending convergence sign-off (round-2 confirmation in flight at `233e9e3`).
+gate. Branch: `impl/p0-instrument-repair` (from main `ccfa5c2`); **signed off
+2026-07-22 at `040ca3a`** after nine confirmation rounds (one registered
+limitation, L1 — see D-078 clause 8).
 
 ## Build arc (2026-07-20)
 
@@ -150,9 +151,43 @@ rulings; provenance authentication; claim-aggregation rulings).
 - Salvage of the 288-bundle corpus remains a separate Ed ruling under D-078;
   DF-TELEM unchanged.
 
+## Rounds 4-9 and sign-off (2026-07-21 → 22)
+
+- **Rounds 4-7** (fix waves `d77ea6d`, `232438b`, `e995c82`): confirmed
+  findings per round fell 27→8→9→7→3→6→3. Headline closures: calibration
+  epistemics (the 95/95 identity's transfer assumptions T1-T3 registered
+  explicitly), pre/post calibration BRACKETING required for claim-bearing
+  collections with the bracket maximum CONSUMED (`max(B_pre, B_post)` must
+  not exceed any member envelope's minted bound), protocol v3 (59 pulses),
+  exact corner-maximized D-054 floors over joint per-member interval
+  corners, and claim-licensing policy hardening. Every fix wave received a
+  §C-028 delta re-audit; the last two ran fully clean.
+- **Round 8** (this wave, landed `040ca3a`, suite 2088/0): four rulings —
+  dual-clock semantic authentication of every calibration command event
+  (±1 s, shifted-freshness relabels refuse), executed-schedule
+  authentication (durations, van-der-Corput gaps ±0.25 s, ≥4.5 s quiet
+  baselines; the sealed live v2 artifact passes empirically), corner-widened
+  floors carried additively with full-corner validator recomputation and
+  engine consumption, envelope-method v3 as the sole current mint. The
+  wave's own delta re-audit (3 lenses, 8 refuter verdicts, 2 filter-killed
+  reruns) confirmed and fixed two more: command-event ClockStamp physical
+  sanity (a negative half-width could understate B_fiducial by ~3 µs —
+  killed), OverflowError containment, plus claim-consumption v3 eligibility
+  and two test-wiring gaps. Three findings refuted, one narrowed to a
+  registered nit (ULP-scale duration boundary, fail-closed).
+- **Round 9 (FINAL, Ed-ratified cap)** over `040ca3a`: fiducial chain,
+  reduce taxonomy, and contract coherence confirmed clean; ONE surviving
+  blocker (CR9-1, lead-reproduced): canonical floor artifacts are
+  self-attesting about admissible widths and campaign membership.
+  Adjudicated as **registered limitation L1** (floor artifacts are
+  claim-licensing only from same-custody-session governed extraction) with
+  the binding fix queued as FLOOR-BIND-01 (P1). D-078 clause 8 records the
+  ruling and justification.
+
 ## State at writing
 
-Branch pushed at `233e9e3`; PR opens after confirmation-round sign-off.
-Remaining after sign-off: PR per the operation-loop gate shape →
-RUN_STATE/PROJECT_STATUS/DRIFT refresh → then Phase 1 re-collection per the
-roadmap (fresh calibration first).
+Branch signed off and pushed at `040ca3a` + close-out docs; PR open for
+Ed-named merge. Remaining: RUN_STATE/PROJECT_STATUS refresh (bookkeeping
+commits) → fresh [QUIET-MAC] v3 pulse calibration BRACKETING Window-A
+re-collection per the roadmap (ping Ed to schedule — no measurements run
+without the window).

@@ -4400,3 +4400,40 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    requires fresh live [QUIET-MAC] calibration under protocol v3
    (59 pulses, fifth-wave addendum), bracketing the window, within 24 h of
    collection.
+
+8. **Confirmation round 9 (2026-07-22, FINAL under the Ed-ratified cap) —
+   outcome and registered limitation L1.** The round-9 review over head
+   040ca3a confirmed the fiducial chain, reduce-side verification taxonomy,
+   and contract coherence clean, with ONE surviving blocker (CR9-1,
+   repro-backed, lead-reproduced): the canonical floor/MDE artifact is
+   SELF-ATTESTING about its admissible half-widths and campaign membership —
+   `validate_floor_artifact` recomputes widened floors only from
+   artifact-internal widths, and evidence binding authenticates identities,
+   hashes, and ordering but neither rederives source widths nor requires
+   complete governed campaign membership. A substituted artifact with
+   understated widths (or one omitting a member) validates, binds, and
+   licenses an exact claim floor. Per the loop-termination doctrine
+   (clause 5), the lead adjudicates this a REGISTERED LIMITATION rather than
+   a tenth round:
+   - **L1 (registered): canonical floor artifacts are not independently
+     claim-licensing.** Until floor↔extraction binding lands, a
+     claim-bearing analysis may consume a floor artifact ONLY when it was
+     produced by the governed extraction in the same custody session as the
+     analysis (same run manifest; extraction gates demonstrably executed).
+     Standalone or externally supplied floor artifacts are non-claim-bearing
+     evidence. Justification: the exposure is artifact substitution or a
+     defective producer BETWEEN extraction and analysis; an honest
+     same-session pipeline computes widths and membership under the already
+     -hardened extraction gates, so no measurement this program will make
+     under L1's workflow rule is affected. The gap is a third-party
+     verifiability deficit, not an instrument-physics defect.
+   - **Queued fix (next cycle, P1):** bind each canonical floor cell to its
+     extraction report and source-member disposition (or rederive the
+     extraction gates and widths at binding), refusing on any stored
+     width/corner mismatch or membership deviation, with integration
+     regressions for width substitution and member omission (TASK_QUEUE
+     FLOOR-BIND-01).
+   Round-9 verification note: the focused 357-test review surface passed at
+   the head in-session; the lead's full-suite gate over the identical tree
+   content (2088 passed / 15 skipped / 1570 subtests / 0 failures)
+   stands as the aggregate confirmation.

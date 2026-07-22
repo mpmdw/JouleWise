@@ -847,6 +847,45 @@
       "status": "shelved",
       "stop_card": null
     },
+    "FLOOR-BIND-01": {
+      "acceptance": {
+        "evidence": [
+          "Canonical floor cells bound to their extraction report and source-member disposition (or extraction gates and widths rederived at binding)",
+          "Binding refuses on any stored width/corner mismatch or campaign-membership deviation",
+          "Integration regressions reject width substitution and member omission end-to-end"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FLOOR-BIND-01/acceptance",
+          "label": "FLOOR-BIND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Floor/MDE artifacts stop being self-attesting: claim consumption authenticates admissible widths and complete governed campaign membership against extraction evidence, retiring registered limitation L1."
+      },
+      "authority": {
+        "label": "D-078 clause 8 (confirmation round 9, registered limitation L1)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 clause 8 L1",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Until this row closes, claim-bearing analysis may consume floor artifacts only from same-custody-session governed extraction; standalone artifacts are non-claim-bearing"
+        }
+      ],
+      "flags": [],
+      "goal": "Bind canonical floor/MDE artifacts to governed extraction (CR9-1): authenticate admissible half-widths and complete campaign membership at claim consumption, with substitution/omission regressions.",
+      "id": "FLOOR-BIND-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "queued",
+      "status_note": "Minted 2026-07-22 from confirmation round 9 (CR9-1, lead-reproduced). L1 workflow rule mitigates until closed.",
+      "stop_card": null
+    },
     "P1-001": {
       "acceptance": {
         "evidence": [
@@ -2220,5 +2259,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-18"
+  "updated": "2026-07-22"
 }

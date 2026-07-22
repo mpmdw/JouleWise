@@ -116,6 +116,30 @@ guard-protected protocol now collects ~280 bundles per night routinely.
 Records: `docs/reviews/2026-07-19-measurement-soundness-audit.md`,
 `docs/run_reports/2026-07-19-recal456-extended-window.md`.
 
+**REPAIR COMPLETE (2026-07-22): the instrument repair is finished and
+signed off.** Over three days the timing defect was fixed and the whole
+measurement chain was hardened through nine rounds of independent
+adversarial review (each round tried to break the instrument; the last
+round found one remaining gap, recorded below). In plain terms, the
+instrument now: (a) knows precisely when its power readings happened
+relative to the model's work (the clock-alignment fix, with the
+alignment uncertainty — about 27 milliseconds — carried into every
+result as an explicit error bar); (b) proves its own calibration is
+genuine and fresh — a calibration recording that was tampered with,
+mislabeled, taken under the wrong procedure, or older than 24 hours is
+automatically rejected; and (c) refuses to report a result rather than
+report a doubtful one, in every failure case we could construct. One
+known limitation is recorded honestly: the file that stores the
+detection-floor statistics is not yet cryptographically tied back to
+the raw measurements it came from, so we only trust such files when our
+own pipeline produced them in the same verified session (a fix is
+queued). Live validation on the real hardware passed: 40 of 40
+calibration pulses detected with no false detections, and a test
+measurement reproduced the expected physics where the old defective
+pipeline had been wrong by a factor of ~28. Next: a fresh calibration
+and re-collection of the measurement campaign under the repaired
+instrument. Record: `docs/run_reports/2026-07-20-p0-instrument-repair.md`.
+
 ### Exploratory follow-on — not a promoted claim
 
 Nine additional strict-valid, collection-usable bundles cover three

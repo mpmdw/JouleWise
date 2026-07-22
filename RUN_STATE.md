@@ -1,27 +1,31 @@
 # JouleWise Run State
 
-Last updated: 2026-07-19 (late night). **SOUNDNESS GATE ACTIVE (D-078
-proposed): the Ed-directed measurement-soundness audit found a
-trace-time-anchor defect — power-trace timestamps are misaligned with
-runtime events (~0.5–1 s), so NO existing powermetrics corpus supports
-claim-bearing floors/MDEs as recorded** (all four P0 findings
-lead-verified from primary evidence; record:
-`docs/reviews/2026-07-19-measurement-soundness-audit.md`). The extended
-re-collection itself executed perfectly: three further bracketed windows
-(`runs_recal4/5/6_20260719/`, 266/266 strict-valid, clean SOURCE
-provenance, one unlock abort quarantined) + recal3 = 288 bundles, all
-planned Window-A cells except DF-TELEM at planned n. The corpus is
-retained as instrument/calibration evidence; arithmetic, token
-accounting, guard behavior, and ABBA execution all verified sound.
-NEXT (ordered; roadmap:
-`docs/phase_2/splitwise_replication_roadmap.md`): (1) [AGENT]
-INSTRUMENT REPAIR — tight causal trace-time anchor + anchor-envelope
-reduction; extraction honors window_evidence_precheck + campaign-log
-cooldown joins; analysis-engine 0.5.0/v2 wire compat; CPU-aware idle
-admission; (2) [QUIET-MAC] re-collect Window A under the fixed anchor
-(tonight proved ~280 bundles/night is routine); (3) then P2-006
-Qwen2.5-1.5B/7B pair campaign per the roadmap (Sol design consult
-adopted). The 2026-07-17 published floor table is caveated pending
+Last updated: 2026-07-22. **D-078 P0 INSTRUMENT REPAIR SIGNED OFF at
+`040ca3a` (branch `impl/p0-instrument-repair`, PR open for Ed-named
+merge).** Nine confirmation rounds converged (27→8→9→7→3→6→3→5→1
+findings/round); round 9 was FINAL per the Ed-ratified cap and its one
+surviving blocker is now REGISTERED LIMITATION L1 (D-078 clause 8):
+canonical floor/MDE artifacts are claim-licensing ONLY from
+same-custody-session governed extraction until FLOOR-BIND-01 (P1,
+agent lane) binds them to extraction evidence. Suite at sign-off:
+2088 passed / 0 failures. Instrument state: B_fiducial 27.373 ms
+(nonparametric 95/95 under registered assumptions T1-T3), composed
+per-edge bound B_bundle+B_fiducial+span, corner-exact two-edge
+envelopes, exact corner-maximized D-054 floors with corner-widened
+records, protocol v3 (59 pulses), mandatory pre/post calibration
+bracketing with consumed bracket maximum, dual-clock + ClockStamp
+physical-sanity + executed-schedule authentication (understated-bound
+paths killed). NEXT (ordered; roadmap:
+`docs/phase_2/splitwise_replication_roadmap.md`): (1) Ed merges the PR;
+(2) [QUIET-MAC] fresh v3 pulse calibration BRACKETING a Window-A
+re-collection window — ping Ed to schedule (no measurements run without
+the window); (3) then P2-006 Qwen2.5-1.5B/7B pair campaign per the
+roadmap. The 2026-07-19 soundness-gate context (trace-time-anchor
+defect voiding claim use of all prior powermetrics corpora; 288-bundle
+recal corpus retained as instrument/calibration evidence; record:
+`docs/reviews/2026-07-19-measurement-soundness-audit.md`) is now
+addressed in code at this head; corpus salvage remains a separate Ed
+ruling. The 2026-07-17 published floor table is caveated pending
 re-adjudication. Prior context: PR #78 MERGED (b52abf3). The
 first window's record — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
@@ -117,7 +121,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-18). Latest report: [D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open](docs/run_reports/2026-07-18-d077-fix-rounds.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-22). Latest report: [D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open](docs/run_reports/2026-07-18-d077-fix-rounds.md).
 
 ### [ED-EXTERNAL]
 
@@ -129,7 +133,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A4 `AXI-SB-ADAPTER`: Implement the static-batch Mac adapter follow-on minted by the AXI-SB supported verdict: batch_size configuration knob, per-sequence request-scoped token events per the AXI-SA contract, realized-vs-configured batch recording, and structured memory-fit outcomes, with strict-valid mock or smoke bundles and no energy claims.
+- READY — A3 `FLOOR-BIND-01`: Bind canonical floor/MDE artifacts to governed extraction (CR9-1): authenticate admissible half-widths and complete campaign membership at claim consumption, with substitution/omission regressions.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
