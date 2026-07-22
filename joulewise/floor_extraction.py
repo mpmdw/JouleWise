@@ -68,6 +68,7 @@ from joulewise.analysis_engine.inputs import (
 )
 from joulewise.detection_floor import (
     FloorEstimate,
+    MAX_EXACT_ADMISSIBLE_CORNER_N,
     abba_delta,
     absolute_false_effect_floor,
     comparative_false_effect_floor,
@@ -675,10 +676,18 @@ def extract_absolute_cell(
             values = [member.value_j for member in admitted]  # type: ignore[list-item]
             widths = [member.anchor_shift_bound_j for member in admitted]
             point_floor = absolute_false_effect_floor(values)
-            floor = absolute_false_effect_floor(
-                values,
-                admissible_half_widths_j=widths,  # type: ignore[arg-type]
-            )
+            if (
+                len(values) > MAX_EXACT_ADMISSIBLE_CORNER_N
+                and any(width > 0.0 for width in widths)  # type: ignore[operator]
+            ):
+                refusals.append(
+                    "admissible_set_uncertainty_dominates_point_floor"
+                )
+            else:
+                floor = absolute_false_effect_floor(
+                    values,
+                    admissible_half_widths_j=widths,  # type: ignore[arg-type]
+                )
             point_gate = (
                 point_floor.guarded_floor_j
                 if point_floor.guarded_floor_j is not None
@@ -692,7 +701,10 @@ def extract_absolute_cell(
                 + (width_sum - width) / n
                 for value, width in zip(values, widths, strict=True)  # type: ignore[arg-type]
             )
-            if widened_residual_max > point_gate:
+            if (
+                len(values) <= MAX_EXACT_ADMISSIBLE_CORNER_N
+                and widened_residual_max > point_gate
+            ):
                 refusals.append(
                     "admissible_set_uncertainty_dominates_point_floor"
                 )
@@ -829,10 +841,18 @@ def extract_comparative_cell(
             ]
             anchor_max = max(anchor_values) if anchor_values else None
             point_floor = comparative_false_effect_floor(block_deltas)
-            floor = comparative_false_effect_floor(
-                block_deltas,
-                admissible_half_widths_j=block_half_widths,
-            )
+            if (
+                len(block_deltas) > MAX_EXACT_ADMISSIBLE_CORNER_N
+                and any(width > 0.0 for width in block_half_widths)
+            ):
+                refusals.append(
+                    "admissible_set_uncertainty_dominates_point_floor"
+                )
+            else:
+                floor = comparative_false_effect_floor(
+                    block_deltas,
+                    admissible_half_widths_j=block_half_widths,
+                )
             point_gate = (
                 point_floor.guarded_floor_j
                 if point_floor.guarded_floor_j is not None
@@ -844,7 +864,10 @@ def extract_comparative_cell(
                     block_deltas, block_half_widths, strict=True
                 )
             )
-            if widened_delta_max > point_gate:
+            if (
+                len(block_deltas) <= MAX_EXACT_ADMISSIBLE_CORNER_N
+                and widened_delta_max > point_gate
+            ):
                 refusals.append(
                     "admissible_set_uncertainty_dominates_point_floor"
                 )

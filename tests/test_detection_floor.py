@@ -206,6 +206,27 @@ class TestAbsoluteFloor(unittest.TestCase):
         )
         self.assertGreaterEqual(estimate.unguarded_floor_j, 2.3 - TOL)
 
+    def test_joint_corners_raise_full_floor_when_prediction_component_dominates(self):
+        # K1 counterexample: the point floor is 3.2254 J guarded and the
+        # round-4 linear-residual widening remains below it. A joint corner
+        # instead maximizes the Student-t prediction term, so the COMPLETE
+        # guarded floor must rise to 5.2008 J.
+        energies = [101.0, 99.0, 100.0, 100.0, 100.0]
+        point = absolute_false_effect_floor(energies)
+        widened = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.5] * 5,
+        )
+        self.assertAlmostEqual(point.guarded_floor_j, 3.2254205307215367)
+        self.assertGreaterEqual(widened.guarded_floor_j, 5.2008)
+
+    def test_more_than_sixteen_nonzero_member_widths_refuse_approximation(self):
+        with self.assertRaisesRegex(ValueError, "capped at n=16"):
+            absolute_false_effect_floor(
+                [100.0] * 17,
+                admissible_half_widths_j=[0.5] * 17,
+            )
+
 
     def test_below_five_is_smoke_only(self):
         est = absolute_false_effect_floor([10.0, 12.0, 11.0])
@@ -267,6 +288,19 @@ class TestComparativeFloor(unittest.TestCase):
             admissible_half_widths_j=[1.0] * 5,
         )
         self.assertGreaterEqual(estimate.unguarded_floor_j, 3.0 - TOL)
+
+    def test_joint_corners_raise_comparative_prediction_component(self):
+        # K1 comparative counterexample derived from the same member-energy
+        # pattern: point deltas [1,-1,0,0,0] have a 3.2254 J guarded floor,
+        # while +/-0.5 J delta widths put the full corner maximum at 5.4468 J.
+        deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
+        point = comparative_false_effect_floor(deltas)
+        widened = comparative_false_effect_floor(
+            deltas,
+            admissible_half_widths_j=[0.5] * 5,
+        )
+        self.assertAlmostEqual(point.guarded_floor_j, 3.2254205307215367)
+        self.assertGreaterEqual(widened.guarded_floor_j, 5.4468 - TOL)
 
     def test_label_swap_leaves_floor_unchanged(self):
         negated = [-d for d in FIXTURE_B_DELTAS]

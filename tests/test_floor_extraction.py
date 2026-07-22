@@ -55,8 +55,17 @@ REGISTERED_POLICY_PATH = (
     / "campaign_policies"
     / "quiet_mac_p2_production.json"
 )
+EXPLORATORY_POLICY_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "configs"
+    / "campaign_policies"
+    / "quiet_mac_exploratory.json"
+)
 TEST_POLICY_SHA256 = hashlib.sha256(
     REGISTERED_POLICY_PATH.read_bytes()
+).hexdigest()
+EXPLORATORY_POLICY_SHA256 = hashlib.sha256(
+    EXPLORATORY_POLICY_PATH.read_bytes()
 ).hexdigest()
 REGISTERED_BRACKET_POLICY = json.loads(REGISTERED_POLICY_PATH.read_text())[
     "idle_admission_extension"
@@ -1030,6 +1039,36 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             reasons = whole_window_refusal_reasons(root, {"A", "B"})
         self.assertIn("whole_window_verdict_provenance_invalid", reasons)
 
+    def test_current_claim_refuses_registered_exploratory_policy_row(self) -> None:
+        # K2 defect shape: the row and policy hash may be authentic, but an
+        # exploratory/non-claim-bearing registered policy has no authority to
+        # license a claim-time whole-window join.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, manifest, core = self._current_core_fixture(root)
+            manifest["campaign_policy"]["sha256"] = EXPLORATORY_POLICY_SHA256
+            manifest_path = root / "campaign_manifests" / "synthetic-session.json"
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            )
+            core["policy_sha256"] = EXPLORATORY_POLICY_SHA256
+            row = self._whole_window_row(root, bundle_ids)
+            row["campaign_policy"]["sha256"] = EXPLORATORY_POLICY_SHA256
+            row["idle_admission_core"] = core
+            descriptors = source_manifest_descriptors(root, [manifest_path])
+            row["row_provenance"] = build_row_provenance(
+                policy_sha256=EXPLORATORY_POLICY_SHA256,
+                bundle_ids=bundle_ids,
+                source_manifests=descriptors,
+            )
+            (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
+            reasons = whole_module.whole_window_refusal_reasons(
+                root, set(bundle_ids)
+            )
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
     def test_current_whole_window_rederives_cpu_and_adapter_labels(self) -> None:
         # G3 defect shape: one-line edits to stored labels must disagree with
         # fresh member-local evidence, even though the rest of the row stays
@@ -1048,6 +1087,11 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     whole_module,
                     "calibration_bracket_for_bundles",
                     return_value=(bracket, ()),
+                ),
+                mock.patch.object(
+                    whole_module,
+                    "_verify_instrument_calibration",
+                    return_value=(0.03, None),
                 ),
             ):
                 clean = whole_module._current_core_rederivation_reasons(
@@ -1105,6 +1149,11 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     "calibration_bracket_for_bundles",
                     return_value=(bracket, ()),
                 ),
+                mock.patch.object(
+                    whole_module,
+                    "_verify_instrument_calibration",
+                    return_value=(0.03, None),
+                ),
             ):
                 forged = json.loads(json.dumps(clean_core))
                 forged["instrument_calibration_bracket"] = bracket
@@ -1116,6 +1165,57 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     policy_sha256=TEST_POLICY_SHA256,
                 )
         self.assertIn("calibration_bracket_exceeds_minted_bound", reasons)
+
+    def test_inflated_metadata_effective_bound_is_provenance_invalid(self) -> None:
+        # K3 defect shape: changing ONLY the unauthenticated metadata scalar
+        # used to make a too-small minted envelope appear to dominate the
+        # bracket. The artifact-derived effective bound remains 0.03 s, so the
+        # scalar disagreement itself must now refuse provenance.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, manifest, core = self._current_core_fixture(root)
+            physics_caches: list[dict[str, float]] = []
+
+            def authenticated_bound(*_args, physics_cache, **_kwargs):
+                physics_caches.append(physics_cache)
+                return 0.03, None
+
+            metadata_path = root / bundle_ids[0] / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["instrument_calibration"][
+                "verified_effective_b_fiducial_s"
+            ] = 10.0
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+            )
+            with (
+                mock.patch.object(
+                    whole_module, "current_environment_refusals", return_value=()
+                ),
+                mock.patch.object(
+                    whole_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=(core["instrument_calibration_bracket"], ()),
+                ),
+                mock.patch.object(
+                    whole_module,
+                    "_verify_instrument_calibration",
+                    side_effect=authenticated_bound,
+                ),
+            ):
+                reasons = whole_module._current_core_rederivation_reasons(
+                    core=core,
+                    bundle_ids=bundle_ids,
+                    manifests=[manifest],
+                    runs_root=root,
+                    policy_sha256=TEST_POLICY_SHA256,
+                )
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+        self.assertNotIn("calibration_bracket_exceeds_minted_bound", reasons)
+        self.assertEqual(len(physics_caches), len(bundle_ids))
+        self.assertTrue(all(cache is physics_caches[0] for cache in physics_caches))
 
     def test_current_whole_window_rejects_nonempty_core_conditions(self) -> None:
         # G3(c): a nominally passed row cannot carry a buried contamination
@@ -1194,6 +1294,10 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 mock.patch(
                     "joulewise.whole_window.calibration_bracket_for_bundles",
                     return_value=(core["instrument_calibration_bracket"], ()),
+                ),
+                mock.patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.03, None),
                 ),
             ):
                 reasons = whole_window_refusal_reasons(root, set(bundle_ids))
@@ -1969,6 +2073,35 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         )
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 20.0)
+
+    def test_seventeen_member_nonzero_width_cell_refuses_exact_corner_overflow(self) -> None:
+        # K1 cap defect shape: exact full-floor enumeration is governed only
+        # through n=16. A 17-member nonzero-width cell must use the registered
+        # refusal rather than silently falling back to a partial bound.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle_ids = [f"corner-cap-r{index:02d}" for index in range(17)]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for bundle_id in bundle_ids:
+                write_bundle(
+                    runs_root,
+                    bundle_id,
+                    make_summary(100.0, anchor_bound=0.5),
+                )
+            report = extract_absolute_cell(
+                cell_id="K1-CORNER-CAP",
+                metric="gross_energy_j",
+                window_class="request",
+                members=[{"slot": value, "bundle_id": value} for value in bundle_ids],
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertEqual(
+            report.refusal_reasons,
+            ("admissible_set_uncertainty_dominates_point_floor",),
+        )
+        self.assertIsNone(report.floor)
 
     def test_alternating_ten_member_corner_residual_refuses_extraction(self) -> None:
         # G1 exact review counterexample: points alternate 99.5/100.5 J and

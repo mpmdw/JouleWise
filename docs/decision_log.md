@@ -4355,6 +4355,18 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    claim verifier); the registered-policy trust anchor refuses
    duplicate-JSON-key policy bytes; and the standalone reducer horizon
    predicate upper-bounds `run_started` as well as the window end.
+   Round-7 follow-ups (same date): the operative floor is the EXACT maximum
+   of the complete D-054 guarded floor over the joint per-member interval
+   corners (every component is convex in the member vector, so vertex
+   enumeration is exact; n <= 16 enumerated, larger widths refuse) — the
+   linear-corner residual widening alone under-covered the Student-t
+   prediction component; claim-licensing whole-window evidence requires the
+   registered policy to be production-profile AND claim-bearing (exploratory
+   rows can never license claims); the bracket-dominance gate authenticates
+   each member's consumed bound from hash-verified calibration evidence
+   (never the mint-time metadata scalar, whose disagreement is itself
+   provenance-invalid); claim brackets accept protocol v3 artifacts ONLY
+   (v2 stays valid as reduction/validation evidence).
    Registry additions for this wave: `instrument_calibration_bracket_missing`,
    `calibration_bracket_exceeds_minted_bound`,
    (claim-bearing window not bracketed by two authenticated, fresh

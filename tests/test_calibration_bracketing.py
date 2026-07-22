@@ -17,6 +17,7 @@ from joulewise.calibration_bracketing import (
 from joulewise.powermetrics_fiducial import (
     MAX_AGE_S,
     PROTOCOL_ID,
+    PROTOCOL_V2_ID,
     PROTOCOL_V3_SHA256,
     PULSE_COUNT,
     REGION_COVERAGE_RESOLUTION_S,
@@ -34,12 +35,19 @@ class CalibrationBracketingTests(unittest.TestCase):
             calibration_bracket_max_drift_s=0.010,
         )
 
-    def candidate(self, name: str, capture_s: float, bound_s: float) -> CalibrationCandidate:
+    def candidate(
+        self,
+        name: str,
+        capture_s: float,
+        bound_s: float,
+        *,
+        protocol_id: str = PROTOCOL_ID,
+    ) -> CalibrationCandidate:
         return CalibrationCandidate(
             relative_path=f"instrument_validation/{name}",
             manifest_sha256="ab" * 32,
             evidence_sha256="cd" * 32,
-            protocol_id=PROTOCOL_ID,
+            protocol_id=protocol_id,
             capture_wall_time_s=capture_s,
             b_fiducial_s=bound_s,
             bindings=self.bindings,
@@ -69,6 +77,38 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "failed")
         self.assertEqual(reasons, ("instrument_calibration_bracket_missing",))
+
+    def test_claim_bracket_refuses_v2_only_candidates_but_accepts_v3_pair(self) -> None:
+        # K4 defect shape: fresh, binding-matched v2 validation artifacts are
+        # still reduction evidence, but do not carry v3's governed 95/95
+        # claim calibration. Replacing only the protocol with v3 passes.
+        v2 = [
+            self.candidate("pre-v2", 99.0, 0.020, protocol_id=PROTOCOL_V2_ID),
+            self.candidate("post-v2", 111.0, 0.027, protocol_id=PROTOCOL_V2_ID),
+        ]
+        result, reasons = evaluate_calibration_bracket(
+            v2,
+            window_start_s=100.0,
+            window_end_s=110.0,
+            bindings=self.bindings,
+            policy=self.policy,
+        )
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(reasons, ("instrument_calibration_bracket_missing",))
+
+        v3 = [
+            self.candidate("pre-v3", 99.0, 0.020),
+            self.candidate("post-v3", 111.0, 0.027),
+        ]
+        result, reasons = evaluate_calibration_bracket(
+            v3,
+            window_start_s=100.0,
+            window_end_s=110.0,
+            bindings=self.bindings,
+            policy=self.policy,
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(result["status"], "passed")
 
     def test_bracket_drift_over_registered_tolerance_refuses_claim(self) -> None:
         result, reasons = evaluate_calibration_bracket(

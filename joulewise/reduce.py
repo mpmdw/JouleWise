@@ -1174,6 +1174,7 @@ def _verify_instrument_calibration(
     calibration: dict[str, Any],
     *,
     strict_physics: bool = True,
+    physics_cache: dict[str, float] | None = None,
 ) -> tuple[float | None, str | None]:
     """Resolve ``B_fiducial`` only from a hash-verified calibration artifact.
 
@@ -1503,7 +1504,16 @@ def _verify_instrument_calibration(
         ):
             return None, "instrument_calibration_stale"
 
-    if not strict_physics:
+    cached_physics_bound = (
+        physics_cache.get(artifact_sha256)
+        if strict_physics and physics_cache is not None
+        else None
+    )
+    if cached_physics_bound is not None and (
+        not math.isfinite(cached_physics_bound) or cached_physics_bound < 0.0
+    ):
+        return None, "instrument_calibration_invalid"
+    if not strict_physics or cached_physics_bound is not None:
         fresh = None
 
     # Hash custody is necessary but not physical verification. Re-anchor the
@@ -1513,7 +1523,7 @@ def _verify_instrument_calibration(
     # not required to enclose a newly wider estimator revision: that wider
     # fresh B_fiducial is accepted and becomes effective, so a self-consistent
     # older artifact remains usable without shrinking the downstream bound.
-    if strict_physics:
+    if strict_physics and cached_physics_bound is None:
         try:
             fresh = rederive_detection_from_artifacts(
                 primary_bytes["raw/powermetrics.plist"],
@@ -1558,6 +1568,11 @@ def _verify_instrument_calibration(
                     )
                 ):
                     return None, "instrument_calibration_invalid"
+        cached_physics_bound = max(
+            float(b_fiducial), float(fresh.b_fiducial_s)
+        )
+        if physics_cache is not None:
+            physics_cache[artifact_sha256] = cached_physics_bound
 
     # Any bound-field change invalidates the calibration.  The measuring
     # bundle records the complete binding vector beside the calibration
@@ -1668,6 +1683,8 @@ def _verify_instrument_calibration(
         or observed_bindings.get("power_policy") != bindings.get("power_policy")
     ):
         return None, "instrument_calibration_mismatch"
+    if cached_physics_bound is not None:
+        return max(float(b_fiducial), cached_physics_bound), None
     if fresh is None:
         return float(b_fiducial), None
     return max(float(b_fiducial), float(fresh.b_fiducial_s)), None

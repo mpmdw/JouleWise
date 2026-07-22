@@ -3756,6 +3756,11 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         "timestamp": utc_timestamp(),
         "record_type": "idle_admission_whole_window_verdict",
         "status": status,
+        "claim_licensing": bool(
+            policy_binding.policy.profile.value == "production"
+            and policy_binding.idle_admission_extension is not None
+            and policy_binding.idle_admission_extension.claim_bearing
+        ),
         "runs_dir": str(runs_dir),
         "campaign_policy": policy_binding.to_metadata(),
         "bundle_ids": [evaluation.bundle_id for evaluation in included],
@@ -5179,6 +5184,11 @@ def run_axi_spec_campaign(
                 "timestamp": utc_timestamp(),
                 "record_type": "idle_admission_whole_window_verdict",
                 "status": whole_status,
+                "claim_licensing": bool(
+                    policy_binding.policy.profile.value == "production"
+                    and extension is not None
+                    and extension.claim_bearing
+                ),
                 "runs_dir": str(runs_dir),
                 "campaign_policy": policy_binding.to_metadata(),
                 "bundle_ids": [row.bundle_id for row in selected_evaluations],

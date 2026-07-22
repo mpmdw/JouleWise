@@ -252,10 +252,16 @@ def evaluate_calibration_bracket(
         or window_start_s >= window_end_s
     ):
         return result, ("instrument_calibration_bracket_missing",)
+    # v2 remains an authenticated validation/reduction artifact, but only the
+    # 59-pulse v3 protocol carries the governed 95/95 claim calibration.
     matching = [
         candidate
         for candidate in candidates
-        if all(candidate.bindings.get(field) == bindings.get(field) for field in V2_BINDING_FIELDS)
+        if candidate.protocol_id == PROTOCOL_ID
+        and all(
+            candidate.bindings.get(field) == bindings.get(field)
+            for field in V2_BINDING_FIELDS
+        )
     ]
     causal_pre = [
         candidate for candidate in matching if candidate.capture_wall_time_s <= window_start_s

@@ -37,6 +37,7 @@ __all__ = [
     "TRANSPORT_RULE_ID",
     "GUARD_REFERENCE_N",
     "GUARD_MINIMUM_N",
+    "MAX_EXACT_ADMISSIBLE_CORNER_N",
     "TRANSPORT_REASON_CODES",
     "STACK_IDENTITY_DOMAIN",
     "CONDITION_FAMILY_DOMAIN",
@@ -71,6 +72,7 @@ CONDITION_FAMILY_DOMAIN = "joulewise.condition_family.v1"
 # It is not a tolerance, percentile-coverage, confidence, or power guarantee.
 GUARD_REFERENCE_N = 10
 GUARD_MINIMUM_N = 5
+MAX_EXACT_ADMISSIBLE_CORNER_N = 16
 _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
@@ -355,6 +357,64 @@ def _apply_admissible_set_guard(
     )
 
 
+def _corner_maximized_unguarded_floor(
+    point_values_j: Sequence[float],
+    half_widths_j: Sequence[float],
+    *,
+    kind: str,
+) -> float:
+    """Return the exact full D-054 floor maximum over an interval box.
+
+    The maximum of the complete floor (maximum absolute term, sample
+    standard deviation, and Student-t prediction term) occurs at a vertex of
+    the independent member/delta interval box. Enumeration is deliberately
+    capped: callers must refuse rather than substitute an approximation once
+    the governed exact calculation is too large.
+    """
+
+    if len(point_values_j) != len(half_widths_j):
+        raise ValueError("admissible-set half-width count must match point estimates")
+    if not any(half_widths_j):
+        mean = sum(point_values_j) / len(point_values_j)
+        deviations = (
+            [value - mean for value in point_values_j]
+            if kind == "absolute"
+            else list(point_values_j)
+        )
+        prediction_extra = 0.0 if kind == "absolute" else abs(mean)
+        return _floor_estimate(
+            kind, deviations, mean, prediction_extra
+        ).unguarded_floor_j
+    if len(point_values_j) > MAX_EXACT_ADMISSIBLE_CORNER_N:
+        raise ValueError(
+            "exact admissible-set corner enumeration is capped at "
+            f"n={MAX_EXACT_ADMISSIBLE_CORNER_N}"
+        )
+
+    maximum = 0.0
+    for mask in range(1 << len(point_values_j)):
+        corner = [
+            point + (width if mask & (1 << index) else -width)
+            for index, (point, width) in enumerate(
+                zip(point_values_j, half_widths_j, strict=True)
+            )
+        ]
+        mean = sum(corner) / len(corner)
+        deviations = (
+            [value - mean for value in corner]
+            if kind == "absolute"
+            else corner
+        )
+        prediction_extra = 0.0 if kind == "absolute" else abs(mean)
+        maximum = max(
+            maximum,
+            _floor_estimate(
+                kind, deviations, mean, prediction_extra
+            ).unguarded_floor_j,
+        )
+    return maximum
+
+
 def absolute_false_effect_floor(
     values_j: Sequence[float],
     *,
@@ -377,10 +437,15 @@ def absolute_false_effect_floor(
         width * (n - 1) / n + (total_width - width) / n
         for width in widths
     ]
-    return _apply_admissible_set_guard(
-        estimate,
+    # Keep the exact linear-residual result as a cheap lower bound, but the
+    # operative floor is the maximum of the COMPLETE D-054 floor at a joint
+    # interval-box corner. In particular, uncertainty can maximize the
+    # Student-t prediction component at a different corner.
+    uncertainty_floor = max(
         _linear_corner_widened_max(residuals, residual_widths),
+        _corner_maximized_unguarded_floor(values, widths, kind="absolute"),
     )
+    return _apply_admissible_set_guard(estimate, uncertainty_floor)
 
 
 def comparative_false_effect_floor(
@@ -399,10 +464,11 @@ def comparative_false_effect_floor(
     widths = _admissible_widths(
         admissible_half_widths_j, expected_n=len(deltas)
     )
-    return _apply_admissible_set_guard(
-        estimate,
+    uncertainty_floor = max(
         _linear_corner_widened_max(deltas, widths),
+        _corner_maximized_unguarded_floor(deltas, widths, kind="comparative"),
     )
+    return _apply_admissible_set_guard(estimate, uncertainty_floor)
 
 
 def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:

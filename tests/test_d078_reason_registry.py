@@ -146,10 +146,10 @@ class D078ReasonRegistryTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(field, contract)
 
-    def test_fiducial_contract_v1_clause_is_frozen_replay_only(self) -> None:
-        # G6 defect shape: the reduce-time checklist formerly stated an
-        # unqualified v1 protocol requirement even though the current path is
-        # mechanically v2-only.
+    def test_fiducial_contract_names_both_frozen_replay_protocols(self) -> None:
+        # K5 defect shape: the reduce-time checklist formerly omitted v2 from
+        # the frozen replay arms even though reducer 0.5.1/0.6.1 accepts it
+        # only against the frozen replay sha.
         contract = " ".join(
             Path("docs/contracts/powermetrics_fiducial.md")
             .read_text(encoding="utf-8")
@@ -157,9 +157,11 @@ class D078ReasonRegistryTests(unittest.TestCase):
         )
         self.assertIn(
             "under the frozen historical replay arms only, `protocol_id` is "
-            "`powermetrics_pulse_fiducial_v1`",
+            "`powermetrics_pulse_fiducial_v1` or "
+            "`powermetrics_pulse_fiducial_v2`",
             contract,
         )
+        self.assertIn("v2 is pinned to the frozen replay sha", contract)
         self.assertIn("New claim-bearing calibration capture requires v3", contract)
         self.assertIn(
             "accepts authenticated v2 validation artifacts from this D-078 arc",

@@ -1404,6 +1404,7 @@ class RunCampaignTests(unittest.TestCase):
             if row.get("record_type") == "idle_admission_whole_window_verdict"
         ]
         self.assertEqual(len(whole), 1)
+        self.assertFalse(whole[0]["claim_licensing"])
         self.assertEqual(
             whole[0]["idle_admission_core"]["schema_version"],
             run_campaign_module.IDLE_ADMISSION_CORE_SCHEMA,

@@ -32,6 +32,7 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import calibration_bracket_for_bundles
+from joulewise.reduce import _verify_instrument_calibration
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
@@ -813,6 +814,16 @@ def _current_core_rederivation_reasons(
         else None
     )
     profile = registered.get("profile") if isinstance(registered, Mapping) else None
+    # A registered hash authenticates policy bytes, not claim authority. Only
+    # a production policy whose extension explicitly bears claims may license
+    # a current whole-window row. Exploratory collection remains legal, but
+    # its verdict cannot be laundered into claim evidence.
+    if (
+        profile != "production"
+        or not isinstance(extension_value, Mapping)
+        or extension_value.get("claim_bearing") is not True
+    ):
+        return {"whole_window_verdict_provenance_invalid"}
     try:
         extension = IdleAdmissionExtension.from_mapping(
             dict(extension_value) if isinstance(extension_value, Mapping) else None,
@@ -933,25 +944,49 @@ def _current_core_rederivation_reasons(
         if not isinstance(bracket_bound, bool) and isinstance(
             bracket_bound, int | float
         ):
+            physics_cache: dict[str, float] = {}
             for _bundle_id, _path, member_metadata, _cpu in derived_members:
                 member_calibration = (
                     member_metadata.get("instrument_calibration")
                     if isinstance(member_metadata, Mapping)
                     else None
                 )
-                consumed = (
+                metadata_scalar = (
                     member_calibration.get("verified_effective_b_fiducial_s")
                     if isinstance(member_calibration, Mapping)
                     else None
                 )
+                authenticated: float | None = None
+                detail: str | None = "instrument_calibration_invalid"
+                if isinstance(member_calibration, Mapping):
+                    try:
+                        authenticated, detail = _verify_instrument_calibration(
+                            BundleReader(_path),
+                            dict(member_metadata),
+                            dict(member_calibration),
+                            strict_physics=True,
+                            physics_cache=physics_cache,
+                        )
+                    except (BundleReadError, OSError, TypeError, ValueError):
+                        authenticated = None
+                        detail = "instrument_calibration_invalid"
                 if (
-                    isinstance(consumed, bool)
-                    or not isinstance(consumed, int | float)
-                    or not math.isfinite(float(consumed))
-                    or float(bracket_bound) > float(consumed) + 1e-12
+                    detail is not None
+                    or authenticated is None
+                    or not math.isfinite(authenticated)
+                    or authenticated < 0.0
                 ):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                    continue
+                if (
+                    isinstance(metadata_scalar, bool)
+                    or not isinstance(metadata_scalar, int | float)
+                    or not math.isfinite(float(metadata_scalar))
+                    or abs(float(metadata_scalar) - authenticated) > 1e-9
+                ):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                if float(bracket_bound) > authenticated + 1e-12:
                     reasons.add("calibration_bracket_exceeds_minted_bound")
-                    break
     return reasons
 
 

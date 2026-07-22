@@ -166,7 +166,8 @@ rejected). At reduce time the reducer loads that file, verifies its sha256
 equals `artifact_sha256`, and fails closed (`clock_anchor_unresolved`) unless
 ALL of: `schema_version` is `joulewise.instrument_evidence.v1`; under the
 frozen historical replay arms only, `protocol_id` is
-`powermetrics_pulse_fiducial_v1` (the current strict path accepts authenticated
+`powermetrics_pulse_fiducial_v1` or `powermetrics_pulse_fiducial_v2` (v2 is
+pinned to the frozen replay sha; the current strict path accepts authenticated
 v2 validation evidence from this arc and requires v3 for future claim-bearing
 calibration collections, as specified below); `status` is `valid`;
 `anchor_method_version` equals the reducer's own
