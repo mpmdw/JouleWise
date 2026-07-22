@@ -1,6 +1,22 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-19d (SOUNDNESS AUDIT — deploy priority raised). The
+Refreshed: 2026-07-22 (INSTRUMENT REPAIR SIGNED OFF — the good-news
+counterpart to the 07-19d alert below, which remains partly operative
+until deploy). Repo truth now AHEAD of the live capsule: the D-078
+instrument repair is complete and signed off (nine adversarial
+confirmation rounds; PR #79 open for Ed's merge), PROJECT_STATUS
+carries a new plain-language "REPAIR COMPLETE" advisor section (timing
+fix with explicit ~27 ms error bar, calibration authentication,
+fail-closed refusals, one honestly-registered limitation L1), and
+RUN_STATE/the roadmap show Phase 0 complete with Phase 1 re-collection
+next. The live capsule still shows the superseded 07-17 claim posture
+AND none of the repair story. Deploy timing is Ed's call; note the
+07-19d overstatement concern is best cured by deploying AFTER PR #79
+merges so the capsule picks up the full corrected posture in one step.
+Three-step: git pull; build_site + pack_capsule; npx lakebed deploy.
+Automation informs; Ed deploys.
+
+Prior refresh: 2026-07-19d (SOUNDNESS AUDIT — deploy priority raised). The
 live capsule now shows SUPERSEDED claim posture: the deployed Status
 page presents the 07-17 floor table uncaveated and the night's corpus
 as claim-ready. Repo truth: D-078 soundness gate — a trace-time-anchor

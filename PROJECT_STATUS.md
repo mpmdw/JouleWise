@@ -133,12 +133,15 @@ known limitation is recorded honestly: the file that stores the
 detection-floor statistics is not yet cryptographically tied back to
 the raw measurements it came from, so we only trust such files when our
 own pipeline produced them in the same verified session (a fix is
-queued). Live validation on the real hardware passed: 40 of 40
-calibration pulses detected with no false detections, and a test
+queued). Live validation on the real hardware passed: the validation
+recording (made under the earlier 40-pulse calibration procedure)
+detected all 40 calibration pulses with no false detections, and a test
 measurement reproduced the expected physics where the old defective
-pipeline had been wrong by a factor of ~28. Next: a fresh calibration
-and re-collection of the measurement campaign under the repaired
-instrument. Record: `docs/run_reports/2026-07-20-p0-instrument-repair.md`.
+pipeline had been wrong by a factor of ~28. Production measurements
+will use the newer 59-pulse calibration procedure, which supports the
+stronger statistical guarantee we quote for the timing error bar.
+Next: a fresh calibration and re-collection of the measurement campaign
+under the repaired instrument. Record: `docs/run_reports/2026-07-20-p0-instrument-repair.md`.
 
 ### Exploratory follow-on — not a promoted claim
 

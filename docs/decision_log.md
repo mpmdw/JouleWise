@@ -100,7 +100,7 @@ be re-derived by a future agent gets an entry here.
 | D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
 | D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
 | D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
-| D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted (Ed ratification pending) |
+| D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted; operative under Ed's direction through the full repair arc (close-out cap explicitly Ed-ratified 2026-07-22; original-text ratification rides PR #79 review) |
 
 ---
 
@@ -4019,8 +4019,11 @@ defect corrections to the accepted policy, not new policy alternatives.
 ## D-078: Soundness gate — no claim-bearing extraction from time-anchor-defective powermetrics corpora
 
 Date: 2026-07-19. Owner: lead session under Ed's soundness-audit directive;
-Ed ratification pending (recorded here so the gate binds future sessions
-immediately; Ed may amend).
+recorded so the gate binds future sessions immediately. Status update
+2026-07-22: the gate has been operative under Ed's direction through the
+entire repair arc, and Ed explicitly ratified the close-out cap (clause 8);
+formal ratification of this original text rides the PR #79 review (Ed may
+amend).
 
 The 2026-07-19 measurement-soundness audit
 (`docs/reviews/2026-07-19-measurement-soundness-audit.md`; all P0 findings

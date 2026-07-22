@@ -153,8 +153,11 @@ rulings; provenance authentication; claim-aggregation rulings).
 
 ## Rounds 4-9 and sign-off (2026-07-21 → 22)
 
-- **Rounds 4-7** (fix waves `d77ea6d`, `232438b`, `e995c82`): confirmed
-  findings per round fell 27→8→9→7→3→6→3. Headline closures: calibration
+- **Rounds 4-7** (fix waves `d77ea6d` round 5, `232438b` round 6,
+  `e995c82` round 7; round 4 landed inside the `0925480`→`d77ea6d`
+  sequence): the canonical full-arc finding trajectory is
+  **27→8→9→7→3→6→3→5→1** (rounds 2-9; round 8's 5 and round 9's 1 are
+  described below). Headline closures: calibration
   epistemics (the 95/95 identity's transfer assumptions T1-T3 registered
   explicitly), pre/post calibration BRACKETING required for claim-bearing
   collections with the bracket maximum CONSUMED (`max(B_pre, B_post)` must
@@ -169,8 +172,9 @@ rulings; provenance authentication; claim-aggregation rulings).
   baselines; the sealed live v2 artifact passes empirically), corner-widened
   floors carried additively with full-corner validator recomputation and
   engine consumption, envelope-method v3 as the sole current mint. The
-  wave's own delta re-audit (3 lenses, 8 refuter verdicts, 2 filter-killed
-  reruns) confirmed and fixed two more: command-event ClockStamp physical
+  wave's own delta re-audit (3 lenses, 8 refuter runs of which 3 were
+  filter-killed and all 3 recovered by rephrased relaunch) confirmed and
+  fixed two more: command-event ClockStamp physical
   sanity (a negative half-width could understate B_fiducial by ~3 µs —
   killed), OverflowError containment, plus claim-consumption v3 eligibility
   and two test-wiring gaps. Three findings refuted, one narrowed to a
@@ -186,8 +190,9 @@ rulings; provenance authentication; claim-aggregation rulings).
 
 ## State at writing
 
-Branch signed off and pushed at `040ca3a` + close-out docs; PR open for
-Ed-named merge. Remaining: RUN_STATE/PROJECT_STATUS refresh (bookkeeping
-commits) → fresh [QUIET-MAC] v3 pulse calibration BRACKETING Window-A
-re-collection per the roadmap (ping Ed to schedule — no measurements run
-without the window).
+Code/test sign-off head `040ca3a`; docs close-out head `debc6d2`
+(RUN_STATE/PROJECT_STATUS/kernel refresh included); **PR #79** open for
+Ed-named merge. Remaining after merge: fresh [QUIET-MAC] 59-pulse v3
+calibration BRACKETING Window-A re-collection per the roadmap (ping Ed
+to schedule — no measurements run without the window); FLOOR-BIND-01
+retires limitation L1.

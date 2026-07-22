@@ -36,9 +36,22 @@ reordered this roadmap: **instrument repair now precedes everything.**
    A100/H100 heterogeneity, no InfiniBand KV overlap, no
    continuous-batching/SLO serving results (D-070 static-batch fence).
 
-## Phase 0 — INSTRUMENT REPAIR [AGENT lane; blocks everything]
+## Phase 0 — INSTRUMENT REPAIR [COMPLETE 2026-07-22]
 
-From the soundness audit; all prospective, no stored-summary rewrites:
+**Signed off at code head `040ca3a` (close-out `debc6d2`, PR #79) after
+nine adversarial confirmation rounds; registered limitation L1
+(floor-artifact↔extraction binding, FLOOR-BIND-01) is the one recorded
+leftover.** The delivered instrument exceeds this section's original
+T0.1-T0.6 scope — see
+`docs/run_reports/2026-07-20-p0-instrument-repair.md` and D-078
+(amendments + clause 8) for the final state; the list below is retained
+as the original work definition. Phase 1 entry gate: PR #79 merged, then
+fresh 59-pulse protocol-v3 calibration BRACKETING the collection window
+(consumed `max(B_pre, B_post)`), L1 same-custody-session extraction rule
+in force.
+
+Original definition (historical). From the soundness audit; all
+prospective, no stored-summary rewrites:
 
 - **T0.1 Trace-time anchor:** replace the pre-spawn/first-parse midpoint
   anchor with a tight causal anchor (design options to evaluate: workload

@@ -8,8 +8,11 @@ surviving blocker is now REGISTERED LIMITATION L1 (D-078 clause 8):
 canonical floor/MDE artifacts are claim-licensing ONLY from
 same-custody-session governed extraction until FLOOR-BIND-01 (P1,
 agent lane) binds them to extraction evidence. Suite at sign-off:
-2088 passed / 0 failures. Instrument state: B_fiducial 27.373 ms
-(nonparametric 95/95 under registered assumptions T1-T3), composed
+2088 passed / 0 failures. Instrument state: B_fiducial 27.373 ms from
+the sealed 40-pulse v2 validation run (~87% confidence on the 95th
+percentile; the claim-bearing nonparametric 95/95 bound under
+registered assumptions T1-T3 is minted by the fresh 59-pulse v3
+calibration that brackets the next collection window), composed
 per-edge bound B_bundle+B_fiducial+span, corner-exact two-edge
 envelopes, exact corner-maximized D-054 floors with corner-widened
 records, protocol v3 (59 pulses), mandatory pre/post calibration
@@ -26,24 +29,17 @@ recal corpus retained as instrument/calibration evidence; record:
 `docs/reviews/2026-07-19-measurement-soundness-audit.md`) is now
 addressed in code at this head; corpus salvage remains a separate Ed
 ruling. The 2026-07-17 published floor table is caveated pending
-re-adjudication. Prior context: PR #78 MERGED (b52abf3). The
-first window's record — 32/32 strict-valid bundles in
-`runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
-comparative blocks, full suite-absolute block), collected under the
-production environment-guard policy with per-run admission evidence
-(record: `docs/run_reports/2026-07-19-d077-recal-window.md`). A second
-bracketed overnight window (`runs_recal2_20260719/`) then closed the
-optional-block gaps: block 08 long-request absolute 20/20 (the missing
-long-request floor now has evidence), block 09 short-prefill ABBA 40/40,
-both NEG-8 brackets — 62/62 strict-valid, backed up. Night total: 94
-strict-valid bundles, zero contaminated members admitted. PR #77 (D-077
-fix rounds) is MERGED; PR #78 (macOS 26 environment-probe fixes,
-live-validated by the campaigns themselves) awaits Ed's merge. NEXT
-WORK: (1) floor re-extraction from BOTH recal corpora (supersedes the
-caveated 07-17 suite cells and adds the long-request + short-prefill
-floors; P2-015 analysis), (2) PR #78 merge + suite-test profiler
-patch/cache follow-up, (3) [AGENT] A4 AXI-SB-ADAPTER remains the
-agent-lane head. Ed-side: `sudo pmset -c displaysleep 10`.
+re-adjudication.
+
+Prior context (historical, pre-repair; superseded by the sign-off above):
+PRs #77 and #78 are both MERGED (#78 at b52abf3). The recal windows of
+2026-07-18/19 collected 94 + 266 strict-valid bundles under the
+production environment guard (records:
+`docs/run_reports/2026-07-19-d077-recal-window.md`,
+`2026-07-19-recal456-extended-window.md`); that corpus is instrument
+evidence only — the pre-repair floor re-extraction plan is VOID, and
+P2-015 restarts under the repaired instrument per the roadmap.
+Ed-side standing: `sudo pmset -c displaysleep 10`.
 
 Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
@@ -121,7 +117,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-22). Latest report: [D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open](docs/run_reports/2026-07-18-d077-fix-rounds.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-22). Latest report: [D-078 P0 instrument repair signed off (9 confirmation rounds, limitation L1 registered); PR #79 open](docs/run_reports/2026-07-20-p0-instrument-repair.md).
 
 ### [ED-EXTERNAL]
 
@@ -252,6 +248,13 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
+**D-078 P0 instrument repair SIGNED OFF (2026-07-22): code head `040ca3a`,
+close-out `debc6d2`, PR #79 open for Ed-named merge; registered limitation
+L1 + FLOOR-BIND-01 queued; next is v3-bracketed Window-A re-collection**
+(full state in the header above; record:
+`docs/run_reports/2026-07-20-p0-instrument-repair.md`). Earlier arcs below
+are historical.
+
 **C-028 CLOSED (2026-07-11): the full hardening + analysis-engine arc is
 on main.** Reducer lattice 0.4.2 (inter-token metric) / 0.4.1 (idle ESS,
 HAC variance — local r1's 47x underestimate closed) / 0.4.0 (verdict
@@ -374,6 +377,12 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
+- **D-078 sign-off gate (2026-07-22, current):** branch
+  `impl/p0-instrument-repair` code/test head `040ca3a` (docs-only
+  close-out `debc6d2` carries it unchanged): lead-run
+  `pytest -q tests/` = **2088 passed, 15 skipped, 1570 subtests, 0
+  failures**; round-9 focused review surface 357 passed at the same
+  head. Entries below are historical.
 - PR #65 branch `impl/bridge-v1.1` final head `8b96bd4`: canonical
   `Ran 1387 tests`, `OK (skipped=10)`, lead-run 2026-07-13 (four
   lead-side full-suite runs across the fix arc: 1371→1381→1385→1387);
@@ -547,14 +556,14 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- Main checkout is at the post-#65 merge with the regenerated baked
-  site and merged-state bookkeeping committed straight to main per
-  convention; the tree is clean after the site-regen commit. Merged
-  bridge branches were deleted local+origin. One stale nested worktree
-  (`.claude/worktrees/magical-jones-79e5f4`, detached, clean) was
-  removed this session; the long-lived `JouleWise-wt/*` stream worktrees
-  are untouched. The Lakebed upload was completed by Ed and
-  lead-verified live; no pending actions remain.
+- (2026-07-22) Branch `impl/p0-instrument-repair` is at close-out head
+  `debc6d2` (pushed; PR #79 open). Main is at the `b2f7d2c` checkpoint
+  and will be superseded by the PR merge — this file's branch copy is
+  the current one. The it-p0 integration worktree lives in the
+  session-d714f367 scratchpad; session-6e0fe1ee scratchpad holds the
+  resume-pointer history. Older note (2026-07-13, historical): main was
+  at the post-#65 merge, clean; merged bridge branches deleted; Lakebed
+  upload Ed-completed and lead-verified.
 - The generated state-kernel blocks are authoritative for work selection.
   Hand-authored `RUN_STATE.md` and `TASK_QUEUE.md` text remains authoritative
   only for its own factual, policy, and historical domains;

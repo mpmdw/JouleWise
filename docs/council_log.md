@@ -1657,3 +1657,47 @@ contradictory-verdict pattern produced correct narrowings twice;
 the two scope violations and one thin-output ultra warning are the
 arc's recorded 5.6-sol failure modes. Sealed A/B remains the gate
 before any delegation-boundary change.
+
+## C-030: D-078 P0 instrument-repair close-out session — round-8 landing, round-9 final confirmation, sign-off (2026-07-22)
+
+Shape: lead resumed the paused arc cold from scratchpad pointers; collected
+the checkpointed Sol round-8 fix wave; §C-028 delta re-audit (3 fresh
+read-only Sol lenses over a shared packet → 8 xhigh refuter verdicts,
+blockers 2 refuters with distinct lenses); Sol xhigh round-8b fix wave under
+enforced WRITE_SCOPE (one NEEDS_SCOPE early-return, lead-ruled, fixture fix
+applied at the bench); bounded 8b delta re-audit; lead full-suite gates
+(2081 → 2088 passed, 0 failures); commit `040ca3a`; round-9 FINAL
+confirmation (Sol xhigh review genre); CR9-1 adjudicated as registered
+limitation L1 per the loop-termination doctrine; close-out `debc6d2`;
+PR #79 opened for Ed-named merge.
+
+Layer catches (unique):
+- Sol review lenses: A1 (v3 claim-eligibility contract divergence),
+  B1 (ClockStamp physical-sanity gap → understated B_fiducial ~3 µs),
+  C1/C2 (boundary float, OverflowError escape), C3/C4 (test-wiring gaps).
+- Sol xhigh refuters: killed A2/B2 outright (both plausible, both wrong —
+  A2's "legacy records break" was self-invalid synthetic-only; B2's
+  stale-vs-invalid relabel would have broken a ratified distinction);
+  narrowed C1 to a registered nit; split on A1 (contract-confirmed,
+  reachability-refuted) — lead synthesis: pre-existing defense-in-depth
+  hardening, not a round-8 regression.
+- Round-9 confirmation: CR9-1 (floor artifacts self-attesting) — the only
+  finding of the round, repro-backed, lead-reproduced at the bench.
+- Lead unique: false-attribution triage of the 8b audit's two "blockers"
+  (both were the lead's own authorized bench edits); the L1 adjudication.
+
+Failure modes recorded: (1) upstream cyber-content filter killed 3/8
+refuters mid-run on adversarial phrasing ("malformed/tamper/escape") —
+rephrasing as data-quality QA of our own instrument recovered all three
+(route: keep refuter briefs mechanism-neutral); (2) lead bench-edited the
+worktree while an enforced-scope Sol session ran in it → false
+SCOPE_VIOLATION attribution + resume-registry loss (rule: no lead edits in
+a tree with a live enforced-scope session); (3) the known xhigh review-genre
+null-final-message mode recurred on round 9; the documented bridge-resume
+recovery worked first try.
+
+Dissent recorded: the 8b delta auditor's should-fix (OverflowError
+normalization also reaching v1 replay error behavior) was overridden by
+lead ruling — frozen-replay doctrine protects computed semantics of
+parsable artifacts, not crash reproduction on impossible inputs; the
+reducer's structured-failure contract governs all protocols.

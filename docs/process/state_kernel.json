@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open",
-    "path": "docs/run_reports/2026-07-18-d077-fix-rounds.md"
+    "label": "D-078 P0 instrument repair signed off (9 confirmation rounds, limitation L1 registered); PR #79 open",
+    "path": "docs/run_reports/2026-07-20-p0-instrument-repair.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1123,7 +1123,7 @@
           "label": "Phase 2 exit checklist",
           "path": "docs/phase_2/phase_2_exit_checklist.md"
         },
-        "summary": "Strict-valid reducer-0.4.2 campaign bundles with counterbalanced order and drift sentinels; interpretation uses campaign claim_readiness plus the merged fail-closed analysis engine."
+        "summary": "Strict-valid reducer-0.5.2/0.6.2 campaign bundles with counterbalanced order and drift sentinels; interpretation uses campaign claim_readiness plus the merged fail-closed analysis engine."
       },
       "authority": {
         "label": "Phase 2 plan + analysis plans",
@@ -1333,7 +1333,7 @@
           "label": "Phase 2 exit checklist",
           "path": "docs/phase_2/phase_2_exit_checklist.md"
         },
-        "summary": "Reducer-0.4.2 strict-valid calibration bundles; per-metric floor_abs_j and floor_cmp_j; governed idle uncertainty retained; calibration manifest hash cited by later reports."
+        "summary": "Reducer-0.5.2/0.6.2 strict-valid calibration bundles; per-metric floor_abs_j and floor_cmp_j; governed idle uncertainty retained; calibration manifest hash cited by later reports."
       },
       "authority": {
         "label": "D-054 + detection floor spec",
@@ -1402,7 +1402,15 @@
         }
       ],
       "fallback": null,
-      "fences": [],
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 clause 8 (L1) + bracketing ruling",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Claim-bearing collection requires fresh 59-pulse protocol-v3 calibration BRACKETING the window (consumed max(B_pre,B_post)); floor artifacts are claim-licensing only from same-custody-session governed extraction until FLOOR-BIND-01 closes"
+        }
+      ],
       "flags": [
         "lead_only",
         "pre_window_a_gate"
@@ -1413,6 +1421,7 @@
       "priority": "p2_next_slice",
       "rank": 1,
       "status": "partial",
+      "status_note": "Start gate: PR #79 (D-078 repair) merges to main first; collection runs on merged main.",
       "stop_card": null
     },
     "P2-016": {
