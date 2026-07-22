@@ -248,11 +248,12 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**D-078 P0 instrument repair SIGNED OFF (2026-07-22): code head `040ca3a`,
-close-out `debc6d2`, PR #79 open for Ed-named merge; registered limitation
-L1 + FLOOR-BIND-01 queued; next is v3-bracketed Window-A re-collection**
-(full state in the header above; record:
-`docs/run_reports/2026-07-20-p0-instrument-repair.md`). Earlier arcs below
+**The D-078 Phase-0 instrument repair is SIGNED OFF (2026-07-22): code
+head `040ca3a`, close-out `debc6d2`, PR #79 open for Ed-named merge,
+registered limitation L1 recorded, FLOOR-BIND-01 queued, and the next
+step is the v3-bracketed Window-A re-collection.** Full state in the
+header above; record:
+`docs/run_reports/2026-07-20-p0-instrument-repair.md`. Earlier arcs below
 are historical.
 
 **C-028 CLOSED (2026-07-11): the full hardening + analysis-engine arc is
