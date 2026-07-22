@@ -588,6 +588,12 @@ def _campaign_policy_from_environment() -> tuple[
         "profile": policy.profile.value,
         "sha256": actual_sha,
         "source": path_text,
+        "calibration_bracketing": {
+            "require_bracket": policy.calibration_bracketing.require_bracket,
+            "calibration_bracket_max_drift_s": (
+                policy.calibration_bracketing.calibration_bracket_max_drift_s
+            ),
+        },
     }
     if policy.idle_admission_extension is not None:
         extension = policy.idle_admission_extension
@@ -930,6 +936,14 @@ class _Execution:
             per_run_evaluation = evaluate_environment_policy(
                 self._environment if isinstance(self._environment, dict) else {},
                 self._campaign_policy.environment_guard,
+            )
+            # Preserve the exact snapshot that licensed admission.  The live
+            # environment object later gains post-run observations, so its
+            # eventual metadata representation is not the immutable input to
+            # this decision.  Current strict consumers recompute both the
+            # snapshot digest and the policy result from this embedded copy.
+            per_run_evaluation["snapshot"] = _jsonable(
+                self._environment if isinstance(self._environment, dict) else {}
             )
             preflight_evaluation = (
                 self._campaign_environment_preflight.get("evaluation")

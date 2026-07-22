@@ -112,6 +112,9 @@ from joulewise.whole_window import (  # noqa: E402
     source_manifest_descriptors,
     validated_attempt_selection,
 )
+from joulewise.calibration_bracketing import (  # noqa: E402
+    calibration_bracket_for_bundles,
+)
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
     current_environment_refusals,
@@ -220,6 +223,12 @@ class CampaignPolicyBinding:
             "profile": self.policy.profile.value,
             "sha256": self.sha256,
             "source": str(self.path),
+            "calibration_bracketing": {
+                "require_bracket": self.policy.calibration_bracketing.require_bracket,
+                "calibration_bracket_max_drift_s": (
+                    self.policy.calibration_bracketing.calibration_bracket_max_drift_s
+                ),
+            },
         }
         if self.idle_admission_extension is not None:
             row["idle_admission_extension"] = {
@@ -3286,6 +3295,7 @@ def idle_admission_core_verdict(
     policy_binding: CampaignPolicyBinding,
     *,
     whole_window: bool = False,
+    runs_root: Path | None = None,
 ) -> dict[str, Any]:
     """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
 
@@ -3303,6 +3313,7 @@ def idle_admission_core_verdict(
         "members": [],
         "adapter_wattage_continuity": None,
         "neg8_bracket": None,
+        "instrument_calibration_bracket": None,
         "conditions": [],
     }
     if extension is None:
@@ -3427,6 +3438,19 @@ def idle_admission_core_verdict(
         if start_identity is not None and start_identity == end_identity
         else None
     )
+    if whole_window:
+        calibration_bracket, calibration_reasons = calibration_bracket_for_bundles(
+            runs_root
+            if runs_root is not None
+            else evaluations[0].bundle_path.parent
+            if evaluations
+            else Path("."),
+            [evaluation.bundle_path for evaluation in evaluations],
+            policy_binding.policy.calibration_bracketing,
+        )
+        section["instrument_calibration_bracket"] = calibration_bracket
+        if extension.claim_bearing:
+            conditions.update(calibration_reasons)
     section["conditions"] = sorted(conditions)
     return section
 
@@ -3689,7 +3713,7 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     included = [evaluation for evaluation in evaluations if evaluation.usable]
     excluded = [evaluation for evaluation in evaluations if not evaluation.usable]
     core = idle_admission_core_verdict(
-        included, policy_binding, whole_window=True
+        included, policy_binding, whole_window=True, runs_root=runs_dir
     )
     core_conditions = set(core.get("conditions", []))
     core_conditions.update(selection_conditions)
@@ -4085,8 +4109,17 @@ def _idle_admission_claim_barrier_reasons(core: Mapping[str, Any]) -> list[str]:
 
     reasons: set[str] = set()
     conditions = core.get("conditions")
-    if isinstance(conditions, list) and "environment_admission_failed" in conditions:
-        reasons.add("environment_admission_failed")
+    if isinstance(conditions, list):
+        for condition in (
+            "environment_admission_failed",
+            "instrument_calibration_bracket_missing",
+            "instrument_calibration_mismatch",
+            "instrument_calibration_stale",
+            "thermal_pressure_elevated_in_window",
+            "environment_admission_missing",
+        ):
+            if condition in conditions:
+                reasons.add(condition)
     members = core.get("members")
     if not isinstance(members, list) or not members:
         reasons.add("cpu_admission_core_missing")
@@ -5121,6 +5154,7 @@ def run_axi_spec_campaign(
                 selected_evaluations,
                 policy_binding,
                 whole_window=True,
+                runs_root=runs_dir,
             )
             extension = policy_binding.idle_admission_extension
             core_reasons = _idle_admission_claim_barrier_reasons(core)
@@ -5911,7 +5945,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     categories = classify_campaign_members(all_evaluations, missing_members)
     collection_verdict, collection_reasons = collection_verdict_for(categories)
     sampling_audit = sampling_audit_for(analysis_manifest)
-    idle_admission_core = idle_admission_core_verdict(all_evaluations, policy_binding)
+    idle_admission_core = idle_admission_core_verdict(
+        all_evaluations, policy_binding, runs_root=runs_dir
+    )
     extension = policy_binding.idle_admission_extension
     claim_bearing = bool(
         analysis_manifest is not None

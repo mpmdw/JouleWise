@@ -184,6 +184,12 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual(policies[1].idle_admission.on_fail.value, "flag")
         self.assertTrue(policies[0].idle_admission_extension.claim_bearing)
         self.assertFalse(policies[1].idle_admission_extension.claim_bearing)
+        self.assertTrue(policies[0].calibration_bracketing.require_bracket)
+        self.assertFalse(policies[1].calibration_bracketing.require_bracket)
+        self.assertEqual(
+            policies[0].calibration_bracketing.calibration_bracket_max_drift_s,
+            0.010,
+        )
         self.assertEqual(
             policies[0].idle_admission_extension.cpu_criteria.min_samples, 30
         )
@@ -213,6 +219,19 @@ class BenchmarkConfigTests(unittest.TestCase):
         legacy = json.loads(path.read_text())
         legacy.pop("idle_admission_extension")
         self.assertIsNone(CampaignPolicy.from_mapping(legacy).idle_admission_extension)
+
+    def test_production_campaign_policy_requires_calibration_bracketing(self) -> None:
+        # H2 exact policy defect: a claim-bearing production policy formerly
+        # had no required pre/post calibration-bracket declaration.
+        path = ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        payload = json.loads(path.read_text())
+        missing = json.loads(json.dumps(payload))
+        missing.pop("calibration_bracketing")
+        with self.assertRaisesRegex(SchemaError, "calibration_bracketing"):
+            CampaignPolicy.from_mapping(missing)
+        payload["calibration_bracketing"]["require_bracket"] = False
+        with self.assertRaisesRegex(SchemaError, "production.*require_bracket"):
+            CampaignPolicy.from_mapping(payload)
 
     def test_cooldown_coverage_fraction_is_bounded(self) -> None:
         path = ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"

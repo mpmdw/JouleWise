@@ -602,8 +602,9 @@ committed request-token rows, not event-line count.
 
 Strict validation additionally requires:
 
-1. AXI config extension, metadata event version, and reducer 0.6.0 appear
-   together; partial opt-in is invalid.
+1. AXI config extension, metadata event version, and an AXI reducer arm
+   (`0.6.0`, `0.6.1`, or `0.6.2` per the §8.1 matrix) appear together;
+   partial opt-in is invalid.
 2. Metadata speculation identity equals config identity and satisfies the
    mode-specific null rules.
 3. Draft-model and target stack identities are separately complete. Native
@@ -665,7 +666,7 @@ or additive-field comparison. The exact arms are:
 | `0.5.0` | Preserve today's exact duration-weighted idle-v2 and historical event/token code path, derived outputs, and current comparison behavior, including its existing treatment of absent `idle_baseline.gpu_freq_mhz_mean`. Do not add a new 0.6.0 absence tolerance. |
 | `0.6.0` + `metadata.event_semantics_version == "joulewise.events.v2"` | Use the request/burst path in this document, duration-weighted idle-v2, unioned group phase windows, request output artifacts, and new metrics. D-078 note: `0.6.0` is byte-frozen and replays with the point-anchor timeline; it carries the same anchor defect the D-078 audit found. |
 | `0.6.1` + `metadata.event_semantics_version == "joulewise.events.v2"` | D-078 additive arm: identical burst semantics to `0.6.0` plus the censored-intersection anchor re-derivation, re-anchored shared timeline, `energy_anchor_shift_envelopes`, `energy_bound_terms_j.E_clock_anchor_shift_bound_j`, and the registered calibration/CPU/anchor-envelope precheck barriers (see `docs/contracts/run_bundle_layout.md` D-078 section). `0.6.1` is replay-only, superseded by `0.6.2`, and claim-INELIGIBLE under the registered superseded-composition refusal (its envelopes compose anchor bounds by `max()`); explicit `0.6.0` is replay-only for historical bundles already carrying that frozen wire. Stored `0.6.0`/`0.6.1` summaries are never rewritten. |
-| `0.6.2` + `metadata.event_semantics_version == "joulewise.events.v2"` | D-078 convergence-wave additive arm (2026-07-21 amendment): identical burst semantics to `0.6.1` plus additive causal-bound composition (`B_effective = B_bundle + B_fiducial`, where `B_fiducial` already folds in the calibration capture's own trace-anchor bound), fiducial protocol_v2 physics, stricter evidence admission (attempt-ledger contiguity, decision/final-attempt binding, closed decision/claim_reason vocabulary), and the post-window trace-tail sufficiency gate. Sole claim-eligible AXI mint. |
+| `0.6.2` + `metadata.event_semantics_version == "joulewise.events.v2"` | D-078 convergence-wave additive arm (2026-07-21 amendment): identical burst semantics to `0.6.1` plus additive causal-bound composition (`B_effective = B_bundle + B_fiducial + wall_minus_monotonic_span`, three disjoint causal links; `B_fiducial` additionally folds in the calibration capture's own trace-anchor bound), fiducial protocol_v2 physics, stricter evidence admission (attempt-ledger contiguity, decision/final-attempt binding, closed decision/claim_reason vocabulary), and the post-window trace-tail sufficiency gate. Sole claim-eligible AXI mint. |
 | `0.4.0`, `0.3.x`, recorded `0.2.x`, unknown versions, or incoherent version/event pairs | Unsupported; require explicit compatible re-reduction or report a structured refusal. Never guess. |
 
 The implementation MUST keep the existing arms' code paths and outputs

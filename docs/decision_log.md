@@ -4312,6 +4312,49 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    time control can evade it — accepted (host time integrity is an
    operator obligation, like bundle custody itself).
 
+7b. **(Fifth-wave addendum — calibration epistemics, same date.)** After
+   confirmation round 5 over `09b5de6` (the P0 was statistical, not
+   mechanical: a 40-pulse sample maximum is not an out-of-sample
+   deterministic bound — 87.1% confidence on the 95th percentile vs the
+   D-054 doctrine's n=59 for 95/95), the lead ruled:
+   (1) **protocol_v3** raises the pulse count to 59, satisfying the repo's
+   own nonparametric 95/95 doctrine; v3 is required for future
+   claim-bearing calibration captures (v2 artifacts stay verifiable as this
+   arc's validation evidence).
+   (2) **B_fiducial's epistemic status is stated honestly everywhere**: a
+   95/95 nonparametric calibration bound, deterministic for claims only
+   under REGISTERED transfer assumptions — T1 binding-vector stationarity,
+   T2 the authenticated 24 h horizon, T3 load-regime transfer (calibration
+   pulses are GPU-matmul under CPU-light load; sustained mixed-load
+   transfer is an assumption; a loaded-calibration protocol variant is the
+   registered roadmap mitigation).
+   (3) **Calibration bracketing is required for claim-bearing collections**:
+   two valid artifacts bracketing the window (pre at-or-before start, post
+   at-or-after end, each within its own horizon), consumed as
+   `max(pre, post)`, refusing `instrument_calibration_bracket_missing` or
+   on bracket drift beyond `calibration_bracket_max_drift_s` (production
+   10 ms). Single-calibration reduction remains valid only for
+   non-claim-bearing probe/exploratory use.
+   (4) **Environment state is window-enforced**: per-interval
+   thermal-pressure records are scanned over the measured window
+   (`thermal_pressure_elevated_in_window` refusal); admission objects are
+   recomputed from their embedded snapshots — a stored `eligible: true` is
+   never trusted.
+   (5) **Loop-termination doctrine**: convergence sign-off means zero
+   UNADDRESSED P0/P1, where "addressed" includes a registered limitation
+   with recorded justification, adjudicated by the lead. A physical
+   instrument's uncertainty budget always rests on stated assumptions;
+   the honest end state is registered assumptions, not infinite hardening.
+   T3 is the first entry in that register.
+   Registry additions for this wave: `instrument_calibration_bracket_missing`
+   (claim-bearing window not bracketed by two authenticated, fresh
+   calibration artifacts, or bracket drift beyond the registered tolerance)
+   and `thermal_pressure_elevated_in_window` (per-interval thermal-pressure
+   records non-nominal — or missing on the strict path — anywhere in the
+   admission-to-window span). Both only refuse; the
+   PENDING_DECISION_LOG_REGISTRATION exception for them is retired with
+   this entry.
+
 7. **Sign-off evidence must be head-minted.** Any artifact or re-reduction
    quoted as validation evidence for a head must be regenerated AT that head
    (the pre-233e9e3 rederived calibration artifact lacks the horizon fields

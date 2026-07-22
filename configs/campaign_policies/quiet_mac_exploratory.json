@@ -1,4 +1,8 @@
 {
+  "calibration_bracketing": {
+    "calibration_bracket_max_drift_s": 0.01,
+    "require_bracket": false
+  },
   "cooldown": {
     "absolute_ceiling_w": null,
     "cap_s": 300.0,

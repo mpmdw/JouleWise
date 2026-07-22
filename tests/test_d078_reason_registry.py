@@ -12,9 +12,10 @@ from joulewise import idle_admission
 from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
 
 
-# Pending-registration exception retired: the 2026-07-21 (second) D-078
-# amendment registered the confirmation-round spellings, so every code
-# vocabulary entry must appear in the decision log.
+# The lead pre-authorized these round-5 spellings and owns their decision-log
+# registration. This scoped worker must not edit that lead-owned file.
+# Pending-registration exception retired: the fifth-wave D-078 addendum
+# registered the bracketing and thermal-window spellings.
 PENDING_DECISION_LOG_REGISTRATION: set[str] = set()
 
 
@@ -52,6 +53,8 @@ class D078ReasonRegistryTests(unittest.TestCase):
         source_paths = (
             "joulewise/reduce.py",
             "joulewise/analysis_engine/inputs.py",
+            "joulewise/calibration_bracketing.py",
+            "joulewise/environment_admission.py",
             "scripts/validate_powermetrics_fiducial.py",
         )
         source_by_path = {
@@ -157,11 +160,40 @@ class D078ReasonRegistryTests(unittest.TestCase):
             "`powermetrics_pulse_fiducial_v1`",
             contract,
         )
+        self.assertIn("New claim-bearing calibration capture requires v3", contract)
         self.assertIn(
-            "current claim-bearing path instead requires "
-            "`powermetrics_pulse_fiducial_v2`",
+            "accepts authenticated v2 validation artifacts from this D-078 arc",
             contract,
         )
+
+    def test_fiducial_contract_registers_95_95_and_t1_t3_transfer_limits(self) -> None:
+        contract = Path("docs/contracts/powermetrics_fiducial.md").read_text(
+            encoding="utf-8"
+        )
+        for required in (
+            "nonparametric 95/95 calibration bound",
+            "T1 — binding-vector stationarity",
+            "T2 — authenticated 24-hour transfer horizon",
+            "T3 — load-regime transfer",
+            "capture_wall_time_s",
+            "max_age_s = 86400",
+            "+/-1 s",
+            "measured-window end",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, contract)
+
+    def test_adapter_contract_does_not_call_frozen_051_061_claim_bearing(self) -> None:
+        # H4 exact defect: the contract mislabeled replay-only reducer arms as
+        # the bundles to which current claim-bearing calibration gates apply.
+        contract = " ".join(
+            Path("docs/contracts/adapter_contracts.md")
+            .read_text(encoding="utf-8")
+            .split()
+        )
+        self.assertNotIn("claim-bearing powermetrics 0.5.1/0.6.1", contract)
+        self.assertIn("0.5.1/0.6.1 are claim-ineligible replay arms", contract)
+        self.assertIn("current claim-eligible mints 0.5.2/0.6.2", contract)
 
     def test_claim_evidence_flags_contract_declares_all_leaf_union_scope(self) -> None:
         contract = Path("docs/contracts/run_bundle_layout.md").read_text(

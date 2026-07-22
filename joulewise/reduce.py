@@ -1177,11 +1177,14 @@ def _verify_instrument_calibration(
 ) -> tuple[float | None, str | None]:
     """Resolve ``B_fiducial`` only from a hash-verified calibration artifact.
 
-    D-078: ``B_effective = max(B_bundle, B_fiducial from the MATCHING
-    calibration artifact, referenced by sha256)``. ``b_fiducial_s`` is NEVER
-    trusted from the self-asserted metadata scalar alone: the referenced
-    ``instrument_evidence.json`` is loaded from the bundle, its sha256
-    verified, and every bound field matched against the bundle environment.
+    ``B_fiducial`` is the protocol's nonparametric 95/95 bound on its
+    calibration distribution, not an unconditional unseen-load maximum.
+    Claim-time determinism is conditional on the registered T1 binding-vector,
+    T2 authenticated 24-hour horizon, and T3 load-regime transfer assumptions.
+    ``b_fiducial_s`` is NEVER trusted from the self-asserted metadata scalar
+    alone: the referenced ``instrument_evidence.json`` is loaded from the
+    bundle, its sha256 verified, and every bound field matched against the
+    bundle environment.
     Returns ``(fiducial_bound_s, None)`` on success or ``(None, detail)`` for
     the ``clock_anchor_unresolved`` barrier (never a silent fallback to
     ``B_bundle`` alone)."""
@@ -1303,17 +1306,20 @@ def _verify_instrument_calibration(
     from joulewise.powermetrics_fiducial import (
         CAPTURE_TIME_FIELD,
         LEGACY_BINDING_FIELDS,
+        LEGACY_PROTOCOL_ID,
         MAX_AGE_S,
         PROTOCOL_ID,
+        PROTOCOL_V2_ID,
         PROTOCOL_V2_SHA256,
+        PROTOCOL_V3_SHA256,
         REGION_COVERAGE_RESOLUTION_S,
         REPLAY_PROTOCOL_V2_SHA256,
-        PULSE_COUNT,
         RESIDUAL_REGION_METHOD,
         SUPPORTED_PROTOCOL_IDS,
         V2_BINDING_FIELDS,
         capture_wall_time_from_events,
         diagnostic_reason_registered,
+        protocol_pulse_count,
         rederive_detection_from_artifacts,
     )
 
@@ -1322,9 +1328,15 @@ def _verify_instrument_calibration(
     evidence_protocol_id = evidence.get("protocol_id")
     if evidence_protocol_id not in SUPPORTED_PROTOCOL_IDS:
         return None, "instrument_calibration_protocol_mismatch"
-    if strict_physics and evidence_protocol_id != PROTOCOL_ID:
+    if strict_physics and evidence_protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         return None, "instrument_calibration_invalid"
-    if strict_physics and evidence_protocol_id == PROTOCOL_ID:
+    if not strict_physics and evidence_protocol_id not in {
+        LEGACY_PROTOCOL_ID,
+        PROTOCOL_V2_ID,
+    }:
+        # Frozen replay never learns a successor protocol identity.
+        return None, "instrument_calibration_protocol_mismatch"
+    if strict_physics and evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         capture_wall_time_s = evidence.get(CAPTURE_TIME_FIELD)
         max_age_s = evidence.get("max_age_s")
         if (
@@ -1355,7 +1367,7 @@ def _verify_instrument_calibration(
             return None, "instrument_calibration_invalid"
     binding_fields = (
         V2_BINDING_FIELDS
-        if evidence_protocol_id == PROTOCOL_ID
+        if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
         else LEGACY_BINDING_FIELDS
     )
     evidence_reasons = evidence.get("reasons")
@@ -1399,7 +1411,7 @@ def _verify_instrument_calibration(
     if (
         isinstance(pulse_count, bool)
         or not isinstance(pulse_count, int)
-        or pulse_count != PULSE_COUNT
+        or pulse_count != protocol_pulse_count(str(evidence_protocol_id))
         or not isinstance(pulses, list)
         or len(pulses) != pulse_count
         or evidence.get("all_pulses_detected") is not True
@@ -1505,6 +1517,7 @@ def _verify_instrument_calibration(
                 primary_bytes["raw/powermetrics.plist"],
                 primary_bytes["events.jsonl"],
                 evidence.get("clock_anchor"),
+                protocol_id=str(evidence_protocol_id),
             )
         except (KeyError, TypeError, ValueError):
             return None, "instrument_calibration_invalid"
@@ -1581,12 +1594,16 @@ def _verify_instrument_calibration(
         "mlx_version": mlx.get("version") if isinstance(mlx, dict) else None,
         "pulse_protocol_id": evidence_protocol_id,
     }
-    if evidence_protocol_id == PROTOCOL_ID:
+    if evidence_protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         expected.update(
             {
                 "estimator_revision": RESIDUAL_REGION_METHOD,
                 "protocol_sha256": (
-                    PROTOCOL_V2_SHA256
+                    (
+                        PROTOCOL_V2_SHA256
+                        if evidence_protocol_id == PROTOCOL_V2_ID
+                        else PROTOCOL_V3_SHA256
+                    )
                     if strict_physics
                     else REPLAY_PROTOCOL_V2_SHA256
                 ),

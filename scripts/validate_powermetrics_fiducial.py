@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Lead-owned [QUIET-MAC] pulse-fiducial calibration run (D-078).
 
-Protocol (frozen in configs/calibration/powermetrics_fiducial/protocol_v1.json
-and docs/contracts/powermetrics_fiducial.md):
+The current claim-bearing protocol is frozen in
+configs/calibration/powermetrics_fiducial/protocol_v3.json and documented in
+docs/contracts/powermetrics_fiducial.md. Historical protocol files remain
+byte-frozen validation identities.
 
 - preallocated 4096x4096 FP16 MLX matmuls, mx.eval GPU fencing;
-- 3 warmup pulses, then k=40 pulses of 1.0 s each;
+- 3 warmup pulses, then k=59 pulses of 1.0 s each;
 - deterministic low-discrepancy spacing 1.5 + vanDerCorput_2(j) s
   (avoids 10 Hz phase lock);
 - >= 5 s baseline before and after the pulse train;
@@ -44,7 +46,10 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
 from joulewise.clock import SystemClock  # noqa: E402
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
+    LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
+    PROTOCOL_V2_ID,
+    PROTOCOL_V2_PULSE_COUNT,
     RESIDUAL_REGION_METHOD,
     PULSE_COUNT,
     PULSE_DURATION_S,
@@ -68,6 +73,9 @@ from joulewise.uncertainty_evidence import (  # noqa: E402
 )
 
 PROTOCOL_PATH = (
+    REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v3.json"
+)
+PROTOCOL_V2_PATH = (
     REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v2.json"
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
@@ -147,7 +155,7 @@ def trim_trace_after_warmups(
 
 
 def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
-    """Re-emit v2 evidence from an immutable capture without live collection."""
+    """Re-emit v2 validation evidence from compatible 40-pulse primary bytes."""
 
     source_dir = Path(source_dir)
     manifest_path = source_dir / "manifest.json"
@@ -160,6 +168,11 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
     if not isinstance(artifacts, dict) or not isinstance(stored, dict):
         raise ValueError("source calibration metadata is malformed")
+    if (
+        stored.get("protocol_id") not in {LEGACY_PROTOCOL_ID, PROTOCOL_V2_ID}
+        or stored.get("pulse_count") != PROTOCOL_V2_PULSE_COUNT
+    ):
+        raise ValueError("re-derivation requires compatible 40-pulse v1/v2 evidence")
     raw_by_name: dict[str, bytes] = {}
     for relative in (
         "raw/powermetrics.plist",
@@ -190,6 +203,7 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
         raw_by_name["raw/powermetrics.plist"],
         raw_by_name["events.jsonl"],
         stored.get("clock_anchor"),
+        protocol_id=str(stored.get("protocol_id")),
     )
     stored_bound = stored.get("b_fiducial_s")
     if (
@@ -205,9 +219,9 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     bindings = dict(stored.get("bindings", {}))
     bindings.update(
         {
-            "pulse_protocol_id": PROTOCOL_ID,
+            "pulse_protocol_id": PROTOCOL_V2_ID,
             "estimator_revision": RESIDUAL_REGION_METHOD,
-            "protocol_sha256": sha256_path(PROTOCOL_PATH),
+            "protocol_sha256": sha256_path(PROTOCOL_V2_PATH),
         }
     )
     validation_id = str(stored.get("validation_id") or source_dir.name) + "-v2"
@@ -222,6 +236,8 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
         capture_wall_time_s=capture_wall_time_from_events(
             raw_by_name["events.jsonl"]
         ),
+        protocol_id=PROTOCOL_V2_ID,
+        protocol_pulse_count=PROTOCOL_V2_PULSE_COUNT,
     )
     payload["clock_anchor"] = stored.get("clock_anchor")
     payload["clock_anchor_resolved"] = True

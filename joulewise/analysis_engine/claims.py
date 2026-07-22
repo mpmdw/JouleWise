@@ -50,6 +50,8 @@ REDUCER_REASON_CODES = frozenset(
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
         "instrument_calibration_stale",
+        "instrument_calibration_bracket_missing",
+        "thermal_pressure_elevated_in_window",
         "negative_power_sample",
         "post_window_trace_tail_shorter_than_anchor_bound",
         "anchor_energy_envelope_unrecorded",

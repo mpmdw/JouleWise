@@ -31,7 +31,8 @@ from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
 )
-from joulewise.schemas import BenchmarkConfig
+from joulewise.calibration_bracketing import calibration_bracket_for_bundles
+from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
@@ -810,6 +811,10 @@ def _current_core_rederivation_reasons(
         )
     except (TypeError, ValueError):
         return {"whole_window_verdict_provenance_invalid"}
+    try:
+        registered_typed_policy = CampaignPolicy.from_mapping(dict(registered))
+    except (TypeError, ValueError):
+        return {"whole_window_verdict_provenance_invalid"}
     if paths is None:
         return {"whole_window_verdict_provenance_invalid"}
 
@@ -893,6 +898,18 @@ def _current_core_rederivation_reasons(
         stored = core.get("adapter_wattage_continuity")
         if not isinstance(stored, Mapping) or dict(stored) != derived:
             reasons.add("adapter_continuity_failed")
+        calibration_bracket, calibration_reasons = calibration_bracket_for_bundles(
+            runs_root,
+            [path for _bundle_id, path, _metadata, _cpu in derived_members],
+            registered_typed_policy.calibration_bracketing,
+        )
+        stored_calibration_bracket = core.get("instrument_calibration_bracket")
+        if (
+            not isinstance(stored_calibration_bracket, Mapping)
+            or dict(stored_calibration_bracket) != calibration_bracket
+        ):
+            reasons.add("whole_window_verdict_conflict")
+        reasons.update(calibration_reasons)
     return reasons
 
 

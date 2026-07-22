@@ -636,6 +636,11 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 "decision": "passed",
                 "policy": dict(REGISTERED_BRACKET_POLICY),
             },
+            "instrument_calibration_bracket": {
+                "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                "status": "passed",
+                "b_fiducial_s": 0.02,
+            },
             "conditions": [],
         }
         return bundle_ids, manifest, core
@@ -755,12 +760,15 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            self.assertEqual(
-                floor_module._cpu_admission_bundle_reasons(
-                    bundle, self._powermetrics_summary(40.0)
-                ),
-                (),
-            )
+            with mock.patch.object(
+                floor_module, "current_environment_refusals", return_value=()
+            ):
+                self.assertEqual(
+                    floor_module._cpu_admission_bundle_reasons(
+                        bundle, self._powermetrics_summary(40.0)
+                    ),
+                    (),
+                )
 
     def test_floor_refuses_missing_and_explicitly_unenforced_cpu_admission(self) -> None:
         # W4 defect shape: both bundles had finite metrics/envelopes and clean
@@ -1025,37 +1033,48 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             bundle_ids, manifest, clean_core = self._current_core_fixture(root)
-            clean = whole_module._current_core_rederivation_reasons(
-                core=clean_core,
-                bundle_ids=bundle_ids,
-                manifests=[manifest],
-                runs_root=root,
-                policy_sha256=TEST_POLICY_SHA256,
-            )
-            self.assertEqual(clean, set())
+            bracket = clean_core["instrument_calibration_bracket"]
+            with (
+                mock.patch.object(
+                    whole_module, "current_environment_refusals", return_value=()
+                ),
+                mock.patch.object(
+                    whole_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=(bracket, ()),
+                ),
+            ):
+                clean = whole_module._current_core_rederivation_reasons(
+                    core=clean_core,
+                    bundle_ids=bundle_ids,
+                    manifests=[manifest],
+                    runs_root=root,
+                    policy_sha256=TEST_POLICY_SHA256,
+                )
+                self.assertEqual(clean, set())
 
-            forged_cpu = json.loads(json.dumps(clean_core))
-            forged_cpu["members"][0]["cpu_admission"]["decision"] = "failed"
-            forged_cpu["members"][0]["cpu_admission"]["admitted"] = False
-            cpu_reasons = whole_module._current_core_rederivation_reasons(
-                core=forged_cpu,
-                bundle_ids=bundle_ids,
-                manifests=[manifest],
-                runs_root=root,
-                policy_sha256=TEST_POLICY_SHA256,
-            )
-            self.assertIn("cpu_admission_core_failed", cpu_reasons)
+                forged_cpu = json.loads(json.dumps(clean_core))
+                forged_cpu["members"][0]["cpu_admission"]["decision"] = "failed"
+                forged_cpu["members"][0]["cpu_admission"]["admitted"] = False
+                cpu_reasons = whole_module._current_core_rederivation_reasons(
+                    core=forged_cpu,
+                    bundle_ids=bundle_ids,
+                    manifests=[manifest],
+                    runs_root=root,
+                    policy_sha256=TEST_POLICY_SHA256,
+                )
+                self.assertIn("cpu_admission_core_failed", cpu_reasons)
 
-            forged_adapter = json.loads(json.dumps(clean_core))
-            forged_adapter["adapter_wattage_continuity"]["decision"] = "failed"
-            adapter_reasons = whole_module._current_core_rederivation_reasons(
-                core=forged_adapter,
-                bundle_ids=bundle_ids,
-                manifests=[manifest],
-                runs_root=root,
-                policy_sha256=TEST_POLICY_SHA256,
-            )
-            self.assertIn("adapter_continuity_failed", adapter_reasons)
+                forged_adapter = json.loads(json.dumps(clean_core))
+                forged_adapter["adapter_wattage_continuity"]["decision"] = "failed"
+                adapter_reasons = whole_module._current_core_rederivation_reasons(
+                    core=forged_adapter,
+                    bundle_ids=bundle_ids,
+                    manifests=[manifest],
+                    runs_root=root,
+                    policy_sha256=TEST_POLICY_SHA256,
+                )
+                self.assertIn("adapter_continuity_failed", adapter_reasons)
 
     def test_current_whole_window_rejects_nonempty_core_conditions(self) -> None:
         # G3(c): a nominally passed row cannot carry a buried contamination
@@ -1125,7 +1144,17 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             mismatched["measurement_quality"]["telemetry_source"] = "powermetrics"
             reduced = mock.Mock()
             reduced.to_dict.return_value = mismatched
-            with mock.patch("joulewise.reduce.reduce_bundle", return_value=reduced):
+            with (
+                mock.patch("joulewise.reduce.reduce_bundle", return_value=reduced),
+                mock.patch(
+                    "joulewise.whole_window.current_environment_refusals",
+                    return_value=(),
+                ),
+                mock.patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(core["instrument_calibration_bracket"], ()),
+                ),
+            ):
                 reasons = whole_window_refusal_reasons(root, set(bundle_ids))
         self.assertEqual(reasons, ("whole_window_verdict_conflict",))
 

@@ -7,11 +7,15 @@ fits the interval-average model
     y_i = b + A * |I_i INTERSECT [t_on + d_on, t_off + d_off]| / |I_i|
 
 per pulse with a robust constrained loss. The instrument residual bound
-``B_fiducial`` is the max over all per-pulse onset/offset residual intervals
-of ``max(|r_lower|, |r_upper|)`` - a deterministic worst-case bound, never a
-percentile. Detection NEVER timestamps the first above-threshold interval
-endpoint (that bakes in up to one cadence of bias); MLX dispatch/fence
-latency stays inside the bound and is never subtracted.
+``B_fiducial`` is the sample maximum over all per-pulse onset/offset residual
+intervals of ``max(|r_lower|, |r_upper|)``. Protocol v3's 59 pulses make it a
+nonparametric 95/95 calibration bound for the calibration distribution
+(``1 - 0.95**59 >= 0.95``), not an unconditional out-of-sample deterministic
+bound. Claim-time determinism is conditional on the registered binding,
+freshness/authentication, and load-regime transfer assumptions. Detection
+NEVER timestamps the first above-threshold interval endpoint (that bakes in
+up to one cadence of bias); MLX dispatch/fence latency stays inside the bound
+and is never subtracted.
 
 Pure functions here are exercised by synthetic CI tests; the live [QUIET-MAC]
 capture is lead-owned and driven by ``scripts/validate_powermetrics_fiducial.py``.
@@ -33,9 +37,13 @@ from joulewise.uncertainty_evidence import (
 )
 
 LEGACY_PROTOCOL_ID = "powermetrics_pulse_fiducial_v1"
-PROTOCOL_ID = "powermetrics_pulse_fiducial_v2"
-SUPPORTED_PROTOCOL_IDS = frozenset({LEGACY_PROTOCOL_ID, PROTOCOL_ID})
+PROTOCOL_V2_ID = "powermetrics_pulse_fiducial_v2"
+PROTOCOL_ID = "powermetrics_pulse_fiducial_v3"
+SUPPORTED_PROTOCOL_IDS = frozenset(
+    {LEGACY_PROTOCOL_ID, PROTOCOL_V2_ID, PROTOCOL_ID}
+)
 PROTOCOL_V2_SHA256 = "82d8c3125ef25437a89916429578d60fe47cbba2beb5bf54eb39b55935cc3783"
+PROTOCOL_V3_SHA256 = "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1"
 # The 0.5.1/0.6.1 replay arms froze their binding expectation at the
 # protocol_v2.json bytes current when they were minted; re-keying the live
 # constant must never change frozen replay dispositions.
@@ -44,7 +52,9 @@ REPLAY_PROTOCOL_V2_SHA256 = (
 )
 CAPTURE_TIME_FIELD = "capture_wall_time_s"
 MAX_AGE_S = 86400
-PULSE_COUNT = 40
+LEGACY_PULSE_COUNT = 40
+PROTOCOL_V2_PULSE_COUNT = 40
+PULSE_COUNT = 59
 WARMUP_PULSE_COUNT = 3
 PULSE_DURATION_S = 1.0
 PULSE_GAP_BASE_S = 1.5
@@ -81,6 +91,30 @@ V2_BINDING_FIELDS = LEGACY_BINDING_FIELDS + (
     "protocol_sha256",
 )
 BINDING_FIELDS = V2_BINDING_FIELDS
+
+
+def protocol_pulse_count(protocol_id: str) -> int:
+    """Return the exact pulse count bound by one immutable protocol."""
+
+    if protocol_id == LEGACY_PROTOCOL_ID:
+        return LEGACY_PULSE_COUNT
+    if protocol_id == PROTOCOL_V2_ID:
+        return PROTOCOL_V2_PULSE_COUNT
+    if protocol_id == PROTOCOL_ID:
+        return PULSE_COUNT
+    raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
+
+
+def protocol_sha256(protocol_id: str) -> str | None:
+    """Return the registered protocol-file digest when that field exists."""
+
+    if protocol_id == PROTOCOL_V2_ID:
+        return PROTOCOL_V2_SHA256
+    if protocol_id == PROTOCOL_ID:
+        return PROTOCOL_V3_SHA256
+    if protocol_id == LEGACY_PROTOCOL_ID:
+        return None
+    raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
 
 # Closed serializer vocabulary.  Prefix-coded diagnostics are represented by
 # their registered prefix including the trailing colon.
@@ -165,7 +199,7 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
                 "gpu_fence": "mx.eval per matmul",
             },
             "warmup_pulses": WARMUP_PULSE_COUNT,
-            "pulse_count": PULSE_COUNT,
+            "pulse_count": LEGACY_PULSE_COUNT,
             "pulse_duration_s": PULSE_DURATION_S,
             "pulse_gap_s": "1.5 + van_der_corput_base2(j)",
             "baseline_before_s": BASELINE_S,
@@ -190,12 +224,16 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
                 "event-stamp uncertainty widens every residual interval",
             ],
         }
-    if protocol_id != PROTOCOL_ID:
+    if protocol_id not in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
 
     return {
-        "schema_version": "joulewise.pulse_fiducial_protocol.v2",
-        "protocol_id": PROTOCOL_ID,
+        "schema_version": (
+            "joulewise.pulse_fiducial_protocol.v2"
+            if protocol_id == PROTOCOL_V2_ID
+            else "joulewise.pulse_fiducial_protocol.v3"
+        ),
+        "protocol_id": protocol_id,
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "workload": {
             "kind": "mlx_matmul",
@@ -205,7 +243,7 @@ def protocol_definition(protocol_id: str = PROTOCOL_ID) -> dict[str, Any]:
             "gpu_fence": "mx.eval per matmul",
         },
         "warmup_pulses": WARMUP_PULSE_COUNT,
-        "pulse_count": PULSE_COUNT,
+        "pulse_count": protocol_pulse_count(protocol_id),
         "pulse_duration_s": PULSE_DURATION_S,
         "pulse_gap_s": "1.5 + van_der_corput_base2(j)",
         "baseline_before_s": BASELINE_S,
@@ -715,7 +753,7 @@ def detect_pulses(
     *,
     trace_anchor_bound_s: float = 0.0,
 ) -> FiducialDetection:
-    """Fit every commanded pulse and derive the worst-case residual bound.
+    """Fit every commanded pulse and derive the calibration-sample maximum.
 
     Fails closed: ``b_fiducial_s`` is ``None`` unless every pulse is
     detected, no spurious plateau exists outside the commanded windows, and
@@ -810,6 +848,8 @@ def rederive_detection_from_artifacts(
     raw_powermetrics: bytes,
     events_jsonl: bytes,
     recorded_clock_anchor: Mapping[str, Any],
+    *,
+    protocol_id: str = PROTOCOL_ID,
 ) -> FiducialDetection:
     """Re-run calibration physics from hash-verified primary bytes.
 
@@ -824,6 +864,7 @@ def rederive_detection_from_artifacts(
         parse_powermetrics_records,
     )
 
+    expected_pulse_count = protocol_pulse_count(protocol_id)
     if not isinstance(recorded_clock_anchor, Mapping):
         raise ValueError("calibration clock anchor is missing")
     stamp_rows = recorded_clock_anchor.get("clock_stamps")
@@ -915,7 +956,7 @@ def rederive_detection_from_artifacts(
         raise ValueError("calibration pulse event ledger is incomplete")
     if (
         len(pairs["warmup"]) != WARMUP_PULSE_COUNT
-        or len(pairs["pulse"]) != PULSE_COUNT
+        or len(pairs["pulse"]) != expected_pulse_count
     ):
         raise ValueError("calibration pulse event count disagrees with protocol")
 
@@ -951,18 +992,23 @@ def verify_stored_evidence_physics(
     strings, pulse rows, and the scalar bound cannot substitute for a refit.
     """
 
-    if evidence.get("protocol_id") not in SUPPORTED_PROTOCOL_IDS:
+    evidence_protocol_id = evidence.get("protocol_id")
+    if evidence_protocol_id not in SUPPORTED_PROTOCOL_IDS:
         raise ValueError("instrument protocol is unsupported")
+    expected_pulse_count = protocol_pulse_count(str(evidence_protocol_id))
     reasons = evidence.get("reasons")
     if evidence.get("status") != "valid" or not isinstance(reasons, list) or reasons:
         raise ValueError("valid instrument evidence must have no reasons")
     if any(not diagnostic_reason_registered(reason) for reason in reasons):
         raise ValueError("instrument evidence has an unknown reason")
     pulses = evidence.get("pulses")
-    if not isinstance(pulses, list) or len(pulses) != PULSE_COUNT:
+    if not isinstance(pulses, list) or len(pulses) != expected_pulse_count:
         raise ValueError("instrument pulse rows are incomplete")
     fresh = rederive_detection_from_artifacts(
-        raw_powermetrics, events_jsonl, evidence.get("clock_anchor")
+        raw_powermetrics,
+        events_jsonl,
+        evidence.get("clock_anchor"),
+        protocol_id=str(evidence_protocol_id),
     )
     if (
         fresh.b_fiducial_s is None
@@ -1038,7 +1084,7 @@ def instrument_evidence(
 
     ``bindings`` must supply every :data:`BINDING_FIELDS` entry non-empty;
     production bundles reference the result by sha256, and any bound-field
-    change invalidates the calibration. The v1 protocol binds ALL
+    change invalidates the calibration. Every protocol binds ALL
     ``protocol_pulse_count`` pulses detected: a run with a fitted bound but
     fewer than the protocol count (or any undetected pulse) is ``invalid``.
     """
@@ -1046,7 +1092,9 @@ def instrument_evidence(
     if protocol_id not in SUPPORTED_PROTOCOL_IDS:
         raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
     binding_fields = (
-        V2_BINDING_FIELDS if protocol_id == PROTOCOL_ID else LEGACY_BINDING_FIELDS
+        V2_BINDING_FIELDS
+        if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+        else LEGACY_BINDING_FIELDS
     )
     missing = [
         name
@@ -1063,7 +1111,7 @@ def instrument_evidence(
     )
     detection_reasons_ok = not detection.reasons
     capture_time_ok = (
-        protocol_id != PROTOCOL_ID
+        protocol_id == LEGACY_PROTOCOL_ID
         or (
             not isinstance(capture_wall_time_s, bool)
             and isinstance(capture_wall_time_s, int | float)
@@ -1157,7 +1205,7 @@ def instrument_evidence(
             for fit in detection.fits
         ],
     }
-    if protocol_id == PROTOCOL_ID:
+    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
         payload["max_age_s"] = MAX_AGE_S
     return payload

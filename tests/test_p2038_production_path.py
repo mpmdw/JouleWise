@@ -46,6 +46,10 @@ def claim_admission_fixture():
             "policy_version": "p2038-production-path-test-v1",
             "profile": "production",
             "post_window_sampling_dwell_s": 1.0,
+            "calibration_bracketing": {
+                "require_bracket": True,
+                "calibration_bracket_max_drift_s": 0.010,
+            },
             "environment_guard": {
                 "require_ac_power": True,
                 "require_external_connected": True,
@@ -134,7 +138,7 @@ def install_complete_calibration(directory: Path) -> None:
     from tests.test_reduce import self_consistent_calibration
     from joulewise.powermetrics_fiducial import (
         MAX_AGE_S,
-        PROTOCOL_ID,
+        PROTOCOL_V2_ID,
         PROTOCOL_V2_SHA256,
         RESIDUAL_REGION_METHOD,
         capture_wall_time_from_events,
@@ -158,12 +162,12 @@ def install_complete_calibration(directory: Path) -> None:
             "powermetrics_native_second_censored_intersection_v1"
         ),
         "mlx_version": "p2038-test-mlx",
-        "pulse_protocol_id": PROTOCOL_ID,
+        "pulse_protocol_id": PROTOCOL_V2_ID,
         "power_policy": "ac_high_power",
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "protocol_sha256": PROTOCOL_V2_SHA256,
     }
-    evidence["protocol_id"] = PROTOCOL_ID
+    evidence["protocol_id"] = PROTOCOL_V2_ID
     evidence["capture_wall_time_s"] = capture_wall_time_from_events(event_bytes)
     evidence["max_age_s"] = MAX_AGE_S
     evidence["bindings"] = bindings
@@ -417,7 +421,13 @@ class P2038ProductionPathTests(unittest.TestCase):
             )
             self.assertIsNotNone(request_gate["cadence_ratio"])
             self.assertGreaterEqual(request_gate["cadence_ratio"], 4.0)
-            self.assertEqual(request_gate["reasons"], [])
+            # H3 current-strict gate: this historical production-shaped
+            # fixture has no authenticated per-interval thermal coverage for
+            # the admission-to-window gap, so it now refuses independently of
+            # the P2-029/P2-040 clock and drift evidence exercised above.
+            self.assertEqual(
+                request_gate["reasons"], ["environment_admission_missing"]
+            )
             reader = BundleReader(bundle)
             measured_window = reader.measured_window()
             self.assertIsNotNone(measured_window)
@@ -445,7 +455,7 @@ class P2038ProductionPathTests(unittest.TestCase):
             )
             self.assertIs(
                 stored["window_evidence_precheck"]["gross_request"]["eligible"],
-                True,
+                False,
             )
 
     def test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible(self) -> None:
@@ -487,6 +497,7 @@ class P2038ProductionPathTests(unittest.TestCase):
                         "clock_bound_exceeds_quarter_window",
                         "anchor_energy_envelope_exceeds_quarter_metric",
                         "post_window_trace_tail_shorter_than_anchor_bound",
+                        "environment_admission_missing",
                     },
                 )
             self.assertIs(gates["idle_subtracted_request"]["eligible"], False)
@@ -600,6 +611,7 @@ class P2038ProductionPathTests(unittest.TestCase):
                         "clock_bound_exceeds_quarter_window",
                         "anchor_energy_envelope_exceeds_quarter_metric",
                         "post_window_trace_tail_shorter_than_anchor_bound",
+                        "environment_admission_missing",
                     },
                 )
             self.assertGreaterEqual(

@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import hashlib
 import json
 import math
 from pathlib import Path
 from typing import Any
 
+from joulewise.environment import evaluate_environment_policy
+from joulewise.schemas import CampaignPolicy, SchemaError
+
 
 ADMISSION_SCHEMA = "joulewise.environment_admission.v1"
 EVALUATION_SCHEMA = "joulewise.environment_evaluation.v1"
 MAX_ADMISSION_GAP_S = 600.0
+REGISTERED_POLICY_DIR = (
+    Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
+)
 
 
 def environment_observation_failure(observation: Any) -> str | None:
@@ -123,6 +130,7 @@ def current_environment_refusals(
     reasons = set(
         environment_admission_refusals(admission, require_attempt_timing=True)
     )
+    reasons.update(_recomputed_environment_evaluation_refusals(metadata))
     start_s = _finite_number(measured_window_start_s)
     end_s = _finite_number(measured_window_end_s)
     if start_s is None or end_s is None or start_s >= end_s:
@@ -185,7 +193,191 @@ def current_environment_refusals(
     if captured_at_s is None or captured_at_s < end_s:
         reasons.add("environment_admission_missing")
     reasons.update(post_run_environment_refusals(metadata))
+    reasons.update(
+        _window_thermal_pressure_refusals(
+            metadata,
+            bundle_path=Path(bundle_path),
+            measured_window_start_s=start_s,
+            measured_window_end_s=end_s,
+        )
+    )
     return tuple(sorted(reasons))
+
+
+def _registered_campaign_policy(metadata: Any) -> CampaignPolicy | None:
+    binding = metadata.get("campaign_policy") if isinstance(metadata, Mapping) else None
+    expected = binding.get("sha256") if isinstance(binding, Mapping) else None
+    if not isinstance(expected, str) or len(expected) != 64:
+        return None
+    try:
+        candidates = sorted(REGISTERED_POLICY_DIR.glob("*.json"))
+    except OSError:
+        return None
+    for path in candidates:
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        if hashlib.sha256(raw).hexdigest() != expected:
+            continue
+        try:
+            payload = json.loads(raw)
+            return CampaignPolicy.from_mapping(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, SchemaError, TypeError, ValueError):
+            return None
+    return None
+
+
+def _recomputed_environment_evaluation_refusals(metadata: Any) -> tuple[str, ...]:
+    """Re-evaluate the embedded snapshot; stored eligibility is not authority."""
+
+    if not isinstance(metadata, Mapping):
+        return ("environment_admission_missing",)
+    admission = metadata.get("environment_admission")
+    stored = (
+        admission.get("per_run_environment_evaluation")
+        if isinstance(admission, Mapping)
+        else None
+    )
+    snapshot = stored.get("snapshot") if isinstance(stored, Mapping) else None
+    policy = _registered_campaign_policy(metadata)
+    if (
+        not isinstance(snapshot, Mapping)
+        or not isinstance(stored, Mapping)
+        or policy is None
+    ):
+        return ("environment_admission_missing",)
+    fresh = evaluate_environment_policy(snapshot, policy.environment_guard)
+    required_equal = (
+        "eligible",
+        "snapshot_sha256",
+        "findings",
+        "findings_sha256",
+    )
+    if any(stored.get(field) != fresh.get(field) for field in required_equal):
+        return ("environment_admission_failed",)
+    if fresh.get("eligible") is not True:
+        return ("environment_admission_failed",)
+    return ()
+
+
+def _window_thermal_pressure_refusals(
+    metadata: Any,
+    *,
+    bundle_path: Path,
+    measured_window_start_s: float,
+    measured_window_end_s: float,
+) -> tuple[str, ...]:
+    """Scan every powermetrics interval from final admission through window end."""
+
+    admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
+    attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+    final = attempts[-1] if isinstance(attempts, list) and attempts else None
+    admission_start_s = (
+        _finite_number(final.get("start_s")) if isinstance(final, Mapping) else None
+    )
+    admission_end_s = (
+        _finite_number(final.get("end_s")) if isinstance(final, Mapping) else None
+    )
+    if (
+        admission_start_s is None
+        or admission_end_s is None
+        or admission_end_s > measured_window_start_s
+    ):
+        return ("environment_admission_missing",)
+    try:
+        from joulewise.adapters.powermetrics import (  # noqa: PLC0415
+            anchor_records_from_powermetrics,
+            parse_powermetrics_records,
+        )
+        from joulewise.uncertainty_evidence import (  # noqa: PLC0415
+            derive_powermetrics_anchor_v2,
+            stamp_from_mapping,
+        )
+
+        attempt_number = final.get("attempt")
+        if isinstance(attempt_number, bool) or not isinstance(attempt_number, int):
+            raise ValueError("final attempt ordinal is invalid")
+        idle_name = (
+            "powermetrics_idle.plist"
+            if attempt_number == 1
+            else f"powermetrics_idle_attempt_{attempt_number}.plist"
+        )
+        idle_records = parse_powermetrics_records(
+            (bundle_path / "raw" / idle_name).read_bytes(),
+            timestamp_anchor_s=admission_start_s,
+        )
+        raw = (bundle_path / "raw" / "powermetrics.plist").read_bytes()
+        native = parse_powermetrics_records(raw)
+        uncertainty = metadata.get("uncertainty_evidence")
+        clock_anchor = (
+            uncertainty.get("clock_anchor")
+            if isinstance(uncertainty, Mapping)
+            else None
+        )
+        stamps_raw = (
+            clock_anchor.get("clock_stamps")
+            if isinstance(clock_anchor, Mapping)
+            else None
+        )
+        if not isinstance(stamps_raw, Mapping):
+            raise ValueError("clock stamps are missing")
+        stamps = {
+            name: stamp_from_mapping(row)
+            for name, row in stamps_raw.items()
+            if isinstance(row, Mapping)
+        }
+        anchor = derive_powermetrics_anchor_v2(
+            stamps=stamps,
+            records=anchor_records_from_powermetrics(native),
+        )
+        if anchor.get("status") != "bounded":
+            raise ValueError("clock anchor is unresolved")
+        measured_records = parse_powermetrics_records(
+            raw,
+            first_record_endpoint_s=float(anchor["first_sample_end_point_epoch_s"]),
+        )
+    except (OSError, KeyError, TypeError, ValueError):
+        return ("environment_admission_missing",)
+
+    intervals = sorted(
+        (
+            (
+                record.timestamp_s - record.elapsed_ns / 1_000_000_000.0,
+                record.timestamp_s,
+                record.thermal_pressure,
+            )
+            for record in (*idle_records, *measured_records)
+            if record.timestamp_s > admission_end_s
+            and record.timestamp_s - record.elapsed_ns / 1_000_000_000.0
+            < measured_window_end_s
+        ),
+        # Sort on the numeric interval only: a pressure value must never
+        # participate in ordering (mixed str/None ties raised TypeError,
+        # crashing instead of refusing).
+        key=lambda interval: (interval[0], interval[1]),
+    )
+    if not intervals:
+        return ("environment_admission_missing",)
+    # Pressure-check EVERY record intersecting the span first; the coverage
+    # walk below is a separate question.  (Delta-review P2: an elevated
+    # record fully covered by an overlapping nominal record previously
+    # escaped the pressure check via the cursor skip.)
+    for _start_s, _end_s, pressure in intervals:
+        if not isinstance(pressure, str) or not pressure.strip():
+            return ("environment_admission_missing",)
+        if pressure.strip().lower() not in {"nominal", "normal"}:
+            return ("thermal_pressure_elevated_in_window",)
+    cursor = admission_end_s
+    for start_s, end_s, _pressure in intervals:
+        if end_s <= cursor:
+            continue
+        if start_s > cursor + 1e-6:
+            return ("environment_admission_missing",)
+        cursor = max(cursor, end_s)
+        if cursor >= measured_window_end_s:
+            return ()
+    return ("environment_admission_missing",)
 
 
 def environment_admission_refusals(

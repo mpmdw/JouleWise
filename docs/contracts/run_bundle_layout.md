@@ -192,6 +192,17 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   `environment_admission` records the per-run evaluation, critical-probe and
   provenance status, guard observations, every idle attempt, the final
   decision, and the optional unwaivable claim reason. On the current mint,
+  `per_run_environment_evaluation.snapshot` preserves the immutable snapshot
+  that was evaluated. Strict consumption recomputes its SHA-256 and reruns
+  `evaluate_environment_policy` under the exact hash-registered campaign
+  policy; any disagreement with the stored `eligible`, `snapshot_sha256`,
+  `findings`, or `findings_sha256` refuses rather than trusting a stored
+  `eligible: true`. The current strict path also scans every powermetrics
+  interval from the final admission through the measured-window end. Missing
+  interval thermal-pressure evidence refuses as
+  `environment_admission_missing`; any non-nominal interval refuses as
+  `thermal_pressure_elevated_in_window`. These recomputation and window-scan
+  gates do not dispatch for frozen replay arms. On the current mint,
   every attempt also records finite monotonic-clock `start_s` and `end_s`
   with `start_s < end_s`; ledger order is physical order and requires
   `end_i <= start_(i+1)`. Missing, malformed, overlapping, or non-monotonic
@@ -599,9 +610,12 @@ replays stay byte-frozen):
   `joulewise.instrument_evidence.v1` whose `b_fiducial_s`,
   `anchor_method_version`, and environment bindings all match; `B_fiducial`
   is never trusted from the metadata scalar alone (an invalid block is
-  `clock_anchor_unresolved`). Current 0.5.2/0.6.2 claims require a v2
-  calibration artifact with the v2 estimator identity and residual-region
-  fields, `capture_wall_time_s`, and `max_age_s = 86400`; missing v2 shape is
+  `clock_anchor_unresolved`). Current 0.5.2/0.6.2 strict reduction accepts
+  authenticated protocol-v2 validation evidence from the current D-078 arc
+  and protocol-v3 evidence; every future claim-bearing calibration capture
+  must use v3's 59-pulse protocol. Both identities require the v2 estimator
+  revision and residual-region fields, `capture_wall_time_s`, and
+  `max_age_s = 86400`; a missing protocol-specific shape is
   `instrument_calibration_invalid`. Claim-time verification independently
   derives the capture time as the minimum finite timestamp in the
   hash-verified calibration `events.jsonl` and requires it to agree with the
@@ -613,6 +627,16 @@ replays stay byte-frozen):
   also re-reads `validation_manifest_path`, verifies its recorded SHA-256,
   and verifies the presence and SHA-256 of every manifest member within the
   bundle before trusting the calibration attachment.
+- A claim-bearing whole-window collection requires authenticated pre and post
+  calibration artifacts around the full collection window, both within their
+  86400-second endpoint horizons and on one exact binding vector. The claim
+  consumes `max(B_pre, B_post)`. A missing endpoint refuses as
+  `instrument_calibration_bracket_missing`, a horizon failure reuses
+  `instrument_calibration_stale`, and drift above the hash-registered
+  `calibration_bracket_max_drift_s` refuses as
+  `instrument_calibration_mismatch` (production tolerance: 0.010 s). A single
+  calibration remains valid only for non-claim-bearing probe/exploratory
+  reduction. Frozen 0.5.1/0.6.1 replay semantics do not dispatch this gate.
 - `energy_uncertainty_status = "bounded"` only when every required bound
   term (drift, both interpolation terms, anchor shift) is present.
   Interval-support traces keep both interpolation terms exactly 0; point

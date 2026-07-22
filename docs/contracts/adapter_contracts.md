@@ -471,17 +471,19 @@ fails.)
 
 ### D-078 instrument-calibration binding (2026-07-20 additive repair)
 
-A claim-bearing powermetrics 0.5.1/0.6.1 bundle must reference a hash-verified
-`joulewise.instrument_evidence.v1` artifact and repeat its complete binding
-vector in `metadata.instrument_calibration.bindings`: hardware model, OS build,
+Powermetrics 0.5.1/0.6.1 are claim-ineligible replay arms. The calibration-
+binding requirement applies to the current claim-eligible mints 0.5.2/0.6.2:
+each must reference a hash-verified `joulewise.instrument_evidence.v1`
+artifact and repeat its complete binding vector in
+`metadata.instrument_calibration.bindings`: hardware model, OS build,
 powermetrics binary sha256, sampling interval, anchor-method version, MLX
-version, pulse-protocol ID, and power policy.  Every field is compared; an
-absent vector or any mismatch is claim-ineligible.  The reducer independently
-rechecks `pulse_count == 40`, a present detected row for every pulse,
-`all_pulses_detected == true`, zero spurious plateaus, a finite bound, and
-valid referenced raw-powermetrics/events hashes.  `status: "valid"` is never
-trusted by itself.  Metrics/envelopes remain available for diagnostic salvage
-when calibration is absent/invalid, but claim eligibility does not.
+version, pulse-protocol ID, and power policy. Every field is compared; an
+absent vector or any mismatch is claim-ineligible. The reducer independently
+rechecks the protocol-specific pulse count, a present detected row for every
+pulse, `all_pulses_detected == true`, zero spurious plateaus, a finite bound,
+and valid referenced raw-powermetrics/events hashes. `status: "valid"` is
+never trusted by itself. Metrics/envelopes remain available for diagnostic
+salvage when calibration is absent/invalid, but claim eligibility does not.
 
 Each pulse row is indexed exactly once in protocol order and carries finite,
 ordered onset and offset residual interval endpoints. `b_fiducial_s` must

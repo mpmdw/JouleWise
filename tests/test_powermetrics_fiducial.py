@@ -23,7 +23,10 @@ from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
     LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
+    PROTOCOL_V2_ID,
     PROTOCOL_V2_SHA256,
+    PROTOCOL_V3_SHA256,
+    PULSE_COUNT,
     RESIDUAL_REGION_METHOD,
     CommandedPulse,
     TraceInterval,
@@ -497,7 +500,7 @@ class EvidenceTests(unittest.TestCase):
     def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
         detection = self.make_detection()
         bindings = self.bindings(
-            pulse_protocol_id=PROTOCOL_ID,
+            pulse_protocol_id=PROTOCOL_V2_ID,
             estimator_revision=RESIDUAL_REGION_METHOD,
             protocol_sha256=PROTOCOL_V2_SHA256,
         )
@@ -510,9 +513,14 @@ class EvidenceTests(unittest.TestCase):
             },
             "protocol_pulse_count": 3,
         }
-        missing = instrument_evidence(detection, **kwargs)
+        missing = instrument_evidence(
+            detection, protocol_id=PROTOCOL_V2_ID, **kwargs
+        )
         recorded = instrument_evidence(
-            detection, capture_wall_time_s=1_784_491_000.25, **kwargs
+            detection,
+            capture_wall_time_s=1_784_491_000.25,
+            protocol_id=PROTOCOL_V2_ID,
+            **kwargs,
         )
 
         self.assertEqual(missing["status"], "invalid")
@@ -541,7 +549,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_fitted_bound_below_protocol_pulse_count_is_invalid(self) -> None:
         # Regression: a 3-pulse run yields a fitted bound and all-detected, but
-        # the default protocol binds all 40 pulses. It must NOT be valid.
+        # the default protocol binds all 59 pulses. It must NOT be valid.
         detection = self.make_detection()
         self.assertTrue(detection.all_pulses_detected)
         self.assertIsNotNone(detection.b_fiducial_s)
@@ -659,15 +667,26 @@ class FrozenProtocolTests(unittest.TestCase):
     def test_consistent_protocol_json_matches_executable_pins(self) -> None:
         self.assertTrue(verify_frozen_protocol())
 
-    def test_v1_protocol_bytes_remain_frozen_and_v2_hash_is_bound(self) -> None:
+    def test_v1_v2_protocol_bytes_remain_frozen_and_v3_hash_is_bound(self) -> None:
         v1 = Path("configs/calibration/powermetrics_fiducial/protocol_v1.json")
         v2 = Path("configs/calibration/powermetrics_fiducial/protocol_v2.json")
+        v3 = Path("configs/calibration/powermetrics_fiducial/protocol_v3.json")
         self.assertEqual(
             hashlib.sha256(v1.read_bytes()).hexdigest(),
             "14a7b5d82f446ba76609dafb0773ea1c3588ab6247919518e50c275e8b99eff9",
         )
         self.assertEqual(hashlib.sha256(v2.read_bytes()).hexdigest(), PROTOCOL_V2_SHA256)
+        self.assertEqual(hashlib.sha256(v3.read_bytes()).hexdigest(), PROTOCOL_V3_SHA256)
         self.assertEqual(protocol_definition()["protocol_id"], PROTOCOL_ID)
+
+    def test_protocol_v3_uses_d054_nonparametric_95_95_sample_count(self) -> None:
+        # H1 exact defect: the 40-pulse maximum provided only 87.1%
+        # confidence of covering the 95th percentile, yet was described as an
+        # out-of-sample deterministic bound. The prospective mint uses n=59.
+        self.assertEqual(PULSE_COUNT, 59)
+        self.assertGreaterEqual(1.0 - 0.95**PULSE_COUNT, 0.95)
+        self.assertLess(1.0 - 0.95**40, 0.95)
+        self.assertEqual(protocol_definition()["pulse_count"], 59)
 
     def test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch(self) -> None:
         from tests.test_reduce import self_consistent_calibration
@@ -703,7 +722,7 @@ class FrozenProtocolTests(unittest.TestCase):
             )
             output = Path(tmp) / "fresh" / "instrument_evidence.json"
             fresh = validation_script.rederive_artifact(source, output)
-            self.assertEqual(fresh["protocol_id"], PROTOCOL_ID)
+            self.assertEqual(fresh["protocol_id"], PROTOCOL_V2_ID)
             self.assertGreater(fresh["b_fiducial_s"], stored_only)
             self.assertEqual(
                 fresh["bindings"]["estimator_revision"], RESIDUAL_REGION_METHOD

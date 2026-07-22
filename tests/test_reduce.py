@@ -73,10 +73,10 @@ def self_consistent_calibration(
     )
     from joulewise.clock import ClockStamp
     from joulewise.powermetrics_fiducial import (
-        PULSE_COUNT,
+        LEGACY_PULSE_COUNT,
         CommandedPulse,
-    instrument_evidence,
-    LEGACY_PROTOCOL_ID,
+        instrument_evidence,
+        LEGACY_PROTOCOL_ID,
         pulse_schedule,
         rederive_detection_from_artifacts,
     )
@@ -94,7 +94,9 @@ def self_consistent_calibration(
         (first_endpoint_s + 4.45, first_endpoint_s + 5.45),
         (first_endpoint_s + 6.95, first_endpoint_s + 7.95),
     ]
-    commanded_edges = pulse_schedule(PULSE_COUNT, start_s=first_endpoint_s + 14.95)
+    commanded_edges = pulse_schedule(
+        LEGACY_PULSE_COUNT, start_s=first_endpoint_s + 14.95
+    )
     true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
     capture_end_s = true_edges[-1][1] + 5.0
 
@@ -181,7 +183,9 @@ def self_consistent_calibration(
     events = "".join(
         json.dumps(row, sort_keys=True) + "\n" for row in event_rows
     ).encode("utf-8")
-    detection = rederive_detection_from_artifacts(raw, events, clock_anchor)
+    detection = rederive_detection_from_artifacts(
+        raw, events, clock_anchor, protocol_id=LEGACY_PROTOCOL_ID
+    )
     bindings = {
         "hardware_model": "Mac15,9",
         "os_build": "25F84",
@@ -203,6 +207,7 @@ def self_consistent_calibration(
             "events.jsonl": hashlib.sha256(events).hexdigest(),
         },
         protocol_id=LEGACY_PROTOCOL_ID,
+        protocol_pulse_count=LEGACY_PULSE_COUNT,
     )
     evidence["clock_anchor"] = clock_anchor
     evidence["clock_anchor_resolved"] = True
@@ -2049,6 +2054,113 @@ class D078R01RegressionTests(unittest.TestCase):
             environment_admission_refusals(contradictory),
         )
 
+    def test_current_admission_recomputes_snapshot_instead_of_trusting_eligible_true(self) -> None:
+        # H3(b) exact defect: the stored decision and hashes used to be trusted
+        # even after the embedded snapshot changed to an ineligible state.
+        from joulewise.environment import evaluate_environment_policy
+        from joulewise.environment_admission import (
+            _recomputed_environment_evaluation_refusals,
+        )
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs/campaign_policies/quiet_mac_p2_production.json"
+        raw = policy_path.read_bytes()
+        policy = CampaignPolicy.from_mapping(json.loads(raw))
+        snapshot = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+        }
+        stored = evaluate_environment_policy(snapshot, policy.environment_guard)
+        stored["snapshot"] = json.loads(json.dumps(snapshot))
+        metadata = {
+            "campaign_policy": {"sha256": hashlib.sha256(raw).hexdigest()},
+            "environment_admission": {
+                "per_run_environment_evaluation": stored,
+            },
+        }
+        self.assertEqual(_recomputed_environment_evaluation_refusals(metadata), ())
+        metadata["environment_admission"]["per_run_environment_evaluation"][
+            "snapshot"
+        ]["thermal_pressure"] = "elevated"
+        self.assertEqual(
+            _recomputed_environment_evaluation_refusals(metadata),
+            ("environment_admission_failed",),
+        )
+
+    def test_current_thermal_scan_refuses_elevated_or_missing_interval_pressure(self) -> None:
+        # H3(a) exact defects: nominal endpoint snapshots used to hide an
+        # elevated per-interval record, while a missing record did not fail
+        # closed as absent window-enforced environment evidence.
+        from types import SimpleNamespace
+        from joulewise.environment_admission import _window_thermal_pressure_refusals
+
+        def record(end_s: float, pressure):
+            return SimpleNamespace(
+                timestamp_s=end_s,
+                elapsed_ns=1_000_000_000,
+                thermal_pressure=pressure,
+            )
+
+        metadata = {
+            "environment_admission": {
+                "attempts": [{"attempt": 1, "start_s": 0.0, "end_s": 1.0}]
+            },
+            "uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"x": {}}}},
+        }
+        for label, pressure, expected in (
+            (
+                "elevated",
+                "Elevated",
+                ("thermal_pressure_elevated_in_window",),
+            ),
+            ("missing", None, ("environment_admission_missing",)),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp)
+                (bundle / "raw").mkdir()
+                (bundle / "raw/powermetrics_idle.plist").write_bytes(b"idle")
+                (bundle / "raw/powermetrics.plist").write_bytes(b"measured")
+                with (
+                    patch(
+                        "joulewise.adapters.powermetrics.parse_powermetrics_records",
+                        side_effect=[
+                            [record(1.0, "Nominal")],
+                            [record(2.0, "Nominal")],
+                            [record(2.0, "Nominal"), record(3.0, pressure)],
+                        ],
+                    ),
+                    patch(
+                        "joulewise.adapters.powermetrics.anchor_records_from_powermetrics",
+                        return_value=[],
+                    ),
+                    patch(
+                        "joulewise.environment_admission.stamp_from_mapping",
+                        create=True,
+                    ),
+                    patch(
+                        "joulewise.uncertainty_evidence.stamp_from_mapping",
+                        return_value=object(),
+                    ),
+                    patch(
+                        "joulewise.uncertainty_evidence.derive_powermetrics_anchor_v2",
+                        return_value={
+                            "status": "bounded",
+                            "first_sample_end_point_epoch_s": 2.0,
+                        },
+                    ),
+                ):
+                    reasons = _window_thermal_pressure_refusals(
+                        metadata,
+                        bundle_path=bundle,
+                        measured_window_start_s=2.0,
+                        measured_window_end_s=3.0,
+                    )
+            self.assertEqual(reasons, expected)
+
     def test_environment_schema_and_guard_structure_are_fail_closed(self) -> None:
         from joulewise.environment_admission import environment_admission_refusals
 
@@ -2257,12 +2369,22 @@ class D078R01RegressionTests(unittest.TestCase):
                     + "\n",
                     encoding="utf-8",
                 )
-                reasons = current_environment_refusals(
-                    metadata,
-                    bundle_path=bundle,
-                    measured_window_start_s=measured_start,
-                    measured_window_end_s=measured_end,
-                )
+                with (
+                    patch(
+                        "joulewise.environment_admission._recomputed_environment_evaluation_refusals",
+                        return_value=(),
+                    ),
+                    patch(
+                        "joulewise.environment_admission._window_thermal_pressure_refusals",
+                        return_value=(),
+                    ),
+                ):
+                    reasons = current_environment_refusals(
+                        metadata,
+                        bundle_path=bundle,
+                        measured_window_start_s=measured_start,
+                        measured_window_end_s=measured_end,
+                    )
             self.assertEqual(
                 "environment_admission_missing" in reasons,
                 expected_missing,
@@ -2308,12 +2430,22 @@ class D078R01RegressionTests(unittest.TestCase):
                     + "\n",
                     encoding="utf-8",
                 )
-                reasons = current_environment_refusals(
-                    metadata,
-                    bundle_path=bundle,
-                    measured_window_start_s=10.0,
-                    measured_window_end_s=10.5,
-                )
+                with (
+                    patch(
+                        "joulewise.environment_admission._recomputed_environment_evaluation_refusals",
+                        return_value=(),
+                    ),
+                    patch(
+                        "joulewise.environment_admission._window_thermal_pressure_refusals",
+                        return_value=(),
+                    ),
+                ):
+                    reasons = current_environment_refusals(
+                        metadata,
+                        bundle_path=bundle,
+                        measured_window_start_s=10.0,
+                        measured_window_end_s=10.5,
+                    )
             self.assertEqual(
                 "environment_admission_missing" in reasons,
                 expected_missing,
@@ -2636,26 +2768,32 @@ class D078R01RegressionTests(unittest.TestCase):
         from joulewise.powermetrics_fiducial import (
             MAX_AGE_S,
             PROTOCOL_ID,
+            PROTOCOL_V2_ID,
             PROTOCOL_V2_SHA256,
+            PROTOCOL_V3_SHA256,
             RESIDUAL_REGION_METHOD,
         )
 
         evidence, _raw, calibration_events = self_consistent_calibration()
-        protocol_id = overrides.pop("protocol_id", PROTOCOL_ID)
-        if protocol_id == PROTOCOL_ID:
+        protocol_id = overrides.pop("protocol_id", PROTOCOL_V2_ID)
+        if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
             event_rows = [
                 json.loads(line) for line in calibration_events.splitlines()
             ]
-            evidence["protocol_id"] = PROTOCOL_ID
+            evidence["protocol_id"] = protocol_id
             evidence["capture_wall_time_s"] = min(
                 float(row["timestamp_s"]) for row in event_rows
             )
             evidence["max_age_s"] = MAX_AGE_S
             evidence["bindings"].update(
                 {
-                    "pulse_protocol_id": PROTOCOL_ID,
+                    "pulse_protocol_id": protocol_id,
                     "estimator_revision": RESIDUAL_REGION_METHOD,
-                    "protocol_sha256": PROTOCOL_V2_SHA256,
+                    "protocol_sha256": (
+                        PROTOCOL_V2_SHA256
+                        if protocol_id == PROTOCOL_V2_ID
+                        else PROTOCOL_V3_SHA256
+                    ),
                 }
             )
         bindings_override = overrides.pop("bindings", None)
@@ -3381,7 +3519,7 @@ class D078R01RegressionTests(unittest.TestCase):
         # the body retained the legacy residual-region shape.
         from joulewise.powermetrics_fiducial import (
             MAX_AGE_S,
-            PROTOCOL_ID,
+            PROTOCOL_V2_ID,
             PROTOCOL_V2_SHA256,
             RESIDUAL_REGION_METHOD,
             capture_wall_time_from_events,
@@ -3391,14 +3529,14 @@ class D078R01RegressionTests(unittest.TestCase):
             protocol_id="powermetrics_pulse_fiducial_v1"
         )
         _source, _raw, calibration_events = self_consistent_calibration()
-        evidence["protocol_id"] = PROTOCOL_ID
+        evidence["protocol_id"] = PROTOCOL_V2_ID
         evidence["capture_wall_time_s"] = capture_wall_time_from_events(
             calibration_events
         )
         evidence["max_age_s"] = MAX_AGE_S
         evidence["bindings"].update(
             {
-                "pulse_protocol_id": PROTOCOL_ID,
+                "pulse_protocol_id": PROTOCOL_V2_ID,
                 "estimator_revision": RESIDUAL_REGION_METHOD,
                 "protocol_sha256": PROTOCOL_V2_SHA256,
             }
@@ -3436,6 +3574,20 @@ class D078R01RegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = self._bundle_with_calibration(tmp, evidence=evidence)
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_051_frozen_replay_does_not_learn_protocol_v3(self) -> None:
+        # H1 frozen-arm drift guard: adding the prospective v3 identity to the
+        # current strict path must not expand the 0.5.1 replay accept set.
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+
+        evidence = self._valid_instrument_evidence(protocol_id=PROTOCOL_ID)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.1")
         self.assertIn(
             "instrument_calibration_invalid",
             summary.window_evidence_precheck["gross_request"]["reasons"],

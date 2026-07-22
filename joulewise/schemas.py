@@ -562,6 +562,42 @@ class CooldownPolicy:
 
 
 @dataclass(frozen=True)
+class CalibrationBracketingPolicy:
+    """Claim-bearing pre/post instrument-calibration bracket policy."""
+
+    require_bracket: bool
+    calibration_bracket_max_drift_s: float
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "CalibrationBracketingPolicy":
+        data = _require_mapping(data, "calibration_bracketing")
+        _require_exact_keys(
+            data,
+            "calibration_bracketing",
+            frozenset(
+                {"require_bracket", "calibration_bracket_max_drift_s"}
+            ),
+        )
+        drift = _optional_float(
+            data.get("calibration_bracket_max_drift_s"),
+            "calibration_bracketing.calibration_bracket_max_drift_s",
+            minimum=0.0,
+        )
+        if drift is None:
+            raise SchemaError(
+                "calibration_bracketing.calibration_bracket_max_drift_s "
+                "must be a finite number"
+            )
+        return cls(
+            require_bracket=_require_bool(
+                data.get("require_bracket"),
+                "calibration_bracketing.require_bracket",
+            ),
+            calibration_bracket_max_drift_s=drift,
+        )
+
+
+@dataclass(frozen=True)
 class CampaignPolicy:
     """Typed policy loaded from a separately hashed campaign sidecar.
 
@@ -577,6 +613,7 @@ class CampaignPolicy:
     environment_guard: EnvironmentGuardPolicy
     idle_admission: IdleAdmissionPolicy
     cooldown: CooldownPolicy
+    calibration_bracketing: CalibrationBracketingPolicy
     idle_admission_extension: IdleAdmissionExtension | None = None
     post_window_sampling_dwell_s: float = 1.0
 
@@ -595,6 +632,7 @@ class CampaignPolicy:
                     "environment_guard",
                     "idle_admission",
                     "cooldown",
+                    "calibration_bracketing",
                     "idle_admission_extension",
                     "post_window_sampling_dwell_s",
                 }
@@ -634,6 +672,16 @@ class CampaignPolicy:
             )
         except IdleAdmissionPolicyError as exc:
             raise SchemaError(str(exc)) from exc
+        calibration_bracketing = CalibrationBracketingPolicy.from_mapping(
+            data.get("calibration_bracketing")
+        )
+        if (
+            profile == CampaignPolicyProfile.PRODUCTION
+            and not calibration_bracketing.require_bracket
+        ):
+            raise SchemaError(
+                "production calibration_bracketing.require_bracket must be true"
+            )
         return cls(
             schema_version=schema_version,
             policy_id=_require_string(data.get("policy_id"), "campaign_policy.policy_id"),
@@ -646,6 +694,7 @@ class CampaignPolicy:
             ),
             idle_admission=admission,
             cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
+            calibration_bracketing=calibration_bracketing,
             idle_admission_extension=extension,
             post_window_sampling_dwell_s=(
                 _optional_float(

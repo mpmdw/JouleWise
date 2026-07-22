@@ -5838,7 +5838,21 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 str(binding.path),
             ]
         )
-        with patch.object(run_campaign_module, "validate_bundle", return_value=[]):
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(
+                    {
+                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                        "status": "passed",
+                        "b_fiducial_s": 0.02,
+                    },
+                    (),
+                ),
+            ),
+        ):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
         verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
         self.assertEqual(
