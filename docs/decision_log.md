@@ -4300,6 +4300,17 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    accepted), with canonical-workload identity (`canonical_neg8_workload` +
    `scientific_config_sha256` against the custody-bound config) enforced;
    (5) the four byte-frozen goldens carry executable sha256 pins.
+   Round-4 confirmation follow-ups (same date): the universal
+   `clock_anchor_unresolved` barrier covers the `0.4.1`/`0.4.2` arms (every
+   pre-repair wire, not only 0.5.0/0.6.0 — the former 0.4.x escape is
+   closed and its test assertion inverted); the production trace-margin
+   gate uses the full three-term composed bound including the
+   wall-minus-monotonic span; campaign `ready_for_analysis` requires a
+   registered claim-eligible mint (`0.5.2`/`0.6.2`; mock telemetry exempt —
+   it can never bear claims). Recorded custody boundary: the 24 h
+   calibration horizon compares host wall time, so an operator with host
+   time control can evade it — accepted (host time integrity is an
+   operator obligation, like bundle custody itself).
 
 7. **Sign-off evidence must be head-minted.** Any artifact or re-reduction
    quoted as validation evidence for a head must be regenerated AT that head

@@ -1059,15 +1059,22 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
         self.assertIn("anchor_energy_envelope_unrecorded", reasons)
 
-    def test_pre_anchor_wire_without_envelope_reads_additively(self):
-        summary = self._summary(reducer_version="0.4.2")
-        del summary["energy_anchor_shift_envelopes"]
-        del summary["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"]
-        bounds, reasons = deterministic_bounds(
-            _bounds_evidence(summary), self.GROSS_METRIC
-        )
-        self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
-        self.assertEqual(reasons, ())
+    def test_pre_anchor_04x_wires_carry_the_universal_claim_barrier(self):
+        # Confirmation-round-4 P0 inversion: 0.4.x anchors are exactly as
+        # defective as 0.5.0's, so the universal D-078 barrier must fire —
+        # the former empty-reasons assertion asserted the escape hatch.
+        for reducer_version in ("0.4.1", "0.4.2"):
+            with self.subTest(reducer_version=reducer_version):
+                summary = self._summary(reducer_version=reducer_version)
+                del summary["energy_anchor_shift_envelopes"]
+                del summary["energy_bound_terms_j"][
+                    "E_clock_anchor_shift_bound_j"
+                ]
+                bounds, reasons = deterministic_bounds(
+                    _bounds_evidence(summary), self.GROSS_METRIC
+                )
+                self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+                self.assertIn("clock_anchor_unresolved", reasons)
 
     def test_point_anchor_wires_always_refuse_even_when_all_observations_are_old(self):
         # W3 defect shape: the mixed-wire guard only noticed an anchor term on

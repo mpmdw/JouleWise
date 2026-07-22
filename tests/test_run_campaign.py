@@ -4919,7 +4919,8 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
             "energy_bound_terms_j": {"E_drift_bound_j": 0.01},
             "energy_anchor_shift_envelopes": {
                 "/gross_energy_j": {
-                    "method": "common_trace_shift_plus_independent_edge_span_v2"
+                    "method": "common_trace_shift_plus_independent_edge_span_v2",
+                    "wall_minus_monotonic_independent_edge_span_s": 1.0e-5,
                 }
             },
         }
@@ -4950,7 +4951,11 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
     def test_current_p2038_2_with_composed_margin_and_envelope_passes(self) -> None:
         result = self._assertion()
         self.assertEqual(result["clock_method"], self.metadata["uncertainty_evidence"]["clock_anchor"]["method"])
-        self.assertEqual(result["composed_anchor_bound_s"], 0.07)
+        # Three-term composed bound: bundle + fiducial + wall-minus-monotonic
+        # edge span (confirmation-round-4 P1 pinned the two-term shortcut).
+        self.assertAlmostEqual(
+            result["composed_anchor_bound_s"], 0.07001, places=12
+        )
 
     def test_spawn_envelope_only_evidence_is_rejected(self) -> None:
         self.metadata["uncertainty_evidence"]["schema_version"] = "p2-038.1"

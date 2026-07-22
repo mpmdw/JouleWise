@@ -1251,7 +1251,41 @@ def assert_production_uncertainty(
             bundle,
             "composed bundle-plus-fiducial anchor bound is unavailable",
         )
-    composed_anchor_bound_s = sum(float(value) for value in bound_parts)
+    # The contract's composed causal bound is THREE terms: the wall-minus-
+    # monotonic edge span is a disjoint per-edge error source exactly like
+    # the fiducial lag (confirmation-round-4 P1: the two-term sum admitted
+    # margins the reducer's tail gate would refuse).
+    production_envelopes = (
+        raw_summary.get("energy_anchor_shift_envelopes")
+        if isinstance(raw_summary, dict)
+        else None
+    )
+    production_gross_envelope = (
+        production_envelopes.get("/gross_energy_j")
+        if isinstance(production_envelopes, dict)
+        else None
+    )
+    edge_span_s = (
+        production_gross_envelope.get(
+            "wall_minus_monotonic_independent_edge_span_s"
+        )
+        if isinstance(production_gross_envelope, dict)
+        else None
+    )
+    if (
+        isinstance(edge_span_s, bool)
+        or not isinstance(edge_span_s, int | float)
+        or not math.isfinite(float(edge_span_s))
+        or float(edge_span_s) < 0.0
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "wall-minus-monotonic edge span is unavailable for the composed bound",
+        )
+    composed_anchor_bound_s = sum(float(value) for value in bound_parts) + float(
+        edge_span_s
+    )
     margin_values = (
         margins.get("achieved_pre_window_margin_s")
         if isinstance(margins, dict)
@@ -3809,6 +3843,36 @@ def _member_readiness_reasons(
         reasons.add("bundle_strict_invalid")
     if evaluation.status != "succeeded":
         reasons.add("bundle_status_not_succeeded")
+    # "ready_for_analysis" is a governance assertion: replay-only wires may
+    # validate strictly, but only the registered claim-eligible mints can be
+    # declared ready (confirmation-round-4 P1 — non-current wires formerly
+    # reached readiness and relied on downstream barriers alone). Mock
+    # telemetry stays version-exempt: it cannot bear claims regardless.
+    summary_provenance = (
+        evaluation.summary.get("summary_provenance")
+        if isinstance(evaluation.summary, dict)
+        else None
+    )
+    readiness_reducer_version = (
+        summary_provenance.get("reducer_version")
+        if isinstance(summary_provenance, dict)
+        else None
+    )
+    readiness_quality = (
+        evaluation.summary.get("measurement_quality")
+        if isinstance(evaluation.summary, dict)
+        else None
+    )
+    readiness_telemetry = (
+        readiness_quality.get("telemetry_source")
+        if isinstance(readiness_quality, dict)
+        else None
+    )
+    if (
+        readiness_telemetry != "mock"
+        and readiness_reducer_version not in {"0.5.2", "0.6.2"}
+    ):
+        reasons.add("reducer_wire_unknown")
     if isinstance(evaluation.metadata, dict):
         adapters = evaluation.metadata.get("adapters")
         telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None

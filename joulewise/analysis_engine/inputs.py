@@ -67,7 +67,11 @@ SUPERSEDED_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
 ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset(
     {"0.5.2", "0.6.2"}
 )
-PRE_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.0", "0.6.0"})
+# EVERY wire minted before the D-078 anchor repair carries the universal
+# claim barrier — the 0.4.x arms are governed for replay/idle-variance
+# identity but their anchors are exactly as defective as 0.5.0's
+# (confirmation-round-4 P0: 0.4.x formerly escaped this set).
+PRE_ANCHOR_REDUCER_VERSIONS = frozenset({"0.4.1", "0.4.2", "0.5.0", "0.6.0"})
 ANCHOR_SHIFT_ENVELOPE_FIELD = "energy_anchor_shift_envelopes"
 ANCHOR_SHIFT_ENVELOPE_METHOD = "common_trace_shift_interval_overlap_v1"
 ANCHOR_SHIFT_ENVELOPE_METHODS = frozenset(
