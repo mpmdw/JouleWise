@@ -6,9 +6,12 @@
 > lead-verified from primary evidence) found a trace-time-anchor defect:
 > power-trace timestamps are misaligned with runtime events at the ~0.5–1 s
 > scale, so the request/phase/item point energies in this report are NOT
-> physically attributable to their stated windows (worst case: the short
-> request cell reports 0.274 J while ~8 J of workload energy sits outside
-> the marker window). This report's original "claim-eligible" headline
+> physically attributable to their stated windows. Worst case: the short
+> request cell integrated a near-idle slice of the recording (0.274 J)
+> because the misaligned window missed the workload's actual ~8 J
+> consumption burst, which sits fully and positively in the same recording
+> a fraction of a second away — a time-bookkeeping error, not a negative
+> or missing energy. This report's original "claim-eligible" headline
 > conflated SOURCE provenance (`source_provenance.claim_eligible=true`,
 > 266/266 — still true) with METRIC-level eligibility: the reducer's own
 > `window_evidence_precheck` passes only 50/288 whole-request gross metrics

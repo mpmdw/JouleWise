@@ -21,14 +21,17 @@ limitation, L1 — see D-078 clause 8).
    streams — A anchor+envelope+fiducial harness (reducer 0.5.1 + AXI 0.6.1,
    additive; 0.5.0/0.6.0 byte-frozen), B engine wire compat +
    cooldown/cap-hit joins + extraction hygiene, C idle-admission core.
-   Per-stream review panels, severity-tiered refuters, fix-until-dry with
-   delta re-audits (A: 1 round, B: 3, C: 1; zero unresolved). Integration
-   head `3480f1b`.
+   Per-stream review panels (contract/execution/physics + Sol cross-model
+   lens), severity-tiered refuters, fix-until-dry with delta re-audits
+   (A: 1 round, B: 3, C: 1; zero unresolved). Integration head `3480f1b`,
+   full suite `Ran 1910 tests, OK` (21 named environment skips in the bare
+   worktree).
 3. **C2 hookup (Sol high):** live CPU-aware admission enforcement in the
    controller (production fail-closed, exploratory flagged), typed
    `idle_admission_extension` sidecar schema, adapter-power call site,
    `--whole-window-verdict` NEG-8 bracket pass, attempts ledger. Lead-verified
-   fail-closed on missing telemetry under both policies; committed `d1c1538`.
+   fail-closed on missing telemetry under both policies; committed `d1c1538`;
+   suite lead-run `Ran 1918 tests, OK (skipped=21)`.
 4. **Lead physics verification (independent arithmetic, not the branch's
    code):** r01 anchor interval `[1784491122.657586, 1784491122.770690]`,
    midpoint matching the branch to the microsecond; corrected gross 7.6639 J

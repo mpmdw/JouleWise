@@ -101,20 +101,26 @@ UPDATE (2026-07-19 night): the clean re-run is done — 288 strict-valid
 bundles with clean source provenance (`runs_recal3/4/5/6_20260719/`)
 cover every planned Window-A cell except DF-TELEM at planned n,
 including the complete n=10 suite-ABBA comparative cell; the source
-provenance gate is closed. **SUPERSEDING UPDATE (2026-07-19 late
-night): a same-day measurement-soundness audit (findings lead-verified
-from primary evidence) found a trace-time-anchor defect affecting ALL
-powermetrics corpora — power timestamps are misaligned with runtime
-events at the ~0.5–1 s scale, so request/phase point energies are not
-physically attributable to their windows and no claim-bearing floor or
-MDE will be published from existing corpora as recorded.** The corpora
-are retained as instrument/calibration evidence; the environment guard,
-arithmetic identities, and token accounting all verified sound. Path
-forward: instrument repair (tight causal time anchor + anchor-envelope
-reduction, precheck-honest extraction), then re-collection — the
-guard-protected protocol now collects ~280 bundles per night routinely.
-Records: `docs/reviews/2026-07-19-measurement-soundness-audit.md`,
-`docs/run_reports/2026-07-19-recal456-extended-window.md`.
+provenance gate is closed. **SUPERSEDING UPDATE (2026-07-19/20): a
+same-day soundness audit found a timing bug, and no energy number from
+the existing recordings will be used for claims until re-measurement.**
+In plain terms: the power meter and the workload log time on two
+different clocks, and our alignment between them could be off by up to
+~1 second. Energy is computed by summing meter samples inside the
+workload's start/stop window, so a misaligned window integrates the
+wrong slice of the recording — dramatic for sub-second test runs (one
+0.37 s run read 0.27 J when its true consumption, plainly present in
+the recording, was ~8 J), and a meaningful hidden uncertainty (~±10 J)
+even on 60-second runs. Nothing measured negative; the recordings are
+intact and self-consistent; long-run repeatability (~0.3% across
+nights) shows the platform is stable. Very short workloads are simply
+below this instrument's resolution and will not be claimed — by
+design, not workaround. The fix (align on the meter's own timestamps,
+attach an explicit uncertainty range to every number, calibrate
+end-to-end with 40 precisely-timed GPU bursts before new data) is
+implemented and in adversarial review. Plain-language explainer:
+`docs/advisor_briefs/2026-07-20-timing-defect-explainer.md`; technical
+record: `docs/reviews/2026-07-19-measurement-soundness-audit.md`.
 
 **REPAIR COMPLETE (2026-07-22): the instrument repair is finished and
 signed off.** Over three days the timing defect was fixed and the whole
