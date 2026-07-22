@@ -558,7 +558,17 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
             rich_lines = (root / RICH_IDLE_NAME).read_text().splitlines()
             self.assertEqual(len(rich_lines), 5)
-            self.assertEqual(json.loads(rich_lines[0])["index"], 0)
+            first_rich = json.loads(rich_lines[0])
+            self.assertEqual(first_rich["index"], 0)
+            # G5 defect shape: native whole-second plist dates used to place
+            # otherwise valid idle evidence outside the controller attempt.
+            # The rich interval now starts exactly at the capture wall anchor.
+            self.assertAlmostEqual(
+                first_rich["timestamp_s"]
+                - first_rich["elapsed_ns"] / 1_000_000_000.0,
+                200.0,
+                places=12,
+            )
             retry_rich = (
                 root / "rich_telemetry_idle_attempt_2.jsonl"
             ).read_text().splitlines()

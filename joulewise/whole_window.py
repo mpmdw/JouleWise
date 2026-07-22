@@ -17,17 +17,28 @@ from typing import Any
 
 from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
+    IdleAdmissionExtension,
     NEG8_BRACKET_SCHEMA,
     Neg8BracketPolicy,
+    evaluate_adapter_wattage_continuity,
+    evaluate_cpu_idle_admission,
     evaluate_neg8_bracket,
+    extract_adapter_observation,
 )
 from joulewise.bundle import sanitize_id_component
+from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.environment_admission import (
+    current_environment_refusals,
+    environment_admission_refusals,
+)
+from joulewise.schemas import BenchmarkConfig
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 WHOLE_WINDOW_PROVENANCE_SCHEMA = (
     "joulewise.idle_admission_whole_window_provenance.v1"
 )
+CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
 
 
 def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
@@ -332,6 +343,7 @@ def _manifest_members(
     if not isinstance(members, list):
         return None
     result: set[str] = set()
+    duplicate_ids: set[str] = set()
     for row in members:
         if not isinstance(row, Mapping) or row.get("execution") != "invoked":
             continue
@@ -340,7 +352,20 @@ def _manifest_members(
             return None
         if any(not isinstance(item, str) or not item for item in bundle_ids):
             return None
+        # G7(a): on the current strict path invoked occurrences are evidence,
+        # not a mathematical set.  The check below deliberately leaves frozen
+        # replay's committed set-collapse behavior untouched.
+        duplicate_ids.update(
+            item for item in bundle_ids if bundle_ids.count(item) > 1 or item in result
+        )
         result.update(bundle_ids)
+    if duplicate_ids and any(
+        _current_strict_summary(
+            _read_json_object(runs_root / bundle_id / "summary_metrics.json")
+        )
+        for bundle_id in result
+    ):
+        return None
     return result
 
 
@@ -356,16 +381,34 @@ def _neg8_position(role: Any, sentinel_position: Any) -> str | None:
     return None
 
 
-def _gross_energy_evidence(bundle_path: Path) -> dict[str, float] | None:
-    """Re-read the NEG-8 admissible set from one member summary."""
-
+def _read_json_object(path: Path) -> Mapping[str, Any] | None:
     try:
-        # Strict UTF-8 only (json.loads on bytes auto-detects wider encodings).
-        summary = json.loads(
-            (bundle_path / "summary_metrics.json").read_bytes().decode("utf-8")
-        )
+        value = json.loads(path.read_bytes().decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+    return value if isinstance(value, Mapping) else None
+
+
+def _summary_reducer_version(summary: Any) -> str | None:
+    provenance = summary.get("summary_provenance") if isinstance(summary, Mapping) else None
+    value = provenance.get("reducer_version") if isinstance(provenance, Mapping) else None
+    return value if isinstance(value, str) else None
+
+
+def _current_strict_summary(summary: Any) -> bool:
+    """Identify current-mint, non-mock summaries that can bear strict claims."""
+
+    quality = summary.get("measurement_quality") if isinstance(summary, Mapping) else None
+    telemetry_source = (
+        quality.get("telemetry_source") if isinstance(quality, Mapping) else None
+    )
+    return (
+        _summary_reducer_version(summary) in CURRENT_MINT_REDUCER_VERSIONS
+        and telemetry_source != "mock"
+    )
+
+
+def _gross_fields(summary: Any) -> dict[str, float] | None:
     if not isinstance(summary, Mapping):
         return None
     gross = summary.get("gross_energy_j")
@@ -375,7 +418,12 @@ def _gross_energy_evidence(bundle_path: Path) -> dict[str, float] | None:
     )
     if not isinstance(envelope, Mapping):
         return None
-    fields = (gross, envelope.get("point_j"), envelope.get("lower_j"), envelope.get("upper_j"))
+    fields = (
+        gross,
+        envelope.get("point_j"),
+        envelope.get("lower_j"),
+        envelope.get("upper_j"),
+    )
     if any(
         isinstance(value, bool)
         or not isinstance(value, int | float)
@@ -393,13 +441,56 @@ def _gross_energy_evidence(bundle_path: Path) -> dict[str, float] | None:
     return {"point_j": point, "lower_j": lower, "upper_j": upper}
 
 
+def _gross_energy_evidence(
+    bundle_path: Path,
+) -> tuple[dict[str, float] | None, str | None]:
+    """Re-derive current NEG-8 energy from primary bytes; replay stays stored."""
+
+    stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
+    stored = _gross_fields(stored_summary)
+    reducer_version = _summary_reducer_version(stored_summary)
+    if not _current_strict_summary(stored_summary):
+        return stored, None if stored is not None else "provenance"
+    try:
+        # Deliberately output-free: reduce_bundle is pure over the bundle and
+        # returns an in-memory summary.  Minutes-scale claim verification cost
+        # is accepted for primary-evidence NEG-8 re-derivation.
+        from joulewise.reduce import reduce_bundle
+
+        reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
+    except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
+        return None, "provenance"
+    fresh = _gross_fields(reduced)
+    prechecks = reduced.get("window_evidence_precheck")
+    gross_gate = None
+    if isinstance(prechecks, Mapping):
+        gross_gate = prechecks.get("gross_request")
+        if not isinstance(gross_gate, Mapping):
+            gross_gate = prechecks.get("gross_batch_group")
+    if (
+        reduced.get("status") != "succeeded"
+        or fresh is None
+        or not isinstance(gross_gate, Mapping)
+        or gross_gate.get("eligible") is not True
+    ):
+        return None, "provenance"
+    if stored is None or any(
+        not math.isclose(
+            stored[field], fresh[field], rel_tol=1e-9, abs_tol=1e-9
+        )
+        for field in ("point_j", "lower_j", "upper_j")
+    ):
+        return None, "conflict"
+    return fresh, None
+
+
 REGISTERED_POLICY_DIR = (
     Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
 )
 
 
-def _registered_bracket_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
-    """Resolve NEG-8 bracket tolerances from a repo-registered policy.
+def _registered_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
+    """Resolve a repo-registered campaign policy by exact file-byte hash.
 
     The verdict row's ``policy_sha256`` is the hash of the campaign-policy
     file bytes.  Registered policy files are the only trust anchor the
@@ -425,40 +516,89 @@ def _registered_bracket_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
             payload = json.loads(raw)
         except (UnicodeDecodeError, ValueError):
             return None
-        extension = (
-            payload.get("idle_admission_extension")
-            if isinstance(payload, Mapping)
-            else None
-        )
-        bracket = (
-            extension.get("neg8_bracket")
-            if isinstance(extension, Mapping)
-            else None
-        )
-        return bracket if isinstance(bracket, Mapping) else None
+        return payload if isinstance(payload, Mapping) else None
     return None
+
+
+def _registered_bracket_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
+    payload = _registered_policy(policy_sha256)
+    extension = (
+        payload.get("idle_admission_extension")
+        if isinstance(payload, Mapping)
+        else None
+    )
+    bracket = (
+        extension.get("neg8_bracket") if isinstance(extension, Mapping) else None
+    )
+    return bracket if isinstance(bracket, Mapping) else None
+
+
+def _scientific_config_identity(bundle_path: Path) -> tuple[str | None, bool]:
+    """Recompute canonical NEG-8 identity from custody-bound config bytes."""
+
+    config = _read_json_object(bundle_path / "config.json")
+    metadata = _read_json_object(bundle_path / "metadata.json")
+    try:
+        raw = (bundle_path / "config.json").read_bytes()
+        normalized = BenchmarkConfig.from_mapping(dict(config or {})).to_dict()
+    except (OSError, TypeError, ValueError):
+        return None, False
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("config_sha256") != hashlib.sha256(raw).hexdigest()
+    ):
+        return None, False
+    scientific = dict(normalized)
+    scientific.pop("run_id", None)
+    digest = hashlib.sha256(
+        json.dumps(scientific, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    workload = normalized.get("workload_profile")
+    canonical = bool(
+        isinstance(workload, Mapping)
+        and workload.get("name") == "df_rq_mid"
+        and workload.get("prompt_tokens") == 1024
+        and workload.get("output_tokens") == 256
+        and workload.get("dataset_ref") is None
+        and workload.get("suite_manifest_ref") is None
+    )
+    return digest, canonical
 
 
 def _derived_neg8_decision(
     manifests: Sequence[Mapping[str, Any]],
     runs_root: Path,
     policy_value: Any,
-) -> str | None:
-    """Re-derive a verdict from source-member summaries, never the stored row."""
+    *,
+    current: bool = True,
+) -> tuple[str | None, str | None]:
+    """Re-derive a verdict from source-member summaries, never the stored row.
+
+    ``current`` selects the evidence-path resolution: current-strict rows use
+    selection-custody manifest resolution; frozen replay rows keep the
+    committed 0925480 ``runs_root / bundle_id`` resolution unconditionally
+    (frozen-arm purity — a custody improvement must never change a frozen
+    row's disposition in either direction).
+    """
 
     try:
         policy = Neg8BracketPolicy.from_mapping(policy_value)
     except (TypeError, ValueError):
-        return None
+        return None, "provenance"
     references: dict[str, list[dict[str, float] | None]] = {
         "start": [],
         "end": [],
     }
     invalid_role = False
     for manifest in manifests:
+        manifest_paths = (
+            _manifest_bundle_paths([manifest], runs_root) if current else None
+        )
+        if current and manifest_paths is None:
+            return None, "provenance"
         members = manifest.get("members")
         if not isinstance(members, list):
-            return None
+            return None, "provenance"
         for member in members:
             if not isinstance(member, Mapping) or member.get("execution") != "invoked":
                 continue
@@ -472,18 +612,288 @@ def _derived_neg8_decision(
                 continue
             bundle_ids = member.get("bundle_ids")
             if not isinstance(bundle_ids, list):
-                return None
+                return None, "provenance"
             for bundle_id in bundle_ids:
                 if not isinstance(bundle_id, str) or not bundle_id:
-                    return None
-                references[position].append(
-                    _gross_energy_evidence(runs_root / bundle_id)
-                )
+                    return None, "provenance"
+                if current:
+                    bundle_path = manifest_paths.get(bundle_id)
+                    if bundle_path is None:
+                        return None, "provenance"
+                else:
+                    # Frozen replay: committed direct resolution, no custody
+                    # requirement, evidence-or-None appended as at 0925480.
+                    frozen_evidence, _frozen_problem = _gross_energy_evidence(
+                        runs_root / bundle_id
+                    )
+                    references[position].append(frozen_evidence)
+                    continue
+                stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
+                if _current_strict_summary(stored_summary):
+                    scientific_sha, canonical = _scientific_config_identity(bundle_path)
+                    if (
+                        member.get("canonical_neg8_workload") is not True
+                        or not canonical
+                        or scientific_sha is None
+                        or member.get("scientific_config_sha256") != scientific_sha
+                    ):
+                        return None, "provenance"
+                evidence, problem = _gross_energy_evidence(bundle_path)
+                if problem is not None:
+                    return None, problem
+                references[position].append(evidence)
     start = references["start"][0] if len(references["start"]) == 1 else None
     end = references["end"][0] if len(references["end"]) == 1 else None
     if invalid_role or len(references["start"]) > 1 or len(references["end"]) > 1:
         start = end = None
-    return evaluate_neg8_bracket(start, end, policy)["decision"]
+    return evaluate_neg8_bracket(start, end, policy)["decision"], None
+
+
+def _manifest_bundle_paths(
+    manifests: Sequence[Mapping[str, Any]], runs_root: Path
+) -> dict[str, Path] | None:
+    """Resolve every invoked occurrence without duplicate/set collapse."""
+
+    result: dict[str, Path] = {}
+    for manifest in manifests:
+        selection = manifest.get("attempt_ledger_selection")
+        if isinstance(selection, Mapping):
+            descriptors = selection.get("selected_bundles")
+            if not isinstance(descriptors, list):
+                return None
+            occurrences: list[tuple[str, Path]] = []
+            for descriptor in descriptors:
+                if not isinstance(descriptor, Mapping):
+                    return None
+                bundle_id = descriptor.get("bundle_id")
+                path = _safe_source_path(runs_root, descriptor.get("path"))
+                if not isinstance(bundle_id, str) or not bundle_id or path is None:
+                    return None
+                occurrences.append((bundle_id, path))
+        else:
+            members = manifest.get("members")
+            if not isinstance(members, list):
+                return None
+            occurrences = []
+            for member in members:
+                if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                    continue
+                ids = member.get("bundle_ids")
+                if not isinstance(ids, list):
+                    return None
+                for bundle_id in ids:
+                    if not isinstance(bundle_id, str) or not bundle_id:
+                        return None
+                    occurrences.append((bundle_id, runs_root / bundle_id))
+        for bundle_id, path in occurrences:
+            if bundle_id in result:
+                # G7(a) is a current strict-path gate.  Frozen replay keeps
+                # the committed occurrence-to-set collapse; a mixed/current
+                # join refuses as soon as either duplicate path is current.
+                if _current_strict_summary(
+                    _read_json_object(path / "summary_metrics.json")
+                ) or _current_strict_summary(
+                    _read_json_object(result[bundle_id] / "summary_metrics.json")
+                ):
+                    return None
+                continue
+            result[bundle_id] = path
+    return result
+
+
+def _load_idle_records(bundle_path: Path, attempt: int) -> list[dict[str, Any]] | None:
+    name = (
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+    )
+    try:
+        lines = (bundle_path / name).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    rows: list[dict[str, Any]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(row, dict):
+            return None
+        rows.append(row)
+    return rows
+
+
+def _adapter_observations(bundle_id: str, metadata: Mapping[str, Any]) -> list[dict[str, Any]]:
+    observations: list[dict[str, Any]] = []
+    environment = metadata.get("environment")
+    if isinstance(environment, Mapping):
+        observations.append(
+            extract_adapter_observation(
+                environment.get("power") if isinstance(environment.get("power"), Mapping) else None,
+                source=f"{bundle_id}:environment",
+                power_source=environment.get("power_source"),
+            )
+        )
+    admission = metadata.get("environment_admission")
+    guards = admission.get("guard_observations") if isinstance(admission, Mapping) else None
+    if isinstance(guards, list):
+        for guard in guards:
+            if not isinstance(guard, Mapping) or "power" not in guard:
+                continue
+            phase = guard.get("phase")
+            observations.append(
+                extract_adapter_observation(
+                    guard.get("power") if isinstance(guard.get("power"), Mapping) else None,
+                    source=f"{bundle_id}:guard:{phase if isinstance(phase, str) else 'guard'}",
+                )
+            )
+    post = environment.get("post_run_observation") if isinstance(environment, Mapping) else None
+    if isinstance(post, Mapping) and post.get("capture_skipped") is not True:
+        observations.append(
+            extract_adapter_observation(
+                post.get("power") if isinstance(post.get("power"), Mapping) else None,
+                source=f"{bundle_id}:post_run",
+                power_source=post.get("power_source"),
+            )
+        )
+    else:
+        observations.append(
+            extract_adapter_observation(None, source=f"{bundle_id}:post_run_missing")
+        )
+    return observations
+
+
+def _current_core_rederivation_reasons(
+    *,
+    core: Mapping[str, Any],
+    bundle_ids: Sequence[str],
+    manifests: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    policy_sha256: Any,
+) -> set[str]:
+    """Recompute current-mint CPU/environment/adapter labels from members."""
+
+    reasons: set[str] = set()
+    paths = _manifest_bundle_paths(manifests, runs_root)
+    # STRUCTURAL frozen gate (delta-review P2): a frozen-only row must exit
+    # before ANY current-gate refusal can fire, including registered-policy
+    # parse failures and custody-resolution failures.  The currentness probe
+    # therefore falls back to direct resolution when custody paths are
+    # unavailable.
+    probe_paths = (
+        paths
+        if paths is not None
+        else {bundle_id: runs_root / bundle_id for bundle_id in bundle_ids}
+    )
+    strict_current_ids = {
+        bundle_id
+        for bundle_id in bundle_ids
+        if (path := probe_paths.get(bundle_id)) is not None
+        and _current_strict_summary(_read_json_object(path / "summary_metrics.json"))
+    }
+    if not strict_current_ids:
+        return reasons
+
+    registered = _registered_policy(policy_sha256)
+    extension_value = (
+        registered.get("idle_admission_extension")
+        if isinstance(registered, Mapping)
+        else None
+    )
+    profile = registered.get("profile") if isinstance(registered, Mapping) else None
+    try:
+        extension = IdleAdmissionExtension.from_mapping(
+            dict(extension_value) if isinstance(extension_value, Mapping) else None,
+            profile=profile,
+        )
+    except (TypeError, ValueError):
+        return {"whole_window_verdict_provenance_invalid"}
+    if paths is None:
+        return {"whole_window_verdict_provenance_invalid"}
+
+    derived_members: list[
+        tuple[str, Path, Mapping[str, Any], Mapping[str, Any]]
+    ] = []
+    for bundle_id in bundle_ids:
+        path = paths.get(bundle_id)
+        if path is None:
+            reasons.add("whole_window_verdict_provenance_invalid")
+            continue
+        metadata = _read_json_object(path / "metadata.json")
+        if not isinstance(metadata, Mapping):
+            reasons.add("environment_admission_missing")
+            continue
+        admission = metadata.get("environment_admission")
+        if bundle_id in strict_current_ids:
+            try:
+                window = BundleReader(path).measured_window()
+            except (BundleReadError, OSError, TypeError, ValueError):
+                window = None
+            if window is None:
+                reasons.add("environment_admission_missing")
+                continue
+            reasons.update(
+                current_environment_refusals(
+                    metadata,
+                    bundle_path=path,
+                    measured_window_start_s=window.start_s,
+                    measured_window_end_s=window.end_s,
+                )
+            )
+        else:
+            reasons.update(environment_admission_refusals(admission))
+        attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+        final = attempts[-1] if isinstance(attempts, list) and attempts else None
+        attempt = final.get("attempt") if isinstance(final, Mapping) else None
+        records = (
+            _load_idle_records(path, attempt)
+            if isinstance(attempt, int) and not isinstance(attempt, bool)
+            else None
+        )
+        decision = admission.get("decision") if isinstance(admission, Mapping) else None
+        cpu = evaluate_cpu_idle_admission(
+            records,
+            extension.cpu_criteria,
+            gpu_admitted=(
+                True if decision == "admitted" else False if decision in {"flagged", "abort"} else None
+            ),
+        )
+        derived_members.append((bundle_id, path, metadata, cpu))
+
+    stored_members = core.get("members")
+    if not isinstance(stored_members, list):
+        reasons.add("cpu_admission_core_missing")
+    else:
+        by_id = {
+            row.get("bundle_id"): row
+            for row in stored_members
+            if isinstance(row, Mapping) and isinstance(row.get("bundle_id"), str)
+        }
+        for bundle_id, _path, _metadata, cpu in derived_members:
+            stored = by_id.get(bundle_id)
+            stored_cpu = stored.get("cpu_admission") if isinstance(stored, Mapping) else None
+            if not isinstance(stored_cpu, Mapping) or dict(stored_cpu) != cpu:
+                reasons.add("cpu_admission_core_failed")
+
+    conditions = core.get("conditions")
+    if not isinstance(conditions, list) or conditions:
+        reasons.add("whole_window_verdict_provenance_invalid")
+
+    if len(derived_members) == len(bundle_ids):
+        observations = [
+            observation
+            for bundle_id, _path, metadata, _cpu in derived_members
+            for observation in _adapter_observations(bundle_id, metadata)
+        ]
+        derived = evaluate_adapter_wattage_continuity(
+            observations, extension.adapter_wattage
+        )
+        stored = core.get("adapter_wattage_continuity")
+        if not isinstance(stored, Mapping) or dict(stored) != derived:
+            reasons.add("adapter_continuity_failed")
+    return reasons
 
 
 def _validate_row(
@@ -580,6 +990,17 @@ def _validate_row(
         reasons.add("whole_window_verdict_provenance_invalid")
 
     if isinstance(core, Mapping):
+        reasons.update(
+            _current_core_rederivation_reasons(
+                core=core,
+                bundle_ids=bundle_ids,
+                manifests=verified_source_manifests,
+                runs_root=runs_root,
+                policy_sha256=policy_sha,
+            )
+        )
+
+    if isinstance(core, Mapping):
         bracket = core.get("neg8_bracket")
         continuity = core.get("adapter_wattage_continuity")
         members = core.get("members")
@@ -600,10 +1021,17 @@ def _validate_row(
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")
             else:
-                derived_decision = _derived_neg8_decision(
-                    verified_source_manifests, runs_root, registered_policy
+                derived_decision, derived_problem = _derived_neg8_decision(
+                    verified_source_manifests,
+                    runs_root,
+                    registered_policy,
+                    current=_row_references_current_strict_member(
+                        row, runs_root, referenced
+                    ),
                 )
-                if derived_decision is None:
+                if derived_problem == "conflict":
+                    reasons.add("whole_window_verdict_conflict")
+                elif derived_problem is not None or derived_decision is None:
                     reasons.add("whole_window_verdict_provenance_invalid")
                 elif bracket.get("decision") != derived_decision:
                     reasons.add("whole_window_verdict_conflict")
@@ -647,6 +1075,42 @@ def _validate_row(
     return not reasons, tuple(sorted(reasons))
 
 
+def _row_references_current_strict_member(
+    row: Mapping[str, Any], runs_root: Path, referenced: set[str]
+) -> bool:
+    """Find current members in both ordinary and selected-bundle custody."""
+
+    provenance = row.get("row_provenance")
+    descriptors = (
+        provenance.get("source_campaign_manifests")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    if not isinstance(descriptors, list):
+        return False
+    manifests: list[Mapping[str, Any]] = []
+    for descriptor in descriptors:
+        path = (
+            _safe_source_path(runs_root, descriptor.get("path"))
+            if isinstance(descriptor, Mapping)
+            else None
+        )
+        manifest = _read_json_object(path) if path is not None else None
+        if isinstance(manifest, Mapping):
+            manifests.append(manifest)
+    paths = _manifest_bundle_paths(manifests, runs_root)
+    return bool(
+        paths is not None
+        and any(
+            bundle_id in referenced
+            and _current_strict_summary(
+                _read_json_object(path / "summary_metrics.json")
+            )
+            for bundle_id, path in paths.items()
+        )
+    )
+
+
 def whole_window_refusal_reasons(
     runs_root: Path, referenced_bundle_ids: set[str]
 ) -> tuple[str, ...]:
@@ -666,14 +1130,19 @@ def whole_window_refusal_reasons(
     overlapping: list[Mapping[str, Any]] = []
     valid: list[Mapping[str, Any]] = []
     invalid_reasons: set[str] = set()
+    history_malformed = False
     for line in lines:
         if not line.strip():
             continue
         try:
             row = json.loads(line)
         except json.JSONDecodeError:
+            history_malformed = True
             continue
-        if not isinstance(row, Mapping) or row.get("record_type") != (
+        if not isinstance(row, Mapping):
+            history_malformed = True
+            continue
+        if row.get("record_type") != (
             "idle_admission_whole_window_verdict"
         ):
             continue
@@ -689,6 +1158,24 @@ def whole_window_refusal_reasons(
             valid.append(row)
         else:
             invalid_reasons.update(reasons)
+    current_referenced = any(
+        _current_strict_summary(
+            _read_json_object(Path(runs_root) / bundle_id / "summary_metrics.json")
+        )
+        for bundle_id in referenced_bundle_ids
+    ) or any(
+        _row_references_current_strict_member(
+            row, Path(runs_root), referenced_bundle_ids
+        )
+        for row in overlapping
+    )
+    if history_malformed and current_referenced:
+        # Bundle-local custody cannot make append-history erasure impossible:
+        # an attacker controlling the whole runs root can still forge a fully
+        # consistent replacement corpus.  The attainable goal is narrower:
+        # laundering must mint consistent member bundles/manifests/verdicts,
+        # not delete or corrupt one cheap campaign-log line.
+        return ("whole_window_verdict_conflict",)
     if not overlapping:
         return missing
     if not valid:

@@ -194,6 +194,19 @@ class TestAbsoluteFloor(unittest.TestCase):
         self.assertTrue(close(est.guarded_floor_j, after_max))
         self.assertGreater(est.guarded_floor_j, inside_max)
 
+    def test_member_interval_corners_widen_residual_not_just_member_width(self):
+        # G1 defect shape: ten alternating point energies have +/-0.5 J point
+        # residuals, but independent +/-1 J member intervals can move one
+        # member against the sample mean by 1.8 J.  The attainable residual is
+        # therefore 0.5 + 1.8 = 2.3 J; the old max(widths)==1 shortcut missed it.
+        energies = [99.5, 100.5] * 5
+        estimate = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[1.0] * 10,
+        )
+        self.assertGreaterEqual(estimate.unguarded_floor_j, 2.3 - TOL)
+
+
     def test_below_five_is_smoke_only(self):
         est = absolute_false_effect_floor([10.0, 12.0, 11.0])
         self.assertIsNone(est.guard_factor)
@@ -244,6 +257,16 @@ class TestComparativeFloor(unittest.TestCase):
         self.assertTrue(close(est.unguarded_floor_j, FIXTURE_B_PREDICTION))
         self.assertTrue(close(est.guard_factor, 1.5))
         self.assertTrue(close(est.guarded_floor_j, FIXTURE_B_GUARDED))
+
+    def test_block_interval_corner_widens_the_observed_delta(self):
+        # A linear block contrast ranges over point_delta +/- sum(|c_i|w_i).
+        # The operative floor must cover the point magnitude plus that width,
+        # rather than comparing the width alone to the point-only floor.
+        estimate = comparative_false_effect_floor(
+            [2.0] * 5,
+            admissible_half_widths_j=[1.0] * 5,
+        )
+        self.assertGreaterEqual(estimate.unguarded_floor_j, 3.0 - TOL)
 
     def test_label_swap_leaves_floor_unchanged(self):
         negated = [-d for d in FIXTURE_B_DELTAS]

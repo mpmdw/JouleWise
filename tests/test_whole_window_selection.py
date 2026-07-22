@@ -265,6 +265,67 @@ class WholeWindowSelectionTests(unittest.TestCase):
             )
             self.assertIsNone(validated_attempt_selection(selection, root))
 
+    def test_frozen_neg8_derivation_keeps_committed_direct_resolution(self) -> None:
+        # Delta-review P1 regression: selection-custody path resolution is a
+        # CURRENT-strict improvement. A frozen row whose NEG-8 references are
+        # reachable only through selection custody must keep the committed
+        # runs_root/<bundle_id> resolution — the references stay unreadable
+        # (None), the derived decision stays 'failed', and a stored 'passed'
+        # stays in conflict. current=True may resolve them; current=False
+        # must not.
+        import tempfile
+        from joulewise.whole_window import _derived_neg8_decision
+
+        policy = {
+            "require_bracket": True,
+            "max_abs_delta_j": 0.05,
+            "max_rel_delta": 0.25,
+        }
+        summary = {
+            "gross_energy_j": 5.0,
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {"point_j": 5.0, "lower_j": 4.9, "upper_j": 5.1}
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for position, bundle_id in (("start", "neg8-s"), ("end", "neg8-e")):
+                hidden = root / "axi_attempt_bundles" / "a1" / bundle_id
+                hidden.mkdir(parents=True)
+                (hidden / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+            manifest = {
+                "attempt_ledger_selection": {
+                    "selected_bundles": [
+                        {
+                            "bundle_id": bundle_id,
+                            "path": f"axi_attempt_bundles/a1/{bundle_id}",
+                        }
+                        for bundle_id in ("neg8-s", "neg8-e")
+                    ]
+                },
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": ["neg8-s"],
+                        "role": "neg8_daily_reference_start",
+                        "sentinel_position": "start",
+                    },
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": ["neg8-e"],
+                        "role": "neg8_daily_reference_end",
+                        "sentinel_position": "end",
+                    },
+                ],
+            }
+            frozen_decision, frozen_problem = _derived_neg8_decision(
+                [manifest], root, policy, current=False
+            )
+        self.assertIsNone(frozen_problem)
+        self.assertEqual(frozen_decision, "failed")
+
 
 if __name__ == "__main__":
     unittest.main()

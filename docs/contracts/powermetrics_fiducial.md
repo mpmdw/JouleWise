@@ -108,8 +108,10 @@ required. `artifact_path` is the bundle-relative location of the copied
 `instrument_evidence.json` (absolute paths and parent traversal are
 rejected). At reduce time the reducer loads that file, verifies its sha256
 equals `artifact_sha256`, and fails closed (`clock_anchor_unresolved`) unless
-ALL of: `schema_version` is `joulewise.instrument_evidence.v1`; `protocol_id`
-is `powermetrics_pulse_fiducial_v1`; `status` is `valid`;
+ALL of: `schema_version` is `joulewise.instrument_evidence.v1`; under the
+frozen historical replay arms only, `protocol_id` is
+`powermetrics_pulse_fiducial_v1` (the current claim-bearing path instead
+requires `powermetrics_pulse_fiducial_v2` as specified below); `status` is `valid`;
 `anchor_method_version` equals the reducer's own
 `powermetrics_native_second_censored_intersection_v1`; the artifact's
 `b_fiducial_s` matches the metadata scalar; every binding field is present

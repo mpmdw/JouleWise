@@ -114,6 +114,7 @@ from joulewise.whole_window import (  # noqa: E402
 )
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
+    current_environment_refusals,
     environment_admission_refusals,
     post_run_environment_refusals,
 )
@@ -2999,6 +3000,33 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 
 
+def _current_member_environment_refusals(
+    evaluation: MemberEvaluation,
+) -> tuple[str, ...]:
+    summary = evaluation.summary
+    provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
+    reducer_version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+    quality = summary.get("measurement_quality") if isinstance(summary, dict) else None
+    telemetry_source = quality.get("telemetry_source") if isinstance(quality, dict) else None
+    if reducer_version not in {"0.5.2", "0.6.2"} or telemetry_source == "mock":
+        return ()
+    metadata = evaluation.metadata
+    if not isinstance(metadata, dict):
+        return ("environment_admission_missing",)
+    try:
+        measured_window = BundleReader(evaluation.bundle_path).measured_window()
+    except (BundleReadError, OSError, TypeError, ValueError):
+        measured_window = None
+    if measured_window is None:
+        return ("environment_admission_missing",)
+    return current_environment_refusals(
+        metadata,
+        bundle_path=evaluation.bundle_path,
+        measured_window_start_s=measured_window.start_s,
+        measured_window_end_s=measured_window.end_s,
+    )
+
+
 def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
     """Attempt number whose idle telemetry matches the recorded admission.
 
@@ -3016,7 +3044,7 @@ def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
 
     metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
     admission = metadata.get("environment_admission")
-    if environment_admission_refusals(admission):
+    if _current_member_environment_refusals(evaluation) or environment_admission_refusals(admission):
         return None
     if not isinstance(admission, dict):
         return None
@@ -3259,6 +3287,8 @@ def idle_admission_core_verdict(
     neg8_starts: list[tuple[dict[str, float] | None, str | None]] = []
     neg8_ends: list[tuple[dict[str, float] | None, str | None]] = []
     for evaluation in evaluations:
+        current_environment_reasons = _current_member_environment_refusals(evaluation)
+        conditions.update(current_environment_reasons)
         if isinstance(evaluation.metadata, dict):
             adapters = evaluation.metadata.get("adapters")
             telemetry = (
@@ -3267,7 +3297,7 @@ def idle_admission_core_verdict(
             telemetry_name = (
                 telemetry.get("name") if isinstance(telemetry, dict) else None
             )
-            if telemetry_name != "mock":
+            if telemetry_name != "mock" and not current_environment_reasons:
                 conditions.update(
                     post_run_environment_refusals(evaluation.metadata)
                 )
@@ -3783,7 +3813,9 @@ def _member_readiness_reasons(
         adapters = evaluation.metadata.get("adapters")
         telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
         telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
-        if telemetry_name != "mock":
+        current_environment_reasons = _current_member_environment_refusals(evaluation)
+        reasons.update(current_environment_reasons)
+        if telemetry_name != "mock" and not current_environment_reasons:
             reasons.update(post_run_environment_refusals(evaluation.metadata))
     cleanup_flags = {
         "runtime_cleanup_ok",

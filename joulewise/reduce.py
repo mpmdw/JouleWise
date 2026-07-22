@@ -90,6 +90,7 @@ from joulewise.schemas import (
 )
 from joulewise.validation import finite_float
 from joulewise.environment_admission import (
+    current_environment_refusals,
     environment_admission_refusals,
     post_run_environment_refusals,
 )
@@ -681,25 +682,48 @@ def _window_evidence_precheck(
             for (block_id, level_id), intervals in sorted(level_windows.items())
         }
     _apply_environment_claim_barrier(
-        result, metadata, strict=strict_environment
+        result,
+        metadata,
+        strict=strict_environment,
+        bundle_path=reader.path if strict_environment else None,
+        measured_window=measured_window if strict_environment else None,
     )
     return result
 
 
 def _environment_claim_reasons(
-    metadata: dict[str, Any], *, strict: bool = True
+    metadata: dict[str, Any],
+    *,
+    strict: bool = True,
+    bundle_path: Path | None = None,
+    measured_window: Window | None = None,
 ) -> list[str]:
     reasons: list[str] = []
     admission = metadata.get("environment_admission")
     if strict:
         telemetry_source = _telemetry_source(metadata)
-        if admission is not None or telemetry_source != "mock":
+        if (
+            telemetry_source != "mock"
+            and bundle_path is not None
+            and measured_window is not None
+        ):
+            reasons.extend(
+                current_environment_refusals(
+                    metadata,
+                    bundle_path=bundle_path,
+                    measured_window_start_s=measured_window.start_s,
+                    measured_window_end_s=measured_window.end_s,
+                )
+            )
+        elif admission is not None or telemetry_source != "mock":
             reasons.extend(
                 environment_admission_refusals(
                     admission, require_attempt_timing=strict
                 )
             )
-        if telemetry_source != "mock":
+        if telemetry_source != "mock" and (
+            bundle_path is None or measured_window is None
+        ):
             reasons.extend(post_run_environment_refusals(metadata))
     elif (
         isinstance(admission, dict)
@@ -713,11 +737,21 @@ def _environment_claim_reasons(
 
 
 def _apply_environment_claim_barrier(
-    prechecks: dict[str, Any], metadata: dict[str, Any], *, strict: bool = True
+    prechecks: dict[str, Any],
+    metadata: dict[str, Any],
+    *,
+    strict: bool = True,
+    bundle_path: Path | None = None,
+    measured_window: Window | None = None,
 ) -> None:
     """Stamp unwaivable reasons on gross, idle-subtracted, and throughput claims."""
 
-    reasons = _environment_claim_reasons(metadata, strict=strict)
+    reasons = _environment_claim_reasons(
+        metadata,
+        strict=strict,
+        bundle_path=bundle_path,
+        measured_window=measured_window,
+    )
     if not reasons:
         return
     for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
@@ -2063,6 +2097,42 @@ def _corner_composed_anchor_shift_envelope(
     ):
         return None
 
+    # G7(c), current-wire only: evaluate interval association after removing a
+    # shared epoch.  Adding a 2026-scale epoch before a ~50 us anchor delta can
+    # round the delta itself by several microseconds; relative coordinates keep
+    # the same physical overlaps without that avoidable float association.
+    # Frozen 0.5.1/0.6.1 never call this current-wire corner evaluator.
+    origin_s = contributions[0][0][0].t
+    contributions = [
+        (
+            [
+                TracePoint(
+                    t=point.t - origin_s,
+                    power_w=point.power_w,
+                    support_start_s=(
+                        point.support_start_s - origin_s
+                        if point.support_start_s is not None
+                        else None
+                    ),
+                    support_end_s=(
+                        point.support_end_s - origin_s
+                        if point.support_end_s is not None
+                        else None
+                    ),
+                )
+                for point in curve
+            ],
+            [
+                Window(
+                    start_s=window.start_s - origin_s,
+                    end_s=window.end_s - origin_s,
+                )
+                for window in windows
+            ],
+        )
+        for curve, windows in contributions
+    ]
+
     point_j = _shift_energy_j(contributions, 0.0)
     common_only = _anchor_shift_envelope(contributions, bundle_bound_s)
     # The wall-minus-monotonic span is an independent per-edge clock error
@@ -3052,6 +3122,7 @@ def _reduce_v060(
             else "not_estimable"
         )
     window_precheck = _window_evidence_precheck_v060(
+        reader,
         metadata,
         curve,
         window,
@@ -3167,6 +3238,7 @@ def _reduce_v060(
 
 
 def _window_evidence_precheck_v060(
+    reader: BundleReader,
     metadata: dict[str, Any],
     curve: list[TracePoint],
     measured_window: Window,
@@ -3243,7 +3315,11 @@ def _window_evidence_precheck_v060(
                 "windows": windows,
             }
     _apply_environment_claim_barrier(
-        result, metadata, strict=strict_environment
+        result,
+        metadata,
+        strict=strict_environment,
+        bundle_path=reader.path if strict_environment else None,
+        measured_window=measured_window if strict_environment else None,
     )
     return result
 

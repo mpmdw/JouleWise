@@ -1632,6 +1632,35 @@ class D078AnchorEnvelopeTests(unittest.TestCase):
         self.assertEqual(envelope["upper_j"], envelope["point_j"])
         self.assertEqual(envelope["max_abs_delta_j"], 0.0)
 
+    def test_current_corner_integrals_are_epoch_translation_invariant(self) -> None:
+        # G7(c) defect shape: adding a 2026-scale epoch changed a 50 us corner
+        # excursion by several microjoules because (epoch + delta) was rounded
+        # before association with the window endpoint.  Current-wire corner
+        # math must integrate in anchor-relative coordinates.
+        from joulewise.bundle_read import Window
+        from joulewise.reduce import _corner_composed_anchor_shift_envelope
+
+        def envelope(origin_s: float):
+            curve = self.interval_curve(
+                [
+                    (origin_s, origin_s + 0.5, 0.0),
+                    (origin_s + 0.5, origin_s + 1.0, 100.0),
+                    (origin_s + 1.0, origin_s + 1.5, 0.0),
+                ]
+            )
+            return _corner_composed_anchor_shift_envelope(
+                [(curve, [Window(origin_s + 0.5, origin_s + 1.25)])],
+                0.00005,
+                0.0,
+            )
+
+        relative = envelope(0.0)
+        epoch = envelope(1_784_490_850.0)
+        self.assertIsNotNone(relative)
+        self.assertIsNotNone(epoch)
+        for field in ("point_j", "lower_j", "upper_j", "max_abs_delta_j"):
+            self.assertAlmostEqual(epoch[field], relative[field], places=12)
+
     def test_clock_step_span_adds_independent_opposite_edge_shift_bound(self) -> None:
         # F14 audit reproduction: two 100 W supports touch opposite request
         # edges.  A common +/-4 ms translation leaves their summed 0.8 J
@@ -2124,6 +2153,171 @@ class D078R01RegressionTests(unittest.TestCase):
             ),
             (),
         )
+
+    def test_current_admission_is_causally_bound_to_epoch_measured_window(self) -> None:
+        # G2 exact repro: a tiny synthetic-looking admission [1,2] and post
+        # observation at 3 must not admit an epoch-scale measured window.
+        from joulewise.environment_admission import current_environment_refusals
+
+        metadata = {
+            "environment_admission": self._clean_environment_admission(),
+            "environment": {
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "captured_at_s": 3.0,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                }
+            },
+        }
+        metadata["environment_admission"]["attempts"][0]["baseline"] = {
+            "duration_s": 1.0
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "rich_telemetry_idle.jsonl").write_text(
+                json.dumps({"timestamp_s": 1.5, "elapsed_ns": 500_000_000})
+                + "\n",
+                encoding="utf-8",
+            )
+            reasons = current_environment_refusals(
+                metadata,
+                bundle_path=bundle,
+                measured_window_start_s=1_784_490_850.0,
+                measured_window_end_s=1_784_490_851.0,
+            )
+        self.assertIn("environment_admission_missing", reasons)
+
+    def test_current_admission_gap_overlap_and_post_bracket_fail_independently(self) -> None:
+        from joulewise.environment_admission import current_environment_refusals
+
+        measured_start = 1_784_490_850.0
+        measured_end = measured_start + 1.0
+        cases = (
+            (
+                "gap_over_600s",
+                measured_start - 601.5,
+                measured_start - 600.5,
+                measured_end,
+                True,
+            ),
+            (
+                "attempt_overlaps_measurement",
+                measured_start - 0.5,
+                measured_start + 0.1,
+                measured_end,
+                True,
+            ),
+            (
+                "post_observation_precedes_end",
+                measured_start - 1.0,
+                measured_start - 0.5,
+                measured_end - 0.1,
+                True,
+            ),
+            (
+                "coherent_bracket",
+                measured_start - 1.0,
+                measured_start - 0.5,
+                measured_end,
+                False,
+            ),
+        )
+        for label, attempt_start, attempt_end, post_at, expected_missing in cases:
+            admission = self._clean_environment_admission()
+            admission["attempts"][0].update(
+                {
+                    "start_s": attempt_start,
+                    "end_s": attempt_end,
+                    "baseline": {"duration_s": 0.5},
+                }
+            )
+            metadata = {
+                "environment_admission": admission,
+                "environment": {
+                    "post_run_observation": {
+                        "capture_skipped": False,
+                        "captured_at_s": post_at,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
+                    }
+                },
+            }
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp)
+                (bundle / "rich_telemetry_idle.jsonl").write_text(
+                    json.dumps(
+                        {
+                            "timestamp_s": attempt_start + 0.5,
+                            "elapsed_ns": 500_000_000,
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                reasons = current_environment_refusals(
+                    metadata,
+                    bundle_path=bundle,
+                    measured_window_start_s=measured_start,
+                    measured_window_end_s=measured_end,
+                )
+            self.assertEqual(
+                "environment_admission_missing" in reasons,
+                expected_missing,
+            )
+
+    def test_current_attempt_window_must_contain_idle_capture_evidence(self) -> None:
+        # G5 defect shapes are independent: a one-second attempt cannot claim
+        # a two-second baseline, and endpoint-stamped rich-idle evidence must
+        # not sit outside the attempt it is attributed to.
+        from joulewise.environment_admission import current_environment_refusals
+
+        clean_metadata = {
+            "environment_admission": self._clean_environment_admission(),
+            "environment": {
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "captured_at_s": 11.0,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                }
+            },
+        }
+        for label, duration_s, endpoint_s, expected_missing in (
+            ("baseline_longer_than_attempt", 2.0, 8.5, True),
+            ("capture_outside_attempt", 0.5, 7.5, True),
+            ("coherent_endpoint_capture", 0.5, 8.5, False),
+        ):
+            metadata = json.loads(json.dumps(clean_metadata))
+            metadata["environment_admission"]["attempts"][0].update(
+                {
+                    "start_s": 8.0,
+                    "end_s": 9.0,
+                    "baseline": {"duration_s": duration_s},
+                }
+            )
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp)
+                (bundle / "rich_telemetry_idle.jsonl").write_text(
+                    json.dumps(
+                        {"timestamp_s": endpoint_s, "elapsed_ns": 500_000_000}
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                reasons = current_environment_refusals(
+                    metadata,
+                    bundle_path=bundle,
+                    measured_window_start_s=10.0,
+                    measured_window_end_s=10.5,
+                )
+            self.assertEqual(
+                "environment_admission_missing" in reasons,
+                expected_missing,
+            )
 
     def test_post_run_critical_environment_failure_bars_claim(self) -> None:
         metadata = {
@@ -3389,10 +3583,10 @@ class D078R01RegressionTests(unittest.TestCase):
         )
         self.assertAlmostEqual(payload["gross_energy_j"], 7.664158853340149)
         gross = payload["energy_anchor_shift_envelopes"]["/gross_energy_j"]
-        # Lead-verified by independent recomputation: the wall-minus-monotonic
-        # span (8.106e-06 s) widens the corner edges vs the fiducial-only
-        # corners by ~2*span*P_edge; point energies are unchanged.
-        self.assertAlmostEqual(gross["lower_j"], 6.765502658434629)
+        # Independently recomputed with Decimal interval overlaps after one
+        # shared epoch subtraction: point=7.664158853340148765..., lower=
+        # 6.765501506995912139..., upper=7.682118047887086708....
+        self.assertAlmostEqual(gross["lower_j"], 6.7655015069959115)
         self.assertAlmostEqual(gross["upper_j"], 7.682118047887087)
         self.assertFalse(payload["window_evidence_precheck"]["gross_request"]["eligible"])
 

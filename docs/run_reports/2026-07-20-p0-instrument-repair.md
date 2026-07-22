@@ -117,9 +117,22 @@ a full confirmation round confirms zero P0/P1.
   version-coherence validation; structured CLI refusals; whole-window
   verdict re-derivation + NEG-8 duplicate rejection; protocol shape
   authentication; attempt-window timing semantics).
+- **Confirmation round 3** over `0925480`: withheld sign-off with 7 confirmed
+  — and the frontier moved up a layer again: the physics lens explicitly
+  recorded "the instrument CAN take a defensible measurement on a fresh head
+  collection"; all four P0s sit in the CLAIM-AGGREGATION layer (floor
+  statistics used a max-width shortcut instead of exact linear-corner
+  widening over member envelopes; admission evidence was not causally bound
+  to its measured window; the whole-window verifier trusted stored
+  CPU/adapter labels; NEG-8 references were read from stored summaries
+  rather than re-reduced from primary evidence). Fixed in the round-4 wave
+  under the fourth D-078 amendment addendum (exact corner widening; 600 s
+  causal admission gap; primary-evidence re-derivation throughout;
+  frozen-golden checksum pins).
 
-Decision-log record: two 2026-07-21 D-078 amendments (identity bump +
-vocabulary registrations; two-edge envelope + horizon/custody/dwell rulings).
+Decision-log record: four 2026-07-21 D-078 amendments/addenda (identity bump
++ vocabulary registrations; two-edge envelope + horizon/custody/dwell
+rulings; provenance authentication; claim-aggregation rulings).
 
 ## Consequences for the measurement program
 

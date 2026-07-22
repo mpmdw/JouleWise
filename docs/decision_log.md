@@ -4279,6 +4279,28 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
 6. **Admission attempts have timing semantics.** Attempt-ledger rows carry
    strictly increasing, non-overlapping declared windows on the strict path;
    violations refuse `environment_admission_missing`.
+7a. **(Fourth-wave addendum — claim-aggregation rulings, same date.)** After
+   confirmation round 3 over `0925480` (instrument core verified defensible
+   on fresh head collections by every lens; all four P0s in the
+   claim-aggregation layer), the lead ruled: (1) floors/MDEs widen by EXACT
+   linear-corner evaluation over member envelope intervals — residual
+   widening `w_i·(n−1)/n + Σ_{j≠i}w_j/n`, contrast widening
+   `Σ|c_i|·w_i` — never a max-width shortcut, and the dominance refusal
+   fires against the widened quantity; (2) admission is causally bound to
+   its run: the final attempt window ends at-or-before window start within
+   `MAX_ADMISSION_GAP_S = 600` (inclusive), the post-run observation is
+   captured at-or-after window end, and attempt windows must contain their
+   stage's recorded idle-capture interval; (3) the whole-window verifier re-derives CPU admission and
+   adapter continuity from member-bundle primary evidence, refuses nonempty
+   condition lists and undecodable log lines (laundering must require
+   consistent cross-bundle forgery, never a one-line edit — full erasure
+   resistance inside bundle custody is impossible and is recorded as the
+   honest boundary); (4) NEG-8 reference energies are re-reduced from
+   primary evidence at the current mint at claim time (minutes-scale cost
+   accepted), with canonical-workload identity (`canonical_neg8_workload` +
+   `scientific_config_sha256` against the custody-bound config) enforced;
+   (5) the four byte-frozen goldens carry executable sha256 pins.
+
 7. **Sign-off evidence must be head-minted.** Any artifact or re-reduction
    quoted as validation evidence for a head must be regenerated AT that head
    (the pre-233e9e3 rederived calibration artifact lacks the horizon fields

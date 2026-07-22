@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import json
 import math
+from pathlib import Path
 from typing import Any
 
 
 ADMISSION_SCHEMA = "joulewise.environment_admission.v1"
 EVALUATION_SCHEMA = "joulewise.environment_evaluation.v1"
+MAX_ADMISSION_GAP_S = 600.0
 
 
 def environment_observation_failure(observation: Any) -> str | None:
@@ -46,6 +49,143 @@ def post_run_environment_refusals(metadata: Any) -> tuple[str, ...]:
     ):
         return ("environment_admission_failed",)
     return ()
+
+
+def _finite_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _attempt_capture_interval(
+    bundle_path: Path, attempt: int
+) -> tuple[float, float] | None:
+    """Read the producer's endpoint-stamped idle telemetry interval."""
+
+    name = (
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+    )
+    try:
+        lines = (Path(bundle_path) / name).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    starts: list[float] = []
+    ends: list[float] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(row, Mapping):
+            return None
+        timestamp_s = _finite_number(row.get("timestamp_s"))
+        elapsed_ns = row.get("elapsed_ns")
+        if (
+            timestamp_s is None
+            or isinstance(elapsed_ns, bool)
+            or not isinstance(elapsed_ns, int)
+            or elapsed_ns <= 0
+        ):
+            # Current strict evidence must bind the capture to its stage.
+            # Untimestamped legacy diagnostics remain replayable because
+            # frozen consumers never dispatch to this validator.
+            return None
+        elapsed_s = elapsed_ns / 1_000_000_000.0
+        # Powermetrics rich telemetry stamps each averaging interval at its
+        # endpoint; this matches ``samples_from_records`` and the adapter's
+        # committed ``[endpoint-elapsed, endpoint)`` association rule.
+        starts.append(timestamp_s - elapsed_s)
+        ends.append(timestamp_s)
+    if not starts:
+        return None
+    return min(starts), max(ends)
+
+
+def current_environment_refusals(
+    metadata: Any,
+    *,
+    bundle_path: Path,
+    measured_window_start_s: Any,
+    measured_window_end_s: Any,
+) -> tuple[str, ...]:
+    """Current-mint causal and cross-field environment evidence validator.
+
+    Callers must dispatch here only for strict 0.5.2/0.6.2 claim paths.  The
+    frozen replay arms intentionally retain their committed validator surface.
+    """
+
+    admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
+    reasons = set(
+        environment_admission_refusals(admission, require_attempt_timing=True)
+    )
+    start_s = _finite_number(measured_window_start_s)
+    end_s = _finite_number(measured_window_end_s)
+    if start_s is None or end_s is None or start_s >= end_s:
+        reasons.add("environment_admission_missing")
+        return tuple(sorted(reasons))
+
+    attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+    if not isinstance(attempts, list) or not attempts:
+        reasons.add("environment_admission_missing")
+    else:
+        final_end_s = _finite_number(
+            attempts[-1].get("end_s") if isinstance(attempts[-1], Mapping) else None
+        )
+        if (
+            final_end_s is None
+            or final_end_s > start_s
+            or start_s - final_end_s > MAX_ADMISSION_GAP_S
+        ):
+            reasons.add("environment_admission_missing")
+
+        for expected_attempt, row in enumerate(attempts, start=1):
+            if not isinstance(row, Mapping):
+                reasons.add("environment_admission_missing")
+                continue
+            attempt_start_s = _finite_number(row.get("start_s"))
+            attempt_end_s = _finite_number(row.get("end_s"))
+            baseline = row.get("baseline")
+            baseline_duration_s = (
+                _finite_number(baseline.get("duration_s"))
+                if isinstance(baseline, Mapping)
+                else None
+            )
+            if (
+                attempt_start_s is None
+                or attempt_end_s is None
+                or baseline_duration_s is None
+                or baseline_duration_s <= 0.0
+                or baseline_duration_s > attempt_end_s - attempt_start_s + 1e-9
+            ):
+                reasons.add("environment_admission_missing")
+                continue
+            capture = _attempt_capture_interval(bundle_path, expected_attempt)
+            if capture is None or (
+                capture[0] < attempt_start_s - 1e-9
+                or capture[1] > attempt_end_s + 1e-9
+            ):
+                reasons.add("environment_admission_missing")
+
+    environment = metadata.get("environment") if isinstance(metadata, Mapping) else None
+    observation = (
+        environment.get("post_run_observation")
+        if isinstance(environment, Mapping)
+        else None
+    )
+    captured_at_s = (
+        _finite_number(observation.get("captured_at_s"))
+        if isinstance(observation, Mapping)
+        else None
+    )
+    if captured_at_s is None or captured_at_s < end_s:
+        reasons.add("environment_admission_missing")
+    reasons.update(post_run_environment_refusals(metadata))
+    return tuple(sorted(reasons))
 
 
 def environment_admission_refusals(

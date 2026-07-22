@@ -440,6 +440,206 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         summary["measurement_quality"]["telemetry_source"] = "powermetrics"
         return summary
 
+    @staticmethod
+    def _install_current_strict_bundle(
+        root: Path, bundle_id: str, value: float = 40.0
+    ) -> tuple[dict, str]:
+        """Install the minimal primary surfaces used by current claim tests."""
+
+        from joulewise.idle_admission import (
+            IdleAdmissionExtension,
+            evaluate_cpu_idle_admission,
+        )
+        from joulewise.schemas import BenchmarkConfig
+
+        bundle = root / bundle_id
+        summary = make_summary(value)
+        summary["measurement_quality"]["telemetry_source"] = "powermetrics"
+        write_bundle(root, bundle_id, summary)
+
+        config = json.loads(
+            (Path(__file__).parent / "fixtures" / "d078_r01" / "config.json").read_text()
+        )
+        config["run_id"] = bundle_id
+        config["workload_profile"].update(
+            {
+                "name": "df_rq_mid",
+                "prompt_tokens": 1024,
+                "output_tokens": 256,
+                "dataset_ref": None,
+            }
+        )
+        config_raw = (
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        (bundle / "config.json").write_bytes(config_raw)
+        normalized = BenchmarkConfig.from_mapping(config).to_dict()
+        scientific = dict(normalized)
+        scientific.pop("run_id", None)
+        scientific_sha256 = hashlib.sha256(
+            json.dumps(scientific, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+        policy = json.loads(REGISTERED_POLICY_PATH.read_text())
+        extension = IdleAdmissionExtension.from_mapping(
+            policy["idle_admission_extension"], profile=policy["profile"]
+        )
+        records = [
+            {
+                "timestamp_s": 8.01 + index * 0.01,
+                "elapsed_ns": 10_000_000,
+                "clusters": [
+                    {"cpus": [{"idle_ratio": 1.0, "down_ratio": 0.0}]}
+                ],
+                "processor_combined_power_w": 0.1,
+            }
+            for index in range(30)
+        ]
+        cpu = evaluate_cpu_idle_admission(
+            records, extension.cpu_criteria, gpu_admitted=True
+        )
+        (bundle / "rich_telemetry_idle.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records),
+            encoding="utf-8",
+        )
+        (bundle / "events.jsonl").write_text(
+            "".join(
+                json.dumps(
+                    {
+                        "event_type": event_type,
+                        "phase": "measured_run",
+                        "timestamp_s": timestamp_s,
+                        "message": "",
+                        "metadata": {},
+                    }
+                )
+                + "\n"
+                for event_type, timestamp_s in (
+                    ("sampling_started", 10.0),
+                    ("sampling_stopped", 11.0),
+                )
+            ),
+            encoding="utf-8",
+        )
+        power = {"adapter_watts": 140.0, "adapter_description": "140W USB-C"}
+        guards = [
+            {
+                "phase": phase,
+                "capture_skipped": False,
+                "display_power_state": "all_asleep",
+                "screensaver_engaged": False,
+                "errors": {},
+                "power": dict(power),
+            }
+            for phase in ("before_attempt_1", "after_attempt_1")
+        ]
+        metadata = {
+            "config_sha256": hashlib.sha256(config_raw).hexdigest(),
+            "environment_admission": {
+                "schema_version": "joulewise.environment_admission.v1",
+                "critical_environment_passed": True,
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "schema_version": "joulewise.environment_evaluation.v1",
+                    "eligible": True,
+                    "snapshot_sha256": "ab" * 32,
+                },
+                "decision": "admitted",
+                "claim_reason": None,
+                "attempts": [
+                    {
+                        "attempt": 1,
+                        "start_s": 8.0,
+                        "end_s": 9.0,
+                        "baseline": {"duration_s": 0.3},
+                        "admitted": True,
+                        "cpu_admission_enforced": True,
+                        "cpu_admission": cpu,
+                    }
+                ],
+                "guard_observations": guards,
+            },
+            "environment": {
+                "power": dict(power),
+                "power_source": "AC Power",
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "captured_at_s": 11.0,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                    "power": dict(power),
+                    "power_source": "AC Power",
+                },
+            },
+        }
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return cpu, scientific_sha256
+
+    def _current_core_fixture(
+        self, root: Path
+    ) -> tuple[list[str], dict, dict]:
+        from joulewise import whole_window as whole_module
+        from joulewise.idle_admission import IdleAdmissionExtension
+
+        bundle_ids = ["current-neg8-start", "current-neg8-end"]
+        install_synthetic_recovered_manifest(root, bundle_ids)
+        cpu_by_id: dict[str, dict] = {}
+        scientific_by_id: dict[str, str] = {}
+        for bundle_id in bundle_ids:
+            cpu, scientific = self._install_current_strict_bundle(root, bundle_id)
+            cpu_by_id[bundle_id] = cpu
+            scientific_by_id[bundle_id] = scientific
+
+        manifest_path = root / "campaign_manifests" / "synthetic-session.json"
+        manifest = json.loads(manifest_path.read_text())
+        for member in manifest["members"]:
+            bundle_id = member["bundle_ids"][0]
+            if member.get("role") is not None:
+                member["canonical_neg8_workload"] = True
+                member["scientific_config_sha256"] = scientific_by_id[bundle_id]
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        policy = json.loads(REGISTERED_POLICY_PATH.read_text())
+        extension = IdleAdmissionExtension.from_mapping(
+            policy["idle_admission_extension"], profile=policy["profile"]
+        )
+        observations = []
+        for bundle_id in bundle_ids:
+            metadata = json.loads((root / bundle_id / "metadata.json").read_text())
+            observations.extend(
+                whole_module._adapter_observations(bundle_id, metadata)
+            )
+        continuity = whole_module.evaluate_adapter_wattage_continuity(
+            observations, extension.adapter_wattage
+        )
+        core = {
+            "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+            "policy_sha256": TEST_POLICY_SHA256,
+            "members": [
+                {
+                    "bundle_id": bundle_id,
+                    "cpu_admission": cpu_by_id[bundle_id],
+                    "adapter_observation_count": 4,
+                }
+                for bundle_id in bundle_ids
+            ],
+            "adapter_wattage_continuity": continuity,
+            "neg8_bracket": {
+                "schema_version": NEG8_BRACKET_SCHEMA,
+                "decision": "passed",
+                "policy": dict(REGISTERED_BRACKET_POLICY),
+            },
+            "conditions": [],
+        }
+        return bundle_ids, manifest, core
+
     def test_floor_cpu_ledger_rejects_duplicates_reordering_mismatch_and_absence(self) -> None:
         # F8 floor-side reproduction of the same four ledgers exercised by the
         # reducer; no consumer may bless a final row the other rejects.
@@ -447,6 +647,9 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
 
         clean_row = {
             "attempt": 1,
+            "start_s": 8.0,
+            "end_s": 9.0,
+            "baseline": {"duration_s": 0.5},
             "admitted": True,
             "cpu_admission_enforced": True,
             "cpu_admission": {"admitted": True},
@@ -491,6 +694,30 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp)
+            (bundle / "events.jsonl").write_text(
+                "".join(
+                    json.dumps(
+                        {
+                            "event_type": event_type,
+                            "phase": "measured_run",
+                            "timestamp_s": timestamp_s,
+                            "message": "",
+                            "metadata": {},
+                        }
+                    )
+                    + "\n"
+                    for event_type, timestamp_s in (
+                        ("sampling_started", 10.0),
+                        ("sampling_stopped", 11.0),
+                    )
+                ),
+                encoding="utf-8",
+            )
+            (bundle / "rich_telemetry_idle.jsonl").write_text(
+                json.dumps({"timestamp_s": 8.5, "elapsed_ns": 500_000_000})
+                + "\n",
+                encoding="utf-8",
+            )
             for attempts, decision in cases:
                 with self.subTest(attempts=attempts, decision=decision):
                     (bundle / "metadata.json").write_text(
@@ -513,7 +740,16 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             (bundle / "metadata.json").write_text(
                 json.dumps(
                     {
-                        "environment_admission": clean_admission
+                        "environment_admission": clean_admission,
+                        "environment": {
+                            "post_run_observation": {
+                                "capture_skipped": False,
+                                "captured_at_s": 11.0,
+                                "display_power_state": "all_asleep",
+                                "screensaver_engaged": False,
+                                "errors": {},
+                            }
+                        },
                     }
                 )
                 + "\n",
@@ -629,7 +865,10 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             write_bundle(
                 root,
                 bundle_id,
-                make_summary(40.0 + index * 0.04, anchor_bound=0.004),
+                make_summary(
+                    40.0 + index * 0.04,
+                    anchor_bound=0.004,
+                ),
             )
         if whole_window_row is not None:
             (root / "campaign_log.jsonl").write_text(
@@ -776,6 +1015,228 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             (root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
             reasons = whole_window_refusal_reasons(root, {"A", "B"})
         self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_current_whole_window_rederives_cpu_and_adapter_labels(self) -> None:
+        # G3 defect shape: one-line edits to stored labels must disagree with
+        # fresh member-local evidence, even though the rest of the row stays
+        # byte-coherent.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, manifest, clean_core = self._current_core_fixture(root)
+            clean = whole_module._current_core_rederivation_reasons(
+                core=clean_core,
+                bundle_ids=bundle_ids,
+                manifests=[manifest],
+                runs_root=root,
+                policy_sha256=TEST_POLICY_SHA256,
+            )
+            self.assertEqual(clean, set())
+
+            forged_cpu = json.loads(json.dumps(clean_core))
+            forged_cpu["members"][0]["cpu_admission"]["decision"] = "failed"
+            forged_cpu["members"][0]["cpu_admission"]["admitted"] = False
+            cpu_reasons = whole_module._current_core_rederivation_reasons(
+                core=forged_cpu,
+                bundle_ids=bundle_ids,
+                manifests=[manifest],
+                runs_root=root,
+                policy_sha256=TEST_POLICY_SHA256,
+            )
+            self.assertIn("cpu_admission_core_failed", cpu_reasons)
+
+            forged_adapter = json.loads(json.dumps(clean_core))
+            forged_adapter["adapter_wattage_continuity"]["decision"] = "failed"
+            adapter_reasons = whole_module._current_core_rederivation_reasons(
+                core=forged_adapter,
+                bundle_ids=bundle_ids,
+                manifests=[manifest],
+                runs_root=root,
+                policy_sha256=TEST_POLICY_SHA256,
+            )
+            self.assertIn("adapter_continuity_failed", adapter_reasons)
+
+    def test_current_whole_window_rejects_nonempty_core_conditions(self) -> None:
+        # G3(c): a nominally passed row cannot carry a buried contamination
+        # condition and still license the join.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, manifest, core = self._current_core_fixture(root)
+            core["conditions"] = ["environment_admission_failed"]
+            reasons = whole_module._current_core_rederivation_reasons(
+                core=core,
+                bundle_ids=bundle_ids,
+                manifests=[manifest],
+                runs_root=root,
+                policy_sha256=TEST_POLICY_SHA256,
+            )
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_current_neg8_primary_evidence_must_match_stored_summary(self) -> None:
+        # G4 defect shape: a forged stored NEG-8 summary used to be accepted
+        # without re-reducing the member's primary bytes.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._install_current_strict_bundle(root, "reference")
+            bundle = root / "reference"
+            stored = json.loads((bundle / "summary_metrics.json").read_text())
+
+            mismatched = json.loads(json.dumps(stored))
+            mismatched["gross_energy_j"] += 0.5
+            for key in ("point_j", "lower_j", "upper_j"):
+                mismatched["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+                    key
+                ] += 0.5
+            reduced = mock.Mock()
+            reduced.to_dict.return_value = mismatched
+            with mock.patch("joulewise.reduce.reduce_bundle", return_value=reduced):
+                evidence, problem = whole_module._gross_energy_evidence(bundle)
+            self.assertIsNone(evidence)
+            self.assertEqual(problem, "conflict")
+
+            ineligible = json.loads(json.dumps(stored))
+            ineligible["window_evidence_precheck"]["gross_request"] = {
+                "eligible": False,
+                "reasons": ["clock_anchor_unresolved"],
+            }
+            reduced.to_dict.return_value = ineligible
+            with mock.patch("joulewise.reduce.reduce_bundle", return_value=reduced):
+                evidence, problem = whole_module._gross_energy_evidence(bundle)
+            self.assertIsNone(evidence)
+            self.assertEqual(problem, "provenance")
+
+    def test_current_neg8_summary_disagreement_maps_to_whole_window_conflict(self) -> None:
+        # G4 requires the public join vocabulary to distinguish disagreement
+        # from merely missing provenance.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, _manifest, core = self._current_core_fixture(root)
+            row = self._whole_window_row(root, bundle_ids)
+            row["idle_admission_core"] = core
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(row) + "\n", encoding="utf-8"
+            )
+            mismatched = make_summary(40.5)
+            mismatched["measurement_quality"]["telemetry_source"] = "powermetrics"
+            reduced = mock.Mock()
+            reduced.to_dict.return_value = mismatched
+            with mock.patch("joulewise.reduce.reduce_bundle", return_value=reduced):
+                reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+        self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+
+    def test_current_neg8_manifest_identity_is_rederived(self) -> None:
+        # G4 P1: a role label alone cannot turn a non-canonical or differently
+        # configured member into a NEG-8 reference.
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle_ids, manifest, _core = self._current_core_fixture(root)
+
+            def stored_evidence(path: Path):
+                summary = json.loads((path / "summary_metrics.json").read_text())
+                return whole_module._gross_fields(summary), None
+
+            with mock.patch.object(
+                whole_module, "_gross_energy_evidence", side_effect=stored_evidence
+            ):
+                decision, problem = whole_module._derived_neg8_decision(
+                    [manifest], root, REGISTERED_BRACKET_POLICY
+                )
+            self.assertEqual((decision, problem), ("passed", None))
+
+            for field, value in (
+                ("canonical_neg8_workload", False),
+                ("scientific_config_sha256", "0" * 64),
+            ):
+                forged = json.loads(json.dumps(manifest))
+                forged["members"][0][field] = value
+                with self.subTest(field=field), mock.patch.object(
+                    whole_module,
+                    "_gross_energy_evidence",
+                    side_effect=stored_evidence,
+                ):
+                    decision, problem = whole_module._derived_neg8_decision(
+                        [forged], root, REGISTERED_BRACKET_POLICY
+                    )
+                self.assertIsNone(decision)
+                self.assertEqual(problem, "provenance")
+
+    def test_current_campaign_log_malformed_row_refuses_join(self) -> None:
+        # G3(d): corrupting one history line must conflict instead of cheaply
+        # erasing it while a later well-formed verdict remains.
+        for malformed in ("{not-json", "[]"):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bundle_ids = ["A", "B"]
+                install_synthetic_recovered_manifest(root, bundle_ids)
+                for bundle_id in bundle_ids:
+                    write_bundle(root, bundle_id, self._powermetrics_summary(40.0))
+                row = self._whole_window_row(root, bundle_ids)
+                log = root / "campaign_log.jsonl"
+                log.write_text(json.dumps(row) + "\n", encoding="utf-8")
+                baseline = whole_window_refusal_reasons(root, set(bundle_ids))
+                self.assertNotEqual(baseline, ("whole_window_verdict_conflict",))
+                log.write_text(
+                    json.dumps(row) + "\n" + malformed + "\n", encoding="utf-8"
+                )
+                reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+            self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+
+    def test_manifest_duplicate_invoked_occurrence_refuses(self) -> None:
+        # G7(a): duplicate a non-reference invoked occurrence so no unrelated
+        # NEG-8 ambiguity can mask the membership-count defect.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids = ["A", "middle", "B"]
+            install_synthetic_recovered_manifest(root, bundle_ids)
+            manifest_path = root / "campaign_manifests" / "synthetic-session.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["members"].append(
+                json.loads(json.dumps(manifest["members"][1]))
+            )
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            for bundle_id in bundle_ids:
+                write_bundle(root, bundle_id, self._powermetrics_summary(40.0))
+            row = self._whole_window_row(root, bundle_ids)
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(row) + "\n", encoding="utf-8"
+            )
+            reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_frozen_replay_manifest_duplicate_retains_committed_semantics(self) -> None:
+        # The G7(a) occurrence gate is deliberately absent from frozen 0.5.1
+        # replay; this pins the task's no-replay-drift constraint.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids = ["A", "middle", "B"]
+            install_synthetic_recovered_manifest(root, bundle_ids)
+            manifest_path = root / "campaign_manifests" / "synthetic-session.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["members"].append(
+                json.loads(json.dumps(manifest["members"][1]))
+            )
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            for bundle_id in bundle_ids:
+                write_bundle(root, bundle_id, make_summary(40.0, reducer="0.5.1"))
+            row = self._whole_window_row(root, bundle_ids)
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(row) + "\n", encoding="utf-8"
+            )
+            reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+        self.assertEqual(reasons, ())
 
 
 class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
@@ -1075,7 +1536,11 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
                 runs_root=runs_root,
                 cooldowns=campaign_cooldown_evidence(runs_root),
             )
-        self.assertTrue(report.extractable)
+        self.assertFalse(report.extractable)
+        self.assertIn(
+            "admissible_set_uncertainty_dominates_point_floor",
+            report.refusal_reasons,
+        )
         self.assertEqual(report.excluded_slots, ("b01",))
         self.assertEqual(report.n_planned, 3)
         self.assertEqual(report.n_admitted, 2)
@@ -1105,6 +1570,40 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         expected_delta = (32.2 + 32.3 - 32.4 - 32.5) / 2.0
         for delta in report.floor.deviations_j:
             self.assertAlmostEqual(delta, expected_delta, places=9)
+
+    def test_abba_member_corners_widen_block_delta_exactly(self) -> None:
+        # G1 ABBA defect shape: each point block has delta=2 J.  Four
+        # independent +/-0.5 J member intervals contribute
+        # (0.5+0.5+0.5+0.5)/2 = 1 J, so the attainable magnitude is 3 J.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle_ids: list[str] = []
+            blocks = []
+            values = {"A1": 40.0, "B1": 42.0, "B2": 42.0, "A2": 40.0}
+            for block_index in range(5):
+                members = {}
+                for position, value in values.items():
+                    bundle_id = f"g1-b{block_index}-{position.lower()}"
+                    bundle_ids.append(bundle_id)
+                    members[position] = bundle_id
+                    write_bundle(
+                        runs_root,
+                        bundle_id,
+                        make_summary(value, anchor_bound=0.5),
+                    )
+                blocks.append({"block_id": f"b{block_index}", "members": members})
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            report = extract_comparative_cell(
+                cell_id="G1-ABBA-CORNERS",
+                metric="gross_energy_j",
+                window_class="request",
+                blocks=blocks,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertTrue(report.extractable)
+        assert report.floor is not None
+        self.assertGreaterEqual(report.floor.unguarded_floor_j, 3.0 - 1e-12)
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
@@ -1400,6 +1899,36 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         )
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 20.0)
+
+    def test_alternating_ten_member_corner_residual_refuses_extraction(self) -> None:
+        # G1 exact review counterexample: points alternate 99.5/100.5 J and
+        # every member admits +/-1 J.  A residual corner reaches 2.3 J, not
+        # the old max-width shortcut's 1 J.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle_ids = [f"g1-r{index:02d}" for index in range(10)]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for index, bundle_id in enumerate(bundle_ids):
+                write_bundle(
+                    runs_root,
+                    bundle_id,
+                    make_summary(99.5 if index % 2 == 0 else 100.5, anchor_bound=1.0),
+                )
+            report = extract_absolute_cell(
+                cell_id="G1-EXACT-CORNERS",
+                metric="gross_energy_j",
+                window_class="request",
+                members=[{"slot": b, "bundle_id": b} for b in bundle_ids],
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertFalse(report.extractable)
+        self.assertIn(
+            "admissible_set_uncertainty_dominates_point_floor",
+            report.refusal_reasons,
+        )
+        assert report.floor is not None
+        self.assertGreaterEqual(report.floor.unguarded_floor_j, 2.3 - 1e-12)
 
 
 class CapHitVerificationGateTests(_PermissiveStrictValidatorMixin, unittest.TestCase):

@@ -27,6 +27,12 @@ AXI_FIXTURE = ROOT / "tests" / "fixtures" / "axi_valid_burst"
 LEGACY_FIXTURE = ROOT / "tests" / "fixtures" / "legacy_reducer_current_behavior"
 GOLDENS = ROOT / "tests" / "goldens"
 BASE_HEAD = "9ee87102c04530e874909d077d842a4573f9f065"
+BYTE_FROZEN_GOLDEN_SHA256 = {
+    "legacy_reducer_050.patch.json": "86eddab41ca9dc78e6d378456e0567fc126282a030f103eee3686c4ec8cfa589",
+    "d078_r01_reducer_051.json": "22ebcf01886138f87881aa0e6be067e5abac9edfe5a930e7293776bd57f5af81",
+    "axi_summary_v060.json": "ba21a0c32c7ec4ae141345e6ed4753b135178aba82e7972089d002d6f3ae0f02",
+    "axi_summary_v061.json": "2931b49140a36aa1e12b0b5e5f4b33627aa8c2901275b81a3bc1fceff13a3c96",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -105,6 +111,16 @@ class AxiBurstReduceTests(unittest.TestCase):
                         absent_tolerance=tolerance,
                     ),
                     [],
+                )
+
+    def test_byte_frozen_reducer_goldens_match_executable_sha256_registry(self) -> None:
+        # G7(b): semantic replay tests can drift together with edited expected
+        # bytes.  Pin the four explicitly byte-frozen reducer golden files.
+        for name, expected in BYTE_FROZEN_GOLDEN_SHA256.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    hashlib.sha256((GOLDENS / name).read_bytes()).hexdigest(),
+                    expected,
                 )
 
     def test_legacy_golden_provenance_replays_pristine_base_head(self) -> None:

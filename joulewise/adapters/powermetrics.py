@@ -220,7 +220,14 @@ class PowermetricsTelemetryAdapter:
             artifact=f"raw/{artifact_name}",
             capture=f"idle_baseline_attempt_{attempt}",
         )
-        rich_records = decode_rich_telemetry(data)
+        # Bind the rich CPU-admission rows to the same wall-clock capture
+        # anchor as the baseline records.  Native plist dates are censored to
+        # whole seconds and can predate the controller's attempt window; using
+        # them here would contradict the stage ledger even when the capture
+        # itself occurred wholly inside the attempt.
+        rich_records = decode_rich_telemetry(
+            data, timestamp_anchor_s=capture_start_s
+        )
         if context is not None:
             self._idle_admission_records_by_run.setdefault(context.run_id, {})[
                 attempt

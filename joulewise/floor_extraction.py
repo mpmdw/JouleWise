@@ -74,7 +74,11 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.whole_window import whole_window_refusal_reasons
-from joulewise.environment_admission import environment_admission_refusals
+from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.environment_admission import (
+    current_environment_refusals,
+    environment_admission_refusals,
+)
 
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
@@ -340,7 +344,24 @@ def _cpu_admission_bundle_reasons(
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return ("environment_admission_missing",)
     admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
-    return environment_admission_refusals(admission)
+    reasons = set(environment_admission_refusals(admission))
+    if _summary_reducer_version(summary) in {"0.5.2", "0.6.2"}:
+        try:
+            measured_window = BundleReader(path).measured_window()
+        except (BundleReadError, OSError, TypeError, ValueError):
+            measured_window = None
+        if measured_window is None:
+            reasons.add("environment_admission_missing")
+        else:
+            reasons.update(
+                current_environment_refusals(
+                    metadata,
+                    bundle_path=path,
+                    measured_window_start_s=measured_window.start_s,
+                    measured_window_end_s=measured_window.end_s,
+                )
+            )
+    return tuple(sorted(reasons))
 
 
 def _evaluate_member(
@@ -662,7 +683,15 @@ def extract_absolute_cell(
                 if point_floor.guarded_floor_j is not None
                 else point_floor.unguarded_floor_j
             )
-            if anchor_max is not None and anchor_max > point_gate:
+            n = len(values)
+            width_sum = math.fsum(widths)  # type: ignore[arg-type]
+            widened_residual_max = max(
+                abs(value - point_floor.mean_j)
+                + width * (n - 1) / n
+                + (width_sum - width) / n
+                for value, width in zip(values, widths, strict=True)  # type: ignore[arg-type]
+            )
+            if widened_residual_max > point_gate:
                 refusals.append(
                     "admissible_set_uncertainty_dominates_point_floor"
                 )
@@ -808,7 +837,13 @@ def extract_comparative_cell(
                 if point_floor.guarded_floor_j is not None
                 else point_floor.unguarded_floor_j
             )
-            if max(block_half_widths) > point_gate:
+            widened_delta_max = max(
+                abs(delta) + width
+                for delta, width in zip(
+                    block_deltas, block_half_widths, strict=True
+                )
+            )
+            if widened_delta_max > point_gate:
                 refusals.append(
                     "admissible_set_uncertainty_dominates_point_floor"
                 )

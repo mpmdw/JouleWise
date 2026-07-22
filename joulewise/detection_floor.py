@@ -293,17 +293,30 @@ def _floor_estimate(kind: str, deviations: Sequence[float], mean: float, predict
     )
 
 
-def _admissible_half_width_max(
+def _admissible_widths(
     widths_j: Sequence[float] | None, *, expected_n: int
-) -> float:
+) -> list[float]:
     if widths_j is None:
-        return 0.0
+        return [0.0] * expected_n
     widths = _clean_values(widths_j, "admissible-set half-widths")
     if len(widths) != expected_n:
         raise ValueError("admissible-set half-width count must match point estimates")
     if any(value < 0.0 for value in widths):
         raise ValueError("admissible-set half-widths must be >= 0")
-    return max(widths)
+    return widths
+
+
+def _linear_corner_widened_max(
+    point_values_j: Sequence[float], linear_half_widths_j: Sequence[float]
+) -> float:
+    """Exact maximum magnitude over independent linear member intervals."""
+
+    if len(point_values_j) != len(linear_half_widths_j):
+        raise ValueError("linear half-width count must match point values")
+    return max(
+        abs(point) + width
+        for point, width in zip(point_values_j, linear_half_widths_j, strict=True)
+    )
 
 
 def _apply_admissible_set_guard(
@@ -313,9 +326,10 @@ def _apply_admissible_set_guard(
 
     The D-054 scatter calculation remains visible in its component fields, but
     the operative unguarded/guarded floors can never be smaller than the
-    largest member-level admissible-set half-width.  Otherwise a near-identical
-    set of point estimates could claim a millijoule floor while each member is
-    scientifically compatible with tens of joules of anchor displacement.
+    largest attainable magnitude of the linear residual/contrast. Otherwise a
+    near-identical set of point estimates could claim a millijoule floor while
+    each member is scientifically compatible with tens of joules of anchor
+    displacement.
     """
 
     if uncertainty_floor_j <= estimate.unguarded_floor_j:
@@ -351,11 +365,21 @@ def absolute_false_effect_floor(
     mean = sum(values) / len(values)
     residuals = [v - mean for v in values]
     estimate = _floor_estimate("absolute", residuals, mean, 0.0)
+    widths = _admissible_widths(
+        admissible_half_widths_j, expected_n=len(values)
+    )
+    n = len(values)
+    total_width = math.fsum(widths)
+    # For residual r_i = x_i - mean(x), the independent interval coefficients
+    # are (n-1)/n on member i and -1/n on every other member.  Linear extrema
+    # over a box occur exactly at corners, so this is an equality, not a bound.
+    residual_widths = [
+        width * (n - 1) / n + (total_width - width) / n
+        for width in widths
+    ]
     return _apply_admissible_set_guard(
         estimate,
-        _admissible_half_width_max(
-            admissible_half_widths_j, expected_n=len(values)
-        ),
+        _linear_corner_widened_max(residuals, residual_widths),
     )
 
 
@@ -372,11 +396,12 @@ def comparative_false_effect_floor(
     deltas = _clean_values(block_deltas_j, "block deltas")
     mean = sum(deltas) / len(deltas)
     estimate = _floor_estimate("comparative", deltas, mean, abs(mean))
+    widths = _admissible_widths(
+        admissible_half_widths_j, expected_n=len(deltas)
+    )
     return _apply_admissible_set_guard(
         estimate,
-        _admissible_half_width_max(
-            admissible_half_widths_j, expected_n=len(deltas)
-        ),
+        _linear_corner_widened_max(deltas, widths),
     )
 
 
