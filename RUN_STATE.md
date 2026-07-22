@@ -1,35 +1,25 @@
 # JouleWise Run State
 
-Last updated: 2026-07-21 (Ed checkpoint stop #2). **D-078 SOUNDNESS GATE
-remains ACTIVE; Phase 0 instrument repair: convergence rounds 2-3 COMPLETE
-and committed/pushed @ `5093355` (suite 2003 passed/0 fail), but the first
-confirmation round over that head correctly WITHHELD sign-off — 8 confirmed
-findings incl. one P0 (two-edge calibration collapsed into a 1-D common-shift
-envelope; independent start/stop edge lags add up to 2·P·B_fiducial that the
-envelope omitted — NEG-8 attainable 38.831 J vs licensed upper 38.574 J).**
-The Sol xhigh confirmation-fix round with binding lead rulings
-(corner-composed two-edge envelope; in-place revision of the UNRELEASED
-0.5.2/0.6.2 mints; negative-power + 24 h calibration-staleness refusals;
-environment-admission full-object fail-closed incl. post-run observation;
-claim-time custody verification; universal 1.0 s dwell floor) COMPLETED and
-was collected before this stop closed: all 9 ruling groups implemented with
-named regressions, Sol in-session suite tail 2020 passed / 18 skipped /
-0 failures, frozen bytes verified untouched, both P0 corner-envelope
-regressions independently re-run green. The it-p0 worktree is DIRTY and
-READY FOR LEAD REVIEW (owed: full 26-file diff read, PENDING-set retirement,
-lead suite gate, MANDATORY delta re-audit) — do NOT commit before those. The
-second 2026-07-21 D-078 amendment (all rulings) is already written in the
-worktree decision log. Live evidence this arc: pulse calibration 40/40 valid,
-B_fiducial 27.373 ms under protocol_v2 (rederived from sealed 07-20 raw
-bytes); probe cells re-reduced at 0.5.2 — shorts 7.278/7.750/7.688 J
-(cadence-ineligible by design), mid gross 38.060 J honestly refused on tail
-support, NEG-8 admitted. RESUME: full pointers file in session-08f326a8
-scratchpad SESSION_RESUME_POINTERS.md (rejoin Sol thread -> lead diff review
--> delta re-audit -> commit -> confirmation round 2 -> PR -> bookkeeping;
-run report 2026-07-20-p0-instrument-repair.md is still the stale
-pre-live-validation draft). NOTE: the new 24 h calibration validity horizon
-means Window-A re-collection needs a FRESH [QUIET-MAC] pulse calibration
-(ping Ed first).
+Last updated: 2026-07-22 (Ed pause). **D-078 SOUNDNESS GATE ACTIVE; Phase 0
+instrument repair in its ED-RATIFIED FINAL CYCLE.** Branch
+`impl/p0-instrument-repair` pushed through `e995c82` — seven convergence/
+confirmation fix waves complete (trajectory 27→8→9→7→3→6→3 confirmed
+findings/round; last two delta re-audits fully clean; suite 2076 passed/0
+fail). The loop is CAPPED: (1) in-flight Sol xhigh fix wave (dual-clock
+calibration authentication, v3 schedule authentication, widened-floor
+artifact handoff) lands with delta re-audit + suite; (2) confirmation
+round 9 runs as the FINAL round — leftovers become lead-adjudicated
+REGISTERED LIMITATIONS per the recorded doctrine; (3) sign-off, PR,
+bookkeeping. Instrument state: B_fiducial 27.373 ms (nonparametric 95/95
+under registered assumptions T1-T3), composed per-edge bound
+B_bundle+B_fiducial+span, corner-exact two-edge envelopes, exact
+corner-maximized D-054 floors, protocol v3 (59 pulses) + mandatory pre/post
+calibration bracketing for claim-bearing collections. RESUME: pointers file
+in session-6e0fe1ee scratchpad SESSION_RESUME_POINTERS.md (Sol session
+recovery via ~/.codex/sessions rollout task_complete; worktree decision_log
+carries an authorized uncommitted lead addendum). Window-A re-collection
+needs fresh [QUIET-MAC] v3 calibration BRACKETING the window — ping Ed
+first.
 
 Prior checkpoint (2026-07-20): branch @ `ca6861b`:
 anchor estimator v2 (censored-constraint interval), continuous
