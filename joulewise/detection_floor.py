@@ -238,6 +238,9 @@ class FloorEstimate:
     unguarded_floor_j: float
     guard_factor: Optional[float]  # None when n < GUARD_MINIMUM_N (smoke only)
     guarded_floor_j: Optional[float]
+    admissible_half_widths_j: tuple[float, ...] = ()
+    corner_widened_unguarded_floor_j: Optional[float] = None
+    corner_widened_guarded_floor_j: Optional[float] = None
 
 
 def small_sample_guard_factor(n: int) -> float:
@@ -322,7 +325,9 @@ def _linear_corner_widened_max(
 
 
 def _apply_admissible_set_guard(
-    estimate: FloorEstimate, uncertainty_floor_j: float
+    estimate: FloorEstimate,
+    uncertainty_floor_j: float,
+    admissible_half_widths_j: Sequence[float],
 ) -> FloorEstimate:
     """Raise a point-estimate floor to cover admitted energy sets.
 
@@ -334,9 +339,7 @@ def _apply_admissible_set_guard(
     displacement.
     """
 
-    if uncertainty_floor_j <= estimate.unguarded_floor_j:
-        return estimate
-    unguarded = uncertainty_floor_j
+    unguarded = max(estimate.unguarded_floor_j, uncertainty_floor_j)
     guarded = (
         estimate.guard_factor * unguarded
         if estimate.guard_factor is not None
@@ -354,6 +357,9 @@ def _apply_admissible_set_guard(
         unguarded_floor_j=unguarded,
         guard_factor=estimate.guard_factor,
         guarded_floor_j=guarded,
+        admissible_half_widths_j=tuple(admissible_half_widths_j),
+        corner_widened_unguarded_floor_j=unguarded,
+        corner_widened_guarded_floor_j=guarded,
     )
 
 
@@ -445,7 +451,7 @@ def absolute_false_effect_floor(
         _linear_corner_widened_max(residuals, residual_widths),
         _corner_maximized_unguarded_floor(values, widths, kind="absolute"),
     )
-    return _apply_admissible_set_guard(estimate, uncertainty_floor)
+    return _apply_admissible_set_guard(estimate, uncertainty_floor, widths)
 
 
 def comparative_false_effect_floor(
@@ -468,7 +474,7 @@ def comparative_false_effect_floor(
         _linear_corner_widened_max(deltas, widths),
         _corner_maximized_unguarded_floor(deltas, widths, kind="comparative"),
     )
-    return _apply_admissible_set_guard(estimate, uncertainty_floor)
+    return _apply_admissible_set_guard(estimate, uncertainty_floor, widths)
 
 
 def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:
@@ -507,6 +513,21 @@ def build_absolute_record(estimate: FloorEstimate, bundle_observations: Sequence
         raise ValueError("absolute record requires an absolute FloorEstimate")
     if len(bundle_observations) != estimate.n:
         raise ValueError("bundle_observations length must equal n")
+    widths = (
+        estimate.admissible_half_widths_j
+        if estimate.admissible_half_widths_j
+        else (0.0,) * estimate.n
+    )
+    widened_unguarded = (
+        estimate.corner_widened_unguarded_floor_j
+        if estimate.corner_widened_unguarded_floor_j is not None
+        else estimate.unguarded_floor_j
+    )
+    widened_guarded = (
+        estimate.corner_widened_guarded_floor_j
+        if estimate.corner_widened_unguarded_floor_j is not None
+        else estimate.guarded_floor_j
+    )
     return {
         "n": estimate.n,
         "mean_j": estimate.mean_j,
@@ -518,6 +539,9 @@ def build_absolute_record(estimate: FloorEstimate, bundle_observations: Sequence
         "unguarded_floor_j": estimate.unguarded_floor_j,
         "guard_factor": estimate.guard_factor,
         "guarded_floor_j": estimate.guarded_floor_j,
+        "admissible_half_widths_j": list(widths),
+        "corner_widened_unguarded_floor_j": widened_unguarded,
+        "corner_widened_guarded_floor_j": widened_guarded,
         "bundle_observations": [dict(obs) for obs in bundle_observations],
     }
 
@@ -527,6 +551,21 @@ def build_comparative_record(estimate: FloorEstimate, blocks: Sequence[Mapping])
         raise ValueError("comparative record requires a comparative FloorEstimate")
     if len(blocks) != estimate.n:
         raise ValueError("blocks length must equal n_blocks")
+    widths = (
+        estimate.admissible_half_widths_j
+        if estimate.admissible_half_widths_j
+        else (0.0,) * estimate.n
+    )
+    widened_unguarded = (
+        estimate.corner_widened_unguarded_floor_j
+        if estimate.corner_widened_unguarded_floor_j is not None
+        else estimate.unguarded_floor_j
+    )
+    widened_guarded = (
+        estimate.corner_widened_guarded_floor_j
+        if estimate.corner_widened_unguarded_floor_j is not None
+        else estimate.guarded_floor_j
+    )
     return {
         "n_blocks": estimate.n,
         "mean_delta_j": estimate.mean_j,
@@ -538,6 +577,9 @@ def build_comparative_record(estimate: FloorEstimate, blocks: Sequence[Mapping])
         "unguarded_floor_j": estimate.unguarded_floor_j,
         "guard_factor": estimate.guard_factor,
         "guarded_floor_j": estimate.guarded_floor_j,
+        "admissible_half_widths_j": list(widths),
+        "corner_widened_unguarded_floor_j": widened_unguarded,
+        "corner_widened_guarded_floor_j": widened_guarded,
         "blocks": [dict(block) for block in blocks],
     }
 
@@ -565,8 +607,18 @@ def build_floor_cell(
         regime_record["stack_identity_sha256"] = canonical_domain_sha256(
             STACK_IDENTITY_DOMAIN, stack_identity
         )
-    floor_abs = absolute.get("guarded_floor_j") if absolute is not None else None
-    floor_cmp = comparative.get("guarded_floor_j") if comparative is not None else None
+    floor_abs = (
+        absolute.get("corner_widened_guarded_floor_j", absolute.get("guarded_floor_j"))
+        if absolute is not None
+        else None
+    )
+    floor_cmp = (
+        comparative.get(
+            "corner_widened_guarded_floor_j", comparative.get("guarded_floor_j")
+        )
+        if comparative is not None
+        else None
+    )
     if floor_abs is not None and floor_cmp is not None:
         floor_gate: Optional[float] = max(floor_abs, floor_cmp)
     else:
@@ -766,6 +818,11 @@ _CMP_KEYS = {
     "guarded_floor_j",
     "blocks",
 }
+_WIDENED_FLOOR_KEYS = {
+    "admissible_half_widths_j",
+    "corner_widened_unguarded_floor_j",
+    "corner_widened_guarded_floor_j",
+}
 _OBS_KEYS = {"bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
 _BLOCK_KEYS = {
     "block_id",
@@ -838,6 +895,19 @@ def _check_keys(mapping, allowed, where, errors) -> bool:
         return False
     unknown = set(mapping) - allowed
     missing = allowed - set(mapping)
+    for key in sorted(unknown):
+        errors.append(f"{where}: unrecognized key {key!r}")
+    for key in sorted(missing):
+        errors.append(f"{where}: missing key {key!r}")
+    return not missing
+
+
+def _check_keys_with_optional(mapping, required, optional, where, errors) -> bool:
+    if not isinstance(mapping, Mapping):
+        errors.append(f"{where}: expected an object")
+        return False
+    unknown = set(mapping) - required - optional
+    missing = required - set(mapping)
     for key in sorted(unknown):
         errors.append(f"{where}: unrecognized key {key!r}")
     for key in sorted(missing):
@@ -944,15 +1014,66 @@ def _validate_idle_drift_guard(guard, where, errors) -> None:
         errors.append(f"{where}.calibration_status: invalid status {status!r}")
 
 
-def _validate_estimate_math(record, where, deviations, mean, prediction_extra, errors) -> None:
+def _validate_estimate_math(
+    record,
+    where,
+    deviations,
+    mean,
+    prediction_extra,
+    point_values,
+    kind,
+    errors,
+) -> None:
     n = len(deviations)
-    est = _floor_estimate("absolute", list(deviations), mean, prediction_extra)
+    est = _floor_estimate(kind, list(deviations), mean, prediction_extra)
+    present_widened_keys = set(record) & _WIDENED_FLOOR_KEYS
+    widened_unguarded = est.unguarded_floor_j
+    widened_guarded = est.guarded_floor_j
+    if present_widened_keys and present_widened_keys != _WIDENED_FLOOR_KEYS:
+        errors.append(f"{where}: widened floor fields must be present together")
+    elif present_widened_keys:
+        widths = record.get("admissible_half_widths_j")
+        if (
+            not isinstance(widths, list)
+            or len(widths) != n
+            or any(not _is_number(width) or width < 0.0 for width in widths)
+        ):
+            errors.append(
+                f"{where}: admissible_half_widths_j must contain n finite nonnegative numbers"
+            )
+        else:
+            try:
+                corner_floor = _corner_maximized_unguarded_floor(
+                    point_values, widths, kind=kind
+                )
+            except (TypeError, ValueError) as exc:
+                errors.append(f"{where}: widened floor cannot be recomputed: {exc}")
+            else:
+                widened_unguarded = max(est.unguarded_floor_j, corner_floor)
+                widened_guarded = (
+                    est.guard_factor * widened_unguarded
+                    if est.guard_factor is not None
+                    else None
+                )
+                if not _close(
+                    record.get("corner_widened_unguarded_floor_j"),
+                    widened_unguarded,
+                ):
+                    errors.append(
+                        f"{where}: stored corner_widened_unguarded_floor_j does not match full corner enumeration"
+                    )
+                if not _close(
+                    record.get("corner_widened_guarded_floor_j"), widened_guarded
+                ):
+                    errors.append(
+                        f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
+                    )
     stddev_key = "sample_stddev_j"
     checks = [
         (stddev_key, est.sample_stddev_j),
         ("t_critical", est.t_critical),
         ("prediction_component_j", est.prediction_component_j),
-        ("unguarded_floor_j", est.unguarded_floor_j),
+        ("unguarded_floor_j", widened_unguarded),
     ]
     for key in (
         "sample_stddev_j",
@@ -973,7 +1094,7 @@ def _validate_estimate_math(record, where, deviations, mean, prediction_extra, e
     else:
         if not _close(record.get("guard_factor"), expected_guard):
             errors.append(f"{where}: stored guard_factor does not match recomputed value")
-        if not _close(record.get("guarded_floor_j"), expected_guard * est.unguarded_floor_j):
+        if not _close(record.get("guarded_floor_j"), widened_guarded):
             errors.append(f"{where}: stored guarded_floor_j does not match recomputed value")
 
 
@@ -1008,7 +1129,9 @@ def _validate_stress_observed(observed, where, errors) -> None:
 
 
 def _validate_absolute(record, where, errors) -> None:
-    if not _check_keys(record, _ABS_KEYS, where, errors):
+    if not _check_keys_with_optional(
+        record, _ABS_KEYS, _WIDENED_FLOOR_KEYS, where, errors
+    ):
         return
     residuals = record["residuals_j"]
     observations = record["bundle_observations"]
@@ -1062,11 +1185,22 @@ def _validate_absolute(record, where, errors) -> None:
         errors.append(f"{where}: stored max_abs_residual_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_residual_j"]):
         errors.append(f"{where}: max_abs_residual_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_estimate_math(record, where, expected_residuals, mean, 0.0, errors)
+    _validate_estimate_math(
+        record,
+        where,
+        expected_residuals,
+        mean,
+        0.0,
+        values,
+        "absolute",
+        errors,
+    )
 
 
 def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -> None:
-    if not _check_keys(record, _CMP_KEYS, where, errors):
+    if not _check_keys_with_optional(
+        record, _CMP_KEYS, _WIDENED_FLOOR_KEYS, where, errors
+    ):
         return
     deltas = record["block_deltas_j"]
     blocks = record["blocks"]
@@ -1163,7 +1297,16 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
         errors.append(f"{where}: stored max_abs_delta_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_delta_j"]):
         errors.append(f"{where}: max_abs_delta_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_estimate_math(record, where, expected_deltas, mean, abs(mean), errors)
+    _validate_estimate_math(
+        record,
+        where,
+        expected_deltas,
+        mean,
+        abs(mean),
+        expected_deltas,
+        "comparative",
+        errors,
+    )
 
 
 def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
@@ -1212,8 +1355,18 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
             calibration_plan_sha256,
         )
 
-    expected_abs = absolute.get("guarded_floor_j") if isinstance(absolute, Mapping) else None
-    expected_cmp = comparative.get("guarded_floor_j") if isinstance(comparative, Mapping) else None
+    expected_abs = (
+        absolute.get("corner_widened_guarded_floor_j", absolute.get("guarded_floor_j"))
+        if isinstance(absolute, Mapping)
+        else None
+    )
+    expected_cmp = (
+        comparative.get(
+            "corner_widened_guarded_floor_j", comparative.get("guarded_floor_j")
+        )
+        if isinstance(comparative, Mapping)
+        else None
+    )
     for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
         value = cell[key]
         if value is not None and not _is_floor_j(value):

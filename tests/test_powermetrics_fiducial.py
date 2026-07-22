@@ -30,6 +30,7 @@ from joulewise.powermetrics_fiducial import (
     RESIDUAL_REGION_METHOD,
     CommandedPulse,
     TraceInterval,
+    authenticate_protocol_schedule,
     detect_pulses,
     instrument_evidence,
     protocol_definition,
@@ -120,6 +121,105 @@ class ScheduleTests(unittest.TestCase):
             self.assertAlmostEqual(off_s - on_s, 1.0, places=12)
             self.assertGreaterEqual(next_on_s - off_s, 1.5)
         self.assertEqual(schedule[0][0], 10.0)
+
+    def test_phase_locked_uniform_gap_schedule_refuses_authentication(self) -> None:
+        pulses = commanded(
+            [(5.0 + 2.5 * index, 6.0 + 2.5 * index) for index in range(5)]
+        )
+        trace = [TraceInterval(start_s=0.0, end_s=pulses[-1].off_s + 5.0, power_w=2.0)]
+        with self.assertRaisesRegex(ValueError, "gaps disagree"):
+            authenticate_protocol_schedule(pulses, trace)
+
+    def test_vdc_schedule_passes_authentication(self) -> None:
+        scheduled = pulse_schedule(5, start_s=5.0)
+        pulses = commanded(scheduled)
+        trace = [TraceInterval(start_s=0.0, end_s=pulses[-1].off_s + 5.0, power_w=2.0)]
+        authenticate_protocol_schedule(pulses, trace)
+
+    def test_rederivation_authenticates_executed_schedule(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        first_endpoint_s = 1_784_490_850.05
+        first_pulse_s = first_endpoint_s + 14.95
+        uniform_edges = [
+            (first_pulse_s + 2.5 * index, first_pulse_s + 2.5 * index + 1.0)
+            for index in range(40)
+        ]
+        uniform_evidence, uniform_raw, uniform_events = self_consistent_calibration(
+            first_endpoint_s=first_endpoint_s,
+            commanded_edges=uniform_edges,
+        )
+        self.assertEqual(uniform_evidence["status"], "valid")
+        with self.assertRaisesRegex(ValueError, "gaps disagree"):
+            fiducial_module.rederive_detection_from_artifacts(
+                uniform_raw,
+                uniform_events,
+                uniform_evidence["clock_anchor"],
+                protocol_id=PROTOCOL_V2_ID,
+            )
+
+        vdc_evidence, vdc_raw, vdc_events = self_consistent_calibration()
+        accepted = fiducial_module.rederive_detection_from_artifacts(
+            vdc_raw,
+            vdc_events,
+            vdc_evidence["clock_anchor"],
+            protocol_id=PROTOCOL_V2_ID,
+        )
+        self.assertTrue(accepted.all_pulses_detected, accepted.reasons)
+        self.assertIsNotNone(accepted.b_fiducial_s)
+
+    def test_negative_resolution_stamp_previously_understated_bound_now_refuses(
+        self,
+    ) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration()
+        valid = fiducial_module.rederive_detection_from_artifacts(
+            raw,
+            events,
+            evidence["clock_anchor"],
+            protocol_id=PROTOCOL_V2_ID,
+        )
+        rows = [json.loads(line) for line in events.splitlines()]
+        for row in rows:
+            stamp = row["metadata"]["clock_stamp"]
+            stamp["wall_resolution_s"] = -2e-6
+            stamp["monotonic_resolution_s"] = -2e-6
+        mutated_events = "".join(
+            json.dumps(row, sort_keys=True) + "\n" for row in rows
+        ).encode("utf-8")
+
+        # Pin the former defect shape on the explicitly frozen v1 replay arm:
+        # its historical arithmetic produces a three-microsecond smaller
+        # bound, while current strict v2/v3 acceptance below refuses it.
+        understated = fiducial_module.rederive_detection_from_artifacts(
+            raw,
+            mutated_events,
+            evidence["clock_anchor"],
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        self.assertGreater(valid.b_fiducial_s, understated.b_fiducial_s)
+        self.assertAlmostEqual(
+            valid.b_fiducial_s - understated.b_fiducial_s,
+            3e-6,
+            places=12,
+        )
+        with self.assertRaisesRegex(ValueError, "ClockStamp"):
+            fiducial_module.rederive_detection_from_artifacts(
+                raw,
+                mutated_events,
+                evidence["clock_anchor"],
+                protocol_id=PROTOCOL_V2_ID,
+            )
+        with self.assertRaisesRegex(ValueError, "half-width"):
+            fiducial_module.clock_stamp_half_width_s(
+                SimpleNamespace(
+                    monotonic_before_s=1.0,
+                    monotonic_after_s=1.0 + 2e-6,
+                    wall_resolution_s=-2e-6,
+                    monotonic_resolution_s=-2e-6,
+                )
+            )
 
 
 class DetectorTests(unittest.TestCase):

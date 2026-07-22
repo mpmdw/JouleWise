@@ -57,12 +57,14 @@ _SELF_CONSISTENT_CALIBRATION: tuple[dict, bytes, bytes] | None = None
 
 
 def self_consistent_calibration(
-    *, first_endpoint_s: float | None = None
+    *,
+    first_endpoint_s: float | None = None,
+    commanded_edges: list[tuple[float, float]] | None = None,
 ) -> tuple[dict, bytes, bytes]:
     """Build one cached 40-pulse plist/event calibration for reducer tests."""
 
     global _SELF_CONSISTENT_CALIBRATION
-    use_cache = first_endpoint_s is None
+    use_cache = first_endpoint_s is None and commanded_edges is None
     if use_cache and _SELF_CONSISTENT_CALIBRATION is not None:
         evidence, raw, events = _SELF_CONSISTENT_CALIBRATION
         return json.loads(json.dumps(evidence)), raw, events
@@ -94,9 +96,10 @@ def self_consistent_calibration(
         (first_endpoint_s + 4.45, first_endpoint_s + 5.45),
         (first_endpoint_s + 6.95, first_endpoint_s + 7.95),
     ]
-    commanded_edges = pulse_schedule(
-        LEGACY_PULSE_COUNT, start_s=first_endpoint_s + 14.95
-    )
+    if commanded_edges is None:
+        commanded_edges = pulse_schedule(
+            LEGACY_PULSE_COUNT, start_s=first_endpoint_s + 14.95
+        )
     true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
     capture_end_s = true_edges[-1][1] + 5.0
 
@@ -2834,7 +2837,13 @@ class D078R01RegressionTests(unittest.TestCase):
         return evidence
 
     def _bundle_with_calibration(
-        self, tmp, *, evidence, b_fiducial_s=None, mutate_bytes=None
+        self,
+        tmp,
+        *,
+        evidence,
+        b_fiducial_s=None,
+        mutate_bytes=None,
+        calibration_events_override=None,
     ) -> Path:
         import shutil
 
@@ -2844,6 +2853,8 @@ class D078R01RegressionTests(unittest.TestCase):
         _canonical_evidence, calibration_raw, calibration_events = (
             self_consistent_calibration()
         )
+        if calibration_events_override is not None:
+            calibration_events = calibration_events_override
         artifact_dir = bundle / "calibration"
         (artifact_dir / "raw").mkdir(parents=True)
         (artifact_dir / "raw" / "powermetrics.plist").write_bytes(
@@ -3513,6 +3524,93 @@ class D078R01RegressionTests(unittest.TestCase):
             "instrument_calibration_stale",
             summary.window_evidence_precheck["gross_request"]["reasons"],
         )
+
+    def test_052_shifted_event_clock_cannot_relabel_calibration_fresh(self) -> None:
+        # L1 exact defect: moving every top-level event time authenticated a
+        # fresh capture while the embedded ClockStamp epochs (and raw physics)
+        # stayed fixed. Rehashing the otherwise-valid bytes must still refuse.
+        evidence = self._valid_instrument_evidence()
+        _source, _raw, calibration_events = self_consistent_calibration()
+        shifted_rows = [
+            json.loads(line) for line in calibration_events.splitlines()
+        ]
+        for row in shifted_rows:
+            row["timestamp_s"] += 100_000.0
+        shifted_events = "".join(
+            json.dumps(row, sort_keys=True) + "\n" for row in shifted_rows
+        ).encode("utf-8")
+        evidence["capture_wall_time_s"] += 100_000.0
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(
+                tmp,
+                evidence=evidence,
+                calibration_events_override=shifted_events,
+            )
+            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_command_clockstamp_physical_defects_are_invalid(self) -> None:
+        evidence = self._valid_instrument_evidence()
+        _source, _raw, calibration_events = self_consistent_calibration()
+        for defect in ("negative_resolution", "reversed_monotonic_bracket"):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                rows = [
+                    json.loads(line) for line in calibration_events.splitlines()
+                ]
+                stamp = rows[0]["metadata"]["clock_stamp"]
+                if defect == "negative_resolution":
+                    stamp["wall_resolution_s"] = -1e-6
+                else:
+                    stamp["monotonic_after_s"] = (
+                        stamp["monotonic_before_s"] - 1e-6
+                    )
+                mutated_events = "".join(
+                    json.dumps(row, sort_keys=True) + "\n" for row in rows
+                ).encode("utf-8")
+                bundle = self._bundle_with_calibration(
+                    tmp,
+                    evidence=evidence,
+                    calibration_events_override=mutated_events,
+                )
+                summary = reduce_module.reduce_bundle(
+                    bundle, reducer_version="0.5.2"
+                )
+                reasons = summary.window_evidence_precheck["gross_request"][
+                    "reasons"
+                ]
+                self.assertIn("instrument_calibration_invalid", reasons)
+
+    def test_052_oversized_command_clock_values_are_invalid_not_stale(self) -> None:
+        evidence = self._valid_instrument_evidence()
+        _source, _raw, calibration_events = self_consistent_calibration()
+        for defect in ("timestamp_s", "embedded_epoch_s"):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                rows = [
+                    json.loads(line) for line in calibration_events.splitlines()
+                ]
+                if defect == "timestamp_s":
+                    rows[0]["timestamp_s"] = 10**400
+                else:
+                    rows[0]["metadata"]["clock_stamp"]["epoch_s"] = 10**400
+                mutated_events = "".join(
+                    json.dumps(row, sort_keys=True) + "\n" for row in rows
+                ).encode("utf-8")
+                bundle = self._bundle_with_calibration(
+                    tmp,
+                    evidence=evidence,
+                    calibration_events_override=mutated_events,
+                )
+                summary = reduce_module.reduce_bundle(
+                    bundle, reducer_version="0.5.2"
+                )
+                reasons = summary.window_evidence_precheck["gross_request"][
+                    "reasons"
+                ]
+                self.assertIn("instrument_calibration_invalid", reasons)
+                self.assertNotIn("instrument_calibration_stale", reasons)
 
     def test_052_relabelled_v1_body_as_v2_refuses_protocol_shape(self) -> None:
         # F6 defect shape: protocol_id and bindings were re-keyed to v2 while

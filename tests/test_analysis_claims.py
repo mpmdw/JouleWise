@@ -46,7 +46,8 @@ from joulewise.analysis_engine.sensitivity import (
     randomization_check,
     summarize_loo,
 )
-from tests.test_detection_floor import make_artifact, make_consumer
+from joulewise.detection_floor import comparative_false_effect_floor
+from tests.test_detection_floor import make_artifact, make_cell, make_consumer
 
 
 HEX = "a" * 64
@@ -892,6 +893,62 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(ambiguous.status, "refused")
         self.assertEqual(ambiguous.reason_codes, ("transport_group_incomplete",))
 
+    def test_engine_consumes_corner_widened_guarded_floor(self):
+        cell = make_cell(
+            energies=[0.0, 1.0, -1.0, 0.0, 0.0],
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.01] * 5,
+        )
+        artifact = make_artifact([cell])
+        artifact["calibration_scope"] = "window_a"
+        consumer = make_consumer()
+        request = FloorRequest(
+            backend=consumer.pop("backend"),
+            metric=consumer.pop("metric"),
+            window_class=consumer.pop("window_class"),
+            condition_family_id=consumer.pop("condition_family_id"),
+            condition_family_sha256=consumer.pop("condition_family_sha256"),
+            stack_identity_sha256=consumer.pop("stack_identity_sha256"),
+            consumer_stress=consumer,
+        )
+        resolution = resolve_floor(artifact, HEX, request)
+        self.assertEqual(resolution.status, "transported")
+        self.assertEqual(resolution.floor_gate_j, 3.2578982723565812)
+
+    def test_engine_consumes_comparative_widened_floor_as_operative_gate(self):
+        deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
+        cell = make_cell(
+            energies=[0.0] * 5,
+            deltas=deltas,
+            comparative_half_widths=[0.5] * 5,
+        )
+        artifact = make_artifact([cell])
+        artifact["calibration_scope"] = "window_a"
+        widened = cell["comparative"]["corner_widened_guarded_floor_j"]
+        point = comparative_false_effect_floor(deltas).guarded_floor_j
+        self.assertGreater(widened, point)
+
+        # The nested widened record is authoritative at the consumption seam;
+        # a stale denormalized scalar must not shrink the operative gate.
+        artifact["cells"][0]["floor_cmp_j"] = point
+        consumer = make_consumer(
+            condition_family_id=cell["key"]["condition_family_id"],
+            condition_family_sha256=cell["key"]["condition_family_sha256"],
+        )
+        request = FloorRequest(
+            backend=consumer.pop("backend"),
+            metric=consumer.pop("metric"),
+            window_class=consumer.pop("window_class"),
+            condition_family_id=consumer.pop("condition_family_id"),
+            condition_family_sha256=consumer.pop("condition_family_sha256"),
+            stack_identity_sha256=consumer.pop("stack_identity_sha256"),
+            consumer_stress=consumer,
+        )
+        resolution = resolve_floor(artifact, HEX, request)
+        self.assertEqual(resolution.status, "exact")
+        self.assertEqual(resolution.floor_cmp_j, widened)
+        self.assertEqual(resolution.floor_gate_j, widened)
+
     def test_smoke_floor_and_pending_idle_guard_are_never_claim_usable(self):
         smoke = make_artifact()
         consumer = make_consumer()
@@ -964,7 +1021,7 @@ class AnchorBoundPropagationTests(unittest.TestCase):
             },
             "energy_anchor_shift_envelopes": {
                 "/gross_energy_j": {
-                    "method": "common_trace_shift_interval_overlap_v1",
+                    "method": "common_trace_shift_plus_independent_edge_corners_v3",
                     "anchor_bound_s": 0.05,
                     "point_j": 40.0,
                     "lower_j": 39.96,
@@ -976,7 +1033,7 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         summary.update(overrides)
         return summary
 
-    def test_anchor_wire_propagates_the_larger_of_envelope_and_scalar(self):
+    def test_current_v3_anchor_wire_propagates_larger_envelope_or_scalar(self):
         bounds, reasons = deterministic_bounds(
             _bounds_evidence(self._summary()), self.GROSS_METRIC
         )
@@ -984,6 +1041,33 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         self.assertEqual(bounds["E_clock_anchor_shift_bound_j"], 0.05)
         # Interpolation stays a SEPARATE term; never folded into the anchor.
         self.assertEqual(bounds["E_interpolation_joint_edge_bound_j"], 0.02)
+
+    def test_current_mint_refuses_replay_only_v1_and_v2_envelope_methods(self):
+        for reducer_version in ("0.5.2", "0.6.2"):
+            for method in (
+                "common_trace_shift_interval_overlap_v1",
+                "common_trace_shift_plus_independent_edge_span_v2",
+            ):
+                with self.subTest(
+                    reducer_version=reducer_version, method=method
+                ):
+                    summary = self._summary(reducer_version=reducer_version)
+                    summary["energy_anchor_shift_envelopes"][
+                        "/gross_energy_j"
+                    ]["method"] = method
+                    envelope, problem = anchor_shift_envelope(
+                        summary, "gross_energy_j"
+                    )
+                    self.assertIsNone(problem)
+                    self.assertEqual(envelope["method"], method)
+                    bounds, reasons = deterministic_bounds(
+                        _bounds_evidence(summary), self.GROSS_METRIC
+                    )
+                    self.assertNotIn("E_clock_anchor_shift_bound_j", bounds)
+                    self.assertIn("clock_anchor_unresolved", reasons)
+                    self.assertNotIn(
+                        "anchor_energy_envelope_unrecorded", reasons
+                    )
 
     def test_reducer_v2_golden_envelope_propagates_end_to_end(self):
         # F3 defect shape: reducer 0.5.2 emits v2, but the consumer formerly
@@ -1019,6 +1103,9 @@ class AnchorBoundPropagationTests(unittest.TestCase):
 
     def test_v1_remains_registered_and_unknown_method_is_malformed(self):
         summary = self._summary()
+        summary["energy_anchor_shift_envelopes"]["/gross_energy_j"][
+            "method"
+        ] = "common_trace_shift_interval_overlap_v1"
         envelope, problem = anchor_shift_envelope(summary, "gross_energy_j")
         self.assertIsNone(problem)
         self.assertEqual(
@@ -1096,7 +1183,13 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         summary = self._summary(reducer_version="0.5.1")
         summary["energy_anchor_shift_envelopes"]["/gross_energy_j"][
             "method"
-        ] = "historical-spelling-does-not-control-version-barrier"
+        ] = "common_trace_shift_plus_independent_edge_span_v2"
+        envelope, problem = anchor_shift_envelope(summary, "gross_energy_j")
+        self.assertIsNone(problem)
+        self.assertEqual(
+            envelope["method"],
+            "common_trace_shift_plus_independent_edge_span_v2",
+        )
         bounds, reasons = deterministic_bounds(
             _bounds_evidence(summary), self.GROSS_METRIC
         )
@@ -1126,7 +1219,7 @@ class AnchorBoundPropagationTests(unittest.TestCase):
             },
             "energy_anchor_shift_envelopes": {
                 "/phase_energy_j/prefill": {
-                    "method": "common_trace_shift_interval_overlap_v1",
+                    "method": "common_trace_shift_plus_independent_edge_corners_v3",
                     "anchor_bound_s": 0.05,
                     "point_j": 5.0,
                     "lower_j": 4.9,

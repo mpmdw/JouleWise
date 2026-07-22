@@ -81,6 +81,9 @@ ANCHOR_SHIFT_ENVELOPE_METHODS = frozenset(
         "common_trace_shift_plus_independent_edge_corners_v3",
     }
 )
+CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD = (
+    "common_trace_shift_plus_independent_edge_corners_v3"
+)
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
 
 
@@ -2229,6 +2232,18 @@ def deterministic_bounds(
             reducer_version in ANCHOR_ENVELOPE_REDUCER_VERSIONS
         )
         envelope, problem = anchor_shift_envelope(summary, str(name))
+        if (
+            anchor_required
+            and envelope is not None
+            and envelope["method"]
+            != CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD
+        ):
+            # Registered v1/v2 spellings remain replay-readable, but only the
+            # v3 method is eligible on a current 0.5.2/0.6.2 claim wire.
+            # This is a version/method eligibility refusal, not malformed
+            # evidence and therefore not a fabricated method reason.
+            reasons.append("clock_anchor_unresolved")
+            return
         bound: float | None = envelope["max_abs_delta_j"] if envelope else None
         scalar = (
             scalar_terms.get(ANCHOR_SHIFT_BOUND_TERM)
@@ -2484,7 +2499,31 @@ def resolve_floor(
             reasons.append("artifact_schema_invalid")
         if not isinstance(eligibility, Mapping) or eligibility.get("status") != "claim_ready":
             reasons.append("cell_not_claim_ready")
-        values = (cell.get("floor_abs_j"), cell.get("floor_cmp_j"), cell.get("floor_gate_j"))
+        absolute = cell.get("absolute")
+        comparative = cell.get("comparative")
+        floor_abs = (
+            absolute.get(
+                "corner_widened_guarded_floor_j", cell.get("floor_abs_j")
+            )
+            if isinstance(absolute, Mapping)
+            else cell.get("floor_abs_j")
+        )
+        floor_cmp = (
+            comparative.get(
+                "corner_widened_guarded_floor_j", cell.get("floor_cmp_j")
+            )
+            if isinstance(comparative, Mapping)
+            else cell.get("floor_cmp_j")
+        )
+        floor_gate = (
+            max(floor_abs, floor_cmp)
+            if isinstance(floor_abs, int | float)
+            and not isinstance(floor_abs, bool)
+            and isinstance(floor_cmp, int | float)
+            and not isinstance(floor_cmp, bool)
+            else cell.get("floor_gate_j")
+        )
+        values = (floor_abs, floor_cmp, floor_gate)
         if any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))

@@ -278,7 +278,9 @@ Additive; no seeded plan row above is rewritten.
   explicitly, alongside (never merged with) the interpolation terms.
 - The accepted envelope-method spellings are the closed set
   `{common_trace_shift_interval_overlap_v1,
-  common_trace_shift_plus_independent_edge_span_v2}`. Reducer 0.5.1/0.6.1
+  common_trace_shift_plus_independent_edge_span_v2,
+  common_trace_shift_plus_independent_edge_corners_v3}`. The v3 spelling is
+  the current 0.5.2/0.6.2 mint; v1/v2 are replay-read-only. Reducer 0.5.1/0.6.1
   remains parsable for replay but is barred from claim use with
   `clock_anchor_unresolved` because its frozen envelope used the superseded
   max-composition rule; version eligibility, not a fabricated method error,

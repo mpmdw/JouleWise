@@ -1481,6 +1481,11 @@ def _verify_instrument_calibration(
             derived_capture_wall_time_s = capture_wall_time_from_events(
                 primary_bytes["events.jsonl"]
             )
+        except (KeyError, OverflowError, TypeError, ValueError):
+            # Malformed, missing, or inconsistent calibration event clocks are
+            # semantic evidence defects, not an authentic-but-expired horizon.
+            return None, "instrument_calibration_invalid"
+        try:
             collection_times = [
                 row.get("timestamp_s")
                 for row in reader.events()
@@ -1531,7 +1536,7 @@ def _verify_instrument_calibration(
                 evidence.get("clock_anchor"),
                 protocol_id=str(evidence_protocol_id),
             )
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, OverflowError, TypeError, ValueError):
             return None, "instrument_calibration_invalid"
         if (
             len(fresh.fits) != pulse_count
@@ -2634,7 +2639,7 @@ def reduce_bundle(
             idle_baseline,
             reducer_version=reducer_version,
         )
-    except (_ReduceError, BundleReadError) as exc:
+    except (_ReduceError, BundleReadError, OverflowError) as exc:
         summary_type = (
             SummaryMetricsV060
             if reducer_version in AXI_REDUCER_VERSIONS

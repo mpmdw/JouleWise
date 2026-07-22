@@ -360,10 +360,20 @@ def make_regime(
     }
 
 
-def make_cell(cell_id="cell-1", energies=None, deltas=None, regime=None, condition="cf-1"):
+def make_cell(
+    cell_id="cell-1",
+    energies=None,
+    deltas=None,
+    regime=None,
+    condition="cf-1",
+    absolute_half_widths=None,
+    comparative_half_widths=None,
+):
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
-    abs_est = absolute_false_effect_floor(energies)
+    abs_est = absolute_false_effect_floor(
+        energies, admissible_half_widths_j=absolute_half_widths
+    )
     observations = [
         {
             "bundle_id": f"{cell_id}-r{i}",
@@ -373,7 +383,9 @@ def make_cell(cell_id="cell-1", energies=None, deltas=None, regime=None, conditi
         }
         for i, value in enumerate(energies)
     ]
-    cmp_est = comparative_false_effect_floor(deltas)
+    cmp_est = comparative_false_effect_floor(
+        deltas, admissible_half_widths_j=comparative_half_widths
+    )
     blocks = []
     for i, delta in enumerate(deltas):
         a, b = 100.0, 100.0 + delta
@@ -460,6 +472,57 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(artifact), [])
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_widened_floor_record_round_trips_and_rejects_tampering(self):
+        cell = make_cell(
+            energies=[0.0, 1.0, -1.0, 0.0, 0.0],
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.01] * 5,
+        )
+        artifact = make_artifact([cell])
+        record = artifact["cells"][0]["absolute"]
+        self.assertEqual(record["admissible_half_widths_j"], [0.01] * 5)
+        self.assertEqual(
+            record["corner_widened_guarded_floor_j"], 3.2578982723565812
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        record["corner_widened_guarded_floor_j"] -= 0.1
+        self.assertTrue(
+            any(
+                "full corner enumeration" in error
+                for error in validate_floor_artifact(artifact)
+            )
+        )
+
+    def test_comparative_widened_floor_round_trips_and_rejects_tampering(self):
+        cell = make_cell(
+            energies=[0.0] * 5,
+            deltas=[1.0, -1.0, 0.0, 0.0, 0.0],
+            comparative_half_widths=[0.5] * 5,
+        )
+        artifact = make_artifact([cell])
+        record = artifact["cells"][0]["comparative"]
+        self.assertEqual(record["admissible_half_widths_j"], [0.5] * 5)
+        self.assertEqual(
+            record["corner_widened_guarded_floor_j"], 5.446799999999999
+        )
+        self.assertEqual(
+            artifact["cells"][0]["floor_gate_j"],
+            record["corner_widened_guarded_floor_j"],
+        )
+        round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
+        self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+        round_tripped["cells"][0]["comparative"][
+            "corner_widened_guarded_floor_j"
+        ] -= 0.1
+        self.assertTrue(
+            any(
+                "full corner enumeration" in error
+                for error in validate_floor_artifact(round_tripped)
+            )
+        )
 
     def test_artifact_records_plan_hash_and_per_member_abba_sequence(self):
         artifact = make_artifact()

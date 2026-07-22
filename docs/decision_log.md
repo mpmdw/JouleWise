@@ -4367,6 +4367,20 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    (never the mint-time metadata scalar, whose disagreement is itself
    provenance-invalid); claim brackets accept protocol v3 artifacts ONLY
    (v2 stays valid as reduction/validation evidence).
+   Round-8 follow-ups (2026-07-22): calibration identity is SEMANTICALLY
+   authenticated, not just byte-authenticated — every calibration command
+   event's two clocks (top-level `timestamp_s` and embedded ClockStamp
+   epoch) must agree within 1 s on the strict path, and any event carrying
+   a ClockStamp is skew-checked (the live artifact agrees within
+   0.205 ms; a shifted-freshness relabel now refuses); claim-time
+   rederivation authenticates the EXECUTED v3 schedule (pulse durations,
+   the deterministic van-der-Corput gap sequence within ±0.25 s, ≥4.5 s
+   commanded-quiet baselines) so phase-locked or degenerate captures cannot
+   claim the 95/95 identity; and the canonical floor/MDE artifact carries
+   the corner-widened floor additively (validator recomputes it; the
+   analysis engine consumes the WIDENED guarded floor as operative) —
+   closing the honest-artifact-fails-closed gap so a sound end-to-end
+   floor/MDE handoff exists.
    Registry additions for this wave: `instrument_calibration_bracket_missing`,
    `calibration_bracket_exceeds_minted_bound`,
    (claim-bearing window not bracketed by two authenticated, fresh

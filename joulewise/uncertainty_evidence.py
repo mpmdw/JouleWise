@@ -85,7 +85,9 @@ def unknown_component(reason: str) -> dict[str, str]:
     return {"status": "unknown", "reason": reason}
 
 
-def _valid_stamp(stamp: ClockStamp) -> bool:
+def valid_clock_stamp(stamp: ClockStamp) -> bool:
+    """Return whether a paired wall/monotonic stamp is physically sane."""
+
     values = (
         stamp.epoch_s,
         stamp.monotonic_before_s,
@@ -99,6 +101,12 @@ def _valid_stamp(stamp: ClockStamp) -> bool:
         and stamp.wall_resolution_s >= 0.0
         and stamp.monotonic_resolution_s >= 0.0
     )
+
+
+def _valid_stamp(stamp: ClockStamp) -> bool:
+    """Backward-compatible internal alias for trace-anchor validation."""
+
+    return valid_clock_stamp(stamp)
 
 
 def _stamp_half_width_s(stamp: ClockStamp) -> float:

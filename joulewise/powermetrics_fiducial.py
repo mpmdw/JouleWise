@@ -34,6 +34,7 @@ from joulewise.uncertainty_evidence import (
     CLOCK_METHOD_V2,
     derive_powermetrics_anchor_v2,
     stamp_from_mapping,
+    valid_clock_stamp,
 )
 
 LEGACY_PROTOCOL_ID = "powermetrics_pulse_fiducial_v1"
@@ -71,6 +72,11 @@ FIT_COARSE_STEP_S = 0.005
 FIT_FINE_STEP_S = 0.0005
 REGION_COVERAGE_RESOLUTION_S = 0.0001
 MAX_VALIDATED_EDGE_SHIFT_S = 0.50
+MAX_EVENT_CLOCK_SKEW_S = 1.0
+MIN_AUTHENTICATED_PULSE_DURATION_S = 0.8
+MAX_AUTHENTICATED_PULSE_DURATION_S = 1.2
+MAX_AUTHENTICATED_GAP_ERROR_S = 0.25
+MIN_AUTHENTICATED_BASELINE_S = 4.5
 HUBER_DELTA = 1.345
 PLATEAU_INSET_S = 0.25
 LOCAL_MARGIN_S = 0.75
@@ -169,16 +175,42 @@ def capture_wall_time_from_events(events_raw: bytes) -> float:
         ]
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("source calibration events are malformed") from exc
+    command_event_types = {
+        "warmup_command_on",
+        "warmup_command_off",
+        "pulse_command_on",
+        "pulse_command_off",
+    }
     for row in rows:
         value = row.get("timestamp_s") if isinstance(row, Mapping) else None
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, int | float)
-            or not math.isfinite(float(value))
-            or float(value) < 0.0
-        ):
+        if isinstance(value, bool) or not isinstance(value, int | float):
             raise ValueError("source calibration event time is malformed")
-        timestamps.append(float(value))
+        try:
+            timestamp_s = float(value)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise ValueError("source calibration event time is malformed") from exc
+        if not math.isfinite(timestamp_s) or timestamp_s < 0.0:
+            raise ValueError("source calibration event time is malformed")
+        metadata = row.get("metadata")
+        stamp_row = metadata.get("clock_stamp") if isinstance(metadata, Mapping) else None
+        if row.get("event_type") in command_event_types and not isinstance(
+            stamp_row, Mapping
+        ):
+            raise ValueError("source calibration event clocks are unpaired")
+        if stamp_row is not None:
+            if not isinstance(stamp_row, Mapping):
+                raise ValueError("source calibration event ClockStamp is malformed")
+            try:
+                stamp = stamp_from_mapping(stamp_row)
+            except (KeyError, OverflowError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    "source calibration event ClockStamp is malformed"
+                ) from exc
+            if not valid_clock_stamp(stamp):
+                raise ValueError("source calibration event ClockStamp is malformed")
+            if abs(timestamp_s - stamp.epoch_s) > MAX_EVENT_CLOCK_SKEW_S:
+                raise ValueError("source calibration event clocks disagree")
+        timestamps.append(timestamp_s)
     if not timestamps:
         raise ValueError("source calibration events omit capture time")
     return min(timestamps)
@@ -341,6 +373,49 @@ def pulse_schedule(
         schedule.append((on_s, off_s))
         cursor = off_s + pulse_gap_s(index)
     return schedule
+
+
+def authenticate_protocol_schedule(
+    pulses: Sequence[CommandedPulse], intervals: Sequence[TraceInterval]
+) -> None:
+    """Authenticate the executed v2/v3 command schedule from primary evidence.
+
+    Pulse edges come from paired event ClockStamps. The anchored trace proves
+    that commanded-quiet support exists before and after the train; no planned
+    offset metadata is trusted. This gate is invoked only for the current
+    strict-physics v2/v3 path, never for byte-frozen v1 replay semantics.
+    """
+
+    if not pulses or not intervals:
+        raise ValueError("calibration schedule baseline is underivable")
+    for pulse in pulses:
+        duration_s = pulse.off_s - pulse.on_s
+        if (
+            not math.isfinite(duration_s)
+            or duration_s < MIN_AUTHENTICATED_PULSE_DURATION_S
+            or duration_s > MAX_AUTHENTICATED_PULSE_DURATION_S
+        ):
+            raise ValueError("calibration pulse duration disagrees with protocol")
+    for pulse_index, (pulse, following) in enumerate(
+        zip(pulses, pulses[1:], strict=False), start=1
+    ):
+        actual_gap_s = following.on_s - pulse.off_s
+        expected_gap_s = pulse_gap_s(pulse_index)
+        if (
+            not math.isfinite(actual_gap_s)
+            or abs(actual_gap_s - expected_gap_s)
+            > MAX_AUTHENTICATED_GAP_ERROR_S
+        ):
+            raise ValueError("calibration pulse gaps disagree with protocol")
+    trace_start_s = min(interval.start_s for interval in intervals)
+    trace_end_s = max(interval.end_s for interval in intervals)
+    if (
+        not math.isfinite(trace_start_s)
+        or not math.isfinite(trace_end_s)
+        or pulses[0].on_s - trace_start_s < MIN_AUTHENTICATED_BASELINE_S
+        or trace_end_s - pulses[-1].off_s < MIN_AUTHENTICATED_BASELINE_S
+    ):
+        raise ValueError("calibration schedule quiet baseline is too short")
 
 
 @dataclass(frozen=True)
@@ -828,9 +903,18 @@ def detect_pulses(
 def clock_stamp_half_width_s(stamp: Any) -> float:
     """Conservative half-width of one paired wall/monotonic stamp."""
 
-    return (stamp.monotonic_after_s - stamp.monotonic_before_s) / 2.0 + max(
-        stamp.wall_resolution_s, stamp.monotonic_resolution_s
-    )
+    try:
+        result = (
+            float(stamp.monotonic_after_s) - float(stamp.monotonic_before_s)
+        ) / 2.0 + max(
+            float(stamp.wall_resolution_s),
+            float(stamp.monotonic_resolution_s),
+        )
+    except (AttributeError, OverflowError, TypeError, ValueError) as exc:
+        raise ValueError("ClockStamp half-width is malformed") from exc
+    if not math.isfinite(result) or result < 0.0:
+        raise ValueError("ClockStamp half-width must be finite and non-negative")
+    return result
 
 
 def trim_trace_after_pulses(
@@ -865,6 +949,12 @@ def rederive_detection_from_artifacts(
     )
 
     expected_pulse_count = protocol_pulse_count(protocol_id)
+    strict_protocol = protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+    if strict_protocol:
+        # Strict v2/v3 semantics authenticate the wall-clock event label against
+        # the embedded physics ClockStamp before either freshness or fitting can
+        # consume it. Protocol v1 remains a byte-frozen historical arm.
+        capture_wall_time_from_events(events_jsonl)
     if not isinstance(recorded_clock_anchor, Mapping):
         raise ValueError("calibration clock anchor is missing")
     stamp_rows = recorded_clock_anchor.get("clock_stamps")
@@ -877,7 +967,7 @@ def rederive_detection_from_artifacts(
             if isinstance(row, Mapping)
         }
         native_records = parse_powermetrics_records(raw_powermetrics)
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, OverflowError, TypeError, ValueError) as exc:
         raise ValueError("calibration anchor evidence is malformed") from exc
     derived_anchor = derive_powermetrics_anchor_v2(
         stamps=anchor_stamps,
@@ -910,6 +1000,17 @@ def rederive_detection_from_artifacts(
         raise ValueError("calibration events are not UTF-8") from exc
     pairs: dict[str, list[CommandedPulse]] = {"warmup": [], "pulse": []}
     pending: dict[str, Any] = {}
+
+    def event_stamp_half_width_s(stamp: Any) -> float:
+        if strict_protocol:
+            return clock_stamp_half_width_s(stamp)
+        # Byte-frozen v1 replay keeps the historical arithmetic, including
+        # its old malformed-stamp behavior. Strict v2/v3 intake above owns
+        # the physical-sanity gate for every current accepted command stamp.
+        return (
+            stamp.monotonic_after_s - stamp.monotonic_before_s
+        ) / 2.0 + max(stamp.wall_resolution_s, stamp.monotonic_resolution_s)
+
     for line in text.splitlines():
         if not line.strip():
             continue
@@ -934,7 +1035,7 @@ def rederive_detection_from_artifacts(
             raise ValueError("calibration pulse event lacks a ClockStamp")
         try:
             stamp = stamp_from_mapping(stamp_row)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, OverflowError, TypeError, ValueError) as exc:
             raise ValueError("calibration pulse ClockStamp is malformed") from exc
         if edge == "on":
             if kind in pending:
@@ -948,8 +1049,8 @@ def rederive_detection_from_artifacts(
                 CommandedPulse(
                     on_s=on_stamp.epoch_s,
                     off_s=stamp.epoch_s,
-                    on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
-                    off_uncertainty_s=clock_stamp_half_width_s(stamp),
+                    on_uncertainty_s=event_stamp_half_width_s(on_stamp),
+                    off_uncertainty_s=event_stamp_half_width_s(stamp),
                 )
             )
     if pending:
@@ -972,8 +1073,11 @@ def rederive_detection_from_artifacts(
         )
         for record in anchored
     ]
+    protocol_intervals = trim_trace_after_pulses(intervals, pairs["warmup"])
+    if strict_protocol:
+        authenticate_protocol_schedule(pairs["pulse"], protocol_intervals)
     return detect_pulses(
-        trim_trace_after_pulses(intervals, pairs["warmup"]),
+        protocol_intervals,
         pairs["pulse"],
         trace_anchor_bound_s=float(
             derived_anchor["effective_clock_anchor_bound_s"]

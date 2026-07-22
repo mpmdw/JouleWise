@@ -274,7 +274,7 @@ def make_summary(
         )
         summary["energy_anchor_shift_envelopes"] = {
             pointer: {
-                "method": "common_trace_shift_interval_overlap_v1",
+                "method": "common_trace_shift_plus_independent_edge_corners_v3",
                 "anchor_bound_s": 0.05,
                 "point_j": point,
                 "lower_j": point - anchor_bound,
