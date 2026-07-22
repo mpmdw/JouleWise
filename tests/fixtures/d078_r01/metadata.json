@@ -1,0 +1,831 @@
+{
+  "adapters": {
+    "runtime": {
+      "cleanup_metadata": {
+        "memory_snapshots": [
+          {
+            "captured_at_s": 1784491130.959022,
+            "label": "cleanup_start",
+            "mlx_metal": {
+              "active_memory_bytes": 871558152,
+              "api_available": true,
+              "cache_memory_bytes": 11307774,
+              "peak_memory_bytes": 1119317776
+            },
+            "process_rss_bytes": 1176764416
+          }
+        ]
+      },
+      "name": "mlx",
+      "prepare_metadata": {
+        "adapter": "mlx_runtime",
+        "load_wall_time_s": 0.25043416023254395,
+        "memory_snapshots": [
+          {
+            "captured_at_s": 1784491074.589065,
+            "label": "prepare_end",
+            "mlx_metal": {
+              "active_memory_bytes": 871558152,
+              "api_available": true,
+              "cache_memory_bytes": 4756,
+              "peak_memory_bytes": 871558152
+            },
+            "process_rss_bytes": 1987674112
+          }
+        ],
+        "mlx_lm_version": "0.31.3",
+        "mlx_version": "0.31.2",
+        "model_artifact_identity": {
+          "algorithm": "sha256",
+          "files": {
+            "model.safetensors": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717"
+          },
+          "folded_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+          "kind": "file_set",
+          "root": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+          "status": "ok"
+        },
+        "model_config_eos_token_id": 151645,
+        "model_config_name": "qwen2",
+        "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "model_source_is_local_path": true,
+        "quantization": "int4",
+        "transformers_version": "5.12.1",
+        "weight_format": "mlx"
+      }
+    },
+    "telemetry": {
+      "command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "-b",
+        "0",
+        "-i",
+        "100",
+        "--samplers",
+        "cpu_power,gpu_power,ane_power,thermal",
+        "--format",
+        "plist",
+        "-o",
+        "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/joulewise-powermetrics-xazzjkcr.plist"
+      ],
+      "name": "powermetrics",
+      "raw_artifact": "powermetrics.plist",
+      "readiness": {
+        "ready_bytes": 52561,
+        "ready_check": "first_parseable_plist_document"
+      },
+      "timestamp_derivation": "current-era timestamp_s uses the midpoint of a controller-monotonic pre-spawn/first-parse bracket mapped through the run wall-minus-monotonic envelope; record 0 is that interval endpoint and records i>0 advance by elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the legacy cumulative-elapsed reconstruction. Each emitted sample carries its [endpoint-elapsed_ns, endpoint) averaging support."
+    }
+  },
+  "campaign_environment_preflight": {
+    "admitted": true,
+    "arm_quiet_mode": {
+      "command": [
+        "pmset",
+        "displaysleepnow"
+      ],
+      "command_returncode": 0,
+      "countdown_s": 20,
+      "requested": true,
+      "verified_by_reprobe": true
+    },
+    "captured_at": "2026-07-19T19:56:13.710980Z",
+    "enforced": true,
+    "evaluation": {
+      "eligible": true,
+      "findings": [
+        {
+          "actual": "AC Power",
+          "code": "power_source_not_ac",
+          "critical": true,
+          "field": "power_source",
+          "required": "AC Power",
+          "status": "pass"
+        },
+        {
+          "actual": true,
+          "code": "external_power_not_connected",
+          "critical": true,
+          "field": "power.external_connected",
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "low_power_mode_enabled",
+          "critical": true,
+          "field": "low_power_mode",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "all_asleep",
+          "code": "display_not_all_asleep",
+          "critical": true,
+          "field": "display_power_state",
+          "required": "all_asleep",
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "screensaver_engaged",
+          "critical": true,
+          "field": "screensaver_engaged",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "nominal",
+          "code": "thermal_not_nominal",
+          "critical": true,
+          "field": "thermal_pressure",
+          "required": "nominal",
+          "status": "pass"
+        }
+      ],
+      "findings_sha256": "dd9f19b39b77c0770f62e3abf1a19d9db4b614f2ff6ccae70cc5fcbf404be3e6",
+      "load_average_evidence": {
+        "admission_gate": false,
+        "load_average_15m": 1.88,
+        "load_average_1m": 2.44,
+        "load_average_5m": 2.17
+      },
+      "schema_version": "joulewise.environment_evaluation.v1",
+      "snapshot_sha256": "6a7414eeafd600892ee2f078334167da2a57c5ae8ed01d201097d4155b8a403b"
+    },
+    "initial_findings_sha256": "dd9f19b39b77c0770f62e3abf1a19d9db4b614f2ff6ccae70cc5fcbf404be3e6",
+    "initial_snapshot_sha256": "c20ecfcc0d53f11da91fcd39e0b4c425a936f1c3ee6b99213b9ff13eb2cd5aa5",
+    "override": null,
+    "policy_sha256": "7e0d20897be4559e82cbe3271f56e6f2b09fbbfe9646fe6f5a1988c732852012",
+    "schema_version": "joulewise.campaign_environment_preflight.v1",
+    "snapshot": {
+      "battery_percent": 100,
+      "battery_state": "charged",
+      "boot_time_s": 1783962965,
+      "build_version": "25F84",
+      "clock_sync": {
+        "status": "limited_without_admin",
+        "timed_probe_error": null,
+        "timed_running": true
+      },
+      "cpu_brand": "Apple M3 Max",
+      "display": {
+        "active_displays": 1,
+        "asleep_display_count": 1,
+        "asleep_evidence_count": 1,
+        "built_in_display_count": 1,
+        "external_display_count": 0,
+        "framebuffer_pipes_external_capable": 4,
+        "framebuffer_pipes_total": 5,
+        "probe": "system_profiler_spdisplays",
+        "reason": null,
+        "status": "ok"
+      },
+      "display_power_state": "all_asleep",
+      "display_sleep_prevented": false,
+      "errors": {},
+      "hid_idle_s": 4113.482560333,
+      "hw_model": "Mac15,9",
+      "load_average_15m": 1.88,
+      "load_average_1m": 2.44,
+      "load_average_5m": 2.17,
+      "logical_cpu_count": 16,
+      "low_power_mode": false,
+      "memory": {
+        "compressor_bytes": 143032320,
+        "page_size_bytes": 16384,
+        "pageins": 53092940,
+        "pageouts": 3037,
+        "pages_free": 2256567,
+        "pages_occupied_by_compressor": 8730,
+        "pages_stored_in_compressor": 36706,
+        "swap_usage": {
+          "free": "0.00M",
+          "total": "0.00M",
+          "used": "0.00M"
+        }
+      },
+      "memory_free_percent": 97.0,
+      "memory_pressure_percent": 3.0,
+      "power": {
+        "adapter_description": "pd charger",
+        "adapter_watts": 140,
+        "external_connected": true,
+        "fully_charged": true,
+        "is_charging": false
+      },
+      "power_source": "AC Power",
+      "product_name": "macOS",
+      "product_version": "26.5.2",
+      "python_packages": {
+        "mlx": {
+          "present": true,
+          "version": "0.31.2"
+        },
+        "mlx-lm": {
+          "present": true,
+          "version": "0.31.3"
+        },
+        "transformers": {
+          "present": true,
+          "version": "5.12.1"
+        }
+      },
+      "screensaver_delay_s": 0,
+      "screensaver_engaged": false,
+      "screensaver_module": "Ventura",
+      "thermal_pressure": "nominal",
+      "thermal_probe_reason": null,
+      "uptime_s": 528008.6765928268
+    }
+  },
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "policy_version": "environment-guard-cooldown-v2",
+    "profile": "production",
+    "schema_version": "joulewise.campaign_policy.v1",
+    "sha256": "7e0d20897be4559e82cbe3271f56e6f2b09fbbfe9646fe6f5a1988c732852012",
+    "source": "/Users/edr/code/JouleWise/configs/campaign_policies/quiet_mac_p2_production.json"
+  },
+  "clock": {
+    "kind": "system",
+    "monotonic_minus_wall_s": -1784244490.8603308,
+    "monotonic_resolution_s": 4.166666666666666e-08,
+    "wall_minus_monotonic_end_s": 1784244490.8603308,
+    "wall_minus_monotonic_start_s": 1784244490.8605406,
+    "wall_resolution_s": 1.0000000000000002e-06
+  },
+  "clock_anchor_bound_s": 1.1299676895141602,
+  "config_sha256": "0a9c3fd462fc333dec2c7341b18116aa5d88c0aaafba443193cf2e9e81a8a28f",
+  "config_warnings": [],
+  "connection": {
+    "host": "localhost",
+    "transport": "local"
+  },
+  "device": {
+    "boundary": "Apple SoC CPU + GPU + ANE package power",
+    "capability_precheck": {
+      "ok": true
+    },
+    "device": "macbook_m3_max",
+    "hw_model": "Mac15,9",
+    "kern_bootargs": "",
+    "kern_boottime": 1783962965,
+    "kern_osversion": "25F84",
+    "plist_anchor_offset_s": 0.89534592628479,
+    "power_units": "powermetrics milliwatts converted to watts",
+    "powermetrics": {
+      "samplers_available": [
+        "cpu_power",
+        "gpu_power",
+        "ane_power",
+        "thermal"
+      ],
+      "samplers_probe": {
+        "method": "requested_sampler_probe",
+        "ok": true
+      },
+      "samplers_requested": "cpu_power,gpu_power,ane_power,thermal"
+    },
+    "rail_manifest": [
+      "cpu_power",
+      "gpu_power",
+      "ane_power"
+    ],
+    "telemetry": "powermetrics",
+    "timestamp_derivation": "current-era timestamp_s uses the midpoint of a controller-monotonic pre-spawn/first-parse bracket mapped through the run wall-minus-monotonic envelope; record 0 is that interval endpoint and records i>0 advance by elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the legacy cumulative-elapsed reconstruction. Each emitted sample carries its [endpoint-elapsed_ns, endpoint) averaging support."
+  },
+  "environment": {
+    "battery_percent": 100,
+    "battery_state": "charged",
+    "boot_time_s": 1783962965,
+    "build_version": "25F84",
+    "capture_scope": "run",
+    "capture_skipped": false,
+    "captured_at_s": 1784491074.8968399,
+    "captured_for_rep": null,
+    "clock_sync": {
+      "status": "limited_without_admin",
+      "timed_probe_error": null,
+      "timed_running": true
+    },
+    "cpu_brand": "Apple M3 Max",
+    "display": {
+      "active_displays": 1,
+      "asleep_display_count": 1,
+      "asleep_evidence_count": 1,
+      "built_in_display_count": 1,
+      "external_display_count": 0,
+      "framebuffer_pipes_external_capable": 4,
+      "framebuffer_pipes_total": 5,
+      "probe": "system_profiler_spdisplays",
+      "reason": null,
+      "status": "ok"
+    },
+    "display_power_state": "all_asleep",
+    "display_sleep_prevented": false,
+    "env_capture_duration_s": 0.3012700080871582,
+    "errors": {},
+    "hid_idle_s": 4214.662139083,
+    "hw_model": "Mac15,9",
+    "load_average_15m": 1.82,
+    "load_average_1m": 1.55,
+    "load_average_5m": 1.93,
+    "logical_cpu_count": 16,
+    "low_power_mode": false,
+    "memory": {
+      "compressor_bytes": 143032320,
+      "page_size_bytes": 16384,
+      "pageins": 53093300,
+      "pageouts": 3037,
+      "pages_free": 2136866,
+      "pages_occupied_by_compressor": 8730,
+      "pages_stored_in_compressor": 36706,
+      "swap_usage": {
+        "free": "0.00M",
+        "total": "0.00M",
+        "used": "0.00M"
+      }
+    },
+    "memory_free_percent": 97.0,
+    "memory_pressure_percent": 3.0,
+    "post_run_observation": {
+      "capture_duration_s": 0.1909630298614502,
+      "capture_skipped": false,
+      "captured_at_s": 1784491131.164917,
+      "display": {
+        "active_displays": 1,
+        "asleep_display_count": 1,
+        "asleep_evidence_count": 1,
+        "built_in_display_count": 1,
+        "external_display_count": 0,
+        "probe": "system_profiler_spdisplays",
+        "reason": null,
+        "status": "ok"
+      },
+      "display_power_state": "all_asleep",
+      "errors": {},
+      "hid_idle_s": 4271.000621,
+      "screensaver_delay_s": 0,
+      "screensaver_engaged": false,
+      "screensaver_module": "Ventura"
+    },
+    "power": {
+      "adapter_description": "pd charger",
+      "adapter_watts": 140,
+      "external_connected": true,
+      "fully_charged": true,
+      "is_charging": false
+    },
+    "power_source": "AC Power",
+    "product_name": "macOS",
+    "product_version": "26.5.2",
+    "python_packages": {
+      "mlx": {
+        "present": true,
+        "version": "0.31.2"
+      },
+      "mlx-lm": {
+        "present": true,
+        "version": "0.31.3"
+      },
+      "transformers": {
+        "present": true,
+        "version": "5.12.1"
+      }
+    },
+    "screensaver_delay_s": 0,
+    "screensaver_engaged": false,
+    "screensaver_module": "Ventura",
+    "settle_s": 2.0,
+    "thermal_pressure": "nominal",
+    "thermal_probe_reason": null,
+    "uptime_s": 528109.858992815
+  },
+  "environment_admission": {
+    "attempts": [
+      {
+        "admitted": true,
+        "attempt": 1,
+        "baseline": {
+          "duration_s": 36.242620696,
+          "gpu_freq_hz_mean": 11.266666666666667,
+          "gpu_freq_mhz_mean": 11.266666666666667,
+          "gpu_idle_ratio_mean": 0.99858973,
+          "gpu_idle_ratio_min": 0.924069,
+          "idle_window_suspect": false,
+          "power_w_mean": 0.08898363771419929,
+          "power_w_stddev": 0.028041367979448627,
+          "sample_count": 300,
+          "telemetry_backend": "powermetrics"
+        }
+      }
+    ],
+    "claim_reason": null,
+    "critical_environment_passed": true,
+    "decision": "admitted",
+    "guard_observations": [
+      {
+        "capture_skipped": false,
+        "display": {
+          "active_displays": 1,
+          "asleep_display_count": 1,
+          "asleep_evidence_count": 1,
+          "built_in_display_count": 1,
+          "external_display_count": 0,
+          "probe": "system_profiler_spdisplays",
+          "reason": null,
+          "status": "ok"
+        },
+        "display_power_state": "all_asleep",
+        "errors": {},
+        "hid_idle_s": 4216.959913458,
+        "phase": "before_attempt_1",
+        "screensaver_delay_s": 0,
+        "screensaver_engaged": false,
+        "screensaver_module": "Ventura"
+      },
+      {
+        "capture_skipped": false,
+        "display": {
+          "active_displays": 1,
+          "asleep_display_count": 1,
+          "asleep_evidence_count": 1,
+          "built_in_display_count": 1,
+          "external_display_count": 0,
+          "probe": "system_profiler_spdisplays",
+          "reason": null,
+          "status": "ok"
+        },
+        "display_power_state": "all_asleep",
+        "errors": {},
+        "hid_idle_s": 4256.481142291,
+        "phase": "after_attempt_1",
+        "screensaver_delay_s": 0,
+        "screensaver_engaged": false,
+        "screensaver_module": "Ventura"
+      }
+    ],
+    "on_fail": "abort",
+    "per_run_environment_evaluation": {
+      "eligible": true,
+      "findings": [
+        {
+          "actual": "AC Power",
+          "code": "power_source_not_ac",
+          "critical": true,
+          "field": "power_source",
+          "required": "AC Power",
+          "status": "pass"
+        },
+        {
+          "actual": true,
+          "code": "external_power_not_connected",
+          "critical": true,
+          "field": "power.external_connected",
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "low_power_mode_enabled",
+          "critical": true,
+          "field": "low_power_mode",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "all_asleep",
+          "code": "display_not_all_asleep",
+          "critical": true,
+          "field": "display_power_state",
+          "required": "all_asleep",
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "screensaver_engaged",
+          "critical": true,
+          "field": "screensaver_engaged",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "nominal",
+          "code": "thermal_not_nominal",
+          "critical": true,
+          "field": "thermal_pressure",
+          "required": "nominal",
+          "status": "pass"
+        }
+      ],
+      "findings_sha256": "dd9f19b39b77c0770f62e3abf1a19d9db4b614f2ff6ccae70cc5fcbf404be3e6",
+      "load_average_evidence": {
+        "admission_gate": false,
+        "load_average_15m": 1.82,
+        "load_average_1m": 1.55,
+        "load_average_5m": 1.93
+      },
+      "schema_version": "joulewise.environment_evaluation.v1",
+      "snapshot_sha256": "bbcaacf2f034cc618860be6a400586dd024edd52254619ed758574de62fa512f"
+    },
+    "policy_version": "environment-guard-cooldown-v2",
+    "reference_provenance_present": true,
+    "schema_version": "joulewise.environment_admission.v1"
+  },
+  "git_commit": "e79279a54e071f4b26684530e38a7e1b6dc59a45",
+  "idle_baseline": {
+    "duration_s": 36.242620696,
+    "gpu_freq_hz_mean": 11.266666666666667,
+    "gpu_freq_mhz_mean": 11.266666666666667,
+    "gpu_idle_ratio_mean": 0.99858973,
+    "gpu_idle_ratio_min": 0.924069,
+    "idle_window_suspect": false,
+    "power_w_mean": 0.08898363771419929,
+    "power_w_stddev": 0.028041367979448627,
+    "sample_count": 300,
+    "telemetry_backend": "powermetrics"
+  },
+  "idle_drift_bound_w": 0.7093793622858008,
+  "joulewise_version": "0.1.0",
+  "machine": "arm64",
+  "marker_to_first_sample_phase_bound_s": 1.1299676895141602,
+  "marker_to_last_sample_phase_bound_s": 0.5924515724182129,
+  "model": {
+    "context_window": 32768,
+    "family": "qwen2.5",
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "weight_format": "mlx"
+  },
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "python_version": "3.13.1",
+  "quantization": {
+    "bits": 4,
+    "group_size": null,
+    "name": "int4"
+  },
+  "run_id": "p2015-df-rq-short-abs-r01",
+  "schema_version": "0.1",
+  "source_provenance": {
+    "changed_during_run": false,
+    "claim_eligible": true,
+    "diff_identity": {
+      "algorithm": "sha256",
+      "version": "joulewise.git-diff.nul-v1"
+    },
+    "end": {
+      "diff_sha256": "7c9e13b3e28fc9a79a6d5be4981b75ae3eeae4a95becfe879c2af2b77eb0b16a",
+      "git_commit": "e79279a54e071f4b26684530e38a7e1b6dc59a45",
+      "staged": "clean",
+      "tracked": "clean",
+      "untracked": "clean"
+    },
+    "reason_codes": [],
+    "schema": "joulewise.source_provenance.v1",
+    "start": {
+      "diff_sha256": "7c9e13b3e28fc9a79a6d5be4981b75ae3eeae4a95becfe879c2af2b77eb0b16a",
+      "git_commit": "e79279a54e071f4b26684530e38a7e1b6dc59a45",
+      "staged": "clean",
+      "tracked": "clean",
+      "untracked": "clean"
+    }
+  },
+  "thermal_post": {
+    "fan_state": null,
+    "metadata": {
+      "source": "powermetrics",
+      "temperature_c_available": false
+    },
+    "temperature_c": null,
+    "thermal_pressure": "Nominal",
+    "timestamp_s": 1784491123.8092759
+  },
+  "thermal_pre": {
+    "fan_state": null,
+    "metadata": {
+      "source": "powermetrics",
+      "temperature_c_available": false
+    },
+    "temperature_c": null,
+    "thermal_pressure": "Nominal",
+    "timestamp_s": 1784491121.788299
+  },
+  "uncertainty_evidence": {
+    "clock_anchor": {
+      "anchor_only_bound_s": 0.5090290307998657,
+      "clock_stamps": {
+        "first_parse": {
+          "epoch_s": 1784491122.808308,
+          "monotonic_after_s": 246631.94794675,
+          "monotonic_before_s": 246631.947945583,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "post_parse": {
+          "epoch_s": 1784491123.7528949,
+          "monotonic_after_s": 246632.892536583,
+          "monotonic_before_s": 246632.89253625,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "pre_spawn": {
+          "epoch_s": 1784491121.790265,
+          "monotonic_after_s": 246630.92990025,
+          "monotonic_before_s": 246630.929898708,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "sampling_started": {
+          "epoch_s": 1784491122.808424,
+          "monotonic_after_s": 246631.948062125,
+          "monotonic_before_s": 246631.948062,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        },
+        "sampling_stopped": {
+          "epoch_s": 1784491123.179584,
+          "monotonic_after_s": 246632.319224083,
+          "monotonic_before_s": 246632.319224041,
+          "monotonic_resolution_s": 4.166666666666666e-08,
+          "wall_resolution_s": 1.0000000000000002e-06
+        }
+      },
+      "effective_clock_anchor_bound_s": 1.1299676895141602,
+      "first_parse_upper_monotonic_s": 246631.94794675,
+      "first_sample_end_lower_epoch_s": 1784491121.790256,
+      "first_sample_end_point_epoch_s": 1784491122.299285,
+      "first_sample_end_upper_epoch_s": 1784491122.808314,
+      "method": "powermetrics_spawn_ready_wall_monotonic_envelope_v1",
+      "plist_timestamp_check": {
+        "all_intervals_intersect": true,
+        "method": "whole_second_consistency_only_v1",
+        "records_checked": 9
+      },
+      "process_spawn_lower_monotonic_s": 246630.929898708,
+      "status": "bounded",
+      "wall_minus_monotonic_lower_s": 1784244490.8603573,
+      "wall_minus_monotonic_upper_s": 1784244490.8603673
+    },
+    "idle_drift": {
+      "calibration_artifact_sha256": null,
+      "calibration_cell_id": null,
+      "calibration_guard_w": null,
+      "calibration_status": "interim_run_sentinels_only",
+      "effective_bound_w": 0.7093793622858008,
+      "method": "pre_post_idle_observed_envelope_v1",
+      "post_artifact": "raw/powermetrics_idle_post.plist",
+      "post_idle_window_suspect": false,
+      "post_sample_count": 50,
+      "pre_artifact": "raw/powermetrics_idle.plist",
+      "pre_idle_window_suspect": false,
+      "pre_power_w_mean": 0.08898363771419929,
+      "pre_sample_count": 300,
+      "run_observed_envelope_w": 0.7093793622858008,
+      "status": "bounded"
+    },
+    "idle_drift_guard": {
+      "artifact_sha256": null,
+      "bundle_sha256": [],
+      "calibration_status": "pending_calibration",
+      "cell_id": null,
+      "guard_w": null,
+      "method": "p2_015_prediction_guard_v1",
+      "n_bundles": 0
+    },
+    "sample_phase": {
+      "first_elapsed_s": 0.111798833,
+      "last_elapsed_s": 0.11390975,
+      "marker_to_first_sample_phase_bound_s": 1.1299676895141602,
+      "marker_to_last_sample_phase_bound_s": 0.5924515724182129,
+      "method": "interval_support_vs_controller_markers_v1",
+      "sampling_started_epoch_s": 1784491122.808424,
+      "sampling_stopped_epoch_s": 1784491123.179584,
+      "status": "bounded"
+    },
+    "schema_version": "p2-038.1",
+    "telemetry_backend": "powermetrics"
+  },
+  "workload_observed": {
+    "output_token_count": 64,
+    "token_count": 192
+  },
+  "workload_provenance": {
+    "generator": {
+      "name": "mlx_lm.stream_generate",
+      "version": "0.31.3"
+    },
+    "model": {
+      "artifact_identity": {
+        "algorithm": "sha256",
+        "files": {
+          "model.safetensors": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717"
+        },
+        "folded_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "kind": "file_set",
+        "root": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "status": "ok"
+      },
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit"
+    },
+    "output_policy": {
+      "emitted_tokens": 64,
+      "name": "fixed_budget_exact",
+      "requested_tokens": 64,
+      "stop_condition": "requested_tokens_emitted"
+    },
+    "prompt": {
+      "realized_token_count": 128,
+      "text_sha256": null,
+      "token_hash_domain": "joulewise.prompt_token_ids.v1",
+      "token_ids_sha256": "75644f38b1d2e90edfd10b1bff572378198b7083173141667d1c98125feaf706"
+    },
+    "response": {
+      "emitted_token_ids": [
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500,
+        13,
+        96048,
+        273,
+        54,
+        1064,
+        27268,
+        9934,
+        3950,
+        8500
+      ]
+    },
+    "sampler": {
+      "api": "mlx_lm.sample_utils.make_sampler",
+      "kind": "greedy",
+      "parameter": "temp",
+      "pinned": true,
+      "temperature": 0.0
+    },
+    "tokenizer": {
+      "backend": "mlx",
+      "class": "TokenizerWrapper",
+      "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "vocab_size": 151643
+    }
+  }
+}

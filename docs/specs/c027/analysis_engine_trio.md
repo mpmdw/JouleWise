@@ -1828,3 +1828,39 @@ These should be corrected, not re-decided:
   unguarded `13.599567 J` small-`n` false-effect guard example.
 - Static/design checks only. No hardware or campaign command was run, no
   corpus bundle was modified, and no legacy result was promoted above L1.
+
+## 10. Amendment 2026-07-19 (D-078 audit follow-up, T0.3/T0.4/T0.6)
+
+Additive to Component B (P2-037); nothing above is rewritten.
+
+- `joulewise/analysis_engine/inputs.py` replaces the 0.4.x-range reducer
+  acceptance with the EXACT pair matrix `GOVERNED_REDUCER_IDLE_METHOD_PAIRS`
+  (0.4.1/0.4.2 + v1; 0.5.0/0.5.1 + duration-weighted v2; 0.6.0/0.6.1 + v2).
+  `governed_stochastic_variance` fails closed on any crossed or unknown pair.
+  Verified against the byte-exact stored wire of
+  `runs_recal4_20260719/p2015-df-su-sentinel-abs-r01/summary_metrics.json`
+  (sha256 `8abd820e…`, embedded as a pinned fixture in
+  `tests/test_analysis_claims.py`).
+- `deterministic_bounds` additionally reads the frozen anchor-envelope fields
+  (`energy_anchor_shift_envelopes` keyed by summary-rooted JSON Pointers;
+  `energy_bound_terms_j.E_clock_anchor_shift_bound_j`) and emits the
+  deterministic term `E_clock_anchor_shift_bound_j`. On the anchor wires
+  (0.5.1/0.6.1) the fields are required; on older wires the read is additive,
+  but a present-and-malformed envelope always fails closed
+  (`anchor_energy_envelope_unrecorded`).
+- `REDUCER_REASON_CODES` gains the D-078 anchor barriers
+  `clock_anchor_unresolved`, `anchor_energy_envelope_unrecorded`, and
+  `anchor_energy_envelope_exceeds_quarter_metric` (precedence: not
+  resolvable), so 0.5.1-era stored prechecks stay readable instead of
+  collapsing into `window_evidence_precheck_missing`.
+- `metric_value` / floor-evidence binding enforce metric-vs-window-class
+  consistency (phase windows extract only `phase_energy_j.<target>`) and
+  refuse the legacy `throughput_tokens_s` field loudly.
+- `campaign_cooldown_evidence` is the public reuse point for the
+  hash-verified cooldown join (`manifest_id=None` selects calibration
+  campaigns recorded with `analysis_manifest_id` null). The detection-floor
+  extraction layer (`joulewise/floor_extraction.py`,
+  `scripts/extract_detection_floors.py`,
+  `docs/phase_2/detection_floor.md` Section 5) composes this join with the
+  hard precheck gate, cap-hit same-slot exclusion at n-1 under the frozen
+  guard, and the anchor-envelope requirements.

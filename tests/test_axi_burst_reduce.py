@@ -27,6 +27,12 @@ AXI_FIXTURE = ROOT / "tests" / "fixtures" / "axi_valid_burst"
 LEGACY_FIXTURE = ROOT / "tests" / "fixtures" / "legacy_reducer_current_behavior"
 GOLDENS = ROOT / "tests" / "goldens"
 BASE_HEAD = "9ee87102c04530e874909d077d842a4573f9f065"
+BYTE_FROZEN_GOLDEN_SHA256 = {
+    "legacy_reducer_050.patch.json": "86eddab41ca9dc78e6d378456e0567fc126282a030f103eee3686c4ec8cfa589",
+    "d078_r01_reducer_051.json": "22ebcf01886138f87881aa0e6be067e5abac9edfe5a930e7293776bd57f5af81",
+    "axi_summary_v060.json": "ba21a0c32c7ec4ae141345e6ed4753b135178aba82e7972089d002d6f3ae0f02",
+    "axi_summary_v061.json": "2931b49140a36aa1e12b0b5e5f4b33627aa8c2901275b81a3bc1fceff13a3c96",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -105,6 +111,16 @@ class AxiBurstReduceTests(unittest.TestCase):
                         absent_tolerance=tolerance,
                     ),
                     [],
+                )
+
+    def test_byte_frozen_reducer_goldens_match_executable_sha256_registry(self) -> None:
+        # G7(b): semantic replay tests can drift together with edited expected
+        # bytes.  Pin the four explicitly byte-frozen reducer golden files.
+        for name, expected in BYTE_FROZEN_GOLDEN_SHA256.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    hashlib.sha256((GOLDENS / name).read_bytes()).hexdigest(),
+                    expected,
                 )
 
     def test_legacy_golden_provenance_replays_pristine_base_head(self) -> None:
@@ -518,3 +534,62 @@ class AxiBurstReduceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AxiV061AnchorEraTests(unittest.TestCase):
+    """D-078: 0.6.1 is the anchor-era AXI arm; 0.6.0 stays byte-frozen."""
+
+    def test_new_event_v2_default_is_0_6_2_and_0_6_0_is_historical_only(self) -> None:
+        # W8 defect shape: deleting the stored historical summary made a new
+        # event-v2 bundle default to the defective 0.6.0 wire.
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / "bundle"
+        shutil.copytree(AXI_FIXTURE, path)
+        (path / "summary_metrics.json").unlink()
+        summary = reduce_bundle(path)
+        self.assertEqual(summary.summary_provenance["reducer_version"], "0.6.2")
+        self.assertEqual(AXI_REDUCER_VERSION, "0.6.2")
+        explicit = reduce_bundle(path, reducer_version="0.6.1")
+        self.assertEqual(
+            explicit.summary_provenance["reducer_version"], "0.6.1"
+        )
+        with self.assertRaisesRegex(ValueError, "historical re-reduction only"):
+            reduce_bundle(path, reducer_version="0.6.0")
+
+    def test_0_6_1_matches_golden_and_0_6_0_stays_byte_frozen(self) -> None:
+        frozen = reduce_bundle(AXI_FIXTURE, reducer_version="0.6.0")
+        self.assertEqual(
+            frozen.canonical_bytes(),
+            (AXI_FIXTURE / "summary_metrics.json").read_bytes(),
+        )
+        current = reduce_bundle(AXI_FIXTURE, reducer_version="0.6.1").to_dict()
+        golden = load_json(GOLDENS / "axi_summary_v061.json")
+        self.assertEqual(current, golden)
+        self.assertEqual(
+            current["summary_provenance"]["reducer_version"], "0.6.1"
+        )
+        # Mock telemetry has no native-stamped raw capture: the anchor-era
+        # machinery is powermetrics-only, so 0.6.1 differs from 0.6.0 solely
+        # by its recorded provenance on this fixture.
+        gate = current["window_evidence_precheck"]["gross_request"]
+        self.assertFalse(gate["eligible"])
+        self.assertNotIn("energy_anchor_shift_envelopes", current)
+        self.assertNotIn(
+            "E_clock_anchor_shift_bound_j", current["energy_bound_terms_j"]
+        )
+        frozen_payload = frozen.to_dict()
+        self.assertNotIn(
+            "E_clock_anchor_shift_bound_j", frozen_payload["energy_bound_terms_j"]
+        )
+        self.assertNotIn("energy_anchor_shift_envelopes", frozen_payload)
+
+    def test_0_6_2_matches_its_identity_locked_golden(self) -> None:
+        current = reduce_bundle(AXI_FIXTURE, reducer_version="0.6.2")
+        self.assertEqual(
+            current.canonical_bytes(),
+            (GOLDENS / "axi_summary_v062.json").read_bytes(),
+        )
+        self.assertEqual(
+            current.summary_provenance["reducer_version"], "0.6.2"
+        )

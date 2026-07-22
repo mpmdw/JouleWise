@@ -681,7 +681,7 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
             summary.window_evidence_precheck["per_token"],
             {
                 "eligible": False,
-                "reasons": ["stream_chunk_fallback"],
+                "reasons": ["token_count_stream_chunk_fallback"],
                 "token_count_source": "stream_chunk_fallback",
             },
         )

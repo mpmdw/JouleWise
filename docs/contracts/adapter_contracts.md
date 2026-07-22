@@ -321,6 +321,184 @@ Initial telemetry backends:
 - `jetson_rails`
 - `wall_meter`
 
+## Idle-Admission Core Policy Extension (T0.5, audit P1.1/P1.2; additive)
+
+GPU-idle-only admission is no longer sufficient. The pure evaluators in
+`joulewise/idle_admission.py` add three fail-closed surfaces, driven by an
+additive campaign-policy sidecar section keyed `idle_admission_extension`
+(schema `joulewise.idle_admission_extension.v1`):
+
+- **CPU-aware idle admission**: policy-configurable criteria over the
+  pre-run baseline rich telemetry (`rich_telemetry_idle.jsonl`) -
+  nearest-rank p95 of the per-record max per-CPU busy ratio
+  (`1 - idle_ratio - down_ratio`, clamped, so parked CPUs never read as
+  busy) against `cpu_criteria.cpu_busy_ratio_p95_max`, and p95 of
+  `processor_combined_power_w` against
+  `cpu_criteria.processor_combined_power_w_p95_max`, with at least
+  `cpu_criteria.min_samples` records. Admission requires the existing
+  GPU-idle admission AND these criteria. Missing, malformed, or
+  insufficient telemetry FAILS CLOSED when
+  `cpu_criteria.on_missing_telemetry` is `fail` (mandatory for a
+  production profile); an exploratory policy may use `flag` but must set
+  `claim_bearing: false` (explicitly non-claim-bearing).
+- **Adapter-wattage continuity**: `collect_environment_guard_observation`
+  records the adapter surface (`power.adapter_watts`,
+  `power.adapter_description`, plus a normalized
+  `adapter_power_observation`) per admission observation when called with
+  `include_adapter_power=True` (default off so pre-hookup callers keep
+  their exact probe sequence AND their exact observation shape; the
+  controller hookup opts in). Under the default flag the `power` block and
+  `adapter_power_observation` keys are ABSENT entirely - not present as
+  all-None placeholders - so the verdict's continuity scan (which treats any
+  guard observation carrying a `power` key as an adapter observation) never
+  ingests unverifiable unknown-wattage placeholders from callers that did not
+  opt in. The campaign
+  verdict evaluates the ordered observation sequence: wattage
+  discontinuities (the live 140->70->140 W negotiation precedent) and
+  description/power-source changes are NAMED conditions - recorded data,
+  never a silent pass and never an implicit abort. Unknown adapter wattage
+  fails closed when `adapter_wattage.require_known_wattage` is true
+  (mandatory for production); stable known wattage passes.
+- **Prospective NEG-8 bracket acceptance**: the campaign verdict compares
+  the start (`*neg8-reference-start*`) and end (`*neg8-reference-end*`)
+  member gross-energy admissible sets from their anchor-shift envelopes.
+  Point-only references are unverifiable and fail closed. The bracket passes
+  only when the worst-case endpoint-pair absolute delta
+  satisfies BOTH `neg8_bracket.max_abs_delta_j` AND
+  `neg8_bracket.max_rel_delta` (maximized over the positive start set);
+  comparisons
+  are `<=`, so exactly-on-threshold passes and one ULP over fails. A
+  missing bracket fails closed when `neg8_bracket.require_bracket` is true
+  (mandatory for production). The bracket is a WHOLE-WINDOW check: the drift
+  comparison is evaluated only by a verdict pass whose evaluated members
+  include BOTH the start and end reference bundles. The canonical Window-A
+  sequence runs the start and end references as SEPARATE `run_campaign.py`
+  invocations, so a per-segment invocation (only one reference, or neither)
+  records the non-drift condition `neg8_bracket_not_evaluated` with decision
+  `not_evaluated` instead of a spurious `failed`/`missing`; to obtain the
+  bracket comparison, run a whole-window verdict pass over both reference
+  bundles together. A reference bundle that is genuinely absent from a
+  whole-window pass is still caught by the collection verdict's
+  missing/failed member handling, not silently dropped.
+
+Verdict surface: `scripts/run_campaign.py` records the additive
+`idle_admission_core` section (schema
+`joulewise.idle_admission_core_verdict.v1`) on the campaign verdict with
+per-member CPU-admission results, the continuity result, the bracket
+result, and the union of named conditions. A sidecar without the extension
+yields the named condition `idle_admission_extension_unconfigured`.
+
+Hash/version enforcement: the campaign policy binding hash is the sha256
+of the full sidecar bytes, extension included - changing any new field
+changes the policy identity; the extension additionally records its own
+canonical-JSON sha256 and requires exact schema/policy version strings and
+exact keys (unknown or missing keys are rejected).
+
+Deployment note (C2 hookup complete): `CampaignPolicy.from_mapping` now owns
+the typed additive extension parse, including profile-dependent fail-closed
+validation, so controller child runs re-parse the full hash-bound sidecar
+without a runner-side strip/parse workaround. The tracked production and
+exploratory sidecars carry the extension. During each live admission attempt,
+the powermetrics adapter exposes that attempt's rich CPU records in memory;
+the controller evaluates CPU/combined-power criteria before workload invoke,
+records the result in the existing `environment_admission.attempts` ledger,
+and retries/aborts or flags according to the base policy. Attempt selection is
+explicit, so the final admission decision and final CPU telemetry cannot be
+paired across retries. Current-mint attempt rows bind each measurement to a
+finite `start_s`/`end_s` wall-clock (epoch) window; the ordered ledger must be
+strictly increasing and non-overlapping (`end_i <= start_(i+1)`). Missing or
+malformed timing refuses current claims, while frozen replay semantics remain
+unchanged. Because the windows are wall-clock, a backwards clock step between
+attempts mints an out-of-order ledger that strict validation permanently
+refuses — a fail-closed false refusal, never an admission; re-run the
+campaign member if this occurs. Missing adapter telemetry fails closed on live clocks;
+`FakeClock` fixture runs retain the pre-hookup GPU decision and record
+`cpu_admission_enforced: false` alongside the named missing-telemetry result.
+That field is an unconditional claim barrier in reducers/extraction; it is
+never evidence that GPU-only admission was scientifically sufficient. Live
+guard observations opt in to adapter-power capture, including a mandatory
+post-workload observation for every member. A missing post sample is unknown
+wattage (and therefore a production refusal), so renegotiation during the
+final workload cannot be hidden by an earlier clean sample.
+
+At window end, chain scripts can run:
+
+```sh
+python3 scripts/run_campaign.py --whole-window-verdict \
+  --runs-dir RUNS_ROOT --campaign-policy POLICY_SIDECAR
+```
+
+This resolves finalized members from the matching campaign provenance
+ledger (falling back to a diagnostic-only scan that cannot pass when
+membership is unbound), applies ordinary strict bundle validation, appends an
+`idle_admission_whole_window_verdict` row to the campaign log, and evaluates
+NEG-8 in explicit whole-window mode. A required missing reference or a
+threshold failure returns nonzero under production; exploratory remains
+non-claim-bearing and emits a labeled `flagged` verdict. At consumption, core
+member occurrences are counted rather than set-collapsed: byte-identical or
+same-ID duplicates invalidate provenance. The consumer also reloads the
+source-member gross-energy admissible sets and re-runs the bracket policy; a
+stored decision that disagrees with that result refuses
+`whole_window_verdict_conflict`. The deployed
+production extension is:
+
+```json
+"idle_admission_extension": {
+  "schema_version": "joulewise.idle_admission_extension.v1",
+  "policy_version": "idle-admission-core-v1",
+  "claim_bearing": true,
+  "cpu_criteria": {
+    "cpu_busy_ratio_p95_max": 0.5,
+    "processor_combined_power_w_p95_max": 1.0,
+    "min_samples": 30,
+    "on_missing_telemetry": "fail"
+  },
+  "adapter_wattage": {"require_known_wattage": true},
+  "neg8_bracket": {
+    "require_bracket": true,
+    "max_abs_delta_j": 0.05,
+    "max_rel_delta": 0.25
+  }
+}
+```
+
+(Exploratory: `claim_bearing: false`, `on_missing_telemetry: "flag"`,
+`require_known_wattage: false`, `require_bracket: false`. Clean-corpus
+calibration, runs_recal5_20260719 r01 idle window, 300 samples: busy p95
+0.211, combined-power p95 0.143 W - the production thresholds above hold
+comfortable margin while a single pegged core or an active-CPU baseline
+fails.)
+
+### D-078 instrument-calibration binding (2026-07-20 additive repair)
+
+Powermetrics 0.5.1/0.6.1 are claim-ineligible replay arms. The calibration-
+binding requirement applies to the current claim-eligible mints 0.5.2/0.6.2:
+each must reference a hash-verified `joulewise.instrument_evidence.v1`
+artifact and repeat its complete binding vector in
+`metadata.instrument_calibration.bindings`: hardware model, OS build,
+powermetrics binary sha256, sampling interval, anchor-method version, MLX
+version, pulse-protocol ID, and power policy. Every field is compared; an
+absent vector or any mismatch is claim-ineligible. The reducer independently
+rechecks the protocol-specific pulse count, a present detected row for every
+pulse, `all_pulses_detected == true`, zero spurious plateaus, a finite bound,
+and valid referenced raw-powermetrics/events hashes. `status: "valid"` is
+never trusted by itself. Metrics/envelopes remain available for diagnostic
+salvage when calibration is absent/invalid, but claim eligibility does not.
+
+Each pulse row is indexed exactly once in protocol order and carries finite,
+ordered onset and offset residual interval endpoints. `b_fiducial_s` must
+dominate the magnitude of every endpoint. The reducer rehashes the referenced
+validation `raw/powermetrics.plist` and `events.jsonl` bytes, verifies the
+artifact's canonical binding-vector digest, and matches its recorded
+powermetrics executable path/digest and power-policy id to runtime-observed
+bundle metadata. An unverifiable observation refuses calibration; copying the
+same unverified values into two metadata objects is not corroboration.
+
+For an accepted nonzero wall-minus-monotonic span, the reducer treats the span
+as independent start/end edge uncertainty in addition to the common trace
+translation. Opposite pre/post-step edge shifts are therefore covered by the
+reported joule envelope. Spans above the 5 ms ceiling remain hard refusals.
+
 ## Structured Failure Reasons
 
 Adapters should report failures with stable reason codes:

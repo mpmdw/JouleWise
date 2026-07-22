@@ -29,12 +29,13 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -74,7 +75,16 @@ from joulewise.environment import (  # noqa: E402
     empty_environment_snapshot,
     evaluate_environment_policy,
 )
+from joulewise.idle_admission import (  # noqa: E402
+    IdleAdmissionExtension,
+    evaluate_adapter_wattage_continuity,
+    evaluate_cpu_idle_admission,
+    evaluate_neg8_bracket,
+    extract_adapter_observation,
+    neg8_bracket_not_evaluated,
+)
 from joulewise.analysis_engine.inputs import (  # noqa: E402
+    ANCHOR_SHIFT_ENVELOPE_METHODS,
     cleanup_claim_evidence_flags,
     token_provenance_from_artifacts,
 )
@@ -83,6 +93,7 @@ from joulewise.analysis_engine.ratio import (  # noqa: E402
     ratio_collection_evidence_reasons,
     ratio_evidence_reasons,
 )
+from joulewise.analysis_engine.claims import REASON_CODES  # noqa: E402
 from joulewise.schemas import (  # noqa: E402
     CampaignPolicy,
     CooldownPolicy,
@@ -95,6 +106,20 @@ from joulewise.interfaces import AttemptIdentity  # noqa: E402
 from joulewise.output_identity import (  # noqa: E402
     build_output_identity_report,
     render_output_identity_report,
+)
+from joulewise.whole_window import (  # noqa: E402
+    build_row_provenance,
+    source_manifest_descriptors,
+    validated_attempt_selection,
+)
+from joulewise.calibration_bracketing import (  # noqa: E402
+    calibration_bracket_for_bundles,
+)
+from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
+from joulewise.environment_admission import (  # noqa: E402
+    current_environment_refusals,
+    environment_admission_refusals,
+    post_run_environment_refusals,
 )
 
 
@@ -112,6 +137,9 @@ ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
 CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
+IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA = (
+    "joulewise.idle_admission_whole_window_verdict.v1"
+)
 CLAIM_READINESS_NOTE = (
     "This verdict checks analysis inputs only; P2-037 decides claim outcomes."
 )
@@ -124,6 +152,9 @@ KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
         "affine_smoke_annotations.v1",
     }
 )
+NEG8_REFERENCE_ROLE = "neg8_daily_reference"
+NEG8_REFERENCE_START_ROLE = "neg8_daily_reference_start"
+NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
 
 
 @dataclass(frozen=True)
@@ -135,6 +166,10 @@ class ConfigInfo:
     generator_sidecar_ref: str | None = None
     suite_manifest_ref: str | None = None
     prompt_token_evidence_policy: PromptTokenEvidencePolicy | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
+    role: str | None = None
+    sentinel_position: str | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +177,15 @@ class ConfigError:
     path: Path
     message: str
     run_id: str | None = None
+
+
+@dataclass(frozen=True)
+class WholeWindowMemberSource:
+    path: Path
+    role: str | None = None
+    sentinel_position: str | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
 
 
 @dataclass(frozen=True)
@@ -169,16 +213,31 @@ class CampaignPolicyBinding:
     path: Path
     policy: CampaignPolicy
     sha256: str
+    idle_admission_extension: IdleAdmissionExtension | None = None
 
     def to_metadata(self) -> dict[str, Any]:
-        return {
+        row = {
             "schema_version": self.policy.schema_version,
             "policy_id": self.policy.policy_id,
             "policy_version": self.policy.policy_version,
             "profile": self.policy.profile.value,
             "sha256": self.sha256,
             "source": str(self.path),
+            "calibration_bracketing": {
+                "require_bracket": self.policy.calibration_bracketing.require_bracket,
+                "calibration_bracket_max_drift_s": (
+                    self.policy.calibration_bracketing.calibration_bracket_max_drift_s
+                ),
+            },
         }
+        if self.idle_admission_extension is not None:
+            row["idle_admission_extension"] = {
+                "schema_version": self.idle_admission_extension.schema_version,
+                "policy_version": self.idle_admission_extension.policy_version,
+                "claim_bearing": self.idle_admission_extension.claim_bearing,
+                "sha256": self.idle_admission_extension.sha256(),
+            }
+        return row
 
 
 @dataclass(frozen=True)
@@ -239,6 +298,10 @@ class MemberEvaluation:
     preceding_campaign_cooldown: dict[str, Any] | None = field(
         default=None, repr=False, compare=False
     )
+    declared_role: str | None = None
+    sentinel_position: str | None = None
+    scientific_config_sha256: str | None = None
+    canonical_neg8_workload: bool = False
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -317,6 +380,12 @@ class MemberEvaluation:
             row["suite_order_seed"] = self.suite_order_seed
         if self.preceding_campaign_cooldown is not None:
             row["preceding_campaign_cooldown"] = self.preceding_campaign_cooldown
+        if self.declared_role is not None:
+            row["declared_role"] = self.declared_role
+        if self.sentinel_position is not None:
+            row["sentinel_position"] = self.sentinel_position
+        if self.scientific_config_sha256 is not None:
+            row["scientific_config_sha256"] = self.scientific_config_sha256
         return row
 
 
@@ -433,6 +502,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--instrument-calibration-dir",
+        help="fiducial validation directory attached to every invoked bundle",
+    )
+    parser.add_argument(
+        "--instrument-power-policy",
+        help="power-policy id bound to the supplied instrument calibration",
+    )
+    parser.add_argument(
         "--arm-quiet-mode",
         action="store_true",
         help=(
@@ -459,11 +536,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("BUNDLE_DIR", "SIDECAR_JSON"),
         help="Post-hoc expected-vs-realized prompt-hash check for one suite bundle",
     )
+    parser.add_argument(
+        "--whole-window-verdict",
+        action="store_true",
+        help=(
+            "Evaluate the idle-admission/NEG-8 verdict over every finalized "
+            "top-level bundle already present under --runs-dir"
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.config_dir is None and args.check_prompt_hashes is None:
-        parser.error("config_dir is required unless --check-prompt-hashes is used")
-    if args.config_dir is not None and args.check_prompt_hashes is not None:
-        parser.error("config_dir cannot be combined with --check-prompt-hashes")
+    if (args.instrument_calibration_dir is None) != (
+        args.instrument_power_policy is None
+    ):
+        parser.error(
+            "--instrument-calibration-dir and --instrument-power-policy must be supplied together"
+        )
+    alternate_modes = int(args.check_prompt_hashes is not None) + int(
+        args.whole_window_verdict
+    )
+    if args.config_dir is None and alternate_modes == 0:
+        parser.error(
+            "config_dir is required unless --check-prompt-hashes or "
+            "--whole-window-verdict is used"
+        )
+    if args.config_dir is not None and alternate_modes:
+        parser.error(
+            "config_dir cannot be combined with --check-prompt-hashes or "
+            "--whole-window-verdict"
+        )
+    if alternate_modes > 1:
+        parser.error(
+            "--check-prompt-hashes and --whole-window-verdict are mutually exclusive"
+        )
     if args.arm_countdown_s < 0:
         parser.error("--arm-countdown-s must be >= 0")
     return args
@@ -478,6 +582,7 @@ def load_campaign_policy(path_text: str) -> CampaignPolicyBinding:
         path=path,
         policy=policy,
         sha256=hashlib.sha256(raw).hexdigest(),
+        idle_admission_extension=policy.idle_admission_extension,
     )
 
 
@@ -671,7 +776,23 @@ def prompt_token_evidence_policy_from_config(
         ) from exc
 
 
-def load_config_info(config_path: Path) -> ConfigInfo:
+def _declared_neg8_reference_position(
+    role: str | None, sentinel_position: str | None
+) -> str | None:
+    """Return an explicitly declared NEG-8 position; IDs confer nothing."""
+
+    if role == NEG8_REFERENCE_START_ROLE:
+        return "start" if sentinel_position in (None, "start") else "invalid"
+    if role == NEG8_REFERENCE_END_ROLE:
+        return "end" if sentinel_position in (None, "end") else "invalid"
+    if role == NEG8_REFERENCE_ROLE:
+        return sentinel_position if sentinel_position in {"start", "end"} else "invalid"
+    return None
+
+
+def load_config_info(
+    config_path: Path, *, order_entry: OrderEntry | None = None
+) -> ConfigInfo:
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
     except OSError as exc:
@@ -697,6 +818,26 @@ def load_config_info(config_path: Path) -> ConfigInfo:
     repetitions = workload_profile.get("repetitions", 1)
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise ValueError(f"workload_profile.repetitions must be a positive integer: {config_path}")
+    normalized = _normalized_benchmark_config(data)
+    scientific_config_sha256 = _scientific_config_sha256(normalized)
+    role = order_entry.role if order_entry is not None else None
+    sentinel_position = (
+        order_entry.sentinel_position if order_entry is not None else None
+    )
+    neg8_position = _declared_neg8_reference_position(role, sentinel_position)
+    canonical_neg8_workload = _declares_canonical_neg8_workload(normalized)
+    if neg8_position == "invalid":
+        raise ValueError(
+            "declared NEG-8 reference role requires an unambiguous start/end position: "
+            f"{config_path}"
+        )
+    if neg8_position is not None and (
+        not canonical_neg8_workload or scientific_config_sha256 is None
+    ):
+        raise ValueError(
+            "declared NEG-8 reference role requires the canonical NEG-8 workload "
+            f"and scientific config identity: {config_path}"
+        )
     return ConfigInfo(
         path=config_path,
         run_id=sanitized_run_id,
@@ -705,6 +846,10 @@ def load_config_info(config_path: Path) -> ConfigInfo:
         generator_sidecar_ref=generator_sidecar_ref_from_config(data),
         suite_manifest_ref=suite_manifest_ref_from_config(data),
         prompt_token_evidence_policy=prompt_token_evidence_policy_from_config(data),
+        scientific_config_sha256=scientific_config_sha256,
+        canonical_neg8_workload=canonical_neg8_workload,
+        role=role,
+        sentinel_position=sentinel_position,
     )
 
 
@@ -717,6 +862,40 @@ def _normalized_benchmark_config(value: Any) -> dict[str, Any] | None:
         return BenchmarkConfig.from_mapping(value).to_dict()
     except Exception:  # noqa: BLE001 - malformed identities fail closed at callers.
         return None
+
+
+def _scientific_config_sha256(
+    normalized_config: dict[str, Any] | None,
+) -> str | None:
+    """Hash normalized scientific config after removing run identity only."""
+
+    if normalized_config is None:
+        return None
+    scientific = dict(normalized_config)
+    scientific.pop("run_id", None)
+    return hashlib.sha256(
+        json.dumps(scientific, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _declares_canonical_neg8_workload(
+    normalized_config: dict[str, Any] | None,
+) -> bool:
+    """Recognize the prospectively frozen NEG-8 whole-window workload."""
+
+    workload = (
+        normalized_config.get("workload_profile")
+        if isinstance(normalized_config, dict)
+        else None
+    )
+    return bool(
+        isinstance(workload, dict)
+        and workload.get("name") == "df_rq_mid"
+        and workload.get("prompt_tokens") == 1024
+        and workload.get("output_tokens") == 256
+        and workload.get("dataset_ref") is None
+        and workload.get("suite_manifest_ref") is None
+    )
 
 
 def _bundle_config_binding_problem(
@@ -817,6 +996,9 @@ def command_for(
     cli_cmd: str | None,
     *,
     frozen_cooldown_anchor: dict[str, Any] | None = None,
+    instrument_calibration_dir: str | None = None,
+    instrument_power_policy: str | None = None,
+    post_window_sampling_dwell_s: float | None = None,
 ) -> list[str]:
     prefix = shlex.split(cli_cmd) if cli_cmd else [sys.executable, "-m", "joulewise"]
     command = prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
@@ -831,6 +1013,17 @@ def command_for(
                 ),
             ]
         )
+    if instrument_calibration_dir is not None:
+        command.extend(["--instrument-calibration-dir", instrument_calibration_dir])
+    if instrument_power_policy is not None:
+        command.extend(["--instrument-power-policy", instrument_power_policy])
+    if post_window_sampling_dwell_s is not None:
+        command.extend(
+            [
+                "--post-window-sampling-dwell-s",
+                str(post_window_sampling_dwell_s),
+            ]
+        )
     return command
 
 
@@ -838,7 +1031,27 @@ def shell_quote(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _stored_bundle_containing(path: Path) -> Path | None:
+    """Return the finalized run-bundle ancestor of a prospective log path."""
+
+    resolved = path.resolve(strict=False)
+    for parent in resolved.parents:
+        if (parent / "summary_metrics.json").is_file():
+            return parent
+    return None
+
+
+def _require_external_campaign_log(log_path: Path) -> None:
+    bundle = _stored_bundle_containing(log_path)
+    if bundle is not None:
+        raise ValueError(
+            "--log must be outside the immutable stored run bundle: "
+            f"{bundle}"
+        )
+
+
 def append_log(log_path: Path, row: dict[str, Any]) -> None:
+    _require_external_campaign_log(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if log_path.exists() and log_path.stat().st_size > 0:
         with log_path.open("rb+") as handle:
@@ -963,16 +1176,16 @@ def assert_production_uncertainty(
                 f"missing raw/{name}",
             )
     evidence = metadata.get("uncertainty_evidence")
-    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.1":
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.2":
         raise _shakedown_fail(
-            "clock_evidence_missing", bundle, "missing p2-038.1 uncertainty evidence"
+            "clock_evidence_missing", bundle, "missing p2-038.2 uncertainty evidence"
         )
     clock = evidence.get("clock_anchor")
     phase = evidence.get("sample_phase")
     idle = evidence.get("idle_drift")
     if not isinstance(clock, dict) or clock.get("status") != "bounded":
         raise _shakedown_fail("clock_evidence_invalid", bundle, "clock evidence is not bounded")
-    if clock.get("method") != "powermetrics_spawn_ready_wall_monotonic_envelope_v1":
+    if clock.get("method") != "powermetrics_native_second_censored_intersection_v1":
         raise _shakedown_fail("clock_evidence_invalid", bundle, "unexpected clock method")
     if not isinstance(phase, dict) or phase.get("status") != "bounded":
         raise _shakedown_fail("phase_evidence_missing", bundle, "phase evidence is not bounded")
@@ -1026,12 +1239,104 @@ def assert_production_uncertainty(
         raise _shakedown_fail(
             "drift_evidence_missing", bundle, "E_drift_bound_j is missing"
         )
+    margins = metadata.get("trace_window_margins")
+    calibration = metadata.get("instrument_calibration")
+    bundle_bound = metadata.get("clock_anchor_bound_s")
+    fiducial_bound = (
+        calibration.get("verified_effective_b_fiducial_s")
+        if isinstance(calibration, dict)
+        else None
+    )
+    bound_parts = (bundle_bound, fiducial_bound)
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+        for value in bound_parts
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "composed bundle-plus-fiducial anchor bound is unavailable",
+        )
+    # The contract's composed causal bound is THREE terms: the wall-minus-
+    # monotonic edge span is a disjoint per-edge error source exactly like
+    # the fiducial lag (confirmation-round-4 P1: the two-term sum admitted
+    # margins the reducer's tail gate would refuse).
+    production_envelopes = (
+        raw_summary.get("energy_anchor_shift_envelopes")
+        if isinstance(raw_summary, dict)
+        else None
+    )
+    production_gross_envelope = (
+        production_envelopes.get("/gross_energy_j")
+        if isinstance(production_envelopes, dict)
+        else None
+    )
+    edge_span_s = (
+        production_gross_envelope.get(
+            "wall_minus_monotonic_independent_edge_span_s"
+        )
+        if isinstance(production_gross_envelope, dict)
+        else None
+    )
+    if (
+        isinstance(edge_span_s, bool)
+        or not isinstance(edge_span_s, int | float)
+        or not math.isfinite(float(edge_span_s))
+        or float(edge_span_s) < 0.0
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "wall-minus-monotonic edge span is unavailable for the composed bound",
+        )
+    composed_anchor_bound_s = sum(float(value) for value in bound_parts) + float(
+        edge_span_s
+    )
+    margin_values = (
+        margins.get("achieved_pre_window_margin_s")
+        if isinstance(margins, dict)
+        else None,
+        margins.get("achieved_post_window_margin_s")
+        if isinstance(margins, dict)
+        else None,
+    )
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+        or float(value) < composed_anchor_bound_s
+        for value in margin_values
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "trace pre/post margins do not cover the composed anchor bound",
+        )
+    envelopes = raw_summary.get("energy_anchor_shift_envelopes")
+    gross_envelope = (
+        envelopes.get("/gross_energy_j") if isinstance(envelopes, dict) else None
+    )
+    if (
+        not isinstance(gross_envelope, dict)
+        or gross_envelope.get("method") not in ANCHOR_SHIFT_ENVELOPE_METHODS
+    ):
+        raise _shakedown_fail(
+            "clock_evidence_invalid",
+            bundle,
+            "current-mint gross anchor-shift envelope is unavailable",
+        )
     return {
         "bundle_id": bundle.name,
         "clock_method": clock["method"],
         "idle_method": idle["method"],
         "request_eligible": True,
         "request_reasons": [],
+        "composed_anchor_bound_s": composed_anchor_bound_s,
+        "achieved_pre_window_margin_s": float(margin_values[0]),
+        "achieved_post_window_margin_s": float(margin_values[1]),
     }
 
 
@@ -1045,10 +1350,27 @@ def execute_production_uncertainty_gate(
         raise _shakedown_fail(
             "strict_pre_reduce_failed", bundle, "; ".join(pre_problems)
         )
-    reduce_result = subprocess.run(
-        [sys.executable, "-m", "joulewise", "reduce", str(bundle)],
-        check=False,
-    )
+    # A shakedown re-reduction is a verification scratch product, not evidence
+    # to append to either the immutable bundle or the caller's working
+    # directory.  Give the CLI an explicit external location so distinct
+    # campaigns with the same bundle basename cannot collide, and discard the
+    # scratch bytes after the gate has consumed the exit status.
+    with tempfile.TemporaryDirectory(prefix="joulewise-rereduce-") as scratch:
+        reduce_output = Path(scratch) / (
+            f"{bundle.name}.summary_metrics.rereduced.json"
+        )
+        reduce_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "joulewise",
+                "reduce",
+                str(bundle),
+                "--output",
+                str(reduce_output),
+            ],
+            check=False,
+        )
     if reduce_result.returncode != 0:
         raise _shakedown_fail(
             "reduce_failed", bundle, f"reduce exit {reduce_result.returncode}"
@@ -1539,7 +1861,11 @@ def _stable_precheck_reasons(value: Any) -> set[str]:
     if isinstance(value, dict):
         raw_reasons = value.get("reasons")
         if isinstance(raw_reasons, list):
-            reasons.update(reason for reason in raw_reasons if isinstance(reason, str))
+            for reason in raw_reasons:
+                if isinstance(reason, str) and reason in REASON_CODES:
+                    reasons.add(reason)
+                else:
+                    reasons.add("window_evidence_precheck_missing")
         for child in value.values():
             reasons.update(_stable_precheck_reasons(child))
     elif isinstance(value, list):
@@ -1681,6 +2007,10 @@ def evaluate_member(
         summary=summary,
         metadata=metadata,
         preceding_campaign_cooldown=cooldown_evidence,
+        declared_role=info.role,
+        sentinel_position=info.sentinel_position,
+        scientific_config_sha256=info.scientific_config_sha256,
+        canonical_neg8_workload=info.canonical_neg8_workload,
     )
 
 
@@ -1771,11 +2101,20 @@ def existing_state(info: ConfigInfo, runs_dir: Path) -> ExistingState:
     return ExistingState(action="would run")
 
 
-def read_config_infos(config_paths: list[Path]) -> list[ConfigInfo | ConfigError]:
+def read_config_infos(
+    config_paths: list[Path],
+    order_by_config: Mapping[str, OrderEntry] | None = None,
+) -> list[ConfigInfo | ConfigError]:
     items: list[ConfigInfo | ConfigError] = []
+    order_by_config = order_by_config or {}
     for config_path in config_paths:
         try:
-            items.append(load_config_info(config_path))
+            items.append(
+                load_config_info(
+                    config_path,
+                    order_entry=order_by_config.get(config_path.name),
+                )
+            )
         except Exception as exc:
             items.append(
                 ConfigError(
@@ -2009,7 +2348,12 @@ def verify_cooldown_raw_provenance(
         parsed_rows = [json.loads(line) for line in lines]
     except (UnicodeDecodeError, json.JSONDecodeError):
         return False
-    return len(parsed_rows) == raw_records
+    if len(parsed_rows) != raw_records or not all(
+        isinstance(row, dict) for row in parsed_rows
+    ):
+        return False
+    derived = cooldown_disposition_from_raw(parsed_rows)
+    return derived is not None and derived == cooldown.get("result")
 
 
 def prior_campaign_cooldown_evidence(
@@ -2323,8 +2667,11 @@ def _first_eligible_cooldown_anchor(
 
 
 def _is_neg8_reference_start(info: ConfigInfo) -> bool:
-    normalized = info.run_id.lower().replace("_", "-")
-    return "neg8-reference-start" in normalized
+    return (
+        _declared_neg8_reference_position(info.role, info.sentinel_position) == "start"
+        and info.canonical_neg8_workload
+        and info.scientific_config_sha256 is not None
+    )
 
 
 def _cooldown_anchor_eligibility(
@@ -2595,9 +2942,13 @@ def record_campaign_member_provenance(
             }
         )
     member_row = {
-            "config": info.path.name,
-            "run_id": info.run_id,
-            "bundle_ids": bundle_ids,
+        "config": info.path.name,
+        "run_id": info.run_id,
+        "role": info.role,
+        "sentinel_position": info.sentinel_position,
+        "scientific_config_sha256": info.scientific_config_sha256,
+        "canonical_neg8_workload": info.canonical_neg8_workload,
+        "bundle_ids": bundle_ids,
             "execution": execution,
             "preceding_campaign_cooldown": recorded_cooldown,
             "claim_evidence": claim_evidence,
@@ -2689,6 +3040,756 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
     return "invalid", reasons or ["no usable members"]
 
 
+IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
+
+
+def _current_member_environment_refusals(
+    evaluation: MemberEvaluation,
+) -> tuple[str, ...]:
+    summary = evaluation.summary
+    provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
+    reducer_version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+    quality = summary.get("measurement_quality") if isinstance(summary, dict) else None
+    telemetry_source = quality.get("telemetry_source") if isinstance(quality, dict) else None
+    if reducer_version not in {"0.5.2", "0.6.2"} or telemetry_source == "mock":
+        return ()
+    metadata = evaluation.metadata
+    if not isinstance(metadata, dict):
+        return ("environment_admission_missing",)
+    try:
+        measured_window = BundleReader(evaluation.bundle_path).measured_window()
+    except (BundleReadError, OSError, TypeError, ValueError):
+        measured_window = None
+    if measured_window is None:
+        return ("environment_admission_missing",)
+    return current_environment_refusals(
+        metadata,
+        bundle_path=evaluation.bundle_path,
+        measured_window_start_s=measured_window.start_s,
+        measured_window_end_s=measured_window.end_s,
+    )
+
+
+def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
+    """Attempt number whose idle telemetry matches the recorded admission.
+
+    The controller records the FINAL retry attempt's admission decision, and
+    ``_gpu_admission_outcome`` reads that final decision, so the CPU-idle
+    evaluation must pair with the telemetry captured on that SAME attempt.
+    Attempt 1 lives in ``rich_telemetry_idle.jsonl``; attempt ``n`` (n>1) in
+    ``rich_telemetry_idle_attempt_{n}.jsonl`` (see
+    ``joulewise/adapters/powermetrics.py``).
+
+    Only ``[1]`` and ``[1, 2]`` are legal, in that order and without
+    duplicates.  The final row's admitted bit must support the top-level
+    decision.  Any missing/malformed/unbound ledger returns ``None``.
+    """
+
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    admission = metadata.get("environment_admission")
+    if _current_member_environment_refusals(evaluation) or environment_admission_refusals(admission):
+        return None
+    if not isinstance(admission, dict):
+        return None
+    attempts = admission.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    numbers: list[int] = []
+    for entry in attempts:
+        if not isinstance(entry, dict):
+            return None
+        value = entry.get("attempt")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            return None
+        numbers.append(value)
+    if numbers not in ([1], [1, 2]):
+        return None
+    final = attempts[-1]
+    admitted = final.get("admitted")
+    decision = admission.get("decision")
+    if not isinstance(admitted, bool):
+        return None
+    if (decision == "admitted") != admitted:
+        return None
+    if decision not in {"admitted", "flagged", "abort"}:
+        return None
+    return numbers[-1]
+
+
+def _load_idle_rich_telemetry(
+    bundle_path: Path, attempt: int
+) -> list[dict[str, Any]] | None:
+    """Load the pre-run baseline rich telemetry, or ``None`` when unusable.
+
+    ``attempt`` selects the retry-matched artifact so CPU-idle evaluation
+    never pairs attempt-1 telemetry with a final-attempt GPU decision.
+    Missing files, unreadable bytes, and malformed JSONL all return ``None``
+    so the pure evaluator fails closed under a production policy instead of
+    admitting on partial evidence.  When the retried artifact is absent this
+    returns ``None`` as well (fail closed on exactly the retried admissions).
+    """
+
+    name = (
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+    )
+    path = bundle_path / name
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    records: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(record, dict):
+            return None
+        records.append(record)
+    return records
+
+
+def _gpu_admission_outcome(evaluation: MemberEvaluation) -> bool | None:
+    """Map the recorded per-bundle admission decision onto a tri-state."""
+
+    metadata = evaluation.metadata
+    admission = (
+        metadata.get("environment_admission") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(admission, dict):
+        return None
+    decision = admission.get("decision")
+    if decision == "admitted":
+        return True
+    if decision in {"flagged", "abort"}:
+        return False
+    return None
+
+
+def _adapter_observations_for(
+    evaluation: MemberEvaluation,
+) -> list[dict[str, Any]]:
+    """Collect adapter-wattage observations recorded for one member.
+
+    The pre-run environment snapshot always contributes one observation;
+    admission guard observations contribute theirs when the adapter surface
+    was captured (bundles produced after the T0.5 guard-observation change).
+    """
+
+    observations: list[dict[str, Any]] = []
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    environment = metadata.get("environment")
+    if isinstance(environment, dict):
+        observations.append(
+            extract_adapter_observation(
+                environment.get("power")
+                if isinstance(environment.get("power"), dict)
+                else None,
+                source=f"{evaluation.bundle_id}:environment",
+                power_source=environment.get("power_source"),
+            )
+        )
+    admission = metadata.get("environment_admission")
+    guard_observations = (
+        admission.get("guard_observations") if isinstance(admission, dict) else None
+    )
+    if isinstance(guard_observations, list):
+        for guard in guard_observations:
+            if not isinstance(guard, dict) or "power" not in guard:
+                continue
+            phase = guard.get("phase")
+            label = phase if isinstance(phase, str) else "guard"
+            observations.append(
+                extract_adapter_observation(
+                    guard.get("power") if isinstance(guard.get("power"), dict) else None,
+                    source=f"{evaluation.bundle_id}:guard:{label}",
+                )
+            )
+    post = environment.get("post_run_observation") if isinstance(environment, dict) else None
+    if isinstance(post, dict) and post.get("capture_skipped") is not True:
+        observations.append(
+            extract_adapter_observation(
+                post.get("power") if isinstance(post.get("power"), dict) else None,
+                source=f"{evaluation.bundle_id}:post_run",
+                power_source=post.get("power_source"),
+            )
+        )
+    else:
+        # Deliberately append an unknown observation: production continuity
+        # requires a post-workload bracket, so a missing/failed post probe must
+        # not be hidden by clean pre-run samples.
+        observations.append(
+            extract_adapter_observation(
+                None,
+                source=f"{evaluation.bundle_id}:post_run_missing",
+            )
+        )
+    return observations
+
+
+def _gross_energy_for(evaluation: MemberEvaluation) -> dict[str, float] | None:
+    if not evaluation.usable or evaluation.validation_problems:
+        return None
+    summary = evaluation.summary
+    value = summary.get("gross_energy_j") if isinstance(summary, dict) else None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+    ):
+        return None
+    envelopes = summary.get("energy_anchor_shift_envelopes")
+    envelope = envelopes.get("/gross_energy_j") if isinstance(envelopes, dict) else None
+    if not isinstance(envelope, dict):
+        # NEG-8 is a causal-set comparison.  A point without its admitted set
+        # cannot establish drift stability and therefore refuses downstream.
+        return None
+    fields = (envelope.get("point_j"), envelope.get("lower_j"), envelope.get("upper_j"))
+    if any(
+        isinstance(item, bool)
+        or not isinstance(item, int | float)
+        or not math.isfinite(float(item))
+        for item in fields
+    ):
+        return None
+    point, lower, upper = (float(item) for item in fields)
+    if not math.isclose(point, float(value), rel_tol=1e-9, abs_tol=1e-12):
+        return None
+    if lower <= 0.0 or not lower <= point <= upper:
+        return None
+    return {"point_j": point, "lower_j": lower, "upper_j": upper}
+
+
+def _neg8_reference_scientific_config_sha256(
+    evaluation: MemberEvaluation,
+) -> str | None:
+    """Authenticate a declared role against the bundle's scientific config."""
+
+    if (
+        not evaluation.canonical_neg8_workload
+        or evaluation.scientific_config_sha256 is None
+    ):
+        return None
+
+    try:
+        raw = json.loads(
+            (evaluation.bundle_path / "config.json").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    normalized = _normalized_benchmark_config(raw)
+    if not _declares_canonical_neg8_workload(normalized):
+        return None
+    observed = _scientific_config_sha256(normalized)
+    if observed != evaluation.scientific_config_sha256:
+        return None
+    return observed
+
+
+def idle_admission_core_verdict(
+    evaluations: Sequence[MemberEvaluation],
+    policy_binding: CampaignPolicyBinding,
+    *,
+    whole_window: bool = False,
+    runs_root: Path | None = None,
+) -> dict[str, Any]:
+    """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
+
+    Everything here is recorded data with stable named conditions; the
+    collection verdict and exit code are unchanged by this section.  Live
+    (pre-invoke) enforcement belongs to the controller hookup that follows
+    this core.
+    """
+
+    extension = policy_binding.idle_admission_extension
+    section: dict[str, Any] = {
+        "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+        "policy_sha256": policy_binding.sha256,
+        "extension": None,
+        "members": [],
+        "adapter_wattage_continuity": None,
+        "neg8_bracket": None,
+        "instrument_calibration_bracket": None,
+        "conditions": [],
+    }
+    if extension is None:
+        # Named condition, not an abort: pre-extension sidecars remain
+        # valid, but the verdict says the CPU-aware admission never ran.
+        section["conditions"] = ["idle_admission_extension_unconfigured"]
+        return section
+    section["extension"] = {
+        "schema_version": extension.schema_version,
+        "policy_version": extension.policy_version,
+        "claim_bearing": extension.claim_bearing,
+        "sha256": extension.sha256(),
+    }
+    conditions: set[str] = set()
+    adapter_observations: list[dict[str, Any]] = []
+    neg8_starts: list[tuple[dict[str, float] | None, str | None]] = []
+    neg8_ends: list[tuple[dict[str, float] | None, str | None]] = []
+    for evaluation in evaluations:
+        current_environment_reasons = _current_member_environment_refusals(evaluation)
+        conditions.update(current_environment_reasons)
+        if isinstance(evaluation.metadata, dict):
+            adapters = evaluation.metadata.get("adapters")
+            telemetry = (
+                adapters.get("telemetry") if isinstance(adapters, dict) else None
+            )
+            telemetry_name = (
+                telemetry.get("name") if isinstance(telemetry, dict) else None
+            )
+            if telemetry_name != "mock" and not current_environment_reasons:
+                conditions.update(
+                    post_run_environment_refusals(evaluation.metadata)
+                )
+        attempt = _final_idle_admission_attempt(evaluation)
+        if attempt is None:
+            conditions.add("idle_admission_attempt_ledger_invalid")
+        records = (
+            _load_idle_rich_telemetry(evaluation.bundle_path, attempt)
+            if attempt is not None
+            else None
+        )
+        cpu_admission = evaluate_cpu_idle_admission(
+            records,
+            extension.cpu_criteria,
+            gpu_admitted=_gpu_admission_outcome(evaluation),
+        )
+        conditions.update(cpu_admission["conditions"])
+        member_observations = _adapter_observations_for(evaluation)
+        adapter_observations.extend(member_observations)
+        section["members"].append(
+            {
+                "bundle_id": evaluation.bundle_id,
+                "cpu_admission": cpu_admission,
+                "adapter_observation_count": len(member_observations),
+            }
+        )
+        neg8_position = _declared_neg8_reference_position(
+            evaluation.declared_role, evaluation.sentinel_position
+        )
+        if neg8_position == "invalid":
+            conditions.add("neg8_bracket_reference_invalid")
+        elif neg8_position == "start":
+            neg8_starts.append(
+                (
+                    _gross_energy_for(evaluation),
+                    _neg8_reference_scientific_config_sha256(evaluation),
+                )
+            )
+        elif neg8_position == "end":
+            neg8_ends.append(
+                (
+                    _gross_energy_for(evaluation),
+                    _neg8_reference_scientific_config_sha256(evaluation),
+                )
+            )
+    continuity = evaluate_adapter_wattage_continuity(
+        adapter_observations, extension.adapter_wattage
+    )
+    conditions.update(continuity["conditions"])
+    # The NEG-8 bracket is a whole-window drift check: the canonical Window-A
+    # sequence runs the start and end references as SEPARATE run_campaign
+    # invocations, so the comparison is only sound when BOTH reference bundles
+    # are evaluated together.  A per-segment invocation records the non-drift
+    # ``neg8_bracket_not_evaluated`` condition rather than a spurious
+    # ``failed``/``missing``.  In explicit whole-window mode a genuinely absent
+    # reference is handed to the bracket evaluator and fails with the named
+    # ``neg8_bracket_missing`` condition.
+    ambiguous = len(neg8_starts) > 1 or len(neg8_ends) > 1
+    if ambiguous:
+        conditions.add("neg8_bracket_ambiguous_reference")
+    neg8_start = neg8_starts[0][0] if len(neg8_starts) == 1 else None
+    neg8_end = neg8_ends[0][0] if len(neg8_ends) == 1 else None
+    start_identity = neg8_starts[0][1] if len(neg8_starts) == 1 else None
+    end_identity = neg8_ends[0][1] if len(neg8_ends) == 1 else None
+    identity_invalid = bool(
+        len(neg8_starts) == 1
+        and len(neg8_ends) == 1
+        and (
+            start_identity is None
+            or end_identity is None
+            or start_identity != end_identity
+        )
+    )
+    if identity_invalid:
+        conditions.add("neg8_bracket_reference_invalid")
+    if whole_window or (neg8_starts and neg8_ends):
+        bracket = evaluate_neg8_bracket(
+            {} if identity_invalid else neg8_start,
+            {} if identity_invalid else neg8_end,
+            extension.neg8_bracket,
+        )
+    else:
+        bracket = neg8_bracket_not_evaluated(
+            extension.neg8_bracket,
+            start_gross_j=neg8_start,
+            end_gross_j=neg8_end,
+        )
+    conditions.update(bracket["conditions"])
+    section["adapter_wattage_continuity"] = continuity
+    section["neg8_bracket"] = bracket
+    section["neg8_reference_scientific_config_sha256"] = (
+        start_identity
+        if start_identity is not None and start_identity == end_identity
+        else None
+    )
+    if whole_window:
+        calibration_bracket, calibration_reasons = calibration_bracket_for_bundles(
+            runs_root
+            if runs_root is not None
+            else evaluations[0].bundle_path.parent
+            if evaluations
+            else Path("."),
+            [evaluation.bundle_path for evaluation in evaluations],
+            policy_binding.policy.calibration_bracketing,
+        )
+        section["instrument_calibration_bracket"] = calibration_bracket
+        if extension.claim_bearing:
+            conditions.update(calibration_reasons)
+    section["conditions"] = sorted(conditions)
+    return section
+
+
+def _whole_window_member(source: WholeWindowMemberSource) -> MemberEvaluation:
+    bundle_path = source.path
+    """Strictly validate an existing bundle before whole-window admission."""
+
+    summary, _summary_problem = _load_json_object(
+        bundle_path / "summary_metrics.json", "summary_metrics.json"
+    )
+    metadata, _metadata_problem = _load_json_object(
+        bundle_path / "metadata.json", "metadata.json"
+    )
+    status = summary.get("status") if isinstance(summary, dict) else None
+    try:
+        problems = validate_bundle(bundle_path, strict=True)
+    except Exception as exc:  # noqa: BLE001 - validator failure is invalid
+        problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+    return MemberEvaluation(
+        bundle_id=bundle_path.name,
+        bundle_path=bundle_path,
+        config_name="<whole-window-existing-bundle>",
+        status=status if isinstance(status, str) else None,
+        strict_valid=not problems,
+        validation_problems=tuple(problems),
+        summary=summary,
+        metadata=metadata,
+        declared_role=source.role,
+        sentinel_position=source.sentinel_position,
+        scientific_config_sha256=source.scientific_config_sha256,
+        canonical_neg8_workload=source.canonical_neg8_workload,
+    )
+
+
+def _whole_window_campaign_membership(
+    runs_dir: Path, policy_sha256: str
+) -> tuple[list[WholeWindowMemberSource], list[str], list[str]]:
+    """Resolve bundle paths from campaign ledgers, never directory order.
+
+    Matching manifests are grouped by analysis-manifest identity.  Exactly one
+    group must contain the NEG-8 reference markers; otherwise the window is
+    unbound/ambiguous and the caller fails closed.  When no campaign ledger is
+    available we retain top-level candidates only for diagnostic validation,
+    but mark membership unresolved so they cannot pass.
+    """
+
+    manifest_dir = runs_dir / "campaign_manifests"
+    groups: dict[str, dict[str, Any]] = {}
+    if manifest_dir.is_dir():
+        for manifest_path in sorted(manifest_dir.glob("*.json")):
+            manifest, problem = _load_json_object(manifest_path, "campaign manifest")
+            if problem is not None or manifest is None:
+                continue
+            if manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
+                continue
+            binding = manifest.get("campaign_policy")
+            if not isinstance(binding, dict) or binding.get("sha256") != policy_sha256:
+                continue
+            identity = manifest.get("analysis_manifest_id")
+            key = identity if isinstance(identity, str) and identity else "<none>"
+            group = groups.setdefault(
+                key,
+                {
+                    "bundle_ids": [],
+                    "manifests": [],
+                    "selected_bundle_ids": [],
+                    "selected_bundle_paths": {},
+                    "selection_manifests": [],
+                    "selection_invalid": False,
+                    "bundle_provenance": {},
+                },
+            )
+            selection = manifest.get("attempt_ledger_selection")
+            if isinstance(selection, dict):
+                selected_ids = selection.get("selected_bundle_ids")
+                selected_bundles = selection.get("selected_bundles")
+                ledger_path_text = selection.get("attempt_ledger_path")
+                ledger_sha = selection.get("attempt_ledger_sha256")
+                quarantined = selection.get("quarantined_attempts")
+                try:
+                    ledger_path = (runs_dir / str(ledger_path_text)).resolve()
+                    ledger_raw = ledger_path.read_bytes()
+                    descriptor_map: dict[str, Path] = {}
+                    if isinstance(selected_bundles, list):
+                        for descriptor in selected_bundles:
+                            if not isinstance(descriptor, dict):
+                                raise ValueError("invalid selected bundle descriptor")
+                            bundle_id = descriptor.get("bundle_id")
+                            path_text = descriptor.get("path")
+                            if (
+                                not isinstance(bundle_id, str)
+                                or not bundle_id
+                                or not isinstance(path_text, str)
+                                or not path_text
+                                or Path(path_text).is_absolute()
+                                or ".." in Path(path_text).parts
+                            ):
+                                raise ValueError("unsafe selected bundle descriptor")
+                            resolved = (runs_dir / path_text).resolve()
+                            if runs_dir.resolve() not in resolved.parents:
+                                raise ValueError("selected bundle escapes runs root")
+                            descriptor_map[bundle_id] = resolved
+                    selection_ok = bool(
+                        selection.get("schema_version")
+                        == "joulewise.attempt_ledger_selection.v1"
+                        and isinstance(selected_ids, list)
+                        and selected_ids
+                        and all(isinstance(value, str) and value for value in selected_ids)
+                        and len(set(selected_ids)) == len(selected_ids)
+                        and isinstance(selected_bundles, list)
+                        and len(descriptor_map) == len(selected_ids)
+                        and set(descriptor_map) == set(selected_ids)
+                        and all(path.is_dir() for path in descriptor_map.values())
+                        and selection.get("selected_membership_sha256")
+                        == hashlib.sha256(
+                            json.dumps(
+                                sorted(selected_ids),
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        and hashlib.sha256(ledger_raw).hexdigest() == ledger_sha
+                        and (
+                            not isinstance(quarantined, list)
+                            or all(
+                                isinstance(row, dict)
+                                and row.get("properly_quarantined") is True
+                                and row.get("recovery_continuity_verified") is True
+                                for row in quarantined
+                            )
+                        )
+                        and runs_dir.resolve() in ledger_path.parents
+                        and validated_attempt_selection(selection, runs_dir)
+                        == set(selected_ids)
+                    )
+                except (OSError, RuntimeError):
+                    selection_ok = False
+                if selection_ok:
+                    group["selected_bundle_ids"].extend(selected_ids)
+                    group["selected_bundle_paths"].update(descriptor_map)
+                    group["selection_manifests"].append(str(manifest_path))
+                else:
+                    group["selection_invalid"] = True
+                # Attempt-ledger selection owns AXI membership.  Raw invoked
+                # rows include legitimate quarantines and must not poison the
+                # governed retry set once the selection is verified.
+                continue
+            group["manifests"].append(str(manifest_path))
+            members = manifest.get("members")
+            if not isinstance(members, list):
+                continue
+            for member in members:
+                if not isinstance(member, dict) or member.get("execution") != "invoked":
+                    continue
+                bundle_ids = member.get("bundle_ids")
+                if isinstance(bundle_ids, list):
+                    valid_bundle_ids = [
+                        value for value in bundle_ids if isinstance(value, str) and value
+                    ]
+                    group["bundle_ids"].extend(valid_bundle_ids)
+                    provenance = {
+                        "role": member.get("role") if isinstance(member.get("role"), str) else None,
+                        "sentinel_position": (
+                            member.get("sentinel_position")
+                            if isinstance(member.get("sentinel_position"), str)
+                            else None
+                        ),
+                        "scientific_config_sha256": (
+                            member.get("scientific_config_sha256")
+                            if isinstance(member.get("scientific_config_sha256"), str)
+                            else None
+                        ),
+                        "canonical_neg8_workload": (
+                            member.get("canonical_neg8_workload") is True
+                        ),
+                    }
+                    for bundle_id in valid_bundle_ids:
+                        prior = group["bundle_provenance"].get(bundle_id)
+                        if prior is not None and prior != provenance:
+                            group["selection_invalid"] = True
+                        group["bundle_provenance"][bundle_id] = provenance
+    candidates = []
+    for identity, group in groups.items():
+        if group["selection_invalid"]:
+            continue
+        using_selection = bool(group["selected_bundle_ids"])
+        raw_bundle_ids = list(
+            group["selected_bundle_ids"]
+            if using_selection
+            else group["bundle_ids"]
+        )
+        # Occurrence-count doctrine at the PRODUCER too: a manifest listing
+        # the same bundle twice is ambiguous evidence, never silently
+        # deduplicated into a passed verdict (confirmation-round-6 P1).
+        if len(set(raw_bundle_ids)) != len(raw_bundle_ids):
+            continue
+        bundle_ids = raw_bundle_ids
+        source_manifests = (
+            group["selection_manifests"] if using_selection else group["manifests"]
+        )
+        positions = {
+            _declared_neg8_reference_position(
+                group["bundle_provenance"].get(value, {}).get("role"),
+                group["bundle_provenance"].get(value, {}).get("sentinel_position"),
+            )
+            for value in bundle_ids
+        }
+        has_start = "start" in positions
+        has_end = "end" in positions
+        if has_start and has_end:
+            candidates.append((identity, bundle_ids, source_manifests))
+    if len(candidates) == 1:
+        identity, bundle_ids, manifests = candidates[0]
+        group = groups[identity]
+        paths = (
+            [group["selected_bundle_paths"][value] for value in bundle_ids]
+            if group["selected_bundle_ids"]
+            else [runs_dir / value for value in bundle_ids]
+        )
+        sources = []
+        for bundle_id, path in zip(bundle_ids, paths, strict=True):
+            provenance = group["bundle_provenance"].get(bundle_id, {})
+            sources.append(
+                WholeWindowMemberSource(
+                    path=path,
+                    role=provenance.get("role"),
+                    sentinel_position=provenance.get("sentinel_position"),
+                    scientific_config_sha256=provenance.get(
+                        "scientific_config_sha256"
+                    ),
+                    canonical_neg8_workload=(
+                        provenance.get("canonical_neg8_workload") is True
+                    ),
+                )
+            )
+        return sources, manifests, []
+    fallback = sorted(
+        path
+        for path in runs_dir.iterdir()
+        if path.is_dir() and (path / "summary_metrics.json").is_file()
+    )
+    condition = (
+        "whole_window_campaign_membership_ambiguous"
+        if len(candidates) > 1
+        else "whole_window_campaign_membership_unresolved"
+    )
+    return [WholeWindowMemberSource(path=path) for path in fallback], [], [condition]
+
+
+def run_whole_window_verdict(args: argparse.Namespace) -> int:
+    """Emit the prospective NEG-8 verdict across a completed runs root."""
+
+    runs_dir = Path(args.runs_dir)
+    if not runs_dir.is_dir():
+        raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
+    policy_binding = load_campaign_policy(args.campaign_policy)
+    bundle_sources, source_manifests, selection_conditions = (
+        _whole_window_campaign_membership(runs_dir, policy_binding.sha256)
+    )
+    evaluations = [_whole_window_member(source) for source in bundle_sources]
+    included = [evaluation for evaluation in evaluations if evaluation.usable]
+    excluded = [evaluation for evaluation in evaluations if not evaluation.usable]
+    core = idle_admission_core_verdict(
+        included, policy_binding, whole_window=True, runs_root=runs_dir
+    )
+    core_conditions = set(core.get("conditions", []))
+    core_conditions.update(selection_conditions)
+    if excluded:
+        core_conditions.add("whole_window_bundle_invalid")
+    core["conditions"] = sorted(core_conditions)
+    bracket = core.get("neg8_bracket")
+    bracket_decision = (
+        bracket.get("decision") if isinstance(bracket, dict) else None
+    )
+    continuity = core.get("adapter_wattage_continuity")
+    members = core.get("members")
+    cpu_passed = bool(members) and all(
+        isinstance(member, dict)
+        and isinstance(member.get("cpu_admission"), dict)
+        and member["cpu_admission"].get("decision") == "admitted"
+        for member in members
+    )
+    core_passed = bool(
+        bracket_decision == "passed"
+        and isinstance(continuity, dict)
+        and continuity.get("decision") == "stable"
+        and cpu_passed
+        and not core["conditions"]
+    )
+    if policy_binding.idle_admission_extension is None:
+        status = "invalid"
+    elif core_passed:
+        status = "passed"
+    elif policy_binding.policy.profile.value == "exploratory":
+        status = "flagged"
+    else:
+        status = "failed"
+    row = {
+        "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
+        "timestamp": utc_timestamp(),
+        "record_type": "idle_admission_whole_window_verdict",
+        "status": status,
+        "claim_licensing": bool(
+            policy_binding.policy.profile.value == "production"
+            and policy_binding.idle_admission_extension is not None
+            and policy_binding.idle_admission_extension.claim_bearing
+        ),
+        "runs_dir": str(runs_dir),
+        "campaign_policy": policy_binding.to_metadata(),
+        "bundle_ids": [evaluation.bundle_id for evaluation in included],
+        "excluded_bundles": [
+            {
+                "bundle_id": evaluation.bundle_id,
+                "status": evaluation.status,
+                "strict_valid": evaluation.strict_valid,
+                "validation_problems": list(evaluation.validation_problems),
+            }
+            for evaluation in excluded
+        ],
+        "idle_admission_core": core,
+    }
+    source_descriptors = source_manifest_descriptors(runs_dir, source_manifests)
+    row["source_campaign_manifests"] = source_descriptors
+    row["row_provenance"] = build_row_provenance(
+        policy_sha256=policy_binding.sha256,
+        bundle_ids=row["bundle_ids"],
+        source_manifests=source_descriptors,
+    )
+    append_log(log_path, row)
+    print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
+    print(f"  decision: {bracket_decision}")
+    for condition in core["conditions"]:
+        print(f"  condition: {condition}")
+    return 0 if status in {"passed", "flagged"} else 1
+
+
 def _manifest_readiness_reasons(state: AnalysisManifestState) -> list[str]:
     reasons = {"analysis_manifest_invalid"}
     for problem in state.problems:
@@ -2775,6 +3876,44 @@ def _member_readiness_reasons(
         reasons.add("bundle_strict_invalid")
     if evaluation.status != "succeeded":
         reasons.add("bundle_status_not_succeeded")
+    # "ready_for_analysis" is a governance assertion: replay-only wires may
+    # validate strictly, but only the registered claim-eligible mints can be
+    # declared ready (confirmation-round-4 P1 — non-current wires formerly
+    # reached readiness and relied on downstream barriers alone). Mock
+    # telemetry stays version-exempt: it cannot bear claims regardless.
+    summary_provenance = (
+        evaluation.summary.get("summary_provenance")
+        if isinstance(evaluation.summary, dict)
+        else None
+    )
+    readiness_reducer_version = (
+        summary_provenance.get("reducer_version")
+        if isinstance(summary_provenance, dict)
+        else None
+    )
+    readiness_quality = (
+        evaluation.summary.get("measurement_quality")
+        if isinstance(evaluation.summary, dict)
+        else None
+    )
+    readiness_telemetry = (
+        readiness_quality.get("telemetry_source")
+        if isinstance(readiness_quality, dict)
+        else None
+    )
+    if (
+        readiness_telemetry != "mock"
+        and readiness_reducer_version not in {"0.5.2", "0.6.2"}
+    ):
+        reasons.add("reducer_wire_unknown")
+    if isinstance(evaluation.metadata, dict):
+        adapters = evaluation.metadata.get("adapters")
+        telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
+        telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
+        current_environment_reasons = _current_member_environment_refusals(evaluation)
+        reasons.update(current_environment_reasons)
+        if telemetry_name != "mock" and not current_environment_reasons:
+            reasons.update(post_run_environment_refusals(evaluation.metadata))
     cleanup_flags = {
         "runtime_cleanup_ok",
         "remote_cleanup_failed",
@@ -2974,6 +4113,78 @@ def claim_readiness_for(
     return base
 
 
+def _idle_admission_claim_barrier_reasons(core: Mapping[str, Any]) -> list[str]:
+    """Map the advisory core surface onto claim-bearing refusal reasons."""
+
+    reasons: set[str] = set()
+    conditions = core.get("conditions")
+    if isinstance(conditions, list):
+        for condition in (
+            "environment_admission_failed",
+            "instrument_calibration_bracket_missing",
+            "instrument_calibration_mismatch",
+            "instrument_calibration_stale",
+            "thermal_pressure_elevated_in_window",
+            "environment_admission_missing",
+        ):
+            if condition in conditions:
+                reasons.add(condition)
+    members = core.get("members")
+    if not isinstance(members, list) or not members:
+        reasons.add("cpu_admission_core_missing")
+    elif any(
+        not isinstance(member, Mapping)
+        or not isinstance(member.get("cpu_admission"), Mapping)
+        or member["cpu_admission"].get("decision") != "admitted"
+        for member in members
+    ):
+        reasons.add("cpu_admission_core_failed")
+    continuity = core.get("adapter_wattage_continuity")
+    if not isinstance(continuity, Mapping):
+        reasons.add("adapter_continuity_evidence_missing")
+    elif continuity.get("decision") != "stable":
+        reasons.add("adapter_continuity_failed")
+    bracket = core.get("neg8_bracket")
+    if not isinstance(bracket, Mapping) or bracket.get("decision") == "not_evaluated":
+        reasons.add("whole_window_neg8_verdict_missing")
+    elif bracket.get("decision") != "passed":
+        reasons.add("whole_window_neg8_verdict_failed")
+    return sorted(reasons)
+
+
+def apply_idle_admission_claim_barrier(
+    readiness: dict[str, Any], core: Mapping[str, Any], *, claim_bearing: bool
+) -> dict[str, Any]:
+    if not claim_bearing:
+        return readiness
+    reasons = _idle_admission_claim_barrier_reasons(core)
+    if not reasons:
+        return readiness
+    result = dict(readiness)
+    result["verdict"] = "not_ready_for_analysis"
+    result["reasons"] = sorted(set(result.get("reasons", [])) | set(reasons))
+    result["ready_contrast_ids"] = []
+    existing = {
+        row.get("contrast_id"): dict(row)
+        for row in result.get("not_ready_contrasts", [])
+        if isinstance(row, dict) and isinstance(row.get("contrast_id"), str)
+    }
+    for contrast_id in result.get("required_contrast_ids", []):
+        if not isinstance(contrast_id, str):
+            continue
+        row = existing.setdefault(
+            contrast_id,
+            {
+                "contrast_id": contrast_id,
+                "affected_member_ids": [],
+                "reasons": [],
+            },
+        )
+        row["reasons"] = sorted(set(row.get("reasons", [])) | set(reasons))
+    result["not_ready_contrasts"] = [existing[key] for key in sorted(existing)]
+    return result
+
+
 def sampling_audit_for(analysis_manifest: AnalysisManifestState | None) -> dict[str, Any]:
     planned_n: int | None = None
     design_name: str | None = None
@@ -3039,6 +4250,7 @@ def append_verdict(
     campaign_provenance_path: Path | None,
     warning: str | None,
     preflight: dict[str, Any],
+    idle_admission_core: dict[str, Any] | None = None,
 ) -> None:
     row: dict[str, Any] = {
         "schema_version": CAMPAIGN_VERDICT_SCHEMA,
@@ -3063,6 +4275,8 @@ def append_verdict(
         ),
         "preflight": preflight,
     }
+    if idle_admission_core is not None:
+        row["idle_admission_core"] = idle_admission_core
     if warning is not None:
         row["block_order_warning"] = warning
     append_log(log_path, row)
@@ -3230,6 +4444,17 @@ def _axi_evidence_map(path: Path, pattern: str) -> dict[str, bytes]:
     return result
 
 
+def _axi_first_run_exemption_allowed(
+    campaign_provenance: Mapping[str, Any], persisted_rows: Sequence[Mapping[str, Any]]
+) -> bool:
+    """True only before this campaign has any durable physical-attempt row."""
+
+    return (
+        campaign_provenance.get("first_physical_run_id") is None
+        and not persisted_rows
+    )
+
+
 def _axi_strict_reason_codes(problems: Sequence[str]) -> list[str]:
     """Project strict validator diagnostics onto its frozen reason enum."""
 
@@ -3303,9 +4528,24 @@ def run_axi_spec_campaign(
                 info.path,
                 runs_dir / "axi_attempt_bundles" / manifest_id / entry["entry_id"] / "a0",
                 args.cli_cmd,
+                instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
+                instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
+                ),
             )
             print(f"dry_run {entry['entry_id']} attempt=0: {shell_quote(command)}")
         return 0
+
+    manifest_copy_path = evidence_root / "analysis_manifest.json"
+    manifest_copy_raw = state.path.read_bytes()
+    if manifest_copy_path.exists():
+        if manifest_copy_path.read_bytes() != manifest_copy_raw:
+            raise FileExistsError("immutable AXI analysis manifest differs")
+    else:
+        _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
     lock_path: Path | None = None
     try:
@@ -3405,6 +4645,40 @@ def run_axi_spec_campaign(
         for row in rows:
             by_entry.setdefault(str(row.get("entry_id")), []).append(row)
 
+        # Process restarts do not reset physical history.  Rehydrate the last
+        # finalized attempt so the next attempt must pass a measured recovery
+        # gate; the first-run exemption exists only before the campaign has any
+        # durable attempt row at all.
+        if rows and policy_binding is not None:
+            prior_finalized = _axi_discover_finalized_bundles(runs_dir, manifest)
+            last_row = rows[-1]
+            last_entry_id = last_row.get("entry_id")
+            last_attempt = last_row.get("attempt_ordinal")
+            last_run_id = last_row.get("run_id")
+            key = (last_entry_id, last_attempt, last_run_id)
+            last_path = prior_finalized.get(key)
+            last_info = config_infos.get(str(last_entry_id))
+            if last_path is not None and last_info is not None:
+                physical_id = (
+                    f"{sanitize_id_component(str(last_entry_id))}__a{last_attempt}__"
+                    f"{sanitize_id_component(str(last_run_id))}"
+                )
+                prior_eval = evaluate_member(
+                    last_path,
+                    info=last_info,
+                    waivers={},
+                    cooldown_evidence=None,
+                )
+                previous_physical_info = replace(
+                    last_info,
+                    run_id=physical_id,
+                    raw_run_id=physical_id,
+                    repetitions=1,
+                )
+                previous_physical_evaluation = replace(
+                    prior_eval, bundle_id=physical_id
+                )
+
         for entry in entries:
             entry_id = entry["entry_id"]
             prior = sorted(by_entry[entry_id], key=lambda row: row["attempt_ordinal"])
@@ -3450,12 +4724,23 @@ def run_axi_spec_campaign(
                 / sanitize_id_component(entry_id)
                 / f"a{attempt_ordinal}"
             )
-            command = command_for(info.path, attempt_runs_dir, args.cli_cmd)
+            command = command_for(
+                info.path,
+                attempt_runs_dir,
+                args.cli_cmd,
+                instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
+                instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
+                ),
+            )
             cooldown_note: dict[str, Any] | None = None
             if policy_binding is not None:
                 assert campaign_provenance_path is not None
                 assert campaign_provenance is not None
-                if campaign_provenance.get("first_physical_run_id") is None:
+                if _axi_first_run_exemption_allowed(campaign_provenance, rows):
                     cooldown_note = {
                         **_cooldown_policy_decision_surface(
                             policy_binding.policy.cooldown
@@ -3482,6 +4767,11 @@ def run_axi_spec_campaign(
                         policy_binding=policy_binding,
                         frozen_anchor=frozen_cooldown_anchor,
                     )
+                    if campaign_provenance.get("first_physical_run_id") is None:
+                        campaign_provenance["first_physical_run_id"] = physical_run_id
+                        write_campaign_provenance(
+                            campaign_provenance_path, campaign_provenance
+                        )
                 else:
                     cooldown_note = {
                         **_cooldown_policy_decision_surface(
@@ -3695,6 +4985,124 @@ def run_axi_spec_campaign(
         else:
             _write_immutable_bytes(ledger_path, ledger_raw)
 
+        if policy_binding is not None:
+            assert campaign_provenance_path is not None
+            assert campaign_provenance is not None
+            selected_bundle_ids = [
+                (
+                    f"{sanitize_id_component(entry_id)}__a{row['attempt_ordinal']}__"
+                    f"{sanitize_id_component(row['run_id'])}"
+                )
+                for entry_id, row in sorted(selected.items())
+                if row is not None and isinstance(row.get("run_id"), str)
+            ]
+            selected_bundles = []
+            for entry_id, row in sorted(selected.items()):
+                if row is None or not isinstance(row.get("run_id"), str):
+                    continue
+                physical_id = (
+                    f"{sanitize_id_component(entry_id)}__a{row['attempt_ordinal']}__"
+                    f"{sanitize_id_component(row['run_id'])}"
+                )
+                bundle_path = finalized_bundles[
+                    (entry_id, row["attempt_ordinal"], row["run_id"])
+                ]
+                selected_bundles.append(
+                    {
+                        "bundle_id": physical_id,
+                        "path": bundle_path.relative_to(runs_dir).as_posix(),
+                        "entry_id": entry_id,
+                        "attempt_ordinal": row["attempt_ordinal"],
+                        "run_id": row["run_id"],
+                    }
+                )
+            cooldown_evidence = prior_campaign_cooldown_evidence(
+                runs_dir, manifest_id
+            )
+            quarantined: list[dict[str, Any]] = []
+            quarantine_unresolved = False
+            for row in rows:
+                if row.get("eligible_for_analysis") is True:
+                    continue
+                entry_id = str(row.get("entry_id"))
+                attempt = row.get("attempt_ordinal")
+                run_id = row.get("run_id")
+                selected_row = selected.get(entry_id)
+                selected_id = (
+                    f"{sanitize_id_component(entry_id)}__a{selected_row['attempt_ordinal']}__"
+                    f"{sanitize_id_component(selected_row['run_id'])}"
+                    if selected_row is not None
+                    and isinstance(selected_row.get("run_id"), str)
+                    else None
+                )
+                cooldown = cooldown_evidence.get(selected_id) if selected_id else None
+                continuity_verified = bool(
+                    isinstance(attempt, int)
+                    and selected_row is not None
+                    and selected_row.get("attempt_ordinal", -1) > attempt
+                    and isinstance(cooldown, dict)
+                    and cooldown.get("result") == "recovered"
+                    and verify_cooldown_raw_provenance(
+                        cooldown, runs_dir / "campaign_manifests"
+                    )
+                )
+                properly_quarantined = bool(
+                    row.get("technical_invalid_reason_code")
+                    and row.get("reason_evidence_sha256")
+                    and row.get("eligible_for_analysis") is False
+                )
+                quarantine_unresolved |= not (
+                    properly_quarantined and continuity_verified
+                )
+                quarantined.append(
+                    {
+                        "entry_id": entry_id,
+                        "attempt_ordinal": attempt,
+                        "run_id": run_id,
+                        "technical_invalid_reason_code": row.get(
+                            "technical_invalid_reason_code"
+                        ),
+                        "properly_quarantined": properly_quarantined,
+                        "selected_successor_bundle_id": selected_id,
+                        "recovery_continuity_verified": continuity_verified,
+                    }
+                )
+            if quarantine_unresolved:
+                # Governed retries may exclude a technical-invalid attempt only
+                # after its successor is causally bracketed by hash-verified
+                # recovery evidence.  This is the complementary half of the
+                # restart fix: selection can recover, but restart cannot erase
+                # the hot/quarantined predecessor.
+                print(
+                    "error: AXI quarantined attempt lacks verified recovery continuity",
+                    file=sys.stderr,
+                )
+                return 1
+            campaign_provenance["attempt_ledger_selection"] = {
+                "schema_version": "joulewise.attempt_ledger_selection.v1",
+                "attempt_ledger_path": ledger_path.relative_to(runs_dir).as_posix(),
+                "attempt_ledger_sha256": axi_sha256_bytes(ledger_raw),
+                "analysis_manifest_path": manifest_copy_path.relative_to(
+                    runs_dir
+                ).as_posix(),
+                "analysis_manifest_sha256": axi_sha256_bytes(manifest_copy_raw),
+                "selected_bundle_ids": sorted(selected_bundle_ids),
+                "selected_bundles": sorted(
+                    selected_bundles, key=lambda row: row["bundle_id"]
+                ),
+                "selected_membership_sha256": hashlib.sha256(
+                    json.dumps(
+                        sorted(selected_bundle_ids),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "quarantined_attempts": quarantined,
+            }
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance
+            )
+
         entry_by_id = {entry["entry_id"]: entry for entry in entries}
         for pair in manifest["pairs"]:
             bundles: dict[str, Path | None] = {}
@@ -3728,6 +5136,107 @@ def run_axi_spec_campaign(
                     raise FileExistsError("immutable output identity report differs")
             else:
                 _write_immutable_bytes(report_path, report_raw)
+        if policy_binding is not None:
+            assert campaign_provenance_path is not None
+            selected_evaluations: list[MemberEvaluation] = []
+            cooldowns = prior_campaign_cooldown_evidence(runs_dir, manifest_id)
+            for entry_id, row in sorted(selected.items()):
+                if row is None or not isinstance(row.get("run_id"), str):
+                    continue
+                bundle_path = finalized_bundles[
+                    (entry_id, row["attempt_ordinal"], row["run_id"])
+                ]
+                physical_id = (
+                    f"{sanitize_id_component(entry_id)}__a{row['attempt_ordinal']}__"
+                    f"{sanitize_id_component(row['run_id'])}"
+                )
+                evaluation = evaluate_member(
+                    bundle_path,
+                    info=config_infos[entry_id],
+                    waivers={},
+                    cooldown_evidence=cooldowns.get(physical_id),
+                )
+                selected_evaluations.append(
+                    replace(evaluation, bundle_id=physical_id)
+                )
+            core = idle_admission_core_verdict(
+                selected_evaluations,
+                policy_binding,
+                whole_window=True,
+                runs_root=runs_dir,
+            )
+            extension = policy_binding.idle_admission_extension
+            core_reasons = _idle_admission_claim_barrier_reasons(core)
+            whole_status = (
+                "invalid"
+                if extension is None
+                else "passed"
+                if not core_reasons and not core.get("conditions")
+                else "flagged"
+                if policy_binding.policy.profile.value == "exploratory"
+                else "failed"
+            )
+            descriptors = source_manifest_descriptors(
+                runs_dir, [campaign_provenance_path]
+            )
+            whole_row = {
+                "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
+                "timestamp": utc_timestamp(),
+                "record_type": "idle_admission_whole_window_verdict",
+                "status": whole_status,
+                "claim_licensing": bool(
+                    policy_binding.policy.profile.value == "production"
+                    and extension is not None
+                    and extension.claim_bearing
+                ),
+                "runs_dir": str(runs_dir),
+                "campaign_policy": policy_binding.to_metadata(),
+                "bundle_ids": [row.bundle_id for row in selected_evaluations],
+                "excluded_bundles": [],
+                "source_campaign_manifests": descriptors,
+                "idle_admission_core": core,
+            }
+            whole_row["row_provenance"] = build_row_provenance(
+                policy_sha256=policy_binding.sha256,
+                bundle_ids=whole_row["bundle_ids"],
+                source_manifests=descriptors,
+            )
+            if log_path is not None:
+                append_log(log_path, whole_row)
+                categories = classify_campaign_members(selected_evaluations, [])
+                collection_verdict, collection_reasons = collection_verdict_for(
+                    categories
+                )
+                readiness = apply_idle_admission_claim_barrier(
+                    claim_readiness_for(
+                        state,
+                        collection_verdict,
+                        selected_evaluations,
+                    ),
+                    core,
+                    claim_bearing=bool(extension and extension.claim_bearing),
+                )
+                append_verdict(
+                    log_path,
+                    collection_verdict=collection_verdict,
+                    collection_reasons=collection_reasons,
+                    categories=categories,
+                    claim_readiness=readiness,
+                    analysis_manifest=state,
+                    sampling_audit=sampling_audit_for(state),
+                    members=selected_evaluations,
+                    campaign_provenance_path=campaign_provenance_path,
+                    warning=None,
+                    preflight=preflight or {},
+                    idle_admission_core=core,
+                )
+            if extension is not None and extension.claim_bearing and core_reasons:
+                print(
+                    "error: AXI campaign-wide idle-admission verdict failed: "
+                    + ", ".join(core_reasons),
+                    file=sys.stderr,
+                )
+                return 1
         print(f"AXI attempt ledger: {ledger_path} sha256={axi_sha256_bytes(ledger_raw)}")
         return 0
     finally:
@@ -3740,6 +5249,7 @@ def run_campaign(args: argparse.Namespace) -> int:
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
 
     policy_binding = load_campaign_policy(args.campaign_policy)
 
@@ -3814,7 +5324,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             log_path=log_path,
             preflight=preflight,
         )
-    items = read_config_infos(configs)
+    items = read_config_infos(configs, order_by_config)
     waivers = load_waivers(args.waivers)
     config_errors = [item for item in items if isinstance(item, ConfigError)]
     if config_errors:
@@ -4030,6 +5540,13 @@ def run_campaign(args: argparse.Namespace) -> int:
                 args.cli_cmd,
                 frozen_cooldown_anchor=(
                     frozen_cooldown_anchor if info.repetitions > 1 else None
+                ),
+                instrument_calibration_dir=getattr(args, "instrument_calibration_dir", None),
+                instrument_power_policy=getattr(args, "instrument_power_policy", None),
+                post_window_sampling_dwell_s=(
+                    policy_binding.policy.post_window_sampling_dwell_s
+                    if policy_binding is not None
+                    else None
                 ),
             )
 
@@ -4441,16 +5958,33 @@ def run_campaign(args: argparse.Namespace) -> int:
         return 0
     categories = classify_campaign_members(all_evaluations, missing_members)
     collection_verdict, collection_reasons = collection_verdict_for(categories)
-    claim_readiness = claim_readiness_for(
-        analysis_manifest, collection_verdict, all_evaluations
-    )
     sampling_audit = sampling_audit_for(analysis_manifest)
+    idle_admission_core = idle_admission_core_verdict(
+        all_evaluations, policy_binding, runs_root=runs_dir
+    )
+    extension = policy_binding.idle_admission_extension
+    claim_bearing = bool(
+        analysis_manifest is not None
+        and extension is not None
+        and extension.claim_bearing
+    )
+    claim_readiness = apply_idle_admission_claim_barrier(
+        claim_readiness_for(analysis_manifest, collection_verdict, all_evaluations),
+        idle_admission_core,
+        claim_bearing=claim_bearing,
+    )
     print_verdict(
         collection_verdict,
         collection_reasons,
         categories,
         claim_readiness,
     )
+    print("IDLE-ADMISSION CORE:")
+    if idle_admission_core["conditions"]:
+        for condition in idle_admission_core["conditions"]:
+            print(f"  condition: {condition}")
+    else:
+        print("  conditions: <none>")
     if not args.dry_run:
         append_verdict(
             log_path,
@@ -4464,8 +5998,16 @@ def run_campaign(args: argparse.Namespace) -> int:
             campaign_provenance_path=campaign_provenance_path,
             warning=order_warning,
             preflight=preflight,
+            idle_admission_core=idle_admission_core,
         )
-    return 1 if failures or collection_verdict in {"blocked", "invalid"} else 0
+    core_blocks_claim = bool(
+        claim_bearing and _idle_admission_claim_barrier_reasons(idle_admission_core)
+    )
+    return 1 if (
+        failures
+        or collection_verdict in {"blocked", "invalid"}
+        or core_blocks_claim
+    ) else 0
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
@@ -4484,6 +6026,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.check_prompt_hashes is not None:
             return run_prompt_hash_check(args)
+        if args.whole_window_verdict:
+            return run_whole_window_verdict(args)
         return run_campaign(args)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)

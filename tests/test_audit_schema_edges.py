@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import copy
-import io
 import json
 import unittest
 import warnings
-from contextlib import redirect_stderr
 from pathlib import Path
 
 from joulewise.schemas import BenchmarkConfig, ConfigKeyWarning, SchemaError
@@ -80,15 +78,15 @@ class SchemaCoverageGapTests(unittest.TestCase):
         data["sampling"].pop("power_hz")
         data["sampling"]["power_hzz"] = 10
 
-        stderr = io.StringIO()
-        with warnings.catch_warnings():
+        with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            with redirect_stderr(stderr):
-                config = BenchmarkConfig.from_mapping(data)
+            config = BenchmarkConfig.from_mapping(data)
 
         self.assertEqual(config.sampling.power_hz, 1.0)
         self.assertEqual(config.config_warnings[0]["code"], "unknown_config_key")
-        self.assertIn("sampling.power_hzz", stderr.getvalue())
+        self.assertEqual(len(caught), 1)
+        self.assertIsInstance(caught[0].message, ConfigKeyWarning)
+        self.assertIn("sampling.power_hzz", str(caught[0].message))
 
     def test_unknown_keys_warn_in_deterministic_order_at_every_schema_level(self) -> None:
         data = example_data()

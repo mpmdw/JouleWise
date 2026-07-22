@@ -2,6 +2,7 @@ import io
 import json
 import math
 import plistlib
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -48,6 +49,98 @@ def _idle_powermetrics_stream(
 
 
 class CliTests(unittest.TestCase):
+    def test_reduce_unsupported_or_crossed_version_is_structured_refusal(self) -> None:
+        # F4 defect shape: resolver ValueError escaped main and printed a raw
+        # traceback instead of the governed CLI refusal surface.
+        cases = (
+            (
+                Path("tests/fixtures/d078_r01"),
+                "9.9.9",
+                "unsupported reducer version: '9.9.9'",
+            ),
+            (
+                Path("tests/fixtures/axi_valid_burst"),
+                "0.5.2",
+                "0.6.0-only bundle shape cannot enter a frozen historical reducer arm",
+            ),
+        )
+        for source, version, expected in cases:
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as tmp:
+                output = Path(tmp) / "must-not-exist.json"
+                stderr = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                    code = main(
+                        [
+                            "reduce",
+                            str(source),
+                            "--reducer-version",
+                            version,
+                            "--output",
+                            str(output),
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertEqual(stderr.getvalue(), f"error: {expected}\n")
+                self.assertFalse(output.exists())
+
+    def test_reduce_default_replays_recorded_060_and_051_versions(self) -> None:
+        cases = (
+            (
+                Path("tests/fixtures/axi_valid_burst"),
+                None,
+                "0.6.0",
+            ),
+            (
+                Path("tests/fixtures/d078_r01"),
+                Path("tests/goldens/d078_r01_reducer_051.json"),
+                "0.5.1",
+            ),
+        )
+        for source, recorded_summary, expected_version in cases:
+            with self.subTest(expected_version=expected_version), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "bundle"
+                shutil.copytree(source, bundle)
+                if recorded_summary is not None:
+                    (bundle / "summary_metrics.json").write_bytes(
+                        recorded_summary.read_bytes()
+                    )
+                output = Path(tmp) / "replayed.json"
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(
+                        main(["reduce", str(bundle), "--output", str(output)]),
+                        0,
+                    )
+                payload = json.loads(output.read_text())
+                self.assertEqual(
+                    payload["summary_provenance"]["reducer_version"],
+                    expected_version,
+                )
+
+    def test_reduce_never_rewrites_stored_point_anchor_summary(self) -> None:
+        # W10 exact defect: the public verb used write_text on the canonical
+        # summary path, replacing frozen 0.5.0 bytes in place.
+        source = Path("tests/fixtures/d078_r01")
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(source, bundle)
+            summary_path = bundle / "summary_metrics.json"
+            before = summary_path.read_bytes()
+            salvage = Path(tmp) / "rereduced.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(
+                    main(["reduce", str(bundle), "--output", str(salvage)]), 0
+                )
+            self.assertEqual(summary_path.read_bytes(), before)
+            self.assertTrue(salvage.is_file())
+            self.assertFalse(
+                (bundle / "summary_metrics.rereduced.0.5.1.json").exists()
+            )
+            payload = json.loads(salvage.read_text())
+            self.assertNotIn("energy_anchor_shift_envelopes", payload)
+            self.assertEqual(
+                payload["summary_provenance"]["reducer_version"], "0.5.0"
+            )
+
     def test_dirty_source_bundle_still_completes_and_remains_structurally_valid(self) -> None:
         config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
         config_data["run_id"] = "dirty-source-completes"
@@ -142,7 +235,7 @@ class CliTests(unittest.TestCase):
                 "strict: unsupported reducer version "
                 "'0.4.1' for current-era bundle; superseded versions "
                 "cannot claim the current inter_token_throughput_tokens_s "
-                "reduction shape and explicit re-reduction with 0.5.0 is "
+                f"reduction shape and explicit re-reduction with {SUMMARY_REDUCER_VERSION} is "
                 "required",
                 validate_bundle(adversarial_bundle, strict=True),
             )
@@ -166,7 +259,8 @@ class CliTests(unittest.TestCase):
                         "strict: unsupported reducer version "
                         f"'{version}' for current-era bundle; superseded versions "
                         "cannot claim the current inter_token_throughput_tokens_s "
-                        "reduction shape and explicit re-reduction with 0.5.0 is "
+                        "reduction shape and explicit re-reduction with "
+                        f"{SUMMARY_REDUCER_VERSION} is "
                         "required",
                         validate_bundle(bundle, strict=True),
                     )
@@ -182,7 +276,7 @@ class CliTests(unittest.TestCase):
                 current_summary["summary_provenance"]["reducer_version"],
                 SUMMARY_REDUCER_VERSION,
             )
-            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.0")
+            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.2")
             self.assertEqual(validate_bundle(current_bundle, strict=True), [])
 
     def test_weighted_idle_drift_flips_strict_verdict_from_legacy_counterfactual(
@@ -220,7 +314,8 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                weighted_summary["summary_provenance"]["reducer_version"], "0.5.0"
+                weighted_summary["summary_provenance"]["reducer_version"],
+                SUMMARY_REDUCER_VERSION,
             )
             self.assertEqual(weighted_summary["idle_mean_uncertainty"]["status"], "estimated")
             self.assertEqual(validate_bundle(bundle, strict=True), [])
@@ -347,11 +442,20 @@ class CliTests(unittest.TestCase):
                 with self.subTest(label=label), mock.patch(
                     "joulewise.cli.reduce_bundle", return_value=summary
                 ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    self.assertEqual(main(["reduce", str(bundle)]), expected)
+                    output = Path(tmp) / f"{label}.json"
                     self.assertEqual(
-                        (bundle / "summary_metrics.json").is_file(),
-                        label != "invalid-succeeded",
+                        main(
+                            [
+                                "reduce",
+                                str(bundle),
+                                "--output",
+                                str(output),
+                            ]
+                        ),
+                        expected,
                     )
+                    self.assertFalse((bundle / "summary_metrics.json").exists())
+                    self.assertEqual(output.is_file(), label != "invalid-succeeded")
 
 
 if __name__ == "__main__":

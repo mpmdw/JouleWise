@@ -19,7 +19,7 @@ from typing import Any, Mapping, Sequence
 AXI_CONFIG_EXTENSION = "joulewise.axi_decode_config.v1"
 EVENT_SEMANTICS_VERSION = "joulewise.events.v2"
 REQUEST_ROSTER_SCHEMA_VERSION = "joulewise.request_roster.v1"
-SUMMARY_REDUCER_VERSION = "0.6.0"
+FROZEN_AXI_060_SUMMARY_REDUCER_VERSION = "0.6.0"
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
@@ -712,7 +712,7 @@ __all__ = [
     "AXI_CONFIG_EXTENSION", "AxiSchemaError", "BatchPolicy", "DraftModelIdentity",
     "COMMON_REQUEST_IDENTITY_KEYS", "EVENT_SEMANTICS_VERSION", "EVENT_TOP_KEYS", "NativeMTPIdentity",
     "REQUEST_ROSTER_SCHEMA_VERSION", "RequestDescriptor", "RequestRoster",
-    "SUMMARY_REDUCER_VERSION", "SpeculationPolicy", "TargetTokenizerIdentity",
+    "FROZEN_AXI_060_SUMMARY_REDUCER_VERSION", "SpeculationPolicy", "TargetTokenizerIdentity",
     "TokenizerIdentity", "axi_config_schema_defs", "canonical_json_bytes",
     "normalized_json_bytes", "request_prompt_sha256", "sha256_bytes",
     "validate_batch_observation", "validate_request_row", "validate_request_token_row",

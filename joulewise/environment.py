@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from importlib import metadata as importlib_metadata
 from typing import Any, Mapping
 
+from joulewise.idle_admission import extract_adapter_observation
 from joulewise.schemas import EnvironmentGuardPolicy
 
 COMMAND_TIMEOUT_S = 3.0
@@ -415,11 +416,25 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
 
 def collect_environment_guard_observation(
     timeout_s: float = COMMAND_TIMEOUT_S,
+    *,
+    include_adapter_power: bool = False,
 ) -> dict[str, Any]:
     """Capture the lightweight display/screensaver transition surface.
 
     This post-run observation intentionally omits the expensive full host
     inventory while preserving null-on-failure semantics for every probe.
+
+    With ``include_adapter_power`` the observation additionally records the
+    adapter-wattage surface (T0.5 idle-admission core): the negotiated
+    adapter wattage and description are captured per admission observation
+    so the campaign verdict can flag wattage discontinuities (the observed
+    140->70->140 W precedent) and description changes as named conditions.
+    Capture stays fail-soft (``None`` on probe failure); the production
+    admission policy is where unknown wattage fails closed.  The flag
+    defaults to off so pre-hookup callers keep their exact probe sequence
+    AND their exact observation shape: the ``power`` block and
+    ``adapter_power_observation`` are present only when the flag is set.
+    The controller hookup opts in.
     """
 
     observation = {
@@ -478,7 +493,32 @@ def collect_environment_guard_observation(
         _parse_ioreg_hid_idle,
         timeout_s,
     )
+    if include_adapter_power:
+        # The adapter-power surface is emitted ONLY when opted in; pre-hookup
+        # callers (default off) keep the exact legacy observation shape so
+        # existing consumers -- and the campaign verdict's adapter-continuity
+        # scan, which treats any guard dict containing "power" as an adapter
+        # observation -- never see all-None wattage blocks they cannot verify.
+        observation["power"] = {
+            "adapter_watts": None,
+            "adapter_description": None,
+            "external_connected": None,
+            "is_charging": None,
+            "fully_charged": None,
+        }
+        _apply_command(
+            observation,
+            errors,
+            "ioreg_battery",
+            ["ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"],
+            _parse_ioreg_battery,
+            timeout_s,
+        )
     _derive_screensaver_engagement(observation)
+    if include_adapter_power:
+        observation["adapter_power_observation"] = extract_adapter_observation(
+            observation["power"], source="admission_guard_observation"
+        )
     return observation
 
 

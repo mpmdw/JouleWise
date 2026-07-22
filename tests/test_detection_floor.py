@@ -194,6 +194,40 @@ class TestAbsoluteFloor(unittest.TestCase):
         self.assertTrue(close(est.guarded_floor_j, after_max))
         self.assertGreater(est.guarded_floor_j, inside_max)
 
+    def test_member_interval_corners_widen_residual_not_just_member_width(self):
+        # G1 defect shape: ten alternating point energies have +/-0.5 J point
+        # residuals, but independent +/-1 J member intervals can move one
+        # member against the sample mean by 1.8 J.  The attainable residual is
+        # therefore 0.5 + 1.8 = 2.3 J; the old max(widths)==1 shortcut missed it.
+        energies = [99.5, 100.5] * 5
+        estimate = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[1.0] * 10,
+        )
+        self.assertGreaterEqual(estimate.unguarded_floor_j, 2.3 - TOL)
+
+    def test_joint_corners_raise_full_floor_when_prediction_component_dominates(self):
+        # K1 counterexample: the point floor is 3.2254 J guarded and the
+        # round-4 linear-residual widening remains below it. A joint corner
+        # instead maximizes the Student-t prediction term, so the COMPLETE
+        # guarded floor must rise to 5.2008 J.
+        energies = [101.0, 99.0, 100.0, 100.0, 100.0]
+        point = absolute_false_effect_floor(energies)
+        widened = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.5] * 5,
+        )
+        self.assertAlmostEqual(point.guarded_floor_j, 3.2254205307215367)
+        self.assertGreaterEqual(widened.guarded_floor_j, 5.2008)
+
+    def test_more_than_sixteen_nonzero_member_widths_refuse_approximation(self):
+        with self.assertRaisesRegex(ValueError, "capped at n=16"):
+            absolute_false_effect_floor(
+                [100.0] * 17,
+                admissible_half_widths_j=[0.5] * 17,
+            )
+
+
     def test_below_five_is_smoke_only(self):
         est = absolute_false_effect_floor([10.0, 12.0, 11.0])
         self.assertIsNone(est.guard_factor)
@@ -244,6 +278,29 @@ class TestComparativeFloor(unittest.TestCase):
         self.assertTrue(close(est.unguarded_floor_j, FIXTURE_B_PREDICTION))
         self.assertTrue(close(est.guard_factor, 1.5))
         self.assertTrue(close(est.guarded_floor_j, FIXTURE_B_GUARDED))
+
+    def test_block_interval_corner_widens_the_observed_delta(self):
+        # A linear block contrast ranges over point_delta +/- sum(|c_i|w_i).
+        # The operative floor must cover the point magnitude plus that width,
+        # rather than comparing the width alone to the point-only floor.
+        estimate = comparative_false_effect_floor(
+            [2.0] * 5,
+            admissible_half_widths_j=[1.0] * 5,
+        )
+        self.assertGreaterEqual(estimate.unguarded_floor_j, 3.0 - TOL)
+
+    def test_joint_corners_raise_comparative_prediction_component(self):
+        # K1 comparative counterexample derived from the same member-energy
+        # pattern: point deltas [1,-1,0,0,0] have a 3.2254 J guarded floor,
+        # while +/-0.5 J delta widths put the full corner maximum at 5.4468 J.
+        deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
+        point = comparative_false_effect_floor(deltas)
+        widened = comparative_false_effect_floor(
+            deltas,
+            admissible_half_widths_j=[0.5] * 5,
+        )
+        self.assertAlmostEqual(point.guarded_floor_j, 3.2254205307215367)
+        self.assertGreaterEqual(widened.guarded_floor_j, 5.4468 - TOL)
 
     def test_label_swap_leaves_floor_unchanged(self):
         negated = [-d for d in FIXTURE_B_DELTAS]
@@ -303,10 +360,20 @@ def make_regime(
     }
 
 
-def make_cell(cell_id="cell-1", energies=None, deltas=None, regime=None, condition="cf-1"):
+def make_cell(
+    cell_id="cell-1",
+    energies=None,
+    deltas=None,
+    regime=None,
+    condition="cf-1",
+    absolute_half_widths=None,
+    comparative_half_widths=None,
+):
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
-    abs_est = absolute_false_effect_floor(energies)
+    abs_est = absolute_false_effect_floor(
+        energies, admissible_half_widths_j=absolute_half_widths
+    )
     observations = [
         {
             "bundle_id": f"{cell_id}-r{i}",
@@ -316,7 +383,9 @@ def make_cell(cell_id="cell-1", energies=None, deltas=None, regime=None, conditi
         }
         for i, value in enumerate(energies)
     ]
-    cmp_est = comparative_false_effect_floor(deltas)
+    cmp_est = comparative_false_effect_floor(
+        deltas, admissible_half_widths_j=comparative_half_widths
+    )
     blocks = []
     for i, delta in enumerate(deltas):
         a, b = 100.0, 100.0 + delta
@@ -403,6 +472,57 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(artifact), [])
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_widened_floor_record_round_trips_and_rejects_tampering(self):
+        cell = make_cell(
+            energies=[0.0, 1.0, -1.0, 0.0, 0.0],
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.01] * 5,
+        )
+        artifact = make_artifact([cell])
+        record = artifact["cells"][0]["absolute"]
+        self.assertEqual(record["admissible_half_widths_j"], [0.01] * 5)
+        self.assertEqual(
+            record["corner_widened_guarded_floor_j"], 3.2578982723565812
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        record["corner_widened_guarded_floor_j"] -= 0.1
+        self.assertTrue(
+            any(
+                "full corner enumeration" in error
+                for error in validate_floor_artifact(artifact)
+            )
+        )
+
+    def test_comparative_widened_floor_round_trips_and_rejects_tampering(self):
+        cell = make_cell(
+            energies=[0.0] * 5,
+            deltas=[1.0, -1.0, 0.0, 0.0, 0.0],
+            comparative_half_widths=[0.5] * 5,
+        )
+        artifact = make_artifact([cell])
+        record = artifact["cells"][0]["comparative"]
+        self.assertEqual(record["admissible_half_widths_j"], [0.5] * 5)
+        self.assertEqual(
+            record["corner_widened_guarded_floor_j"], 5.446799999999999
+        )
+        self.assertEqual(
+            artifact["cells"][0]["floor_gate_j"],
+            record["corner_widened_guarded_floor_j"],
+        )
+        round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
+        self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+        round_tripped["cells"][0]["comparative"][
+            "corner_widened_guarded_floor_j"
+        ] -= 0.1
+        self.assertTrue(
+            any(
+                "full corner enumeration" in error
+                for error in validate_floor_artifact(round_tripped)
+            )
+        )
 
     def test_artifact_records_plan_hash_and_per_member_abba_sequence(self):
         artifact = make_artifact()

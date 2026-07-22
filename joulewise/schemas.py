@@ -24,12 +24,39 @@ from joulewise.axi_decode_config import (
     axi_config_schema_defs,
     normalized_json_bytes as axi_normalized_json_bytes,
 )
+from joulewise.idle_admission import (
+    IdleAdmissionExtension,
+    IdleAdmissionPolicyError,
+)
 from joulewise.validation import finite_float
 
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.5.0"
+SUMMARY_REDUCER_VERSION = "0.5.2"
+
+# Validation-time dispatch vocabulary.  This intentionally is not an enum in
+# the exported wire schema: historical summaries keep their exact bytes and
+# serializers, while generic readers still refuse unknown or crossed labels.
+KNOWN_SUMMARY_REDUCER_VERSIONS = frozenset(
+    {"0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2", "0.6.0", "0.6.1", "0.6.2"}
+)
+AXI_SUMMARY_REDUCER_VERSIONS = frozenset({"0.6.0", "0.6.1", "0.6.2"})
+AXI_SUMMARY_SHAPE_FIELDS = frozenset(
+    {
+        "decode_counter_rollup",
+        "batch_group_gross_energy_j",
+        "gross_energy_per_committed_output_token_j",
+        "gross_energy_per_accepted_draft_token_j",
+        "decode_phase_output_throughput_tokens_s",
+        "decode_emission_event_rate_events_s",
+        "decode_emission_burst_size_mean_tokens",
+        "decode_emission_burst_size_p50_tokens",
+        "decode_emission_burst_size_p95_tokens",
+        "decode_emission_burst_size_max_tokens",
+        "request_decode_metrics",
+    }
+)
 
 _PROMPT_SOURCE_FIELDS = (
     "prompt_text",
@@ -535,6 +562,42 @@ class CooldownPolicy:
 
 
 @dataclass(frozen=True)
+class CalibrationBracketingPolicy:
+    """Claim-bearing pre/post instrument-calibration bracket policy."""
+
+    require_bracket: bool
+    calibration_bracket_max_drift_s: float
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "CalibrationBracketingPolicy":
+        data = _require_mapping(data, "calibration_bracketing")
+        _require_exact_keys(
+            data,
+            "calibration_bracketing",
+            frozenset(
+                {"require_bracket", "calibration_bracket_max_drift_s"}
+            ),
+        )
+        drift = _optional_float(
+            data.get("calibration_bracket_max_drift_s"),
+            "calibration_bracketing.calibration_bracket_max_drift_s",
+            minimum=0.0,
+        )
+        if drift is None:
+            raise SchemaError(
+                "calibration_bracketing.calibration_bracket_max_drift_s "
+                "must be a finite number"
+            )
+        return cls(
+            require_bracket=_require_bool(
+                data.get("require_bracket"),
+                "calibration_bracketing.require_bracket",
+            ),
+            calibration_bracket_max_drift_s=drift,
+        )
+
+
+@dataclass(frozen=True)
 class CampaignPolicy:
     """Typed policy loaded from a separately hashed campaign sidecar.
 
@@ -550,6 +613,9 @@ class CampaignPolicy:
     environment_guard: EnvironmentGuardPolicy
     idle_admission: IdleAdmissionPolicy
     cooldown: CooldownPolicy
+    calibration_bracketing: CalibrationBracketingPolicy
+    idle_admission_extension: IdleAdmissionExtension | None = None
+    post_window_sampling_dwell_s: float = 1.0
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
@@ -566,6 +632,9 @@ class CampaignPolicy:
                     "environment_guard",
                     "idle_admission",
                     "cooldown",
+                    "calibration_bracketing",
+                    "idle_admission_extension",
+                    "post_window_sampling_dwell_s",
                 }
             ),
         )
@@ -591,6 +660,28 @@ class CampaignPolicy:
                 "idle_admission.on_fail='flag' is permitted only for an "
                 "exploratory campaign policy"
             )
+        extension_raw = data.get("idle_admission_extension")
+        try:
+            extension = (
+                IdleAdmissionExtension.from_mapping(
+                    extension_raw,
+                    profile=profile.value,
+                )
+                if extension_raw is not None
+                else None
+            )
+        except IdleAdmissionPolicyError as exc:
+            raise SchemaError(str(exc)) from exc
+        calibration_bracketing = CalibrationBracketingPolicy.from_mapping(
+            data.get("calibration_bracketing")
+        )
+        if (
+            profile == CampaignPolicyProfile.PRODUCTION
+            and not calibration_bracketing.require_bracket
+        ):
+            raise SchemaError(
+                "production calibration_bracketing.require_bracket must be true"
+            )
         return cls(
             schema_version=schema_version,
             policy_id=_require_string(data.get("policy_id"), "campaign_policy.policy_id"),
@@ -603,6 +694,16 @@ class CampaignPolicy:
             ),
             idle_admission=admission,
             cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
+            calibration_bracketing=calibration_bracketing,
+            idle_admission_extension=extension,
+            post_window_sampling_dwell_s=(
+                _optional_float(
+                    data.get("post_window_sampling_dwell_s", 1.0),
+                    "campaign_policy.post_window_sampling_dwell_s",
+                    minimum=1.0,
+                )
+                or 1.0
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1224,12 +1325,13 @@ def summary_validation_problems(summary: Any) -> list[str]:
 
     if not isinstance(summary, Mapping):
         return ["summary_metrics.json is not a JSON object"]
-    problems: list[str] = []
+    problems = _summary_version_problems(summary)
     raw_status = summary.get("status")
     try:
         status = RunStatus(raw_status)
     except (TypeError, ValueError):
-        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
+        problems.append(f"summary status is not a valid RunStatus: {raw_status!r}")
+        return problems
 
     # These fields have the same nullable-number shape for every status in
     # the exported schema. Failure summaries may omit or null them, but a
@@ -1385,6 +1487,58 @@ def summary_validation_problems(summary: Any) -> list[str]:
     return problems
 
 
+def _summary_version_problems(summary: Mapping[str, Any]) -> list[str]:
+    """Validate §8.1 version/shape coherence without changing wire schemas."""
+
+    provenance = summary.get("summary_provenance")
+    if provenance is None:
+        # The six sealed pre-D-033 bundle identities are provenance-less.  A
+        # summary-only validator cannot identify them; strict bundle dispatch
+        # owns that compatibility decision.
+        return []
+    if not isinstance(provenance, Mapping):
+        return ["summary provenance is not null or an object"]
+    reducer_version = provenance.get("reducer_version")
+    if (
+        not isinstance(reducer_version, str)
+        or reducer_version not in KNOWN_SUMMARY_REDUCER_VERSIONS
+    ):
+        return [
+            "summary provenance reducer_version is unsupported: "
+            f"{reducer_version!r}"
+        ]
+
+    problems: list[str] = []
+    event_semantics_version = provenance.get("event_semantics_version")
+    present_axi_fields = AXI_SUMMARY_SHAPE_FIELDS.intersection(summary)
+    if reducer_version in AXI_SUMMARY_REDUCER_VERSIONS:
+        if event_semantics_version != EVENT_SEMANTICS_VERSION:
+            problems.append(
+                "summary provenance reducer/event semantics pairing is invalid: "
+                f"{reducer_version} requires {EVENT_SEMANTICS_VERSION!r}"
+            )
+        missing_axi_fields = sorted(AXI_SUMMARY_SHAPE_FIELDS - set(summary))
+        if missing_axi_fields:
+            problems.append(
+                "summary provenance reducer/shape pairing is invalid: "
+                f"{reducer_version} requires AXI summary fields "
+                + ", ".join(missing_axi_fields)
+            )
+    else:
+        if event_semantics_version is not None:
+            problems.append(
+                "summary provenance reducer/event semantics pairing is invalid: "
+                f"{reducer_version} must not carry event_semantics_version"
+            )
+        if present_axi_fields:
+            problems.append(
+                "summary provenance reducer/shape pairing is invalid: "
+                f"{reducer_version} must not carry AXI summary fields "
+                + ", ".join(sorted(present_axi_fields))
+            )
+    return problems
+
+
 def is_admissible_succeeded_summary(summary: Any) -> bool:
     """Whether ``summary`` is a canonical succeeded admission state."""
 
@@ -1426,6 +1580,10 @@ class SummaryMetrics:
     idle_mean_uncertainty: dict[str, Any] | None = None
     energy_variance_terms_j2: dict[str, float | None] | None = None
     energy_bound_terms_j: dict[str, float | None] | None = None
+    # D-078 (reducer 0.5.1/0.6.1, additive): JSON-Pointer metric paths ->
+    # continuous common-shift anchor energy envelopes. Serialized only when
+    # set, so frozen 0.4.x/0.5.0/0.6.0 replays stay byte-identical.
+    energy_anchor_shift_envelopes: dict[str, Any] | None = None
     window_evidence_precheck: dict[str, Any] | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
@@ -1444,7 +1602,12 @@ class SummaryMetrics:
             raise SchemaError(problems[0])
 
     def _payload(self) -> dict[str, Any]:
-        return _enum_to_value(asdict(self))
+        payload = _enum_to_value(asdict(self))
+        # Additive D-078 field: omitted (not null) when unset so that frozen
+        # 0.4.x/0.5.0/0.6.0 reducer arms keep their byte-frozen serializations.
+        if payload.get("energy_anchor_shift_envelopes") is None:
+            payload.pop("energy_anchor_shift_envelopes", None)
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
@@ -1493,6 +1656,7 @@ class SummaryMetrics:
                 },
                 "energy_variance_terms_j2": {"type": ["object", "null"]},
                 "energy_bound_terms_j": {"type": ["object", "null"]},
+                "energy_anchor_shift_envelopes": {"type": ["object", "null"]},
                 "window_evidence_precheck": {"type": ["object", "null"]},
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
@@ -1946,7 +2110,7 @@ class SummaryMetricsV060(SummaryMetrics):
             "config_schema_version", "event_semantics_version",
         }:
             raise SchemaError("0.6.0 summary_provenance exact keys mismatch")
-        if provenance.get("reducer_version") != "0.6.0" or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
+        if provenance.get("reducer_version") not in {"0.6.0", "0.6.1", "0.6.2"} or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
             raise SchemaError("0.6.0 summary provenance version mismatch")
         if self.decode_counter_rollup is None:
             raise SchemaError("0.6.0 succeeded summary requires decode_counter_rollup")
@@ -2067,7 +2231,9 @@ class SummaryMetricsV060(SummaryMetrics):
         provenance = schema["$defs"]["summary_provenance"]
         provenance["required"].append("event_semantics_version")
         provenance["properties"]["event_semantics_version"] = {"const": EVENT_SEMANTICS_VERSION}
-        provenance["properties"]["reducer_version"] = {"const": "0.6.0"}
+        provenance["properties"]["reducer_version"] = {
+            "enum": ["0.6.0", "0.6.1", "0.6.2"]
+        }
         provenance["additionalProperties"] = False
         return schema
 

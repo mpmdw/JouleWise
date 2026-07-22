@@ -28,7 +28,7 @@ The implementation MUST use these independent version axes:
 | Config base schema | `0.1` | Remains `0.1`; AXI does not consume reserved config `0.2`. |
 | Config extension | `joulewise.axi_decode_config.v1` | Present only on AXI request/burst configs and included in normalized `config.json` identity. |
 | Event semantics | `joulewise.events.v2` | Recorded in `metadata.event_semantics_version`; absent means the historical event arm, never an inferred v2. |
-| Summary reducer | `0.6.0` | First request/burst-aware reducer; `0.4.1`, `0.4.2`, and `0.5.0` retain exact frozen arms. |
+| Summary reducer | `0.6.2` (current claim-eligible mint) | `0.6.0` was the first request/burst-aware reducer and stays byte-frozen, as do replay-only `0.6.1` and the pre-AXI `0.4.1`/`0.4.2`/`0.5.0` arms; see §8.1 for the full version matrix. |
 | Generic analysis registry | `joulewise.analysis_registry.v2` | Sibling of the AP-2-specific v1 registry. |
 | Generic analysis manifest | `joulewise.analysis_manifest.v2` | Sibling of AP-2 v1; it does not reinterpret v1 bytes. |
 | Campaign attempt ledger | `joulewise.attempt_ledger.v1` | Complete deterministic attempt history for each generic-manifest Entry/cell. |
@@ -602,8 +602,9 @@ committed request-token rows, not event-line count.
 
 Strict validation additionally requires:
 
-1. AXI config extension, metadata event version, and reducer 0.6.0 appear
-   together; partial opt-in is invalid.
+1. AXI config extension, metadata event version, and an AXI reducer arm
+   (`0.6.0`, `0.6.1`, or `0.6.2` per the §8.1 matrix) appear together;
+   partial opt-in is invalid.
 2. Metadata speculation identity equals config identity and satisfies the
    mode-specific null rules.
 3. Draft-model and target stack identities are separately complete. Native
@@ -644,10 +645,13 @@ For v2, evidence precedence is:
 4. derived `summary_metrics.json`.
 
 The validator proves agreement among levels 1-3. The reducer consumes only
-strictly paired evidence. Summary is derived and remains the one sanctioned
-post-finalize rewrite; it never overrides output evidence.
+strictly paired evidence. Summary is derived; under D-078 stored summary
+bytes are immutable evidence once a bundle is finalized — post-hoc
+re-reduction mints a NEW artifact outside the bundle (exclusive-create,
+never clobbering), and no path rewrites finalized evidence. Summary never
+overrides output evidence.
 
-## 8. Reducer 0.6.0
+## 8. Reducer version arms (0.6.0 frozen origin through the 0.6.2 mint)
 
 ### 8.1 Dispatch before interpretation
 
@@ -660,7 +664,9 @@ or additive-field comparison. The exact arms are:
 | `0.4.1` | Preserve today's exact unweighted-idle code path, historical event/token interpretation, derived outputs, and current era-aware tolerant comparison behavior. Do not add 0.6.0 fields or broaden its current tolerated-absence set. |
 | `0.4.2` | Preserve today's exact unweighted-idle code path, historical event/token interpretation, derived outputs, and current era-aware tolerant comparison behavior. Do not add 0.6.0 fields or broaden its current tolerated-absence set. |
 | `0.5.0` | Preserve today's exact duration-weighted idle-v2 and historical event/token code path, derived outputs, and current comparison behavior, including its existing treatment of absent `idle_baseline.gpu_freq_mhz_mean`. Do not add a new 0.6.0 absence tolerance. |
-| `0.6.0` + `metadata.event_semantics_version == "joulewise.events.v2"` | Use the request/burst path in this document, duration-weighted idle-v2, unioned group phase windows, request output artifacts, and new metrics. |
+| `0.6.0` + `metadata.event_semantics_version == "joulewise.events.v2"` | Use the request/burst path in this document, duration-weighted idle-v2, unioned group phase windows, request output artifacts, and new metrics. D-078 note: `0.6.0` is byte-frozen and replays with the point-anchor timeline; it carries the same anchor defect the D-078 audit found. |
+| `0.6.1` + `metadata.event_semantics_version == "joulewise.events.v2"` | D-078 additive arm: identical burst semantics to `0.6.0` plus the censored-intersection anchor re-derivation, re-anchored shared timeline, `energy_anchor_shift_envelopes`, `energy_bound_terms_j.E_clock_anchor_shift_bound_j`, and the registered calibration/CPU/anchor-envelope precheck barriers (see `docs/contracts/run_bundle_layout.md` D-078 section). `0.6.1` is replay-only, superseded by `0.6.2`, and claim-INELIGIBLE under the registered superseded-composition refusal (its envelopes compose anchor bounds by `max()`); explicit `0.6.0` is replay-only for historical bundles already carrying that frozen wire. Stored `0.6.0`/`0.6.1` summaries are never rewritten. |
+| `0.6.2` + `metadata.event_semantics_version == "joulewise.events.v2"` | D-078 convergence-wave additive arm (2026-07-21 amendment): identical burst semantics to `0.6.1` plus additive causal-bound composition (`B_effective = B_bundle + B_fiducial + wall_minus_monotonic_span`, three disjoint causal links; `B_fiducial` additionally folds in the calibration capture's own trace-anchor bound), fiducial protocol v2/v3 physics (v3, 59 pulses, required for claim-bearing captures per the fifth-wave D-078 addendum), stricter evidence admission (attempt-ledger contiguity, decision/final-attempt binding, closed decision/claim_reason vocabulary), and the post-window trace-tail sufficiency gate. Sole claim-eligible AXI mint. |
 | `0.4.0`, `0.3.x`, recorded `0.2.x`, unknown versions, or incoherent version/event pairs | Unsupported; require explicit compatible re-reduction or report a structured refusal. Never guess. |
 
 The implementation MUST keep the existing arms' code paths and outputs
@@ -681,11 +687,15 @@ absence sets remain byte-for-byte/code-path unchanged; adding 0.6-only keys to
 those sets is forbidden.
 
 A finalized bundle's `reduce` command defaults to the reducer version already
-recorded in its summary, not the latest package constant. A not-yet-finalized
-v2 bundle uses 0.6.0. Explicit migration to 0.6.0 is permitted only for a v2
-bundle; historical event bundles cannot acquire burst semantics by
-re-reduction. This prevents a package-version bump from forcing current-era
-0.5.0 bundles through a new path.
+recorded in its summary, not the latest package constant — replay of the
+recorded arm, never a silent promotion (regression:
+`test_reduce_default_replays_recorded_060_and_051_versions`). A
+not-yet-finalized v2 bundle finalizes at the current mint (`0.6.2` when the
+AXI opt-in extension is present, `0.5.2` otherwise). Explicit re-reduction
+under a newer arm is opt-in for v2 bundles only and mints a new summary under
+that version; historical event bundles cannot acquire burst semantics by
+re-reduction, and stored summaries are never rewritten. This prevents a
+package-version bump from forcing current-era bundles through a new path.
 
 `summary_provenance` under the new 0.6.0 serializer adds required string field
 `event_semantics_version: "joulewise.events.v2"`. It is absent, not null, in

@@ -25,11 +25,19 @@ from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
     _campaign_cooldown_evidence,
+    campaign_cooldown_evidence,
     floor_binding_reason_codes,
     floor_request_for_evidence,
     floor_stack_identity,
     load_analysis_inputs,
     window_evidence_precheck,
+)
+from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
+from joulewise.whole_window import (
+    IDLE_ADMISSION_CORE_SCHEMA,
+    WHOLE_WINDOW_SCHEMA,
+    build_row_provenance,
+    source_manifest_descriptors,
 )
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
@@ -58,6 +66,113 @@ CLEAN_SOURCE_STATE = {
     "untracked": "clean",
     "diff_sha256": "2" * 64,
 }
+
+
+def install_passing_analysis_whole_window(
+    runs_root: Path, bundle_ids: list[str], *, source_name: str
+) -> None:
+    """Install one provenance-bound passing verdict for a synthetic corpus."""
+
+    bundle_ids = sorted(bundle_ids)
+    reference_ids = [
+        f"{source_name}-neg8-reference-start",
+        f"{source_name}-neg8-reference-end",
+    ]
+    for bundle_id in reference_ids:
+        bundle = runs_root / bundle_id
+        bundle.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "gross_energy_j": 1.0,
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "point_j": 1.0,
+                    "lower_j": 0.99,
+                    "upper_j": 1.01,
+                }
+            },
+        }
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+    covered_ids = sorted([*bundle_ids, *reference_ids])
+    # Anchor to the repo-registered production policy: re-derivation resolves
+    # tolerances from tracked policy files only (fail-closed on unknown shas).
+    registered_policy_path = (
+        ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+    )
+    policy_sha = hashlib.sha256(registered_policy_path.read_bytes()).hexdigest()
+    registered_bracket = json.loads(registered_policy_path.read_text())[
+        "idle_admission_extension"
+    ]["neg8_bracket"]
+    campaign_dir = runs_root / "campaign_manifests"
+    campaign_dir.mkdir(parents=True, exist_ok=True)
+    source_path = campaign_dir / f"{source_name}.json"
+    source_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "session_id": source_name,
+                "analysis_manifest_id": None,
+                "campaign_policy": {"sha256": policy_sha},
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": [reference_ids[0]],
+                        "role": "neg8_daily_reference_start",
+                        "sentinel_position": "start",
+                    },
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": bundle_ids,
+                    },
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": [reference_ids[1]],
+                        "role": "neg8_daily_reference_end",
+                        "sentinel_position": "end",
+                    },
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    descriptors = source_manifest_descriptors(runs_root, [source_path])
+    row = {
+        "schema_version": WHOLE_WINDOW_SCHEMA,
+        "record_type": "idle_admission_whole_window_verdict",
+        "status": "passed",
+        "campaign_policy": {"sha256": policy_sha},
+        "bundle_ids": covered_ids,
+        "idle_admission_core": {
+            "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+            "policy_sha256": policy_sha,
+            "members": [
+                {
+                    "bundle_id": bundle_id,
+                    "cpu_admission": {"decision": "admitted"},
+                }
+                for bundle_id in covered_ids
+            ],
+            "adapter_wattage_continuity": {
+                "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                "decision": "stable",
+            },
+            "neg8_bracket": {
+                "schema_version": NEG8_BRACKET_SCHEMA,
+                "decision": "passed",
+                "policy": dict(registered_bracket),
+            },
+            "conditions": [],
+        },
+    }
+    row["row_provenance"] = build_row_provenance(
+        policy_sha256=policy_sha,
+        bundle_ids=covered_ids,
+        source_manifests=descriptors,
+    )
+    (runs_root / "campaign_log.jsonl").write_text(json.dumps(row) + "\n")
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
@@ -104,6 +219,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
             json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
         )
         cls.manifest_path = cls.config_dir / "analysis_manifest.json"
+        manifest = json.loads(cls.manifest_path.read_text())
+        bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
+        install_passing_analysis_whole_window(
+            cls.runs_root,
+            bundle_ids,
+            source_name="analysis-whole-window-source",
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -147,6 +269,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 self.assertNotIn("loo_magnitude_influential", evaluation["reason_codes"])
                 self.assertEqual(contrast["estimator"]["n"], 5)
                 self.assertEqual(contrast["estimator"]["df"], 4)
+
                 self.assertEqual(len(contrast["loo"]["rows"]), 5)
                 self.assertTrue(
                     all(
@@ -171,6 +294,26 @@ class AnalysisIntegrationTests(unittest.TestCase):
         omitted_loo["contrasts"][0]["loo"] = {"status": "not_run", "rows": []}
         omitted_loo["claim_verdicts_id"] = calculate_claim_verdicts_id(omitted_loo)
         self.assertTrue(validate_claim_verdicts(omitted_loo))
+
+    def test_analysis_loader_refuses_when_whole_window_verdict_is_missing(self):
+        # F5 defect shape: P2-037 formerly loaded cleanup/cooldown/bundles/floor
+        # while routing entirely around the campaign-wide causal verdict.
+        with tempfile.TemporaryDirectory() as tmp:
+            copied_runs = Path(tmp) / "runs-without-whole-window"
+            shutil.copytree(self.runs_root, copied_runs)
+            (copied_runs / "campaign_log.jsonl").unlink()
+            loaded = load_analysis_inputs(
+                self.manifest_path,
+                copied_runs,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+            self.assertTrue(loaded.registered)
+            for evidence in loaded.registered.values():
+                self.assertFalse(evidence.included)
+                self.assertIn(
+                    "whole_window_neg8_verdict_missing", evidence.base_reason_codes
+                )
 
     def test_production_request_factory_reaches_predeclared_transport(self):
         loaded = load_analysis_inputs(
@@ -285,7 +428,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         campaign_dir = runs / "campaign_manifests"
         raw_dir = campaign_dir / "raw"
         raw_dir.mkdir(parents=True)
-        trace = b'{"idle_power_w":5.0,"timestamp_s":1.0}\n'
+        trace = (
+            b'{"idle_power_w":5.0,"release":true,'
+            b'"release_criteria_met_late":false,"timestamp_s":1.0}\n'
+        )
         trace_path = raw_dir / "cooldown.jsonl"
         trace_path.write_bytes(trace)
         descriptor = {
@@ -372,7 +518,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
             campaign_dir = runs / "campaign_manifests"
             raw_dir = campaign_dir / "raw"
             raw_dir.mkdir(parents=True)
-            trace = b'{"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
+            trace = (
+                b'{"release":true,"release_criteria_met_late":false,'
+                b'"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
+            )
             trace_path = raw_dir / "config-r2.jsonl"
             trace_path.write_bytes(trace)
             descriptor = {
@@ -465,6 +614,55 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     evidence,
                     {"name": "gross_energy_j", "metric_tag": "gross_request"},
                 )
+                self.assertNotIn(
+                    "campaign_cooldown_evidence_missing", precheck["reasons"]
+                )
+
+    def test_real_cap_hit_campaign_records_defeat_summary_only_reading(self):
+        """Audit P0.4: the four real cap-hit members carry
+        ``measurement_quality.cooldown_cap_hit=null`` in their summaries, so
+        summary-only extraction would treat them as clean n.  The verified
+        campaign-log join must mark each one ``cooldown_cap_hit``."""
+
+        from tests.test_floor_extraction import (
+            AUDIT_CAP_HIT_TABLE,
+            install_real_cap_hit_manifest,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp)
+            for bundle_id in AUDIT_CAP_HIT_TABLE:
+                install_real_cap_hit_manifest(runs, bundle_id)
+            cooldowns = campaign_cooldown_evidence(runs)
+            for bundle_id in AUDIT_CAP_HIT_TABLE:
+                evidence = BundleEvidence(
+                    entry={},
+                    bundle_id=bundle_id,
+                    relative_path=bundle_id,
+                    path=runs / bundle_id,
+                    summary={
+                        "window_evidence_precheck": {
+                            "gross_request": {"eligible": True, "reasons": []}
+                        },
+                        # The stored summary fact for all four members.
+                        "measurement_quality": {"cooldown_cap_hit": None},
+                    },
+                    metadata={},
+                    raw_config={},
+                    strict_problems=(),
+                    base_reason_codes=(),
+                    config_sha256=None,
+                    summary_sha256=None,
+                    replacement_classification="registered",
+                    inclusion_status="included",
+                    campaign_cooldown=cooldowns[bundle_id],
+                )
+                precheck = window_evidence_precheck(
+                    evidence,
+                    {"name": "gross_energy_j", "metric_tag": "gross_request"},
+                )
+                self.assertFalse(precheck["eligible"])
+                self.assertIn("cooldown_cap_hit", precheck["reasons"])
                 self.assertNotIn(
                     "campaign_cooldown_evidence_missing", precheck["reasons"]
                 )
@@ -755,8 +953,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
             encoding="utf-8",
         )
         campaign_path = calibration_root / "campaign_log.jsonl"
+        whole_window_lines = [
+            line
+            for line in campaign_path.read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("record_type")
+            == "idle_admission_whole_window_verdict"
+        ]
         campaign_path.write_text(
-            "".join(json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows),
+            "".join(line + "\n" for line in whole_window_lines)
+            + "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows
+            ),
             encoding="utf-8",
         )
         provenance = make_artifact()["provenance"]
@@ -1155,6 +1362,16 @@ class AnalysisIntegrationTests(unittest.TestCase):
         config_path.write_text(json.dumps(replacement, indent=2) + "\n", encoding="utf-8")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(main(["run", str(config_path), "--runs-dir", str(runs)]), 0)
+        install_passing_analysis_whole_window(
+            runs,
+            [
+                replacement["run_id"]
+                if entry["entry_id"] == target["entry_id"]
+                else entry["run_id"]
+                for entry in manifest["entries"]
+            ],
+            source_name="replacement-whole-window-source",
+        )
         artifact = analyze_claims(
             self.manifest_path,
             runs,

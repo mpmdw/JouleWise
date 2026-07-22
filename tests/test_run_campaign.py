@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import math
 import os
 import shutil
 import shlex
@@ -13,6 +14,7 @@ import tempfile
 import textwrap
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +24,7 @@ from scripts.run_campaign import (
     execute_production_uncertainty_gate,
     failed_shakedown_record,
 )
+from joulewise.environment import evaluate_environment_policy
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -620,12 +623,19 @@ def write_prior_campaign_provenance(
     manifest_dir = runs_dir / "campaign_manifests"
     raw_dir = manifest_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    raw_payload = json.dumps({"rolling_mean_power_w": 5.0}) + "\n"
-    (raw_dir / "fixture.jsonl").write_text(raw_payload, encoding="utf-8")
-    raw_sha = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
     session_id = "campaign-fixture"
     members = []
-    for bundle_id, result in evidence_by_bundle.items():
+    for index, (bundle_id, result) in enumerate(evidence_by_bundle.items()):
+        raw_name = f"fixture-{index}.jsonl"
+        raw_payload = json.dumps(
+            {
+                "rolling_mean_power_w": 5.0,
+                "release": result == "recovered",
+                "release_criteria_met_late": False,
+            }
+        ) + "\n"
+        (raw_dir / raw_name).write_text(raw_payload, encoding="utf-8")
+        raw_sha = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
         cooldown: dict[str, object] = {
             "result": result,
             "session_id": session_id,
@@ -633,7 +643,7 @@ def write_prior_campaign_provenance(
         }
         if result in {"recovered", "cap_hit"}:
             cooldown["raw_artifact"] = {
-                "path": "raw/fixture.jsonl",
+                "path": f"raw/{raw_name}",
                 "sha256": raw_sha,
                 "records": 1,
             }
@@ -735,6 +745,18 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(binding.policy.policy_id, "quiet-mac-p2-production")
         self.assertEqual(binding.policy.profile.value, "production")
         self.assertEqual(binding.policy.idle_admission.on_fail.value, "abort")
+        self.assertEqual(binding.policy.post_window_sampling_dwell_s, 1.0)
+
+    def test_campaign_policy_rejects_subsecond_post_window_dwell(self) -> None:
+        from joulewise.schemas import SchemaError
+
+        payload = json.loads(TEST_CAMPAIGN_POLICY.read_text())
+        payload["post_window_sampling_dwell_s"] = 0.999
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "policy.json"
+            path.write_text(json.dumps(payload) + "\n")
+            with self.assertRaisesRegex(SchemaError, ">= 1.0"):
+                run_campaign_module.load_campaign_policy(str(path))
 
     def test_frozen_campaign_anchor_is_explicit_child_experiment_argument(self) -> None:
         from joulewise import cli as cli_module
@@ -820,6 +842,39 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(
                 child_experiment.call_args.kwargs["frozen_cooldown_anchor"], anchor
             )
+
+    def test_campaign_command_forwards_instrument_calibration_attachment(self) -> None:
+        # F7/F9 production plumbing regression: the campaign layer must not
+        # strand a validated directory outside the benchmark controller.
+        command = run_campaign_module.command_for(
+            BASE_CONFIG,
+            Path("runs"),
+            None,
+            instrument_calibration_dir="validated/calibration",
+            instrument_power_policy="ac_high_power",
+        )
+        self.assertEqual(
+            command[command.index("--instrument-calibration-dir") + 1],
+            "validated/calibration",
+        )
+        self.assertEqual(
+            command[command.index("--instrument-power-policy") + 1],
+            "ac_high_power",
+        )
+
+    def test_campaign_command_forwards_policy_post_window_dwell(self) -> None:
+        # R4 defect shape: the sidecar formerly had no route to the existing
+        # controller dwell, so live campaigns stopped sampling immediately.
+        command = run_campaign_module.command_for(
+            BASE_CONFIG,
+            Path("runs"),
+            None,
+            post_window_sampling_dwell_s=1.0,
+        )
+        self.assertEqual(
+            command[command.index("--post-window-sampling-dwell-s") + 1],
+            "1.0",
+        )
 
     def test_parent_anchor_validator_has_canonical_child_parity(self) -> None:
         from joulewise.cooldown_anchor import cooldown_anchor_eligibility
@@ -1255,6 +1310,204 @@ class RunCampaignTests(unittest.TestCase):
             "first_run_exempt",
         )
         self.assertEqual(len(provenance["cooldown_gates"]), 3)
+        selection = provenance["attempt_ledger_selection"]
+        self.assertEqual(
+            {row["bundle_id"] for row in selection["selected_bundles"]},
+            set(selection["selected_bundle_ids"]),
+        )
+
+    def test_axi_runner_emits_campaign_wide_idle_admission_verdict(self) -> None:
+        # F5 defect shape: the AXI path formerly returned immediately after
+        # attempt-ledger/output-identity work, never constructing the core
+        # whole-window barrier at all.
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        binding = run_campaign_module.load_campaign_policy(
+            str(ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json")
+        )
+        snapshot = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "fixture",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 1200.0,
+            "thermal_pressure": "nominal",
+            "load_average_1m": 0.0,
+            "capture_scope": "provided_test_fixture",
+            "python_packages": {"mlx": {"version": "test"}},
+        }
+        admitted = {
+            "schema_version": "joulewise.campaign_environment_preflight.v1",
+            "policy_sha256": binding.sha256,
+            "snapshot": snapshot,
+            "evaluation": evaluate_environment_policy(
+                snapshot, binding.policy.environment_guard
+            ),
+            "override": None,
+            "admitted": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            log_path = runs_dir / "campaign_log.jsonl"
+            real_subprocess_run = subprocess.run
+
+            def run_child_without_policy_environment(command, *, check, env):
+                clean_env = dict(env or {})
+                for name in (
+                    run_campaign_module.CAMPAIGN_POLICY_PATH_ENV,
+                    run_campaign_module.CAMPAIGN_POLICY_SHA256_ENV,
+                    run_campaign_module.CAMPAIGN_PREFLIGHT_JSON_ENV,
+                ):
+                    clean_env.pop(name, None)
+                return real_subprocess_run(command, check=check, env=clean_env)
+
+            with (
+                patch.object(
+                    run_campaign_module,
+                    "campaign_environment_preflight",
+                    return_value=admitted,
+                ),
+                patch.object(
+                    run_campaign_module.subprocess,
+                    "run",
+                    side_effect=run_child_without_policy_environment,
+                ),
+                patch.object(
+                    run_campaign_module,
+                    "campaign_cooldown_before_member",
+                    return_value={"result": "recovered"},
+                ),
+            ):
+                result = run_campaign_module.run_axi_spec_campaign(
+                    run_campaign_module.argparse.Namespace(
+                        dry_run=False,
+                        cli_cmd=None,
+                        arm_quiet_mode=False,
+                        arm_countdown_s=0,
+                        environment_override=None,
+                    ),
+                    state,
+                    runs_dir=runs_dir,
+                    policy_binding=binding,
+                    log_path=log_path,
+                )
+            rows = read_all_jsonl(log_path)
+        self.assertEqual(result, 0)
+        whole = [
+            row
+            for row in rows
+            if row.get("record_type") == "idle_admission_whole_window_verdict"
+        ]
+        self.assertEqual(len(whole), 1)
+        self.assertFalse(whole[0]["claim_licensing"])
+        self.assertEqual(
+            whole[0]["idle_admission_core"]["schema_version"],
+            run_campaign_module.IDLE_ADMISSION_CORE_SCHEMA,
+        )
+
+    def test_axi_restart_after_quarantined_attempt_cannot_reuse_first_run_exemption(self) -> None:
+        # F15 audit reproduction: a fresh process has a new provenance object,
+        # but the persisted technical-invalid attempt row is durable physical
+        # evidence and therefore forbids another first-run exemption.
+        fresh_provenance = {"first_physical_run_id": None}
+        quarantined = {
+            "entry_id": "entry-a",
+            "attempt_ordinal": 0,
+            "eligible_for_analysis": False,
+            "technical_invalid_reason_code": "strict_bundle_invalid",
+        }
+        self.assertFalse(
+            run_campaign_module._axi_first_run_exemption_allowed(
+                fresh_provenance, [quarantined]
+            )
+        )
+        self.assertTrue(
+            run_campaign_module._axi_first_run_exemption_allowed(
+                fresh_provenance, []
+            )
+        )
+
+    def test_truncated_self_hashed_attempt_ledger_is_refused(self) -> None:
+        # F5 exact defect: self-consistent bytes are not selection semantics.
+        # This deliberately truncated ledger used to admit the selected set.
+        binding = run_campaign_module.load_campaign_policy(str(TEST_CAMPAIGN_POLICY))
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp)
+            selected_ids = [
+                "p2-neg8-reference-start__a1__start",
+                "p2-neg8-reference-end__a0__end",
+            ]
+            selected_paths = []
+            for index, bundle_id in enumerate(selected_ids):
+                path = runs_dir / "axi_attempt_bundles" / f"selected-{index}"
+                path.mkdir(parents=True)
+                selected_paths.append(path)
+            evidence_dir = runs_dir / "axi_attempt_evidence" / "m"
+            evidence_dir.mkdir(parents=True)
+            ledger_path = evidence_dir / "attempt_ledger.jsonl"
+            ledger_path.write_text('{"persisted":true}\n')
+            manifest_dir = runs_dir / "campaign_manifests"
+            manifest_dir.mkdir()
+            selection = {
+                "schema_version": "joulewise.attempt_ledger_selection.v1",
+                "attempt_ledger_path": ledger_path.relative_to(runs_dir).as_posix(),
+                "attempt_ledger_sha256": hashlib.sha256(
+                    ledger_path.read_bytes()
+                ).hexdigest(),
+                "selected_bundle_ids": sorted(selected_ids),
+                "selected_membership_sha256": hashlib.sha256(
+                    json.dumps(
+                        sorted(selected_ids),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+                "selected_bundles": [
+                    {
+                        "bundle_id": bundle_id,
+                        "path": path.relative_to(runs_dir).as_posix(),
+                    }
+                    for bundle_id, path in zip(selected_ids, selected_paths)
+                ],
+                "quarantined_attempts": [
+                    {
+                        "properly_quarantined": True,
+                        "recovery_continuity_verified": True,
+                    }
+                ],
+            }
+            (manifest_dir / "retry.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": run_campaign_module.CAMPAIGN_PROVENANCE_SCHEMA,
+                        "analysis_manifest_id": "m",
+                        "campaign_policy": {"sha256": binding.sha256},
+                        "attempt_ledger_selection": selection,
+                        "members": [
+                            {
+                                "execution": "invoked",
+                                "bundle_ids": [
+                                    "p2-neg8-reference-start__a0__quarantined",
+                                    *selected_ids,
+                                ],
+                            }
+                        ],
+                    }
+                )
+                + "\n"
+            )
+            paths, _sources, conditions = (
+                run_campaign_module._whole_window_campaign_membership(
+                    runs_dir, binding.sha256
+                )
+            )
+        self.assertEqual(paths, [])
+        self.assertIn("whole_window_campaign_membership_unresolved", conditions)
 
     def test_anchor_freezes_first_eligible_repetition_in_execution_order(self) -> None:
         binding = run_campaign_module.load_campaign_policy(
@@ -2479,7 +2732,17 @@ class RunCampaignTests(unittest.TestCase):
                 evidence,
                 analysis_manifest_id(config_dir),
             )
-            (runs_dir / "campaign_manifests" / "raw" / "fixture.jsonl").unlink()
+            provenance = json.loads(
+                (runs_dir / "campaign_manifests" / "fixture.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            raw_path = next(
+                member["preceding_campaign_cooldown"]["raw_artifact"]["path"]
+                for member in provenance["members"]
+                if "raw_artifact" in member["preceding_campaign_cooldown"]
+            )
+            (runs_dir / "campaign_manifests" / raw_path).unlink()
 
             result = run_campaign(config_dir, runs_dir)
 
@@ -2537,7 +2800,13 @@ class RunCampaignTests(unittest.TestCase):
                 raw_artifact = run_campaign_module._write_campaign_cooldown_trace(
                     provenance_path,
                     "member",
-                    [{"rolling_mean_power_w": 5.0}],
+                    [
+                        {
+                            "rolling_mean_power_w": 5.0,
+                            "release": True,
+                            "release_criteria_met_late": False,
+                        }
+                    ],
                 )
                 raw_path = provenance_path.parent / raw_artifact["path"]
                 if mutation == "hash_mismatch":
@@ -2581,6 +2850,56 @@ class RunCampaignTests(unittest.TestCase):
                     self.assertNotIn("campaign_cooldown_evidence_missing", reasons)
                 else:
                     self.assertIn("campaign_cooldown_evidence_missing", reasons)
+
+    def test_cooldown_verifier_authenticates_raw_terminal_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_dir = Path(tmp) / "campaign_manifests"
+            raw_dir = manifest_dir / "raw"
+            raw_dir.mkdir(parents=True)
+            fixture_events = Path("tests/fixtures/d078_r01/events.jsonl").read_bytes()
+            cases = (
+                ("workload", fixture_events, "recovered", False),
+                (
+                    "cap",
+                    (
+                        json.dumps(
+                            {"release": False, "release_criteria_met_late": True}
+                        )
+                        + "\n"
+                    ).encode(),
+                    "recovered",
+                    False,
+                ),
+                (
+                    "honest-cap",
+                    (
+                        json.dumps(
+                            {"release": False, "release_criteria_met_late": True}
+                        )
+                        + "\n"
+                    ).encode(),
+                    "cap_hit",
+                    True,
+                ),
+            )
+            for name, payload, claim, accepted in cases:
+                path = raw_dir / f"{name}.jsonl"
+                path.write_bytes(payload)
+                cooldown = {
+                    "result": claim,
+                    "raw_artifact": {
+                        "path": f"raw/{name}.jsonl",
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "records": len(payload.splitlines()),
+                    },
+                }
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        run_campaign_module.verify_cooldown_raw_provenance(
+                            cooldown, manifest_dir
+                        ),
+                        accepted,
+                    )
 
     def test_cooldown_provenance_symlink_loop_fails_closed(self) -> None:
         # Path.resolve() may raise (RuntimeError, or OSError ELOOP depending
@@ -2626,8 +2945,18 @@ class RunCampaignTests(unittest.TestCase):
                 )
                 provenance_path = runs_dir / "campaign_manifests" / "fixture.json"
                 if mutation == "hash_mismatch":
-                    (provenance_path.parent / "raw" / "fixture.jsonl").write_text(
-                        '{"rolling_mean_power_w": 6.0}\n', encoding="utf-8"
+                    provenance = json.loads(
+                        provenance_path.read_text(encoding="utf-8")
+                    )
+                    raw_path = next(
+                        member["preceding_campaign_cooldown"]["raw_artifact"]["path"]
+                        for member in provenance["members"]
+                        if "raw_artifact" in member["preceding_campaign_cooldown"]
+                    )
+                    (provenance_path.parent / raw_path).write_text(
+                        '{"rolling_mean_power_w": 6.0, "release": true, '
+                        '"release_criteria_met_late": false}\n',
+                        encoding="utf-8",
                     )
                 else:
                     provenance = json.loads(
@@ -4250,6 +4579,34 @@ class RunCampaignTests(unittest.TestCase):
             ]
             self.assertEqual([row["status"] for row in parsed], ["ok"])
 
+    def test_explicit_log_inside_stored_bundle_is_refused_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            bundle = runs_dir / "sealed"
+            config_dir.mkdir()
+            bundle.mkdir(parents=True)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded"}) + "\n",
+                encoding="utf-8",
+            )
+            write_config(config_dir, "one.json", "one")
+            log_path = bundle / "derived" / "campaign.jsonl"
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                log_path=log_path,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("outside the immutable stored run bundle", result.stderr)
+            self.assertFalse(log_path.exists())
+            self.assertFalse((runs_dir / "order.log").exists())
+
     def test_lock_blocks_real_run_is_removed_after_success_and_dry_run_ignores_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -4462,6 +4819,1140 @@ class RunCampaignTests(unittest.TestCase):
             gate = read_all_jsonl(log_path)[0]
             self.assertEqual(gate["status"], "failed")
             self.assertEqual(gate["code"], "backup_failed")
+
+
+def _idle_admission_extension_mapping(profile: str) -> dict:
+    mapping = {
+        "schema_version": "joulewise.idle_admission_extension.v1",
+        "policy_version": "idle-admission-core-v1",
+        "claim_bearing": True,
+        "cpu_criteria": {
+            "cpu_busy_ratio_p95_max": 0.5,
+            "processor_combined_power_w_p95_max": 1.0,
+            "min_samples": 3,
+            "on_missing_telemetry": "fail",
+        },
+        "adapter_wattage": {"require_known_wattage": True},
+        "neg8_bracket": {
+            "require_bracket": True,
+            "max_abs_delta_j": 0.5,
+            "max_rel_delta": 0.0625,
+        },
+    }
+    if profile == "exploratory":
+        mapping["claim_bearing"] = False
+        mapping["cpu_criteria"]["on_missing_telemetry"] = "flag"
+        mapping["adapter_wattage"]["require_known_wattage"] = False
+        mapping["neg8_bracket"]["require_bracket"] = False
+    return mapping
+
+
+def _clean_idle_records(count: int = 5) -> list[dict]:
+    return [
+        {
+            "processor_combined_power_w": 0.15,
+            "clusters": [
+                {
+                    "cpus": [
+                        {"idle_ratio": 0.95, "down_ratio": 0.0},
+                        {"idle_ratio": 0.99, "down_ratio": 0.0},
+                    ]
+                }
+            ],
+        }
+        for _ in range(count)
+    ]
+
+
+def _busy_idle_records(count: int = 5) -> list[dict]:
+    return [
+        {
+            "processor_combined_power_w": 0.2,
+            "clusters": [{"cpus": [{"idle_ratio": 0.05, "down_ratio": 0.0}]}],
+        }
+        for _ in range(count)
+    ]
+
+
+class ProductionUncertaintyAssertionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.bundle = Path(self._tmp.name) / "bundle"
+        (self.bundle / "raw").mkdir(parents=True)
+        for name in (
+            "powermetrics_idle.plist",
+            "powermetrics.plist",
+            "powermetrics_idle_post.plist",
+        ):
+            (self.bundle / "raw" / name).write_bytes(b"fixture")
+        from tests.test_p2038_production_path import production_config
+
+        self.config = production_config()
+        self.metadata = {
+            "uncertainty_evidence": {
+                "schema_version": "p2-038.2",
+                "clock_anchor": {
+                    "status": "bounded",
+                    "method": "powermetrics_native_second_censored_intersection_v1",
+                },
+                "sample_phase": {"status": "bounded"},
+                "idle_drift": {
+                    "status": "bounded",
+                    "method": "pre_post_idle_observed_envelope_v1",
+                },
+            },
+            "clock_anchor_bound_s": 0.03,
+            "marker_to_first_sample_phase_bound_s": 0.01,
+            "marker_to_last_sample_phase_bound_s": 0.01,
+            "idle_drift_bound_w": 0.01,
+            "instrument_calibration": {"verified_effective_b_fiducial_s": 0.04},
+            "trace_window_margins": {
+                "achieved_pre_window_margin_s": 0.5,
+                "achieved_post_window_margin_s": 0.7,
+            },
+        }
+        self.summary = {
+            "status": "succeeded",
+            "window_evidence_precheck": {
+                "idle_subtracted_request": {"eligible": True, "reasons": []}
+            },
+            "energy_bound_terms_j": {"E_drift_bound_j": 0.01},
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "method": "common_trace_shift_plus_independent_edge_span_v2",
+                    "wall_minus_monotonic_independent_edge_span_s": 1.0e-5,
+                }
+            },
+        }
+
+    def _assertion(self):
+        config = self.config
+        metadata = self.metadata
+        summary = self.summary
+
+        class Reader:
+            def __init__(self, _path):
+                pass
+
+            def config(self):
+                return config
+
+            def metadata(self):
+                return metadata
+
+            def raw_summary(self):
+                return summary
+
+        with patch.object(run_campaign_module, "BundleReader", Reader):
+            return run_campaign_module.assert_production_uncertainty(
+                self.bundle, allow_mock_runtime=True
+            )
+
+    def test_current_p2038_2_with_composed_margin_and_envelope_passes(self) -> None:
+        result = self._assertion()
+        self.assertEqual(result["clock_method"], self.metadata["uncertainty_evidence"]["clock_anchor"]["method"])
+        # Three-term composed bound: bundle + fiducial + wall-minus-monotonic
+        # edge span (confirmation-round-4 P1 pinned the two-term shortcut).
+        self.assertAlmostEqual(
+            result["composed_anchor_bound_s"], 0.07001, places=12
+        )
+
+    def test_spawn_envelope_only_evidence_is_rejected(self) -> None:
+        self.metadata["uncertainty_evidence"]["schema_version"] = "p2-038.1"
+        self.metadata["uncertainty_evidence"]["clock_anchor"][
+            "method"
+        ] = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_missing")
+
+    def test_margin_below_composed_anchor_bound_is_rejected(self) -> None:
+        self.metadata["trace_window_margins"]["achieved_post_window_margin_s"] = 0.06
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_invalid")
+        self.assertIn("trace pre/post margins", raised.exception.detail)
+
+
+class IdleAdmissionCoreVerdictTests(unittest.TestCase):
+    """T0.5 idle-admission core: sidecar binding + campaign-verdict surface."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def _write_extended_sidecar(
+        self, profile: str = "production", mutate=None
+    ) -> Path:
+        source = (
+            ROOT
+            / "configs"
+            / "campaign_policies"
+            / (
+                "quiet_mac_p2_production.json"
+                if profile == "production"
+                else "quiet_mac_exploratory.json"
+            )
+        )
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["idle_admission_extension"] = _idle_admission_extension_mapping(
+            profile
+        )
+        if mutate is not None:
+            mutate(payload)
+        path = self.root / f"policy_{profile}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        return path
+
+    def _binding(self, *, profile: str = "production"):
+        return run_campaign_module.load_campaign_policy(
+            str(self._write_extended_sidecar(profile))
+        )
+
+    def _member(
+        self,
+        bundle_id: str,
+        *,
+        records: list[dict] | None,
+        adapter_watts=140,
+        adapter_description="140W USB-C Power Adapter",
+        gross_energy_j: float | None = None,
+        admission_decision: str | None = "admitted",
+        scientific_sampling_hz: float = 10.0,
+        neg8_position: str | None = None,
+    ):
+        bundle_path = self.root / bundle_id
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        config = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        config["run_id"] = bundle_id
+        config["sampling"]["power_hz"] = scientific_sampling_hz
+        (bundle_path / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        if records is not None:
+            (bundle_path / "rich_telemetry_idle.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records)
+            )
+        metadata: dict = {
+            "environment": {
+                "power_source": "AC Power",
+                "power": {
+                    "adapter_watts": adapter_watts,
+                    "adapter_description": adapter_description,
+                },
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "power_source": "AC Power",
+                    "power": {
+                        "adapter_watts": adapter_watts,
+                        "adapter_description": adapter_description,
+                    },
+                    "errors": {},
+                },
+            }
+        }
+        if admission_decision is not None:
+            metadata["environment_admission"] = {
+                "schema_version": "joulewise.environment_admission.v1",
+                "critical_environment_passed": True,
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "schema_version": "joulewise.environment_evaluation.v1",
+                    "eligible": True,
+                    "snapshot_sha256": "ab" * 32,
+                },
+                "decision": admission_decision,
+                "claim_reason": (
+                    None
+                    if admission_decision == "admitted"
+                    else "environment_admission_failed"
+                ),
+                "attempts": [
+                    {
+                        "attempt": 1,
+                        "admitted": admission_decision == "admitted",
+                        "cpu_admission_enforced": True,
+                        "cpu_admission": {
+                            "admitted": admission_decision == "admitted"
+                        },
+                    }
+                ],
+                "guard_observations": [
+                    {
+                        "phase": phase,
+                        "capture_skipped": False,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
+                    }
+                    for phase in ("before_attempt_1", "after_attempt_1")
+                ],
+            }
+        summary = {}
+        if gross_energy_j is not None:
+            summary = {
+                "gross_energy_j": gross_energy_j,
+                "energy_anchor_shift_envelopes": {
+                    "/gross_energy_j": {
+                        "point_j": gross_energy_j,
+                        "lower_j": gross_energy_j,
+                        "upper_j": gross_energy_j,
+                    }
+                },
+            }
+        normalized = run_campaign_module._normalized_benchmark_config(config)
+        return run_campaign_module.MemberEvaluation(
+            bundle_id=bundle_id,
+            bundle_path=bundle_path,
+            config_name=f"{bundle_id}.json",
+            status="succeeded",
+            strict_valid=True,
+            summary=summary,
+            metadata=metadata,
+            declared_role=(
+                run_campaign_module.NEG8_REFERENCE_ROLE
+                if neg8_position is not None
+                else None
+            ),
+            sentinel_position=neg8_position,
+            scientific_config_sha256=(
+                run_campaign_module._scientific_config_sha256(normalized)
+                if neg8_position is not None
+                else None
+            ),
+            canonical_neg8_workload=(
+                run_campaign_module._declares_canonical_neg8_workload(normalized)
+                if neg8_position is not None
+                else False
+            ),
+        )
+
+    def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
+        path = self._write_extended_sidecar("production")
+        binding = run_campaign_module.load_campaign_policy(str(path))
+        self.assertIsNotNone(binding.idle_admission_extension)
+        self.assertTrue(binding.idle_admission_extension.claim_bearing)
+        self.assertEqual(
+            binding.sha256, hashlib.sha256(path.read_bytes()).hexdigest()
+        )
+        metadata = binding.to_metadata()
+        self.assertEqual(
+            metadata["idle_admission_extension"]["schema_version"],
+            "joulewise.idle_admission_extension.v1",
+        )
+        # Byte-hash enforcement: changing one new field changes the campaign
+        # policy identity (binding hash) and the extension hash.
+        changed = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"][
+                "cpu_criteria"
+            ].update(cpu_busy_ratio_p95_max=0.6),
+        )
+        rebound = run_campaign_module.load_campaign_policy(str(changed))
+        self.assertNotEqual(binding.sha256, rebound.sha256)
+        self.assertNotEqual(
+            metadata["idle_admission_extension"]["sha256"],
+            rebound.to_metadata()["idle_admission_extension"]["sha256"],
+        )
+
+    def test_extension_version_and_profile_constraints_fail_closed(self) -> None:
+        from joulewise.schemas import SchemaError
+
+        tampered = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"].update(
+                schema_version="joulewise.idle_admission_extension.v0"
+            ),
+        )
+        with self.assertRaises(SchemaError):
+            run_campaign_module.load_campaign_policy(str(tampered))
+        loosened = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"][
+                "cpu_criteria"
+            ].update(on_missing_telemetry="flag"),
+        )
+        with self.assertRaises(SchemaError):
+            run_campaign_module.load_campaign_policy(str(loosened))
+
+    def test_sidecar_without_extension_yields_named_condition(self) -> None:
+        binding = run_campaign_module.load_campaign_policy(
+            str(ROOT / "tests" / "fixtures" / "campaign_policy_test.json")
+        )
+        self.assertIsNone(binding.idle_admission_extension)
+        section = run_campaign_module.idle_admission_core_verdict([], binding)
+        self.assertEqual(
+            section["conditions"], ["idle_admission_extension_unconfigured"]
+        )
+        self.assertIsNone(section["extension"])
+
+    def test_post_run_environment_condition_is_claim_barrier(self) -> None:
+        core = {
+            "conditions": ["environment_admission_failed"],
+            "members": [{"cpu_admission": {"decision": "admitted"}}],
+            "adapter_wattage_continuity": {"decision": "stable"},
+            "neg8_bracket": {"decision": "passed"},
+        }
+        self.assertIn(
+            "environment_admission_failed",
+            run_campaign_module._idle_admission_claim_barrier_reasons(core),
+        )
+
+    def test_clean_members_pass_with_stable_wattage_and_neg8_bracket(self) -> None:
+        binding = self._binding()
+        evaluations = [
+            self._member(
+                "p2-neg8-reference-start__r1",
+                records=_clean_idle_records(),
+                gross_energy_j=8.0,
+                neg8_position="start",
+            ),
+            self._member("p2-work-a__r1", records=_clean_idle_records()),
+            self._member(
+                "p2-neg8-reference-end__r1",
+                records=_clean_idle_records(),
+                gross_energy_j=8.5,
+                neg8_position="end",
+            ),
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        self.assertEqual(section["conditions"], [])
+        self.assertTrue(
+            all(row["cpu_admission"]["admitted"] for row in section["members"])
+        )
+        self.assertEqual(
+            section["adapter_wattage_continuity"]["decision"], "stable"
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "passed")
+        self.assertEqual(section["neg8_bracket"]["abs_delta_j"], 0.5)
+        self.assertIsNotNone(
+            section["neg8_reference_scientific_config_sha256"]
+        )
+
+    def test_neg8_substring_without_declared_role_confers_no_reference(self) -> None:
+        # R5 defect shape: these IDs formerly conferred both reference roles.
+        # With no suite-declared role provenance they are ordinary members.
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_bracket_missing", section["conditions"])
+        self.assertIsNone(section["neg8_reference_scientific_config_sha256"])
+
+    def test_declared_neg8_role_with_noncanonical_workload_is_config_error(self) -> None:
+        source = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        source["workload_profile"]["prompt_tokens"] = 999
+        path = self.root / "declared-invalid-neg8.json"
+        path.write_text(json.dumps(source) + "\n", encoding="utf-8")
+        entry = run_campaign_module.OrderEntry(
+            index=1,
+            config=path.name,
+            role=run_campaign_module.NEG8_REFERENCE_ROLE,
+            sentinel_position="start",
+        )
+        with self.assertRaisesRegex(ValueError, "canonical NEG-8 workload"):
+            run_campaign_module.load_config_info(path, order_entry=entry)
+
+    def test_neg8_reference_scientific_config_mismatch_fails_closed(self) -> None:
+        # T2 defect shape: ID substrings plus similar energy formerly licensed
+        # a bracket even when the end reference used a different collection
+        # configuration.  Canonical workload identity alone is not enough;
+        # the complete normalized scientific hashes must also match.
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                    scientific_sampling_hz=5.0,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_bracket_reference_invalid", section["conditions"])
+        self.assertIsNone(section["neg8_reference_scientific_config_sha256"])
+
+    def test_missing_idle_telemetry_fails_closed_under_production(self) -> None:
+        binding = self._binding()
+        evaluations = [self._member("p2-work-a__r1", records=None)]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def test_cpu_active_member_fails_and_is_named(self) -> None:
+        binding = self._binding()
+        active = [
+            {
+                "processor_combined_power_w": 0.2,
+                "clusters": [{"cpus": [{"idle_ratio": 0.05, "down_ratio": 0.0}]}],
+            }
+            for _ in range(5)
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            [self._member("p2-work-a__r1", records=active)], binding
+        )
+        self.assertIn("cpu_busy_ratio_p95_exceeded", section["conditions"])
+        self.assertEqual(
+            section["members"][0]["cpu_admission"]["decision"], "failed"
+        )
+
+    def test_wattage_discontinuity_and_description_change_are_named(self) -> None:
+        binding = self._binding()
+        evaluations = [
+            self._member("m1__r1", records=_clean_idle_records(), adapter_watts=140),
+            self._member("m2__r1", records=_clean_idle_records(), adapter_watts=70),
+            self._member("m3__r1", records=_clean_idle_records(), adapter_watts=140),
+            self._member(
+                "m4__r1",
+                records=_clean_idle_records(),
+                adapter_watts=140,
+                adapter_description="96W USB-C Power Adapter",
+            ),
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        continuity = section["adapter_wattage_continuity"]
+        self.assertEqual(continuity["decision"], "flagged")
+        self.assertIn("adapter_wattage_discontinuity", section["conditions"])
+        self.assertIn("adapter_description_changed", section["conditions"])
+        self.assertEqual(
+            [
+                (row["from_watts"], row["to_watts"])
+                for row in continuity["wattage_transitions"]
+            ],
+            [(140.0, 70.0), (70.0, 140.0)],
+        )
+
+    def test_final_member_post_workload_adapter_renegotiation_is_observed(self) -> None:
+        # F6 audit reproduction: the final workload renegotiates 140 W -> 70 W
+        # after its pre-run sample.  With no post sample the old campaign
+        # verdict incorrectly called the entire campaign stable.
+        binding = self._binding()
+        first = self._member("m1__r1", records=_clean_idle_records())
+        final = self._member("m2__r1", records=_clean_idle_records())
+        final.metadata["environment"]["post_run_observation"]["power"][
+            "adapter_watts"
+        ] = 70
+        section = run_campaign_module.idle_admission_core_verdict(
+            [first, final], binding
+        )
+        continuity = section["adapter_wattage_continuity"]
+        self.assertNotEqual(continuity["decision"], "stable")
+        self.assertIn("adapter_wattage_discontinuity", section["conditions"])
+        self.assertIn(
+            (140.0, 70.0),
+            [
+                (row["from_watts"], row["to_watts"])
+                for row in continuity["wattage_transitions"]
+            ],
+        )
+
+    def test_unknown_adapter_wattage_fails_closed_under_production(self) -> None:
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "m1__r1",
+                    records=_clean_idle_records(),
+                    adapter_watts=None,
+                    adapter_description=None,
+                )
+            ],
+            binding,
+        )
+        self.assertEqual(
+            section["adapter_wattage_continuity"]["decision"], "failed"
+        )
+        self.assertIn("adapter_wattage_unknown", section["conditions"])
+
+    def test_neg8_bracket_edge_cases_in_verdict(self) -> None:
+        binding = self._binding()
+
+        def section_for(end_gross: float | None) -> dict:
+            evaluations = [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                )
+            ]
+            if end_gross is not None:
+                evaluations.append(
+                    self._member(
+                        "p2-neg8-reference-end__r1",
+                        records=_clean_idle_records(),
+                        gross_energy_j=end_gross,
+                        neg8_position="end",
+                    )
+                )
+            return run_campaign_module.idle_admission_core_verdict(
+                evaluations, binding
+            )
+
+        exactly_on = section_for(8.5)
+        self.assertEqual(exactly_on["neg8_bracket"]["decision"], "passed")
+        one_ulp_over = section_for(math.nextafter(8.5, math.inf))
+        self.assertEqual(one_ulp_over["neg8_bracket"]["decision"], "failed")
+        # Start-only invocation is a per-segment run, not a whole-window pass:
+        # the bracket is not evaluated here (non-drift), never a spurious
+        # ``failed``/``missing``.
+        missing = section_for(None)
+        self.assertEqual(missing["neg8_bracket"]["decision"], "not_evaluated")
+        self.assertIn("neg8_bracket_not_evaluated", missing["conditions"])
+        self.assertNotIn("neg8_bracket_missing", missing["conditions"])
+
+    def test_corrupt_utf8_idle_telemetry_fails_closed_not_crash(self) -> None:
+        """Fix round 1: invalid UTF-8 bytes must fail closed, not crash.
+
+        ``_load_idle_rich_telemetry`` promised that unreadable bytes return
+        ``None``, but a stray non-UTF-8 byte raised ``UnicodeDecodeError``
+        (a ``ValueError``, not ``OSError``) which propagated out of
+        ``idle_admission_core_verdict`` and crashed the whole campaign at
+        verdict time -- before ``append_verdict`` -- losing the result.
+        """
+
+        binding = self._binding()
+        bundle_path = self.root / "p2-work-a__r1"
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        (bundle_path / "rich_telemetry_idle.jsonl").write_bytes(
+            b'{"processor_combined_power_w": 0.1}\n\xff\xfe bad bytes\n'
+        )
+        evaluation = run_campaign_module.MemberEvaluation(
+            bundle_id="p2-work-a__r1",
+            bundle_path=bundle_path,
+            config_name="p2-work-a__r1.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={},
+            metadata={"environment_admission": {"decision": "admitted"}},
+        )
+        # Must not raise.
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def _member_with_attempts(
+        self,
+        bundle_id: str,
+        *,
+        attempt1_records: list[dict] | None,
+        attempt2_records: list[dict] | None,
+        final_attempt: int,
+        admission_decision: str,
+    ):
+        bundle_path = self.root / bundle_id
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        if attempt1_records is not None:
+            (bundle_path / "rich_telemetry_idle.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in attempt1_records)
+            )
+        if attempt2_records is not None:
+            (bundle_path / "rich_telemetry_idle_attempt_2.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in attempt2_records)
+            )
+        metadata = {
+            "environment": {
+                "power_source": "AC Power",
+                "power": {
+                    "adapter_watts": 140,
+                    "adapter_description": "140W USB-C Power Adapter",
+                },
+                "post_run_observation": {
+                    "capture_skipped": False,
+                    "display_power_state": "all_asleep",
+                    "screensaver_engaged": False,
+                    "errors": {},
+                },
+            },
+            "environment_admission": {
+                "schema_version": "joulewise.environment_admission.v1",
+                "critical_environment_passed": True,
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "schema_version": "joulewise.environment_evaluation.v1",
+                    "eligible": True,
+                    "snapshot_sha256": "ab" * 32,
+                },
+                "decision": admission_decision,
+                "claim_reason": (
+                    None
+                    if admission_decision == "admitted"
+                    else "environment_admission_failed"
+                ),
+                "attempts": [
+                    {
+                        "attempt": n,
+                        "admitted": (
+                            admission_decision == "admitted" and n == final_attempt
+                        ),
+                        "cpu_admission_enforced": True,
+                        "cpu_admission": {
+                            "admitted": (
+                                admission_decision == "admitted"
+                                and n == final_attempt
+                            )
+                        },
+                    }
+                    for n in range(1, final_attempt + 1)
+                ],
+                "guard_observations": [
+                    {
+                        "phase": phase,
+                        "capture_skipped": False,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
+                    }
+                    for n in range(1, final_attempt + 1)
+                    for phase in (f"before_attempt_{n}", f"after_attempt_{n}")
+                ],
+            },
+        }
+        return run_campaign_module.MemberEvaluation(
+            bundle_id=bundle_id,
+            bundle_path=bundle_path,
+            config_name=f"{bundle_id}.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={},
+            metadata=metadata,
+        )
+
+    def test_cpu_admission_reads_final_attempt_telemetry(self) -> None:
+        """Fix round 1 (blocker): pair CPU telemetry with the final attempt.
+
+        The controller records the FINAL retry attempt's admission decision,
+        so CPU-idle evaluation must read the telemetry from that same attempt.
+        Here attempt 1 is CPU-clean but attempt 2 is CPU-busy and the final
+        (attempt-2) GPU decision is ``admitted``: reading attempt-1 telemetry
+        would fail OPEN and report ``admitted`` on exactly the retried (most
+        suspect) admission.  The fix must read attempt-2 telemetry and fail.
+        """
+
+        binding = self._binding()
+        evaluation = self._member_with_attempts(
+            "p2-work-a__r1",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=_busy_idle_records(),
+            final_attempt=2,
+            admission_decision="admitted",
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_busy_ratio_p95_exceeded", section["conditions"])
+
+    def test_missing_final_attempt_telemetry_fails_closed(self) -> None:
+        """Fix round 1 (blocker): absent retried telemetry fails closed.
+
+        When the recorded final attempt is >1 but its rich-telemetry file is
+        absent, CPU-idle evaluation must fail closed rather than silently fall
+        back to attempt-1 telemetry.
+        """
+
+        binding = self._binding()
+        evaluation = self._member_with_attempts(
+            "p2-work-a__r1",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=None,
+            final_attempt=2,
+            admission_decision="admitted",
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound(self) -> None:
+        # W12 exact defect: max(attempts) silently selected rows from duplicate,
+        # reordered, skipped, or decision-inconsistent ledgers.
+        binding = self._binding()
+        cases = (
+            ([1, 1], [False, True], "admitted"),
+            ([2, 1], [False, True], "admitted"),
+            ([1, 3], [False, True], "admitted"),
+            ([1, 2], [False, False], "admitted"),
+        )
+        for index, (numbers, admitted, decision) in enumerate(cases):
+            with self.subTest(case=index):
+                evaluation = self._member_with_attempts(
+                    f"malformed-{index}",
+                    attempt1_records=_clean_idle_records(),
+                    attempt2_records=_clean_idle_records(),
+                    final_attempt=2,
+                    admission_decision=decision,
+                )
+                evaluation.metadata["environment_admission"]["attempts"] = [
+                    {"attempt": number, "admitted": outcome}
+                    for number, outcome in zip(numbers, admitted)
+                ]
+                section = run_campaign_module.idle_admission_core_verdict(
+                    [evaluation], binding
+                )
+                self.assertIn(
+                    "idle_admission_attempt_ledger_invalid", section["conditions"]
+                )
+
+    def test_duplicate_neg8_markers_are_ambiguous_not_order_selected(self) -> None:
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "a-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "z-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=99.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.1,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertIn("neg8_bracket_ambiguous_reference", section["conditions"])
+        self.assertNotEqual(section["neg8_bracket"]["decision"], "passed")
+
+    def test_idle_core_failure_removes_claim_readiness(self) -> None:
+        # W6 defect shape: readiness was finalized before the core, so an
+        # adapter discontinuity/absent whole-window bracket left a ready claim.
+        readiness = {
+            "verdict": "ready_for_analysis",
+            "reasons": [],
+            "required_contrast_ids": ["c1"],
+            "ready_contrast_ids": ["c1"],
+            "not_ready_contrasts": [],
+            "note": "test",
+        }
+        core = {
+            "members": [
+                {"cpu_admission": {"decision": "admitted"}}
+            ],
+            "adapter_wattage_continuity": {"decision": "failed"},
+            "neg8_bracket": {"decision": "not_evaluated"},
+        }
+        blocked = run_campaign_module.apply_idle_admission_claim_barrier(
+            readiness, core, claim_bearing=True
+        )
+        self.assertEqual(blocked["verdict"], "not_ready_for_analysis")
+        self.assertEqual(blocked["ready_contrast_ids"], [])
+        self.assertIn("adapter_continuity_failed", blocked["reasons"])
+        self.assertIn("whole_window_neg8_verdict_missing", blocked["reasons"])
+
+    def test_invalid_reference_summary_cannot_supply_gross_energy(self) -> None:
+        member = self._member(
+            "neg8-reference-start__r1",
+            records=_clean_idle_records(),
+            gross_energy_j=8.0,
+        )
+        invalid = replace(member, strict_valid=False)
+        self.assertIsNone(run_campaign_module._gross_energy_for(invalid))
+
+    def _install_whole_window_manifest(self, binding, bundle_roles) -> None:
+        manifest_dir = self.root / "campaign_manifests"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        (manifest_dir / "window.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.campaign_provenance.v1",
+                    "analysis_manifest_id": "window-a",
+                    "campaign_policy": {"sha256": binding.sha256},
+                    "members": [
+                        {
+                            "execution": "invoked",
+                            "bundle_ids": [bundle_id],
+                            "role": run_campaign_module.NEG8_REFERENCE_ROLE,
+                            "sentinel_position": position,
+                            "scientific_config_sha256": evaluation.scientific_config_sha256,
+                            "canonical_neg8_workload": True,
+                        }
+                        for bundle_id, position, evaluation in bundle_roles
+                    ],
+                }
+            )
+            + "\n"
+        )
+
+    def test_neg8_bracket_not_evaluated_for_per_segment_invocations(self) -> None:
+        """Fix round 1 (blocker): the bracket is a whole-window check.
+
+        The canonical Window-A sequence runs the start and end NEG-8
+        references as SEPARATE run_campaign invocations.  An end-only or a
+        no-reference invocation must record the non-drift
+        ``neg8_bracket_not_evaluated`` condition, never a spurious
+        ``failed``/``missing`` -- otherwise every real production verdict is
+        red and the prospective bracket acceptance never actually compares.
+        A whole-window pass (both references) still performs the comparison.
+        """
+
+        binding = self._binding()
+
+        end_only = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.5,
+                    neg8_position="end",
+                )
+            ],
+            binding,
+        )
+        self.assertEqual(end_only["neg8_bracket"]["decision"], "not_evaluated")
+        self.assertIn("neg8_bracket_not_evaluated", end_only["conditions"])
+        self.assertNotIn("neg8_bracket_missing", end_only["conditions"])
+
+        no_reference = run_campaign_module.idle_admission_core_verdict(
+            [self._member("p2-work-a__r1", records=_clean_idle_records())],
+            binding,
+        )
+        self.assertEqual(
+            no_reference["neg8_bracket"]["decision"], "not_evaluated"
+        )
+        self.assertIn(
+            "neg8_bracket_not_evaluated", no_reference["conditions"]
+        )
+
+        whole_window = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.5,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+        )
+        self.assertEqual(whole_window["neg8_bracket"]["decision"], "passed")
+        self.assertNotIn(
+            "neg8_bracket_not_evaluated", whole_window["conditions"]
+        )
+
+    def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
+        binding = self._binding()
+        bundle_ids = [
+            "p2-neg8-reference-start__r1",
+            "p2-neg8-reference-end__r1",
+        ]
+        manifest_members = []
+        for bundle_id, gross_energy_j, position in (
+            ("p2-neg8-reference-start__r1", 8.0, "start"),
+            ("p2-neg8-reference-end__r1", 8.04, "end"),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross_energy_j,
+                neg8_position=position,
+            )
+            manifest_members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, manifest_members)
+
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(
+                    {
+                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                        "status": "passed",
+                        "b_fiducial_s": 0.02,
+                    },
+                    (),
+                ),
+            ),
+        ):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(
+            verdict["record_type"], "idle_admission_whole_window_verdict"
+        )
+        self.assertEqual(verdict["status"], "passed")
+        self.assertEqual(
+            verdict["idle_admission_core"]["neg8_bracket"]["decision"],
+            "passed",
+        )
+        self.assertNotIn(
+            "neg8_bracket_not_evaluated",
+            verdict["idle_admission_core"]["conditions"],
+        )
+
+    def test_whole_window_invalid_reference_is_excluded_and_cannot_pass(self) -> None:
+        binding = self._binding()
+        bundle_ids = [
+            "p2-neg8-reference-start__r1",
+            "p2-neg8-reference-end__r1",
+        ]
+        manifest_members = []
+        for bundle_id, gross, position in zip(
+            bundle_ids, (8.0, 8.04), ("start", "end")
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross,
+                neg8_position=position,
+            )
+            manifest_members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, manifest_members)
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+
+        def validate(path, strict):
+            return ["quarantined reference"] if "start" in path.name else []
+
+        with patch.object(run_campaign_module, "validate_bundle", side_effect=validate):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "failed")
+        self.assertEqual(
+            verdict["excluded_bundles"][0]["bundle_id"], bundle_ids[0]
+        )
+        self.assertIn(
+            "whole_window_bundle_invalid",
+            verdict["idle_admission_core"]["conditions"],
+        )
+
+    def test_whole_window_production_verdict_fails_closed_without_end_reference(self) -> None:
+        binding = self._binding()
+        member = self._member(
+            "p2-neg8-reference-start__r1",
+            records=_clean_idle_records(),
+            gross_energy_j=8.0,
+            neg8_position="start",
+        )
+        (member.bundle_path / "summary_metrics.json").write_text(
+            json.dumps({"status": "succeeded", **member.summary}) + "\n"
+        )
+        (member.bundle_path / "metadata.json").write_text(
+            json.dumps(member.metadata) + "\n"
+        )
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+
+        self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "failed")
+        self.assertEqual(
+            verdict["idle_admission_core"]["neg8_bracket"]["decision"],
+            "failed",
+        )
+        self.assertIn(
+            "neg8_bracket_missing",
+            verdict["idle_admission_core"]["conditions"],
+        )
 
 
 if __name__ == "__main__":

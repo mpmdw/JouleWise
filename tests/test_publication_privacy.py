@@ -206,6 +206,11 @@ class PublicationPrivacyTests(unittest.TestCase):
                 "marker_to_first_sample_phase_bound_s": 0.2,
                 "marker_to_last_sample_phase_bound_s": 0.2,
                 "idle_drift_bound_w": 0.3,
+                "trace_window_margins": {
+                    "requested_post_window_dwell_s": 0.75,
+                    "achieved_pre_window_margin_s": 0.52,
+                    "achieved_post_window_margin_s": 0.64,
+                },
                 "workload_observed": {"token_count": 6},
                 "workload_provenance": {
                     "prompt": "PRIVATE_PROMPT_7f6c",
@@ -321,6 +326,14 @@ class PublicationPrivacyTests(unittest.TestCase):
         summary = json.loads((destination / "summary_metrics.json").read_text())
         metadata = json.loads((destination / "metadata.json").read_text())
         self.assertEqual(metadata["source_provenance"], SOURCE_PROVENANCE)
+        self.assertEqual(
+            metadata["trace_window_margins"],
+            {
+                "requested_post_window_dwell_s": 0.75,
+                "achieved_pre_window_margin_s": 0.52,
+                "achieved_post_window_margin_s": 0.64,
+            },
+        )
         quality = summary["measurement_quality"]
         self.assertEqual(
             quality["remote_cleanup_failed"],

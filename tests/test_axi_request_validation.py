@@ -20,6 +20,7 @@ from joulewise.bundle_read import (
     axi_v2_validation_problems,
 )
 from joulewise.cli import validate_bundle
+from joulewise.reduce import reduce_bundle
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +82,16 @@ class AxiRequestValidationTests(unittest.TestCase):
             hashlib.sha256((FIXTURE / "config.json").read_bytes()).hexdigest(),
             "79e34a9adef077ee3f82b4aed16bc551b1ad565fa285da44831917eba11ca48d",
         )
+
+    def test_persisted_0_6_1_summary_revalidates_strictly(self) -> None:
+        # W9 defect shape: in-memory 0.6.1 objects validated, but once persisted
+        # the AXI opt-in reader and exported schema rejected their own wire.
+        temporary, path = self.copied_fixture()
+        self.addCleanup(temporary.cleanup)
+        summary = reduce_bundle(path, reducer_version="0.6.1")
+        (path / "summary_metrics.json").write_bytes(summary.canonical_bytes())
+        self.assertEqual(validate_bundle(path, strict=True), [])
+        self.assertEqual(axi_v2_validation_problems(BundleReader(path)), [])
 
     def test_interleaved_equal_timestamps_pair_by_request_local_key(self) -> None:
         events = [

@@ -421,6 +421,7 @@ class BoundedTelemetryAdapter(Protocol):
         *,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> TelemetryStopResult:
         """Stop sampling and return evidence tied to controller markers."""
 

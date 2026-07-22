@@ -50,6 +50,12 @@ runs/<run_id>/
     (backend-native artifacts, e.g. powermetrics.plist,
      powermetrics_idle.plist,
      powermetrics_idle_attempt_2.plist, nvidia_smi.csv)
+  instrument_calibration/     (powermetrics fiducial attachment only)
+    manifest.json             (hash manifest for the copied custody set)
+    instrument_evidence.json  (validated bound + binding evidence)
+    events.jsonl              (calibration pulse event source)
+    raw/
+      powermetrics.plist       (immutable calibration capture)
   logs/
     controller.log
     runtime.log
@@ -61,6 +67,12 @@ runs/<run_id>/
     request_tokens.jsonl     (event semantics v2)
     suite_items.jsonl        (suite runs only)
 ```
+
+`instrument_calibration/` is a custody subtree, not a reconstructable cache.
+An archiver preserving a bundle with `metadata.instrument_calibration` MUST
+preserve the complete subtree: the manifest authenticates the evidence, pulse
+events, and native capture that the reducer independently replays. Omitting
+any member breaks the calibration binding and makes the bundle claim-ineligible.
 
 The bundle stores the normalized config as sorted-key JSON (`config.json`);
 its SHA-256 hash is recorded in `metadata.config_sha256` and identifies the
@@ -179,7 +191,23 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   and re-probe evidence, and an exact-bound override when one was required.
   `environment_admission` records the per-run evaluation, critical-probe and
   provenance status, guard observations, every idle attempt, the final
-  decision, and the optional unwaivable claim reason. These fields are absent
+  decision, and the optional unwaivable claim reason. On the current mint,
+  `per_run_environment_evaluation.snapshot` preserves the immutable snapshot
+  that was evaluated. Strict consumption recomputes its SHA-256 and reruns
+  `evaluate_environment_policy` under the exact hash-registered campaign
+  policy; any disagreement with the stored `eligible`, `snapshot_sha256`,
+  `findings`, or `findings_sha256` refuses rather than trusting a stored
+  `eligible: true`. The current strict path also scans every powermetrics
+  interval from the final admission through the measured-window end. Missing
+  interval thermal-pressure evidence refuses as
+  `environment_admission_missing`; any non-nominal interval refuses as
+  `thermal_pressure_elevated_in_window`. These recomputation and window-scan
+  gates do not dispatch for frozen replay arms. On the current mint,
+  every attempt also records finite monotonic-clock `start_s` and `end_s`
+  with `start_s < end_s`; ledger order is physical order and requires
+  `end_i <= start_(i+1)`. Missing, malformed, overlapping, or non-monotonic
+  attempt windows refuse with `environment_admission_missing`. Frozen replay
+  arms retain their prior attempt-row semantics. These fields are absent
   for legacy direct runs without a campaign policy; no new section enters
   normalized `config.json`, so historical config serialization and hashes are
   unchanged.
@@ -220,10 +248,17 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   file is written last and is the bundle completion marker (decision
   D-011): a directory without a schema-valid `summary_metrics.json` is an
   incomplete bundle (harness died), distinct from a failed run, which gets
-  a complete bundle with `status=failed`. Rewriting this file via the
-  post-hoc `reduce` verb is the ONE sanctioned post-finalize bundle
-  mutation (decision D-028): the summary is derived, never evidence; every
-  other artifact in a finalized bundle stays immutable.
+  a complete bundle with `status=failed`. D-078 supersedes D-028's former
+  rewrite exception: stored summary bytes are immutable evidence. The
+  post-hoc `reduce` verb writes an exclusive-create prospective artifact
+  outside the input bundle (the current working directory by default, or an
+  explicit external `--output`) and never mutates a finalized bundle.
+
+Derived-output tools preserve the same boundary. Detection-floor extraction
+uses exclusive-create output and refuses both an existing target and any
+target resolving beneath a finalized bundle. Campaign `--log` paths likewise
+must resolve outside every finalized bundle; the default sibling
+`<runs-root>/campaign_log.jsonl` remains the campaign-owned append ledger.
 
 Backend-native raw artifacts under `raw/` are preserved verbatim and are
 the source of truth for the derived `power_trace.csv`; a parser bug can be
@@ -473,6 +508,140 @@ Only the six frozen legacy identities retain `plist_anchor_offset_s` and the
 legacy cumulative-elapsed algorithm. Neither schema version, date, directory
 name, nor additive-field absence selects the legacy path.
 
+### D-078 additive era: `p2-038.2` and reducer `0.5.1` / `0.6.1`
+
+New captures record `uncertainty_evidence` with schema `p2-038.2`: the clock
+anchor is the midpoint of the ADMISSIBLE interval formed by intersecting the
+censored native whole-second constraints `[T_i - q_i, T_i + 1 - q_i)` over
+every record (no outlier deletion) with the causal
+pre-spawn/first-parse interval mapped through the wall-minus-monotonic
+envelope. The old spawn bracket is a causal SET constraint, never a midpoint
+estimate. Exact dispatch for stored `p2-038.1` evidence is retained. Any
+failure (missing/malformed/non-monotone native stamps, `is_delta != true`,
+nonpositive/nonfinite elapsed, energy-versus-power*duration inconsistency,
+no native second rollover before the workload, empty intersection,
+wall-minus-monotonic range > 5 ms or step, first-parse lag > 0.25 s,
+missing edge coverage under any admissible shift) is the
+`clock_anchor_unresolved` claim barrier - never a fallback. The adapter's
+`start_sampling` refuses to return before one native whole-second rollover,
+and measured-run `rich_telemetry.jsonl` timestamps move with the corrected
+anchor. The retained stop prefix keeps a record that brackets the stop marker
+under the EARLIEST admissible anchor.
+
+Current collection also records `metadata.trace_window_margins` with
+`requested_post_window_dwell_s`, `achieved_pre_window_margin_s`, and
+`achieved_post_window_margin_s`. The requested dwell occurs after the
+`sampling_stopped` measured-window stamp and before sampler termination, so it
+does not enter energy integration. Production admission compares both achieved
+margins against the composed causal bound
+`B_bundle + B_fiducial + wall_minus_monotonic_span` and fails closed before
+campaign use if either side lacks support.
+
+Reducers `0.5.1` (and AXI `0.6.1`) re-derive this anchor from the raw
+capture, re-anchor the summed curve, and add (additively; `0.5.0`/`0.6.0`
+replays stay byte-frozen):
+
+- summary field `energy_anchor_shift_envelopes`: JSON-Pointer metric paths
+  mapped to `{method: "common_trace_shift_interval_overlap_v1",
+  anchor_bound_s, point_j, lower_j, upper_j, max_abs_delta_j}` - the
+  CONTINUOUS envelope of each energy metric under one COMMON anchor shift in
+  `[-B_effective, +B_effective]`, evaluated at every trace-edge/window-edge
+  breakpoint (endpoint-only evaluation is unsound; interior extrema exist).
+  Idle subtraction translates the gross envelope; fixed token denominators
+  scale it; disjoint phase intervals sum under the shared shift. Suite
+  per-item/block/level gross energies carry their own envelopes under the
+  same shared shift at pointers `/suite_item_energy_j/<index:id>`,
+  `/suite_block_energy_j/<block_id>`, and
+  `/suite_level_energy_j/<block_id/level_id>` (they feed floor/MDE
+  extraction, so their claim gates must fail closed under anchor error too).
+- Additive method registration for reducer `0.5.1` / AXI `0.6.1`:
+  `common_trace_shift_plus_independent_edge_span_v2` is the reducer-emitted
+  method for envelopes that combine the common continuous trace shift with
+  the independently observed wall-minus-monotonic edge span. Analysis
+  consumers accept the closed replay-read set
+  `{common_trace_shift_interval_overlap_v1,
+  common_trace_shift_plus_independent_edge_span_v2}`. Current reducer `0.5.2`
+  and AXI `0.6.2` mint
+  `common_trace_shift_plus_independent_edge_corners_v3`. Every other method
+  string is malformed evidence and fails closed; v1/v2 remain accepted only
+  to read their already-defined replay wires.
+- The current v3 envelope uses the causal decomposition
+  `start = delta_common + eps_on` and
+  `stop = delta_common + eps_off`, with
+  `|delta_common| <= B_bundle` and independently
+  `|eps_on|, |eps_off| <= B_edge`, where
+  `B_edge = B_fiducial + wall_minus_monotonic_span` (the span is a third
+  disjoint per-edge clock error source, folded into the corners rather than
+  the frozen arms' `2*span*maxP` additive term). For nonnegative power,
+  integrated window energy is monotone nonincreasing in each start edge and
+  monotone nondecreasing in each stop edge. Consequently the extrema over
+  the full three-dimensional box occur among the four
+  `(eps_on, eps_off) in {-B_edge, +B_edge}^2` corners. The reducer
+  pre-offsets every window at each corner, runs the existing continuous,
+  breakpoint-exact common-shift scan over `[-B_bundle, +B_bundle]`, and takes
+  the minimum/maximum across corners. Idle-subtracted and per-token
+  envelopes additionally widen by `2 * B_edge * P_idle`: independent edges
+  vary the subtracted idle duration, so pure translation of the gross
+  envelope under-covers whenever edge power is below the idle mean. A
+  negative rail-power sample invalidates
+  this monotonicity proof and is the fail-closed `negative_power_sample`
+  refusal; it is never silently integrated into a licensed envelope.
+- `energy_bound_terms_j.E_clock_anchor_shift_bound_j`: the request-level
+  scalar (the gross envelope's max absolute deviation).
+- window-evidence precheck reasons `clock_anchor_unresolved`,
+  `anchor_energy_envelope_unrecorded`, and
+  `anchor_energy_envelope_exceeds_quarter_metric`
+  (`(max(P-lower, upper-P) + I_joint) / |P| <= 0.25`, zero-point/nonzero
+  bound failing closed). These reasons apply to the request-level gates AND
+  to every suite item/block/level gate: a resolved anchor no longer exempts
+  granular energy from the envelope requirement (a missing envelope stamps
+  `anchor_energy_envelope_unrecorded`). The frozen 0.5.1/0.6.1 replay wires
+  retain `B_effective = max(B_bundle, B_fiducial)`; the 0.5.2/0.6.2 mint wires
+  use `B_effective = B_bundle + B_fiducial + wall_minus_monotonic_span`
+  because those bounds constrain disjoint causal links. The composed mint
+  bound remains the bound recorded in every affected precheck/envelope, while
+  v3 scans only `B_bundle` as the common component and composes `B_edge`
+  through the independent edge corners above. The
+  optional `metadata.instrument_calibration` block
+  references a `docs/contracts/powermetrics_fiducial.md` artifact by
+  `{artifact_path, artifact_sha256, b_fiducial_s}`. The reducer loads the
+  bundle-relative `artifact_path`, verifies its sha256, and fails closed
+  (`clock_anchor_unresolved`) unless the artifact is a `valid`
+  `joulewise.instrument_evidence.v1` whose `b_fiducial_s`,
+  `anchor_method_version`, and environment bindings all match; `B_fiducial`
+  is never trusted from the metadata scalar alone (an invalid block is
+  `clock_anchor_unresolved`). Current 0.5.2/0.6.2 strict reduction accepts
+  authenticated protocol-v2 validation evidence from the current D-078 arc
+  and protocol-v3 evidence; every future claim-bearing calibration capture
+  must use v3's 59-pulse protocol. Both identities require the v2 estimator
+  revision and residual-region fields, `capture_wall_time_s`, and
+  `max_age_s = 86400`; a missing protocol-specific shape is
+  `instrument_calibration_invalid`. Claim-time verification independently
+  derives the capture time as the minimum finite timestamp in the
+  hash-verified calibration `events.jsonl` and requires it to agree with the
+  declaration within 1.0 s. The measuring bundle must satisfy both
+  `capture_wall_time_s <= run_started` and
+  `measured_window.end_s <= capture_wall_time_s + max_age_s`, inclusively;
+  disagreement or underivable timing is `instrument_calibration_stale`.
+  Claim-time verification
+  also re-reads `validation_manifest_path`, verifies its recorded SHA-256,
+  and verifies the presence and SHA-256 of every manifest member within the
+  bundle before trusting the calibration attachment.
+- A claim-bearing whole-window collection requires authenticated pre and post
+  calibration artifacts around the full collection window, both within their
+  86400-second endpoint horizons and on one exact binding vector. The claim
+  consumes `max(B_pre, B_post)`. A missing endpoint refuses as
+  `instrument_calibration_bracket_missing`, a horizon failure reuses
+  `instrument_calibration_stale`, and drift above the hash-registered
+  `calibration_bracket_max_drift_s` refuses as
+  `instrument_calibration_mismatch` (production tolerance: 0.010 s). A single
+  calibration remains valid only for non-claim-bearing probe/exploratory
+  reduction. Frozen 0.5.1/0.6.1 replay semantics do not dispatch this gate.
+- `energy_uncertainty_status = "bounded"` only when every required bound
+  term (drift, both interpolation terms, anchor shift) is present.
+  Interval-support traces keep both interpolation terms exactly 0; point
+  traces combine conservatively and never double-count.
+
 ## Summary Metrics Minimum Fields
 
 Summary completion is status-specific and enforced by the shared bundle
@@ -585,6 +754,14 @@ explicitly compatible re-reduction. Historical event bundles cannot acquire
 burst semantics by re-reduction. The frozen meanings are not rewritten. The
 six frozen legacy identities keep their provenance-less additive-absence
 tolerance unchanged.
+
+Generic summary validation recognizes only reducer versions `0.4.1`, `0.4.2`,
+`0.5.0`, `0.5.1`, `0.5.2`, `0.6.0`, `0.6.1`, and `0.6.2`. Every `0.6.x`
+summary requires `summary_provenance.event_semantics_version` equal to
+`joulewise.events.v2` and the AXI summary shape; `0.4.x`/`0.5.x` summaries
+must carry neither. This is a validation-time coherence check, not a wire
+schema enum, so frozen serialized summaries remain unchanged.
+
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;
@@ -778,7 +955,18 @@ trace is treated as unknown on resume. At final verdict time, the runner
 re-resolves every recovered or cap-hit trace path relative to the campaign
 manifest and re-verifies file existence, current-byte SHA-256, JSONL
 parseability, and exact positive declared record count for both fresh and
-resumed evidence. The campaign JSONL repeats the following-member gate object
+resumed evidence.
+
+The final row of every cooldown raw JSONL is normative terminal evidence. It
+MUST contain both `release` and `release_criteria_met_late`, and both values
+MUST be JSON booleans. Cap-first precedence is exact: `release == false`
+classifies `cap_hit` regardless of `release_criteria_met_late`; only
+`release == true` with `release_criteria_met_late == false` classifies
+`recovered`. A missing/malformed terminal row, either non-boolean field, or
+`release == true` with `release_criteria_met_late == true` is unclassifiable
+and is rejected as unknown evidence, never relabelled recovered or cap-hit.
+
+The campaign JSONL repeats the following-member gate object
 and ends with a
 `joulewise.campaign_verdict.v2` row. That row separates `collection.verdict`
 (`usable`, `partial`, `blocked`, `invalid`) from
@@ -796,6 +984,17 @@ deciding inclusion, and applies `required_error_term_unknown` whenever a fresh
 cleanup flag is present. A recorded-versus-re-derived cleanup-flag mismatch is
 also fail-closed, while malformed `bundle_id` or `claim_evidence_flags` input is
 an analysis-input error rather than a skipped record.
+
+`claim_evidence_flags` is intentionally a member-level union over every
+claim-bearing metric leaf in that member's reducer prechecks, not a projection
+of only the metric later selected by a contrast. A member-level flag may
+therefore originate from a phase, item, block, or level leaf even when the
+request-window leaf is clean. For example,
+`clock_bound_exceeds_quarter_window` may be contributed by an approximately
+130 ms phase window under a 44 ms clock bound while the enclosing request
+window remains clean. This all-leaf union is intentional conservative gating;
+consumers must neither relabel it as request-only nor discard a flag because
+the selected request leaf does not reproduce it.
 
 For a contrast with a non-null `metric.ratio_estimand`, campaign readiness uses
 the same numerator routing and per-token evidence gate as P2-037. The numerator

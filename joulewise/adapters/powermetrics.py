@@ -38,8 +38,10 @@ from joulewise.interfaces import (
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
+    NativeAnchorRecord,
     derive_idle_drift_evidence,
     derive_powermetrics_clock_evidence,
+    derive_powermetrics_clock_evidence_v2,
     unknown_component,
 )
 
@@ -54,6 +56,11 @@ RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+# D-078: start_sampling refuses to return before the native whole-second
+# stamps roll over at least once, guaranteeing a bounded censored-intersection
+# anchor interval exists before any workload runs. A rollover arrives within
+# one second plus one sampling interval on a healthy sampler.
+ROLLOVER_TIMEOUT_S = 15.0
 POST_MARKER_DRAIN_MARGIN_S = 0.25
 POST_MARKER_DRAIN_POLL_S = 0.05
 MAX_POST_MARKER_ANCHOR_LAG_S = 5.0
@@ -61,13 +68,16 @@ IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
 TIMESTAMP_DERIVATION = (
-    "current-era timestamp_s uses the midpoint of a controller-monotonic "
-    "pre-spawn/first-parse bracket mapped through the run wall-minus-monotonic "
-    "envelope; record 0 is that interval endpoint and records i>0 advance by "
-    "elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. "
-    "Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the "
-    "legacy cumulative-elapsed reconstruction. Each emitted sample carries "
-    "its [endpoint-elapsed_ns, endpoint) averaging support."
+    "current-era timestamp_s anchors record 0's window END to the midpoint of "
+    "the admissible interval formed by intersecting the censored native "
+    "whole-second constraints [T_i - q_i, T_i + 1 - q_i) over every record "
+    "with the causal pre-spawn/first-parse interval mapped through the run "
+    "wall-minus-monotonic envelope (p2-038.2); records i>0 advance by "
+    "elapsed_ns for records 1..i. The old spawn bracket is a causal SET "
+    "constraint, never a midpoint estimate. Exact allowlisted legacy bundles "
+    "retain plist_anchor_offset_s plus the legacy cumulative-elapsed "
+    "reconstruction. Each emitted sample carries its "
+    "[endpoint-elapsed_ns, endpoint) averaging support."
 )
 
 
@@ -135,6 +145,9 @@ class PowermetricsTelemetryAdapter:
         self._pre_idle_quality: dict[str, float | bool | None] | None = None
         self._pending_captures: dict[str, Path] = {}
         self._idle_attempts_by_run: dict[str, int] = {}
+        self._idle_admission_records_by_run: dict[
+            str, dict[int, list[dict[str, Any]]]
+        ] = {}
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -144,6 +157,24 @@ class PowermetricsTelemetryAdapter:
         if isinstance(powermetrics, dict) and powermetrics.get("samplers_probe", {}).get("reason") != "not_probed":
             self._device_metadata["powermetrics"] = powermetrics
         return self._device_metadata
+
+    def idle_admission_records(
+        self,
+        *,
+        run_id: str,
+        attempt: int,
+    ) -> list[dict[str, Any]] | None:
+        """Expose one just-captured idle window to live admission.
+
+        This is an in-memory controller seam: it does not replace or alter the
+        preserved raw/rich artifacts, and attempt selection is explicit so a
+        retry verdict cannot accidentally consume attempt-1 CPU telemetry.
+        """
+
+        records = self._idle_admission_records_by_run.get(run_id, {}).get(attempt)
+        if records is None:
+            return None
+        return [dict(record) for record in records]
 
     def measure_idle(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -189,7 +220,18 @@ class PowermetricsTelemetryAdapter:
             artifact=f"raw/{artifact_name}",
             capture=f"idle_baseline_attempt_{attempt}",
         )
-        rich_records = decode_rich_telemetry(data)
+        # Bind the rich CPU-admission rows to the same wall-clock capture
+        # anchor as the baseline records.  Native plist dates are censored to
+        # whole seconds and can predate the controller's attempt window; using
+        # them here would contradict the stage ledger even when the capture
+        # itself occurred wholly inside the attempt.
+        rich_records = decode_rich_telemetry(
+            data, timestamp_anchor_s=capture_start_s
+        )
+        if context is not None:
+            self._idle_admission_records_by_run.setdefault(context.run_id, {})[
+                attempt
+            ] = [dict(record) for record in rich_records]
         if context is not None:
             self._write_rich_artifact(
                 context=context,
@@ -279,6 +321,13 @@ class PowermetricsTelemetryAdapter:
                 failure_reason=FailureReason.UNKNOWN_ERROR,
                 message="powermetrics readiness completed without a paired clock stamp",
             )
+        rollover = self._wait_for_native_rollover(self._process, self._capture_path)
+        if not rollover.ok:
+            self._stop_process(self._process)
+            self._process = None
+            if context is None:
+                self._release_capture(RAW_SAMPLES_NAME)
+            return rollover
         self._clock_start_s = self._first_parse_stamp.epoch_s
         return AdapterResult(
             ok=True,
@@ -287,6 +336,7 @@ class PowermetricsTelemetryAdapter:
                 "raw_artifact": RAW_SAMPLES_NAME,
                 "timestamp_derivation": TIMESTAMP_DERIVATION,
                 "readiness": ready.metadata,
+                "native_rollover": rollover.metadata,
             },
         )
 
@@ -314,6 +364,7 @@ class PowermetricsTelemetryAdapter:
         *,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> TelemetryStopResult:
         """Stop the real sampler and derive current-era clock/phase evidence."""
 
@@ -323,12 +374,13 @@ class PowermetricsTelemetryAdapter:
                 config,
                 sampling_started=sampling_started,
                 sampling_stopped=sampling_stopped,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
         finally:
             data, _ = self._take_measured_capture()
         if data is None:
-            evidence, _ = derive_powermetrics_clock_evidence(
-                stamps={}, elapsed_s=[], plist_timestamp_s=[]
+            evidence, _ = derive_powermetrics_clock_evidence_v2(
+                stamps={}, records=[]
             )
             return TelemetryStopResult([], evidence)
         native_records, diagnostic = _parse_powermetrics_records(data)
@@ -342,48 +394,61 @@ class PowermetricsTelemetryAdapter:
             stamps["pre_spawn"] = self._pre_spawn_stamp
         if self._first_parse_stamp is not None:
             stamps["first_parse"] = self._first_parse_stamp
-        evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+        evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
             stamps=stamps,
-            elapsed_s=[record.elapsed_ns / 1_000_000_000.0 for record in native_records],
-            plist_timestamp_s=[
-                float(record.metadata["plist_timestamp_s"])
-                for record in native_records
-            ],
+            records=anchor_records_from_powermetrics(native_records),
         )
         if bracket_deadline is not None and point_anchor_s is not None:
             # Freeze only after termination and the authoritative post-parse
-            # stamp. The provisional drain anchor can select an earlier record
-            # when the final wall/monotonic envelope shifts.
+            # stamp. The prefix must retain a record that brackets the stop
+            # marker under the EARLIEST allowed anchor, so the cutoff uses the
+            # admissible interval's lower endpoint, never the midpoint.
             bracketed_data = self._freeze_stop_bracketing_prefix(
                 data,
                 native_records=native_records,
                 diagnostic=diagnostic,
-                point_anchor_s=point_anchor_s,
+                earliest_anchor_s=float(
+                    evidence["clock_anchor"]["admissible_lower_epoch_s"]
+                ),
                 sampling_stopped=sampling_stopped,
                 deadline=bracket_deadline,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
             if bracketed_data is not None:
                 data = bracketed_data
                 native_records, diagnostic = _parse_powermetrics_records(data)
-                evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+                evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
                     stamps=stamps,
-                    elapsed_s=[
-                        record.elapsed_ns / 1_000_000_000.0
-                        for record in native_records
-                    ],
-                    plist_timestamp_s=[
-                        float(record.metadata["plist_timestamp_s"])
-                        for record in native_records
-                    ],
+                    records=anchor_records_from_powermetrics(native_records),
                 )
         if context is not None:
             self._persist_capture(context, RAW_SAMPLES_NAME, data)
+        # Fail-closed timeline: an unresolved anchor (clock_anchor_unresolved)
+        # still needs a structurally valid, window-overlapping trace layout.
+        # The claim barrier lives in the evidence - the fallback endpoint is
+        # recorded there so strict raw-to-trace re-derivation replays it, and
+        # it never re-enters any claim math.
+        trace_endpoint_s = point_anchor_s
+        if trace_endpoint_s is None and native_records:
+            trace_endpoint_s, fallback_method = trace_fallback_endpoint(
+                stamps, native_records
+            )
+            clock_anchor = evidence.get("clock_anchor")
+            if isinstance(clock_anchor, dict):
+                clock_anchor["trace_fallback_endpoint_epoch_s"] = trace_endpoint_s
+                clock_anchor["trace_fallback_method"] = fallback_method
         records = (
-            parse_powermetrics_records(data, first_record_endpoint_s=point_anchor_s)
-            if point_anchor_s is not None
+            parse_powermetrics_records(data, first_record_endpoint_s=trace_endpoint_s)
+            if trace_endpoint_s is not None
             else native_records
         )
-        self._preserve_measured_capture(data, records, diagnostic, context)
+        self._preserve_measured_capture(
+            data,
+            records,
+            diagnostic,
+            context,
+            first_record_endpoint_s=trace_endpoint_s,
+        )
         self._release_capture(RAW_SAMPLES_NAME)
         return TelemetryStopResult(samples_from_records(records), evidence)
 
@@ -393,6 +458,7 @@ class PowermetricsTelemetryAdapter:
         *,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> float | None:
         """Bound sampler wind-down by a trace-domain right-edge sample."""
 
@@ -417,6 +483,7 @@ class PowermetricsTelemetryAdapter:
                 deadline=deadline,
                 sampling_started=sampling_started,
                 sampling_stopped=sampling_stopped,
+                required_post_window_tail_s=required_post_window_tail_s,
             )
             if brackets_stop:
                 return deadline
@@ -508,6 +575,7 @@ class PowermetricsTelemetryAdapter:
         deadline: float,
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
+        required_post_window_tail_s: float = 0.0,
     ) -> bool:
         if self._drain_monotonic() >= deadline:
             return False
@@ -539,29 +607,29 @@ class PowermetricsTelemetryAdapter:
             stamps["pre_spawn"] = self._pre_spawn_stamp
         if self._first_parse_stamp is not None:
             stamps["first_parse"] = self._first_parse_stamp
-        elapsed_s = [
-            record.elapsed_ns / 1_000_000_000.0 for record in native_records
-        ]
         if self._drain_monotonic() >= deadline:
             return False
-        plist_timestamp_s = [
-            float(record.metadata["plist_timestamp_s"]) for record in native_records
-        ]
-        if self._drain_monotonic() >= deadline:
-            return False
-        _evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+        evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
             stamps=stamps,
-            elapsed_s=elapsed_s,
-            plist_timestamp_s=plist_timestamp_s,
+            records=anchor_records_from_powermetrics(native_records),
         )
         if self._drain_monotonic() >= deadline:
             return False
         if point_anchor_s is None:
             return False
         # Project the wall-stamped stop marker into the reconstructed trace's
-        # relative timestamp domain. Comparing wall drain duration directly
-        # would stop early by the startup midpoint-anchor lag.
-        projected_stop_endpoint_s = sampling_stopped.epoch_s - point_anchor_s
+        # relative timestamp domain under the EARLIEST allowed anchor, so the
+        # retained capture still brackets the stop marker at every admissible
+        # anchor shift. Comparing wall drain duration directly would stop
+        # early by the startup anchor lag.
+        earliest_anchor_s = float(
+            evidence["clock_anchor"]["admissible_lower_epoch_s"]
+        )
+        projected_stop_endpoint_s = (
+            sampling_stopped.epoch_s
+            + required_post_window_tail_s
+            - earliest_anchor_s
+        )
         if (
             not math.isfinite(projected_stop_endpoint_s)
             or projected_stop_endpoint_s <= 0.0
@@ -583,11 +651,16 @@ class PowermetricsTelemetryAdapter:
         *,
         native_records: list[PowermetricsRecord],
         diagnostic: _DroppedFrameDiagnostic | None,
-        point_anchor_s: float,
+        earliest_anchor_s: float,
         sampling_stopped: ClockStamp,
         deadline: float,
+        required_post_window_tail_s: float = 0.0,
     ) -> bytes | None:
-        """Select the final-anchor prefix without working past the drain deadline."""
+        """Select the final-anchor prefix without working past the drain deadline.
+
+        The cutoff record is the first whose window END reaches the stop
+        marker under the EARLIEST admissible anchor, so every admissible
+        anchor shift keeps a record bracketing the stop marker (D-078)."""
 
         if self._drain_monotonic() >= deadline:
             return None
@@ -598,7 +671,9 @@ class PowermetricsTelemetryAdapter:
                 return None
             if index > 0:
                 relative_endpoint_s += record.elapsed_ns / 1_000_000_000.0
-            if point_anchor_s + relative_endpoint_s >= sampling_stopped.epoch_s:
+            if earliest_anchor_s + relative_endpoint_s >= (
+                sampling_stopped.epoch_s + required_post_window_tail_s
+            ):
                 bracket_index = index
                 break
         if bracket_index is None or self._drain_monotonic() >= deadline:
@@ -750,6 +825,8 @@ class PowermetricsTelemetryAdapter:
         records: list[PowermetricsRecord],
         diagnostic: _DroppedFrameDiagnostic | None,
         context: RunContext | None,
+        *,
+        first_record_endpoint_s: float | None = None,
     ) -> None:
         self._record_parse_diagnostic(
             diagnostic,
@@ -758,7 +835,12 @@ class PowermetricsTelemetryAdapter:
         )
         if context is not None:
             try:
-                rich_data = rich_telemetry_jsonl(data)
+                # D-078: measured-run rich telemetry timestamps must move with
+                # the corrected anchor rather than keeping an independent
+                # native-date reconstruction.
+                rich_data = rich_telemetry_jsonl(
+                    data, first_record_endpoint_s=first_record_endpoint_s
+                )
             except ValueError as exc:
                 self._device_metadata["rich_telemetry_error"] = _terse_error(exc)
             else:
@@ -989,6 +1071,12 @@ class PowermetricsTelemetryAdapter:
             )
 
     def _base_device_metadata(self, config: BenchmarkConfig | None) -> dict[str, Any]:
+        try:
+            executable_sha256 = hashlib.sha256(
+                Path(self._executable).read_bytes()
+            ).hexdigest()
+        except OSError:
+            executable_sha256 = None
         return {
             "device": config.hardware_target.id if config is not None else None,
             "telemetry": self.name,
@@ -997,6 +1085,8 @@ class PowermetricsTelemetryAdapter:
             "timestamp_derivation": TIMESTAMP_DERIVATION,
             "power_units": "powermetrics milliwatts converted to watts",
             "powermetrics": {
+                "executable_path": self._executable,
+                "executable_sha256": executable_sha256,
                 "samplers_requested": SAMPLERS,
                 "samplers_available": "probe-unavailable",
                 "samplers_probe": {"ok": False, "reason": "not_probed"},
@@ -1125,6 +1215,67 @@ class PowermetricsTelemetryAdapter:
             metadata={"last_parse_error": last_parse_error},
         )
 
+    def _wait_for_native_rollover(
+        self,
+        process: subprocess.Popen[bytes],
+        capture_path: Path,
+    ) -> AdapterResult:
+        """Block until the native whole-second stamps roll over once (D-078).
+
+        Without a rollover before the workload the censored-intersection
+        anchor interval is unbounded on one side; returning early would let a
+        whole run proceed toward a guaranteed ``clock_anchor_unresolved``
+        claim barrier. This wait happens before ``start_sampling`` returns, so
+        D-026 keeps it outside the measured window.
+        """
+
+        deadline = time.monotonic() + ROLLOVER_TIMEOUT_S
+        records_seen = 0
+        while time.monotonic() < deadline:
+            if capture_path.exists() and capture_path.stat().st_size > 0:
+                try:
+                    records = parse_powermetrics_records(capture_path.read_bytes())
+                except ValueError:
+                    records = []
+                records_seen = len(records)
+                native_s = [
+                    float(record.metadata["plist_timestamp_s"])
+                    for record in records
+                ]
+                if any(
+                    later > earlier
+                    for earlier, later in zip(native_s, native_s[1:])
+                ):
+                    return AdapterResult(
+                        ok=True,
+                        metadata={
+                            "ready_check": "native_whole_second_rollover",
+                            "records_before_rollover": records_seen,
+                        },
+                    )
+            if process.poll() is not None:
+                return AdapterResult(
+                    ok=False,
+                    failure_reason=FailureReason.UNKNOWN_ERROR,
+                    message=(
+                        "powermetrics exited before a native whole-second "
+                        f"rollover (returncode {process.returncode})"
+                    ),
+                )
+            # Operational wait for an external process, outside the benchmark
+            # clock discipline; excluded from the measured window by D-026.
+            time.sleep(READINESS_POLL_S)
+        return AdapterResult(
+            ok=False,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            message=(
+                "powermetrics produced no native whole-second rollover within "
+                f"{ROLLOVER_TIMEOUT_S} s of readiness; the anchor interval "
+                "would be unresolvable (clock_anchor_unresolved)"
+            ),
+            metadata={"records_seen": records_seen},
+        )
+
     @staticmethod
     def _stop_process(process: subprocess.Popen[bytes]) -> None:
         if process.poll() is None:
@@ -1134,6 +1285,35 @@ class PowermetricsTelemetryAdapter:
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
+
+
+def trace_fallback_endpoint(
+    stamps: dict[str, ClockStamp],
+    native_records: list[PowermetricsRecord],
+) -> tuple[float, str]:
+    """Structural record-0 END for an unresolved (clock_anchor_unresolved) run.
+
+    Deterministic and replayed by strict validation: the legacy spawn-bracket
+    midpoint when the paired stamps admit one, else the first native
+    whole-second stamp. Never claim-bearing - the barrier stays in the
+    evidence."""
+
+    _legacy_evidence, legacy_point_s = derive_powermetrics_clock_evidence(
+        stamps=stamps,
+        elapsed_s=[
+            record.elapsed_ns / 1_000_000_000.0 for record in native_records
+        ],
+        plist_timestamp_s=[
+            float(record.metadata["plist_timestamp_s"])
+            for record in native_records
+        ],
+    )
+    if legacy_point_s is not None:
+        return legacy_point_s, "legacy_spawn_bracket_midpoint_v1"
+    return (
+        float(native_records[0].metadata["plist_timestamp_s"]),
+        "native_first_whole_second_stamp",
+    )
 
 
 def parse_powermetrics_records(
@@ -1256,16 +1436,50 @@ def _parse_powermetrics_records(
                     "plist_timestamp_s": _timestamp_epoch_utc(
                         _required(document, "timestamp", index)
                     ),
+                    "is_delta": (
+                        document["is_delta"]
+                        if isinstance(document.get("is_delta"), bool)
+                        else None
+                    ),
                 },
             )
         )
     return records, diagnostic
 
 
+def anchor_records_from_powermetrics(
+    records: list[PowermetricsRecord],
+) -> list[NativeAnchorRecord]:
+    """Project parsed records onto the v2 anchor estimator's native evidence."""
+
+    anchor_records: list[NativeAnchorRecord] = []
+    for record in records:
+        energy_j: float | None = None
+        if record.rail_energy_mj:
+            energy_j = (
+                math.fsum(record.rail_energy_mj.values()) / 1000.0
+            )
+        anchor_records.append(
+            NativeAnchorRecord(
+                elapsed_s=record.elapsed_ns / 1_000_000_000.0,
+                native_timestamp_s=float(record.metadata["plist_timestamp_s"]),
+                power_w=record.combined_power_w,
+                energy_j=energy_j,
+                is_delta=record.metadata.get("is_delta"),
+            )
+        )
+    return anchor_records
+
+
 def decode_rich_telemetry(
-    data: bytes, *, timestamp_anchor_s: float | None = None
+    data: bytes,
+    *,
+    timestamp_anchor_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
 ) -> list[dict[str, Any]]:
     """Decode additive per-sample powermetrics fields from a plist stream."""
+    if timestamp_anchor_s is not None and first_record_endpoint_s is not None:
+        raise ValueError("rich telemetry timestamp anchor modes are mutually exclusive")
     documents, _diagnostic = _powermetrics_documents(data)
     if not documents:
         return []
@@ -1274,11 +1488,19 @@ def decode_rich_telemetry(
         _required(documents[0], "timestamp", 0)
     )
     anchor_s = plist_first_timestamp if timestamp_anchor_s is None else timestamp_anchor_s
+    if first_record_endpoint_s is not None:
+        anchor_s = finite_float(first_record_endpoint_s, "first_record_endpoint_s")
     cumulative_elapsed_s = 0.0
     rich_records: list[dict[str, Any]] = []
     for index, document in enumerate(documents):
         elapsed_ns = _required_int(document, "elapsed_ns", index)
-        if timestamp_anchor_s is None:
+        if first_record_endpoint_s is not None:
+            # D-078: rich telemetry timestamps move with the corrected anchor
+            # exactly like the trace: record 0's END is the anchor endpoint.
+            if index > 0:
+                cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+            timestamp_s = anchor_s + cumulative_elapsed_s
+        elif timestamp_anchor_s is None:
             timestamp_s = anchor_s + cumulative_elapsed_s
             cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
         else:
@@ -1315,10 +1537,17 @@ def decode_rich_telemetry(
 
 
 def rich_telemetry_jsonl(
-    data: bytes, *, timestamp_anchor_s: float | None = None
+    data: bytes,
+    *,
+    timestamp_anchor_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
 ) -> str:
     return rich_telemetry_jsonl_from_records(
-        decode_rich_telemetry(data, timestamp_anchor_s=timestamp_anchor_s)
+        decode_rich_telemetry(
+            data,
+            timestamp_anchor_s=timestamp_anchor_s,
+            first_record_endpoint_s=first_record_endpoint_s,
+        )
     )
 
 

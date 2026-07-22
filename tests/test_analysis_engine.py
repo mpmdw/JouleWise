@@ -341,5 +341,138 @@ def replace_ratio(value: RatioObservation, **updates: object) -> RatioObservatio
     return RatioObservation(**fields)  # type: ignore[arg-type]
 
 
+class MixedWireAnchorTermIntersectionTests(unittest.TestCase):
+    """A required anchor bound erased by term-name intersection refuses (Fix E).
+
+    Pairing an anchor-era (0.5.1) bundle that carries
+    ``E_clock_anchor_shift_bound_j`` against a pre-anchor (0.4.2) bundle that
+    additively records no such term must NOT let the intersection silently drop
+    the bound (under-bounding); the contrast refuses with
+    ``anchor_energy_envelope_unrecorded``.
+    """
+
+    def _evidence(self, entry_id, cell_id, block_id, condition_id, summary):
+        from pathlib import Path
+
+        from joulewise.analysis_engine.inputs import BundleEvidence
+
+        return BundleEvidence(
+            entry={
+                "entry_id": entry_id,
+                "cell_id": cell_id,
+                "block_id": block_id,
+                "condition_id": condition_id,
+                "role": "condition",
+            },
+            bundle_id=entry_id,
+            relative_path=entry_id,
+            path=Path(entry_id),
+            summary=summary,
+            metadata=None,
+            raw_config=None,
+            strict_problems=(),
+            base_reason_codes=(),
+            config_sha256=None,
+            summary_sha256=None,
+            replacement_classification="registered",
+            inclusion_status="included",
+        )
+
+    def test_superseded_anchor_wire_refuses_by_version_not_method(self) -> None:
+        from unittest import mock
+
+        import joulewise.analysis_engine as engine
+        from joulewise.analysis_engine.inputs import LoadedAnalysisInputs
+        from tests.test_floor_extraction import make_summary
+
+        anchor_summary = make_summary(40.0, reducer="0.5.1")
+        pre_anchor_summary = make_summary(39.0, reducer="0.4.2", anchor_bound=None)
+
+        effective = {}
+        entries = []
+        block_ids = ("blk1", "blk2")
+        for block_id in block_ids:
+            a_id = f"{block_id}-A"
+            b_id = f"{block_id}-B"
+            effective[a_id] = self._evidence(
+                a_id, "cell_a", block_id, "cond_a", anchor_summary
+            )
+            effective[b_id] = self._evidence(
+                b_id, "cell_b", block_id, "cond_b", pre_anchor_summary
+            )
+            entries.append(effective[a_id].entry)
+            entries.append(effective[b_id].entry)
+
+        inputs = LoadedAnalysisInputs(
+            manifest={
+                "entries": entries,
+                "design": {
+                    "sampling_plan": {"planned_n_blocks": 2},
+                    "randomization": {"scheme": "deterministic"},
+                },
+            },
+            manifest_sha256="",
+            floor_artifact={},
+            floor_sha256="",
+            registered={},
+            effective=effective,
+            extra_audits=(),
+            valid_replacements=(),
+            unregistered_matching=(),
+            top_up_entry_ids=frozenset(),
+        )
+        contrast = {
+            "contrast_id": "C1",
+            "cell_a_id": "cell_a",
+            "cell_b_id": "cell_b",
+            "condition_a_id": "cond_a",
+            "condition_b_id": "cond_b",
+            "block_ids": list(block_ids),
+            "metric": {"name": "gross_energy_j", "window_class": "request"},
+        }
+
+        def stochastic_factory(evidence_a, evidence_b, metric):
+            return (
+                (
+                    StochasticVarianceTerm(
+                        name="E_idle_mean_j2",
+                        variance_a=1e-4,
+                        variance_b=1e-4,
+                        covariance_ab=0.0,
+                        correlation_scope="independent_run",
+                    ),
+                ),
+                [],
+            )
+
+        with mock.patch.object(
+            engine, "_resolve_contrast_floor", return_value=[]
+        ), mock.patch.object(
+            engine, "randomization_check", return_value={"status": "not_applicable"}
+        ), mock.patch.object(engine, "_randomization_alpha", return_value=0.05):
+            prepared = engine._prepare_contrast(
+                inputs,
+                contrast,
+                {},
+                None,
+                stochastic_factory,
+                evidence_class="current",
+            )
+
+        self.assertNotIn(
+            "anchor_energy_envelope_unrecorded", prepared["global_reason_codes"]
+        )
+        # Point estimation remains replay-readable, while every contributing
+        # row carries the universal version barrier into claim evaluation.
+        self.assertEqual(len(prepared["observations"]), 2)
+        self.assertIsNotNone(prepared["estimate"])
+        for row in prepared["block_rows"]:
+            self.assertTrue(row["included"])
+            self.assertIn("clock_anchor_unresolved", row["reason_codes"])
+            self.assertNotIn(
+                "anchor_energy_envelope_unrecorded", row["reason_codes"]
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

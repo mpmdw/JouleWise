@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -15,6 +16,9 @@ from unittest.mock import patch
 import joulewise.adapters as adapters
 from joulewise.clock import Clock, FakeClock
 from joulewise.controller import (
+    CAMPAIGN_POLICY_PATH_ENV,
+    CAMPAIGN_POLICY_SHA256_ENV,
+    CAMPAIGN_PREFLIGHT_JSON_ENV,
     STATUS_BY_REASON,
     _suite_rep_index_from_run_id,
     run_benchmark,
@@ -527,9 +531,17 @@ class AdmissionIdleTelemetry(SuspectIdleTelemetry):
 
     name = "admission-idle"
 
-    def __init__(self, inner: Any, suspect_sequence: list[bool]) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        suspect_sequence: list[bool],
+        cpu_busy_sequence: list[float] | None = None,
+        combined_power_sequence: list[float] | None = None,
+    ) -> None:
         super().__init__(inner)
         self._suspect_sequence = list(suspect_sequence)
+        self._cpu_busy_sequence = list(cpu_busy_sequence or [0.1])
+        self._combined_power_sequence = list(combined_power_sequence or [0.1])
         self._attempt = 0
 
     def measure_idle(self, config: BenchmarkConfig, context=None):
@@ -546,10 +558,38 @@ class AdmissionIdleTelemetry(SuspectIdleTelemetry):
             idle_window_suspect=suspect,
         )
 
+    def idle_admission_records(self, *, run_id: str, attempt: int):
+        index = min(attempt - 1, len(self._cpu_busy_sequence) - 1)
+        power_index = min(attempt - 1, len(self._combined_power_sequence) - 1)
+        busy = self._cpu_busy_sequence[index]
+        power_w = self._combined_power_sequence[power_index]
+        return [
+            {
+                "processor_combined_power_w": power_w,
+                "clusters": [
+                    {
+                        "cpus": [
+                            {"idle_ratio": 1.0 - busy, "down_ratio": 0.0},
+                            {"idle_ratio": 0.0, "down_ratio": 1.0},
+                        ]
+                    }
+                ],
+            }
+            for _ in range(30)
+        ]
+
 
 class AdmissionIdleRegistry:
-    def __init__(self, suspect_sequence: list[bool]) -> None:
+    def __init__(
+        self,
+        suspect_sequence: list[bool],
+        *,
+        cpu_busy_sequence: list[float] | None = None,
+        combined_power_sequence: list[float] | None = None,
+    ) -> None:
         self._suspect_sequence = suspect_sequence
+        self._cpu_busy_sequence = cpu_busy_sequence
+        self._combined_power_sequence = combined_power_sequence
 
     def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
         return adapters.resolve_runtime(config, clock)
@@ -557,7 +597,12 @@ class AdmissionIdleRegistry:
     def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
         telemetry, failure = adapters.resolve_telemetry(config, clock)
         if telemetry is not None:
-            telemetry = AdmissionIdleTelemetry(telemetry, self._suspect_sequence)
+            telemetry = AdmissionIdleTelemetry(
+                telemetry,
+                self._suspect_sequence,
+                self._cpu_busy_sequence,
+                self._combined_power_sequence,
+            )
         return telemetry, failure
 
     def resolve_transport(self, config: BenchmarkConfig):
@@ -1070,10 +1115,10 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        # 22 = full snapshot probes + the guard observation's display
-        # inventory (added 2026-07-18: macOS 26 systemstate cannot prove
-        # display sleep without per-display profiler evidence).
-        self.assertEqual(len(environment_calls), 22)
+        # 23 = full snapshot probes + the post-workload guard's display
+        # inventory and adapter-power probe.  F6 requires the latter so a
+        # final-member renegotiation cannot disappear after the workload.
+        self.assertEqual(len(environment_calls), 23)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
         self.assertEqual(environment["memory"]["pageins"], 2000)
@@ -1094,6 +1139,9 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(environment["display_power_state"], "all_asleep")
         self.assertIs(environment["screensaver_engaged"], False)
         self.assertEqual(environment["post_run_observation"]["display_power_state"], "all_asleep")
+        self.assertEqual(
+            environment["post_run_observation"]["power"]["adapter_watts"], 96
+        )
 
     def test_idle_baseline_failure_preserves_prepare_end_environment(self) -> None:
         config = make_config("controller-idle-failure-env")
@@ -1245,6 +1293,180 @@ class HappyPathTests(ControllerTestCase):
         self.assertIs(admission["critical_environment_passed"], True)
         self.assertIs(admission["reference_provenance_present"], True)
 
+    def test_production_cpu_busy_retry_then_abort_is_enforced_pre_invoke(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-abort"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], cpu_busy_sequence=[0.9, 0.8]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertEqual(
+            [row["cpu_admission"]["decision"] for row in admission["attempts"]],
+            ["failed", "failed"],
+        )
+        self.assertTrue(
+            all(row["gpu_admitted"] for row in admission["attempts"])
+        )
+        events = self.read_events(bundle_path)
+        self.assertNotIn("sampling_started", [event["event_type"] for event in events])
+
+    def test_cpu_retry_ledger_pairs_final_attempt_before_admitting(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-retry-pass"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], cpu_busy_sequence=[0.9, 0.1]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "admitted")
+        self.assertEqual(
+            [row["attempt"] for row in admission["attempts"]], [1, 2]
+        )
+        self.assertEqual(
+            [row["admitted"] for row in admission["attempts"]], [False, True]
+        )
+        self.assertGreater(
+            admission["attempts"][0]["cpu_admission"]["cpu_busy_ratio_p95"],
+            admission["attempts"][1]["cpu_admission"]["cpu_busy_ratio_p95"],
+        )
+
+    def test_exploratory_cpu_failure_is_lenient_but_claim_flagged(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=True
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-exploratory"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], combined_power_sequence=[2.0, 2.0]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "flagged")
+        self.assertFalse(
+            admission["idle_admission_extension"]["claim_bearing"]
+        )
+        self.assertIn(
+            "processor_combined_power_w_p95_exceeded",
+            admission["attempts"][-1]["cpu_admission"]["conditions"],
+        )
+        self.assertIn(
+            "environment_admission_failed",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_production_missing_cpu_telemetry_fails_closed_on_live_clock(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        clean_guard = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "Ventura",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 5.0,
+            "power": {
+                "adapter_watts": 140.0,
+                "adapter_description": "140W USB-C Power Adapter",
+            },
+            "errors": {},
+        }
+        with patch(
+            "joulewise.controller.collect_environment_guard_observation",
+            return_value=clean_guard,
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-cpu-admission-missing-live"),
+                self.runs_root,
+                DeterministicClock(),
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertTrue(admission["attempts"][-1]["cpu_admission_enforced"])
+        self.assertIn(
+            "cpu_baseline_telemetry_missing",
+            admission["attempts"][-1]["cpu_admission"]["conditions"],
+        )
+
+    def test_extension_sidecar_reparses_in_child_environment_path(self) -> None:
+        policy, _binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        raw = PRODUCTION_POLICY_PATH.read_bytes()
+        policy_sha = hashlib.sha256(raw).hexdigest()
+        preflight["policy_sha256"] = policy_sha
+        with patch.dict(
+            os.environ,
+            {
+                CAMPAIGN_POLICY_PATH_ENV: str(PRODUCTION_POLICY_PATH),
+                CAMPAIGN_POLICY_SHA256_ENV: policy_sha,
+                CAMPAIGN_PREFLIGHT_JSON_ENV: json.dumps(preflight),
+            },
+            clear=False,
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-child-extension-sidecar"),
+                self.runs_root,
+                self.clock,
+                registry=AdmissionIdleRegistry([False]),
+                environment_snapshot=snapshot,
+            )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["campaign_policy"]["idle_admission_extension"][
+                "schema_version"
+            ],
+            policy.idle_admission_extension.schema_version,
+        )
+
     def test_post_capture_guard_observation_aborts_awake_display(self) -> None:
         policy, binding, preflight, snapshot = campaign_policy_fixture(
             exploratory=False
@@ -1261,7 +1483,7 @@ class HappyPathTests(ControllerTestCase):
         with patch(
             "joulewise.controller.collect_environment_guard_observation",
             side_effect=[clean, awake],
-        ):
+        ) as collect_guard:
             bundle_path, summary = run_benchmark(
                 make_config("controller-post-capture-awake"),
                 self.runs_root,
@@ -1281,6 +1503,12 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(
             [row["phase"] for row in admission["guard_observations"]],
             ["before_attempt_1", "after_attempt_1"],
+        )
+        self.assertTrue(
+            all(
+                call.kwargs == {"include_adapter_power": True}
+                for call in collect_guard.call_args_list
+            )
         )
 
     def test_environment_override_makes_member_universally_claim_ineligible(self) -> None:
@@ -1848,6 +2076,11 @@ class RunContextSeamTests(ControllerTestCase):
 
 
 class SamplingWindowTests(ControllerTestCase):
+    def test_non_campaign_powermetrics_dwell_default_is_one_second(self) -> None:
+        from joulewise.controller import DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S
+
+        self.assertEqual(DEFAULT_POWERMETRICS_POST_WINDOW_DWELL_S, 1.0)
+
     """2N.2 (D-026): the measured window excludes sampler start/stop latency."""
 
     def run_with_latency(
@@ -1948,6 +2181,59 @@ class SamplingWindowTests(ControllerTestCase):
             if event["event_type"] == "phase_end"
         )
         self.assertAlmostEqual(stopped_s - last_runtime_s, 0.0, places=9)
+
+    def test_post_window_dwell_changes_tail_support_without_moving_marker(self) -> None:
+        # T1 defect shape: immediate sampler stop leaves the last sample before
+        # the stop marker; an injected dwell retains post-window support while
+        # the measured marker (and therefore energy window) stays unchanged.
+        zero_bundle, _ = run_benchmark(
+            make_config("tail-zero"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+            post_window_sampling_dwell_s=0.0,
+        )
+        dwell_bundle, _ = run_benchmark(
+            make_config("tail-dwell"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+            post_window_sampling_dwell_s=0.75,
+        )
+        zero_metadata = json.loads((zero_bundle / "metadata.json").read_text())
+        dwell_metadata = json.loads((dwell_bundle / "metadata.json").read_text())
+        zero_margins = zero_metadata["trace_window_margins"]
+        dwell_margins = dwell_metadata["trace_window_margins"]
+
+        self.assertLess(zero_margins["achieved_post_window_margin_s"], 0.0)
+        self.assertGreaterEqual(
+            dwell_margins["achieved_post_window_margin_s"], 0.60
+        )
+        self.assertEqual(dwell_margins["requested_post_window_dwell_s"], 0.75)
+        zero_stopped = next(
+            event["timestamp_s"]
+            for event in self.read_events(zero_bundle)
+            if event["event_type"] == "sampling_stopped"
+        )
+        dwell_stopped = next(
+            event["timestamp_s"]
+            for event in self.read_events(dwell_bundle)
+            if event["event_type"] == "sampling_stopped"
+        )
+        self.assertEqual(zero_stopped, dwell_stopped)
+
+    def test_powermetrics_rejects_subsecond_post_window_dwell_before_collection(self) -> None:
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = "tail-subsecond-refusal"
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config = BenchmarkConfig.from_mapping(data)
+
+        with self.assertRaisesRegex(ValueError, "at least 1.0 s"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                FakeClock(start=1_700_000_000.0),
+                post_window_sampling_dwell_s=0.999,
+            )
+        self.assertFalse((self.runs_root / "tail-subsecond-refusal").exists())
 
     def test_stage_window_still_contains_the_latency(self) -> None:
         # The stage boundaries DO include the simulated latency - proving the

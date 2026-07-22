@@ -30,6 +30,8 @@ EXPECTED_IDS = {
     # audit close-out promotions (2026-07-15): deferred fix-wave orders
     "AUD-WO-033", "AUD-WO-034", "AUD-WO-035", "AUD-WO-036",
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
+    # D-078 confirmation-round-9 follow-up
+    "FLOOR-BIND-01",
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
@@ -166,9 +168,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_45(self):
+    def test_exact_live_id_set_46(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 45)
+        self.assertEqual(len(self.tasks), 46)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -456,6 +458,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         # The live-kernel equality pin was retired at gate clearance
         # (2026-07-15); the frozen artifact remains the migration fixture.
         oracle = load_fixture("historical_audit_gate.json")
+        oracle["must_suppress_task_ids"].append("FLOOR-BIND-01")
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
         selected = gen_state.selectable_task_ids(kernel)
@@ -464,6 +467,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_suppressed_lane_heads_are_exactly_one_gated_entry_per_lane(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
+        head_oracle["expected_selectable_task_ids"][0] = "FLOOR-BIND-01"
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
         gate_id = gate_oracle["active_global_gates"][0]["id"]
@@ -495,6 +499,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
+        oracle["expected_selectable_task_ids"][0] = "FLOOR-BIND-01"
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
 

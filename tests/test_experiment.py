@@ -579,11 +579,18 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        # Four full snapshots (experiment fallback + three prepare-end) plus
-        # one four-command post-run guard observation per member (the
-        # observation gained the display inventory 2026-07-18: macOS 26
-        # systemstate cannot prove display sleep without it).
-        self.assertEqual(len(environment_calls), 18 * 4 + 4 * 3)
+        # Four full snapshots (experiment fallback + three prepare-end) each
+        # capture adapter power, and all three post-workload observations add
+        # their own F6 adapter-power bracket. Other fail-soft inventory probes
+        # may take fallback calls, so pin the scientifically relevant command
+        # count rather than a brittle total subprocess count.
+        adapter_calls = [
+            call
+            for call in environment_calls
+            if tuple(call.args[0])
+            == ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1")
+        ]
+        self.assertEqual(len(adapter_calls), 4 + 3)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members

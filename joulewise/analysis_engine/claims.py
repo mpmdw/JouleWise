@@ -24,7 +24,11 @@ CLAIM_OUTCOMES = frozenset(
 
 # D-057 reducer vocabulary currently present on main.  The analysis engine
 # copies these spellings verbatim and never treats an unknown spelling as a
-# passing gate.
+# passing gate.  The three ``anchor``/``clock_anchor`` barriers are the
+# 2026-07-19 measurement-soundness-audit additions (D-078): reducer 0.5.1 and
+# AXI 0.6.1 mint them for the trace-time-anchor gate, registered here like the
+# D-077 environment barriers so stored prechecks carrying them stay readable
+# and fail-closed instead of collapsing into ``window_evidence_precheck_missing``.
 REDUCER_REASON_CODES = frozenset(
     {
         "nonpositive_window_duration",
@@ -38,7 +42,22 @@ REDUCER_REASON_CODES = frozenset(
         "idle_baseline_unrecorded",
         "cooldown_cap_hit",
         "environment_admission_failed",
+        "environment_admission_missing",
+        "cpu_admission_unenforced",
         "environment_override",
+        "clock_anchor_unresolved",
+        "instrument_calibration_missing",
+        "instrument_calibration_mismatch",
+        "instrument_calibration_invalid",
+        "instrument_calibration_stale",
+        "instrument_calibration_bracket_missing",
+        "thermal_pressure_elevated_in_window",
+        "negative_power_sample",
+        "post_window_trace_tail_shorter_than_anchor_bound",
+        "anchor_energy_envelope_unrecorded",
+        "anchor_energy_envelope_exceeds_quarter_metric",
+        "token_count_stream_chunk_fallback",
+        "pulse_calibration_rollover_gate_timeout",
     }
 )
 
@@ -88,6 +107,15 @@ ENGINE_REASON_CODES = frozenset(
         "loo_magnitude_influential",
         "outcome_dependent_top_up",
         "legacy_l1_mechanics_only",
+        "whole_window_neg8_verdict_missing",
+        "whole_window_neg8_verdict_failed",
+        "adapter_continuity_evidence_missing",
+        "adapter_continuity_failed",
+        "cpu_admission_core_missing",
+        "cpu_admission_core_failed",
+        "whole_window_verdict_coverage_incomplete",
+        "whole_window_verdict_provenance_invalid",
+        "whole_window_verdict_conflict",
     }
 )
 
@@ -114,6 +142,15 @@ _NOT_RESOLVABLE = frozenset(
         "bundle_missing",
         "bundle_strict_invalid",
         "bundle_status_not_succeeded",
+        "whole_window_neg8_verdict_missing",
+        "whole_window_neg8_verdict_failed",
+        "adapter_continuity_evidence_missing",
+        "adapter_continuity_failed",
+        "cpu_admission_core_missing",
+        "cpu_admission_core_failed",
+        "whole_window_verdict_coverage_incomplete",
+        "whole_window_verdict_provenance_invalid",
+        "whole_window_verdict_conflict",
         "paired_block_incomplete",
         "fixed_n_plan_incomplete",
         "window_evidence_precheck_missing",

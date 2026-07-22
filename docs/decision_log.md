@@ -100,7 +100,7 @@ be re-derived by a future agent gets an entry here.
 | D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
 | D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
 | D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
-| D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted (Ed ratification pending) |
+| D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted; operative under Ed's direction through the full repair arc (close-out cap explicitly Ed-ratified 2026-07-22; original-text ratification rides PR #79 review) |
 
 ---
 
@@ -4019,8 +4019,11 @@ defect corrections to the accepted policy, not new policy alternatives.
 ## D-078: Soundness gate — no claim-bearing extraction from time-anchor-defective powermetrics corpora
 
 Date: 2026-07-19. Owner: lead session under Ed's soundness-audit directive;
-Ed ratification pending (recorded here so the gate binds future sessions
-immediately; Ed may amend).
+recorded so the gate binds future sessions immediately. Status update
+2026-07-22: the gate has been operative under Ed's direction through the
+entire repair arc, and Ed explicitly ratified the close-out cap (clause 8);
+formal ratification of this original text rides the PR #79 review (Ed may
+amend).
 
 The 2026-07-19 measurement-soundness audit
 (`docs/reviews/2026-07-19-measurement-soundness-audit.md`; all P0 findings
@@ -4050,3 +4053,390 @@ Binding until amended:
 
 Revisit trigger: Phase 0 repair lands with live pulse-validation evidence,
 or Ed rules a different salvage/disposition for existing corpora.
+
+### D-078 amendment — 2026-07-20: fail-closed vocabulary and immutable summaries
+
+Additive amendment under the adversarial soundness fix round.  The following
+spellings are the binding, closed registry for D-078 claim refusals and
+campaign conditions.  Consumers preserve these strings verbatim; an unknown
+claim/refusal spelling never becomes a pass.
+
+- Reducer/analysis claim barriers: `nonpositive_window_duration`,
+  `insufficient_in_window_samples`, `cadence_ratio_unrecorded`,
+  `cadence_ratio_below_threshold`, `clock_bound_unrecorded`,
+  `clock_bound_exceeds_quarter_window`, `interpolation_bound_unrecorded`,
+  `drift_term_unknown`, `idle_baseline_unrecorded`, `cooldown_cap_hit`,
+  `environment_admission_failed`, `environment_override`,
+  `environment_admission_missing`, `cpu_admission_unenforced`,
+  `clock_anchor_unresolved`, `anchor_energy_envelope_unrecorded`,
+  `anchor_energy_envelope_exceeds_quarter_metric`,
+  `instrument_calibration_missing`, `instrument_calibration_mismatch`, and
+  `instrument_calibration_invalid`.
+- Floor-extraction refusals: `bundle_missing`, `summary_unreadable`,
+  `bundle_strict_invalid`, `bundle_hash_unresolved`,
+  `bundle_status_not_succeeded`, `reducer_wire_unknown`,
+  `idle_method_pair_invalid`, `metric_missing_or_nonfinite`,
+  `window_evidence_precheck_failed`, `campaign_cooldown_evidence_missing`,
+  `cooldown_cap_hit_unverified`, `campaign_member_omitted_from_spec`,
+  `campaign_member_unattributable`, `cap_hit_drift_term_unavailable`,
+  `insufficient_members_after_exclusion`, plus every applicable reducer
+  barrier above and `whole_window_neg8_verdict_missing`,
+  `whole_window_neg8_verdict_failed`,
+  `adapter_continuity_evidence_missing`, `adapter_continuity_failed`,
+  `cpu_admission_core_missing`, and `cpu_admission_core_failed`.
+- Idle-admission/campaign conditions: `cpu_baseline_telemetry_missing`,
+  `cpu_baseline_telemetry_malformed`,
+  `cpu_baseline_sample_count_insufficient`, `cpu_busy_ratio_p95_exceeded`,
+  `processor_combined_power_w_p95_exceeded`,
+  `gpu_idle_admission_not_passed`, `gpu_idle_admission_unknown`,
+  `adapter_observations_missing`, `adapter_wattage_unknown`,
+  `adapter_wattage_discontinuity`, `adapter_description_changed`,
+  `adapter_power_source_changed`, `neg8_bracket_missing`,
+  `neg8_bracket_reference_invalid`, `neg8_bracket_abs_delta_exceeded`,
+  `neg8_bracket_rel_delta_exceeded`, `neg8_bracket_not_evaluated`,
+  `neg8_bracket_ambiguous_reference`,
+  `idle_admission_attempt_ledger_invalid`,
+  `idle_admission_extension_unconfigured`, `whole_window_bundle_invalid`,
+  `whole_window_campaign_membership_unresolved`, and
+  `whole_window_campaign_membership_ambiguous`.
+- Instrument-evidence diagnostics: `pulse_detection_incomplete`,
+  `spurious_plateau_detected`, `residual_interval_unbounded`,
+  `not_all_pulses_detected`, `binding_fields_missing:`,
+  `pulse_count_below_protocol:`, and
+  `raw_or_event_hash_missing_or_invalid`.  These diagnostics can only make
+  `instrument_calibration_invalid`; they never directly license a claim.
+
+Governance ruling GOV-02: D-078 supersedes only D-028's former exception that
+allowed `summary_metrics.json` to be rewritten after finalization.  Stored
+summary bytes are now immutable evidence.  Post-hoc reduction writes a new,
+non-clobbering artifact (including the repaired anchor envelope) or refuses;
+the raw-artifact immutability and pure-reducer portions of D-002/D-028 remain
+in force.  Frozen 0.5.0/0.6.0 numeric semantics remain replayable and are not
+claim-bearing merely because they can be read.
+
+### D-078 additive registry addendum — 2026-07-20: causal-set repair
+
+The closed registry additionally includes floor/whole-window barriers
+`admissible_set_uncertainty_dominates_point_floor`,
+`whole_window_verdict_coverage_incomplete`,
+`whole_window_verdict_provenance_invalid`, and
+`whole_window_verdict_conflict`. Instrument-evidence diagnostics additionally
+include `no_plateau_interior_intervals`, `plateau_below_minimum`,
+`robust_snr_below_minimum`, `edge_coverage_missing`,
+`model_fit_not_significant`, and
+`fitted_shift_exceeds_validation_limit`. These additions only refuse or widen
+uncertainty; none can license a claim.
+
+### D-078 amendment — 2026-07-21: convergence fix wave (lead adjudications)
+
+Recorded by the lead after the two-round cross-model convergence loop over
+`impl/p0-instrument-repair` (round-2 and round-3 fix waves; council log carries
+the layer accounting). Six rulings:
+
+1. **Additive causal-bound composition.** `B_effective = B_bundle +
+   B_fiducial` replaces `max(B_bundle, B_fiducial)`. The bundle-local
+   censored-constraint anchor interval and the instrument's emission-lag bound
+   sit on disjoint causal links; no containment proof exists, so `max()`
+   under-composes. `B_fiducial` itself additively folds in the calibration
+   capture's own trace-anchor bound. The prior `max()` text in this log is
+   superseded prospectively; stored summaries are never rewritten.
+2. **Identity bump, not in-place semantics change.** The additive composition,
+   fiducial protocol_v2 physics (`joint_loss_sublevel_interval_branch_v2`
+   full 2-D branch-and-bound region), and the stricter evidence-admission
+   semantics are minted as reducer `0.5.2` / AXI `0.6.2` with
+   `configs/calibration/powermetrics_fiducial/protocol_v2.json`. `0.5.1` /
+   `0.6.1` and `protocol_v1.json` remain byte-frozen replay arms.
+3. **Superseded arms are claim-ineligible.** `0.5.1`/`0.6.1` summaries refuse
+   claim-bearing use with a registered refusal (superseded max-composition
+   envelope semantics); `0.5.2`/`0.6.2` are the sole claim-eligible mints.
+4. **Registry additions (closing the F11/PENDING exception).** The closed
+   refusal vocabulary additionally includes
+   `token_count_stream_chunk_fallback` (renamed from the source-label reuse of
+   `stream_chunk_fallback`), `pulse_calibration_rollover_gate_timeout`
+   (pre-workload rollover gate timeout now refuses fail-closed, no artifact
+   minting), and `post_window_trace_tail_shorter_than_anchor_bound`
+   (reduce-time refusal when the post-window trace tail cannot support the
+   composed anchor bound; collection policy raises the minimum post-window
+   dwell to 1.0 s). These only refuse; none can license a claim.
+5. **Registry closure is one-way by design.** Every emitted spelling must be
+   registered here; a registered spelling with no current emission site (e.g.
+   `window_evidence_precheck_failed`, `cap_hit_drift_term_unavailable`) is
+   permitted — unemittable names cannot launder anything.
+6. **Member-level `claim_evidence_flags` is an all-leaf union — documented,
+   not changed.** Adjudicated a documentation defect only: the union is
+   fail-safe (it can only over-flag, never over-admit) and gating decisions
+   read the per-metric leaves. Scope documented in
+   `docs/contracts/run_bundle_layout.md`; no wire rename.
+
+### D-078 amendment — 2026-07-21 (second): two-edge envelope and confirmation-round rulings
+
+Recorded by the lead after the first confirmation round over `5093355`
+correctly withheld sign-off (fresh Sol xhigh audit; 8 confirmed findings, one
+P0). Rulings:
+
+1. **Corner-composed two-edge envelope (P0 repair).** The calibration fits
+   independent start-edge and stop-edge emission lags; a single common trace
+   shift under-covers because independent endpoint errors move energy by up
+   to `2·P·B_fiducial` even when a common shift cancels. The claim envelope
+   is now the extrema over start = `delta_common + eps_on`, stop =
+   `delta_common + eps_off` with `|delta_common| <= B_bundle` and
+   `|eps_on|, |eps_off| <= B_fiducial` independent. For nonnegative power the
+   energy is monotone in each edge separately, so exact extrema are attained
+   at the four edge corners with the common shift scanned continuously — the
+   existing breakpoint-exact scan run per corner. The per-edge corner offset
+   is `±(B_fiducial + wall_minus_monotonic_span)`: the span is a third
+   disjoint per-edge error source, folded into the corners (delta-review
+   amendment) rather than the frozen arms' cruder `2·span·maxP` additive
+   term, and the composed `anchor_bound_s` = `B_bundle + B_fiducial + span`
+   governs the tail-sufficiency gate identically. Idle-subtracted and
+   per-token envelopes additionally widen by `2·(B_fiducial + span)·P_idle`
+   because independent edges vary the subtracted idle duration (delta
+   re-audit catch). New registered method spelling for the 0.5.2/0.6.2
+   mints; v1/v2 spellings remain replay-read-only.
+2. **In-place revision of the unreleased mints.** Reducer 0.5.2 / AXI 0.6.2
+   were never merged or used for stored artifacts; their envelope semantics
+   are revised in place (no 0.5.3/0.6.3 inflation). Goldens regenerated and
+   hand-verified against the formula.
+3. **Registry additions.** The closed refusal vocabulary additionally
+   includes `negative_power_sample` (negative rail power reaching the
+   envelope/energy path breaks the monotonicity argument and refuses
+   fail-closed) and `instrument_calibration_stale` (calibration artifacts
+   now record capture wall time and a 24 h `max_age_s` validity horizon in
+   protocol_v2; claim-time verification refuses missing/invalid capture time
+   or age exceeded — a finite 40-pulse residual maximum is not an
+   out-of-sample bound without recency enforcement). Instrument-evidence
+   diagnostics additionally include `capture_time_missing_or_invalid`
+   (a v2 capture without a valid recorded capture wall time is invalid at
+   minting, with the reason stated rather than silent). All only refuse; the
+   PENDING_DECISION_LOG_REGISTRATION exception is retired with this entry.
+   Replay purity note: the 0.5.1/0.6.1 arms keep their frozen binding
+   expectation against the protocol_v2.json bytes current at their mint
+   (`REPLAY_PROTOCOL_V2_SHA256`); custody-manifest verification and the
+   staleness horizon are current-mint gates only.
+4. **Environment admission consumes the full evidence object.** The shared
+   validator fails closed on `critical_environment_passed`,
+   `reference_provenance_present`, per-run evaluation eligibility, guard
+   observations, and schema identity — and the post-run environment
+   observation passes through the failure predicate on claim/whole-window
+   paths (a post-run critical-environment failure refuses claim
+   eligibility). This closes the Window-A screensaver contamination class
+   end-to-end.
+5. **Calibration custody verified at claim time.** The reducer enforces the
+   validation-manifest reference: in-bundle containment, manifest hash, and
+   presence + sha256 of every manifest member; any failure refuses as
+   `instrument_calibration_invalid`. Current-era (0.5.2/0.6.2) claim-bearing
+   use requires a protocol_v2 calibration artifact.
+6. **Collection floors.** The 1.0 s post-window dwell minimum is enforced on
+   every collection path (controller default, schema minimum, campaign-policy
+   validation); sub-minimum configs refuse at validation. Scope spelling
+   (delta-review adjudication): controller/CLI pre-collection rejection
+   applies wherever powermetrics telemetry collects; mock-backend runs are
+   not dwell-gated at the controller (mock telemetry cannot reach any claim
+   path), while the campaign-policy schema minimum applies universally. Inner
+   phase/item/block/level window entries carry the whole-trace
+   anchor/calibration/tail barrier stamps whenever the top-level barrier
+   fires.
+7. **Cooldown terminal-evidence normativity documented.** The required
+   terminal JSONL row fields (`release`, `release_criteria_met_late`), the
+   cap-first precedence rule ("the cap is causal and wins"), and rejection
+   semantics are contract text in `docs/contracts/run_bundle_layout.md`,
+   matching `joulewise/cooldown.py` exactly.
+
+### D-078 amendment — 2026-07-21 (third): provenance authentication rulings
+
+Recorded by the lead after confirmation round 2 over `233e9e3` withheld
+sign-off (9 confirmed; the physics verified clean from every lens — all
+findings are provenance/governance). Rulings, implemented in the round-3 fix
+wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
+
+1. **Declared facts are authenticated against primary bytes.** The
+   calibration's declared `capture_wall_time_s` must agree (±1 s) with the
+   capture time independently derived from the hash-verified source events —
+   a stale calibration can no longer be relabeled fresh (the P0).
+2. **Freshness covers the whole measurement.** The 24 h horizon binds both
+   `run_started` and the measured window END: `capture <= run_started` and
+   `window_end <= capture + max_age_s`, inclusive. Pre-run delays cannot
+   carry sampling past the declared validity of its calibration.
+3. **Version identity is validated generically.** Generic bundle validation
+   checks `reducer_version` against the closed known set and the §8.1
+   version/event-semantics pairing rules as a validation-time structured
+   problem (no wire-schema enum — frozen-arm byte replay preserved); an
+   unsupported `--reducer-version` yields the standard structured refusal,
+   never a traceback.
+4. **Stored verdicts are re-derived, never trusted.** The whole-window
+   verifier rejects duplicated NEG-8 core members (occurrence-count
+   semantics) and re-derives the bracket verdict from member evidence;
+   disagreement with the stored row is `whole_window_verdict_conflict`.
+   Delta-review strengthening (lead ruling): the re-derivation tolerances
+   come from the repo-REGISTERED campaign policy whose file hash matches the
+   row's `policy_sha256` — the one trust anchor that does not terminate at
+   bundle custody. Unknown policy hashes, and rows whose self-asserted
+   tolerances disagree with the registered policy, refuse
+   `whole_window_verdict_provenance_invalid` before re-derivation. The
+   custody boundary is otherwise explicit: a forger with bundle write access
+   can rewrite row-internal hashes consistently, but cannot mint a matching
+   tracked policy file.
+5. **Protocol identity is shape-authenticated.** A v2 `protocol_id` requires
+   the v2 estimator identity, capture/horizon fields, and v2 residual shape;
+   v1-shaped bodies relabeled v2 refuse `instrument_calibration_invalid`.
+6. **Admission attempts have timing semantics.** Attempt-ledger rows carry
+   strictly increasing, non-overlapping declared windows on the strict path;
+   violations refuse `environment_admission_missing`.
+7a. **(Fourth-wave addendum — claim-aggregation rulings, same date.)** After
+   confirmation round 3 over `0925480` (instrument core verified defensible
+   on fresh head collections by every lens; all four P0s in the
+   claim-aggregation layer), the lead ruled: (1) floors/MDEs widen by EXACT
+   linear-corner evaluation over member envelope intervals — residual
+   widening `w_i·(n−1)/n + Σ_{j≠i}w_j/n`, contrast widening
+   `Σ|c_i|·w_i` — never a max-width shortcut, and the dominance refusal
+   fires against the widened quantity; (2) admission is causally bound to
+   its run: the final attempt window ends at-or-before window start within
+   `MAX_ADMISSION_GAP_S = 600` (inclusive), the post-run observation is
+   captured at-or-after window end, and attempt windows must contain their
+   stage's recorded idle-capture interval; (3) the whole-window verifier re-derives CPU admission and
+   adapter continuity from member-bundle primary evidence, refuses nonempty
+   condition lists and undecodable log lines (laundering must require
+   consistent cross-bundle forgery, never a one-line edit — full erasure
+   resistance inside bundle custody is impossible and is recorded as the
+   honest boundary); (4) NEG-8 reference energies are re-reduced from
+   primary evidence at the current mint at claim time (minutes-scale cost
+   accepted), with canonical-workload identity (`canonical_neg8_workload` +
+   `scientific_config_sha256` against the custody-bound config) enforced;
+   (5) the four byte-frozen goldens carry executable sha256 pins.
+   Round-4 confirmation follow-ups (same date): the universal
+   `clock_anchor_unresolved` barrier covers the `0.4.1`/`0.4.2` arms (every
+   pre-repair wire, not only 0.5.0/0.6.0 — the former 0.4.x escape is
+   closed and its test assertion inverted); the production trace-margin
+   gate uses the full three-term composed bound including the
+   wall-minus-monotonic span; campaign `ready_for_analysis` requires a
+   registered claim-eligible mint (`0.5.2`/`0.6.2`; mock telemetry exempt —
+   it can never bear claims). Recorded custody boundary: the 24 h
+   calibration horizon compares host wall time, so an operator with host
+   time control can evade it — accepted (host time integrity is an
+   operator obligation, like bundle custody itself).
+
+7b. **(Fifth-wave addendum — calibration epistemics, same date.)** After
+   confirmation round 5 over `09b5de6` (the P0 was statistical, not
+   mechanical: a 40-pulse sample maximum is not an out-of-sample
+   deterministic bound — 87.1% confidence on the 95th percentile vs the
+   D-054 doctrine's n=59 for 95/95), the lead ruled:
+   (1) **protocol_v3** raises the pulse count to 59, satisfying the repo's
+   own nonparametric 95/95 doctrine; v3 is required for future
+   claim-bearing calibration captures (v2 artifacts stay verifiable as this
+   arc's validation evidence).
+   (2) **B_fiducial's epistemic status is stated honestly everywhere**: a
+   95/95 nonparametric calibration bound, deterministic for claims only
+   under REGISTERED transfer assumptions — T1 binding-vector stationarity,
+   T2 the authenticated 24 h horizon, T3 load-regime transfer (calibration
+   pulses are GPU-matmul under CPU-light load; sustained mixed-load
+   transfer is an assumption; a loaded-calibration protocol variant is the
+   registered roadmap mitigation).
+   (3) **Calibration bracketing is required for claim-bearing collections**:
+   two valid artifacts bracketing the window (pre at-or-before start, post
+   at-or-after end, each within its own horizon), consumed as
+   `max(pre, post)`, refusing `instrument_calibration_bracket_missing` or
+   on bracket drift beyond `calibration_bracket_max_drift_s` (production
+   10 ms). Single-calibration reduction remains valid only for
+   non-claim-bearing probe/exploratory use.
+   (4) **Environment state is window-enforced**: per-interval
+   thermal-pressure records are scanned over the measured window
+   (`thermal_pressure_elevated_in_window` refusal); admission objects are
+   recomputed from their embedded snapshots — a stored `eligible: true` is
+   never trusted.
+   (5) **Loop-termination doctrine**: convergence sign-off means zero
+   UNADDRESSED P0/P1, where "addressed" includes a registered limitation
+   with recorded justification, adjudicated by the lead. A physical
+   instrument's uncertainty budget always rests on stated assumptions;
+   the honest end state is registered assumptions, not infinite hardening.
+   T3 is the first entry in that register.
+   Round-6 follow-up (same date): the bracket maximum must be CONSUMED, not
+   merely recorded — a claim refuses `calibration_bracket_exceeds_minted_bound`
+   whenever `max(B_pre, B_post)` exceeds any member envelope's minted
+   effective bound (the member must be re-reduced under the dominating
+   calibration); the whole-window producer refuses duplicated member
+   occurrences (occurrence-count doctrine at the producer, not just the
+   claim verifier); the registered-policy trust anchor refuses
+   duplicate-JSON-key policy bytes; and the standalone reducer horizon
+   predicate upper-bounds `run_started` as well as the window end.
+   Round-7 follow-ups (same date): the operative floor is the EXACT maximum
+   of the complete D-054 guarded floor over the joint per-member interval
+   corners (every component is convex in the member vector, so vertex
+   enumeration is exact; n <= 16 enumerated, larger widths refuse) — the
+   linear-corner residual widening alone under-covered the Student-t
+   prediction component; claim-licensing whole-window evidence requires the
+   registered policy to be production-profile AND claim-bearing (exploratory
+   rows can never license claims); the bracket-dominance gate authenticates
+   each member's consumed bound from hash-verified calibration evidence
+   (never the mint-time metadata scalar, whose disagreement is itself
+   provenance-invalid); claim brackets accept protocol v3 artifacts ONLY
+   (v2 stays valid as reduction/validation evidence).
+   Round-8 follow-ups (2026-07-22): calibration identity is SEMANTICALLY
+   authenticated, not just byte-authenticated — every calibration command
+   event's two clocks (top-level `timestamp_s` and embedded ClockStamp
+   epoch) must agree within 1 s on the strict path, and any event carrying
+   a ClockStamp is skew-checked (the live artifact agrees within
+   0.205 ms; a shifted-freshness relabel now refuses); claim-time
+   rederivation authenticates the EXECUTED v3 schedule (pulse durations,
+   the deterministic van-der-Corput gap sequence within ±0.25 s, ≥4.5 s
+   commanded-quiet baselines) so phase-locked or degenerate captures cannot
+   claim the 95/95 identity; and the canonical floor/MDE artifact carries
+   the corner-widened floor additively (validator recomputes it; the
+   analysis engine consumes the WIDENED guarded floor as operative) —
+   closing the honest-artifact-fails-closed gap so a sound end-to-end
+   floor/MDE handoff exists.
+   Registry additions for this wave: `instrument_calibration_bracket_missing`,
+   `calibration_bracket_exceeds_minted_bound`,
+   (claim-bearing window not bracketed by two authenticated, fresh
+   calibration artifacts, or bracket drift beyond the registered tolerance)
+   and `thermal_pressure_elevated_in_window` (per-interval thermal-pressure
+   records non-nominal — or missing on the strict path — anywhere in the
+   admission-to-window span). Both only refuse; the
+   PENDING_DECISION_LOG_REGISTRATION exception for them is retired with
+   this entry.
+
+7. **Sign-off evidence must be head-minted.** Any artifact or re-reduction
+   quoted as validation evidence for a head must be regenerated AT that head
+   (the pre-233e9e3 rederived calibration artifact lacks the horizon fields
+   the head requires, and the probe re-reductions predate the strict
+   calibration gates — both are re-minted at the final head before the
+   sign-off record is written). Claim-bearing measurement additionally
+   requires fresh live [QUIET-MAC] calibration under protocol v3
+   (59 pulses, fifth-wave addendum), bracketing the window, within 24 h of
+   collection.
+
+8. **Confirmation round 9 (2026-07-22, FINAL under the Ed-ratified cap) —
+   outcome and registered limitation L1.** The round-9 review over head
+   040ca3a confirmed the fiducial chain, reduce-side verification taxonomy,
+   and contract coherence clean, with ONE surviving blocker (CR9-1,
+   repro-backed, lead-reproduced): the canonical floor/MDE artifact is
+   SELF-ATTESTING about its admissible half-widths and campaign membership —
+   `validate_floor_artifact` recomputes widened floors only from
+   artifact-internal widths, and evidence binding authenticates identities,
+   hashes, and ordering but neither rederives source widths nor requires
+   complete governed campaign membership. A substituted artifact with
+   understated widths (or one omitting a member) validates, binds, and
+   licenses an exact claim floor. Per the loop-termination doctrine
+   (clause 5), the lead adjudicates this a REGISTERED LIMITATION rather than
+   a tenth round:
+   - **L1 (registered): canonical floor artifacts are not independently
+     claim-licensing.** Until floor↔extraction binding lands, a
+     claim-bearing analysis may consume a floor artifact ONLY when it was
+     produced by the governed extraction in the same custody session as the
+     analysis (same run manifest; extraction gates demonstrably executed).
+     Standalone or externally supplied floor artifacts are non-claim-bearing
+     evidence. Justification: the exposure is artifact substitution or a
+     defective producer BETWEEN extraction and analysis; an honest
+     same-session pipeline computes widths and membership under the already
+     -hardened extraction gates, so no measurement this program will make
+     under L1's workflow rule is affected. The gap is a third-party
+     verifiability deficit, not an instrument-physics defect.
+   - **Queued fix (next cycle, P1):** bind each canonical floor cell to its
+     extraction report and source-member disposition (or rederive the
+     extraction gates and widths at binding), refusing on any stored
+     width/corner mismatch or membership deviation, with integration
+     regressions for width substitution and member omission (TASK_QUEUE
+     FLOOR-BIND-01).
+   Round-9 verification note: the focused 357-test review surface passed at
+   the head in-session; the lead's full-suite gate over the identical tree
+   content (2088 passed / 15 skipped / 1570 subtests / 0 failures)
+   stands as the aggregate confirmation.

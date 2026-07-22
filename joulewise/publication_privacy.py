@@ -113,6 +113,7 @@ _METADATA_KEYS = frozenset(
         "marker_to_first_sample_phase_bound_s",
         "marker_to_last_sample_phase_bound_s",
         "idle_drift_bound_w",
+        "trace_window_margins",
         "workload_observed",
         "workload_provenance",
         "suite",
@@ -136,6 +137,7 @@ _METADATA_RETAIN_KEYS = frozenset(
         "marker_to_first_sample_phase_bound_s",
         "marker_to_last_sample_phase_bound_s",
         "idle_drift_bound_w",
+        "trace_window_margins",
     }
 )
 
@@ -428,6 +430,31 @@ def _audit_metadata(path: Path) -> None:
     ):
         if key in value and value[key] is not None and not isinstance(value[key], (int, float)):
             raise PrivacyAuditError(f"metadata.json.{key} is not numeric or null")
+    margins = value.get("trace_window_margins")
+    if margins is not None:
+        expected_margin_keys = {
+            "requested_post_window_dwell_s",
+            "achieved_pre_window_margin_s",
+            "achieved_post_window_margin_s",
+        }
+        if not isinstance(margins, dict) or set(margins) != expected_margin_keys:
+            raise PrivacyAuditError(
+                "metadata.json.trace_window_margins must have the exact governed keys"
+            )
+        for key, margin in margins.items():
+            if (
+                isinstance(margin, bool)
+                or not isinstance(margin, (int, float))
+                or not math.isfinite(float(margin))
+            ):
+                raise PrivacyAuditError(
+                    f"metadata.json.trace_window_margins.{key} is not finite numeric evidence"
+                )
+        if float(margins["requested_post_window_dwell_s"]) < 0.0:
+            raise PrivacyAuditError(
+                "metadata.json.trace_window_margins.requested_post_window_dwell_s "
+                "must be nonnegative"
+            )
     config_hash = value.get("config_sha256")
     if config_hash is not None and (
         not isinstance(config_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", config_hash)

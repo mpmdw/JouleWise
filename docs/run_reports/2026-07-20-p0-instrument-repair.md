@@ -1,13 +1,13 @@
-# 2026-07-20 — Phase 0 instrument repair: anchor estimator v2, energy envelopes, convergence sign-off, first live pulse-fiducial calibration
-
-DRAFT — sections marked [PENDING] are filled at checkpoint close this session.
+# 2026-07-20/21 — Phase 0 instrument repair: anchor estimator v2, two-edge energy envelopes, live pulse-fiducial calibration, cross-model convergence
 
 Ed-directed ("spend serious time making sure the measurement instruments are
 rigorous"; ultracode authorized). Executes roadmap Phase 0
 (`docs/phase_2/splitwise_replication_roadmap.md`) against the D-078 soundness
-gate. Branch: `impl/p0-instrument-repair` (from main `ccfa5c2`).
+gate. Branch: `impl/p0-instrument-repair` (from main `ccfa5c2`); **signed off
+2026-07-22 at `040ca3a`** after nine confirmation rounds (one registered
+limitation, L1 — see D-078 clause 8).
 
-## Build arc
+## Build arc (2026-07-20)
 
 1. **Design:** Sol xhigh pre-decision consult (thread 019f7df3-8120) rejected
    the lead's naive native-timestamp anchor (stamps are 1-second-quantized
@@ -37,47 +37,165 @@ gate. Branch: `impl/p0-instrument-repair` (from main `ccfa5c2`).
    midpoint matching the branch to the microsecond; corrected gross 7.6639 J
    (branch: 7.664159 J) vs the defective 0.274 J; envelope scan
    [6.765, 7.681] J with the maximum at an interior breakpoint.
-5. **Convergence sign-off (ultracode workflow):** rounds of one fresh-thread
-   Sol xhigh whole-instrument adversarial audit + two Fable clean-room
-   physics recomputers + two Sol high sweeps (contract, execution);
-   P0/P1 findings refuted by two distinct lenses; Sol high fix rounds with
-   delta re-audits. CHECKPOINT STATE (Ed stop, 2026-07-20): round 1 ran
-   fully (findings confirmed -> Sol high fix round -> delta re-audit);
-   round-1 fix work lead-committed as `ca6861b` after adjudication (the
-   worker-drafted D-078 closed-vocabulary amendment ADOPTED; two stray
-   scratch files excluded; fix agents had drafted doc changes outside a
-   declared scope — lead reviewed each; convergence fix prompts must carry
-   exhaustive WRITE_SCOPE next run, lead error recorded). Round 2 was
-   mid-flight (final read-only sweep) when Ed called the checkpoint; the
-   workflow was stopped cleanly. **Convergence sign-off NOT yet reached** —
-   resume workflow wf_c5a2e6c8-147 (script in the session workflows dir)
-   or relaunch round 2 fresh next session.
 
-## Live instrument validation (lead-owned [QUIET-MAC], Ed pre-authorized window)
+## Live instrument validation (lead-owned [QUIET-MAC], Ed pre-authorized window, 2026-07-20)
 
-- **Pulse-fiducial calibration:** NOT RUN — Ed's checkpoint stop arrived
-  before the quiet window opened. The chain is staged and ready:
-  scratchpad `pulse_run.sh` (idle-wait -> displaysleepnow -> 
-  `scripts/validate_powermetrics_fiducial.py --allow-live --power-policy
-  ac_high_power` from the it-p0 worktree with the main venv). FIRST ACTION
-  next quiet window.
-- **Stability probe (probe-only runs root, non-claim-bearing):** NOT RUN
-  (same stop). Config dir staged in the session scratchpad (`stability/`:
-  NEG-8 + short ×2 + mid ×1 with a probe-labeled order manifest). Runs
-  right after the pulse calibration; the acid test is the short cell
-  reading ~8 J with an honest envelope (defective corpus: 0.274 J) while
-  correctly REMAINING cadence-ineligible.
+- **Pulse-fiducial calibration VALID**
+  (`runs/instrument_validation/20260720T185237-462076b9/`, worktree runs
+  root): 40/40 commanded pulses detected, 0 spurious plateaus, residual
+  median 10.5 ms / p95 19.0 ms. Declared B_fiducial 24.0028 ms under the v1
+  method; head re-derivation from the same sealed raw bytes under protocol_v2
+  (full 2-D `joint_loss_sublevel_interval_branch_v2` region + capture
+  anchor-bound composition) gives **B_fiducial = 27.373 ms** — the value to
+  quote (artifact re-emitted offline via the new `--rederive-from` mode as
+  `runs/instrument_validation/20260721T042731-rederive-v2/`; no second live
+  run needed).
+- **Stability probe (probe-labeled, non-claim-bearing), 4/4 usable:** live
+  short cells 7.278 / 7.750 J (plus 7.688 J in the earlier probe root), mid
+  gross 38.060 J, NEG-8 idle bracket 38.521 J. The acid test passed: the
+  short cell reads ~7.3–7.8 J with an honest envelope where the defective
+  corpus recorded 0.274 J, while correctly REMAINING cadence-ineligible.
+  Sealed-corpus coherence: the defective-era mid reduction (24.07 J) had an
+  admissible corrected range reaching ~37.7 J; the live repaired measurement
+  landed at 38.06 J, and an independent recomputation of a sealed recal5 mid
+  cell gave 38.51 J.
+- **Instrument refuses honestly:** at the head where the tail gate was first
+  reachable, the mid cell's 46.1 ms post-window tail could not support the
+  ~71.0 ms composed requirement (B_bundle + B_fiducial + span) and the
+  reducer refused `post_window_trace_tail_shorter_than_anchor_bound` rather
+  than licensing the claim; a clean-room recompute confirmed the gate flips
+  exactly at the composed bound, erring toward refusal. At later heads the
+  strict calibration gates (protocol-v2-only + freshness horizon) fire
+  first on these pre-head probe artifacts — every layer fails closed
+  (collection policy now enforces a 1.0 s post-window dwell so future cells
+  cannot hit the tail case). The unbound first probe root correctly refused
+  `instrument_calibration_missing`.
 
-## Checkpoint state
+## Convergence loop (2026-07-20 → 21)
 
-Branch `impl/p0-instrument-repair` pushed at `ca6861b` (streams + C2 +
-round-1 fixes; last lead-run full suite at `d1c1538`: `Ran 1918 tests,
-OK (skipped=21)`; the round-1 fix commit's suite gate is owed at round-2
-resume). No PR yet — opens after convergence sign-off. Remaining before
-any re-collection, in order: (1) convergence round 2 to sign-off (both
-model families clean at P0/P1); (2) lead final pass + PR per the
-operation-loop gate shape; (3) live pulse-fiducial calibration (staged);
-(4) stability probe (staged); (5) window licenses from measured
-B_effective; then Window-A re-collection per the roadmap. Salvage of the
-288-bundle corpus remains a separate Ed ruling under D-078; DF-TELEM
-unchanged.
+Round shape: fresh Sol xhigh whole-instrument adversarial audit + Fable
+clean-room physics recomputers + Sol high contract/execution sweeps;
+P0/P1 findings refuted by two distinct lenses; Sol fix rounds under binding
+lead rulings; mandatory delta re-audit of every fix round; sign-off only when
+a full confirmation round confirms zero P0/P1.
+
+- **Round 1** (2026-07-20, checkpointed): fixes lead-committed as `ca6861b`.
+- **Rounds 2–3** (overnight): ~160 agents; 27 confirmed P0/P1 fixed —
+  headline items: additive causal-bound composition minted as reducer
+  0.5.2 / AXI 0.6.2 (0.5.0/0.6.0/0.5.1/0.6.1 byte-frozen replay arms),
+  calibration physics re-derivation at claim time, whole-window
+  attempt-ledger validation, environment-admission closed vocabulary,
+  cooldown physics rederivation, derived-output clobber guards, fail-closed
+  rollover gate. Landed as `5093355` (suite 2003 passed / 0 failures).
+- **Confirmation round 1** over `5093355`: correctly WITHHELD sign-off — 8
+  confirmed findings, headline **P0: the claim envelope modeled one common
+  trace shift while the calibration measures independent start/stop edge
+  lags** (omits up to 2·P·B_fiducial; NEG-8 demo: attainable 38.831 J vs
+  licensed 38.574 J). Fixed under lead rulings as the **corner-composed
+  two-edge envelope** (exact by per-edge monotonicity; corners at
+  ±(B_fiducial + wall-minus-monotonic span), common shift scanned
+  breakpoint-exact per corner), plus: negative-power refusal, 24 h
+  calibration validity horizon (`instrument_calibration_stale`), claim-time
+  custody-manifest verification, environment-admission full-object
+  fail-closed including the post-run observation, universal 1.0 s dwell
+  floor, declared NEG-8 role provenance, runtime-observed
+  binding_observations.
+- **Delta re-audits caught real fix-round defects every time they ran** (the
+  standing doctrine held): a lost early-return changing frozen replay
+  semantics (round 2), and in the confirmation-fix wave a frozen-arm replay
+  purity break (custody/protocol-sha checks firing on 0.5.1/0.6.1 — one
+  direction admission-widening) plus the idle-subtracted envelope
+  under-coverage (duration varies under independent edges) — the latter two
+  found by the delta agent, the corner-span omission found by the lead's own
+  diff review. All bench-fixed with defect-shaped regressions. Landed as
+  `233e9e3` (suite 2027 passed / 0 failures).
+- **Confirmation round 2** over `233e9e3`: withheld sign-off with 9 confirmed
+  findings — but the character shifted decisively: the physics verified clean
+  from every lens (clean-room recompute, dense attainable-set scans,
+  sealed/live coherence), and every finding is provenance/governance:
+  headline **P0: the declared calibration capture time was never
+  authenticated against the raw event bytes**, so a stale calibration could
+  be relabeled fresh and defeat the 24 h horizon. Fixed in the round-3 wave
+  under the third D-078 amendment (capture-time authentication ±1 s against
+  hash-verified events; horizon binding the measured-window end; generic
+  version-coherence validation; structured CLI refusals; whole-window
+  verdict re-derivation + NEG-8 duplicate rejection; protocol shape
+  authentication; attempt-window timing semantics).
+- **Confirmation round 3** over `0925480`: withheld sign-off with 7 confirmed
+  — and the frontier moved up a layer again: the physics lens explicitly
+  recorded "the instrument CAN take a defensible measurement on a fresh head
+  collection"; all four P0s sit in the CLAIM-AGGREGATION layer (floor
+  statistics used a max-width shortcut instead of exact linear-corner
+  widening over member envelopes; admission evidence was not causally bound
+  to its measured window; the whole-window verifier trusted stored
+  CPU/adapter labels; NEG-8 references were read from stored summaries
+  rather than re-reduced from primary evidence). Fixed in the round-4 wave
+  under the fourth D-078 amendment addendum (exact corner widening; 600 s
+  causal admission gap; primary-evidence re-derivation throughout;
+  frozen-golden checksum pins).
+
+Decision-log record: four 2026-07-21 D-078 amendments/addenda (identity bump
++ vocabulary registrations; two-edge envelope + horizon/custody/dwell
+rulings; provenance authentication; claim-aggregation rulings).
+
+## Consequences for the measurement program
+
+- Quote **27.4 ms** (never 24.0) as the instrument emission-lag bound.
+- Effective per-window anchor bound = B_bundle + B_fiducial + span
+  (additive; disjoint causal links). Live request-level bounds land around
+  68–86 ms; quarter-window claim gating therefore keeps short (~130 ms)
+  phase windows ineligible — request-level and longer windows are the
+  claim-bearing surface, as designed.
+- The 24 h calibration validity horizon means **Window-A re-collection needs
+  a fresh [QUIET-MAC] pulse calibration** (chain staged; ping Ed first).
+- Live probe summaries were minted pre-fix; envelopes must be re-quoted from
+  a final-head re-reduction before any claim-adjacent use (the probe roots
+  are probe-labeled and non-claim-bearing regardless).
+- Salvage of the 288-bundle corpus remains a separate Ed ruling under D-078;
+  DF-TELEM unchanged.
+
+## Rounds 4-9 and sign-off (2026-07-21 → 22)
+
+- **Rounds 4-7** (fix waves `d77ea6d` round 5, `232438b` round 6,
+  `e995c82` round 7; round 4 landed inside the `0925480`→`d77ea6d`
+  sequence): the canonical full-arc finding trajectory is
+  **27→8→9→7→3→6→3→5→1** (rounds 2-9; round 8's 5 and round 9's 1 are
+  described below). Headline closures: calibration
+  epistemics (the 95/95 identity's transfer assumptions T1-T3 registered
+  explicitly), pre/post calibration BRACKETING required for claim-bearing
+  collections with the bracket maximum CONSUMED (`max(B_pre, B_post)` must
+  not exceed any member envelope's minted bound), protocol v3 (59 pulses),
+  exact corner-maximized D-054 floors over joint per-member interval
+  corners, and claim-licensing policy hardening. Every fix wave received a
+  §C-028 delta re-audit; the last two ran fully clean.
+- **Round 8** (this wave, landed `040ca3a`, suite 2088/0): four rulings —
+  dual-clock semantic authentication of every calibration command event
+  (±1 s, shifted-freshness relabels refuse), executed-schedule
+  authentication (durations, van-der-Corput gaps ±0.25 s, ≥4.5 s quiet
+  baselines; the sealed live v2 artifact passes empirically), corner-widened
+  floors carried additively with full-corner validator recomputation and
+  engine consumption, envelope-method v3 as the sole current mint. The
+  wave's own delta re-audit (3 lenses, 8 refuter runs of which 3 were
+  filter-killed and all 3 recovered by rephrased relaunch) confirmed and
+  fixed two more: command-event ClockStamp physical
+  sanity (a negative half-width could understate B_fiducial by ~3 µs —
+  killed), OverflowError containment, plus claim-consumption v3 eligibility
+  and two test-wiring gaps. Three findings refuted, one narrowed to a
+  registered nit (ULP-scale duration boundary, fail-closed).
+- **Round 9 (FINAL, Ed-ratified cap)** over `040ca3a`: fiducial chain,
+  reduce taxonomy, and contract coherence confirmed clean; ONE surviving
+  blocker (CR9-1, lead-reproduced): canonical floor artifacts are
+  self-attesting about admissible widths and campaign membership.
+  Adjudicated as **registered limitation L1** (floor artifacts are
+  claim-licensing only from same-custody-session governed extraction) with
+  the binding fix queued as FLOOR-BIND-01 (P1). D-078 clause 8 records the
+  ruling and justification.
+
+## State at writing
+
+Code/test sign-off head `040ca3a`; docs close-out head `debc6d2`
+(RUN_STATE/PROJECT_STATUS/kernel refresh included); **PR #79** open for
+Ed-named merge. Remaining after merge: fresh [QUIET-MAC] 59-pulse v3
+calibration BRACKETING Window-A re-collection per the roadmap (ping Ed
+to schedule — no measurements run without the window); FLOOR-BIND-01
+retires limitation L1.

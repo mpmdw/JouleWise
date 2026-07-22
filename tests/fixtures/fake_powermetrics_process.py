@@ -53,11 +53,19 @@ def main() -> int:
     output = Path(args.o)
     interval_s = args.i / 1000.0
     index = 0
-    previous_endpoint_s = time.monotonic() - interval_s
+    # Record 0's averaging window opens at process start: real powermetrics
+    # never reports support from before its own spawn, and the D-078 causal
+    # constraint rejects such data.
+    previous_endpoint_s = time.monotonic()
     with output.open("wb", buffering=0) as handle:
         while args.n is None or index < args.n:
             if index == 0 and args.n is None and mode == "wide":
                 time.sleep(1.2)
+            if index == 0:
+                # Real powermetrics emits its first record only after one full
+                # averaging interval; record 0's window END must causally
+                # follow the spawn by at least elapsed_ns (D-078).
+                time.sleep(interval_s)
             if index:
                 time.sleep(interval_s)
             document = dict(documents[index % len(documents)])
@@ -66,6 +74,17 @@ def main() -> int:
                 1, int((endpoint_s - previous_endpoint_s) * 1_000_000_000)
             )
             previous_endpoint_s = endpoint_s
+            # Keep the delta-aggregate invariant power * elapsed == energy;
+            # the D-078 estimator fails closed on inconsistent records.
+            processor = dict(document["processor"])
+            elapsed_s = document["elapsed_ns"] / 1_000_000_000.0
+            for rail, counter in (
+                ("cpu_power", "cpu_energy"),
+                ("gpu_power", "gpu_energy"),
+                ("ane_power", "ane_energy"),
+            ):
+                processor[counter] = round(float(processor[rail]) * elapsed_s)
+            document["processor"] = processor
             native_timestamp = datetime.now(UTC)
             if mode == "inconsistent":
                 native_timestamp += timedelta(seconds=60)
@@ -75,12 +94,21 @@ def main() -> int:
                 gpu["idle_ratio"] = 0.0
                 gpu["freq_hz"] = 1200.0
                 document["gpu"] = gpu
-            if mode == "rail_only":
+            # Keep the pre-run admission capture complete so this mode proves
+            # CPU/GPU idle on merit.  Only the post-run sentinel is rail-only,
+            # which withholds the drift term without laundering admission.
+            if mode == "rail_only" and invocation >= 3:
                 document.pop("gpu", None)
             if mode == "extreme_post" and invocation >= 4:
                 processor = dict(document["processor"])
                 for rail in ("cpu_power", "gpu_power", "ane_power"):
                     processor[rail] = 1_000_000_000_000.0
+                    counter = rail.replace("_power", "_energy")
+                    processor[counter] = round(
+                        1_000_000_000_000.0
+                        * document["elapsed_ns"]
+                        / 1_000_000_000.0
+                    )
                 document["processor"] = processor
             if index:
                 handle.write(b"\0")

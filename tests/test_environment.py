@@ -869,13 +869,36 @@ class DisplayAsleepDerivationTests(unittest.TestCase):
                 return Completed("{\n    idleTime = 0;\n}\n")
             if command[:2] == ["ioreg", "-c"]:
                 return Completed('"HIDIdleTime" = 242818958916\n')
+            if command[:2] == ["ioreg", "-r"]:
+                return Completed(
+                    '"ExternalConnected" = Yes\n'
+                    '"AdapterDetails" = {"Watts"=140,"Description"='
+                    '"140W USB-C Power Adapter"}\n'
+                )
             raise AssertionError(command)
 
         with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
-            observation = collect_environment_guard_observation()
+            observation = collect_environment_guard_observation(
+                include_adapter_power=True
+            )
 
         self.assertEqual(observation["display_power_state"], "all_asleep")
         self.assertEqual(observation["errors"], {})
+        # T0.5 idle-admission core: the guard observation records the adapter
+        # wattage surface per admission observation.
+        self.assertEqual(observation["power"]["adapter_watts"], 140)
+        self.assertEqual(
+            observation["power"]["adapter_description"], "140W USB-C Power Adapter"
+        )
+        self.assertEqual(
+            observation["adapter_power_observation"],
+            {
+                "source": "admission_guard_observation",
+                "adapter_watts": 140.0,
+                "adapter_description": "140W USB-C Power Adapter",
+                "power_source": None,
+            },
+        )
 
     def test_guard_observation_profiler_failure_fails_closed(self) -> None:
         from joulewise.environment import collect_environment_guard_observation
@@ -897,12 +920,74 @@ class DisplayAsleepDerivationTests(unittest.TestCase):
                 return Completed("{\n    idleTime = 0;\n}\n")
             if command[:2] == ["ioreg", "-c"]:
                 return Completed('"HIDIdleTime" = 242818958916\n')
+            if command[:2] == ["ioreg", "-r"]:
+                return Completed("", returncode=1)
             raise AssertionError(command)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            observation = collect_environment_guard_observation(
+                include_adapter_power=True
+            )
+
+        self.assertEqual(observation["display_power_state"], "any_awake")
+        # Adapter capture stays fail-soft: probe failure leaves None fields
+        # (the production admission policy fails closed on unknown wattage).
+        self.assertIsNone(observation["power"]["adapter_watts"])
+        self.assertIsNone(observation["adapter_power_observation"]["adapter_watts"])
+        self.assertIn("ioreg_battery", observation["errors"])
+
+    def test_guard_observation_default_skips_adapter_probe(self) -> None:
+        """Pre-hookup callers keep the exact legacy probe sequence AND shape.
+
+        Regression (fix round 1): the default-off observation must NOT carry
+        the ``power`` block or ``adapter_power_observation``.  The campaign
+        verdict's adapter-continuity scan treats any guard dict containing
+        ``power`` as an adapter observation, so emitting an all-None block
+        under the default flag silently changed the stored shape and would
+        contribute unverifiable unknown-wattage observations once a
+        require_known_wattage extension is configured.
+        """
+
+        from joulewise.environment import collect_environment_guard_observation
+
+        commands: list[list[str]] = []
+
+        def fake_run(command, **kwargs):
+            class Completed:
+                returncode = 0
+                stderr = ""
+
+                def __init__(self, stdout):
+                    self.stdout = stdout
+
+            commands.append(list(command))
+            if command[:2] == ["ioreg", "-r"]:
+                raise AssertionError(
+                    "adapter probe must not run without include_adapter_power"
+                )
+            return Completed("")
 
         with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
             observation = collect_environment_guard_observation()
 
-        self.assertEqual(observation["display_power_state"], "any_awake")
+        self.assertNotIn(
+            ["ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"], commands
+        )
+        # Legacy-shape equality: the adapter surface is absent entirely.
+        self.assertNotIn("power", observation)
+        self.assertNotIn("adapter_power_observation", observation)
+        self.assertEqual(
+            set(observation),
+            {
+                "display_power_state",
+                "screensaver_engaged",
+                "screensaver_module",
+                "screensaver_delay_s",
+                "hid_idle_s",
+                "display",
+                "errors",
+            },
+        )
 
 
 class PmsetPowerModeParsingTests(unittest.TestCase):
