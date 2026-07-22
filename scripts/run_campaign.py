@@ -3638,13 +3638,17 @@ def _whole_window_campaign_membership(
         if group["selection_invalid"]:
             continue
         using_selection = bool(group["selected_bundle_ids"])
-        bundle_ids = list(
-            dict.fromkeys(
-                group["selected_bundle_ids"]
-                if using_selection
-                else group["bundle_ids"]
-            )
+        raw_bundle_ids = list(
+            group["selected_bundle_ids"]
+            if using_selection
+            else group["bundle_ids"]
         )
+        # Occurrence-count doctrine at the PRODUCER too: a manifest listing
+        # the same bundle twice is ambiguous evidence, never silently
+        # deduplicated into a passed verdict (confirmation-round-6 P1).
+        if len(set(raw_bundle_ids)) != len(raw_bundle_ids):
+            continue
+        bundle_ids = raw_bundle_ids
         source_manifests = (
             group["selection_manifests"] if using_selection else group["manifests"]
         )

@@ -514,7 +514,16 @@ def _registered_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
         if hashlib.sha256(raw).hexdigest() != policy_sha256:
             continue
         try:
-            payload = json.loads(raw)
+            # Duplicate JSON keys parse last-key-wins under plain json.loads,
+            # so a hash would authenticate ambiguous bytes; the trust anchor
+            # must refuse them (confirmation-round-6 P1).
+            from joulewise.determinism_gate import (  # noqa: PLC0415
+                _reject_duplicate_json_pairs,
+            )
+
+            payload = json.loads(
+                raw, object_pairs_hook=_reject_duplicate_json_pairs
+            )
         except (UnicodeDecodeError, ValueError):
             return None
         return payload if isinstance(payload, Mapping) else None
@@ -910,6 +919,39 @@ def _current_core_rederivation_reasons(
         ):
             reasons.add("whole_window_verdict_conflict")
         reasons.update(calibration_reasons)
+        # The contract consumes B_fiducial = max(B_pre, B_post), but member
+        # envelopes were minted from each bundle's attached (pre) calibration
+        # alone.  A claim is therefore defensible ONLY when every member's
+        # minted bound already dominates the bracket maximum; otherwise the
+        # envelopes understate the admissible sets under calibration drift
+        # (confirmation-round-6 P0) and the members must be re-reduced.
+        bracket_bound = (
+            calibration_bracket.get("b_fiducial_s")
+            if isinstance(calibration_bracket, Mapping)
+            else None
+        )
+        if not isinstance(bracket_bound, bool) and isinstance(
+            bracket_bound, int | float
+        ):
+            for _bundle_id, _path, member_metadata, _cpu in derived_members:
+                member_calibration = (
+                    member_metadata.get("instrument_calibration")
+                    if isinstance(member_metadata, Mapping)
+                    else None
+                )
+                consumed = (
+                    member_calibration.get("verified_effective_b_fiducial_s")
+                    if isinstance(member_calibration, Mapping)
+                    else None
+                )
+                if (
+                    isinstance(consumed, bool)
+                    or not isinstance(consumed, int | float)
+                    or not math.isfinite(float(consumed))
+                    or float(bracket_bound) > float(consumed) + 1e-12
+                ):
+                    reasons.add("calibration_bracket_exceeds_minted_bound")
+                    break
     return reasons
 
 

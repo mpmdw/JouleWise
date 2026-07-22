@@ -4346,7 +4346,17 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    instrument's uncertainty budget always rests on stated assumptions;
    the honest end state is registered assumptions, not infinite hardening.
    T3 is the first entry in that register.
-   Registry additions for this wave: `instrument_calibration_bracket_missing`
+   Round-6 follow-up (same date): the bracket maximum must be CONSUMED, not
+   merely recorded — a claim refuses `calibration_bracket_exceeds_minted_bound`
+   whenever `max(B_pre, B_post)` exceeds any member envelope's minted
+   effective bound (the member must be re-reduced under the dominating
+   calibration); the whole-window producer refuses duplicated member
+   occurrences (occurrence-count doctrine at the producer, not just the
+   claim verifier); the registered-policy trust anchor refuses
+   duplicate-JSON-key policy bytes; and the standalone reducer horizon
+   predicate upper-bounds `run_started` as well as the window end.
+   Registry additions for this wave: `instrument_calibration_bracket_missing`,
+   `calibration_bracket_exceeds_minted_bound`,
    (claim-bearing window not bracketed by two authenticated, fresh
    calibration artifacts, or bracket drift beyond the registered tolerance)
    and `thermal_pressure_elevated_in_window` (per-interval thermal-pressure
@@ -4361,5 +4371,6 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    the head requires, and the probe re-reductions predate the strict
    calibration gates — both are re-minted at the final head before the
    sign-off record is written). Claim-bearing measurement additionally
-   requires a fresh live [QUIET-MAC] v2 calibration within 24 h of
+   requires fresh live [QUIET-MAC] calibration under protocol v3
+   (59 pulses, fifth-wave addendum), bracketing the window, within 24 h of
    collection.

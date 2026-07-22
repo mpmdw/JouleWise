@@ -1496,6 +1496,8 @@ def _verify_instrument_calibration(
             or not math.isfinite(float(collection_times[0]))
             or measured_window is None
             or float(capture_wall_time_s) > float(collection_times[0])
+            or float(collection_times[0])
+            > float(capture_wall_time_s) + float(MAX_AGE_S)
             or measured_window.end_s
             > float(capture_wall_time_s) + float(MAX_AGE_S)
         ):

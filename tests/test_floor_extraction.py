@@ -572,6 +572,12 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     "power_source": "AC Power",
                 },
             },
+            # Minted effective bound dominates the fixture bracket maximum
+            # (0.02 s) so a clean core stays clean under the round-6
+            # bracket-consumption gate.
+            "instrument_calibration": {
+                "verified_effective_b_fiducial_s": 0.03,
+            },
         }
         (bundle / "metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n",
@@ -1075,6 +1081,41 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     policy_sha256=TEST_POLICY_SHA256,
                 )
                 self.assertIn("adapter_continuity_failed", adapter_reasons)
+
+    def test_bracket_max_exceeding_minted_member_bound_refuses(self) -> None:
+        # Confirmation-round-6 P0 regression: max(B_pre, B_post) is CONSUMED,
+        # not merely recorded — a bracket maximum above any member's minted
+        # effective bound refuses (envelopes understate the admissible sets
+        # under calibration drift; members must be re-reduced).
+        from joulewise import whole_window as whole_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, manifest, clean_core = self._current_core_fixture(root)
+            bracket = json.loads(
+                json.dumps(clean_core["instrument_calibration_bracket"])
+            )
+            bracket["b_fiducial_s"] = 10.0
+            with (
+                mock.patch.object(
+                    whole_module, "current_environment_refusals", return_value=()
+                ),
+                mock.patch.object(
+                    whole_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=(bracket, ()),
+                ),
+            ):
+                forged = json.loads(json.dumps(clean_core))
+                forged["instrument_calibration_bracket"] = bracket
+                reasons = whole_module._current_core_rederivation_reasons(
+                    core=forged,
+                    bundle_ids=bundle_ids,
+                    manifests=[manifest],
+                    runs_root=root,
+                    policy_sha256=TEST_POLICY_SHA256,
+                )
+        self.assertIn("calibration_bracket_exceeds_minted_bound", reasons)
 
     def test_current_whole_window_rejects_nonempty_core_conditions(self) -> None:
         # G3(c): a nominally passed row cannot carry a buried contamination

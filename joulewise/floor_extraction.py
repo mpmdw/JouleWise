@@ -146,6 +146,7 @@ CELL_REFUSAL_CODES = (
     "whole_window_verdict_coverage_incomplete",
     "whole_window_verdict_provenance_invalid",
     "whole_window_verdict_conflict",
+    "calibration_bracket_exceeds_minted_bound",
     "admissible_set_uncertainty_dominates_point_floor",
 )
 
