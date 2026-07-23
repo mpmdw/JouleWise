@@ -89,7 +89,7 @@ def main() -> int:
             if mode == "inconsistent":
                 native_timestamp += timedelta(seconds=60)
             document["timestamp"] = native_timestamp
-            if mode == "contaminated_post" and invocation >= 4:
+            if mode == "contaminated_post" and invocation >= 3:
                 gpu = dict(document.get("gpu", {}))
                 gpu["idle_ratio"] = 0.0
                 gpu["freq_hz"] = 1200.0

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -14,7 +15,12 @@ from typing import Any
 from unittest.mock import patch
 
 import joulewise.adapters as adapters
-from joulewise.clock import Clock, FakeClock
+from joulewise.adapters.powermetrics import (
+    RICH_IDLE_NAME,
+    PowermetricsTelemetryAdapter,
+    rich_telemetry_jsonl_from_records,
+)
+from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import (
     CAMPAIGN_POLICY_PATH_ENV,
     CAMPAIGN_POLICY_SHA256_ENV,
@@ -607,6 +613,220 @@ class AdmissionIdleRegistry:
 
     def resolve_transport(self, config: BenchmarkConfig):
         return adapters.resolve_transport(config)
+
+
+class FakeProcessPowermetricsRegistry:
+    """Production adapter wired to the process-level synthetic sampler."""
+
+    adapter_type = PowermetricsTelemetryAdapter
+
+    def __init__(self) -> None:
+        self.adapter: PowermetricsTelemetryAdapter | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        self.adapter = self.adapter_type(
+            clock,
+            executable=str(
+                REPO_ROOT / "tests" / "fixtures" / "fake_powermetrics_process.py"
+            ),
+            privilege_prefix=(sys.executable,),
+        )
+        return self.adapter, None
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class RetryAdmissionPowermetricsAdapter(PowermetricsTelemetryAdapter):
+    """Process-backed sampler with deterministic retry CPU conditions."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.concurrent_bounded_capture = False
+        self.idle_slice_count = 0
+
+    def _run_bounded_capture(self, *args, **kwargs):
+        if self._process is not None:
+            self.concurrent_bounded_capture = True
+        return super()._run_bounded_capture(*args, **kwargs)
+
+    def _capture_idle_slice(self, *args, **kwargs):
+        self.idle_slice_count += 1
+        return super()._capture_idle_slice(*args, **kwargs)
+
+    @staticmethod
+    def _admission_records(
+        records: list[dict[str, Any]], attempt: int
+    ) -> list[dict[str, Any]]:
+        adjusted = json.loads(json.dumps(records))
+        busy_ratio = 0.9 if attempt == 1 else 0.1
+        combined_power_w = 2.0 if attempt == 1 else 0.1
+        for record in adjusted:
+            record["processor_combined_power_w"] = combined_power_w
+            for cluster in record.get("clusters", []):
+                for cpu in cluster.get("cpus", []):
+                    cpu["idle_ratio"] = 1.0 - busy_ratio
+                    cpu["down_ratio"] = 0.0
+        return adjusted
+
+    def idle_admission_records(self, *, run_id: str, attempt: int):
+        records = super().idle_admission_records(run_id=run_id, attempt=attempt)
+        if records is None:
+            return None
+        return self._admission_records(records, attempt)
+
+    def _write_rich_artifact(self, *, context, name, data, error_key) -> None:
+        attempt: int | None = None
+        if name == RICH_IDLE_NAME:
+            attempt = 1
+        elif name.startswith("rich_telemetry_idle_attempt_"):
+            attempt = int(name.removesuffix(".jsonl").rsplit("_", 1)[-1])
+        if attempt is not None:
+            records = [json.loads(line) for line in data.splitlines() if line]
+            data = rich_telemetry_jsonl_from_records(
+                self._admission_records(records, attempt)
+            )
+        super()._write_rich_artifact(
+            context=context,
+            name=name,
+            data=data,
+            error_key=error_key,
+        )
+
+
+class RetryAdmissionPowermetricsRegistry(FakeProcessPowermetricsRegistry):
+    adapter_type = RetryAdmissionPowermetricsAdapter
+
+
+class CleanAdmissionPowermetricsAdapter(RetryAdmissionPowermetricsAdapter):
+    @staticmethod
+    def _admission_records(
+        records: list[dict[str, Any]], attempt: int
+    ) -> list[dict[str, Any]]:
+        return RetryAdmissionPowermetricsAdapter._admission_records(records, 2)
+
+
+class CleanAdmissionPowermetricsRegistry(FakeProcessPowermetricsRegistry):
+    adapter_type = CleanAdmissionPowermetricsAdapter
+
+
+def powermetrics_frames(data: bytes) -> list[bytes]:
+    return [frame for frame in data.split(b"\0") if frame.strip()]
+
+
+def assert_contiguous_frame_subsequence(
+    testcase: unittest.TestCase,
+    stream: bytes,
+    logical_slice: bytes,
+) -> None:
+    stream_frames = powermetrics_frames(stream)
+    slice_frames = powermetrics_frames(logical_slice)
+    testcase.assertTrue(slice_frames)
+    testcase.assertTrue(
+        any(
+            stream_frames[index : index + len(slice_frames)] == slice_frames
+            for index in range(len(stream_frames) - len(slice_frames) + 1)
+        ),
+        "idle artifact frames must be a contiguous byte-exact stream slice",
+    )
+
+
+def _produce_admission_powermetrics_bundle(
+    runs_root: Path,
+    run_id: str,
+    registry: Any,
+) -> tuple[Path, SummaryMetrics]:
+    """Produce one strict-valid bundle through the process harness."""
+
+    config_payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+    config_payload["run_id"] = run_id
+    config_payload["hardware_target"].update(
+        {"id": "synthetic_mac", "telemetry_backend": "powermetrics"}
+    )
+    config_payload["sampling"].update(
+        {"power_hz": 20.0, "idle_seconds": 1.5}
+    )
+    config = BenchmarkConfig.from_mapping(config_payload)
+
+    policy_bytes = PRODUCTION_POLICY_PATH.read_bytes()
+    policy = CampaignPolicy.from_mapping(json.loads(policy_bytes))
+    policy_sha256 = hashlib.sha256(policy_bytes).hexdigest()
+    snapshot = {
+        "power_source": "AC Power",
+        "power": {"external_connected": True},
+        "low_power_mode": False,
+        "display_power_state": "all_asleep",
+        "screensaver_engaged": False,
+        "thermal_pressure": "nominal",
+    }
+    preflight = {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": policy_sha256,
+        "snapshot": snapshot,
+        "evaluation": evaluate_environment_policy(
+            snapshot, policy.environment_guard
+        ),
+        "override": None,
+        "admitted": True,
+    }
+    binding = {
+        "schema_version": policy.schema_version,
+        "policy_id": policy.policy_id,
+        "policy_version": policy.policy_version,
+        "profile": policy.profile.value,
+        "sha256": policy_sha256,
+        "source": str(PRODUCTION_POLICY_PATH),
+    }
+    clean_observation = {
+        "power_source": "AC Power",
+        "display_power_state": "all_asleep",
+        "screensaver_engaged": False,
+        "power": {
+            "adapter_watts": 140.0,
+            "adapter_description": "synthetic adapter",
+        },
+        "errors": {},
+    }
+    with patch(
+        "joulewise.controller.collect_environment_guard_observation",
+        side_effect=lambda **_kwargs: json.loads(json.dumps(clean_observation)),
+    ):
+        return run_benchmark(
+            config,
+            runs_root,
+            SystemClock(),
+            registry=registry,
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+            post_window_sampling_dwell_s=1.0,
+        )
+
+
+def produce_retry_powermetrics_bundle(
+    runs_root: Path,
+    run_id: str,
+) -> tuple[Path, SummaryMetrics]:
+    return _produce_admission_powermetrics_bundle(
+        runs_root,
+        run_id,
+        RetryAdmissionPowermetricsRegistry(),
+    )
+
+
+def produce_clean_powermetrics_bundle(
+    runs_root: Path,
+    run_id: str,
+) -> tuple[Path, SummaryMetrics]:
+    return _produce_admission_powermetrics_bundle(
+        runs_root,
+        run_id,
+        CleanAdmissionPowermetricsRegistry(),
+    )
 
 
 class MetadataRuntime:
@@ -1357,6 +1577,247 @@ class HappyPathTests(ControllerTestCase):
             admission["attempts"][0]["cpu_admission"]["cpu_busy_ratio_p95"],
             admission["attempts"][1]["cpu_admission"]["cpu_busy_ratio_p95"],
         )
+
+    def test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce(
+        self,
+    ) -> None:
+        from joulewise.cli import validate_bundle
+        from joulewise.reduce import reduce_bundle
+
+        registry = RetryAdmissionPowermetricsRegistry()
+        bundle_path, summary = _produce_admission_powermetrics_bundle(
+            self.runs_root,
+            "controller-powermetrics-retry-pass",
+            registry,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        attempts = metadata["environment_admission"]["attempts"]
+        self.assertEqual(
+            [row["cpu_admission"]["decision"] for row in attempts],
+            ["failed", "admitted"],
+        )
+        self.assertEqual([row["admitted"] for row in attempts], [False, True])
+
+        canonical = bundle_path / "raw" / "powermetrics_idle.plist"
+        attempt_one = bundle_path / "raw" / "powermetrics_idle_attempt_1.plist"
+        attempt_two = bundle_path / "raw" / "powermetrics_idle_attempt_2.plist"
+        stream = (bundle_path / "raw" / "powermetrics.plist").read_bytes()
+        self.assertEqual(canonical.read_bytes(), attempt_two.read_bytes())
+        self.assertNotEqual(attempt_one.read_bytes(), attempt_two.read_bytes())
+        assert_contiguous_frame_subsequence(self, stream, attempt_one.read_bytes())
+        assert_contiguous_frame_subsequence(self, stream, attempt_two.read_bytes())
+        self.assertIsInstance(registry.adapter, RetryAdmissionPowermetricsAdapter)
+        assert isinstance(registry.adapter, RetryAdmissionPowermetricsAdapter)
+        self.assertEqual(registry.adapter.idle_slice_count, 2)
+        self.assertFalse(registry.adapter.concurrent_bounded_capture)
+        self.assertIsNone(registry.adapter._process)
+        self.assertFalse(registry.adapter._admission_sampling_start_requested)
+        self.assertFalse(registry.adapter._admission_sampling_handoff_pending)
+        command = metadata["adapters"]["telemetry"]["command"]
+        self.assertNotIn("-n", command)
+        self.assertEqual(
+            command[command.index("--samplers") + 1],
+            "cpu_power,gpu_power,ane_power,thermal",
+        )
+        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+        fresh = reduce_bundle(bundle_path)
+        self.assertEqual(fresh.status, RunStatus.SUCCEEDED)
+        self.assertEqual(
+            fresh.idle_mean_uncertainty["source_artifact"],
+            "raw/powermetrics_idle.plist",
+        )
+        self.assertEqual(
+            fresh.idle_mean_uncertainty["source_sha256"],
+            hashlib.sha256(attempt_two.read_bytes()).hexdigest(),
+        )
+
+    def test_powermetrics_thermal_coverage_is_continuous_across_admission_handoff(
+        self,
+    ) -> None:
+        from joulewise.environment_admission import (
+            _window_thermal_pressure_refusals,
+        )
+        from joulewise.bundle_read import BundleReader
+
+        config_payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        config_payload["run_id"] = "controller-thermal-admission-handoff"
+        config_payload["hardware_target"].update(
+            {
+                "id": "synthetic_mac",
+                "telemetry_backend": "powermetrics",
+            }
+        )
+        config_payload["sampling"].update(
+            {"power_hz": 20.0, "idle_seconds": 0.2}
+        )
+        config = BenchmarkConfig.from_mapping(config_payload)
+
+        policy_payload = json.loads(PRODUCTION_POLICY_PATH.read_text())
+        criteria = policy_payload["idle_admission_extension"]["cpu_criteria"]
+        criteria.update(
+            {
+                "cpu_busy_ratio_p95_max": 0.6,
+                "processor_combined_power_w_p95_max": 2.0,
+                "min_samples": 3,
+            }
+        )
+        policy = CampaignPolicy.from_mapping(policy_payload)
+        snapshot = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+        }
+        evaluation = evaluate_environment_policy(snapshot, policy.environment_guard)
+        binding = {
+            "schema_version": policy.schema_version,
+            "policy_id": policy.policy_id,
+            "policy_version": policy.policy_version,
+            "profile": policy.profile.value,
+            "sha256": "a" * 64,
+            "source": str(PRODUCTION_POLICY_PATH),
+        }
+        preflight = {
+            "schema_version": "joulewise.campaign_environment_preflight.v1",
+            "policy_sha256": binding["sha256"],
+            "snapshot": snapshot,
+            "evaluation": evaluation,
+            "override": None,
+            "admitted": True,
+        }
+        clean_observation = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "power": {
+                "adapter_watts": 140.0,
+                "adapter_description": "synthetic adapter",
+            },
+            "errors": {},
+        }
+        registry = FakeProcessPowermetricsRegistry()
+        with patch(
+            "joulewise.controller.collect_environment_guard_observation",
+            side_effect=lambda **_kwargs: json.loads(json.dumps(clean_observation)),
+        ):
+            bundle_path, summary = run_benchmark(
+                config,
+                self.runs_root,
+                SystemClock(),
+                registry=registry,
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+                post_window_sampling_dwell_s=1.0,
+            )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(registry.adapter)
+        assert registry.adapter is not None
+        self.assertIsNone(registry.adapter._process)
+        self.assertFalse(registry.adapter._admission_sampling_handoff_pending)
+        assert_contiguous_frame_subsequence(
+            self,
+            (bundle_path / "raw" / "powermetrics.plist").read_bytes(),
+            (bundle_path / "raw" / "powermetrics_idle.plist").read_bytes(),
+        )
+        self.assertFalse(
+            (bundle_path / "raw" / "powermetrics_idle_attempt_1.plist").exists()
+        )
+        reader = BundleReader(bundle_path)
+        window = reader.measured_window()
+        self.assertIsNotNone(window)
+        assert window is not None
+        self.assertEqual(
+            _window_thermal_pressure_refusals(
+                reader.metadata(),
+                bundle_path=bundle_path,
+                measured_window_start_s=window.start_s,
+                measured_window_end_s=window.end_s,
+            ),
+            (),
+        )
+
+    def test_powermetrics_abort_before_admission_capture_clears_handoff_state(
+        self,
+    ) -> None:
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        adapter._capability = AdapterResult(ok=True)
+        config = make_config("controller-powermetrics-abort-latch")
+
+        class InterruptedProcess:
+            def __init__(self) -> None:
+                self.returncode = None
+                self.terminated = False
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        process = InterruptedProcess()
+
+        def interrupted_start(*_args, **_kwargs):
+            adapter._process = process
+            raise KeyboardInterrupt
+
+        with (
+            patch.object(adapter, "start_sampling", side_effect=interrupted_start),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            adapter.begin_admission_window_sampling(config)
+
+        self.assertFalse(adapter._admission_sampling_start_requested)
+        self.assertIs(adapter._process, process)
+        self.assertEqual(adapter.stop_sampling(config), [])
+        self.assertTrue(process.terminated)
+        self.assertFalse(adapter._admission_sampling_handoff_pending)
+        self.assertIsNone(adapter._admission_sampling_metadata)
+        self.assertIsNone(adapter._process)
+
+        admitted_process = InterruptedProcess()
+
+        def successful_start(*_args, **_kwargs):
+            metadata = {"command": ["powermetrics", "--samplers", "thermal"]}
+            adapter._process = admitted_process
+            adapter._admission_sampling_metadata = dict(metadata)
+            return AdapterResult(ok=True, metadata=metadata)
+
+        with patch.object(adapter, "start_sampling", side_effect=successful_start):
+            result = adapter.begin_admission_window_sampling(config)
+        self.assertTrue(result.ok)
+        self.assertTrue(adapter._admission_sampling_handoff_pending)
+        self.assertEqual(adapter.stop_sampling(config), [])
+        self.assertTrue(admitted_process.terminated)
+        self.assertFalse(adapter._admission_sampling_start_requested)
+        self.assertFalse(adapter._admission_sampling_handoff_pending)
+        self.assertIsNone(adapter._admission_sampling_metadata)
+        self.assertIsNone(adapter._process)
+
+        def failed_rollover(*_args, **_kwargs):
+            adapter._admission_sampling_metadata = {"stale": True}
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message="rollover failed",
+            )
+
+        with patch.object(adapter, "start_sampling", side_effect=failed_rollover):
+            result = adapter.begin_admission_window_sampling(config)
+        self.assertFalse(result.ok)
+        self.assertFalse(adapter._admission_sampling_start_requested)
+        self.assertFalse(adapter._admission_sampling_handoff_pending)
+        self.assertIsNone(adapter._admission_sampling_metadata)
 
     def test_exploratory_cpu_failure_is_lenient_but_claim_flagged(self) -> None:
         policy, binding, preflight, snapshot = campaign_policy_fixture(

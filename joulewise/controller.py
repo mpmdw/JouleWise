@@ -1003,6 +1003,19 @@ class _Execution:
                     "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
                 )
 
+        if admission is not None and admission.enabled:
+            begin_sampling = getattr(
+                self._telemetry, "begin_admission_window_sampling", None
+            )
+            if callable(begin_sampling):
+                self._sampling_start_in_progress = True
+                result = begin_sampling(self._config, self._context)
+                self._check(
+                    result,
+                    "idle_baseline",
+                    "telemetry admission-window sampling failed",
+                )
+
         self._baseline = self._measure_idle_admission_attempt(1, attempts)
         if admission is not None and admission.enabled:
             self._enforce_post_capture_admission_guard(1)
@@ -1023,6 +1036,20 @@ class _Execution:
                 self._enforce_post_capture_admission_guard(2)
             assert self._environment_admission is not None
             if attempts[-1]["admitted"]:
+                final_attempt = attempts[-1].get("attempt")
+                promote_attempt = getattr(
+                    self._telemetry, "promote_idle_admission_attempt", None
+                )
+                if (
+                    isinstance(final_attempt, int)
+                    and final_attempt > 1
+                    and callable(promote_attempt)
+                ):
+                    promote_attempt(
+                        run_id=self._context.run_id,
+                        attempt=final_attempt,
+                        context=self._context,
+                    )
                 self._environment_admission["decision"] = "admitted"
             elif admission.on_fail == AdmissionFailureAction.ABORT:
                 reason = "idle environment admission failed after one retry"

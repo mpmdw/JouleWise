@@ -12,6 +12,7 @@ import getpass
 import hashlib
 import json
 import math
+import os
 import plistlib
 import statistics
 import subprocess
@@ -148,6 +149,9 @@ class PowermetricsTelemetryAdapter:
         self._idle_admission_records_by_run: dict[
             str, dict[int, list[dict[str, Any]]]
         ] = {}
+        self._admission_sampling_start_requested = False
+        self._admission_sampling_handoff_pending = False
+        self._admission_sampling_metadata: dict[str, Any] | None = None
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -176,6 +180,75 @@ class PowermetricsTelemetryAdapter:
             return None
         return [dict(record) for record in records]
 
+    def promote_idle_admission_attempt(
+        self,
+        *,
+        run_id: str,
+        attempt: int,
+        context: RunContext,
+    ) -> None:
+        """Make the final admitted retry the canonical idle artifact.
+
+        The fixed canonical name is the reducer interface.  Retry-specific
+        files remain immutable audit evidence; on the first retry promotion,
+        attempt 1 is preserved under its explicit audit name before the
+        canonical path is atomically replaced.
+        """
+
+        if attempt <= 1:
+            return
+        if self._idle_attempts_by_run.get(run_id) != attempt:
+            raise BundleError(
+                "idle attempt promotion does not match captured attempt"
+            )
+
+        canonical = context.raw_dir / RAW_IDLE_NAME
+        final = context.raw_dir / f"powermetrics_idle_attempt_{attempt}.plist"
+        attempt_one = context.raw_dir / "powermetrics_idle_attempt_1.plist"
+        try:
+            canonical_data = canonical.read_bytes()
+            final_data = final.read_bytes()
+        except OSError as exc:
+            raise BundleError(
+                f"idle attempt promotion evidence is unavailable: {exc}"
+            ) from exc
+
+        if attempt_one.exists():
+            if (
+                attempt_one.read_bytes() != canonical_data
+                and canonical_data != final_data
+            ):
+                raise BundleError(
+                    "existing idle attempt-1 audit artifact does not match canonical bytes"
+                )
+        else:
+            write_raw_artifact(context, attempt_one.name, canonical_data)
+        if attempt_one.exists():
+            self._acknowledge_capture(context, attempt_one.name, attempt_one)
+
+        if canonical_data != final_data:
+            handle = tempfile.NamedTemporaryFile(
+                dir=context.raw_dir,
+                prefix=f".{RAW_IDLE_NAME}.",
+                suffix=".tmp",
+                delete=False,
+            )
+            temporary = Path(handle.name)
+            try:
+                with handle:
+                    handle.write(final_data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, canonical)
+                directory_fd = os.open(context.raw_dir, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            finally:
+                temporary.unlink(missing_ok=True)
+        self._acknowledge_capture(context, RAW_IDLE_NAME, canonical)
+
     def measure_idle(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> IdleBaseline:
@@ -202,13 +275,20 @@ class PowermetricsTelemetryAdapter:
             if attempt == 1
             else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
         )
-        capture_start_s = self._clock.now()
-        data = self._run_bounded_capture(
-            config,
-            count=count,
-            artifact_name=artifact_name,
-            context=context,
-        )
+        if self._admission_sampling_handoff_pending and self._process is not None:
+            data, capture_start_s = self._capture_idle_slice(
+                config,
+                count=count,
+                artifact_name=artifact_name,
+            )
+        else:
+            capture_start_s = self._clock.now()
+            data = self._run_bounded_capture(
+                config,
+                count=count,
+                artifact_name=artifact_name,
+                context=context,
+            )
         if context is not None:
             self._persist_capture(context, artifact_name, data)
         self._release_capture(artifact_name)
@@ -277,6 +357,22 @@ class PowermetricsTelemetryAdapter:
         if not capability.ok:
             return capability
         if self._process is not None:
+            if self._admission_sampling_handoff_pending:
+                if self._process.poll() is not None:
+                    self._reset_admission_sampling_state()
+                    return AdapterResult(
+                        ok=False,
+                        failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
+                        message=(
+                            "powermetrics sampling ended before the measured-window "
+                            "handoff"
+                        ),
+                    )
+                self._admission_sampling_handoff_pending = False
+                return AdapterResult(
+                    ok=True,
+                    metadata=dict(self._admission_sampling_metadata or {}),
+                )
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -312,10 +408,14 @@ class PowermetricsTelemetryAdapter:
         if not ready.ok:
             self._stop_process(self._process)
             self._process = None
+            self._reset_admission_sampling_state()
             if context is None:
                 self._release_capture(RAW_SAMPLES_NAME)
             return ready
         if self._first_parse_stamp is None:
+            self._stop_process(self._process)
+            self._process = None
+            self._reset_admission_sampling_state()
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -325,11 +425,12 @@ class PowermetricsTelemetryAdapter:
         if not rollover.ok:
             self._stop_process(self._process)
             self._process = None
+            self._reset_admission_sampling_state()
             if context is None:
                 self._release_capture(RAW_SAMPLES_NAME)
             return rollover
         self._clock_start_s = self._first_parse_stamp.epoch_s
-        return AdapterResult(
+        result = AdapterResult(
             ok=True,
             metadata={
                 "command": command,
@@ -339,6 +440,40 @@ class PowermetricsTelemetryAdapter:
                 "native_rollover": rollover.metadata,
             },
         )
+        self._admission_sampling_metadata = dict(result.metadata)
+        return result
+
+    def begin_admission_window_sampling(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
+        """Start the sole sampler before the first idle-admission capture.
+
+        Admission baselines are logical, byte-verbatim slices of this stream;
+        the same process remains live through measured-window handoff.
+        """
+
+        capability = self._ensure_capability()
+        if not capability.ok:
+            return capability
+        if self._process is not None or self._admission_sampling_start_requested:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message="powermetrics admission-window sampling is already active",
+            )
+        self._admission_sampling_start_requested = True
+        try:
+            result = self.start_sampling(config, context)
+        finally:
+            # An interrupt can land after native process creation but before
+            # ``start_sampling`` returns.  Controller finalization owns that
+            # process; this transient guard must never leak into adapter reuse.
+            self._admission_sampling_start_requested = False
+        if not result.ok:
+            self._reset_admission_sampling_state()
+            return result
+        self._admission_sampling_handoff_pending = True
+        return result
 
     def stop_sampling(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -347,6 +482,7 @@ class PowermetricsTelemetryAdapter:
 
         data, clock_start_s = self._take_measured_capture()
         if data is None:
+            self._release_capture(RAW_SAMPLES_NAME)
             return []
         if context is not None:
             self._persist_capture(context, RAW_SAMPLES_NAME, data)
@@ -379,6 +515,7 @@ class PowermetricsTelemetryAdapter:
         finally:
             data, _ = self._take_measured_capture()
         if data is None:
+            self._release_capture(RAW_SAMPLES_NAME)
             evidence, _ = derive_powermetrics_clock_evidence_v2(
                 stamps={}, records=[]
             )
@@ -723,6 +860,12 @@ class PowermetricsTelemetryAdapter:
             self._clock_start_s = None
             self._pre_spawn_stamp = None
             self._first_parse_stamp = None
+            self._reset_admission_sampling_state()
+
+    def _reset_admission_sampling_state(self) -> None:
+        self._admission_sampling_start_requested = False
+        self._admission_sampling_handoff_pending = False
+        self._admission_sampling_metadata = None
 
     def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
         """Retry every native capture write before releasing its source file."""
@@ -775,6 +918,14 @@ class PowermetricsTelemetryAdapter:
                 )
         else:
             write_raw_artifact(context, artifact_name, data)
+        return self._acknowledge_capture(context, artifact_name, destination)
+
+    def _acknowledge_capture(
+        self,
+        context: RunContext,
+        artifact_name: str,
+        destination: Path,
+    ) -> DurableCustodyAcknowledgement:
         token = self._custody_token(artifact_name)
         acknowledgement = context.acknowledge_custody(token, [destination])
         if not self._acknowledgement_is_valid(
@@ -1049,6 +1200,71 @@ class PowermetricsTelemetryAdapter:
             if context is None:
                 self._release_capture(artifact_name)
             raise
+
+    def _capture_idle_slice(
+        self,
+        config: BenchmarkConfig,
+        *,
+        count: int,
+        artifact_name: str,
+    ) -> tuple[bytes, float]:
+        """Return consecutive complete frames from the active primary stream.
+
+        One newly completed frame is skipped so a frame whose averaging
+        support straddles the attempt boundary cannot enter the logical idle
+        capture.  The attempt ledger anchors the returned slice at its
+        recorded start and derives its end from these frames' elapsed values.
+        """
+
+        process = self._process
+        capture_path = self._capture_path
+        if process is None or capture_path is None:
+            raise AdapterFailure(
+                FailureReason.TELEMETRY_UNAVAILABLE,
+                "powermetrics admission stream is unavailable",
+            )
+        try:
+            existing_frames = _complete_powermetrics_frames(
+                capture_path.read_bytes()
+            )
+        except (OSError, ValueError) as exc:
+            raise AdapterFailure(
+                FailureReason.TELEMETRY_UNAVAILABLE,
+                f"powermetrics admission stream is unreadable: {exc}",
+            ) from exc
+        capture_start_s = self._clock.now()
+        slice_start = len(existing_frames) + 1
+        slice_end = slice_start + count
+        deadline = time.monotonic() + self._capture_timeout_s(config, count + 1)
+        # Do not repeatedly parse a growing plist stream during the interval
+        # whose quiescent power is being estimated.  Wait until the requested
+        # frames should be complete, then inspect only outside their support.
+        time.sleep((count + 1) * self._interval_ms(config) / 1000.0)
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise AdapterFailure(
+                    FailureReason.TELEMETRY_UNAVAILABLE,
+                    "powermetrics admission stream ended before the idle slice completed",
+                )
+            try:
+                frames = _complete_powermetrics_frames(capture_path.read_bytes())
+            except (OSError, ValueError):
+                frames = []
+            if len(frames) >= slice_end:
+                data = b"\0".join(frames[slice_start:slice_end])
+                retained_slice = self._new_capture_path()
+                try:
+                    retained_slice.write_bytes(data)
+                except BaseException:
+                    retained_slice.unlink(missing_ok=True)
+                    raise
+                self._pending_captures[artifact_name] = retained_slice
+                return data, capture_start_s
+            time.sleep(max(READINESS_POLL_S, self._interval_ms(config) / 1000.0))
+        raise AdapterFailure(
+            FailureReason.UNKNOWN_ERROR,
+            "powermetrics admission stream did not complete the idle slice before timeout",
+        )
 
     def _remember_records(
         self,
@@ -1689,6 +1905,14 @@ def _powermetrics_documents(
             raise ValueError(message)
         documents.append(document)
     return documents, diagnostic
+
+
+def _complete_powermetrics_frames(data: bytes) -> list[bytes]:
+    """Return only complete plist frame bytes, preserving their exact encoding."""
+
+    documents, _diagnostic = _powermetrics_documents(data)
+    parts = [part for part in data.split(b"\0") if part.strip()]
+    return parts[: len(documents)]
 
 
 def _rich_gpu(value: object) -> dict[str, Any] | None:
