@@ -57,6 +57,7 @@ RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+STREAM_READ_CHUNK_BYTES = 64 * 1024
 # D-078: start_sampling refuses to return before the native whole-second
 # stamps roll over at least once, guaranteeing a bounded censored-intersection
 # anchor interval exists before any workload runs. A rollover arrives within
@@ -152,6 +153,10 @@ class PowermetricsTelemetryAdapter:
         self._admission_sampling_start_requested = False
         self._admission_sampling_handoff_pending = False
         self._admission_sampling_metadata: dict[str, Any] | None = None
+        self._stream_cursor_path: Path | None = None
+        self._stream_cursor_offset = 0
+        self._stream_frame_boundaries: list[int] = []
+        self._stream_tail_suffix = b""
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -381,6 +386,7 @@ class PowermetricsTelemetryAdapter:
 
         self._capture_path = self._new_capture_path()
         self._pending_captures[RAW_SAMPLES_NAME] = self._capture_path
+        self._initialize_stream_cursor(self._capture_path)
         self._pre_spawn_stamp = None
         self._first_parse_stamp = None
         command = self._command(
@@ -866,6 +872,7 @@ class PowermetricsTelemetryAdapter:
         self._admission_sampling_start_requested = False
         self._admission_sampling_handoff_pending = False
         self._admission_sampling_metadata = None
+        self._reset_stream_cursor()
 
     def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
         """Retry every native capture write before releasing its source file."""
@@ -1223,23 +1230,22 @@ class PowermetricsTelemetryAdapter:
                 FailureReason.TELEMETRY_UNAVAILABLE,
                 "powermetrics admission stream is unavailable",
             )
+        if self._stream_cursor_path != capture_path:
+            self._initialize_stream_cursor(capture_path)
         try:
-            existing_frames = _complete_powermetrics_frames(
-                capture_path.read_bytes()
-            )
+            completed_before_attempt = self._advance_stream_cursor(capture_path)
         except (OSError, ValueError) as exc:
             raise AdapterFailure(
                 FailureReason.TELEMETRY_UNAVAILABLE,
                 f"powermetrics admission stream is unreadable: {exc}",
             ) from exc
         capture_start_s = self._clock.now()
-        slice_start = len(existing_frames) + 1
+        # Cursor catch-up excludes every frame completed while controller work
+        # ran between attempts. The next completed frame may already have
+        # opened before this stamp, so exclude that one straddle as well.
+        slice_start = completed_before_attempt + 1
         slice_end = slice_start + count
         deadline = time.monotonic() + self._capture_timeout_s(config, count + 1)
-        # Do not repeatedly parse a growing plist stream during the interval
-        # whose quiescent power is being estimated.  Wait until the requested
-        # frames should be complete, then inspect only outside their support.
-        time.sleep((count + 1) * self._interval_ms(config) / 1000.0)
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise AdapterFailure(
@@ -1247,11 +1253,18 @@ class PowermetricsTelemetryAdapter:
                     "powermetrics admission stream ended before the idle slice completed",
                 )
             try:
-                frames = _complete_powermetrics_frames(capture_path.read_bytes())
-            except (OSError, ValueError):
-                frames = []
-            if len(frames) >= slice_end:
-                data = b"\0".join(frames[slice_start:slice_end])
+                completed_frames = self._advance_stream_cursor(capture_path)
+            except (OSError, ValueError) as exc:
+                raise AdapterFailure(
+                    FailureReason.TELEMETRY_UNAVAILABLE,
+                    f"powermetrics admission stream is unreadable: {exc}",
+                ) from exc
+            if completed_frames >= slice_end:
+                data = self._read_completed_stream_frames(
+                    capture_path,
+                    start=slice_start,
+                    count=count,
+                )
                 retained_slice = self._new_capture_path()
                 try:
                     retained_slice.write_bytes(data)
@@ -1265,6 +1278,127 @@ class PowermetricsTelemetryAdapter:
             FailureReason.UNKNOWN_ERROR,
             "powermetrics admission stream did not complete the idle slice before timeout",
         )
+
+    def _initialize_stream_cursor(self, capture_path: Path) -> None:
+        self._stream_cursor_path = capture_path
+        self._stream_cursor_offset = 0
+        self._stream_frame_boundaries = []
+        self._stream_tail_suffix = b""
+
+    def _reset_stream_cursor(self) -> None:
+        self._stream_cursor_path = None
+        self._stream_cursor_offset = 0
+        self._stream_frame_boundaries = []
+        self._stream_tail_suffix = b""
+
+    def _advance_stream_cursor(self, capture_path: Path) -> int:
+        """Scan only newly appended bytes and remember complete-frame ends."""
+
+        if self._stream_cursor_path != capture_path:
+            raise ValueError("powermetrics stream cursor does not match capture path")
+        descriptor = os.open(capture_path, os.O_RDONLY)
+        try:
+            stream_size = os.fstat(descriptor).st_size
+            if stream_size < self._stream_cursor_offset:
+                raise ValueError("powermetrics admission stream was truncated")
+            while self._stream_cursor_offset < stream_size:
+                chunk = os.pread(
+                    descriptor,
+                    min(
+                        STREAM_READ_CHUNK_BYTES,
+                        stream_size - self._stream_cursor_offset,
+                    ),
+                    self._stream_cursor_offset,
+                )
+                if not chunk:
+                    raise OSError("powermetrics admission stream stopped during read")
+                chunk_start = self._stream_cursor_offset
+                boundary = chunk.find(b"\0")
+                while boundary >= 0:
+                    self._stream_frame_boundaries.append(chunk_start + boundary)
+                    boundary = chunk.find(b"\0", boundary + 1)
+                final_boundary = chunk.rfind(b"\0")
+                if final_boundary >= 0:
+                    self._stream_tail_suffix = chunk[final_boundary + 1 :][-32:]
+                else:
+                    self._stream_tail_suffix = (
+                        self._stream_tail_suffix + chunk
+                    )[-32:]
+                self._stream_cursor_offset += len(chunk)
+        finally:
+            os.close(descriptor)
+        return len(self._stream_frame_boundaries)
+
+    def _read_completed_stream_frames(
+        self,
+        capture_path: Path,
+        *,
+        start: int,
+        count: int,
+    ) -> bytes:
+        """Read one byte-verbatim contiguous range after all support has ended."""
+
+        if count <= 0 or start < 0:
+            raise ValueError("powermetrics frame range is invalid")
+        final_index = start + count - 1
+        if final_index >= len(self._stream_frame_boundaries):
+            raise ValueError("powermetrics frame range is not complete")
+        start_offset = (
+            0 if start == 0 else self._stream_frame_boundaries[start - 1] + 1
+        )
+        end_offset = self._stream_frame_boundaries[final_index]
+        return self._read_stream_range(capture_path, start_offset, end_offset)
+
+    def _read_stream_frame_candidate(
+        self,
+        capture_path: Path,
+        *,
+        index: int,
+    ) -> bytes:
+        """Read one completed frame, or the current incremental tail for readiness."""
+
+        if index < 0 or index > len(self._stream_frame_boundaries):
+            raise ValueError("powermetrics frame index is unavailable")
+        if index < len(self._stream_frame_boundaries):
+            return self._read_completed_stream_frames(
+                capture_path,
+                start=index,
+                count=1,
+            )
+        start_offset = (
+            0
+            if index == 0
+            else self._stream_frame_boundaries[index - 1] + 1
+        )
+        return self._read_stream_range(
+            capture_path,
+            start_offset,
+            self._stream_cursor_offset,
+        )
+
+    @staticmethod
+    def _read_stream_range(
+        capture_path: Path,
+        start_offset: int,
+        end_offset: int,
+    ) -> bytes:
+        descriptor = os.open(capture_path, os.O_RDONLY)
+        try:
+            chunks: list[bytes] = []
+            offset = start_offset
+            while offset < end_offset:
+                chunk = os.pread(
+                    descriptor,
+                    min(STREAM_READ_CHUNK_BYTES, end_offset - offset),
+                    offset,
+                )
+                if not chunk:
+                    raise OSError("powermetrics frame range stopped during read")
+                chunks.append(chunk)
+                offset += len(chunk)
+        finally:
+            os.close(descriptor)
+        return b"".join(chunks)
 
     def _remember_records(
         self,
@@ -1390,23 +1524,32 @@ class PowermetricsTelemetryAdapter:
         deadline = time.monotonic() + READINESS_TIMEOUT_S
         last_parse_error: str | None = None
         while time.monotonic() < deadline:
-            if capture_path.exists() and capture_path.stat().st_size > 0:
-                data = capture_path.read_bytes()
-                first_document = data.split(b"\0", 1)[0]
-                if first_document.strip():
-                    try:
-                        parse_powermetrics_records(first_document)
-                    except ValueError as exc:
-                        last_parse_error = str(exc)
-                    else:
-                        self._first_parse_stamp = self._clock.stamp()
-                        return AdapterResult(
-                            ok=True,
-                            metadata={
-                                "ready_bytes": len(data),
-                                "ready_check": "first_parseable_plist_document",
-                            },
-                        )
+            try:
+                completed_frames = self._advance_stream_cursor(capture_path)
+            except FileNotFoundError:
+                completed_frames = 0
+            except (OSError, ValueError) as exc:
+                completed_frames = 0
+                last_parse_error = str(exc)
+            tail_complete = self._stream_tail_suffix.rstrip().endswith(b"</plist>")
+            if completed_frames or tail_complete:
+                try:
+                    first_document = self._read_stream_frame_candidate(
+                        capture_path,
+                        index=0,
+                    )
+                    parse_powermetrics_records(first_document)
+                except (OSError, ValueError) as exc:
+                    last_parse_error = str(exc)
+                else:
+                    self._first_parse_stamp = self._clock.stamp()
+                    return AdapterResult(
+                        ok=True,
+                        metadata={
+                            "ready_bytes": self._stream_cursor_offset,
+                            "ready_check": "first_parseable_plist_document",
+                        },
+                    )
             if process.poll() is not None:
                 return AdapterResult(
                     ok=False,
@@ -1447,21 +1590,37 @@ class PowermetricsTelemetryAdapter:
 
         deadline = time.monotonic() + ROLLOVER_TIMEOUT_S
         records_seen = 0
+        next_frame = 0
+        previous_native_s: float | None = None
         while time.monotonic() < deadline:
-            if capture_path.exists() and capture_path.stat().st_size > 0:
+            try:
+                completed_frames = self._advance_stream_cursor(capture_path)
+            except (FileNotFoundError, OSError, ValueError):
+                completed_frames = next_frame
+            available_frames = completed_frames
+            tail_start = (
+                0
+                if not self._stream_frame_boundaries
+                else self._stream_frame_boundaries[-1] + 1
+            )
+            if (
+                self._stream_cursor_offset > tail_start
+                and self._stream_tail_suffix.rstrip().endswith(b"</plist>")
+            ):
+                available_frames += 1
+            while next_frame < available_frames:
                 try:
-                    records = parse_powermetrics_records(capture_path.read_bytes())
-                except ValueError:
-                    records = []
-                records_seen = len(records)
-                native_s = [
-                    float(record.metadata["plist_timestamp_s"])
-                    for record in records
-                ]
-                if any(
-                    later > earlier
-                    for earlier, later in zip(native_s, native_s[1:])
-                ):
+                    frame = self._read_stream_frame_candidate(
+                        capture_path,
+                        index=next_frame,
+                    )
+                    records = parse_powermetrics_records(frame)
+                except (OSError, ValueError):
+                    break
+                native_s = float(records[0].metadata["plist_timestamp_s"])
+                records_seen += 1
+                next_frame += 1
+                if previous_native_s is not None and native_s > previous_native_s:
                     return AdapterResult(
                         ok=True,
                         metadata={
@@ -1469,6 +1628,7 @@ class PowermetricsTelemetryAdapter:
                             "records_before_rollover": records_seen,
                         },
                     )
+                previous_native_s = native_s
             if process.poll() is not None:
                 return AdapterResult(
                     ok=False,
