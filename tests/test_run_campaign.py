@@ -5487,92 +5487,53 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(member["decision"], "failed")
         self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
 
-    def _member_with_attempts(
+    def _produced_retry_member(
         self,
         bundle_id: str,
         *,
         attempt1_records: list[dict] | None,
         attempt2_records: list[dict] | None,
-        final_attempt: int,
-        admission_decision: str,
+        expected_strict_valid: bool = True,
     ):
-        bundle_path = self.root / bundle_id
-        bundle_path.mkdir(parents=True, exist_ok=True)
-        if attempt1_records is not None:
-            (bundle_path / "rich_telemetry_idle.jsonl").write_text(
-                "".join(json.dumps(r) + "\n" for r in attempt1_records)
-            )
-        if attempt2_records is not None:
-            (bundle_path / "rich_telemetry_idle_attempt_2.jsonl").write_text(
-                "".join(json.dumps(r) + "\n" for r in attempt2_records)
-            )
-        metadata = {
-            "environment": {
-                "power_source": "AC Power",
-                "power": {
-                    "adapter_watts": 140,
-                    "adapter_description": "140W USB-C Power Adapter",
-                },
-                "post_run_observation": {
-                    "capture_skipped": False,
-                    "display_power_state": "all_asleep",
-                    "screensaver_engaged": False,
-                    "errors": {},
-                },
-            },
-            "environment_admission": {
-                "schema_version": "joulewise.environment_admission.v1",
-                "critical_environment_passed": True,
-                "reference_provenance_present": True,
-                "per_run_environment_evaluation": {
-                    "schema_version": "joulewise.environment_evaluation.v1",
-                    "eligible": True,
-                    "snapshot_sha256": "ab" * 32,
-                },
-                "decision": admission_decision,
-                "claim_reason": (
-                    None
-                    if admission_decision == "admitted"
-                    else "environment_admission_failed"
-                ),
-                "attempts": [
-                    {
-                        "attempt": n,
-                        "admitted": (
-                            admission_decision == "admitted" and n == final_attempt
-                        ),
-                        "cpu_admission_enforced": True,
-                        "cpu_admission": {
-                            "admitted": (
-                                admission_decision == "admitted"
-                                and n == final_attempt
-                            )
-                        },
-                    }
-                    for n in range(1, final_attempt + 1)
-                ],
-                "guard_observations": [
-                    {
-                        "phase": phase,
-                        "capture_skipped": False,
-                        "display_power_state": "all_asleep",
-                        "screensaver_engaged": False,
-                        "errors": {},
-                    }
-                    for n in range(1, final_attempt + 1)
-                    for phase in (f"before_attempt_{n}", f"after_attempt_{n}")
-                ],
-            },
-        }
-        return run_campaign_module.MemberEvaluation(
-            bundle_id=bundle_id,
-            bundle_path=bundle_path,
-            config_name=f"{bundle_id}.json",
-            status="succeeded",
-            strict_valid=True,
-            summary={},
-            metadata=metadata,
+        from tests.test_controller import produce_retry_powermetrics_bundle
+
+        bundle_path, _summary = produce_retry_powermetrics_bundle(
+            self.root / "runs",
+            bundle_id,
         )
+        attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
+        attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
+        for path, replacements in (
+            (attempt1_path, attempt1_records),
+            (attempt2_path, attempt2_records),
+        ):
+            if replacements is None:
+                path.unlink(missing_ok=True)
+                continue
+            template = replacements[0]
+            produced = [
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line
+            ]
+            for record in produced:
+                record["processor_combined_power_w"] = template[
+                    "processor_combined_power_w"
+                ]
+                record["clusters"] = json.loads(json.dumps(template["clusters"]))
+            path.write_text(
+                "".join(json.dumps(record) + "\n" for record in produced),
+                encoding="utf-8",
+            )
+        config_path = self.root / f"{bundle_id}.json"
+        shutil.copy2(bundle_path / "config.json", config_path)
+        evaluation = run_campaign_module.evaluate_member(
+            bundle_path,
+            info=run_campaign_module.load_config_info(config_path),
+            waivers={},
+        )
+        self.assertIs(evaluation.strict_valid, expected_strict_valid)
+        return evaluation
 
     def test_cpu_admission_reads_final_attempt_telemetry(self) -> None:
         """Fix round 1 (blocker): pair CPU telemetry with the final attempt.
@@ -5586,12 +5547,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         """
 
         binding = self._binding()
-        evaluation = self._member_with_attempts(
+        evaluation = self._produced_retry_member(
             "p2-work-a__r1",
             attempt1_records=_clean_idle_records(),
             attempt2_records=_busy_idle_records(),
-            final_attempt=2,
-            admission_decision="admitted",
         )
         section = run_campaign_module.idle_admission_core_verdict(
             [evaluation], binding
@@ -5609,12 +5568,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         """
 
         binding = self._binding()
-        evaluation = self._member_with_attempts(
+        evaluation = self._produced_retry_member(
             "p2-work-a__r1",
             attempt1_records=_clean_idle_records(),
             attempt2_records=None,
-            final_attempt=2,
-            admission_decision="admitted",
+            expected_strict_valid=False,
         )
         section = run_campaign_module.idle_admission_core_verdict(
             [evaluation], binding
@@ -5633,15 +5591,20 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             ([1, 3], [False, True], "admitted"),
             ([1, 2], [False, False], "admitted"),
         )
+        base_evaluation = self._produced_retry_member(
+            "malformed-ledger",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=_clean_idle_records(),
+        )
         for index, (numbers, admitted, decision) in enumerate(cases):
             with self.subTest(case=index):
-                evaluation = self._member_with_attempts(
-                    f"malformed-{index}",
-                    attempt1_records=_clean_idle_records(),
-                    attempt2_records=_clean_idle_records(),
-                    final_attempt=2,
-                    admission_decision=decision,
+                evaluation = replace(
+                    base_evaluation,
+                    metadata=json.loads(json.dumps(base_evaluation.metadata)),
                 )
+                evaluation.metadata["environment_admission"][
+                    "decision"
+                ] = decision
                 evaluation.metadata["environment_admission"]["attempts"] = [
                     {"attempt": number, "admitted": outcome}
                     for number, outcome in zip(numbers, admitted)

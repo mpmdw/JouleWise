@@ -2305,93 +2305,53 @@ class D078R01RegressionTests(unittest.TestCase):
         self.assertIn("environment_admission_missing", reasons)
 
     def test_current_admission_gap_overlap_and_post_bracket_fail_independently(self) -> None:
+        from joulewise.bundle_read import BundleReader
         from joulewise.environment_admission import current_environment_refusals
+        from tests.test_controller import produce_clean_powermetrics_bundle
 
-        measured_start = 1_784_490_850.0
-        measured_end = measured_start + 1.0
-        cases = (
-            (
-                "gap_over_600s",
-                measured_start - 601.5,
-                measured_start - 600.5,
-                measured_end,
-                True,
-            ),
-            (
-                "attempt_overlaps_measurement",
-                measured_start - 0.5,
-                measured_start + 0.1,
-                measured_end,
-                True,
-            ),
-            (
-                "post_observation_precedes_end",
-                measured_start - 1.0,
-                measured_start - 0.5,
-                measured_end - 0.1,
-                True,
-            ),
-            (
-                "coherent_bracket",
-                measured_start - 1.0,
-                measured_start - 0.5,
-                measured_end,
-                False,
-            ),
-        )
-        for label, attempt_start, attempt_end, post_at, expected_missing in cases:
-            admission = self._clean_environment_admission()
-            admission["attempts"][0].update(
-                {
-                    "start_s": attempt_start,
-                    "end_s": attempt_end,
-                    "baseline": {"duration_s": 0.5},
-                }
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, summary = produce_clean_powermetrics_bundle(
+                Path(tmp),
+                "reduce-current-environment",
             )
-            metadata = {
-                "environment_admission": admission,
-                "environment": {
-                    "post_run_observation": {
-                        "capture_skipped": False,
-                        "captured_at_s": post_at,
-                        "display_power_state": "all_asleep",
-                        "screensaver_engaged": False,
-                        "errors": {},
-                    }
-                },
-            }
-            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
-                bundle = Path(tmp)
-                (bundle / "rich_telemetry_idle.jsonl").write_text(
-                    json.dumps(
-                        {
-                            "timestamp_s": attempt_start + 0.5,
-                            "elapsed_ns": 500_000_000,
-                        }
-                    )
-                    + "\n",
-                    encoding="utf-8",
-                )
-                with (
-                    patch(
-                        "joulewise.environment_admission._recomputed_environment_evaluation_refusals",
-                        return_value=(),
-                    ),
-                    patch(
-                        "joulewise.environment_admission._window_thermal_pressure_refusals",
-                        return_value=(),
-                    ),
-                ):
+            self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+            reader = BundleReader(bundle)
+            measured_window = reader.measured_window()
+            self.assertIsNotNone(measured_window)
+            assert measured_window is not None
+            clean_metadata = reader.metadata()
+            clean_attempt = clean_metadata["environment_admission"]["attempts"][0]
+            attempt_span_s = clean_attempt["end_s"] - clean_attempt["start_s"]
+            cases = (
+                ("gap_over_600s", "gap", True),
+                ("attempt_overlaps_measurement", "overlap", True),
+                ("post_observation_precedes_end", "post", True),
+                ("coherent_bracket", "clean", False),
+            )
+            for label, mutation, expected_missing in cases:
+                metadata = json.loads(json.dumps(clean_metadata))
+                attempt = metadata["environment_admission"]["attempts"][0]
+                if mutation == "gap":
+                    attempt["end_s"] = measured_window.start_s - 600.5
+                    attempt["start_s"] = attempt["end_s"] - attempt_span_s
+                elif mutation == "overlap":
+                    attempt["end_s"] = measured_window.start_s + 0.1
+                    attempt["start_s"] = attempt["end_s"] - attempt_span_s
+                elif mutation == "post":
+                    metadata["environment"]["post_run_observation"][
+                        "captured_at_s"
+                    ] = measured_window.end_s - 0.1
+                with self.subTest(label=label):
                     reasons = current_environment_refusals(
                         metadata,
                         bundle_path=bundle,
-                        measured_window_start_s=measured_start,
-                        measured_window_end_s=measured_end,
+                        measured_window_start_s=measured_window.start_s,
+                        measured_window_end_s=measured_window.end_s,
                     )
-            self.assertEqual(
-                "environment_admission_missing" in reasons,
-                expected_missing,
-            )
+                    self.assertEqual(
+                        "environment_admission_missing" in reasons,
+                        expected_missing,
+                    )
 
     def test_current_attempt_window_must_contain_idle_capture_evidence(self) -> None:
         # G5 defect shapes are independent: a one-second attempt cannot claim
