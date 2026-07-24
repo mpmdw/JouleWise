@@ -63,6 +63,7 @@ standing instructions.
 | C-026 | 2026-07-09 | P2-034 broad campaign packs (pointer entry; run report `2026-07-09-p2034-broad-packs.md`) — design-round-first (memo ratified w/ 3 pins), single worktree stream, dual lenses, final-head CLEAN | PR #39 merged; six packs, pack lint errors=0; compliance lens caught a char-level registry drift the linter cannot see (code-span nesting) + a scorer-leak + P2-022 structure flattening; executability lens caught the external-lab cold-start gap; pre-hardware campaign surface COMPLETE (every pre_hardware_preparable=fully row packed) |
 | C-027 | 2026-07-09 | Whole-project council review with gpt-5.6-sol xhigh (first production session; 7 lenses: topdocs/rigor/stats/meta/reverse/arch/negspace + counterreview + independent Fable-tier final examiner; full record `docs/reviews/2026-07-09-c027-whole-project-review.md`) | 8 blocker clusters confirmed (token-denominator mislabel, superseded D-053 prose, RUN_STATE dual next-action, claim machinery unimplemented+unowned, empty D-050 manifest, four D-031 direct-to-main commits, evidence-integrity trio, protocol blockers); claim surfaces corrected same session; 14 follow-up queue rows + NV-GATE-2 additions to P2-005; D-060 proposed + D-061..D-063 accepted; counterreview reversed the lead twice (legacy-gate framing, restructure staging) |
 | C-031 | 2026-07-22 | D-078 P0 instrument-repair close-out (round-8/8b landing + §C-028 delta re-audit with 3 lenses / 11 refuter runs, round-9 FINAL confirmation, L1 adjudication, PR #79) | Round-8b delta re-audit caught the understated-B_fiducial ClockStamp blocker two audited rounds missed; refuters killed 2 findings, narrowed 1, split 1 (lead-synthesized); CR9-1 adjudicated as registered limitation L1 + FLOOR-BIND-01; failure modes recorded (content-filter refuter kills -> data-quality rephrase; bench-edit-during-enforced-scope false attribution; review-genre null-final recovery) |
+| C-032 | 2026-07-24 | NEG-8 drift-gate estimand debate (Ed-directed pre-ratification cross-model debate; Sol xhigh peer vs lead ruling) | Peer disagreed on inferential role (screen != stability proof) and was adjudicated CORRECT; Ed ratified the amended screen+budget design (option F full) with rigor-spiral + no-invented-physics guardrails; second recorded case of peer design judgment overturning a lead ruling pre-implementation |
 
 ---
 
@@ -1702,3 +1703,21 @@ normalization also reaching v1 replay error behavior) was overridden by
 lead ruling — frozen-replay doctrine protects computed semantics of
 parsable artifacts, not crash reproduction on impossible inputs; the
 reducer's structured-failure contract governs all protocols.
+
+## C-032: NEG-8 estimand debate — peer disagreement adopted, Ed ratification (2026-07-24)
+
+Ed directed a formal cross-model debate on the clause-10 ruling before
+ratifying. Shape: lead position paper + explicit license and request to
+disagree; one xhigh peer round evaluating five design options plus a
+peer-proposed sixth; lead adjudication; plain-language synthesis to Ed;
+Ed ratified the amended design with recorded guardrails (decision log
+clause-10 addendum). Yield: the peer's structural correction (anomaly
+screen must not erase drift from the claim budget) was adopted — the
+second recorded case of invited peer design judgment beating the lead's
+ruling. The debate also surfaced one gap neither model had specced
+(drift-bound freshness horizon — prompted by Ed's own risk question) and
+one open science question (a7-vs-a5 prefill floor scatter, 3x).
+Calibration note: invited-disagreement debate briefs (steelman each
+option, demand failure modes + examiner view) produced markedly higher
+design yield than review-shaped prompts; adopt as the default shape for
+estimand/contract rulings.

@@ -4491,3 +4491,34 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    governed bound artifact exists). Windows a6/a8 may be re-verdicted
    under the derived bound (with explicit waivers for aborted-member
    fragments); a5 and a7 remain refused on their genuine grounds.
+
+   **Clause-10 addendum — debate and Ed ratification (2026-07-24).** Per
+   Ed's direction the ruling was formally debated with the peer model
+   before ratification. The peer DISAGREED with the ruling as written on
+   one structural point and was adjudicated correct: the point-drift
+   statistic is the right estimand but an anomaly screen is not proof of
+   stability — passing the gate must never erase observed drift from the
+   claim error budget (consistent with the repo's own D-054/D-057
+   language). Ed RATIFIED the amended SCREEN + BUDGET design (the
+   debate's option F, full variant, Ed explicitly directing the maximal
+   build): per-claim-family point-drift screens (gross AND
+   idle-subtracted, each with its own derived bound); per-family drift
+   ALLOWANCES propagated additively into every floor/claim envelope of
+   the window, never zero even on passing windows (allowance =
+   max(observed excursion, derived repeatability bound)); replicated
+   endpoint references (n=3 per endpoint, means with standard errors) and
+   one midpoint reference prospectively, with the allowance taken over
+   the maximum absolute excursion across sampled points; drift-bound
+   artifacts carry a freshness horizon and re-derivation triggers
+   (OS/build, power-supply, calibration-identity changes) with a distinct
+   stale-bound refusal spelling; legacy pair-only windows evaluate under
+   the single-member-endpoint minimum. Ed's recorded guardrails: watch
+   the RIGOR SPIRAL (floors inflating past the effect sizes the science
+   needs — monitor floor-vs-expected-effect at every extraction) and NO
+   INVENTED PHYSICS (no functional form without a defensible basis;
+   stated limitations beat unjustified formulas). Guiding light for all
+   measurement-program decisions: the Splitwise replication (P2-006);
+   methodology grounding against the Splitwise paper and comparable
+   energy-measurement literature is in flight and feeds the collection
+   design. Economics note recorded: Ed values artifact quality over
+   time/tokens/machine-hours (project runs months ahead of deadline).

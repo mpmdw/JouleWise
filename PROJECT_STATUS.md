@@ -149,6 +149,29 @@ stronger statistical guarantee we quote for the timing error bar.
 Next: a fresh calibration and re-collection of the measurement campaign
 under the repaired instrument. Record: `docs/run_reports/2026-07-20-p0-instrument-repair.md`.
 
+**COLLECTION ERA UPDATE (2026-07-24): the repaired instrument has now
+been proven in production.** Over two nights we collected 229 clean
+measurements across four properly-bracketed windows. The standout
+result: two identical reference measurements taken three hours apart
+agreed to within 0.007 joules on a ~38.5 joule task — about 0.02%,
+which is excellent repeatability for whole-system power measurement.
+The windows are not yet "claim-grade" for one honest reason: our own
+stability check (comparing a reference task at each window's start and
+end) was found to be asking a mathematically unanswerable question, so
+it failed every window on a technicality while the underlying data was
+good. After a formal debate between the two AI models working on the
+project — which the reviewing model won on one substantive point — the
+check was redesigned and ratified: windows are now screened for
+anomalous drift against a limit derived from measured repeatability
+(instead of an arbitrary constant), and any drift observed is carried
+into the results' error bars rather than being ignored once a window
+"passes". Reference measurements are also being tripled at each window
+edge. One collection session under the new rules produces the project's
+first claim-grade detection-floor table, which then sizes the Splitwise
+replication experiments. Records:
+`docs/run_reports/2026-07-23-window-a-collection-arc.md`, decision log
+D-078 clauses 8-10.
+
 ### Exploratory follow-on — not a promoted claim
 
 Nine additional strict-valid, collection-usable bundles cover three

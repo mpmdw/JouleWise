@@ -1,6 +1,15 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-22 (INSTRUMENT REPAIR SIGNED OFF — the good-news
+Refreshed: 2026-07-24 (COLLECTION ERA — repo far ahead of capsule).
+Since the last deploy the repo gained: the merged repair PRs #79-#84,
+two nights of collection (229 members, four bracketed windows), the
+NEG-8 drift-gate redesign (debated, Ed-ratified, D-078 clauses 8-10),
+a new plain-language PROJECT_STATUS collection-era section, the
+2026-07-23 collection-arc run report, and council entries C-031/C-032.
+Recommendation unchanged: deploy at the next natural point (after the
+first claim-grade floor table lands, one more window). Ed deploys.
+
+Prior refresh: 2026-07-22 (INSTRUMENT REPAIR SIGNED OFF — the good-news
 counterpart to the 07-19d alert below, which remains partly operative
 until deploy). Repo truth now AHEAD of the live capsule: the D-078
 instrument repair is complete and signed off (nine adversarial
