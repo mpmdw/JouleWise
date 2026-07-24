@@ -4440,3 +4440,33 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    the head in-session; the lead's full-suite gate over the identical tree
    content (2088 passed / 15 skipped / 1570 subtests / 0 failures)
    stands as the aggregate confirmation.
+
+9. **Live collection arc (2026-07-22/23) — collection-path regressions,
+   occurrence supersession, and basis-scoped verdicts.** The first live
+   Window-A members after sign-off exposed collection-path defects invisible
+   to nine review rounds without hardware; each was fixed under the ratified
+   contracts (PR #80 canonical-attempt promotion + sole-sampler gapless
+   design; PR #81 idle-slice cursor after forensics proved the slicer's own
+   parsing contaminated the admission interval at the real ~120 ms
+   powermetrics cadence). Two doctrine amendments were then ruled by the
+   lead when the whole-window verdict path contradicted operational
+   guidance (both defaults preserved, both overrides explicit and
+   auditable):
+   - **Occurrence supersession (amends the round-6 occurrence-count
+     doctrine):** duplicated member occurrences still REFUSE by default; a
+     duplicate may resolve to the present bundle only when an explicit
+     operator supersession artifact (append-only, hash-sealed, naming the
+     superseded occurrence, quarantine destination, and reason —
+     `--record-supersession`) exists; two present bundles always refuse.
+   - **Basis-scoped whole-window verdicts:** latest-wins remains rejected
+     (verdict-shopping prevention); every verdict records a canonical
+     evaluation-basis hash (member occurrence set + calibration bracket set
+     + policy) and binds only that basis; consumers match the claim's
+     basis; legacy basis-less verdict rows never govern new claims.
+   Diagnostic-cascade decoupling and whole-window waiver consumption landed
+   in the same wave. Windows a5 (108 members) and prior attempts remain
+   NON-claim-bearing as whole windows (true clock-anchor refusal on one
+   member; NEG-8 end reference measured ~2 h post-collection failed the
+   drift gate at 0.778 J — the instrument correctly refusing a stale
+   bracket); their corpora stand as instrument-proving evidence. The next
+   clean bracketed window is the first claim attempt.

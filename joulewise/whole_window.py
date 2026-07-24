@@ -1,9 +1,9 @@
 """Hash-bound, coverage-complete whole-window idle-admission verdict join.
 
 The verdict is a claim barrier, not an append-log preference.  A consumer must
-prove that one internally consistent row covers every bundle it is about to
-use.  Conflicting append-only rows are therefore an ambiguity/refusal; file
-order never grants a later row authority to erase an earlier failure.
+prove that one internally consistent row covers the exact evaluation basis it
+is about to use.  Different bases coexist in append-only history; file order
+never grants a later row authority to erase an earlier failure.
 """
 
 from __future__ import annotations
@@ -39,6 +39,12 @@ WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 WHOLE_WINDOW_PROVENANCE_SCHEMA = (
     "joulewise.idle_admission_whole_window_provenance.v1"
+)
+WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA = (
+    "joulewise.idle_admission_evaluation_basis.v1"
+)
+OCCURRENCE_SUPERSESSION_SCHEMA = (
+    "joulewise.campaign_occurrence_supersession.v1"
 )
 CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
 
@@ -103,6 +109,50 @@ def build_row_provenance(
     }
 
 
+def build_evaluation_basis(
+    *,
+    policy_sha256: str,
+    member_occurrences: Sequence[Mapping[str, Any]],
+    calibration_bracket: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Bind one verdict to physical member bytes and its calibration pair."""
+
+    occurrences = sorted(
+        (dict(value) for value in member_occurrences),
+        key=lambda value: (
+            str(value.get("bundle_id")),
+            str(value.get("bundle_path")),
+        ),
+    )
+    bracket_set = {
+        "pre": (
+            dict(calibration_bracket["pre"])
+            if isinstance(calibration_bracket, Mapping)
+            and isinstance(calibration_bracket.get("pre"), Mapping)
+            else None
+        ),
+        "post": (
+            dict(calibration_bracket["post"])
+            if isinstance(calibration_bracket, Mapping)
+            and isinstance(calibration_bracket.get("post"), Mapping)
+            else None
+        ),
+    }
+    payload = {
+        "schema_version": WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA,
+        "policy_sha256": policy_sha256,
+        "member_occurrences": occurrences,
+        "calibration_bracket_set": bracket_set,
+    }
+    return {**payload, "sha256": canonical_sha256(payload)}
+
+
+def supersession_entry_sha256(entry: Mapping[str, Any]) -> str:
+    return canonical_sha256(
+        {key: value for key, value in entry.items() if key != "entry_sha256"}
+    )
+
+
 def _safe_source_path(root: Path, text: Any) -> Path | None:
     if not isinstance(text, str) or not text:
         return None
@@ -117,6 +167,146 @@ def _safe_source_path(root: Path, text: Any) -> Path | None:
     if path == resolved_root or resolved_root not in path.parents:
         return None
     return path
+
+
+def ordinary_present_bundle_paths(runs_root: Path, bundle_id: str) -> list[Path]:
+    """Find canonical and moved-in-root copies of one ordinary bundle."""
+
+    root = Path(runs_root).resolve()
+    result: list[Path] = []
+    try:
+        candidates = sorted(path for path in root.iterdir() if path.is_dir())
+    except OSError:
+        return result
+    for path in candidates:
+        if path.name == bundle_id:
+            result.append(path)
+            continue
+        if not (path / "summary_metrics.json").is_file():
+            continue
+        config = _read_json_object(path / "config.json")
+        run_id = config.get("run_id") if isinstance(config, Mapping) else None
+        if (
+            isinstance(run_id, str)
+            and sanitize_id_component(run_id) == bundle_id
+        ):
+            result.append(path)
+    return result
+
+
+def _occurrence_descriptor_valid(
+    value: Any, runs_root: Path, *, bundle_id: str
+) -> bool:
+    if not isinstance(value, Mapping) or value.get("bundle_id") != bundle_id:
+        return False
+    source = value.get("source_manifest")
+    member_index = value.get("member_index")
+    bundle_index = value.get("bundle_index")
+    if (
+        not isinstance(source, Mapping)
+        or isinstance(member_index, bool)
+        or not isinstance(member_index, int)
+        or member_index < 0
+        or isinstance(bundle_index, bool)
+        or not isinstance(bundle_index, int)
+        or bundle_index < 0
+    ):
+        return False
+    path = _safe_source_path(runs_root, source.get("path"))
+    expected_sha = source.get("sha256")
+    try:
+        raw = path.read_bytes() if path is not None else None
+        manifest = json.loads(raw) if raw is not None else None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if (
+        raw is None
+        or not isinstance(expected_sha, str)
+        or hashlib.sha256(raw).hexdigest() != expected_sha
+        or not isinstance(manifest, Mapping)
+    ):
+        return False
+    members = manifest.get("members")
+    if not isinstance(members, list) or member_index >= len(members):
+        return False
+    member = members[member_index]
+    ids = member.get("bundle_ids") if isinstance(member, Mapping) else None
+    return bool(
+        isinstance(member, Mapping)
+        and member.get("execution") == "invoked"
+        and isinstance(ids, list)
+        and bundle_index < len(ids)
+        and ids[bundle_index] == bundle_id
+    )
+
+
+def validate_occurrence_supersession_entry(
+    entry: Mapping[str, Any], runs_root: Path
+) -> bool:
+    """Validate an explicit operator supersession artifact from current bytes."""
+
+    root = Path(runs_root).resolve()
+    bundle_id = entry.get("bundle_id")
+    superseded = entry.get("superseded_occurrences")
+    quarantine = entry.get("quarantine")
+    if (
+        entry.get("schema_version") != OCCURRENCE_SUPERSESSION_SCHEMA
+        or entry.get("record_type") != "campaign_occurrence_supersession"
+        or entry.get("runs_root") != str(root)
+        or not isinstance(bundle_id, str)
+        or not bundle_id
+        or not isinstance(entry.get("reason"), str)
+        or not entry["reason"].strip()
+        or not isinstance(superseded, list)
+        or not superseded
+        or not isinstance(quarantine, Mapping)
+        or entry.get("entry_sha256") != supersession_entry_sha256(entry)
+    ):
+        return False
+    selected = entry.get("selected_occurrence")
+    if not _occurrence_descriptor_valid(selected, root, bundle_id=bundle_id):
+        return False
+    if any(
+        not _occurrence_descriptor_valid(value, root, bundle_id=bundle_id)
+        for value in superseded
+    ):
+        return False
+    occurrence_hashes = [canonical_sha256(value) for value in superseded]
+    if (
+        len(set(occurrence_hashes)) != len(occurrence_hashes)
+        or canonical_sha256(selected) in occurrence_hashes
+    ):
+        return False
+    canonical = root / bundle_id
+    present = ordinary_present_bundle_paths(root, bundle_id)
+    if present != [canonical] or not canonical.is_dir():
+        return False
+    quarantine_path_text = quarantine.get("path")
+    if not isinstance(quarantine_path_text, str) or not quarantine_path_text:
+        return False
+    try:
+        quarantine_path = Path(quarantine_path_text).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if quarantine_path == root or root in quarantine_path.parents:
+        return False
+    for name, field in (
+        ("config.json", "config_sha256"),
+        ("metadata.json", "metadata_sha256"),
+        ("summary_metrics.json", "summary_sha256"),
+    ):
+        expected = quarantine.get(field)
+        try:
+            raw = (quarantine_path / name).read_bytes()
+        except OSError:
+            return False
+        if (
+            not isinstance(expected, str)
+            or len(expected) != 64
+            or hashlib.sha256(raw).hexdigest() != expected
+        ):
+            return False
+    return True
 
 
 def _evidence_map(path: Path) -> dict[str, bytes]:
@@ -990,10 +1180,209 @@ def _current_core_rederivation_reasons(
     return reasons
 
 
+def _validated_evaluation_basis(
+    row: Mapping[str, Any], runs_root: Path
+) -> Mapping[str, Any] | None:
+    basis = row.get("evaluation_basis")
+    if not isinstance(basis, Mapping):
+        return None
+    payload = {key: value for key, value in basis.items() if key != "sha256"}
+    policy = row.get("campaign_policy")
+    policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
+    occurrences = basis.get("member_occurrences")
+    bracket_set = basis.get("calibration_bracket_set")
+    core = row.get("idle_admission_core")
+    stored_bracket = (
+        core.get("instrument_calibration_bracket")
+        if isinstance(core, Mapping)
+        else None
+    )
+    expected_bracket_set = {
+        "pre": (
+            dict(stored_bracket["pre"])
+            if isinstance(stored_bracket, Mapping)
+            and isinstance(stored_bracket.get("pre"), Mapping)
+            else None
+        ),
+        "post": (
+            dict(stored_bracket["post"])
+            if isinstance(stored_bracket, Mapping)
+            and isinstance(stored_bracket.get("post"), Mapping)
+            else None
+        ),
+    }
+    if (
+        basis.get("schema_version") != WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA
+        or basis.get("policy_sha256") != policy_sha
+        or basis.get("sha256") != canonical_sha256(payload)
+        or not isinstance(occurrences, list)
+        or not occurrences
+        or bracket_set != expected_bracket_set
+    ):
+        return None
+    ids: list[str] = []
+    root = Path(runs_root).resolve()
+    for occurrence in occurrences:
+        if not isinstance(occurrence, Mapping):
+            return None
+        bundle_id = occurrence.get("bundle_id")
+        path = _safe_source_path(root, occurrence.get("bundle_path"))
+        if not isinstance(bundle_id, str) or not bundle_id or path is None:
+            return None
+        ids.append(bundle_id)
+        for name, field in (
+            ("config.json", "config_sha256"),
+            ("metadata.json", "metadata_sha256"),
+            ("summary_metrics.json", "summary_sha256"),
+        ):
+            expected = occurrence.get(field)
+            try:
+                raw = (path / name).read_bytes()
+            except OSError:
+                return None
+            if (
+                not isinstance(expected, str)
+                or len(expected) != 64
+                or hashlib.sha256(raw).hexdigest() != expected
+            ):
+                return None
+    bundle_ids = row.get("bundle_ids")
+    scope = row.get("evaluation_scope")
+    if (
+        len(set(ids)) != len(ids)
+        or not isinstance(bundle_ids, list)
+        or sorted(ids) != sorted(bundle_ids)
+        or not isinstance(scope, Mapping)
+        or scope.get("runs_root") != str(root)
+        or not isinstance(scope.get("started_at"), str)
+        or not isinstance(scope.get("completed_at"), str)
+    ):
+        return None
+    return basis
+
+
+def _supersession_is_logged(entry: Mapping[str, Any], runs_root: Path) -> bool:
+    try:
+        lines = (Path(runs_root) / "campaign_log.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    for line in lines:
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, Mapping) and dict(value) == dict(entry):
+            return True
+    return False
+
+
+def _basis_source_manifests(
+    *,
+    basis: Mapping[str, Any],
+    verified_sources: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
+    row: Mapping[str, Any],
+    runs_root: Path,
+) -> list[Mapping[str, Any]] | None:
+    """Project authenticated source history onto the basis-selected occurrences."""
+
+    wanted = {
+        occurrence.get("bundle_id")
+        for occurrence in basis.get("member_occurrences", [])
+        if isinstance(occurrence, Mapping)
+        and isinstance(occurrence.get("bundle_id"), str)
+    }
+    selected_manifests: list[Mapping[str, Any]] = []
+    ordinary: dict[str, list[tuple[dict[str, Any], Mapping[str, Any]]]] = {}
+    for descriptor, manifest in verified_sources:
+        if isinstance(manifest.get("attempt_ledger_selection"), Mapping):
+            members = _manifest_members(manifest, runs_root)
+            if members is None:
+                return None
+            if members & wanted:
+                selected_manifests.append(manifest)
+            continue
+        members = manifest.get("members")
+        if not isinstance(members, list):
+            return None
+        for member_index, member in enumerate(members):
+            if (
+                not isinstance(member, Mapping)
+                or member.get("execution") != "invoked"
+            ):
+                continue
+            ids = member.get("bundle_ids")
+            if not isinstance(ids, list):
+                return None
+            for bundle_index, bundle_id in enumerate(ids):
+                if bundle_id in wanted:
+                    occurrence = {
+                        "bundle_id": bundle_id,
+                        "source_manifest": dict(descriptor),
+                        "member_index": member_index,
+                        "bundle_index": bundle_index,
+                    }
+                    filtered_member = dict(member)
+                    filtered_member["bundle_ids"] = [bundle_id]
+                    filtered_manifest = dict(manifest)
+                    filtered_manifest["members"] = [filtered_member]
+                    ordinary.setdefault(bundle_id, []).append(
+                        (occurrence, filtered_manifest)
+                    )
+    supersessions = row.get("occurrence_supersessions")
+    campaign_policy = row.get("campaign_policy")
+    policy_sha256 = (
+        campaign_policy.get("sha256")
+        if isinstance(campaign_policy, Mapping)
+        else None
+    )
+    supplied = (
+        [value for value in supersessions if isinstance(value, Mapping)]
+        if isinstance(supersessions, list)
+        else []
+    )
+    used_entries: set[str] = set()
+    for bundle_id in sorted(wanted):
+        occurrences = ordinary.get(bundle_id, [])
+        if not occurrences:
+            if any(
+                bundle_id in (_manifest_members(value, runs_root) or set())
+                for value in selected_manifests
+            ):
+                continue
+            return None
+        if len(occurrences) == 1:
+            selected_manifests.append(occurrences[0][1])
+            continue
+        matches = [
+            entry
+            for entry in supplied
+            if entry.get("bundle_id") == bundle_id
+            and entry.get("campaign_policy_sha256") == policy_sha256
+            and entry.get("selected_occurrence") == occurrences[-1][0]
+            and entry.get("superseded_occurrences")
+            == [value[0] for value in occurrences[:-1]]
+            and validate_occurrence_supersession_entry(entry, runs_root)
+            and _supersession_is_logged(entry, runs_root)
+        ]
+        if len(matches) != 1:
+            return None
+        used_entries.add(str(matches[0].get("entry_sha256")))
+        selected_manifests.append(occurrences[-1][1])
+    if len(used_entries) != len(supplied):
+        return None
+    return selected_manifests
+
+
 def _validate_row(
     row: Mapping[str, Any], runs_root: Path, referenced: set[str]
 ) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
+    basis_present = "evaluation_basis" in row
+    basis = _validated_evaluation_basis(row, runs_root)
+    if basis_present and basis is None:
+        reasons.add("whole_window_verdict_provenance_invalid")
     if row.get("schema_version") != WHOLE_WINDOW_SCHEMA:
         reasons.add("whole_window_verdict_provenance_invalid")
     bundle_ids = row.get("bundle_ids")
@@ -1033,6 +1422,9 @@ def _validate_row(
     )
     covered_by_sources: set[str] = set()
     verified_source_manifests: list[Mapping[str, Any]] = []
+    verified_sources: list[
+        tuple[Mapping[str, Any], Mapping[str, Any]]
+    ] = []
     if not isinstance(descriptors, list) or not descriptors:
         reasons.add("whole_window_verdict_provenance_invalid")
     else:
@@ -1074,12 +1466,31 @@ def _validate_row(
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")
                 continue
-            members = _manifest_members(manifest, runs_root)
-            if members is None:
-                reasons.add("whole_window_verdict_provenance_invalid")
-                continue
-            covered_by_sources.update(members)
-            verified_source_manifests.append(manifest)
+            verified_sources.append((descriptor, manifest))
+            if basis is None:
+                members = _manifest_members(manifest, runs_root)
+                if members is None:
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                    continue
+                covered_by_sources.update(members)
+                verified_source_manifests.append(manifest)
+    if basis is not None:
+        projected = _basis_source_manifests(
+            basis=basis,
+            verified_sources=verified_sources,
+            row=row,
+            runs_root=runs_root,
+        )
+        if projected is None:
+            reasons.add("whole_window_verdict_provenance_invalid")
+        else:
+            verified_source_manifests = projected
+            covered_by_sources.update(
+                occurrence.get("bundle_id")
+                for occurrence in basis.get("member_occurrences", [])
+                if isinstance(occurrence, Mapping)
+                and isinstance(occurrence.get("bundle_id"), str)
+            )
     if not set(bundle_ids).issubset(covered_by_sources):
         reasons.add("whole_window_verdict_provenance_invalid")
 
@@ -1119,8 +1530,28 @@ def _validate_row(
                     verified_source_manifests,
                     runs_root,
                     registered_policy,
-                    current=_row_references_current_strict_member(
-                        row, runs_root, referenced
+                    current=(
+                        any(
+                            isinstance(occurrence, Mapping)
+                            and (
+                                path := _safe_source_path(
+                                    runs_root, occurrence.get("bundle_path")
+                                )
+                            )
+                            is not None
+                            and _current_strict_summary(
+                                _read_json_object(
+                                    path / "summary_metrics.json"
+                                )
+                            )
+                            for occurrence in basis.get(
+                                "member_occurrences", []
+                            )
+                        )
+                        if basis is not None
+                        else _row_references_current_strict_member(
+                            row, runs_root, referenced
+                        )
                     ),
                 )
                 if derived_problem == "conflict":
@@ -1206,9 +1637,12 @@ def _row_references_current_strict_member(
 
 
 def whole_window_refusal_reasons(
-    runs_root: Path, referenced_bundle_ids: set[str]
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    evaluation_basis_sha256: str | None = None,
 ) -> tuple[str, ...]:
-    """Return stable refusal reasons for a coverage-complete verdict join."""
+    """Return refusals from the verdict governing the requested exact basis."""
 
     missing = (
         "whole_window_neg8_verdict_missing",
@@ -1221,9 +1655,7 @@ def whole_window_refusal_reasons(
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return missing
-    overlapping: list[Mapping[str, Any]] = []
-    valid: list[Mapping[str, Any]] = []
-    invalid_reasons: set[str] = set()
+    verdict_rows: list[Mapping[str, Any]] = []
     history_malformed = False
     for line in lines:
         if not line.strip():
@@ -1246,7 +1678,39 @@ def whole_window_refusal_reasons(
         } if isinstance(bundle_ids, list) else set()
         if not ids.intersection(referenced_bundle_ids):
             continue
-        overlapping.append(row)
+        verdict_rows.append(row)
+    basis_rows = [
+        row
+        for row in verdict_rows
+        if isinstance(row.get("evaluation_basis"), Mapping)
+    ]
+    if basis_rows:
+        overlapping = []
+        for row in basis_rows:
+            basis = row["evaluation_basis"]
+            occurrences = basis.get("member_occurrences")
+            ids = {
+                value.get("bundle_id")
+                for value in occurrences or []
+                if isinstance(value, Mapping)
+                and isinstance(value.get("bundle_id"), str)
+            } if isinstance(occurrences, list) else set()
+            if evaluation_basis_sha256 is not None:
+                if (
+                    basis.get("sha256") == evaluation_basis_sha256
+                    and referenced_bundle_ids.issubset(ids)
+                ):
+                    overlapping.append(row)
+            elif ids == referenced_bundle_ids:
+                overlapping.append(row)
+    else:
+        # Legacy rows remain replay-readable when no basis-bearing history
+        # exists. Once a runner records bases, legacy rows never govern the
+        # new claim path.
+        overlapping = verdict_rows
+    valid: list[Mapping[str, Any]] = []
+    invalid_reasons: set[str] = set()
+    for row in overlapping:
         ok, reasons = _validate_row(row, Path(runs_root), referenced_bundle_ids)
         if ok:
             valid.append(row)
@@ -1274,8 +1738,9 @@ def whole_window_refusal_reasons(
         return missing
     if not valid:
         return tuple(sorted(invalid_reasons or set(missing)))
-    # Any overlapping malformed/incomplete row or any semantically different
-    # valid row makes append-only history ambiguous.  No "latest wins" escape.
+    # Within one selected basis, any malformed/incomplete or semantically
+    # different row remains ambiguous. Different bases were filtered above,
+    # never ordered as "latest wins".
     if len(valid) != len(overlapping):
         return ("whole_window_verdict_conflict",)
     semantic = {
@@ -1286,6 +1751,7 @@ def whole_window_refusal_reasons(
                 "campaign_policy": row.get("campaign_policy"),
                 "idle_admission_core": row.get("idle_admission_core"),
                 "row_provenance": row.get("row_provenance"),
+                "evaluation_basis": row.get("evaluation_basis"),
             }
         )
         for row in valid
@@ -1296,10 +1762,16 @@ def whole_window_refusal_reasons(
 
 
 __all__ = [
+    "OCCURRENCE_SUPERSESSION_SCHEMA",
+    "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
     "WHOLE_WINDOW_SCHEMA",
+    "build_evaluation_basis",
     "build_row_provenance",
     "canonical_sha256",
+    "ordinary_present_bundle_paths",
     "source_manifest_descriptors",
+    "supersession_entry_sha256",
+    "validate_occurrence_supersession_entry",
     "whole_window_refusal_reasons",
 ]
