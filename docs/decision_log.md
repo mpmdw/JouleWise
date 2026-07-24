@@ -4556,3 +4556,25 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    allowance term is absent — refuse, never default to zero; registered
    in both the floor-extraction refusal and reducer reason vocabularies,
    mirroring the `interpolation_bound_unrecorded` idiom).
+
+   **Clause-10 addendum 3 — terminal mock bar (lead, 2026-07-24).** Review
+   of the screen+budget fix round found the ratified premise "mock
+   telemetry can never bear claims" enforced only at the campaign
+   readiness gate and inside individual barrier exemptions — no terminal
+   enforcement existed at the analysis claim boundary, so an honest
+   mock-telemetry member (no forgery) was admissible into floor cells and
+   claim evidence with the anchor-fallback, CPU-admission, and
+   environment barriers all correctly-but-consequentially disabled for
+   it. Registered spelling: `mock_telemetry_claim_ineligible` (a
+   claim-bearing consumption path received a member whose custody-bound
+   config telemetry backend is the mock class; refuse — mock is
+   development-only evidence and no waiver spelling exists). Mockness is
+   derived from the custody-bound config (`hardware_target.
+   telemetry_backend`, config bytes bound via `metadata.config_sha256`),
+   never from summary/metadata labels alone; where a custody-bound
+   config exists, config/metadata/summary telemetry identities must
+   agree by backend class (governed `mock:*` tagged sources are mock
+   class) or the bundle is strict-invalid. Absence of a custody-bound
+   config is non-production evidence, refused by strict validation on
+   every real path (fixture-only permissive paths retain their ratified
+   intent). Lead-initiated; flagged for Ed's review at the PR gate.
