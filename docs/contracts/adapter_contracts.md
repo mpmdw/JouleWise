@@ -574,6 +574,18 @@ quarantine/supersession procedure before replacement; it is never recovered
 by silently accepting the fallback endpoint. The 10 ms wall-versus-monotonic
 spawn bracket remains strict.
 
+**TELEMETRY IDENTITY + TERMINAL MOCK BAR addendum — D-078 clause 10
+addendum 3:** when `metadata.config_sha256` authenticates `config.json`, the
+typed config's `hardware_target.telemetry_backend` is the mockness authority.
+Its backend class must agree with `metadata.adapters.telemetry.name` and
+`summary.measurement_quality.telemetry_source`; governed `mock:*` summary
+sources are the `mock` class. A disagreement is `bundle_strict_invalid`.
+Without a custody-bound config the evidence is non-production (fixture-only
+consumers retain their permissive role), never production evidence inferred
+from a summary label. At claim admission, a custody-bound mock backend refuses
+unwaivably as `mock_telemetry_claim_ineligible`; campaign collection/readiness
+behavior remains unchanged.
+
 ## Structured Failure Reasons
 
 Adapters should report failures with stable reason codes:

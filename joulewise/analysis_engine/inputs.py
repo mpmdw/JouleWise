@@ -31,6 +31,7 @@ from joulewise.detection_floor import (
 )
 from joulewise.whole_window import (
     NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
@@ -91,6 +92,7 @@ CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD = (
 )
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
 ANCHOR_FALLBACK_MEMBER_REFUSAL = "anchor_fallback_member_unusable"
+MOCK_TELEMETRY_CLAIM_REFUSAL = "mock_telemetry_claim_ineligible"
 
 
 def _nested_contains(value: object, target: str) -> bool:
@@ -106,13 +108,26 @@ def _nested_contains(value: object, target: str) -> bool:
 def anchor_fallback_member_unusable(
     summary: Mapping[str, Any] | None,
     metadata: Mapping[str, Any] | None,
+    bundle_path: Path | None = None,
 ) -> bool:
-    """Whether a production member lacks admissible anchor-width evidence."""
+    """Whether a production member lacks admissible anchor-width evidence.
+
+    Mock-config and config-absent members are exempt so fixture-only
+    extraction remains useful without being mistaken for production evidence.
+    The production gate is the addendum in
+    ``docs/phase_2/detection_floor.md``.
+    """
 
     if not isinstance(summary, Mapping):
         return False
-    quality = summary.get("measurement_quality")
-    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
+    if bundle_path is None:
+        return False
+    identity = custody_telemetry_identity(
+        bundle_path,
+        summary=summary,
+        metadata=metadata,
+    )
+    if identity.production_predicate_exempt:
         return False
     if summary.get("energy_uncertainty_status") != "bounded":
         return True
@@ -841,7 +856,19 @@ def bind_floor_artifact_evidence(
                 raw_config = reader.raw_config()
                 local_problems.extend(strict)
                 local_problems.extend(_source_provenance_admission_problems(metadata, summary))
-                if anchor_fallback_member_unusable(summary, metadata):
+                telemetry_identity = custody_telemetry_identity(
+                    path,
+                    summary=summary,
+                    metadata=metadata,
+                )
+                if (
+                    telemetry_identity.custody_bound_config
+                    and not telemetry_identity.triangle_agrees
+                ):
+                    local_problems.append("bundle_strict_invalid")
+                if telemetry_identity.mock_config:
+                    local_problems.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
+                if anchor_fallback_member_unusable(summary, metadata, path):
                     local_problems.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
                 if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
                     local_problems.append("calibration bundle status is not succeeded")
@@ -1547,6 +1574,16 @@ def _read_bundle(
     strict_problems = tuple(
         (*strict_problems, *_source_provenance_admission_problems(metadata, summary))
     )
+    telemetry_identity = custody_telemetry_identity(
+        path,
+        summary=summary,
+        metadata=metadata,
+    )
+    if (
+        telemetry_identity.custody_bound_config
+        and not telemetry_identity.triangle_agrees
+    ):
+        strict_problems = (*strict_problems, "bundle_strict_invalid")
     config_sha256 = _sha256_file(path / "config.json")
     expected_config_sha256 = (
         None if allow_replacement_tags else _expected_bundle_config_sha256(source_config)
@@ -1572,6 +1609,8 @@ def _read_bundle(
         reasons.append("config_hash_mismatch")
     if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
         reasons.append("bundle_status_not_succeeded")
+    if telemetry_identity.mock_config:
+        reasons.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
     inclusion = "included" if not reasons else "excluded"
     return BundleEvidence(
         entry=entry,
@@ -1837,6 +1876,12 @@ def load_analysis_inputs(
             {evidence.bundle_id for evidence in effective.values()},
         )
         for evidence in (*registered.values(), *extras):
+            # A ``legacy`` result is never an allowance waiver: every
+            # governed non-current reducer pair is already claim-ineligible
+            # via deterministic_bounds' universal clock_anchor_unresolved
+            # barrier (and floor extraction separately requires the current
+            # anchor envelope). This flag only distinguishes current rows that
+            # must carry the newly authenticated allowance group.
             evidence.whole_window_drift_allowance_required = (
                 allowances.status != "legacy"
             )

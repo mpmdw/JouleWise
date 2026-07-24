@@ -59,6 +59,7 @@ from joulewise.analysis_engine.inputs import (
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     BundleEvidence,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
     _sha256_file,
     _summary_reducer_version,
     anchor_fallback_member_unusable,
@@ -77,6 +78,7 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.whole_window import (
+    custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
@@ -159,6 +161,7 @@ CELL_REFUSAL_CODES = (
     "calibration_bracket_exceeds_minted_bound",
     "admissible_set_uncertainty_dominates_point_floor",
     "whole_window_drift_allowance_unrecorded",
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
@@ -392,12 +395,18 @@ def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | Non
 def _cpu_admission_bundle_reasons(
     path: Path, summary: Mapping[str, Any]
 ) -> tuple[str, ...]:
-    quality = summary.get("measurement_quality")
-    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
-        return ()
     try:
         metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata = None
+    telemetry_identity = custody_telemetry_identity(
+        path,
+        summary=summary,
+        metadata=metadata if isinstance(metadata, Mapping) else None,
+    )
+    if telemetry_identity.production_predicate_exempt:
+        return ()
+    if not isinstance(metadata, Mapping):
         return ("environment_admission_missing",)
     admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
     reasons = set(environment_admission_refusals(admission))
@@ -463,7 +472,12 @@ def _evaluate_member(
             )
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             metadata = None
-        if anchor_fallback_member_unusable(summary, metadata):
+        telemetry_identity = custody_telemetry_identity(
+            path,
+            summary=summary,
+            metadata=metadata,
+        )
+        if anchor_fallback_member_unusable(summary, metadata, path):
             reasons.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
         # A claim-bearing floor may only be extracted from a STRICT-VALID
         # bundle (D-030): the measured window, summed curve, and re-reduction
@@ -476,8 +490,15 @@ def _evaluate_member(
             strict_problems = tuple(strict_validator(path, True))
         except Exception:  # noqa: BLE001 - validator failure is never a pass
             strict_problems = ("strict validation raised",)
+        if (
+            telemetry_identity.custody_bound_config
+            and not telemetry_identity.triangle_agrees
+        ):
+            strict_problems = (*strict_problems, "telemetry triangle disagreement")
         if strict_problems:
             reasons.append("bundle_strict_invalid")
+        if telemetry_identity.mock_config:
+            reasons.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
         if summary.get("status") != "succeeded":
             reasons.append("bundle_status_not_succeeded")
         reasons.extend(_cpu_admission_bundle_reasons(path, summary))

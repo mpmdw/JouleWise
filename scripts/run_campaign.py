@@ -112,6 +112,7 @@ from joulewise.whole_window import (  # noqa: E402
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     build_row_provenance,
+    custody_telemetry_identity,
     evaluate_neg8_point_drift,
     load_neg8_drift_bound_artifact,
     mint_neg8_drift_bound_artifact,
@@ -2058,6 +2059,17 @@ def evaluate_member(
                 metadata = parsed_metadata
         except (OSError, json.JSONDecodeError):
             metadata = None
+    telemetry_identity = custody_telemetry_identity(
+        bundle_dir,
+        summary=summary,
+        metadata=metadata,
+    )
+    if (
+        telemetry_identity.custody_bound_config
+        and not telemetry_identity.triangle_agrees
+    ):
+        problems.append("bundle_strict_invalid")
+    strict_valid = not problems
     prompt_hash_check = check_prompt_hashes_for_config_bundle(bundle_dir, info)
     binding_problem = (
         _bundle_config_binding_problem(bundle_dir, info)
@@ -2067,7 +2079,7 @@ def evaluate_member(
     collection_flags = set(prompt_hash_check.collection_integrity_flags())
     if (
         info.role in FLOOR_MEMBER_ROLES
-        and anchor_fallback_member_unusable(summary, metadata)
+        and anchor_fallback_member_unusable(summary, metadata, bundle_dir)
     ):
         collection_flags.add(ANCHOR_FALLBACK_MEMBER_REFUSAL)
     if binding_problem is not None:
@@ -3158,9 +3170,15 @@ def _current_member_environment_refusals(
     summary = evaluation.summary
     provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
     reducer_version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
-    quality = summary.get("measurement_quality") if isinstance(summary, dict) else None
-    telemetry_source = quality.get("telemetry_source") if isinstance(quality, dict) else None
-    if reducer_version not in {"0.5.2", "0.6.2"} or telemetry_source == "mock":
+    telemetry_identity = custody_telemetry_identity(
+        evaluation.bundle_path,
+        summary=summary,
+        metadata=evaluation.metadata,
+    )
+    if (
+        reducer_version not in {"0.5.2", "0.6.2"}
+        or telemetry_identity.production_predicate_exempt
+    ):
         return ()
     metadata = evaluation.metadata
     if not isinstance(metadata, dict):
@@ -3675,9 +3693,19 @@ def _whole_window_member(
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
     collection_flags: set[str] = set()
+    telemetry_identity = custody_telemetry_identity(
+        bundle_path,
+        summary=summary,
+        metadata=metadata,
+    )
+    if (
+        telemetry_identity.custody_bound_config
+        and not telemetry_identity.triangle_agrees
+    ):
+        problems.append("bundle_strict_invalid")
     if (
         source.role in FLOOR_MEMBER_ROLES
-        and anchor_fallback_member_unusable(summary, metadata)
+        and anchor_fallback_member_unusable(summary, metadata, bundle_path)
     ):
         collection_flags.add(ANCHOR_FALLBACK_MEMBER_REFUSAL)
     config_name = source.config_name or "<whole-window-existing-bundle>"
@@ -4434,28 +4462,23 @@ def _member_readiness_reasons(
         if isinstance(summary_provenance, dict)
         else None
     )
-    readiness_quality = (
-        evaluation.summary.get("measurement_quality")
-        if isinstance(evaluation.summary, dict)
-        else None
-    )
-    readiness_telemetry = (
-        readiness_quality.get("telemetry_source")
-        if isinstance(readiness_quality, dict)
-        else None
+    readiness_telemetry_identity = custody_telemetry_identity(
+        evaluation.bundle_path,
+        summary=evaluation.summary,
+        metadata=evaluation.metadata,
     )
     if (
-        readiness_telemetry != "mock"
+        not readiness_telemetry_identity.production_predicate_exempt
         and readiness_reducer_version not in {"0.5.2", "0.6.2"}
     ):
         reasons.add("reducer_wire_unknown")
     if isinstance(evaluation.metadata, dict):
-        adapters = evaluation.metadata.get("adapters")
-        telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
-        telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
         current_environment_reasons = _current_member_environment_refusals(evaluation)
         reasons.update(current_environment_reasons)
-        if telemetry_name != "mock" and not current_environment_reasons:
+        if (
+            not readiness_telemetry_identity.production_predicate_exempt
+            and not current_environment_reasons
+        ):
             reasons.update(post_run_environment_refusals(evaluation.metadata))
     cleanup_flags = {
         "runtime_cleanup_ok",

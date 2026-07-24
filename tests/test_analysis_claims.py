@@ -7,6 +7,7 @@ import copy
 import gzip
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,8 @@ from joulewise.analysis_engine.inputs import (
     FloorResolution,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     LoadedAnalysisInputs,
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
+    _read_bundle,
     anchor_shift_envelope,
     bind_floor_artifact_evidence,
     deterministic_bounds,
@@ -45,12 +48,14 @@ from joulewise.analysis_engine.inputs import (
     resolve_floor,
     window_evidence_precheck,
 )
+from joulewise.cli import validate_bundle
 from joulewise.analysis_engine.sensitivity import (
     influence_triggers,
     randomization_check,
     summarize_loo,
 )
 from joulewise.detection_floor import comparative_false_effect_floor
+from joulewise.whole_window import CustodyTelemetryIdentity
 from tests.test_detection_floor import (
     make_artifact,
     make_cell,
@@ -290,7 +295,11 @@ def minimal_artifact():
 class ClaimOutcomeTests(unittest.TestCase):
     def test_environment_barrier_reasons_are_canonical_reducer_codes(self):
         self.assertTrue(
-            {"environment_admission_failed", "environment_override"}
+            {
+                "environment_admission_failed",
+                "environment_override",
+                MOCK_TELEMETRY_CLAIM_REFUSAL,
+            }
             <= REDUCER_REASON_CODES
         )
 
@@ -482,6 +491,76 @@ class SensitivityTests(unittest.TestCase):
 
 
 class InputSeamTests(unittest.TestCase):
+    def test_label_disagreement_is_strict_invalid_at_claim_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle = runs_root / "member"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            source_config = json.loads(
+                (bundle / "config.json").read_text(encoding="utf-8")
+            )
+            with (
+                patch(
+                    "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.analysis_engine.inputs._realized_identity_matches_config",
+                    return_value=True,
+                ),
+            ):
+                evidence = _read_bundle(
+                    {},
+                    bundle,
+                    runs_root,
+                    source_config,
+                    strict_validator=lambda path, strict: (),
+                )
+        self.assertIn("bundle_strict_invalid", evidence.base_reason_codes)
+        self.assertNotIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            evidence.base_reason_codes,
+        )
+
+    def test_honest_strict_mock_member_is_refused_at_claim_boundary(self):
+        fixture = Path("tests/fixtures/axi_valid_burst")
+        source_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(validate_bundle(fixture, strict=True), [])
+        with (
+            patch(
+                "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._realized_identity_matches_config",
+                return_value=True,
+            ),
+        ):
+            evidence = _read_bundle(
+                {},
+                fixture,
+                fixture.parent,
+                source_config,
+                strict_validator=lambda path, strict: validate_bundle(
+                    path, strict=strict
+                ),
+            )
+        self.assertEqual(
+            evidence.base_reason_codes,
+            (MOCK_TELEMETRY_CLAIM_REFUSAL,),
+        )
+        self.assertEqual(evidence.strict_problems, ())
+        self.assertEqual(evidence.inclusion_status, "excluded")
+
     def test_floor_binding_rejects_comparative_abba_fallback_member(self):
         artifact = make_artifact()
         fallback_bundle_id = "cell-1-b0-A1"
@@ -545,6 +624,16 @@ class InputSeamTests(unittest.TestCase):
             patch(
                 "joulewise.analysis_engine.inputs.floor_stack_identity",
                 return_value=stack_identity,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=CustodyTelemetryIdentity(
+                    custody_bound_config=True,
+                    config_backend_class="powermetrics",
+                    metadata_backend_class="powermetrics",
+                    summary_backend_class="powermetrics",
+                    triangle_agrees=True,
+                ),
             ),
         ):
             binding = bind_floor_artifact_evidence(

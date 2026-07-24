@@ -19,11 +19,11 @@ from joulewise.analysis_engine.artifact import (
     validate_claim_verdicts,
 )
 from joulewise.analysis_manifest import calculate_manifest_id
-from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
     campaign_cooldown_evidence,
     floor_binding_reason_codes,
@@ -51,9 +51,15 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
     STACK_IDENTITY_DOMAIN,
+    validate_floor_artifact,
 )
 from scripts.generate_matrix import main as generate_matrix
-from tests.test_detection_floor import condition_family, make_artifact, make_cell
+from tests.test_detection_floor import (
+    condition_family,
+    make_artifact,
+    make_cell,
+    whole_window_allowance,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -248,16 +254,27 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(render_claim_verdicts(first), render_claim_verdicts(second))
         self.assertEqual(len(first["bundle_audit"]), 30)
         self.assertTrue(all(row["strict_status"] == "valid" for row in first["bundle_audit"]))
+        self.assertTrue(
+            all(
+                row["inclusion_status"] == "excluded"
+                and MOCK_TELEMETRY_CLAIM_REFUSAL in row["base_reason_codes"]
+                for row in first["bundle_audit"]
+            )
+        )
         self.assertEqual(len(first["families"]), 4)
         self.assertEqual(len(first["contrasts"]), 24)
         for contrast in first["contrasts"]:
             with self.subTest(contrast=contrast["contrast_id"]):
                 evaluation = contrast["claim_evaluation"]
-                self.assertEqual(evaluation["outcome"], "not_resolvable")
+                self.assertEqual(evaluation["outcome"], "not_estimable")
                 self.assertFalse(evaluation["claim_ready_for_l2_l3"])
+                self.assertIn(
+                    MOCK_TELEMETRY_CLAIM_REFUSAL,
+                    evaluation["reason_codes"],
+                )
                 # Reducer 0.4.2 supplies the governed precheck, so its
                 # absence reason must NOT appear; the remaining fail-closed
-                # reasons keep the outcome not_resolvable.
+                # reasons keep the mock campaign terminally ineligible.
                 self.assertNotIn(
                     "window_evidence_precheck_missing", evaluation["reason_codes"]
                 )
@@ -267,33 +284,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
                 self.assertIn("floor_transport_inapplicable", evaluation["reason_codes"])
                 self.assertNotIn("loo_magnitude_influential", evaluation["reason_codes"])
-                self.assertEqual(contrast["estimator"]["n"], 5)
-                self.assertEqual(contrast["estimator"]["df"], 4)
-
-                self.assertEqual(len(contrast["loo"]["rows"]), 5)
-                self.assertTrue(
-                    all(
-                        "estimate_magnitude" not in row["influence_triggers"]
-                        for row in contrast["loo"]["rows"]
-                    )
+                self.assertEqual(contrast["estimator"]["n"], 0)
+                self.assertIsNone(contrast["estimator"]["df"])
+                self.assertEqual(
+                    contrast["loo"],
+                    {"status": "not_run", "rows": []},
                 )
-        by_id = {contrast["contrast_id"]: contrast for contrast in first["contrasts"]}
-        for family in first["families"]:
-            for omission_index in range(5):
-                raw = {
-                    contrast_id: by_id[contrast_id]["loo"]["rows"][omission_index]["raw_p"]
-                    for contrast_id in family["contrast_ids"]
-                }
-                adjusted = holm_adjust(raw, m=family["m"])
-                for contrast_id in family["contrast_ids"]:
-                    self.assertEqual(
-                        by_id[contrast_id]["loo"]["rows"][omission_index]["adjusted_p"],
-                        adjusted[contrast_id],
-                    )
-        omitted_loo = json.loads(json.dumps(first))
-        omitted_loo["contrasts"][0]["loo"] = {"status": "not_run", "rows": []}
-        omitted_loo["claim_verdicts_id"] = calculate_claim_verdicts_id(omitted_loo)
-        self.assertTrue(validate_claim_verdicts(omitted_loo))
+        self.assertEqual(validate_claim_verdicts(first), [])
 
     def test_analysis_loader_refuses_when_whole_window_verdict_is_missing(self):
         # F5 defect shape: P2-037 formerly loaded cleanup/cooldown/bundles/floor
@@ -380,7 +377,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(request.condition_family_id, condition_id)
         self.assertEqual(request.stack_identity_sha256, group["stack_identity_sha256"])
 
-    def test_named_strata_manifest_completes_leave_one_block_out(self):
+    def test_named_strata_manifest_preserves_terminal_mock_refusal(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_dir = Path(tmp) / "configs"
             shutil.copytree(self.config_dir, config_dir)
@@ -400,23 +397,24 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            artifact = analyze_claims(
+            loaded = load_analysis_inputs(
                 manifest_path,
                 self.runs_root,
                 self.floor_path,
                 strict_validator=validate_bundle,
             )
 
-        self.assertTrue(
-            all(
-                contrast["loo"]["status"] == "complete"
-                for contrast in artifact["contrasts"]
-            )
+        self.assertEqual(
+            loaded.manifest["design"]["randomization"]["scheme"],
+            "stratified_paired_label_swap",
         )
+        self.assertTrue(loaded.registered)
         self.assertTrue(
             all(
-                len(contrast["loo"]["rows"]) == 5
-                for contrast in artifact["contrasts"]
+                not evidence.included
+                and MOCK_TELEMETRY_CLAIM_REFUSAL
+                in evidence.base_reason_codes
+                for evidence in loaded.registered.values()
             )
         )
 
@@ -748,20 +746,19 @@ class AnalysisIntegrationTests(unittest.TestCase):
             "private_test_seam:",
             artifact["engine"]["policy_identity"]["stochastic_variance"],
         )
-        estimator = artifact["contrasts"][0]["estimator"]
-        self.assertGreater(estimator["SE_metrology"], 0.0)
-        self.assertGreater(estimator["SE_total"], estimator["SE_repeat"])
-        repeat_width = (
-            estimator["repeat_point_CI95"]["upper"]
-            - estimator["repeat_point_CI95"]["lower"]
+        contrast = artifact["contrasts"][0]
+        self.assertEqual(contrast["estimator"]["n"], 0)
+        self.assertIsNone(contrast["estimator"]["SE_metrology"])
+        self.assertEqual(
+            contrast["claim_evaluation"]["outcome"],
+            "not_estimable",
         )
-        metrology_width = (
-            estimator["metrology_aware_CI95"]["upper"]
-            - estimator["metrology_aware_CI95"]["lower"]
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            contrast["claim_evaluation"]["reason_codes"],
         )
-        self.assertGreater(metrology_width, repeat_width)
 
-    def test_cli_binds_distinct_calibration_bundles_and_preserves_loo_rows(self):
+    def test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal(self):
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         condition_ids = sorted(
             {
@@ -867,11 +864,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 }
 
             observations = [calibration_record(run_id) for run_id in calibration_ids[:5]]
+            drift_allowance = whole_window_allowance(
+                value=5e-324,
+                observed=0.0,
+                derived=5e-324,
+            )
             absolute = build_absolute_record(
                 absolute_false_effect_floor(
                     [row["metric_value_j"] for row in observations]
                 ),
                 observations,
+                whole_window_drift_allowance=drift_allowance,
             )
             blocks = []
             for block_index in range(5):
@@ -900,6 +903,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             comparative = build_comparative_record(
                 comparative_false_effect_floor([block["delta_j"] for block in blocks]),
                 blocks,
+                whole_window_drift_allowance=drift_allowance,
             )
             cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)
             first_bundle = calibration_root / calibration_ids[0]
@@ -989,6 +993,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 "artifact_sha256": "3" * 64,
             },
         )
+        self.assertEqual(validate_floor_artifact(exact_floor), [])
         floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
         output = self.root / "exact-cli-claim-verdicts.json"
@@ -1014,16 +1019,24 @@ class AnalysisIntegrationTests(unittest.TestCase):
             if contrast["metric"]["name"] == "gross_energy_j"
         ]
         self.assertTrue(gross)
-        self.assertTrue(all(contrast["floor"]["status"] == "resolved" for contrast in gross))
         self.assertTrue(
             all(
-                resolution["status"] == "exact"
+                contrast["floor"]["status"] == "refused"
+                and all(
+                    "artifact_schema_invalid" in resolution["reason_codes"]
+                    for resolution in contrast["floor"]["resolutions"]
+                )
                 for contrast in gross
-                for resolution in contrast["floor"]["resolutions"]
             )
         )
-        self.assertTrue(all(contrast["loo"]["status"] == "complete" for contrast in gross))
-        self.assertTrue(all(len(contrast["loo"]["rows"]) == 5 for contrast in gross))
+        self.assertTrue(
+            all(
+                contrast["loo"] == {"status": "not_run", "rows": []}
+                and MOCK_TELEMETRY_CLAIM_REFUSAL
+                in contrast["claim_evaluation"]["reason_codes"]
+                for contrast in gross
+            )
+        )
 
         def refresh_first_cell(candidate):
             changed_cell = candidate["cells"][0]
@@ -1041,6 +1054,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     [block["delta_j"] for block in changed_blocks]
                 ),
                 changed_blocks,
+                whole_window_drift_allowance=changed_cell["comparative"][
+                    "whole_window_drift_allowance"
+                ],
             )
             changed_cell["floor_cmp_j"] = changed_cell["comparative"]["guarded_floor_j"]
             changed_cell["floor_gate_j"] = max(
@@ -1179,6 +1195,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 [observation["metric_value_j"] for observation in fake_observations]
             ),
             fake_observations,
+            whole_window_drift_allowance=fabricated_cell["absolute"][
+                "whole_window_drift_allowance"
+            ],
         )
         fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"]["guarded_floor_j"]
         fabricated_cell["floor_gate_j"] = max(
@@ -1378,9 +1397,26 @@ class AnalysisIntegrationTests(unittest.TestCase):
             self.floor_path,
             strict_validator=validate_bundle,
         )
-        self.assertEqual(len(artifact["sampling_audit"]["valid_replacements"]), 1)
-        self.assertFalse(artifact["sampling_audit"]["top_up_detected"])
-        self.assertEqual(artifact["sampling_audit"]["demoted_contrast_ids"], [])
+        self.assertEqual(artifact["sampling_audit"]["valid_replacements"], [])
+        self.assertTrue(artifact["sampling_audit"]["top_up_detected"])
+        self.assertEqual(
+            len(artifact["sampling_audit"]["demoted_contrast_ids"]),
+            12,
+        )
+        replacement_audit = next(
+            row
+            for row in artifact["bundle_audit"]
+            if row["bundle_id"] == replacement["run_id"]
+        )
+        self.assertEqual(
+            replacement_audit["replacement_classification"],
+            "replacement_candidate",
+        )
+        self.assertEqual(replacement_audit["inclusion_status"], "excluded")
+        self.assertIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            replacement_audit["base_reason_codes"],
+        )
         affected = [
             contrast
             for contrast in artifact["contrasts"]
@@ -1391,7 +1427,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
             }
         ]
         self.assertTrue(affected)
-        self.assertTrue(all(contrast["estimator"]["n"] == 5 for contrast in affected))
+        self.assertTrue(all(contrast["estimator"]["n"] == 0 for contrast in affected))
+        self.assertTrue(
+            all(
+                MOCK_TELEMETRY_CLAIM_REFUSAL
+                in contrast["claim_evaluation"]["reason_codes"]
+                for contrast in affected
+            )
+        )
 
     def test_replacement_with_changed_rep_tag_is_topup_not_slot_fill(self):
         runs = self.root / "wrong-rep-replacement-runs"
@@ -1471,8 +1514,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(len(affected), 12)
         for contrast in affected:
             with self.subTest(contrast=contrast["contrast_id"]):
-                self.assertEqual(contrast["estimator"]["n"], 4)
-                self.assertEqual(contrast["estimator"]["df"], 3)
+                self.assertEqual(contrast["estimator"]["n"], 0)
+                self.assertIsNone(contrast["estimator"]["df"])
                 missing = next(
                     row
                     for row in contrast["bundle_blocks"]["blocks"]
@@ -1484,9 +1527,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "fixed_n_plan_incomplete",
                     contrast["claim_evaluation"]["reason_codes"],
                 )
+                self.assertIn(
+                    MOCK_TELEMETRY_CLAIM_REFUSAL,
+                    contrast["claim_evaluation"]["reason_codes"],
+                )
                 self.assertEqual(
                     contrast["claim_evaluation"]["outcome"],
-                    "not_resolvable",
+                    "not_estimable",
                 )
 
     def test_bundle_config_byte_mutation_is_excluded_even_when_identity_and_metadata_hash_match(self):
@@ -1841,10 +1888,18 @@ class AnalysisIntegrationTests(unittest.TestCase):
         ]
         self.assertEqual(len(demoted), 12)
         for contrast in demoted:
-            self.assertEqual(contrast["estimator"]["n"], 5)
+            self.assertEqual(contrast["estimator"]["n"], 0)
             self.assertIn(
                 "outcome_dependent_top_up",
                 contrast["claim_evaluation"]["reason_codes"],
+            )
+            self.assertIn(
+                MOCK_TELEMETRY_CLAIM_REFUSAL,
+                contrast["claim_evaluation"]["reason_codes"],
+            )
+            self.assertEqual(
+                contrast["claim_evaluation"]["outcome"],
+                "not_estimable",
             )
             self.assertFalse(contrast["claim_evaluation"]["claim_ready_for_l2_l3"])
 

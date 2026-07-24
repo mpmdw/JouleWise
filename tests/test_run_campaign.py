@@ -4880,6 +4880,23 @@ def _busy_idle_records(count: int = 5) -> list[dict]:
 
 class AnchorFallbackCampaignGateTests(unittest.TestCase):
     @staticmethod
+    def _bind_powermetrics_config(
+        bundle: Path, bundle_id: str, metadata: dict
+    ) -> None:
+        config = json.loads(
+            Path("tests/fixtures/d078_r01/config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        config["run_id"] = bundle_id
+        config_raw = (json.dumps(config, sort_keys=True) + "\n").encode()
+        (bundle / "config.json").write_bytes(config_raw)
+        metadata["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
+        metadata["adapters"] = {
+            "telemetry": {"name": "powermetrics"}
+        }
+
+    @staticmethod
     def _bundle(
         root: Path, bundle_id: str, *, fallback: bool
     ) -> tuple[Path, bytes]:
@@ -4910,9 +4927,12 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
             if fallback
             else {"status": "bounded"}
         )
+        metadata = {"uncertainty_evidence": {"clock_anchor": anchor}}
+        AnchorFallbackCampaignGateTests._bind_powermetrics_config(
+            bundle, bundle_id, metadata
+        )
         (bundle / "metadata.json").write_text(
-            json.dumps({"uncertainty_evidence": {"clock_anchor": anchor}})
-            + "\n",
+            json.dumps(metadata) + "\n",
             encoding="utf-8",
         )
         return bundle, raw_summary
@@ -4971,6 +4991,9 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
             ] = "legacy_spawn_bracket_midpoint_v1"
         else:
             raise AssertionError(f"unknown trigger {trigger}")
+        AnchorFallbackCampaignGateTests._bind_powermetrics_config(
+            bundle, bundle_id, metadata
+        )
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary) + "\n", encoding="utf-8"
         )
@@ -5029,6 +5052,31 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
         self.assertFalse(evaluation.usable)
         self.assertTrue(evaluation.rerun_required)
         self.assertTrue(evaluation.to_log()["rerun_required"])
+
+    def test_label_disagreement_is_strict_invalid_on_both_member_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "label-disagreement"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            ordinary = self._evaluate(bundle, role="absolute_repeat")
+            whole_window = self._whole_window_evaluate(
+                bundle,
+                role="absolute_repeat",
+                waiver=False,
+            )
+        for evaluation in (ordinary, whole_window):
+            with self.subTest(path=evaluation.config_name):
+                self.assertFalse(evaluation.strict_valid)
+                self.assertIn(
+                    "bundle_strict_invalid",
+                    evaluation.validation_problems,
+                )
 
     def test_fully_anchored_floor_member_remains_usable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -5524,6 +5572,9 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                         "config_sha256": hashlib.sha256(
                             config_raw
                         ).hexdigest(),
+                        "adapters": {
+                            "telemetry": {"name": "powermetrics"}
+                        },
                         "campaign_environment_preflight": {
                             "snapshot": {"build_version": "25F84"}
                         },

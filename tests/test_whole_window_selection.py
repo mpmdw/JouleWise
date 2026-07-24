@@ -13,15 +13,24 @@ from unittest.mock import patch
 from joulewise.whole_window import (
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+    CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
     CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+    CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED,
     NEG8_POINT_DRIFT_ESTIMAND,
     NEG8_POINT_DRIFT_CONDITION_CODES,
+    _current_strict_summary,
     _validate_row,
     build_neg8_drift_bound_artifact,
     canonical_sha256,
+    custody_telemetry_identity,
     validated_attempt_selection,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
+)
+from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+from joulewise.floor_extraction import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+    CELL_REFUSAL_CODES,
 )
 from joulewise.analysis_engine.registry import (
     normalized_json_bytes,
@@ -32,19 +41,100 @@ from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 
 
 class WholeWindowSelectionTests(unittest.TestCase):
-    def test_both_family_underived_refusals_are_decision_log_registered(self):
+    @staticmethod
+    def _bounded_clause(decision_log: str, marker: str) -> str:
+        _, clause = decision_log.split(marker, 1)
+        boundaries = [
+            index
+            for boundary in ("\n### ", "\n   **Clause-")
+            if (index := clause.find(boundary)) >= 0
+        ]
+        return clause[: min(boundaries)] if boundaries else clause
+
+    def test_screen_budget_refusals_are_bidirectionally_registered(self):
         decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
-        marker = "### D-078 amendment — 2026-07-20"
-        self.assertIn(marker, decision_log)
-        amendment = decision_log.split(marker, 1)[1]
-        for reason in (
-            CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+        addendum_2_marker = (
+            "**Clause-10 addendum 2 — screen+budget wave registry"
+        )
+        addendum_3_marker = "**Clause-10 addendum 3 — terminal mock bar"
+        self.assertIn(addendum_2_marker, decision_log)
+        self.assertIn(addendum_3_marker, decision_log)
+        addendum_2 = self._bounded_clause(decision_log, addendum_2_marker)
+        addendum_3 = self._bounded_clause(decision_log, addendum_3_marker)
+        addendum_2_codes = {
             CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
             CONDITION_NEG8_DRIFT_BOUND_STALE,
-        ):
+            CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED,
+            ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            "whole_window_drift_allowance_unrecorded",
+        }
+        addendum_3_codes = {"mock_telemetry_claim_ineligible"}
+        for reason in addendum_2_codes:
             with self.subTest(reason=reason):
-                self.assertIn(reason, NEG8_POINT_DRIFT_CONDITION_CODES)
-                self.assertIn(f"`{reason}`", amendment)
+                self.assertIn(f"`{reason}`", addendum_2)
+        for reason in addendum_3_codes:
+            with self.subTest(reason=reason):
+                self.assertIn(f"`{reason}`", addendum_3)
+
+        code_vocabularies = {
+            CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED: (
+                NEG8_POINT_DRIFT_CONDITION_CODES,
+            ),
+            CONDITION_NEG8_DRIFT_BOUND_STALE: (
+                NEG8_POINT_DRIFT_CONDITION_CODES,
+            ),
+            CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED: (
+                NEG8_POINT_DRIFT_CONDITION_CODES,
+            ),
+            ANCHOR_FALLBACK_MEMBER_REFUSAL: (CELL_REFUSAL_CODES,),
+            "whole_window_drift_allowance_unrecorded": (
+                CELL_REFUSAL_CODES,
+                REDUCER_REASON_CODES,
+            ),
+            "mock_telemetry_claim_ineligible": (
+                CELL_REFUSAL_CODES,
+                REDUCER_REASON_CODES,
+            ),
+        }
+        self.assertEqual(
+            set(code_vocabularies),
+            addendum_2_codes | addendum_3_codes,
+        )
+        for reason, vocabularies in code_vocabularies.items():
+            for vocabulary in vocabularies:
+                with self.subTest(reason=reason, vocabulary=type(vocabulary).__name__):
+                    self.assertIn(reason, vocabulary)
+
+        # Existing gross-family spellings remain code-side registered even
+        # though they predate this addendum's five new registrations.
+        self.assertIn(
+            CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+            NEG8_POINT_DRIFT_CONDITION_CODES,
+        )
+        self.assertIn(
+            CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
+            NEG8_POINT_DRIFT_CONDITION_CODES,
+        )
+
+    def test_governed_tagged_mock_source_uses_mock_backend_class(self):
+        fixture = Path("tests/fixtures/axi_valid_burst")
+        identity = custody_telemetry_identity(fixture)
+        self.assertTrue(identity.custody_bound_config)
+        self.assertTrue(identity.mock_config)
+        self.assertTrue(identity.triangle_agrees)
+
+    def test_label_disagreement_is_not_a_current_strict_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "label-disagreement"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(_current_strict_summary(summary, bundle))
 
     def test_basis_row_cannot_downgrade_by_stripping_point_drift_shape(self):
         policy_sha256 = "a" * 64

@@ -37,7 +37,7 @@ from joulewise.environment_admission import (
 )
 from joulewise.calibration_bracketing import calibration_bracket_for_bundles
 from joulewise.reduce import _verify_instrument_calibration
-from joulewise.schemas import BenchmarkConfig, CampaignPolicy
+from joulewise.schemas import BenchmarkConfig, CampaignPolicy, TelemetryBackend
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
@@ -96,6 +96,136 @@ class WholeWindowDriftAllowanceResult:
 
     status: str
     allowances: Mapping[str, Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
+class CustodyTelemetryIdentity:
+    """Config-authoritative telemetry identity for a bundle consumption path."""
+
+    custody_bound_config: bool
+    config_backend_class: str | None
+    metadata_backend_class: str | None
+    summary_backend_class: str | None
+    triangle_agrees: bool
+
+    @property
+    def mock_config(self) -> bool:
+        return (
+            self.custody_bound_config
+            and self.config_backend_class == TelemetryBackend.MOCK.value
+        )
+
+    @property
+    def production_predicate_exempt(self) -> bool:
+        # No custody-bound config is fixture/non-production evidence. Its
+        # summary label is never promoted into a production identity.
+        return not self.custody_bound_config or self.mock_config
+
+
+def _telemetry_backend_class(value: object) -> str | None:
+    """Normalize governed telemetry labels to their backend class."""
+
+    if not isinstance(value, str):
+        return None
+    if value == TelemetryBackend.MOCK.value or value.startswith("mock:"):
+        return TelemetryBackend.MOCK.value
+    try:
+        return TelemetryBackend(value).value
+    except ValueError:
+        return None
+
+
+def custody_telemetry_identity(
+    bundle_path: Path,
+    *,
+    summary: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> CustodyTelemetryIdentity:
+    """Derive mockness and config/metadata/summary triangle agreement.
+
+    Config authority exists only when ``metadata.config_sha256`` authenticates
+    the exact ``config.json`` bytes. Without that custody binding, the result
+    is explicitly non-production and callers may retain fixture-only behavior.
+    """
+
+    path = Path(bundle_path)
+    if metadata is None:
+        metadata = _read_json_object(path / "metadata.json")
+    if summary is None:
+        summary = _read_json_object(path / "summary_metrics.json")
+    quality = (
+        summary.get("measurement_quality")
+        if isinstance(summary, Mapping)
+        else None
+    )
+    summary_class = _telemetry_backend_class(
+        quality.get("telemetry_source")
+        if isinstance(quality, Mapping)
+        else None
+    )
+    adapters = (
+        metadata.get("adapters")
+        if isinstance(metadata, Mapping)
+        else None
+    )
+    telemetry = (
+        adapters.get("telemetry")
+        if isinstance(adapters, Mapping)
+        else None
+    )
+    metadata_class = _telemetry_backend_class(
+        telemetry.get("name") if isinstance(telemetry, Mapping) else None
+    )
+    if metadata_class is None and isinstance(metadata, Mapping):
+        # Frozen AXI mock fixtures predate metadata.adapters.telemetry but do
+        # carry the governed tagged primary source identity. Preserve that
+        # fixture wire while keeping the compatibility projection mock-only;
+        # production backends still require the adapter identity vertex.
+        runtime = metadata.get("runtime")
+        legacy_mock_class = _telemetry_backend_class(
+            runtime.get("primary_source_identity")
+            if isinstance(runtime, Mapping)
+            else None
+        )
+        if legacy_mock_class == TelemetryBackend.MOCK.value:
+            metadata_class = legacy_mock_class
+    try:
+        config_raw = (path / "config.json").read_bytes()
+    except OSError:
+        config_raw = None
+    custody_bound = bool(
+        config_raw is not None
+        and isinstance(metadata, Mapping)
+        and metadata.get("config_sha256")
+        == hashlib.sha256(config_raw).hexdigest()
+    )
+    if not custody_bound:
+        return CustodyTelemetryIdentity(
+            custody_bound_config=False,
+            config_backend_class=None,
+            metadata_backend_class=metadata_class,
+            summary_backend_class=summary_class,
+            triangle_agrees=True,
+        )
+    try:
+        raw_config = json.loads(config_raw)
+        config = BenchmarkConfig.from_mapping(raw_config)
+        config_class = _telemetry_backend_class(
+            config.hardware_target.telemetry_backend.value
+        )
+    except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        config_class = None
+    triangle_agrees = bool(
+        config_class is not None
+        and config_class == metadata_class == summary_class
+    )
+    return CustodyTelemetryIdentity(
+        custody_bound_config=True,
+        config_backend_class=config_class,
+        metadata_backend_class=metadata_class,
+        summary_backend_class=summary_class,
+        triangle_agrees=triangle_agrees,
+    )
 
 
 def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
@@ -1568,7 +1698,8 @@ def _manifest_members(
         result.update(bundle_ids)
     if duplicate_ids and any(
         _current_strict_summary(
-            _read_json_object(runs_root / bundle_id / "summary_metrics.json")
+            _read_json_object(runs_root / bundle_id / "summary_metrics.json"),
+            runs_root / bundle_id,
         )
         for bundle_id in result
     ):
@@ -1612,16 +1743,34 @@ def _summary_reducer_version(summary: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _current_strict_summary(summary: Any) -> bool:
+def _current_strict_summary(
+    summary: Any, bundle_path: Path | None = None
+) -> bool:
     """Identify current-mint, non-mock summaries that can bear strict claims."""
 
     quality = summary.get("measurement_quality") if isinstance(summary, Mapping) else None
-    telemetry_source = (
+    summary_class = _telemetry_backend_class(
         quality.get("telemetry_source") if isinstance(quality, Mapping) else None
     )
+    if bundle_path is not None:
+        identity = custody_telemetry_identity(
+            bundle_path,
+            summary=summary if isinstance(summary, Mapping) else None,
+        )
+        non_mock = (
+            identity.triangle_agrees
+            and identity.config_backend_class is not None
+            and identity.config_backend_class != TelemetryBackend.MOCK.value
+            if identity.custody_bound_config
+            else summary_class != TelemetryBackend.MOCK.value
+        )
+    else:
+        # Compatibility for pure summary fixtures. Real bundle dispatch passes
+        # a path and therefore uses the custody-bound config when available.
+        non_mock = summary_class != TelemetryBackend.MOCK.value
     return (
         _summary_reducer_version(summary) in CURRENT_MINT_REDUCER_VERSIONS
-        and telemetry_source != "mock"
+        and non_mock
     )
 
 
@@ -1673,7 +1822,7 @@ def _reference_energy_evidence(
         else None
     )
     reducer_version = _summary_reducer_version(stored_summary)
-    if not _current_strict_summary(stored_summary):
+    if not _current_strict_summary(stored_summary, bundle_path):
         return (
             stored_gross,
             stored_idle,
@@ -1820,7 +1969,7 @@ def mint_neg8_drift_bound_artifact(
         seen_ids.add(bundle_id)
         summary = _read_json_object(bundle_path / "summary_metrics.json")
         metadata = _read_json_object(bundle_path / "metadata.json")
-        if not _current_strict_summary(summary):
+        if not _current_strict_summary(summary, bundle_path):
             raise ValueError(
                 f"NEG-8 corpus member {bundle_id} is not a current strict mint"
             )
@@ -2048,7 +2197,7 @@ def _derived_neg8_decision(
                         )
                     continue
                 stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
-                if _current_strict_summary(stored_summary):
+                if _current_strict_summary(stored_summary, bundle_path):
                     scientific_sha, canonical = _scientific_config_identity(bundle_path)
                     if (
                         member.get("canonical_neg8_workload") is not True
@@ -2178,9 +2327,11 @@ def _manifest_bundle_paths(
                 # the committed occurrence-to-set collapse; a mixed/current
                 # join refuses as soon as either duplicate path is current.
                 if _current_strict_summary(
-                    _read_json_object(path / "summary_metrics.json")
+                    _read_json_object(path / "summary_metrics.json"),
+                    path,
                 ) or _current_strict_summary(
-                    _read_json_object(result[bundle_id] / "summary_metrics.json")
+                    _read_json_object(result[bundle_id] / "summary_metrics.json"),
+                    result[bundle_id],
                 ):
                     return None
                 continue
@@ -2278,7 +2429,10 @@ def _current_core_rederivation_reasons(
         bundle_id
         for bundle_id in bundle_ids
         if (path := probe_paths.get(bundle_id)) is not None
-        and _current_strict_summary(_read_json_object(path / "summary_metrics.json"))
+        and _current_strict_summary(
+            _read_json_object(path / "summary_metrics.json"),
+            path,
+        )
     }
     if not strict_current_ids:
         return reasons
@@ -2822,7 +2976,8 @@ def _validate_row(
                         )
                         is not None
                         and _current_strict_summary(
-                            _read_json_object(path / "summary_metrics.json")
+                            _read_json_object(path / "summary_metrics.json"),
+                            path,
                         )
                         for occurrence in basis.get(
                             "member_occurrences", []
@@ -3009,7 +3164,8 @@ def _row_references_current_strict_member(
         and any(
             bundle_id in referenced
             and _current_strict_summary(
-                _read_json_object(path / "summary_metrics.json")
+                _read_json_object(path / "summary_metrics.json"),
+                path,
             )
             for bundle_id, path in paths.items()
         )
@@ -3098,7 +3254,8 @@ def whole_window_refusal_reasons(
             invalid_reasons.update(reasons)
     current_referenced = any(
         _current_strict_summary(
-            _read_json_object(Path(runs_root) / bundle_id / "summary_metrics.json")
+            _read_json_object(Path(runs_root) / bundle_id / "summary_metrics.json"),
+            Path(runs_root) / bundle_id,
         )
         for bundle_id in referenced_bundle_ids
     ) or any(
@@ -3284,6 +3441,7 @@ __all__ = [
     "NEG8_DRIFT_BOUND_MAX_AGE_S",
     "NEG8_DRIFT_ESTIMATOR_ID",
     "NEG8_POINT_DRIFT_ESTIMAND",
+    "CustodyTelemetryIdentity",
     "WholeWindowDriftAllowanceResult",
     "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
@@ -3297,6 +3455,7 @@ __all__ = [
     "build_neg8_drift_bound_artifact",
     "build_row_provenance",
     "canonical_sha256",
+    "custody_telemetry_identity",
     "evaluate_neg8_point_drift",
     "evaluate_neg8_bound_freshness",
     "load_neg8_drift_bound_artifact",

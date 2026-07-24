@@ -6,6 +6,7 @@ worked example.
 """
 
 import json
+import hashlib
 import math
 import tempfile
 import unittest
@@ -132,6 +133,16 @@ class TestAnchorFallbackFloorMemberGate(unittest.TestCase):
     ) -> None:
         bundle = root / bundle_id
         bundle.mkdir()
+        config = json.loads(
+            Path("tests/fixtures/d078_r01/config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        config["run_id"] = bundle_id
+        config_raw = (
+            json.dumps(config, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        (bundle / "config.json").write_bytes(config_raw)
         (bundle / "summary_metrics.json").write_text(
             json.dumps(
                 TestAnchorFallbackFloorMemberGate._summary(
@@ -152,7 +163,11 @@ class TestAnchorFallbackFloorMemberGate(unittest.TestCase):
         )
         (bundle / "metadata.json").write_text(
             json.dumps(
-                {"uncertainty_evidence": {"clock_anchor": anchor}},
+                {
+                    "config_sha256": hashlib.sha256(config_raw).hexdigest(),
+                    "adapters": {"telemetry": {"name": "powermetrics"}},
+                    "uncertainty_evidence": {"clock_anchor": anchor},
+                },
                 sort_keys=True,
             )
             + "\n",
@@ -542,6 +557,15 @@ def make_cell(
     comparative_half_widths=None,
     whole_window_drift_allowance=None,
 ):
+    if whole_window_drift_allowance is None:
+        # Claim-ready fixtures must carry the clause-9 current allowance
+        # group. The smallest positive float preserves the historical fixture
+        # floor values while still exercising the complete governed wire.
+        whole_window_drift_allowance = whole_window_allowance(
+            value=5e-324,
+            observed=0.0,
+            derived=5e-324,
+        )
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
     abs_est = absolute_false_effect_floor(
@@ -1061,6 +1085,65 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assert_invalid(
             omitted,
             "whole-window basis requires the complete drift-widened field group",
+        )
+
+        full_strip = json.loads(json.dumps(artifact))
+        full_strip_cell = full_strip["cells"][0]
+        for record_name in ("absolute", "comparative"):
+            for field in (
+                "whole_window_evaluation_basis_sha256",
+                "whole_window_drift_allowance",
+                "drift_widened_unguarded_floor_j",
+                "drift_widened_guarded_floor_j",
+            ):
+                full_strip_cell[record_name].pop(field)
+        full_strip_cell["floor_abs_j"] = full_strip_cell["absolute"][
+            "corner_widened_guarded_floor_j"
+        ]
+        full_strip_cell["floor_cmp_j"] = full_strip_cell["comparative"][
+            "corner_widened_guarded_floor_j"
+        ]
+        full_strip_cell["floor_gate_j"] = max(
+            full_strip_cell["floor_abs_j"], full_strip_cell["floor_cmp_j"]
+        )
+        full_strip_group = full_strip["transport_groups"][0]
+        full_strip_group["composed_floor_abs_j"] = full_strip_cell["floor_abs_j"]
+        full_strip_group["composed_floor_cmp_j"] = full_strip_cell["floor_cmp_j"]
+        full_strip_group["composed_floor_gate_j"] = full_strip_cell["floor_gate_j"]
+        self.assert_invalid(
+            full_strip,
+            "claim_ready primary_claim_gate requires a whole-window basis",
+        )
+
+        comparative_strip = json.loads(json.dumps(artifact))
+        comparative_strip_cell = comparative_strip["cells"][0]
+        for field in (
+            "whole_window_evaluation_basis_sha256",
+            "whole_window_drift_allowance",
+            "drift_widened_unguarded_floor_j",
+            "drift_widened_guarded_floor_j",
+        ):
+            comparative_strip_cell["comparative"].pop(field)
+        comparative_strip_cell["floor_cmp_j"] = comparative_strip_cell[
+            "comparative"
+        ]["corner_widened_guarded_floor_j"]
+        comparative_strip_cell["floor_gate_j"] = max(
+            comparative_strip_cell["floor_abs_j"],
+            comparative_strip_cell["floor_cmp_j"],
+        )
+        comparative_strip_group = comparative_strip["transport_groups"][0]
+        comparative_strip_group["composed_floor_abs_j"] = (
+            comparative_strip_cell["floor_abs_j"]
+        )
+        comparative_strip_group["composed_floor_cmp_j"] = (
+            comparative_strip_cell["floor_cmp_j"]
+        )
+        comparative_strip_group["composed_floor_gate_j"] = (
+            comparative_strip_cell["floor_gate_j"]
+        )
+        self.assert_invalid(
+            comparative_strip,
+            "whole-window drift groups must be symmetric and complete",
         )
 
     def test_basis_passing_extraction_refuses_absent_allowances(self):

@@ -607,6 +607,13 @@ Validation recomputes `corner_widened_* + allowance`; `floor_abs_j`,
 drift-widened guarded value. Claim decision intervals additionally expose
 `E_whole_window_drift_allowance_j`; the paired wire apportions half to each
 side so the contrast receives the window allowance exactly once.
+For a `claim_ready` / `primary_claim_gate` cell, both present absolute and
+comparative records must carry the complete group, the same
+`whole_window_evaluation_basis_sha256`, and the same allowance mapping.
+Basis-less legacy rows remain replay-readable but never govern a new claim;
+removing the basis together with every widened field therefore refuses a
+claim-ready cell. This is the eligibility-scoped requirement from D-078
+clause 10 addendum 2; broader custody binding remains FLOOR-BIND-01.
 
 Registry additions (Ed-ratified 2026-07-24) are
 `neg8_drift_bound_underived` and
@@ -712,6 +719,16 @@ the additive composition and is the only repaired claim-bearing mint.
   evidence before a replacement occurrence can govern. The strict 10 ms
   wall-versus-monotonic spawn bracket is unchanged; recovery is a rerun, never
   acceptance of the ±0.5 s legacy midpoint fallback.
+- **TELEMETRY IDENTITY + TERMINAL MOCK BAR — D-078 clause 10 addendum 3:**
+  when `metadata.config_sha256` authenticates the config bytes, typed config
+  telemetry is authoritative and must agree by backend class with
+  `metadata.adapters.telemetry.name` and
+  `measurement_quality.telemetry_source` (`mock:*` is class `mock`).
+  Disagreement is `bundle_strict_invalid`. No custody-bound config means
+  non-production/fixture evidence; it is never promoted from a summary label.
+  Claim-bearing extraction and analysis admission reject a custody-bound mock
+  member unwaivably as `mock_telemetry_claim_ineligible`. This terminal bar
+  does not change campaign readiness.
 - Floor estimation operates on admissible energy sets, not point estimates
   alone. The operative absolute floor is no smaller than the largest admitted
   member half-width; an ABBA block uses the propagated half-width of its four

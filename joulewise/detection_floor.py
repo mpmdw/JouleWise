@@ -1563,11 +1563,19 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
         if metric in {"energy_request_j", "idle_subtracted_energy_j"}
         else "gross_energy"
     )
+    present_records = [
+        record for record in (absolute, comparative) if isinstance(record, Mapping)
+    ]
+    grouped_records = [
+        record
+        for record in present_records
+        if "whole_window_evaluation_basis_sha256" in record
+        or bool(set(record) & _DRIFT_WIDENED_FLOOR_KEYS)
+    ]
     allowance_records = [
         record.get("whole_window_drift_allowance")
-        for record in (absolute, comparative)
-        if isinstance(record, Mapping)
-        and "whole_window_drift_allowance" in record
+        for record in present_records
+        if "whole_window_drift_allowance" in record
     ]
     for allowance_record in allowance_records:
         if (
@@ -1577,10 +1585,37 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
             errors.append(
                 f"{where}: whole-window drift allowance claim_family does not match metric"
             )
-    if len(allowance_records) == 2 and allowance_records[0] != allowance_records[1]:
-        errors.append(
-            f"{where}: absolute and comparative whole-window drift allowances disagree"
+    if grouped_records:
+        complete_group = all(
+            "whole_window_evaluation_basis_sha256" in record
+            and set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+            == _DRIFT_WIDENED_FLOOR_KEYS
+            for record in present_records
         )
+        if (
+            len(grouped_records) != len(present_records)
+            or len(allowance_records) != len(present_records)
+            or not complete_group
+        ):
+            errors.append(
+                f"{where}: absolute and comparative whole-window drift groups must be symmetric and complete"
+            )
+        else:
+            basis_values = {
+                record.get("whole_window_evaluation_basis_sha256")
+                for record in present_records
+            }
+            if len(basis_values) != 1:
+                errors.append(
+                    f"{where}: absolute and comparative whole-window evaluation bases disagree"
+                )
+            if any(
+                allowance_record != allowance_records[0]
+                for allowance_record in allowance_records[1:]
+            ):
+                errors.append(
+                    f"{where}: absolute and comparative whole-window drift allowances disagree"
+                )
 
     expected_abs = (
         absolute.get(
@@ -1660,6 +1695,20 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
         eligibility = cell["eligibility"]
         if eligibility["use_role"] != "primary_claim_gate":
             errors.append(f"{where}.eligibility: claim_ready requires primary_claim_gate use_role")
+        if eligibility["use_role"] == "primary_claim_gate" and (
+            len(grouped_records) != len(present_records)
+            or len(allowance_records) != len(present_records)
+            or not present_records
+            or any(
+                "whole_window_evaluation_basis_sha256" not in record
+                or set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+                != _DRIFT_WIDENED_FLOOR_KEYS
+                for record in present_records
+            )
+        ):
+            errors.append(
+                f"{where}.eligibility: claim_ready primary_claim_gate requires a whole-window basis and complete drift-widened field group"
+            )
         minimum_n = eligibility["minimum_claim_n"]
         if isinstance(minimum_n, int) and not isinstance(minimum_n, bool):
             absolute_n = absolute.get("n") if isinstance(absolute, Mapping) else None

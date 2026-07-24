@@ -16,6 +16,7 @@ import hashlib
 import io
 import json
 import math
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -31,12 +32,15 @@ from joulewise.floor_extraction import (
     FloorExtractionError,
     LEGACY_THROUGHPUT_FIELD,
     READER_THROUGHPUT_FIELD,
+    _evaluate_member,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
     governed_cell_metric,
     reader_throughput_tokens_s,
 )
+from joulewise.analysis_engine.inputs import MOCK_TELEMETRY_CLAIM_REFUSAL
+from joulewise.cli import validate_bundle
 from scripts.extract_detection_floors import main as extract_main
 from joulewise.whole_window import (
     IDLE_ADMISSION_CORE_SCHEMA,
@@ -460,6 +464,23 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         return summary
 
     @staticmethod
+    def _bind_powermetrics_config(
+        bundle: Path, bundle_id: str, metadata: dict
+    ) -> None:
+        config = json.loads(
+            Path("tests/fixtures/d078_r01/config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        config["run_id"] = bundle_id
+        config_raw = (json.dumps(config, sort_keys=True) + "\n").encode()
+        (bundle / "config.json").write_bytes(config_raw)
+        metadata["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
+        metadata["adapters"] = {
+            "telemetry": {"name": "powermetrics"}
+        }
+
+    @staticmethod
     def _install_current_strict_bundle(
         root: Path, bundle_id: str, value: float = 40.0
     ) -> tuple[dict, str]:
@@ -555,6 +576,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         ]
         metadata = {
             "config_sha256": hashlib.sha256(config_raw).hexdigest(),
+            "adapters": {"telemetry": {"name": "powermetrics"}},
             "environment_admission": {
                 "schema_version": "joulewise.environment_admission.v1",
                 "critical_environment_passed": True,
@@ -758,16 +780,17 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             )
             for attempts, decision in cases:
                 with self.subTest(attempts=attempts, decision=decision):
+                    metadata = {
+                        "environment_admission": {
+                            "decision": decision,
+                            "attempts": attempts,
+                        }
+                    }
+                    self._bind_powermetrics_config(
+                        bundle, "cpu-ledger", metadata
+                    )
                     (bundle / "metadata.json").write_text(
-                        json.dumps(
-                            {
-                                "environment_admission": {
-                                    "decision": decision,
-                                    "attempts": attempts,
-                                }
-                            }
-                        )
-                        + "\n",
+                        json.dumps(metadata) + "\n",
                         encoding="utf-8",
                     )
                     self.assertTrue(
@@ -775,22 +798,21 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                             bundle, self._powermetrics_summary(40.0)
                         )
                     )
-            (bundle / "metadata.json").write_text(
-                json.dumps(
-                    {
-                        "environment_admission": clean_admission,
-                        "environment": {
-                            "post_run_observation": {
-                                "capture_skipped": False,
-                                "captured_at_s": 11.0,
-                                "display_power_state": "all_asleep",
-                                "screensaver_engaged": False,
-                                "errors": {},
-                            }
-                        },
+            metadata = {
+                "environment_admission": clean_admission,
+                "environment": {
+                    "post_run_observation": {
+                        "capture_skipped": False,
+                        "captured_at_s": 11.0,
+                        "display_power_state": "all_asleep",
+                        "screensaver_engaged": False,
+                        "errors": {},
                     }
-                )
-                + "\n",
+                },
+            }
+            self._bind_powermetrics_config(bundle, "cpu-ledger", metadata)
+            (bundle / "metadata.json").write_text(
+                json.dumps(metadata) + "\n",
                 encoding="utf-8",
             )
             with mock.patch.object(
@@ -811,23 +833,34 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             runs_root = Path(tmp)
             for bundle_id, value in (("missing", 40.0), ("unenforced", 40.1)):
                 write_bundle(runs_root, bundle_id, self._powermetrics_summary(value))
-            (runs_root / "unenforced" / "metadata.json").write_text(
-                json.dumps(
-                    {
-                        "environment_admission": {
-                            "decision": "admitted",
-                            "attempts": [
-                                {
-                                    "attempt": 1,
-                                    "admitted": True,
-                                    "cpu_admission_enforced": False,
-                                    "cpu_admission": {"admitted": True},
-                                }
-                            ]
+            missing_metadata: dict = {}
+            self._bind_powermetrics_config(
+                runs_root / "missing", "missing", missing_metadata
+            )
+            (runs_root / "missing" / "metadata.json").write_text(
+                json.dumps(missing_metadata) + "\n",
+                encoding="utf-8",
+            )
+            unenforced_metadata = {
+                "environment_admission": {
+                    "decision": "admitted",
+                    "attempts": [
+                        {
+                            "attempt": 1,
+                            "admitted": True,
+                            "cpu_admission_enforced": False,
+                            "cpu_admission": {"admitted": True},
                         }
-                    }
-                )
-                + "\n"
+                    ],
+                }
+            }
+            self._bind_powermetrics_config(
+                runs_root / "unenforced",
+                "unenforced",
+                unenforced_metadata,
+            )
+            (runs_root / "unenforced" / "metadata.json").write_text(
+                json.dumps(unenforced_metadata) + "\n"
             )
             cooldowns = {
                 bundle_id: {"result": "recovered", "verified": True}
@@ -2246,6 +2279,54 @@ class StrictValidationGateTests(unittest.TestCase):
             )
         self.assertFalse(report.extractable)
         self.assertIn("bundle_strict_invalid", report.refusal_reasons)
+
+
+class TelemetryIdentityGateTests(unittest.TestCase):
+    def test_label_disagreement_is_strict_invalid_at_extraction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle = runs_root / "member"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            member = _evaluate_member(
+                slot="r1",
+                bundle_id="member",
+                block_id=None,
+                position=None,
+                runs_root=runs_root,
+                metric="gross_energy_j",
+                window_class="request",
+                cooldowns={},
+                hash_bundles=False,
+                strict_validator=lambda path, strict: (),
+            )
+        self.assertIn("bundle_strict_invalid", member.reasons)
+
+    def test_honest_strict_mock_member_is_terminally_ineligible(self) -> None:
+        fixture = Path("tests/fixtures/axi_valid_burst")
+        self.assertEqual(validate_bundle(fixture, strict=True), [])
+        member = _evaluate_member(
+            slot="r1",
+            bundle_id=fixture.name,
+            block_id=None,
+            position=None,
+            runs_root=fixture.parent,
+            metric="gross_energy_j",
+            window_class="request",
+            cooldowns={},
+            hash_bundles=False,
+            strict_validator=lambda path, strict: validate_bundle(
+                path, strict=strict
+            ),
+        )
+        self.assertIn(MOCK_TELEMETRY_CLAIM_REFUSAL, member.reasons)
+        self.assertNotIn("bundle_strict_invalid", member.reasons)
 
     def test_unresolvable_hash_pin_refuses_instead_of_failing_open(self) -> None:
         import os
