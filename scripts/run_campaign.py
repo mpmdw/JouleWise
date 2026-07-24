@@ -108,6 +108,7 @@ from joulewise.output_identity import (  # noqa: E402
 )
 from joulewise.whole_window import (  # noqa: E402
     OCCURRENCE_SUPERSESSION_SCHEMA,
+    build_neg8_freshness_observation,
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     build_row_provenance,
@@ -128,6 +129,10 @@ from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
     current_environment_refusals,
     post_run_environment_refusals,
+)
+from joulewise.floor_extraction import (  # noqa: E402
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+    anchor_fallback_member_unusable,
 )
 
 
@@ -162,7 +167,9 @@ KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
 )
 NEG8_REFERENCE_ROLE = "neg8_daily_reference"
 NEG8_REFERENCE_START_ROLE = "neg8_daily_reference_start"
+NEG8_REFERENCE_MIDPOINT_ROLE = "neg8_daily_reference_midpoint"
 NEG8_REFERENCE_END_ROLE = "neg8_daily_reference_end"
+FLOOR_MEMBER_ROLES = frozenset({"absolute_repeat", "comparative_abba_member"})
 
 
 @dataclass(frozen=True)
@@ -341,6 +348,11 @@ class MemberEvaluation:
 
     @property
     def waived(self) -> bool:
+        # This flag is an acquisition failure, not an analysis judgment.  The
+        # only recovery is a new, anchor-bounded measurement; a campaign
+        # waiver must never turn the clipped point into usable evidence.
+        if ANCHOR_FALLBACK_MEMBER_REFUSAL in self.collection_integrity_flags:
+            return False
         if self.waiver is None:
             return False
         classes = self.waiver_classes()
@@ -354,6 +366,13 @@ class MemberEvaluation:
     @property
     def failed(self) -> bool:
         return not self.usable and not self.waived
+
+    @property
+    def rerun_required(self) -> bool:
+        return (
+            ANCHOR_FALLBACK_MEMBER_REFUSAL
+            in self.collection_integrity_flags
+        )
 
     def to_log(self) -> dict[str, Any]:
         row: dict[str, Any] = {
@@ -373,6 +392,7 @@ class MemberEvaluation:
             "claim_evidence_classification": (
                 "flagged" if self.claim_evidence_flags else "clean"
             ),
+            "rerun_required": self.rerun_required,
         }
         if self.waiver is not None:
             row["waiver"] = {
@@ -859,8 +879,18 @@ def _declared_neg8_reference_position(
         return "start" if sentinel_position in (None, "start") else "invalid"
     if role == NEG8_REFERENCE_END_ROLE:
         return "end" if sentinel_position in (None, "end") else "invalid"
+    if role == NEG8_REFERENCE_MIDPOINT_ROLE:
+        return (
+            "midpoint"
+            if sentinel_position in (None, "midpoint")
+            else "invalid"
+        )
     if role == NEG8_REFERENCE_ROLE:
-        return sentinel_position if sentinel_position in {"start", "end"} else "invalid"
+        return (
+            sentinel_position
+            if sentinel_position in {"start", "midpoint", "end"}
+            else "invalid"
+        )
     return None
 
 
@@ -2035,6 +2065,11 @@ def evaluate_member(
         else None
     )
     collection_flags = set(prompt_hash_check.collection_integrity_flags())
+    if (
+        info.role in FLOOR_MEMBER_ROLES
+        and anchor_fallback_member_unusable(summary, metadata)
+    ):
+        collection_flags.add(ANCHOR_FALLBACK_MEMBER_REFUSAL)
     if binding_problem is not None:
         problems.append(binding_problem)
         collection_flags.add("config_manifest_mismatch")
@@ -3339,7 +3374,7 @@ def _gross_energy_for(evaluation: MemberEvaluation) -> dict[str, float] | None:
 
 
 def _idle_subtracted_energy_for(evaluation: MemberEvaluation) -> float | None:
-    """Return the idle-subtracted point companion without making it a gate."""
+    """Return the idle-subtracted NEG-8 claim-family point."""
 
     summary = evaluation.summary
     value = (
@@ -3354,6 +3389,18 @@ def _idle_subtracted_energy_for(evaluation: MemberEvaluation) -> float | None:
     ):
         return None
     return float(value)
+
+
+def _reference_window_span(
+    evaluation: MemberEvaluation,
+) -> tuple[float, float] | None:
+    try:
+        window = BundleReader(evaluation.bundle_path).measured_window()
+    except (BundleReadError, OSError, TypeError, ValueError):
+        return None
+    if window is None or window.end_s < window.start_s:
+        return None
+    return float(window.start_s), float(window.end_s)
 
 
 def _neg8_reference_scientific_config_sha256(
@@ -3389,6 +3436,7 @@ def idle_admission_core_verdict(
     whole_window: bool = False,
     runs_root: Path | None = None,
     neg8_drift_bound: Mapping[str, Any] | None = None,
+    evaluation_timestamp_s: float | None = None,
 ) -> dict[str, Any]:
     """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
 
@@ -3422,12 +3470,18 @@ def idle_admission_core_verdict(
     }
     conditions: set[str] = set()
     adapter_observations: list[dict[str, Any]] = []
-    neg8_starts: list[
-        tuple[dict[str, float] | None, float | None, str | None]
-    ] = []
-    neg8_ends: list[
-        tuple[dict[str, float] | None, float | None, str | None]
-    ] = []
+    neg8_references: dict[
+        str,
+        list[
+            tuple[
+                dict[str, float] | None,
+                float | None,
+                str | None,
+                tuple[float, float] | None,
+                Mapping[str, Any] | None,
+            ]
+        ],
+    ] = {"start": [], "midpoint": [], "end": []}
     for evaluation in evaluations:
         current_environment_reasons = _current_member_environment_refusals(evaluation)
         conditions.update(current_environment_reasons)
@@ -3471,20 +3525,14 @@ def idle_admission_core_verdict(
         )
         if neg8_position == "invalid":
             conditions.add("neg8_bracket_reference_invalid")
-        elif neg8_position == "start":
-            neg8_starts.append(
+        elif neg8_position in neg8_references:
+            neg8_references[neg8_position].append(
                 (
                     _gross_energy_for(evaluation),
                     _idle_subtracted_energy_for(evaluation),
                     _neg8_reference_scientific_config_sha256(evaluation),
-                )
-            )
-        elif neg8_position == "end":
-            neg8_ends.append(
-                (
-                    _gross_energy_for(evaluation),
-                    _idle_subtracted_energy_for(evaluation),
-                    _neg8_reference_scientific_config_sha256(evaluation),
+                    _reference_window_span(evaluation),
+                    evaluation.metadata,
                 )
             )
     continuity = evaluate_adapter_wattage_continuity(
@@ -3499,51 +3547,97 @@ def idle_admission_core_verdict(
     # ``failed``/``missing``.  In explicit whole-window mode a genuinely absent
     # reference is handed to the bracket evaluator and fails with the named
     # ``neg8_bracket_missing`` condition.
-    ambiguous = len(neg8_starts) > 1 or len(neg8_ends) > 1
+    counts = tuple(
+        len(neg8_references[position])
+        for position in ("start", "midpoint", "end")
+    )
+    complete_legacy_pair = counts == (1, 0, 1)
+    complete_replicated_trajectory = counts == (3, 1, 3)
+    ambiguous = bool(
+        (neg8_references["start"] or neg8_references["end"])
+        and not (complete_legacy_pair or complete_replicated_trajectory)
+    )
     if ambiguous:
         conditions.add("neg8_bracket_ambiguous_reference")
-    neg8_start = neg8_starts[0][0] if len(neg8_starts) == 1 else None
-    neg8_end = neg8_ends[0][0] if len(neg8_ends) == 1 else None
-    start_idle_subtracted = (
-        neg8_starts[0][1] if len(neg8_starts) == 1 else None
-    )
-    end_idle_subtracted = (
-        neg8_ends[0][1] if len(neg8_ends) == 1 else None
-    )
-    start_identity = neg8_starts[0][2] if len(neg8_starts) == 1 else None
-    end_identity = neg8_ends[0][2] if len(neg8_ends) == 1 else None
+    reference_shape_valid = complete_legacy_pair or complete_replicated_trajectory
+    identities = [
+        item[2]
+        for position in ("start", "midpoint", "end")
+        for item in neg8_references[position]
+    ]
     identity_invalid = bool(
-        len(neg8_starts) == 1
-        and len(neg8_ends) == 1
+        reference_shape_valid
         and (
-            start_identity is None
-            or end_identity is None
-            or start_identity != end_identity
+            any(identity is None for identity in identities)
+            or len(set(identities)) != 1
         )
     )
     if identity_invalid:
         conditions.add("neg8_bracket_reference_invalid")
-    if whole_window or (neg8_starts and neg8_ends):
+    spans = [
+        item[3]
+        for position in ("start", "midpoint", "end")
+        for item in neg8_references[position]
+    ]
+    duration_s = (
+        max(span[1] for span in spans if span is not None)
+        - min(span[0] for span in spans if span is not None)
+        if spans and all(span is not None for span in spans)
+        else None
+    )
+    freshness_observation = build_neg8_freshness_observation(
+        [
+            item[4]
+            for position in ("start", "midpoint", "end")
+            for item in neg8_references[position]
+        ],
+        evaluated_at_s=(
+            time.time()
+            if evaluation_timestamp_s is None
+            else evaluation_timestamp_s
+        ),
+    )
+
+    def family_values(position: str, index: int) -> list[Any] | None:
+        if not reference_shape_valid:
+            return None
+        return [item[index] for item in neg8_references[position]]
+
+    if whole_window or (
+        neg8_references["start"] and neg8_references["end"]
+    ):
         bracket = evaluate_neg8_point_drift(
-            {} if identity_invalid else neg8_start,
-            {} if identity_invalid else neg8_end,
+            {} if identity_invalid else family_values("start", 0),
+            {} if identity_invalid else family_values("end", 0),
             extension.neg8_bracket,
             neg8_drift_bound,
-            start_idle_subtracted_j=start_idle_subtracted,
-            end_idle_subtracted_j=end_idle_subtracted,
+            start_idle_subtracted_j=family_values("start", 1),
+            midpoint_gross_j=family_values("midpoint", 0),
+            midpoint_idle_subtracted_j=family_values("midpoint", 1),
+            end_idle_subtracted_j=family_values("end", 1),
+            window_duration_s=duration_s,
+            bound_freshness_observation=freshness_observation,
         )
     else:
         bracket = neg8_bracket_not_evaluated(
             extension.neg8_bracket,
-            start_gross_j=neg8_start,
-            end_gross_j=neg8_end,
+            start_gross_j=(
+                neg8_references["start"][0][0]
+                if len(neg8_references["start"]) == 1
+                else None
+            ),
+            end_gross_j=(
+                neg8_references["end"][0][0]
+                if len(neg8_references["end"]) == 1
+                else None
+            ),
         )
     conditions.update(bracket["conditions"])
     section["adapter_wattage_continuity"] = continuity
     section["neg8_bracket"] = bracket
     section["neg8_reference_scientific_config_sha256"] = (
-        start_identity
-        if start_identity is not None and start_identity == end_identity
+        identities[0]
+        if identities and not identity_invalid and len(set(identities)) == 1
         else None
     )
     if whole_window:
@@ -4073,7 +4167,7 @@ def run_record_supersession(args: argparse.Namespace) -> int:
 
 
 def run_derive_neg8_drift_bound(args: argparse.Namespace) -> int:
-    """Mint one immutable, hash-sealed NEG-8 point-drift bound artifact."""
+    """Mint one immutable, hash-sealed dual-family NEG-8 bound artifact."""
 
     artifact = mint_neg8_drift_bound_artifact(
         Path(args.runs_dir), Path(args.derive_neg8_drift_bound)
@@ -4092,7 +4186,14 @@ def run_derive_neg8_drift_bound(args: argparse.Namespace) -> int:
     _write_immutable_bytes(output, raw)
     print(
         "NEG-8 DRIFT BOUND: "
-        f"{artifact['bound_j']:.12g} J "
+        "gross(single="
+        f"{artifact['claim_family_bounds']['gross_energy']['estimator']['single_member_endpoint_bound_j']:.12g} J,"
+        " triplet_mean="
+        f"{artifact['claim_family_bounds']['gross_energy']['estimator']['replicated_endpoint_bound_j']:.12g} J) "
+        "idle_subtracted(single="
+        f"{artifact['claim_family_bounds']['idle_subtracted_energy']['estimator']['single_member_endpoint_bound_j']:.12g} J,"
+        " triplet_mean="
+        f"{artifact['claim_family_bounds']['idle_subtracted_energy']['estimator']['replicated_endpoint_bound_j']:.12g} J) "
         f"derivation_sha256={artifact['derivation_sha256']} "
         f"output={output}"
     )
@@ -6031,8 +6132,19 @@ def run_campaign(args: argparse.Namespace) -> int:
                     )
                     print(
                         f"failed {info.run_id}: existing bundle(s) are not skippable: "
-                        f"{details}; inspect or move those bundle(s), or provide an "
-                        "explicit campaign waiver",
+                        f"{details}; "
+                        + (
+                            "quarantine the failed fragment, rerun, and record "
+                            "ordinary occurrence supersession"
+                            if any(
+                                evaluation.rerun_required
+                                for evaluation in failed
+                            )
+                            else (
+                                "inspect or move those bundle(s), or provide an "
+                                "explicit campaign waiver"
+                            )
+                        ),
                         file=sys.stderr,
                     )
                 else:
@@ -6366,6 +6478,16 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"did not pass: {details}",
                         file=sys.stderr,
                     )
+                    if any(
+                        evaluation.rerun_required
+                        for evaluation in failed_members
+                    ):
+                        print(
+                            "anchor fallback rerun required: preserve and quarantine "
+                            "the failed fragment, rerun the floor member, then record "
+                            "ordinary occurrence supersession",
+                            file=sys.stderr,
+                        )
             extra = {
                 **order_extra,
                 "members": [evaluation.to_log() for evaluation in evaluations],

@@ -1,0 +1,22 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "neg8-window-reference-midpoint-v1",
+  "plan_id": "neg8-window-reference-trajectory-m3max-qwen25-1p5b-v1",
+  "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+  "ordering_note": "One same-condition midpoint reference for trajectory-excursion budgeting; it is not an endpoint replicate.",
+  "planned_n_bundles": 1,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "neg8-window-midpoint.json",
+      "run_id": "neg8-window-midpoint",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference_midpoint",
+      "block_index": 1,
+      "position_in_block": 1,
+      "sentinel_position": "midpoint"
+    }
+  ]
+}

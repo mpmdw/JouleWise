@@ -11,7 +11,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.whole_window import (
+    CONDITION_NEG8_DRIFT_BOUND_STALE,
+    CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+    CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+    NEG8_POINT_DRIFT_CONDITION_CODES,
     build_neg8_drift_bound_artifact,
+    canonical_sha256,
     validated_attempt_selection,
     whole_window_refusal_reasons,
 )
@@ -24,6 +29,20 @@ from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 
 
 class WholeWindowSelectionTests(unittest.TestCase):
+    def test_both_family_underived_refusals_are_registered(self):
+        self.assertIn(
+            CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+            NEG8_POINT_DRIFT_CONDITION_CODES,
+        )
+        self.assertIn(
+            CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+            NEG8_POINT_DRIFT_CONDITION_CODES,
+        )
+        self.assertIn(
+            CONDITION_NEG8_DRIFT_BOUND_STALE,
+            NEG8_POINT_DRIFT_CONDITION_CODES,
+        )
+
     def _real_fixture(self, root: Path):
         _registry, manifest, _raw, _configs, _roster = evidence_for("draft")
         entry = manifest["entries"][0]
@@ -287,6 +306,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
         }
         summary = {
             "gross_energy_j": 5.0,
+            "idle_subtracted_energy_j": 4.5,
             "energy_anchor_shift_envelopes": {
                 "/gross_energy_j": {"point_j": 5.0, "lower_j": 4.9, "upper_j": 5.1}
             },
@@ -298,6 +318,26 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 hidden.mkdir(parents=True)
                 (hidden / "summary_metrics.json").write_text(
                     json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                (hidden / "metadata.json").write_text(
+                    json.dumps(
+                        {
+                            "campaign_environment_preflight": {
+                                "snapshot": {"build_version": "25F84"}
+                            },
+                            "environment": {
+                                "power_source": "AC Power",
+                                "power": {
+                                    "adapter_watts": 140,
+                                    "adapter_description": "test supply",
+                                },
+                            },
+                            "instrument_calibration": {
+                                "artifact_sha256": "c" * 64
+                            },
+                        }
+                    )
+                    + "\n"
                 )
             manifest = {
                 "attempt_ledger_selection": {
@@ -335,13 +375,26 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 members=[
                     {
                         "bundle_id": f"reference-{index:02d}",
-                        "point_gross_j": 5.0,
+                        "point_gross_j": 5.0 + index * 0.001,
+                        "point_idle_subtracted_j": 4.5 + index * 0.001,
                         "bundle_evidence_sha256": hashlib.sha256(
                             f"reference-{index:02d}".encode()
                         ).hexdigest(),
                     }
                     for index in range(10)
                 ],
+                derivation_timestamp_s=1_000_000.0,
+                freshness_bindings={
+                    "os_build": "25F84",
+                    "power_supply_identity_sha256": canonical_sha256(
+                        {
+                            "power_source": "AC Power",
+                            "adapter_watts": 140.0,
+                            "adapter_description": "test supply",
+                        }
+                    ),
+                    "calibration_identity_sha256": "c" * 64,
+                },
             )
             amended_decision, amended_problem = _derived_neg8_decision(
                 [manifest],
@@ -350,6 +403,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 current=True,
                 point_drift=True,
                 drift_bound_artifact=drift_bound,
+                freshness_evaluated_at_s=1_000_001.0,
             )
         self.assertIsNone(frozen_problem)
         self.assertEqual(frozen_decision, "failed")

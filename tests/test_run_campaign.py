@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -24,6 +25,10 @@ from scripts.run_campaign import (
     failed_shakedown_record,
 )
 from joulewise.environment import evaluate_environment_policy
+from joulewise.whole_window import (
+    NEG8_DRIFT_BOUND_MAX_AGE_S,
+    canonical_sha256,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -4873,6 +4878,106 @@ def _busy_idle_records(count: int = 5) -> list[dict]:
     ]
 
 
+class AnchorFallbackCampaignGateTests(unittest.TestCase):
+    @staticmethod
+    def _bundle(
+        root: Path, bundle_id: str, *, fallback: bool
+    ) -> tuple[Path, bytes]:
+        bundle = root / bundle_id
+        bundle.mkdir()
+        summary = {
+            "status": "succeeded",
+            "measurement_quality": {"telemetry_source": "powermetrics"},
+            "energy_uncertainty_status": (
+                "not_estimable" if fallback else "bounded"
+            ),
+            "window_evidence_precheck": {
+                "gross_request": {
+                    "eligible": not fallback,
+                    "reasons": (
+                        ["clock_anchor_unresolved"] if fallback else []
+                    ),
+                }
+            },
+        }
+        raw_summary = (json.dumps(summary, sort_keys=True) + "\n").encode()
+        (bundle / "summary_metrics.json").write_bytes(raw_summary)
+        anchor = (
+            {
+                "status": "unresolved",
+                "trace_fallback_method": "legacy_spawn_bracket_midpoint_v1",
+            }
+            if fallback
+            else {"status": "bounded"}
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps({"uncertainty_evidence": {"clock_anchor": anchor}})
+            + "\n",
+            encoding="utf-8",
+        )
+        return bundle, raw_summary
+
+    def _evaluate(self, bundle: Path, *, role: str):
+        info = run_campaign_module.ConfigInfo(
+            path=BASE_CONFIG,
+            run_id=bundle.name,
+            raw_run_id=bundle.name,
+            repetitions=1,
+            role=role,
+        )
+        with (
+            patch.object(
+                run_campaign_module, "validate_bundle", return_value=[]
+            ),
+            patch.object(
+                run_campaign_module,
+                "_bundle_config_binding_problem",
+                return_value=None,
+            ),
+        ):
+            return run_campaign_module.evaluate_member(
+                bundle, info=info, waivers={}
+            )
+
+    def test_floor_member_fallback_anchor_is_unwaivable_rerun_trigger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, raw_summary = self._bundle(
+                Path(tmp), "fallback-member", fallback=True
+            )
+            evaluation = self._evaluate(bundle, role="absolute_repeat")
+            self.assertTrue(bundle.is_dir())
+            self.assertEqual(
+                (bundle / "summary_metrics.json").read_bytes(), raw_summary
+            )
+        self.assertIn(
+            run_campaign_module.ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            evaluation.collection_integrity_flags,
+        )
+        self.assertIn(
+            run_campaign_module.ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            evaluation.failure_classes(),
+        )
+        self.assertTrue(evaluation.failed)
+        self.assertFalse(evaluation.usable)
+        self.assertTrue(evaluation.rerun_required)
+        self.assertTrue(evaluation.to_log()["rerun_required"])
+
+    def test_fully_anchored_floor_member_remains_usable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _raw_summary = self._bundle(
+                Path(tmp), "anchored-member", fallback=False
+            )
+            evaluation = self._evaluate(
+                bundle, role="comparative_abba_member"
+            )
+        self.assertNotIn(
+            run_campaign_module.ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            evaluation.collection_integrity_flags,
+        )
+        self.assertTrue(evaluation.usable)
+        self.assertFalse(evaluation.rerun_required)
+
+
 class ProductionUncertaintyAssertionTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -5010,7 +5115,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             str(self._write_extended_sidecar(profile))
         )
 
-    def _drift_bound(self, points: list[float] | None = None) -> dict:
+    def _drift_bound(
+        self,
+        points: list[float] | None = None,
+        *,
+        derived_at_s: float | None = None,
+    ) -> dict:
         values = (
             points
             if points is not None
@@ -5025,12 +5135,27 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 {
                     "bundle_id": f"reference-{index:02d}",
                     "point_gross_j": point,
+                    "point_idle_subtracted_j": point - 0.2,
                     "bundle_evidence_sha256": hashlib.sha256(
                         f"reference-{index:02d}".encode()
                     ).hexdigest(),
                 }
                 for index, point in enumerate(values)
             ],
+            derivation_timestamp_s=(
+                time.time() if derived_at_s is None else derived_at_s
+            ),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": canonical_sha256(
+                    {
+                        "power_source": "AC Power",
+                        "adapter_watts": 140.0,
+                        "adapter_description": "140W USB-C Power Adapter",
+                    }
+                ),
+                "calibration_identity_sha256": "c" * 64,
+            },
         )
 
     def _write_drift_bound(self, points: list[float] | None = None) -> Path:
@@ -5054,6 +5179,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         admission_decision: str | None = "admitted",
         scientific_sampling_hz: float = 10.0,
         neg8_position: str | None = None,
+        os_build: str = "25F84",
+        calibration_identity_sha256: str = "c" * 64,
     ):
         bundle_path = self.root / bundle_id
         bundle_path.mkdir(parents=True, exist_ok=True)
@@ -5077,6 +5204,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 "".join(json.dumps(record) + "\n" for record in records)
             )
         metadata: dict = {
+            "campaign_environment_preflight": {
+                "snapshot": {"build_version": os_build}
+            },
+            "instrument_calibration": {
+                "artifact_sha256": calibration_identity_sha256
+            },
             "environment": {
                 "power_source": "AC Power",
                 "power": {
@@ -5135,6 +5268,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             }
         summary = {}
         if gross_energy_j is not None:
+            if idle_subtracted_energy_j is None:
+                idle_subtracted_energy_j = gross_energy_j - 0.2
             summary = {
                 "gross_energy_j": gross_energy_j,
                 "idle_subtracted_energy_j": idle_subtracted_energy_j,
@@ -5282,7 +5417,22 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     {
                         "config_sha256": hashlib.sha256(
                             config_raw
-                        ).hexdigest()
+                        ).hexdigest(),
+                        "campaign_environment_preflight": {
+                            "snapshot": {"build_version": "25F84"}
+                        },
+                        "environment": {
+                            "power_source": "AC Power",
+                            "power": {
+                                "adapter_watts": 140,
+                                "adapter_description": (
+                                    "140W USB-C Power Adapter"
+                                ),
+                            },
+                        },
+                        "instrument_calibration": {
+                            "artifact_sha256": "c" * 64
+                        },
                     }
                 )
                 + "\n",
@@ -5292,6 +5442,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             summary = {
                 "status": "succeeded",
                 "gross_energy_j": point_j,
+                "idle_subtracted_energy_j": point_j - 0.2,
                 "energy_anchor_shift_envelopes": {
                     "/gross_energy_j": {
                         "point_j": point_j,
@@ -5304,7 +5455,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "telemetry_source": "powermetrics"
                 },
                 "window_evidence_precheck": {
-                    "gross_request": {"eligible": True}
+                    "gross_request": {"eligible": True},
+                    "idle_subtracted_request": {"eligible": True},
                 },
             }
             (bundle / "summary_metrics.json").write_text(
@@ -5357,6 +5509,53 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertTrue(
             run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
         )
+
+    def test_prospective_window_reference_configs_are_same_condition_3_1_3(
+        self,
+    ) -> None:
+        root = ROOT / "configs" / "campaigns" / "window_references"
+        reference = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        reference.pop("run_id")
+        expected = {
+            "start_triplet": (3, "start"),
+            "midpoint": (1, "midpoint"),
+            "end_triplet": (3, "end"),
+        }
+        observed_run_ids = set()
+        for directory, (count, position) in expected.items():
+            manifest = json.loads(
+                (root / directory / "order_manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            entries = manifest["executed_order"]
+            self.assertEqual(manifest["planned_n_bundles"], count)
+            self.assertEqual(len(entries), count)
+            self.assertEqual(
+                {entry["sentinel_position"] for entry in entries},
+                {position},
+            )
+            for entry in entries:
+                config = json.loads(
+                    (root / directory / entry["config"]).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(config["run_id"], entry["run_id"])
+                self.assertNotIn(config["run_id"], observed_run_ids)
+                observed_run_ids.add(config["run_id"])
+                config.pop("run_id")
+                self.assertEqual(config, reference)
+        self.assertEqual(len(observed_run_ids), 7)
 
     def test_neg8_bound_builder_requires_ten_members_and_detects_tampering(
         self,
@@ -5443,6 +5642,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             section["adapter_wattage_continuity"]["decision"], "stable"
         )
         self.assertEqual(section["neg8_bracket"]["decision"], "passed")
+        self.assertEqual(
+            section["neg8_bracket"]["bound_freshness"]["decision"],
+            "fresh",
+        )
         self.assertAlmostEqual(section["neg8_bracket"]["abs_delta_j"], 0.04)
         self.assertEqual(
             section["neg8_bracket"]["drift_bound_artifact"][
@@ -5454,7 +5657,128 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             section["neg8_reference_scientific_config_sha256"]
         )
 
-    def test_point_drift_gates_while_corner_and_idle_sub_are_diagnostics(self) -> None:
+    def test_neg8_bound_horizon_expiry_refuses_as_stale(self) -> None:
+        binding = self._binding()
+        expired = self._drift_bound(
+            derived_at_s=time.time() - NEG8_DRIFT_BOUND_MAX_AGE_S - 1.0
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "neg8-expired-start",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "neg8-expired-end",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+            neg8_drift_bound=expired,
+        )
+        freshness = section["neg8_bracket"]["bound_freshness"]
+        self.assertEqual(freshness["decision"], "stale")
+        self.assertIn(
+            "validity_horizon_expired",
+            freshness["triggered_rederivation_reasons"],
+        )
+        self.assertIn("neg8_drift_bound_stale", section["conditions"])
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+
+    def test_neg8_bound_binding_changes_trigger_stale_refusal(self) -> None:
+        binding = self._binding()
+        cases = (
+            (
+                "os_build_change",
+                {"os_build": "25F85"},
+            ),
+            (
+                "power_supply_change",
+                {
+                    "adapter_watts": 96,
+                    "adapter_description": "96W USB-C Power Adapter",
+                },
+            ),
+            (
+                "calibration_identity_change",
+                {"calibration_identity_sha256": "d" * 64},
+            ),
+        )
+        for trigger, overrides in cases:
+            with self.subTest(trigger=trigger):
+                members = [
+                    self._member(
+                        f"neg8-{trigger}-{position}",
+                        records=_clean_idle_records(),
+                        gross_energy_j=8.0 + index * 0.01,
+                        neg8_position=position,
+                        **overrides,
+                    )
+                    for index, position in enumerate(("start", "end"))
+                ]
+                section = run_campaign_module.idle_admission_core_verdict(
+                    members,
+                    binding,
+                    whole_window=True,
+                    neg8_drift_bound=self._drift_bound(),
+                )
+                freshness = section["neg8_bracket"]["bound_freshness"]
+                self.assertIn(
+                    trigger,
+                    freshness["triggered_rederivation_reasons"],
+                )
+                self.assertIn(
+                    "neg8_drift_bound_stale", section["conditions"]
+                )
+                self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+
+    def test_prefreshness_bound_wire_is_parseable_but_always_stale(self) -> None:
+        binding = self._binding()
+        artifact = self._drift_bound()
+        artifact.pop("freshness")
+        artifact["derivation_sha256"] = canonical_sha256(
+            {
+                key: value
+                for key, value in artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "neg8-prefreshness-start",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "neg8-prefreshness-end",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+            neg8_drift_bound=artifact,
+        )
+        freshness = section["neg8_bracket"]["bound_freshness"]
+        self.assertEqual(freshness["decision"], "stale")
+        self.assertIn(
+            "freshness_fields_missing",
+            freshness["triggered_rederivation_reasons"],
+        )
+        self.assertIn("neg8_drift_bound_stale", section["conditions"])
+
+    def test_family_point_drift_gates_while_gross_corners_are_diagnostic(self) -> None:
         binding = self._binding()
         drift_bound = self._drift_bound()
         section = run_campaign_module.idle_admission_core_verdict(
@@ -5492,6 +5816,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             bracket["idle_subtracted_companion"]["abs_delta_j"], 0.07
         )
         self.assertEqual(
+            bracket["idle_subtracted_companion"]["role"],
+            "claim_family_screen_and_budget",
+        )
+        self.assertEqual(
             bracket["drift_bound_artifact"]["reference_corpus"]["member_ids"],
             [f"reference-{index:02d}" for index in range(10)],
         )
@@ -5503,6 +5831,142 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             bracket["drift_bound_artifact"]["derivation_sha256"],
             drift_bound["derivation_sha256"],
         )
+
+    def test_idle_subtracted_family_can_fail_while_gross_family_passes(self) -> None:
+        binding = self._binding()
+        drift_bound = self._drift_bound()
+        gross_bound = drift_bound["claim_family_bounds"]["gross_energy"][
+            "estimator"
+        ]["single_member_endpoint_bound_j"]
+        idle_bound = drift_bound["claim_family_bounds"][
+            "idle_subtracted_energy"
+        ]["estimator"]["single_member_endpoint_bound_j"]
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "neg8-gross-pass-idle-fail-start",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    idle_subtracted_energy_j=7.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "neg8-gross-pass-idle-fail-end",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0 + gross_bound / 2.0,
+                    idle_subtracted_energy_j=7.0 + idle_bound * 2.0,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+            neg8_drift_bound=drift_bound,
+        )
+        bracket = section["neg8_bracket"]
+        self.assertTrue(
+            bracket["claim_families"]["gross_energy"]["screen_passed"]
+        )
+        self.assertFalse(
+            bracket["claim_families"]["idle_subtracted_energy"][
+                "screen_passed"
+            ]
+        )
+        self.assertIn(
+            "neg8_bracket_idle_sub_abs_delta_exceeded",
+            bracket["conditions"],
+        )
+        self.assertEqual(bracket["decision"], "failed")
+
+    def test_replicated_endpoints_record_sem_and_midpoint_dominates_budget(
+        self,
+    ) -> None:
+        binding = self._binding()
+        drift_bound = self._drift_bound()
+        evaluations = []
+        for index, gross in enumerate((8.00, 8.02, 7.98), start=1):
+            evaluations.append(
+                self._member(
+                    f"neg8-start-r{index}",
+                    records=_clean_idle_records(),
+                    gross_energy_j=gross,
+                    idle_subtracted_energy_j=gross - 0.2,
+                    neg8_position="start",
+                )
+            )
+        evaluations.append(
+            self._member(
+                "neg8-midpoint",
+                records=_clean_idle_records(),
+                gross_energy_j=8.5,
+                idle_subtracted_energy_j=8.3,
+                neg8_position="midpoint",
+            )
+        )
+        for index, gross in enumerate((8.01, 8.03, 7.99), start=1):
+            evaluations.append(
+                self._member(
+                    f"neg8-end-r{index}",
+                    records=_clean_idle_records(),
+                    gross_energy_j=gross,
+                    idle_subtracted_energy_j=gross - 0.2,
+                    neg8_position="end",
+                )
+            )
+        bracket = run_campaign_module.idle_admission_core_verdict(
+            evaluations,
+            binding,
+            whole_window=True,
+            neg8_drift_bound=drift_bound,
+        )["neg8_bracket"]
+        self.assertEqual(
+            bracket["endpoint_protocol"],
+            "replicated_endpoints_with_midpoint",
+        )
+        gross = bracket["claim_families"]["gross_energy"]
+        self.assertEqual(gross["start"]["n"], 3)
+        self.assertGreater(gross["start"]["standard_error_j"], 0.0)
+        self.assertAlmostEqual(gross["point_delta_j"], 0.01)
+        self.assertAlmostEqual(gross["trajectory_excursion_max_j"], 0.5)
+        self.assertAlmostEqual(gross["drift_allowance_j"], 0.5)
+        self.assertGreater(gross["drift_allowance_j"], 0.0)
+        self.assertEqual(
+            gross["duration_scaling"], "not_applied_no_governed_time_law"
+        )
+        self.assertEqual(bracket["decision"], "passed")
+
+    def test_legacy_pair_uses_single_member_bound_and_nonzero_allowance(self) -> None:
+        binding = self._binding()
+        drift_bound = self._drift_bound()
+        bracket = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "legacy-start",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "legacy-end",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.01,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+            neg8_drift_bound=drift_bound,
+        )["neg8_bracket"]
+        gross = bracket["claim_families"]["gross_energy"]
+        self.assertEqual(
+            bracket["endpoint_protocol"], "legacy_single_member_endpoints"
+        )
+        self.assertEqual(
+            gross["derived_repeatability_bound_j"],
+            drift_bound["claim_family_bounds"]["gross_energy"]["estimator"][
+                "single_member_endpoint_bound_j"
+            ],
+        )
+        self.assertGreater(gross["drift_allowance_j"], 0.0)
 
     def test_whole_window_refuses_distinct_underived_bound_condition(self) -> None:
         binding = self._binding()
@@ -5526,6 +5990,9 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(section["neg8_bracket"]["decision"], "failed")
         self.assertIn("neg8_drift_bound_underived", section["conditions"])
+        self.assertIn(
+            "neg8_idle_sub_drift_bound_underived", section["conditions"]
+        )
 
     def test_neg8_substring_without_declared_role_confers_no_reference(self) -> None:
         # R5 defect shape: these IDs formerly conferred both reference roles.

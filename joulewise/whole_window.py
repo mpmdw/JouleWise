@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import statistics
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -54,9 +55,38 @@ NEG8_REFERENCE_CORPUS_SCHEMA = "joulewise.neg8_reference_corpus.v1"
 NEG8_POINT_DRIFT_ESTIMAND = (
     "abs(end_point_gross_j-start_point_gross_j)"
 )
+NEG8_IDLE_SUB_POINT_DRIFT_ESTIMAND = (
+    "abs(end_point_idle_subtracted_j-start_point_idle_subtracted_j)"
+)
 NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
 NEG8_DRIFT_MINIMUM_N = 10
+NEG8_REPLICATED_ENDPOINT_N = 3
+NEG8_DRIFT_BOUND_MAX_AGE_S = 86400
+NEG8_CLAIM_FAMILY_GROSS = "gross_energy"
+NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED = "idle_subtracted_energy"
 CONDITION_NEG8_DRIFT_BOUND_UNDERIVED = "neg8_drift_bound_underived"
+CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED = (
+    "neg8_idle_sub_drift_bound_underived"
+)
+CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED = (
+    "neg8_bracket_abs_delta_exceeded"
+)
+CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED = (
+    "neg8_bracket_idle_sub_abs_delta_exceeded"
+)
+CONDITION_NEG8_DRIFT_BOUND_STALE = "neg8_drift_bound_stale"
+NEG8_POINT_DRIFT_CONDITION_CODES = frozenset(
+    {
+        CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+        CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+        CONDITION_NEG8_DRIFT_BOUND_STALE,
+        CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
+        CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED,
+        "neg8_bracket_missing",
+        "neg8_bracket_reference_invalid",
+    }
+)
+NEG8_WHOLE_WINDOW_ALLOWANCE_TERM = "E_whole_window_drift_allowance_j"
 
 
 def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
@@ -101,6 +131,253 @@ def _finite_number(value: Any, *, positive: bool = False) -> float | None:
     return number
 
 
+def _nested_named_mappings(
+    value: Any, name: str
+) -> list[Mapping[str, Any]]:
+    matches: list[Mapping[str, Any]] = []
+    if isinstance(value, Mapping):
+        candidate = value.get(name)
+        if isinstance(candidate, Mapping):
+            matches.append(candidate)
+        for child in value.values():
+            matches.extend(_nested_named_mappings(child, name))
+    elif isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        for child in value:
+            matches.extend(_nested_named_mappings(child, name))
+    return matches
+
+
+def neg8_freshness_bindings_from_metadata(
+    metadata: Any,
+) -> dict[str, str] | None:
+    """Derive the revalidation binding vector from one reference bundle."""
+
+    if not isinstance(metadata, Mapping):
+        return None
+    snapshots: list[Mapping[str, Any]] = []
+    # Prefer the member's run-time observation over the campaign-start
+    # preflight. A power supply can renegotiate after preflight; using the
+    # stale first snapshot would hide exactly the trigger this binding owns.
+    environment = metadata.get("environment")
+    if isinstance(environment, Mapping):
+        snapshots.append(environment)
+    preflight = metadata.get("campaign_environment_preflight")
+    if isinstance(preflight, Mapping):
+        snapshot = preflight.get("snapshot")
+        if isinstance(snapshot, Mapping):
+            snapshots.append(snapshot)
+        evaluation = preflight.get("evaluation")
+        evaluated_snapshot = (
+            evaluation.get("snapshot")
+            if isinstance(evaluation, Mapping)
+            else None
+        )
+        if isinstance(evaluated_snapshot, Mapping):
+            snapshots.append(evaluated_snapshot)
+    platform = metadata.get("platform")
+    if isinstance(platform, Mapping):
+        snapshots.append(platform)
+
+    os_build = next(
+        (
+            value
+            for snapshot in snapshots
+            if isinstance((value := snapshot.get("build_version")), str)
+            and value
+        ),
+        None,
+    )
+    power_identity: dict[str, Any] | None = None
+    for snapshot in snapshots:
+        power = snapshot.get("power")
+        if not isinstance(power, Mapping):
+            continue
+        power_source = snapshot.get("power_source")
+        watts = power.get("adapter_watts")
+        description = power.get("adapter_description")
+        if (
+            isinstance(power_source, str)
+            and power_source
+            and not isinstance(watts, bool)
+            and isinstance(watts, int | float)
+            and math.isfinite(float(watts))
+            and float(watts) > 0.0
+            and isinstance(description, str)
+            and description
+        ):
+            power_identity = {
+                "power_source": power_source,
+                "adapter_watts": float(watts),
+                "adapter_description": description,
+            }
+            break
+
+    calibration_sha = next(
+        (
+            artifact_sha
+            for calibration in _nested_named_mappings(
+                metadata, "instrument_calibration"
+            )
+            if _sha256_text(
+                artifact_sha := calibration.get("artifact_sha256")
+            )
+        ),
+        None,
+    )
+    if (
+        os_build is None
+        or power_identity is None
+        or calibration_sha is None
+    ):
+        return None
+    return {
+        "os_build": os_build,
+        "power_supply_identity_sha256": canonical_sha256(power_identity),
+        "calibration_identity_sha256": calibration_sha,
+    }
+
+
+def build_neg8_freshness_observation(
+    metadata_values: Sequence[Any],
+    *,
+    evaluated_at_s: Any = None,
+) -> dict[str, Any]:
+    """Build the current binding observation used by the freshness gate."""
+
+    timestamp = _finite_number(
+        time.time() if evaluated_at_s is None else evaluated_at_s
+    )
+    bindings = [
+        neg8_freshness_bindings_from_metadata(metadata)
+        for metadata in metadata_values
+    ]
+    resolved = [binding for binding in bindings if binding is not None]
+    unique = {
+        canonical_sha256(binding): binding
+        for binding in resolved
+    }
+    if len(resolved) != len(bindings) or not bindings:
+        binding_status = "missing"
+        observed = None
+    elif len(unique) != 1:
+        binding_status = "conflict"
+        observed = None
+    else:
+        binding_status = "resolved"
+        observed = dict(next(iter(unique.values())))
+    return {
+        "evaluated_at_s": timestamp,
+        "binding_status": binding_status,
+        "bindings": observed,
+        "member_count": len(bindings),
+        "resolved_member_count": len(resolved),
+    }
+
+
+def evaluate_neg8_bound_freshness(
+    artifact: Mapping[str, Any],
+    observation: Any,
+) -> dict[str, Any]:
+    """Evaluate horizon and exact binding triggers for one bound artifact."""
+
+    freshness = artifact.get("freshness")
+    observed = (
+        observation.get("bindings")
+        if isinstance(observation, Mapping)
+        else None
+    )
+    evaluated_at = (
+        _finite_number(observation.get("evaluated_at_s"))
+        if isinstance(observation, Mapping)
+        else None
+    )
+    triggers: list[str] = []
+    derived_at: float | None = None
+    expires_at: float | None = None
+    artifact_bindings: Mapping[str, Any] | None = None
+    if not isinstance(freshness, Mapping):
+        triggers.append("freshness_fields_missing")
+    else:
+        derived_at = _finite_number(freshness.get("derived_at_s"))
+        max_age = _finite_number(freshness.get("max_age_s"), positive=True)
+        artifact_bindings = (
+            freshness.get("bindings")
+            if isinstance(freshness.get("bindings"), Mapping)
+            else None
+        )
+        if (
+            derived_at is None
+            or max_age != float(NEG8_DRIFT_BOUND_MAX_AGE_S)
+            or artifact_bindings is None
+        ):
+            triggers.append("freshness_fields_invalid")
+        else:
+            expires_at = derived_at + max_age
+    if (
+        not isinstance(observation, Mapping)
+        or observation.get("binding_status") != "resolved"
+        or not isinstance(observed, Mapping)
+        or evaluated_at is None
+    ):
+        triggers.append("freshness_observation_unresolved")
+    if (
+        derived_at is not None
+        and evaluated_at is not None
+        and evaluated_at < derived_at
+    ):
+        triggers.append("evaluation_precedes_derivation")
+    if (
+        expires_at is not None
+        and evaluated_at is not None
+        and evaluated_at > expires_at
+    ):
+        triggers.append("validity_horizon_expired")
+    for field, trigger in (
+        ("os_build", "os_build_change"),
+        ("power_supply_identity_sha256", "power_supply_change"),
+        ("calibration_identity_sha256", "calibration_identity_change"),
+    ):
+        if (
+            isinstance(artifact_bindings, Mapping)
+            and isinstance(observed, Mapping)
+            and artifact_bindings.get(field) != observed.get(field)
+        ):
+            triggers.append(trigger)
+    unique_triggers = list(dict.fromkeys(triggers))
+    return {
+        "decision": "stale" if unique_triggers else "fresh",
+        "condition": (
+            CONDITION_NEG8_DRIFT_BOUND_STALE
+            if unique_triggers
+            else None
+        ),
+        "evaluated_at_s": evaluated_at,
+        "derived_at_s": derived_at,
+        "expires_at_s": expires_at,
+        "max_age_s": (
+            freshness.get("max_age_s")
+            if isinstance(freshness, Mapping)
+            else None
+        ),
+        "artifact_bindings": (
+            dict(artifact_bindings)
+            if isinstance(artifact_bindings, Mapping)
+            else None
+        ),
+        "observed_bindings": (
+            dict(observed) if isinstance(observed, Mapping) else None
+        ),
+        "observation_binding_status": (
+            observation.get("binding_status")
+            if isinstance(observation, Mapping)
+            else None
+        ),
+        "triggered_rederivation_reasons": unique_triggers,
+    }
+
+
 def build_neg8_drift_bound_artifact(
     *,
     corpus_id: str,
@@ -108,8 +385,10 @@ def build_neg8_drift_bound_artifact(
     manifest_sha256: str,
     scientific_config_sha256: str,
     members: Sequence[Mapping[str, Any]],
+    derivation_timestamp_s: Any,
+    freshness_bindings: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Build the predeclared D-054-style point-contrast guard artifact."""
+    """Build the dual-family D-054-style point-contrast guard artifact."""
 
     if not isinstance(corpus_id, str) or not corpus_id.strip():
         raise ValueError("NEG-8 reference corpus_id must be non-empty")
@@ -121,26 +400,54 @@ def build_neg8_drift_bound_artifact(
         raise ValueError(
             "NEG-8 reference scientific_config_sha256 must be lowercase sha256"
         )
+    derived_at = _finite_number(derivation_timestamp_s)
+    if derived_at is None or derived_at < 0.0:
+        raise ValueError(
+            "NEG-8 derivation_timestamp_s must be finite and nonnegative"
+        )
+    freshness_binding_keys = {
+        "os_build",
+        "power_supply_identity_sha256",
+        "calibration_identity_sha256",
+    }
+    if (
+        not isinstance(freshness_bindings, Mapping)
+        or set(freshness_bindings) != freshness_binding_keys
+        or not isinstance(freshness_bindings.get("os_build"), str)
+        or not freshness_bindings.get("os_build")
+        or not _sha256_text(
+            freshness_bindings.get("power_supply_identity_sha256")
+        )
+        or not _sha256_text(
+            freshness_bindings.get("calibration_identity_sha256")
+        )
+    ):
+        raise ValueError("NEG-8 freshness bindings are invalid")
     normalized_members: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for member in members:
         if not isinstance(member, Mapping) or set(member) != {
             "bundle_id",
             "point_gross_j",
+            "point_idle_subtracted_j",
             "bundle_evidence_sha256",
         }:
             raise ValueError(
                 "NEG-8 reference members require bundle_id, point_gross_j, "
-                "and bundle_evidence_sha256"
+                "point_idle_subtracted_j, and bundle_evidence_sha256"
             )
         bundle_id = member.get("bundle_id")
-        point = _finite_number(member.get("point_gross_j"), positive=True)
+        gross_point = _finite_number(member.get("point_gross_j"), positive=True)
+        idle_subtracted_point = _finite_number(
+            member.get("point_idle_subtracted_j")
+        )
         evidence_sha = member.get("bundle_evidence_sha256")
         if (
             not isinstance(bundle_id, str)
             or not bundle_id
             or bundle_id in seen_ids
-            or point is None
+            or gross_point is None
+            or idle_subtracted_point is None
             or not _sha256_text(evidence_sha)
         ):
             raise ValueError("NEG-8 reference corpus member is invalid or duplicated")
@@ -148,7 +455,8 @@ def build_neg8_drift_bound_artifact(
         normalized_members.append(
             {
                 "bundle_id": bundle_id,
-                "point_gross_j": point,
+                "point_gross_j": gross_point,
+                "point_idle_subtracted_j": idle_subtracted_point,
                 "bundle_evidence_sha256": evidence_sha,
             }
         )
@@ -157,12 +465,65 @@ def build_neg8_drift_bound_artifact(
         raise ValueError(
             f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
         )
-    points = [member["point_gross_j"] for member in normalized_members]
-    sample_range = max(points) - min(points)
-    sample_stddev = statistics.stdev(points)
-    t_critical = student_t_critical_95(n - 1)
-    prediction = t_critical * sample_stddev * math.sqrt(2.0)
-    bound = max(sample_range, prediction)
+    def family_estimator(point_field: str) -> dict[str, Any]:
+        points = [member[point_field] for member in normalized_members]
+        sample_range = max(points) - min(points)
+        sample_stddev = statistics.stdev(points)
+        t_critical = student_t_critical_95(n - 1)
+        single_prediction = t_critical * sample_stddev * math.sqrt(2.0)
+        single_bound = max(sample_range, single_prediction)
+        ordered = sorted(points)
+        replicated_range = (
+            statistics.fmean(ordered[-NEG8_REPLICATED_ENDPOINT_N:])
+            - statistics.fmean(ordered[:NEG8_REPLICATED_ENDPOINT_N])
+        )
+        replicated_prediction = (
+            t_critical
+            * sample_stddev
+            * math.sqrt(2.0 / NEG8_REPLICATED_ENDPOINT_N)
+        )
+        replicated_bound = max(replicated_range, replicated_prediction)
+        if single_bound <= 0.0 or replicated_bound <= 0.0:
+            raise ValueError(
+                "NEG-8 reference corpus must derive strictly positive bounds"
+            )
+        return {
+            "id": NEG8_DRIFT_ESTIMATOR_ID,
+            "minimum_n": NEG8_DRIFT_MINIMUM_N,
+            "n": n,
+            "sample_range_j": sample_range,
+            "sample_stddev_j": sample_stddev,
+            "student_t_critical_95": t_critical,
+            "prediction_two_point_j": single_prediction,
+            "single_member_endpoint_bound_j": single_bound,
+            "replicated_endpoint_n": NEG8_REPLICATED_ENDPOINT_N,
+            "replicated_endpoint_sample_range_j": replicated_range,
+            "prediction_two_endpoint_means_j": replicated_prediction,
+            "replicated_endpoint_bound_j": replicated_bound,
+            "single_member_formula": (
+                "max(sample_range_j,"
+                "t_0.975,n-1*sample_stddev_j*sqrt(2))"
+            ),
+            "replicated_endpoint_formula": (
+                "max(mean(largest_3)-mean(smallest_3),"
+                "t_0.975,n-1*sample_stddev_j*sqrt(2/3))"
+            ),
+        }
+
+    gross_estimator = family_estimator("point_gross_j")
+    idle_subtracted_estimator = family_estimator("point_idle_subtracted_j")
+    family_bounds = {
+        NEG8_CLAIM_FAMILY_GROSS: {
+            "estimand": NEG8_POINT_DRIFT_ESTIMAND,
+            "point_field": "point_gross_j",
+            "estimator": gross_estimator,
+        },
+        NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED: {
+            "estimand": NEG8_IDLE_SUB_POINT_DRIFT_ESTIMAND,
+            "point_field": "point_idle_subtracted_j",
+            "estimator": idle_subtracted_estimator,
+        },
+    }
     payload = {
         "schema_version": NEG8_DRIFT_BOUND_SCHEMA,
         "estimand": NEG8_POINT_DRIFT_ESTIMAND,
@@ -176,35 +537,46 @@ def build_neg8_drift_bound_artifact(
             "member_ids": [member["bundle_id"] for member in normalized_members],
             "members": normalized_members,
         },
-        "estimator": {
-            "id": NEG8_DRIFT_ESTIMATOR_ID,
-            "minimum_n": NEG8_DRIFT_MINIMUM_N,
-            "n": n,
-            "sample_range_j": sample_range,
-            "sample_stddev_j": sample_stddev,
-            "student_t_critical_95": t_critical,
-            "prediction_two_point_j": prediction,
-            "formula": (
-                "max(sample_range_j,"
-                "t_0.975,n-1*sample_stddev_j*sqrt(2))"
-            ),
+        # Gross top-level aliases preserve the amended-v1 pair-window wire.
+        "estimator": gross_estimator,
+        "bound_j": gross_estimator["single_member_endpoint_bound_j"],
+        "claim_family_bounds": family_bounds,
+        "freshness": {
+            "derived_at_s": derived_at,
+            "max_age_s": NEG8_DRIFT_BOUND_MAX_AGE_S,
+            "bindings": dict(freshness_bindings),
+            "rederivation_triggers": [
+                "os_build_change",
+                "power_supply_change",
+                "calibration_identity_change",
+                "validity_horizon_expired",
+            ],
         },
-        "bound_j": bound,
     }
     return {**payload, "derivation_sha256": canonical_sha256(payload)}
 
 
 def validate_neg8_drift_bound_artifact(value: Any) -> bool:
-    """Validate the seal, corpus provenance, and estimator arithmetic."""
+    """Validate the seal and arithmetic for current or replayable v1 wires.
 
-    if not isinstance(value, Mapping) or set(value) != {
+    A sealed pre-freshness v1 wire remains parseable so the evaluator can
+    classify it as stale with the dedicated condition. It is never fresh.
+    """
+
+    base_keys = {
         "schema_version",
         "estimand",
         "reference_corpus",
         "estimator",
         "bound_j",
+        "claim_family_bounds",
         "derivation_sha256",
-    }:
+    }
+    if (
+        not isinstance(value, Mapping)
+        or frozenset(value)
+        not in {frozenset(base_keys), frozenset(base_keys | {"freshness"})}
+    ):
         return False
     corpus = value.get("reference_corpus")
     estimator = value.get("estimator")
@@ -226,17 +598,7 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
         }
         or corpus.get("schema_version") != NEG8_REFERENCE_CORPUS_SCHEMA
         or corpus.get("freeze_status") != "settled_reference"
-        or set(estimator)
-        != {
-            "id",
-            "minimum_n",
-            "n",
-            "sample_range_j",
-            "sample_stddev_j",
-            "student_t_critical_95",
-            "prediction_two_point_j",
-            "formula",
-        }
+        or not isinstance(value.get("claim_family_bounds"), Mapping)
     ):
         return False
     members = corpus.get("members")
@@ -244,15 +606,38 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
     if not isinstance(members, list) or not isinstance(member_ids, list):
         return False
     try:
+        freshness = value.get("freshness")
+        current = isinstance(freshness, Mapping)
         expected = build_neg8_drift_bound_artifact(
             corpus_id=corpus.get("corpus_id"),
             condition_id=corpus.get("condition_id"),
             manifest_sha256=corpus.get("manifest_sha256"),
             scientific_config_sha256=corpus.get("scientific_config_sha256"),
             members=members,
+            derivation_timestamp_s=(
+                freshness.get("derived_at_s") if current else 0.0
+            ),
+            freshness_bindings=(
+                freshness.get("bindings")
+                if current
+                else {
+                    "os_build": "legacy-wire",
+                    "power_supply_identity_sha256": "0" * 64,
+                    "calibration_identity_sha256": "0" * 64,
+                }
+            ),
         )
     except (TypeError, ValueError, statistics.StatisticsError):
         return False
+    if not current:
+        expected.pop("freshness")
+        expected["derivation_sha256"] = canonical_sha256(
+            {
+                key: item
+                for key, item in expected.items()
+                if key != "derivation_sha256"
+            }
+        )
     return (
         member_ids == [member.get("bundle_id") for member in members]
         and dict(value) == expected
@@ -290,6 +675,154 @@ def _admissible_energy_set(value: Any) -> tuple[float, float, float] | None:
     return (point, lower, upper) if lower <= point <= upper else None
 
 
+def _as_reference_values(value: Any) -> list[Any]:
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray, Mapping)
+    ):
+        return list(value)
+    return [] if value is None else [value]
+
+
+def _endpoint_point_summary(values: Sequence[Any]) -> dict[str, Any] | None:
+    points = [_finite_number(value) for value in values]
+    if not points or any(point is None for point in points):
+        return None
+    normalized = [float(point) for point in points]
+    return {
+        "n": len(normalized),
+        "mean_j": statistics.fmean(normalized),
+        "standard_error_j": (
+            statistics.stdev(normalized) / math.sqrt(len(normalized))
+            if len(normalized) > 1
+            else None
+        ),
+        "member_points_j": normalized,
+    }
+
+
+def _endpoint_admissible_summary(values: Sequence[Any]) -> dict[str, Any] | None:
+    sets = [_admissible_energy_set(value) for value in values]
+    if not sets or any(item is None for item in sets):
+        return None
+    normalized = [item for item in sets if item is not None]
+    points = [item[0] for item in normalized]
+    return {
+        "n": len(normalized),
+        "mean_j": statistics.fmean(points),
+        "standard_error_j": (
+            statistics.stdev(points) / math.sqrt(len(points))
+            if len(points) > 1
+            else None
+        ),
+        "member_points_j": points,
+        "mean_admissible_set_j": {
+            "point_j": statistics.fmean(points),
+            "lower_j": statistics.fmean(item[1] for item in normalized),
+            "upper_j": statistics.fmean(item[2] for item in normalized),
+        },
+    }
+
+
+def _family_bound(
+    artifact: Mapping[str, Any] | None, family: str, protocol: str
+) -> float | None:
+    families = (
+        artifact.get("claim_family_bounds")
+        if isinstance(artifact, Mapping)
+        else None
+    )
+    family_record = families.get(family) if isinstance(families, Mapping) else None
+    estimator = (
+        family_record.get("estimator")
+        if isinstance(family_record, Mapping)
+        else None
+    )
+    field = (
+        "replicated_endpoint_bound_j"
+        if protocol == "replicated_endpoints_with_midpoint"
+        else "single_member_endpoint_bound_j"
+    )
+    return (
+        _finite_number(estimator.get(field), positive=True)
+        if isinstance(estimator, Mapping)
+        else None
+    )
+
+
+def neg8_claim_family_for_metric(metric_name: Any) -> str:
+    """Map governed energy metrics onto the two NEG-8 claim families."""
+
+    return (
+        NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED
+        if metric_name in {"energy_request_j", "idle_subtracted_energy_j"}
+        else NEG8_CLAIM_FAMILY_GROSS
+    )
+
+
+def _family_drift_record(
+    *,
+    family: str,
+    start: Mapping[str, Any],
+    midpoint: Mapping[str, Any] | None,
+    end: Mapping[str, Any],
+    protocol: str,
+    artifact: Mapping[str, Any] | None,
+    duration_s: float | None,
+) -> dict[str, Any]:
+    point_delta = abs(float(end["mean_j"]) - float(start["mean_j"]))
+    trajectory_points = [float(start["mean_j"]), float(end["mean_j"])]
+    if midpoint is not None:
+        trajectory_points.insert(1, float(midpoint["mean_j"]))
+    excursion = max(trajectory_points) - min(trajectory_points)
+    derived_bound = _family_bound(artifact, family, protocol)
+    allowance = (
+        max(excursion, derived_bound)
+        if derived_bound is not None
+        else None
+    )
+    return {
+        "claim_family": family,
+        "endpoint_protocol": protocol,
+        "start": dict(start),
+        "midpoint": dict(midpoint) if midpoint is not None else None,
+        "end": dict(end),
+        "point_delta_j": point_delta,
+        "combined_endpoint_standard_error_j": (
+            math.sqrt(
+                float(start["standard_error_j"]) ** 2
+                + float(end["standard_error_j"]) ** 2
+            )
+            if start.get("standard_error_j") is not None
+            and end.get("standard_error_j") is not None
+            else None
+        ),
+        "screen_statistic_j": point_delta,
+        "screen_statistic_definition": "abs(end_endpoint_mean-start_endpoint_mean)",
+        "derived_repeatability_bound_j": derived_bound,
+        "screen_passed": (
+            point_delta <= derived_bound
+            if derived_bound is not None
+            else False
+        ),
+        "trajectory_excursion_max_j": excursion,
+        "drift_allowance_j": allowance,
+        "allowance_formula": (
+            "max(trajectory_excursion_max_j,derived_repeatability_bound_j)"
+        ),
+        "window_duration_s": duration_s,
+        "duration_scaling": "not_applied_no_governed_time_law",
+        "provenance": {
+            "bound_derivation_sha256": (
+                artifact.get("derivation_sha256")
+                if isinstance(artifact, Mapping)
+                else None
+            ),
+            "observed_component": "trajectory_excursion_max_j",
+            "derived_component": "derived_repeatability_bound_j",
+        },
+    }
+
+
 def evaluate_neg8_point_drift(
     start_gross_j: Any,
     end_gross_j: Any,
@@ -298,12 +831,14 @@ def evaluate_neg8_point_drift(
     *,
     start_idle_subtracted_j: Any = None,
     end_idle_subtracted_j: Any = None,
+    midpoint_gross_j: Any = None,
+    midpoint_idle_subtracted_j: Any = None,
+    window_duration_s: Any = None,
+    bound_freshness_observation: Any = None,
 ) -> dict[str, Any]:
-    """Gate NEG-8 on point drift and retain envelope corners as diagnostics."""
+    """Gate both claim families and mint non-vanishing drift allowances."""
 
     conditions: set[str] = set()
-    start_set = _admissible_energy_set(start_gross_j)
-    end_set = _admissible_energy_set(end_gross_j)
     artifact = (
         dict(drift_bound_artifact)
         if validate_neg8_drift_bound_artifact(drift_bound_artifact)
@@ -311,20 +846,144 @@ def evaluate_neg8_point_drift(
     )
     if artifact is None:
         conditions.add(CONDITION_NEG8_DRIFT_BOUND_UNDERIVED)
-    if start_gross_j is None or end_gross_j is None:
+        conditions.add(CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED)
+        bound_freshness = {
+            "decision": "underived",
+            "condition": None,
+            "evaluated_at_s": None,
+            "derived_at_s": None,
+            "expires_at_s": None,
+            "max_age_s": None,
+            "artifact_bindings": None,
+            "observed_bindings": None,
+            "observation_binding_status": None,
+            "triggered_rederivation_reasons": [],
+        }
+    else:
+        bound_freshness = evaluate_neg8_bound_freshness(
+            artifact, bound_freshness_observation
+        )
+        if bound_freshness["decision"] != "fresh":
+            conditions.add(CONDITION_NEG8_DRIFT_BOUND_STALE)
+
+    start_gross_values = _as_reference_values(start_gross_j)
+    midpoint_gross_values = _as_reference_values(midpoint_gross_j)
+    end_gross_values = _as_reference_values(end_gross_j)
+    start_idle_values = _as_reference_values(start_idle_subtracted_j)
+    midpoint_idle_values = _as_reference_values(midpoint_idle_subtracted_j)
+    end_idle_values = _as_reference_values(end_idle_subtracted_j)
+    gross_counts = (
+        len(start_gross_values),
+        len(midpoint_gross_values),
+        len(end_gross_values),
+    )
+    idle_counts = (
+        len(start_idle_values),
+        len(midpoint_idle_values),
+        len(end_idle_values),
+    )
+    if gross_counts == (1, 0, 1) and idle_counts == (1, 0, 1):
+        protocol = "legacy_single_member_endpoints"
+    elif (
+        gross_counts
+        == (
+            NEG8_REPLICATED_ENDPOINT_N,
+            1,
+            NEG8_REPLICATED_ENDPOINT_N,
+        )
+        and idle_counts == gross_counts
+    ):
+        protocol = "replicated_endpoints_with_midpoint"
+    else:
+        protocol = "invalid"
+    if not start_gross_values or not end_gross_values:
         conditions.add("neg8_bracket_missing")
-    elif start_set is None or end_set is None:
+    if protocol == "invalid":
         conditions.add("neg8_bracket_reference_invalid")
 
-    point_delta: float | None = None
-    point_relative: float | None = None
+    start_gross = _endpoint_admissible_summary(start_gross_values)
+    midpoint_gross = _endpoint_admissible_summary(midpoint_gross_values)
+    end_gross = _endpoint_admissible_summary(end_gross_values)
+    start_idle = _endpoint_point_summary(start_idle_values)
+    midpoint_idle = _endpoint_point_summary(midpoint_idle_values)
+    end_idle = _endpoint_point_summary(end_idle_values)
+    required_summaries = (start_gross, end_gross, start_idle, end_idle)
+    if protocol == "replicated_endpoints_with_midpoint":
+        required_summaries = (*required_summaries, midpoint_gross, midpoint_idle)
+    if any(summary is None for summary in required_summaries):
+        conditions.add("neg8_bracket_reference_invalid")
+
+    duration = _finite_number(window_duration_s)
+    if duration is not None and duration < 0.0:
+        duration = None
+    family_records: dict[str, dict[str, Any]] = {}
+    if (
+        protocol != "invalid"
+        and start_gross is not None
+        and end_gross is not None
+        and start_idle is not None
+        and end_idle is not None
+        and (
+            protocol == "legacy_single_member_endpoints"
+            or (midpoint_gross is not None and midpoint_idle is not None)
+        )
+    ):
+        family_records[NEG8_CLAIM_FAMILY_GROSS] = _family_drift_record(
+            family=NEG8_CLAIM_FAMILY_GROSS,
+            start=start_gross,
+            midpoint=midpoint_gross,
+            end=end_gross,
+            protocol=protocol,
+            artifact=artifact,
+            duration_s=duration,
+        )
+        family_records[NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED] = _family_drift_record(
+            family=NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
+            start=start_idle,
+            midpoint=midpoint_idle,
+            end=end_idle,
+            protocol=protocol,
+            artifact=artifact,
+            duration_s=duration,
+        )
+        if (
+            artifact is not None
+            and not family_records[NEG8_CLAIM_FAMILY_GROSS]["screen_passed"]
+        ):
+            conditions.add(CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED)
+        if (
+            artifact is not None
+            and not family_records[NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED][
+                "screen_passed"
+            ]
+        ):
+            conditions.add(CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED)
+
+    point_delta = (
+        family_records.get(NEG8_CLAIM_FAMILY_GROSS, {}).get("point_delta_j")
+    )
+    point_relative = (
+        point_delta / float(start_gross["mean_j"])
+        if point_delta is not None
+        and start_gross is not None
+        and float(start_gross["mean_j"]) != 0.0
+        else None
+    )
     corner_delta: float | None = None
     corner_relative: float | None = None
-    if start_set is not None and end_set is not None:
-        start_point, start_lower, start_upper = start_set
-        end_point, end_lower, end_upper = end_set
-        point_delta = abs(end_point - start_point)
-        point_relative = point_delta / start_point
+    if start_gross is not None and end_gross is not None:
+        start_set = start_gross["mean_admissible_set_j"]
+        end_set = end_gross["mean_admissible_set_j"]
+        start_point, start_lower, start_upper = (
+            start_set["point_j"],
+            start_set["lower_j"],
+            start_set["upper_j"],
+        )
+        end_point, end_lower, end_upper = (
+            end_set["point_j"],
+            end_set["lower_j"],
+            end_set["upper_j"],
+        )
         corners = [
             (start_edge, end_edge)
             for start_edge in (start_lower, start_upper)
@@ -337,20 +996,10 @@ def evaluate_neg8_point_drift(
             abs(end_edge - start_edge) / start_edge
             for start_edge, end_edge in corners
         )
-        if artifact is not None and point_delta > artifact["bound_j"]:
-            # Retain the registered v1 failure word while changing the governed
-            # estimand.  The additive estimand field disambiguates new rows.
-            conditions.add("neg8_bracket_abs_delta_exceeded")
-
-    idle_start = _finite_number(start_idle_subtracted_j)
-    idle_end = _finite_number(end_idle_subtracted_j)
-    idle_delta = (
-        abs(idle_end - idle_start)
-        if idle_start is not None and idle_end is not None
-        else None
-    )
     evidence_failure = conditions & {
         CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+        CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+        CONDITION_NEG8_DRIFT_BOUND_STALE,
         "neg8_bracket_missing",
         "neg8_bracket_reference_invalid",
     }
@@ -363,27 +1012,24 @@ def evaluate_neg8_point_drift(
     return {
         "schema_version": NEG8_BRACKET_SCHEMA,
         "estimand": NEG8_POINT_DRIFT_ESTIMAND,
+        "endpoint_protocol": protocol,
         "decision": decision,
         "passed": decision == "passed",
         "conditions": sorted(conditions),
-        "start_gross_j": start_set[0] if start_set is not None else None,
-        "end_gross_j": end_set[0] if end_set is not None else None,
+        "start_gross_j": (
+            float(start_gross["mean_j"]) if start_gross is not None else None
+        ),
+        "end_gross_j": (
+            float(end_gross["mean_j"]) if end_gross is not None else None
+        ),
         "start_admissible_set_j": (
-            {
-                "point_j": start_set[0],
-                "lower_j": start_set[1],
-                "upper_j": start_set[2],
-            }
-            if start_set is not None
+            dict(start_gross["mean_admissible_set_j"])
+            if start_gross is not None
             else None
         ),
         "end_admissible_set_j": (
-            {
-                "point_j": end_set[0],
-                "lower_j": end_set[1],
-                "upper_j": end_set[2],
-            }
-            if end_set is not None
+            dict(end_gross["mean_admissible_set_j"])
+            if end_gross is not None
             else None
         ),
         "abs_delta_j": point_delta,
@@ -392,10 +1038,31 @@ def evaluate_neg8_point_drift(
         "corner_rel_delta": corner_relative,
         "corner_statistic_role": "diagnostic_not_gating",
         "idle_subtracted_companion": {
-            "start_point_j": idle_start,
-            "end_point_j": idle_end,
-            "abs_delta_j": idle_delta,
-            "role": "diagnostic_not_gating",
+            "start_point_j": (
+                float(start_idle["mean_j"]) if start_idle is not None else None
+            ),
+            "end_point_j": (
+                float(end_idle["mean_j"]) if end_idle is not None else None
+            ),
+            "abs_delta_j": family_records.get(
+                NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED, {}
+            ).get("point_delta_j"),
+            "role": "claim_family_screen_and_budget",
+        },
+        "claim_families": family_records,
+        "drift_allowances": {
+            family: {
+                "claim_family": family,
+                "allowance_j": record["drift_allowance_j"],
+                "observed_trajectory_excursion_j": record[
+                    "trajectory_excursion_max_j"
+                ],
+                "derived_repeatability_bound_j": record[
+                    "derived_repeatability_bound_j"
+                ],
+                "provenance": dict(record["provenance"]),
+            }
+            for family, record in family_records.items()
         },
         # The v1 sidecar fields remain recorded for legacy wire compatibility;
         # neither numeric tolerance gates this amended estimand.
@@ -405,6 +1072,7 @@ def evaluate_neg8_point_drift(
             "max_rel_delta": policy.max_rel_delta,
         },
         "drift_bound_artifact": artifact,
+        "bound_freshness": bound_freshness,
     }
 
 
@@ -900,14 +1568,24 @@ def _manifest_members(
 
 
 def _neg8_position(role: Any, sentinel_position: Any) -> str | None:
-    """Interpret the three campaign-manifest NEG-8 role spellings."""
+    """Interpret the governed campaign-manifest NEG-8 role spellings."""
 
     if role == "neg8_daily_reference_start":
         return "start" if sentinel_position in (None, "start") else "invalid"
     if role == "neg8_daily_reference_end":
         return "end" if sentinel_position in (None, "end") else "invalid"
+    if role == "neg8_daily_reference_midpoint":
+        return (
+            "midpoint"
+            if sentinel_position in (None, "midpoint")
+            else "invalid"
+        )
     if role == "neg8_daily_reference":
-        return sentinel_position if sentinel_position in {"start", "end"} else "invalid"
+        return (
+            sentinel_position
+            if sentinel_position in {"start", "midpoint", "end"}
+            else "invalid"
+        )
     return None
 
 
@@ -971,16 +1649,30 @@ def _gross_fields(summary: Any) -> dict[str, float] | None:
     return {"point_j": point, "lower_j": lower, "upper_j": upper}
 
 
-def _gross_energy_evidence(
+def _reference_energy_evidence(
     bundle_path: Path,
-) -> tuple[dict[str, float] | None, str | None]:
-    """Re-derive current NEG-8 energy from primary bytes; replay stays stored."""
+    *,
+    require_idle_subtracted: bool = True,
+) -> tuple[dict[str, float] | None, float | None, str | None]:
+    """Re-derive both current NEG-8 claim-family points from primary bytes."""
 
     stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
-    stored = _gross_fields(stored_summary)
+    stored_gross = _gross_fields(stored_summary)
+    stored_idle = (
+        _finite_number(stored_summary.get("idle_subtracted_energy_j"))
+        if isinstance(stored_summary, Mapping)
+        else None
+    )
     reducer_version = _summary_reducer_version(stored_summary)
     if not _current_strict_summary(stored_summary):
-        return stored, None if stored is not None else "provenance"
+        return (
+            stored_gross,
+            stored_idle,
+            None
+            if stored_gross is not None
+            and (stored_idle is not None or not require_idle_subtracted)
+            else "provenance",
+        )
     try:
         # Deliberately output-free: reduce_bundle is pure over the bundle and
         # returns an in-memory summary.  Minutes-scale claim verification cost
@@ -989,29 +1681,60 @@ def _gross_energy_evidence(
 
         reduced = reduce_bundle(bundle_path, reducer_version=reducer_version).to_dict()
     except Exception:  # noqa: BLE001 - any reducer/evidence failure refuses.
-        return None, "provenance"
-    fresh = _gross_fields(reduced)
+        return None, None, "provenance"
+    fresh_gross = _gross_fields(reduced)
+    fresh_idle = _finite_number(reduced.get("idle_subtracted_energy_j"))
     prechecks = reduced.get("window_evidence_precheck")
     gross_gate = None
+    idle_gate = None
     if isinstance(prechecks, Mapping):
         gross_gate = prechecks.get("gross_request")
         if not isinstance(gross_gate, Mapping):
             gross_gate = prechecks.get("gross_batch_group")
+        idle_gate = prechecks.get("idle_subtracted_request")
     if (
         reduced.get("status") != "succeeded"
-        or fresh is None
+        or fresh_gross is None
+        or (require_idle_subtracted and fresh_idle is None)
         or not isinstance(gross_gate, Mapping)
         or gross_gate.get("eligible") is not True
+        or (
+            require_idle_subtracted
+            and (
+                not isinstance(idle_gate, Mapping)
+                or idle_gate.get("eligible") is not True
+            )
+        )
     ):
-        return None, "provenance"
-    if stored is None or any(
+        return None, None, "provenance"
+    if stored_gross is None or any(
         not math.isclose(
-            stored[field], fresh[field], rel_tol=1e-9, abs_tol=1e-9
+            stored_gross[field], fresh_gross[field], rel_tol=1e-9, abs_tol=1e-9
         )
         for field in ("point_j", "lower_j", "upper_j")
+    ) or (
+        require_idle_subtracted
+        and (
+            stored_idle is None
+            or fresh_idle is None
+            or not math.isclose(
+                stored_idle, fresh_idle, rel_tol=1e-9, abs_tol=1e-9
+            )
+        )
     ):
-        return None, "conflict"
-    return fresh, None
+        return None, None, "conflict"
+    return fresh_gross, fresh_idle, None
+
+
+def _gross_energy_evidence(
+    bundle_path: Path,
+) -> tuple[dict[str, float] | None, str | None]:
+    """Compatibility projection for frozen gross-only replay callers."""
+
+    gross, _idle_subtracted, problem = _reference_energy_evidence(
+        bundle_path, require_idle_subtracted=False
+    )
+    return gross, problem
 
 
 def _bundle_evidence_sha256(bundle_path: Path) -> str:
@@ -1066,6 +1789,7 @@ def mint_neg8_drift_bound_artifact(
         )
 
     evidence_members: list[dict[str, Any]] = []
+    freshness_bindings: list[dict[str, str]] = []
     scientific_identity: str | None = None
     seen_ids: set[str] = set()
     for member in members:
@@ -1086,6 +1810,7 @@ def mint_neg8_drift_bound_artifact(
             raise ValueError("NEG-8 corpus member is invalid, duplicated, or unsafe")
         seen_ids.add(bundle_id)
         summary = _read_json_object(bundle_path / "summary_metrics.json")
+        metadata = _read_json_object(bundle_path / "metadata.json")
         if not _current_strict_summary(summary):
             raise ValueError(
                 f"NEG-8 corpus member {bundle_id} is not a current strict mint"
@@ -1099,25 +1824,41 @@ def mint_neg8_drift_bound_artifact(
             scientific_identity = identity
         elif identity != scientific_identity:
             raise ValueError("NEG-8 reference corpus members are not same-condition")
-        gross, problem = _gross_energy_evidence(bundle_path)
-        if problem is not None or gross is None:
+        gross, idle_subtracted, problem = _reference_energy_evidence(bundle_path)
+        if problem is not None or gross is None or idle_subtracted is None:
             raise ValueError(
-                f"NEG-8 corpus member {bundle_id} gross evidence is invalid"
+                f"NEG-8 corpus member {bundle_id} dual-family evidence is invalid"
             )
+        binding = neg8_freshness_bindings_from_metadata(metadata)
+        if binding is None:
+            raise ValueError(
+                f"NEG-8 corpus member {bundle_id} freshness bindings are unavailable"
+            )
+        freshness_bindings.append(binding)
         evidence_members.append(
             {
                 "bundle_id": bundle_id,
                 "point_gross_j": gross["point_j"],
+                "point_idle_subtracted_j": idle_subtracted,
                 "bundle_evidence_sha256": _bundle_evidence_sha256(bundle_path),
             }
         )
     assert scientific_identity is not None
+    unique_freshness = {
+        canonical_sha256(binding): binding for binding in freshness_bindings
+    }
+    if len(unique_freshness) != 1:
+        raise ValueError(
+            "NEG-8 reference corpus freshness bindings are not identical"
+        )
     return build_neg8_drift_bound_artifact(
         corpus_id=manifest.get("corpus_id"),
         condition_id=manifest.get("condition_id"),
         manifest_sha256=hashlib.sha256(raw).hexdigest(),
         scientific_config_sha256=scientific_identity,
         members=evidence_members,
+        derivation_timestamp_s=time.time(),
+        freshness_bindings=next(iter(unique_freshness.values())),
     )
 
 
@@ -1219,7 +1960,9 @@ def _derived_neg8_decision(
     current: bool = True,
     point_drift: bool = False,
     drift_bound_artifact: Any = None,
-) -> tuple[str | None, str | None]:
+    return_bracket: bool = False,
+    freshness_evaluated_at_s: Any = None,
+) -> tuple[Any, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
     ``current`` selects the evidence-path resolution: current-strict rows use
@@ -1233,10 +1976,14 @@ def _derived_neg8_decision(
         policy = Neg8BracketPolicy.from_mapping(policy_value)
     except (TypeError, ValueError):
         return None, "provenance"
-    references: dict[str, list[dict[str, float] | None]] = {
+    references: dict[
+        str, list[tuple[dict[str, float] | None, float | None]]
+    ] = {
         "start": [],
+        "midpoint": [],
         "end": [],
     }
+    reference_metadata: list[Mapping[str, Any] | None] = []
     invalid_role = False
     for manifest in manifests:
         manifest_paths = (
@@ -1271,10 +2018,25 @@ def _derived_neg8_decision(
                 else:
                     # Frozen replay: committed direct resolution, no custody
                     # requirement, evidence-or-None appended as at 0925480.
-                    frozen_evidence, _frozen_problem = _gross_energy_evidence(
-                        runs_root / bundle_id
-                    )
-                    references[position].append(frozen_evidence)
+                    if point_drift:
+                        frozen_gross, frozen_idle, _frozen_problem = (
+                            _reference_energy_evidence(
+                                runs_root / bundle_id,
+                                require_idle_subtracted=True,
+                            )
+                        )
+                    else:
+                        frozen_gross, _frozen_problem = _gross_energy_evidence(
+                            runs_root / bundle_id,
+                        )
+                        frozen_idle = None
+                    references[position].append((frozen_gross, frozen_idle))
+                    if point_drift:
+                        reference_metadata.append(
+                            _read_json_object(
+                                runs_root / bundle_id / "metadata.json"
+                            )
+                        )
                     continue
                 stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
                 if _current_strict_summary(stored_summary):
@@ -1286,25 +2048,83 @@ def _derived_neg8_decision(
                         or member.get("scientific_config_sha256") != scientific_sha
                     ):
                         return None, "provenance"
-                evidence, problem = _gross_energy_evidence(bundle_path)
+                if point_drift:
+                    gross, idle_subtracted, problem = (
+                        _reference_energy_evidence(
+                            bundle_path,
+                            require_idle_subtracted=True,
+                        )
+                    )
+                else:
+                    gross, problem = _gross_energy_evidence(bundle_path)
+                    idle_subtracted = None
                 if problem is not None:
                     return None, problem
-                references[position].append(evidence)
-    start = references["start"][0] if len(references["start"]) == 1 else None
-    end = references["end"][0] if len(references["end"]) == 1 else None
-    if invalid_role or len(references["start"]) > 1 or len(references["end"]) > 1:
-        start = end = None
+                references[position].append((gross, idle_subtracted))
+                if point_drift:
+                    reference_metadata.append(
+                        _read_json_object(bundle_path / "metadata.json")
+                    )
+    legacy_pair = (
+        len(references["start"]) == 1
+        and not references["midpoint"]
+        and len(references["end"]) == 1
+    )
+    replicated = (
+        len(references["start"]) == NEG8_REPLICATED_ENDPOINT_N
+        and len(references["midpoint"]) == 1
+        and len(references["end"]) == NEG8_REPLICATED_ENDPOINT_N
+    )
+    shape_valid = legacy_pair or (point_drift and replicated)
+    start_gross = (
+        [item[0] for item in references["start"]]
+        if shape_valid
+        else None
+    )
+    midpoint_gross = (
+        [item[0] for item in references["midpoint"]]
+        if shape_valid and references["midpoint"]
+        else None
+    )
+    end_gross = (
+        [item[0] for item in references["end"]]
+        if shape_valid
+        else None
+    )
+    if invalid_role:
+        start_gross = midpoint_gross = end_gross = None
     if point_drift:
-        return (
-            evaluate_neg8_point_drift(
-                start,
-                end,
-                policy,
-                drift_bound_artifact,
-            )["decision"],
-            None,
+        bracket = evaluate_neg8_point_drift(
+            start_gross,
+            end_gross,
+            policy,
+            drift_bound_artifact,
+            start_idle_subtracted_j=(
+                [item[1] for item in references["start"]]
+                if shape_valid
+                else None
+            ),
+            midpoint_gross_j=midpoint_gross,
+            midpoint_idle_subtracted_j=(
+                [item[1] for item in references["midpoint"]]
+                if shape_valid and references["midpoint"]
+                else None
+            ),
+            end_idle_subtracted_j=(
+                [item[1] for item in references["end"]]
+                if shape_valid
+                else None
+            ),
+            bound_freshness_observation=build_neg8_freshness_observation(
+                reference_metadata,
+                evaluated_at_s=freshness_evaluated_at_s,
+            ),
         )
-    return evaluate_neg8_bracket(start, end, policy)["decision"], None
+        return (bracket if return_bracket else bracket["decision"], None)
+    start = start_gross[0] if legacy_pair and start_gross else None
+    end = end_gross[0] if legacy_pair and end_gross else None
+    bracket = evaluate_neg8_bracket(start, end, policy)
+    return (bracket if return_bracket else bracket["decision"], None)
 
 
 def _manifest_bundle_paths(
@@ -1997,7 +2817,7 @@ def _validate_row(
                     )
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
-                derived_decision, derived_problem = _derived_neg8_decision(
+                derived_value, derived_problem = _derived_neg8_decision(
                     verified_source_manifests,
                     runs_root,
                     registered_policy,
@@ -2026,12 +2846,75 @@ def _validate_row(
                     ),
                     point_drift=point_drift,
                     drift_bound_artifact=drift_bound_artifact,
+                    return_bracket=point_drift,
+                    freshness_evaluated_at_s=(
+                        bracket.get("bound_freshness", {}).get(
+                            "evaluated_at_s"
+                        )
+                        if isinstance(
+                            bracket.get("bound_freshness"), Mapping
+                        )
+                        else None
+                    ),
                 )
                 if derived_problem == "conflict":
                     reasons.add("whole_window_verdict_conflict")
-                elif derived_problem is not None or derived_decision is None:
+                elif derived_problem is not None or derived_value is None:
                     reasons.add("whole_window_verdict_provenance_invalid")
-                elif bracket.get("decision") != derived_decision:
+                elif point_drift:
+                    if not isinstance(derived_value, Mapping):
+                        reasons.add("whole_window_verdict_provenance_invalid")
+                    else:
+                        stored_families = bracket.get("claim_families")
+                        derived_families = derived_value.get("claim_families")
+                        if (
+                            not isinstance(stored_families, Mapping)
+                            or not isinstance(derived_families, Mapping)
+                            or set(stored_families)
+                            != {
+                                NEG8_CLAIM_FAMILY_GROSS,
+                                NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
+                            }
+                            or set(derived_families) != set(stored_families)
+                            or any(
+                                not isinstance(stored_families[family], Mapping)
+                                or not isinstance(derived_families[family], Mapping)
+                                or _finite_number(
+                                    stored_families[family].get(
+                                        "drift_allowance_j"
+                                    ),
+                                    positive=True,
+                                )
+                                is None
+                                or {
+                                    key: value
+                                    for key, value in stored_families[
+                                        family
+                                    ].items()
+                                    if key != "window_duration_s"
+                                }
+                                != {
+                                    key: value
+                                    for key, value in derived_families[
+                                        family
+                                    ].items()
+                                    if key != "window_duration_s"
+                                }
+                                for family in stored_families
+                            )
+                        ):
+                            reasons.add("whole_window_verdict_conflict")
+                        if (
+                            bracket.get("decision")
+                            != derived_value.get("decision")
+                        ):
+                            reasons.add("whole_window_verdict_conflict")
+                        if (
+                            bracket.get("bound_freshness")
+                            != derived_value.get("bound_freshness")
+                        ):
+                            reasons.add("whole_window_verdict_conflict")
+                elif bracket.get("decision") != derived_value:
                     reasons.add("whole_window_verdict_conflict")
         if not isinstance(continuity, Mapping) or continuity.get("schema_version") != ADAPTER_CONTINUITY_SCHEMA:
             reasons.add("adapter_continuity_evidence_missing")
@@ -2234,27 +3117,139 @@ def whole_window_refusal_reasons(
     return ()
 
 
+def whole_window_drift_allowances(
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    evaluation_basis_sha256: str | None = None,
+) -> dict[str, dict[str, Any]] | None:
+    """Return authenticated family allowances for the selected passing basis.
+
+    Legacy pre-budget verdict rows remain valid refusal evidence and return
+    ``None`` here. New point-drift rows must carry both strictly positive
+    allowances, which :func:`_validate_row` re-derives from member evidence.
+    """
+
+    root = Path(runs_root)
+    if whole_window_refusal_reasons(
+        root,
+        referenced_bundle_ids,
+        evaluation_basis_sha256=evaluation_basis_sha256,
+    ):
+        return None
+    try:
+        rows = [
+            value
+            for line in (root / "campaign_log.jsonl").read_text(
+                encoding="utf-8"
+            ).splitlines()
+            if line.strip()
+            and isinstance((value := json.loads(line)), Mapping)
+            and value.get("record_type")
+            == "idle_admission_whole_window_verdict"
+        ]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    basis_rows = [
+        row for row in rows if isinstance(row.get("evaluation_basis"), Mapping)
+    ]
+    candidates: list[Mapping[str, Any]] = []
+    for row in basis_rows or rows:
+        basis = row.get("evaluation_basis")
+        if isinstance(basis, Mapping):
+            occurrences = basis.get("member_occurrences")
+            ids = (
+                {
+                    item.get("bundle_id")
+                    for item in occurrences
+                    if isinstance(item, Mapping)
+                    and isinstance(item.get("bundle_id"), str)
+                }
+                if isinstance(occurrences, list)
+                else set()
+            )
+            if evaluation_basis_sha256 is not None:
+                selected = (
+                    basis.get("sha256") == evaluation_basis_sha256
+                    and referenced_bundle_ids.issubset(ids)
+                )
+            else:
+                selected = ids == referenced_bundle_ids
+        else:
+            bundle_ids = row.get("bundle_ids")
+            ids = (
+                {item for item in bundle_ids if isinstance(item, str)}
+                if isinstance(bundle_ids, list)
+                else set()
+            )
+            selected = bool(ids.intersection(referenced_bundle_ids))
+        if selected and _validate_row(row, root, referenced_bundle_ids)[0]:
+            candidates.append(row)
+    if not candidates:
+        return None
+    bracket = candidates[0].get("idle_admission_core", {}).get("neg8_bracket")
+    allowances = (
+        bracket.get("drift_allowances")
+        if isinstance(bracket, Mapping)
+        else None
+    )
+    if not isinstance(allowances, Mapping) or set(allowances) != {
+        NEG8_CLAIM_FAMILY_GROSS,
+        NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
+    }:
+        return None
+    basis = candidates[0].get("evaluation_basis")
+    result: dict[str, dict[str, Any]] = {}
+    for family, value in allowances.items():
+        if (
+            not isinstance(value, Mapping)
+            or _finite_number(value.get("allowance_j"), positive=True) is None
+        ):
+            return None
+        result[family] = {
+            **dict(value),
+            "whole_window_evaluation_basis_sha256": (
+                basis.get("sha256") if isinstance(basis, Mapping) else None
+            ),
+        }
+    return result
+
+
 __all__ = [
+    "CONDITION_NEG8_DRIFT_BOUND_STALE",
+    "CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED",
+    "CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED",
     "CONDITION_NEG8_DRIFT_BOUND_UNDERIVED",
+    "CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED",
+    "NEG8_CLAIM_FAMILY_GROSS",
+    "NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED",
     "NEG8_DRIFT_BOUND_SCHEMA",
+    "NEG8_DRIFT_BOUND_MAX_AGE_S",
     "NEG8_DRIFT_ESTIMATOR_ID",
     "NEG8_POINT_DRIFT_ESTIMAND",
+    "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
+    "NEG8_WHOLE_WINDOW_ALLOWANCE_TERM",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
     "WHOLE_WINDOW_SCHEMA",
     "build_evaluation_basis",
+    "build_neg8_freshness_observation",
     "build_neg8_drift_bound_artifact",
     "build_row_provenance",
     "canonical_sha256",
     "evaluate_neg8_point_drift",
+    "evaluate_neg8_bound_freshness",
     "load_neg8_drift_bound_artifact",
     "mint_neg8_drift_bound_artifact",
+    "neg8_claim_family_for_metric",
+    "neg8_freshness_bindings_from_metadata",
     "ordinary_present_bundle_paths",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
     "validate_occurrence_supersession_entry",
     "validate_neg8_drift_bound_artifact",
     "whole_window_refusal_reasons",
+    "whole_window_drift_allowances",
 ]

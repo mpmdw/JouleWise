@@ -47,7 +47,12 @@ from joulewise.analysis_engine.sensitivity import (
     summarize_loo,
 )
 from joulewise.detection_floor import comparative_false_effect_floor
-from tests.test_detection_floor import make_artifact, make_cell, make_consumer
+from tests.test_detection_floor import (
+    make_artifact,
+    make_cell,
+    make_consumer,
+    whole_window_allowance,
+)
 
 
 HEX = "a" * 64
@@ -915,6 +920,42 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(resolution.status, "transported")
         self.assertEqual(resolution.floor_gate_j, 3.2578982723565812)
 
+    def test_engine_consumes_whole_window_drift_widened_floor(self):
+        allowance = whole_window_allowance()
+        cell = make_cell(
+            energies=[0.0, 1.0, -1.0, 0.0, 0.0],
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.01] * 5,
+            whole_window_drift_allowance=allowance,
+        )
+        artifact = make_artifact([cell])
+        artifact["calibration_scope"] = "window_a"
+        consumer = make_consumer()
+        request = FloorRequest(
+            backend=consumer.pop("backend"),
+            metric=consumer.pop("metric"),
+            window_class=consumer.pop("window_class"),
+            condition_family_id=consumer.pop("condition_family_id"),
+            condition_family_sha256=consumer.pop("condition_family_sha256"),
+            stack_identity_sha256=consumer.pop("stack_identity_sha256"),
+            consumer_stress=consumer,
+        )
+        resolution = resolve_floor(artifact, HEX, request)
+        self.assertEqual(resolution.status, "transported")
+        expected = max(
+            cell["absolute"]["drift_widened_guarded_floor_j"],
+            cell["comparative"]["drift_widened_guarded_floor_j"],
+        )
+        self.assertEqual(resolution.floor_gate_j, expected)
+        self.assertEqual(
+            expected,
+            max(
+                cell["absolute"]["corner_widened_guarded_floor_j"],
+                cell["comparative"]["corner_widened_guarded_floor_j"],
+            )
+            + allowance["allowance_j"],
+        )
+
     def test_engine_consumes_comparative_widened_floor_as_operative_gate(self):
         deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
         cell = make_cell(
@@ -1256,6 +1297,40 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         # crosses zero even though every member passed its envelope gate.
         self.assertLess(estimate.decision_interval.lower, 0.0)
         self.assertGreater(estimate.metrology_aware_ci95.lower, 0.0)
+
+    def test_whole_window_allowance_is_one_named_contrast_term(self):
+        allowance = whole_window_allowance(value=0.6, observed=0.5, derived=0.6)
+        evidence = _bounds_evidence(self._summary())
+        evidence.whole_window_drift_allowances = {
+            "gross_energy": allowance
+        }
+        bounds, reasons = deterministic_bounds(evidence, self.GROSS_METRIC)
+        self.assertEqual(reasons, ())
+        self.assertEqual(bounds["E_whole_window_drift_allowance_j"], 0.3)
+
+        term = DeterministicBoundTerm(
+            "E_whole_window_drift_allowance_j",
+            bound_a=bounds["E_whole_window_drift_allowance_j"],
+            bound_b=bounds["E_whole_window_drift_allowance_j"],
+        )
+        estimate = estimate_paired_blocks(
+            tuple(
+                PairedObservation(
+                    f"b-{index}",
+                    100.0,
+                    101.0,
+                    deterministic_terms=(term,),
+                )
+                for index in range(5)
+            )
+        )
+        self.assertEqual(
+            {
+                row.name: row.bound
+                for row in estimate.deterministic_bounds
+            }["E_whole_window_drift_allowance_j"],
+            0.6,
+        )
 
     def test_new_anchor_reason_codes_are_registered_and_not_resolvable(self):
         added = {

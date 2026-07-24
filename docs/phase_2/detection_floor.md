@@ -302,6 +302,7 @@ do not block L0/L1 operation or raw bundle reduction.
 | Interpolation/aliasing bound | all integrated windows | perturb window edges by half observed sample gap and recompute; for burst loads use calibration burst residual | if bound exceeds effect, claim is `not resolvable` |
 | Idle-baseline SE | idle-subtracted metrics | powermetrics-v1 `newey_west_bartlett_10s_iid_floor_v1` governed variance-of-mean, propagated by measured duration | idle-sub claims capped until the governed raw-trace estimate is available |
 | Idle drift | idle-subtracted metrics | start/end idle sentinels, cooldown cap hit, drift sentinel trend, or conservative bound from calibration repeats | cap-hit or drift above floor downgrades per C-023 M5 |
+| Whole-window NEG-8 drift allowance | gross and idle-subtracted claim families | Ed-ratified 2026-07-24: family-matched `max(observed start/mid/end excursion, derived repeatability bound)` from the authenticated verdict | add after the guarded/corner-widened floor and as a named deterministic claim-envelope term; missing new-wire allowance never becomes zero |
 | Clock-offset bound | multi-node and externally metered windows | D-003 marker half-round-trip bound; meter synchronization residual | attributed windows shorter than bound cannot carry energy attribution claims |
 
 ### Backend Caveats Inside The Budget
@@ -580,20 +581,53 @@ The implementation is
 `joulewise/floor_extraction.py` plus `scripts/extract_detection_floors.py`,
 composing the existing engine primitives rather than re-deriving them.
 
-**NEG-8 amendment (2026-07-24; lead-ruled, Ed ratification pending):** the
-whole-window drift gate estimates
-`abs(end_point_gross_j - start_point_gross_j)`, with idle-subtracted point
-drift and opposite-corner gross-envelope drift reported only as diagnostics.
-Its bound is never hardcoded: a governed CLI mints a hash-sealed
-`joulewise.neg8_drift_bound.v1` artifact from a named, settled-reference corpus
-of `n >= 10` same-condition NEG-8 members, and the verdict records the corpus
-member ids, estimator, and derivation sha256. The predeclared
-`d054_point_contrast_guard_v1` estimator is
-`max(sample_range_j, t_0.975,n-1 * sample_stddev_j * sqrt(2))`; this D-054-style
-maximum preserves the largest observed false point contrast while adding the
-Student-t prediction guard for two new same-condition points. Until that
-artifact exists and validates, the verdict refuses
-`neg8_drift_bound_underived`; envelope corners never determine pass/fail.
+**NEG-8 SCREEN + BUDGET amendment — Ed-ratified 2026-07-24:** gross and
+idle-subtracted claim families screen independently, with distinct bounds
+minted from the same settled `n >= 10` corpus. Legacy 1+0+1 windows use
+`max(sample_range, t*s*sqrt(2))`. Prospective windows use three-member start
+and end means (recording each SEM), one midpoint, and the derived triplet-mean
+bound `max(mean(largest_3)-mean(smallest_3), t*s*sqrt(2/3))`. Point mean delta
+remains the reject statistic; SEM is reported rather than added a second time
+on top of the repeatability bound. Gross corners are diagnostic only.
+
+For each family the verdict records
+`allowance_j = max(max(start_mean,midpoint,end_mean)-min(...), bound_j)`.
+The allowance therefore cannot vanish on a passing derived-bound window, and
+the midpoint catches interior excursions larger than the endpoint delta.
+There is deliberately no duration scaling: the corpus does not identify a
+drift-versus-time law, so an asserted linear multiplier would invent physics.
+Legacy pairs use `max(abs(delta), bound)` and existing basis-scoped legacy
+verdict rows remain replay-stable.
+
+Floor records carry `whole_window_drift_allowance`,
+`drift_widened_unguarded_floor_j`, and
+`drift_widened_guarded_floor_j` additively, in the D-078 corner-widened style.
+Validation recomputes `corner_widened_* + allowance`; `floor_abs_j`,
+`floor_cmp_j`, transported floors, and the analysis engine select the
+drift-widened guarded value. Claim decision intervals additionally expose
+`E_whole_window_drift_allowance_j`; the paired wire apportions half to each
+side so the contrast receives the window allowance exactly once.
+
+Registry additions (Ed-ratified 2026-07-24) are
+`neg8_drift_bound_underived` and
+`neg8_idle_sub_drift_bound_underived`; neither family may borrow the other's
+bound or default to zero. Family screen failures are
+`neg8_bracket_abs_delta_exceeded` and
+`neg8_bracket_idle_sub_abs_delta_exceeded`.
+
+**BOUND FRESHNESS addendum — Ed-ratified 2026-07-24:** the dual-family
+`joulewise.neg8_drift_bound.v1` seal includes its derivation timestamp, the
+fixed 24-hour (`86400 s`) validity horizon, and exact OS-build,
+power-supply-identity, and calibration-artifact-identity bindings. The horizon
+matches the governed calibration-staleness interval and limits one derived
+repeatability claim to a controlled measurement day; it does not assert a
+physical drift rate. Each screen records evaluation/expiry timestamps,
+artifact and observed bindings, binding-resolution status, and triggered
+re-derivation reasons. Horizon expiry or any named binding change makes both
+families stale and refuses with the registered `neg8_drift_bound_stale`.
+Missing or conflicting current bindings also refuse stale. An authenticated
+pre-addendum v1 artifact without freshness fields is defensively stale, never
+grandfathered; a malformed or unsealed artifact remains family-underived.
 
 ### Consumer wire compatibility (audit P0.3)
 
@@ -661,6 +695,20 @@ the additive composition and is the only repaired claim-bearing mint.
   `(max(P - lower_j, upper_j - P) + E_interpolation_joint_edge_bound_j) / |P| <= 0.25`
   with a zero point and nonzero bound failing closed
   (`anchor_energy_envelope_exceeds_quarter_metric`).
+- **ANCHOR-FALLBACK MEMBER GATE addendum — lead-initiated 2026-07-24:** a
+  non-mock member with missing or non-`bounded` energy uncertainty,
+  `clock_anchor_unresolved`, an unresolved anchor, or any recorded trace
+  fallback (including `legacy_spawn_bracket_midpoint_v1`) is marked
+  `anchor_fallback_member_unusable`. It is never converted to half-width zero.
+  An absolute cell excludes that slot; a comparative cell excludes the whole
+  ABBA block, then recomputes membership and the small-sample guard. Extraction
+  proceeds only if the remaining membership satisfies the existing policy.
+  The campaign runner treats the same code on `absolute_repeat` and
+  `comparative_abba_member` roles as an unwaivable rerun trigger, preserves the
+  failed fragment, and requires the established quarantine/supersession
+  evidence before a replacement occurrence can govern. The strict 10 ms
+  wall-versus-monotonic spawn bracket is unchanged; recovery is a rerun, never
+  acceptance of the ±0.5 s legacy midpoint fallback.
 - Floor estimation operates on admissible energy sets, not point estimates
   alone. The operative absolute floor is no smaller than the largest admitted
   member half-width; an ABBA block uses the propagated half-width of its four

@@ -29,7 +29,12 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     validate_floor_artifact,
 )
-from joulewise.whole_window import whole_window_refusal_reasons
+from joulewise.whole_window import (
+    NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    neg8_claim_family_for_metric,
+    whole_window_drift_allowances,
+    whole_window_refusal_reasons,
+)
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -199,6 +204,9 @@ class BundleEvidence:
     expected_config_sha256: str | None = None
     window_prechecks: dict[str, dict[str, Any]] = field(default_factory=dict)
     campaign_cooldown: Mapping[str, Any] | None = None
+    whole_window_drift_allowances: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict
+    )
 
     @property
     def included(self) -> bool:
@@ -1777,6 +1785,14 @@ def load_analysis_inputs(
         for evidence in (*registered.values(), *extras):
             for reason in whole_window_reasons:
                 _exclude_evidence(evidence, reason)
+    else:
+        allowances = whole_window_drift_allowances(
+            runs_root,
+            {evidence.bundle_id for evidence in effective.values()},
+        )
+        if allowances is not None:
+            for evidence in (*registered.values(), *extras):
+                evidence.whole_window_drift_allowances = allowances
     return LoadedAnalysisInputs(
         manifest=manifest,
         manifest_sha256=manifest_sha,
@@ -2302,6 +2318,24 @@ def deterministic_bounds(
         else:
             reasons.append("interpolation_bound_unrecorded")
         record_anchor_term(None)
+    family = neg8_claim_family_for_metric(name)
+    allowance = evidence.whole_window_drift_allowances.get(family)
+    allowance_j = (
+        allowance.get("allowance_j")
+        if isinstance(allowance, Mapping)
+        else None
+    )
+    if (
+        not isinstance(allowance_j, bool)
+        and isinstance(allowance_j, int | float)
+        and math.isfinite(float(allowance_j))
+        and float(allowance_j) > 0.0
+    ):
+        # The paired estimator's existing deterministic wire adds the A and B
+        # member bounds. This is one campaign-window allowance, so each side
+        # carries one half and the named contrast total equals the allowance
+        # exactly rather than silently doubling it.
+        result[NEG8_WHOLE_WINDOW_ALLOWANCE_TERM] = float(allowance_j) / 2.0
     return result, tuple(ordered_reason_codes(reasons))
 
 
@@ -2503,14 +2537,22 @@ def resolve_floor(
         comparative = cell.get("comparative")
         floor_abs = (
             absolute.get(
-                "corner_widened_guarded_floor_j", cell.get("floor_abs_j")
+                "drift_widened_guarded_floor_j",
+                absolute.get(
+                    "corner_widened_guarded_floor_j",
+                    cell.get("floor_abs_j"),
+                ),
             )
             if isinstance(absolute, Mapping)
             else cell.get("floor_abs_j")
         )
         floor_cmp = (
             comparative.get(
-                "corner_widened_guarded_floor_j", cell.get("floor_cmp_j")
+                "drift_widened_guarded_floor_j",
+                comparative.get(
+                    "corner_widened_guarded_floor_j",
+                    cell.get("floor_cmp_j"),
+                ),
             )
             if isinstance(comparative, Mapping)
             else cell.get("floor_cmp_j")

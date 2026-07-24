@@ -10,6 +10,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
@@ -34,11 +35,31 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     validate_floor_artifact,
 )
+from joulewise.floor_extraction import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+    CELL_REFUSAL_CODES,
+    extract_absolute_cell,
+)
 
 TOL = 1e-12
 HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
+
+
+def whole_window_allowance(value=0.4, observed=0.3, derived=0.4):
+    return {
+        "claim_family": "gross_energy",
+        "allowance_j": value,
+        "observed_trajectory_excursion_j": observed,
+        "derived_repeatability_bound_j": derived,
+        "provenance": {
+            "bound_derivation_sha256": HEX_B,
+            "observed_component": "trajectory_excursion_max_j",
+            "derived_component": "derived_repeatability_bound_j",
+        },
+        "whole_window_evaluation_basis_sha256": HEX_C,
+    }
 
 
 class TestCompleteBundleHash(unittest.TestCase):
@@ -64,6 +85,153 @@ class TestCompleteBundleHash(unittest.TestCase):
             (bundle / "alias").symlink_to("payload")
             with self.assertRaisesRegex(ValueError, "not a regular file"):
                 complete_bundle_sha256(bundle)
+
+
+class TestAnchorFallbackFloorMemberGate(unittest.TestCase):
+    @staticmethod
+    def _summary(value: float, *, fallback: bool = False) -> dict:
+        return {
+            "status": "succeeded",
+            "summary_provenance": {"reducer_version": "0.5.2"},
+            "measurement_quality": {
+                "telemetry_source": "powermetrics",
+                "cooldown_cap_hit": None,
+                "idle_window_suspect": False,
+            },
+            "energy_uncertainty_status": (
+                "not_estimable" if fallback else "bounded"
+            ),
+            "gross_energy_j": value,
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "method": "common_trace_shift_plus_independent_edge_corners_v3",
+                    "anchor_bound_s": 0.01,
+                    "point_j": value,
+                    "lower_j": value - 0.01,
+                    "upper_j": value + 0.01,
+                    "max_abs_delta_j": 0.01,
+                }
+            },
+            "window_evidence_precheck": {
+                "gross_request": {
+                    "eligible": not fallback,
+                    "reasons": (
+                        ["clock_anchor_unresolved"] if fallback else []
+                    ),
+                }
+            },
+        }
+
+    @staticmethod
+    def _write_member(
+        root: Path, bundle_id: str, value: float, *, fallback: bool = False
+    ) -> None:
+        bundle = root / bundle_id
+        bundle.mkdir()
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(
+                TestAnchorFallbackFloorMemberGate._summary(
+                    value, fallback=fallback
+                ),
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        anchor = (
+            {
+                "status": "unresolved",
+                "trace_fallback_method": "legacy_spawn_bracket_midpoint_v1",
+            }
+            if fallback
+            else {"status": "bounded"}
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {"uncertainty_evidence": {"clock_anchor": anchor}},
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def _extract(self, root: Path, values: list[float], *, fallback_at=None):
+        bundle_ids = [f"member-{index}" for index in range(len(values))]
+        for index, (bundle_id, value) in enumerate(
+            zip(bundle_ids, values, strict=True)
+        ):
+            self._write_member(
+                root,
+                bundle_id,
+                value,
+                fallback=index == fallback_at,
+            )
+        cooldowns = {
+            bundle_id: {"result": "recovered", "verified": True}
+            for bundle_id in bundle_ids
+        }
+        with (
+            patch(
+                "joulewise.floor_extraction._cpu_admission_bundle_reasons",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.floor_extraction.window_evidence_precheck",
+                return_value={"eligible": True, "reasons": []},
+            ),
+            patch(
+                "joulewise.floor_extraction.deterministic_bounds",
+                return_value=(
+                    {"E_interpolation_joint_edge_bound_j": 0.0},
+                    (),
+                ),
+            ),
+        ):
+            return extract_absolute_cell(
+                cell_id="anchor-member-gate",
+                metric="gross_energy_j",
+                window_class="request",
+                members=[
+                    {"slot": f"r{index + 1}", "bundle_id": bundle_id}
+                    for index, bundle_id in enumerate(bundle_ids)
+                ],
+                runs_root=root,
+                cooldowns=cooldowns,
+                strict_validator=lambda path, strict: [],
+            )
+
+    def test_fallback_member_is_excluded_and_remaining_members_define_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = [10.0, 10.1, 10.2, 10.3, 10.4, 0.01]
+            report = self._extract(root, values, fallback_at=5)
+        self.assertTrue(report.extractable)
+        self.assertEqual(report.n_admitted, 5)
+        self.assertEqual(report.excluded_slots, ("r6",))
+        excluded = next(member for member in report.members if member.excluded)
+        self.assertIn(ANCHOR_FALLBACK_MEMBER_REFUSAL, excluded.reasons)
+        self.assertIn(ANCHOR_FALLBACK_MEMBER_REFUSAL, CELL_REFUSAL_CODES)
+        self.assertEqual(
+            report.floor,
+            absolute_false_effect_floor(
+                values[:5], admissible_half_widths_j=[0.01] * 5
+            ),
+        )
+
+    def test_fully_anchored_cell_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = [10.0, 10.1, 10.2, 10.3, 10.4, 10.5]
+            report = self._extract(root, values)
+        self.assertTrue(report.extractable)
+        self.assertEqual(report.n_admitted, 6)
+        self.assertEqual(report.excluded_slots, ())
+        self.assertEqual(
+            report.floor,
+            absolute_false_effect_floor(
+                values, admissible_half_widths_j=[0.01] * 6
+            ),
+        )
 
 
 def condition_family(condition_id):
@@ -368,6 +536,7 @@ def make_cell(
     condition="cf-1",
     absolute_half_widths=None,
     comparative_half_widths=None,
+    whole_window_drift_allowance=None,
 ):
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
@@ -421,8 +590,16 @@ def make_cell(
             "claim_usable": True,
             "reason_codes": [],
         },
-        absolute=build_absolute_record(abs_est, observations),
-        comparative=build_comparative_record(cmp_est, blocks),
+        absolute=build_absolute_record(
+            abs_est,
+            observations,
+            whole_window_drift_allowance=whole_window_drift_allowance,
+        ),
+        comparative=build_comparative_record(
+            cmp_est,
+            blocks,
+            whole_window_drift_allowance=whole_window_drift_allowance,
+        ),
         source_regime=regime if regime is not None else make_regime(),
         transport_group_id="tg-1",
         provenance={
@@ -802,6 +979,58 @@ class TestArtifactEmitValidate(unittest.TestCase):
         artifact = make_artifact()
         artifact["idle_drift_guard"]["n_bundles"] = 1
         self.assert_invalid(artifact, "n_bundles and bundle_sha256 length disagree")
+
+    def test_whole_window_allowance_is_additive_and_recomputed(self):
+        allowance = whole_window_allowance()
+        cell = make_cell(whole_window_drift_allowance=allowance)
+        artifact = make_artifact([cell])
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        for record_name in ("absolute", "comparative"):
+            record = cell[record_name]
+            self.assertEqual(record["whole_window_drift_allowance"], allowance)
+            self.assertTrue(
+                close(
+                    record["drift_widened_unguarded_floor_j"],
+                    record["corner_widened_unguarded_floor_j"]
+                    + allowance["allowance_j"],
+                )
+            )
+            self.assertTrue(
+                close(
+                    record["drift_widened_guarded_floor_j"],
+                    record["corner_widened_guarded_floor_j"]
+                    + allowance["allowance_j"],
+                )
+            )
+
+        tampered = json.loads(json.dumps(artifact))
+        tampered["cells"][0]["absolute"][
+            "drift_widened_guarded_floor_j"
+        ] -= 0.1
+        self.assert_invalid(
+            tampered,
+            "drift_widened_guarded_floor_j must equal",
+        )
+
+        understated = json.loads(json.dumps(artifact))
+        understated["cells"][0]["comparative"][
+            "whole_window_drift_allowance"
+        ]["allowance_j"] = 0.2
+        self.assert_invalid(
+            understated,
+            "must equal max(observed, derived)",
+        )
+
+        mismatched_family = json.loads(json.dumps(artifact))
+        for record_name in ("absolute", "comparative"):
+            mismatched_family["cells"][0][record_name][
+                "whole_window_drift_allowance"
+            ]["claim_family"] = "idle_subtracted_energy"
+        self.assert_invalid(
+            mismatched_family,
+            "claim_family does not match metric",
+        )
 
 
 def make_consumer(**overrides):
