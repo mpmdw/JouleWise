@@ -1,0 +1,56 @@
+{
+  "schema_version": "joulewise.neg8_reference_corpus.v1",
+  "corpus_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v1",
+  "freeze_status": "settled_reference",
+  "condition_id": "df-rq-mid",
+  "members": [
+    {
+      "bundle_id": "neg8-refcorpus-r01",
+      "bundle_path": "neg8-refcorpus-r01"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r02",
+      "bundle_path": "neg8-refcorpus-r02"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r03",
+      "bundle_path": "neg8-refcorpus-r03"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r04",
+      "bundle_path": "neg8-refcorpus-r04"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r05",
+      "bundle_path": "neg8-refcorpus-r05"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r06",
+      "bundle_path": "neg8-refcorpus-r06"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r07",
+      "bundle_path": "neg8-refcorpus-r07"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r08",
+      "bundle_path": "neg8-refcorpus-r08"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r09",
+      "bundle_path": "neg8-refcorpus-r09"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r10",
+      "bundle_path": "neg8-refcorpus-r10"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r11",
+      "bundle_path": "neg8-refcorpus-r11"
+    },
+    {
+      "bundle_id": "neg8-refcorpus-r12",
+      "bundle_path": "neg8-refcorpus-r12"
+    }
+  ]
+}

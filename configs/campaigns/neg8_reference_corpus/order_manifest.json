@@ -1,0 +1,141 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "neg8-reference-corpus-order-v1",
+  "plan_id": "neg8-reference-corpus-m3max-qwen25-1p5b-v1",
+  "ordering_note": "Fixed sequential same-condition order; normal campaign admission and cooldown provide settling between independent members.",
+  "planned_n_bundles": 12,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "neg8-refcorpus-r01.json",
+      "run_id": "neg8-refcorpus-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 1,
+      "position_in_block": 1
+    },
+    {
+      "index": 2,
+      "config": "neg8-refcorpus-r02.json",
+      "run_id": "neg8-refcorpus-r02",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 2,
+      "position_in_block": 1
+    },
+    {
+      "index": 3,
+      "config": "neg8-refcorpus-r03.json",
+      "run_id": "neg8-refcorpus-r03",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 3,
+      "position_in_block": 1
+    },
+    {
+      "index": 4,
+      "config": "neg8-refcorpus-r04.json",
+      "run_id": "neg8-refcorpus-r04",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 4,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 4,
+      "position_in_block": 1
+    },
+    {
+      "index": 5,
+      "config": "neg8-refcorpus-r05.json",
+      "run_id": "neg8-refcorpus-r05",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 5,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 5,
+      "position_in_block": 1
+    },
+    {
+      "index": 6,
+      "config": "neg8-refcorpus-r06.json",
+      "run_id": "neg8-refcorpus-r06",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 6,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 6,
+      "position_in_block": 1
+    },
+    {
+      "index": 7,
+      "config": "neg8-refcorpus-r07.json",
+      "run_id": "neg8-refcorpus-r07",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 7,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 7,
+      "position_in_block": 1
+    },
+    {
+      "index": 8,
+      "config": "neg8-refcorpus-r08.json",
+      "run_id": "neg8-refcorpus-r08",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 8,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 8,
+      "position_in_block": 1
+    },
+    {
+      "index": 9,
+      "config": "neg8-refcorpus-r09.json",
+      "run_id": "neg8-refcorpus-r09",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 9,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 9,
+      "position_in_block": 1
+    },
+    {
+      "index": 10,
+      "config": "neg8-refcorpus-r10.json",
+      "run_id": "neg8-refcorpus-r10",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 10,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 10,
+      "position_in_block": 1
+    },
+    {
+      "index": 11,
+      "config": "neg8-refcorpus-r11.json",
+      "run_id": "neg8-refcorpus-r11",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 11,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 11,
+      "position_in_block": 1
+    },
+    {
+      "index": 12,
+      "config": "neg8-refcorpus-r12.json",
+      "run_id": "neg8-refcorpus-r12",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 12,
+      "workload": "df-rq-mid",
+      "role": "neg8_reference_corpus_member",
+      "block_index": 12,
+      "position_in_block": 1
+    }
+  ]
+}

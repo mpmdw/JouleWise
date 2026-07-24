@@ -5234,6 +5234,130 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             run_campaign_module.validate_neg8_drift_bound_artifact(emitted)
         )
 
+    def test_neg8_reference_campaign_corpus_is_accepted_by_derivation_cli(
+        self,
+    ) -> None:
+        campaign_dir = (
+            ROOT / "configs" / "campaigns" / "neg8_reference_corpus"
+        )
+        corpus_path = campaign_dir / "derivation" / "settled_corpus.json"
+        corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+        order = json.loads(
+            (campaign_dir / "order_manifest.json").read_text(encoding="utf-8")
+        )
+        member_ids = [
+            member["bundle_id"] for member in corpus["members"]
+        ]
+        self.assertEqual(
+            member_ids,
+            [entry["run_id"] for entry in order["executed_order"]],
+        )
+        reference_condition = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "p2_015_floors"
+                / "00_neg8_start"
+                / "p2015-neg8-reference-start.json"
+            ).read_text(encoding="utf-8")
+        )
+        reference_condition.pop("run_id")
+
+        for index, member in enumerate(corpus["members"], start=1):
+            bundle_id = member["bundle_id"]
+            bundle = self.root / member["bundle_path"]
+            bundle.mkdir()
+            config_raw = (
+                campaign_dir / f"{bundle_id}.json"
+            ).read_bytes()
+            config = json.loads(config_raw)
+            self.assertEqual(config["run_id"], bundle_id)
+            scientific_condition = dict(config)
+            scientific_condition.pop("run_id")
+            self.assertEqual(scientific_condition, reference_condition)
+            (bundle / "config.json").write_bytes(config_raw)
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "config_sha256": hashlib.sha256(
+                            config_raw
+                        ).hexdigest()
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            point_j = 8.0 + index / 100.0
+            summary = {
+                "status": "succeeded",
+                "gross_energy_j": point_j,
+                "energy_anchor_shift_envelopes": {
+                    "/gross_energy_j": {
+                        "point_j": point_j,
+                        "lower_j": point_j - 0.01,
+                        "upper_j": point_j + 0.01,
+                    }
+                },
+                "summary_provenance": {"reducer_version": "0.5.2"},
+                "measurement_quality": {
+                    "telemetry_source": "powermetrics"
+                },
+                "window_evidence_precheck": {
+                    "gross_request": {"eligible": True}
+                },
+            }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(summary) + "\n", encoding="utf-8"
+            )
+
+        class SyntheticReduction:
+            def __init__(self, value):
+                self.value = value
+
+            def to_dict(self):
+                return self.value
+
+        def reduce_synthetic_bundle(bundle_path, *, reducer_version):
+            self.assertEqual(reducer_version, "0.5.2")
+            return SyntheticReduction(
+                json.loads(
+                    (Path(bundle_path) / "summary_metrics.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+            )
+
+        output = self.root / "derived-bound.json"
+        args = run_campaign_module.parse_args(
+            [
+                "--derive-neg8-drift-bound",
+                str(corpus_path),
+                "--neg8-drift-bound-output",
+                str(output),
+                "--runs-dir",
+                str(self.root),
+            ]
+        )
+        with (
+            patch(
+                "joulewise.reduce.reduce_bundle",
+                side_effect=reduce_synthetic_bundle,
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(
+                run_campaign_module.run_derive_neg8_drift_bound(args), 0
+            )
+        artifact = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(
+            artifact["reference_corpus"]["member_ids"], member_ids
+        )
+        self.assertEqual(artifact["estimator"]["n"], 12)
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
+        )
+
     def test_neg8_bound_builder_requires_ten_members_and_detects_tampering(
         self,
     ) -> None:
