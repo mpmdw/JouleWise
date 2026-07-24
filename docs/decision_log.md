@@ -4524,57 +4524,39 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    time/tokens/machine-hours (project runs months ahead of deadline).
 
    **Clause-10 addendum 2 — screen+budget wave registry + anchor-fallback
-   gate ruling (lead, 2026-07-24).** The ratified SCREEN + BUDGET design
-   landed (branch `impl/neg8-screen-budget`); this clause registers the
-   wave's new refusal/condition spellings in the D-078 closed registry:
-   `neg8_idle_sub_drift_bound_underived` (idle-subtracted family lacks a
-   derived bound), `neg8_bracket_idle_sub_abs_delta_exceeded`
-   (idle-subtracted point-drift excursion exceeds its derived bound),
-   `neg8_drift_bound_stale` (the ratified distinct stale-bound spelling:
-   drift-bound artifact is outside its freshness horizon or a
-   re-derivation trigger fired), and `anchor_fallback_member_unusable`
-   (unwaivable: a member whose energy integration rests on a fallback
-   clock anchor — `energy_uncertainty_status: not_estimable` with an
-   unresolved clock anchor and a legacy fallback trace method — may not
-   anchor a floor or claim cell; rerun required). The first three are the
-   concrete spellings of the Ed-ratified clause-10 design above. The
-   fourth is a LEAD-INITIATED ruling from the 2026-07-24 a7-vs-a5
-   prefill-scatter root-cause analysis
-   (`a7_vs_a5_prefill_scatter_analysis.md`): the a7 11.85 J prefill
-   "floor" was a single fallback-anchored member (r03) with a
-   half-width-zero energy envelope — an instrument artifact, not
-   physics; the true a7 floor sits near 3.3–3.7 J. Fallback-anchored
-   members are therefore excluded from floor/claim eligibility
-   unconditionally (no waiver spelling exists for this code), and a
-   fallback-anchored member found in a floor cell is an unwaivable
-   re-run trigger. Flagged lead-initiated for Ed's review at the PR
-   gate per the standing lead-rulings convention.
-   Registered with this clause for the audit fix round (F3,
-   allowance-omission fail-open): `whole_window_drift_allowance_unrecorded`
-   (a passing basis-bearing whole-window verdict yielded no authenticated
-   per-family drift allowance, or a claim consumed a metric whose named
-   allowance term is absent — refuse, never default to zero; registered
-   in both the floor-extraction refusal and reducer reason vocabularies,
-   mirroring the `interpolation_bound_unrecorded` idiom).
+   gate ruling (lead, 2026-07-24).** Registers the wave's spellings in
+   the D-078 closed registry: `neg8_idle_sub_drift_bound_underived`,
+   `neg8_bracket_idle_sub_abs_delta_exceeded`, and
+   `neg8_drift_bound_stale` (freshness horizon exceeded or
+   re-derivation trigger fired) — the ratified clause-10 design's
+   concrete spellings — plus `anchor_fallback_member_unusable`
+   (unwaivable, no waiver spelling exists: a fallback-clock-anchored
+   member may not anchor a floor or claim cell; in a floor cell it is
+   an unwaivable re-run trigger). The latter is a LEAD-INITIATED
+   ruling from the 2026-07-24 a7-vs-a5 prefill-scatter root cause
+   (`a7_vs_a5_prefill_scatter_analysis.md`): a7's 11.85 J prefill
+   "floor" was one fallback-anchored member (r03), half-width-zero
+   envelope — instrument artifact (true floor ≈ 3.3–3.7 J).
+   Flagged for Ed's PR-gate review. Also registered (fix-round F3):
+   `whole_window_drift_allowance_unrecorded` (passing basis-bearing
+   verdict with no authenticated per-family allowance, or a claim
+   missing its named allowance term — refuse, never zero; in both the
+   floor-extraction and reducer vocabularies, mirroring
+   `interpolation_bound_unrecorded`).
 
-   **Clause-10 addendum 3 — terminal mock bar (lead, 2026-07-24).** Review
-   of the screen+budget fix round found the ratified premise "mock
-   telemetry can never bear claims" enforced only at the campaign
-   readiness gate and inside individual barrier exemptions — no terminal
-   enforcement existed at the analysis claim boundary, so an honest
-   mock-telemetry member (no forgery) was admissible into floor cells and
-   claim evidence with the anchor-fallback, CPU-admission, and
-   environment barriers all correctly-but-consequentially disabled for
-   it. Registered spelling: `mock_telemetry_claim_ineligible` (a
-   claim-bearing consumption path received a member whose custody-bound
-   config telemetry backend is the mock class; refuse — mock is
-   development-only evidence and no waiver spelling exists). Mockness is
-   derived from the custody-bound config (`hardware_target.
-   telemetry_backend`, config bytes bound via `metadata.config_sha256`),
-   never from summary/metadata labels alone; where a custody-bound
-   config exists, config/metadata/summary telemetry identities must
-   agree by backend class (governed `mock:*` tagged sources are mock
-   class) or the bundle is strict-invalid. Absence of a custody-bound
-   config is non-production evidence, refused by strict validation on
-   every real path (fixture-only permissive paths retain their ratified
-   intent). Lead-initiated; flagged for Ed's review at the PR gate.
+   **Clause-10 addendum 3 — terminal mock bar (lead, 2026-07-24).** The
+   ratified premise "mock telemetry can never bear claims" had no
+   terminal enforcement at the analysis claim boundary: honest mock
+   members reached floor cells and claim evidence with the
+   mock-exempted barriers disabled. Registered
+   spelling: `mock_telemetry_claim_ineligible` (claim-bearing
+   consumption of a member whose custody-bound config telemetry backend
+   is the mock class; refuse — development-only evidence, no waiver
+   spelling exists). Mockness derives from the custody-bound config
+   (`hardware_target.telemetry_backend`, bytes bound via
+   `metadata.config_sha256`), never from summary/metadata labels alone;
+   where such a config exists, config/metadata/summary telemetry
+   identities must agree by backend class (governed `mock:*` tags are
+   mock class) or the bundle is strict-invalid. Config absence is
+   non-production evidence (fixture-only permissive paths keep their
+   ratified intent). Lead-initiated; flagged for Ed's PR-gate review.
