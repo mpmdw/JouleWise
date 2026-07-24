@@ -234,7 +234,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-22).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-24).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 

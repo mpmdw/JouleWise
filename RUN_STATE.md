@@ -117,7 +117,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-22). Latest report: [D-078 P0 instrument repair signed off (9 confirmation rounds, limitation L1 registered); PR #79 open](docs/run_reports/2026-07-20-p0-instrument-repair.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-24). Latest report: [First live collection arc: 4 bracketed windows, 229 members, 3 collection-path repair PRs, NEG-8 gate adjudication (point-drift ruling pending Ed)](docs/run_reports/2026-07-23-window-a-collection-arc.md).
 
 ### [ED-EXTERNAL]
 
@@ -248,10 +248,17 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**The D-078 Phase-0 instrument repair is SIGNED OFF (2026-07-22): code
+**Collection era open (2026-07-24): PRs #79-#82 merged; four bracketed
+windows collected (229 strict members; corpora a5-a8) under the repaired
+instrument; instrument point repeatability 0.0067 J / ~38.5 J over 3 h;
+claim licensing gated on the NEG-8 point-drift ruling (lead-ruled, Ed
+ratification pending) + derived drift bound + remaining cells.** Record:
+`docs/run_reports/2026-07-23-window-a-collection-arc.md`. Prior state:
+
+The D-078 Phase-0 instrument repair is SIGNED OFF (2026-07-22): code
 head `040ca3a`, close-out `debc6d2`, PR #79 open for Ed-named merge,
 registered limitation L1 recorded, FLOOR-BIND-01 queued, and the next
-step is the v3-bracketed Window-A re-collection.** Full state in the
+step is the v3-bracketed Window-A re-collection. Full state in the
 header above; record:
 `docs/run_reports/2026-07-20-p0-instrument-repair.md`. Earlier arcs below
 are historical.

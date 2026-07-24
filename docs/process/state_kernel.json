@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "D-078 P0 instrument repair signed off (9 confirmation rounds, limitation L1 registered); PR #79 open",
-    "path": "docs/run_reports/2026-07-20-p0-instrument-repair.md"
+    "label": "First live collection arc: 4 bracketed windows, 229 members, 3 collection-path repair PRs, NEG-8 gate adjudication (point-drift ruling pending Ed)",
+    "path": "docs/run_reports/2026-07-23-window-a-collection-arc.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2268,5 +2268,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-22"
+  "updated": "2026-07-24"
 }
