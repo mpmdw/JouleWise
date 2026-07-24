@@ -14,6 +14,7 @@ import math
 import statistics
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -87,6 +88,14 @@ NEG8_POINT_DRIFT_CONDITION_CODES = frozenset(
     }
 )
 NEG8_WHOLE_WINDOW_ALLOWANCE_TERM = "E_whole_window_drift_allowance_j"
+
+
+@dataclass(frozen=True)
+class WholeWindowDriftAllowanceResult:
+    """Discriminate authenticated current allowances from frozen replay."""
+
+    status: str
+    allowances: Mapping[str, Mapping[str, Any]]
 
 
 def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
@@ -2803,10 +2812,47 @@ def _validate_row(
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")
             else:
-                point_drift = "estimand" in bracket
+                current_evidence = (
+                    any(
+                        isinstance(occurrence, Mapping)
+                        and (
+                            path := _safe_source_path(
+                                runs_root, occurrence.get("bundle_path")
+                            )
+                        )
+                        is not None
+                        and _current_strict_summary(
+                            _read_json_object(path / "summary_metrics.json")
+                        )
+                        for occurrence in basis.get(
+                            "member_occurrences", []
+                        )
+                    )
+                    if basis is not None
+                    else _row_references_current_strict_member(
+                        row, runs_root, referenced
+                    )
+                )
+                # Protocol selection is evidence-authenticated. A basis-bearing
+                # or current-strict row can never downgrade itself to the
+                # frozen gross-only evaluator by deleting amended wire fields.
+                point_drift = basis is not None or current_evidence
+                requires_point_drift_shape = (
+                    basis_present or current_evidence
+                )
                 if (
-                    point_drift
-                    and bracket.get("estimand") != NEG8_POINT_DRIFT_ESTIMAND
+                    requires_point_drift_shape
+                    and (
+                        bracket.get("estimand")
+                        != NEG8_POINT_DRIFT_ESTIMAND
+                        or not isinstance(
+                            bracket.get("claim_families"), Mapping
+                        )
+                        or "drift_bound_artifact" not in bracket
+                        or not isinstance(
+                            bracket.get("bound_freshness"), Mapping
+                        )
+                    )
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")
                 drift_bound_artifact = bracket.get("drift_bound_artifact")
@@ -2821,29 +2867,7 @@ def _validate_row(
                     verified_source_manifests,
                     runs_root,
                     registered_policy,
-                    current=(
-                        any(
-                            isinstance(occurrence, Mapping)
-                            and (
-                                path := _safe_source_path(
-                                    runs_root, occurrence.get("bundle_path")
-                                )
-                            )
-                            is not None
-                            and _current_strict_summary(
-                                _read_json_object(
-                                    path / "summary_metrics.json"
-                                )
-                            )
-                            for occurrence in basis.get(
-                                "member_occurrences", []
-                            )
-                        )
-                        if basis is not None
-                        else _row_references_current_strict_member(
-                            row, runs_root, referenced
-                        )
-                    ),
+                    current=current_evidence,
                     point_drift=point_drift,
                     drift_bound_artifact=drift_bound_artifact,
                     return_bracket=point_drift,
@@ -3122,12 +3146,12 @@ def whole_window_drift_allowances(
     referenced_bundle_ids: set[str],
     *,
     evaluation_basis_sha256: str | None = None,
-) -> dict[str, dict[str, Any]] | None:
+) -> WholeWindowDriftAllowanceResult:
     """Return authenticated family allowances for the selected passing basis.
 
-    Legacy pre-budget verdict rows remain valid refusal evidence and return
-    ``None`` here. New point-drift rows must carry both strictly positive
-    allowances, which :func:`_validate_row` re-derives from member evidence.
+    ``legacy`` is reserved for basis-less frozen replay. ``absent`` means a
+    current/basis-bearing row did not preserve a complete authenticated
+    allowance wire; callers must refuse rather than treating it as zero.
     """
 
     root = Path(runs_root)
@@ -3136,7 +3160,7 @@ def whole_window_drift_allowances(
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
     ):
-        return None
+        return WholeWindowDriftAllowanceResult("absent", {})
     try:
         rows = [
             value
@@ -3149,7 +3173,7 @@ def whole_window_drift_allowances(
             == "idle_admission_whole_window_verdict"
         ]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
+        return WholeWindowDriftAllowanceResult("absent", {})
     basis_rows = [
         row for row in rows if isinstance(row.get("evaluation_basis"), Mapping)
     ]
@@ -3186,33 +3210,66 @@ def whole_window_drift_allowances(
         if selected and _validate_row(row, root, referenced_bundle_ids)[0]:
             candidates.append(row)
     if not candidates:
-        return None
+        return WholeWindowDriftAllowanceResult("absent", {})
     bracket = candidates[0].get("idle_admission_core", {}).get("neg8_bracket")
+    basis = candidates[0].get("evaluation_basis")
+    current = isinstance(basis, Mapping) or _row_references_current_strict_member(
+        candidates[0], root, referenced_bundle_ids
+    )
+    if not current:
+        return WholeWindowDriftAllowanceResult("legacy", {})
+    if (
+        not isinstance(basis, Mapping)
+        or not _sha256_text(basis.get("sha256"))
+    ):
+        return WholeWindowDriftAllowanceResult("absent", {})
     allowances = (
         bracket.get("drift_allowances")
+        if isinstance(bracket, Mapping)
+        else None
+    )
+    claim_families = (
+        bracket.get("claim_families")
         if isinstance(bracket, Mapping)
         else None
     )
     if not isinstance(allowances, Mapping) or set(allowances) != {
         NEG8_CLAIM_FAMILY_GROSS,
         NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED,
-    }:
-        return None
-    basis = candidates[0].get("evaluation_basis")
+    } or not isinstance(claim_families, Mapping):
+        return WholeWindowDriftAllowanceResult("absent", {})
     result: dict[str, dict[str, Any]] = {}
     for family, value in allowances.items():
+        family_record = claim_families.get(family)
+        expected = (
+            {
+                "claim_family": family,
+                "allowance_j": family_record.get("drift_allowance_j"),
+                "observed_trajectory_excursion_j": family_record.get(
+                    "trajectory_excursion_max_j"
+                ),
+                "derived_repeatability_bound_j": family_record.get(
+                    "derived_repeatability_bound_j"
+                ),
+                "provenance": family_record.get("provenance"),
+            }
+            if isinstance(family_record, Mapping)
+            else None
+        )
         if (
             not isinstance(value, Mapping)
+            or expected is None
+            or dict(value) != expected
             or _finite_number(value.get("allowance_j"), positive=True) is None
         ):
-            return None
+            return WholeWindowDriftAllowanceResult("absent", {})
         result[family] = {
             **dict(value),
             "whole_window_evaluation_basis_sha256": (
                 basis.get("sha256") if isinstance(basis, Mapping) else None
             ),
         }
-    return result
+    return WholeWindowDriftAllowanceResult("allowances", result)
 
 
 __all__ = [
@@ -3227,6 +3284,7 @@ __all__ = [
     "NEG8_DRIFT_BOUND_MAX_AGE_S",
     "NEG8_DRIFT_ESTIMATOR_ID",
     "NEG8_POINT_DRIFT_ESTIMAND",
+    "WholeWindowDriftAllowanceResult",
     "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
     "NEG8_WHOLE_WINDOW_ALLOWANCE_TERM",

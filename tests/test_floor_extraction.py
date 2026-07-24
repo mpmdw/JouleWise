@@ -40,7 +40,9 @@ from joulewise.floor_extraction import (
 from scripts.extract_detection_floors import main as extract_main
 from joulewise.whole_window import (
     IDLE_ADMISSION_CORE_SCHEMA,
+    NEG8_POINT_DRIFT_ESTIMAND,
     WHOLE_WINDOW_SCHEMA,
+    WholeWindowDriftAllowanceResult,
     build_row_provenance,
     source_manifest_descriptors,
     whole_window_refusal_reasons,
@@ -321,6 +323,14 @@ class _PermissiveStrictValidatorMixin:
         )
         whole_window_patcher.start()
         self.addCleanup(whole_window_patcher.stop)
+        allowance_patcher = mock.patch(
+            "joulewise.floor_extraction.whole_window_drift_allowances",
+            lambda runs_root, referenced_bundle_ids: (
+                WholeWindowDriftAllowanceResult("legacy", {})
+            ),
+        )
+        allowance_patcher.start()
+        self.addCleanup(allowance_patcher.stop)
 
 
 class RealCapHitJoinTests(unittest.TestCase):
@@ -464,6 +474,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
         bundle = root / bundle_id
         summary = make_summary(value)
         summary["measurement_quality"]["telemetry_source"] = "powermetrics"
+        summary["idle_subtracted_energy_j"] = summary["energy_request_j"]
         write_bundle(root, bundle_id, summary)
 
         config = json.loads(
@@ -648,8 +659,15 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             "adapter_wattage_continuity": continuity,
             "neg8_bracket": {
                 "schema_version": NEG8_BRACKET_SCHEMA,
+                "estimand": NEG8_POINT_DRIFT_ESTIMAND,
                 "decision": "passed",
                 "policy": dict(REGISTERED_BRACKET_POLICY),
+                "claim_families": {
+                    "gross_energy": {},
+                    "idle_subtracted_energy": {},
+                },
+                "drift_bound_artifact": None,
+                "bound_freshness": {},
             },
             "instrument_calibration_bracket": {
                 "schema_version": "joulewise.instrument_calibration_bracket.v1",
@@ -1283,6 +1301,9 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             )
             mismatched = make_summary(40.5)
             mismatched["measurement_quality"]["telemetry_source"] = "powermetrics"
+            mismatched["idle_subtracted_energy_j"] = mismatched[
+                "energy_request_j"
+            ]
             reduced = mock.Mock()
             reduced.to_dict.return_value = mismatched
             with (

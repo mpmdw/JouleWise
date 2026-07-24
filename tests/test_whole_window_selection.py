@@ -14,10 +14,13 @@ from joulewise.whole_window import (
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
     CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
+    NEG8_POINT_DRIFT_ESTIMAND,
     NEG8_POINT_DRIFT_CONDITION_CODES,
+    _validate_row,
     build_neg8_drift_bound_artifact,
     canonical_sha256,
     validated_attempt_selection,
+    whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
 from joulewise.analysis_engine.registry import (
@@ -29,19 +32,194 @@ from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 
 
 class WholeWindowSelectionTests(unittest.TestCase):
-    def test_both_family_underived_refusals_are_registered(self):
-        self.assertIn(
+    def test_both_family_underived_refusals_are_decision_log_registered(self):
+        decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
+        marker = "### D-078 amendment — 2026-07-20"
+        self.assertIn(marker, decision_log)
+        amendment = decision_log.split(marker, 1)[1]
+        for reason in (
             CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
-            NEG8_POINT_DRIFT_CONDITION_CODES,
-        )
-        self.assertIn(
             CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED,
-            NEG8_POINT_DRIFT_CONDITION_CODES,
-        )
-        self.assertIn(
             CONDITION_NEG8_DRIFT_BOUND_STALE,
-            NEG8_POINT_DRIFT_CONDITION_CODES,
-        )
+        ):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, NEG8_POINT_DRIFT_CONDITION_CODES)
+                self.assertIn(f"`{reason}`", amendment)
+
+    def test_basis_row_cannot_downgrade_by_stripping_point_drift_shape(self):
+        policy_sha256 = "a" * 64
+        policy = {
+            "require_bracket": True,
+            "max_abs_delta_j": 0.05,
+            "max_rel_delta": 0.25,
+        }
+        family_record = {
+            "drift_allowance_j": 0.4,
+            "trajectory_excursion_max_j": 0.3,
+            "derived_repeatability_bound_j": 0.4,
+            "provenance": {"bound_derivation_sha256": "b" * 64},
+        }
+        derived = {
+            "decision": "passed",
+            "claim_families": {
+                "gross_energy": dict(family_record),
+                "idle_subtracted_energy": dict(family_record),
+            },
+            "bound_freshness": {"decision": "fresh"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = root / "campaign.json"
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "campaign_policy": {"sha256": policy_sha256},
+                "members": [],
+            }
+            raw = json.dumps(manifest).encode()
+            manifest_path.write_bytes(raw)
+            basis = {
+                "sha256": "c" * 64,
+                "member_occurrences": [
+                    {"bundle_id": "A", "bundle_path": "A"},
+                    {"bundle_id": "B", "bundle_path": "B"},
+                ],
+            }
+            bracket = {
+                "schema_version": "joulewise.neg8_bracket_check.v1",
+                "decision": "passed",
+                "policy": policy,
+                "estimand": NEG8_POINT_DRIFT_ESTIMAND,
+                "claim_families": derived["claim_families"],
+                "drift_bound_artifact": None,
+                "bound_freshness": derived["bound_freshness"],
+            }
+            row = {
+                "schema_version": (
+                    "joulewise.idle_admission_whole_window_verdict.v1"
+                ),
+                "status": "passed",
+                "bundle_ids": ["A", "B"],
+                "campaign_policy": {"sha256": policy_sha256},
+                "evaluation_basis": basis,
+                "row_provenance": {
+                    "schema_version": (
+                        "joulewise.idle_admission_whole_window_provenance.v1"
+                    ),
+                    "policy_sha256": policy_sha256,
+                    "membership_sha256": canonical_sha256(["A", "B"]),
+                    "source_campaign_manifests": [
+                        {
+                            "path": "campaign.json",
+                            "sha256": hashlib.sha256(raw).hexdigest(),
+                        }
+                    ],
+                },
+                "idle_admission_core": {
+                    "schema_version": (
+                        "joulewise.idle_admission_core_verdict.v1"
+                    ),
+                    "policy_sha256": policy_sha256,
+                    "neg8_bracket": bracket,
+                    "adapter_wattage_continuity": {
+                        "schema_version": (
+                            "joulewise.adapter_wattage_continuity.v1"
+                        ),
+                        "decision": "stable",
+                    },
+                    "members": [
+                        {
+                            "bundle_id": bundle_id,
+                            "cpu_admission": {"decision": "admitted"},
+                        }
+                        for bundle_id in ("A", "B")
+                    ],
+                },
+            }
+            with (
+                patch(
+                    "joulewise.whole_window._validated_evaluation_basis",
+                    return_value=basis,
+                ),
+                patch(
+                    "joulewise.whole_window._basis_source_manifests",
+                    return_value=[manifest],
+                ),
+                patch(
+                    "joulewise.whole_window._current_core_rederivation_reasons",
+                    return_value=set(),
+                ),
+                patch(
+                    "joulewise.whole_window._registered_bracket_policy",
+                    return_value=policy,
+                ),
+                patch(
+                    "joulewise.whole_window._derived_neg8_decision",
+                    return_value=(derived, None),
+                ) as derive,
+            ):
+                baseline_ok, baseline_reasons = _validate_row(
+                    row, root, {"A", "B"}
+                )
+                self.assertTrue(baseline_ok, baseline_reasons)
+                self.assertTrue(derive.call_args.kwargs["point_drift"])
+                for field in (
+                    "estimand",
+                    "claim_families",
+                    "drift_bound_artifact",
+                    "bound_freshness",
+                ):
+                    stripped = json.loads(json.dumps(row))
+                    del stripped["idle_admission_core"]["neg8_bracket"][field]
+                    with self.subTest(field=field):
+                        ok, reasons = _validate_row(
+                            stripped, root, {"A", "B"}
+                        )
+                        self.assertFalse(ok)
+                        self.assertIn(
+                            "whole_window_verdict_provenance_invalid",
+                            reasons,
+                        )
+
+    def test_basis_passing_row_without_allowances_is_discriminated_absent(self):
+        row = {
+            "record_type": "idle_admission_whole_window_verdict",
+            "bundle_ids": ["A", "B"],
+            "evaluation_basis": {
+                "sha256": "c" * 64,
+                "member_occurrences": [
+                    {"bundle_id": "A"},
+                    {"bundle_id": "B"},
+                ],
+            },
+            "idle_admission_core": {
+                "neg8_bracket": {
+                    "claim_families": {
+                        "gross_energy": {},
+                        "idle_subtracted_energy": {},
+                    }
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(row) + "\n", encoding="utf-8"
+            )
+            with (
+                patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.whole_window._validate_row",
+                    return_value=(True, ()),
+                ),
+            ):
+                result = whole_window_drift_allowances(
+                    root, {"A", "B"}
+                )
+        self.assertEqual(result.status, "absent")
+        self.assertEqual(result.allowances, {})
 
     def _real_fixture(self, root: Path):
         _registry, manifest, _raw, _configs, _roster = evidence_for("draft")

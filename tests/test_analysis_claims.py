@@ -7,8 +7,10 @@ import copy
 import gzip
 import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.analysis_engine.artifact import (
     calculate_claim_verdicts_id,
@@ -28,6 +30,7 @@ from joulewise.analysis_engine.claims import (
     ordered_reason_codes,
 )
 from joulewise.analysis_engine.inputs import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
     AnalysisInputError,
     BundleEvidence,
     FloorRequest,
@@ -35,6 +38,7 @@ from joulewise.analysis_engine.inputs import (
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     LoadedAnalysisInputs,
     anchor_shift_envelope,
+    bind_floor_artifact_evidence,
     deterministic_bounds,
     governed_stochastic_variance,
     metric_value,
@@ -478,6 +482,83 @@ class SensitivityTests(unittest.TestCase):
 
 
 class InputSeamTests(unittest.TestCase):
+    def test_floor_binding_rejects_comparative_abba_fallback_member(self):
+        artifact = make_artifact()
+        fallback_bundle_id = "cell-1-b0-A1"
+        stack_identity = artifact["cells"][0]["source_regime"][
+            "stack_identity"
+        ]
+
+        class FakeReader:
+            def __init__(self, path):
+                self.path = Path(path)
+
+            def raw_summary(self):
+                return {
+                    "status": "succeeded",
+                    "measurement_quality": {
+                        "telemetry_source": "powermetrics"
+                    },
+                    "energy_uncertainty_status": "bounded",
+                    "gross_energy_j": 100.0,
+                }
+
+            def raw_metadata(self):
+                anchor = {"status": "bounded"}
+                if self.path.name == fallback_bundle_id:
+                    anchor["trace_fallback_method"] = (
+                        "legacy_spawn_bracket_midpoint_v1"
+                    )
+                return {
+                    "uncertainty_evidence": {"clock_anchor": anchor}
+                }
+
+            def raw_config(self):
+                return {}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(
+                "joulewise.analysis_engine.inputs._campaign_order_binding_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.BundleReader",
+                FakeReader,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.complete_bundle_sha256",
+                return_value="a" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._sha256_file",
+                return_value="b" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.scientific_config_identity",
+                return_value={"identity": "test"},
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.floor_stack_identity",
+                return_value=stack_identity,
+            ),
+        ):
+            binding = bind_floor_artifact_evidence(
+                artifact,
+                Path(tmp) / "floor.json",
+                Path(tmp) / "runs",
+                strict_validator=lambda path, strict: [],
+            )
+        self.assertNotIn("cell-1", binding.bound_cell_ids)
+        self.assertIn(
+            ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            binding.problems_by_cell["cell-1"],
+        )
+
     def test_combined_floor_uses_every_selected_absolute_and_comparative_max(self):
         resolutions = (
             FloorResolution(
@@ -1331,6 +1412,23 @@ class AnchorBoundPropagationTests(unittest.TestCase):
             }["E_whole_window_drift_allowance_j"],
             0.6,
         )
+
+    def test_required_whole_window_allowance_missing_refuses_metric(self):
+        evidence = _bounds_evidence(self._summary())
+        evidence.whole_window_drift_allowance_required = True
+        bounds, reasons = deterministic_bounds(evidence, self.GROSS_METRIC)
+        self.assertNotIn("E_whole_window_drift_allowance_j", bounds)
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            reasons,
+        )
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            REDUCER_REASON_CODES,
+        )
+        result = evaluation(base_reason_codes=reasons)
+        self.assertEqual(result["outcome"], "not_resolvable")
+        self.assertFalse(result["claim_ready_for_l2_l3"])
 
     def test_new_anchor_reason_codes_are_registered_and_not_resolvable(self):
         added = {

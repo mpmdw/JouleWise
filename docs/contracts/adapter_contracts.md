@@ -414,7 +414,11 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   `neg8_drift_bound_stale`. A v1 artifact with an authentic pre-addendum seal
   but no freshness block is replay-readable only to produce that stale
   refusal; it is never grandfathered. Malformed or unsealed artifacts remain
-  underived under the two family-specific spellings.
+  underived under the two family-specific spellings. The superseded
+  pre-SCREEN+BUDGET gross-only v1 shape (no `claim_family_bounds`) is not
+  replayable and refuses as malformed/underived; "pre-addendum replay" applies
+  only to the dual-family shape with `claim_family_bounds` present and
+  freshness absent.
 
   The bracket is a WHOLE-WINDOW check: the evaluated basis must contain both
   endpoints. Legacy pair-only windows (a5-a8) remain evaluable as 1+0+1:

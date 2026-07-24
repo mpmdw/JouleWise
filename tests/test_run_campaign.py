@@ -4939,6 +4939,74 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
                 bundle, info=info, waivers={}
             )
 
+    @staticmethod
+    def _whole_window_trigger_bundle(
+        root: Path, bundle_id: str, trigger: str
+    ) -> Path:
+        bundle = root / bundle_id
+        bundle.mkdir()
+        summary = {
+            "status": "succeeded",
+            "measurement_quality": {"telemetry_source": "powermetrics"},
+            "energy_uncertainty_status": "bounded",
+            "window_evidence_precheck": {
+                "gross_request": {"eligible": True, "reasons": []}
+            },
+        }
+        metadata = {
+            "uncertainty_evidence": {
+                "clock_anchor": {"status": "bounded"}
+            }
+        }
+        if trigger == "not_estimable":
+            summary["energy_uncertainty_status"] = "not_estimable"
+        elif trigger == "clock_anchor_unresolved":
+            summary["window_evidence_precheck"]["gross_request"] = {
+                "eligible": False,
+                "reasons": ["clock_anchor_unresolved"],
+            }
+        elif trigger == "trace_fallback_method":
+            metadata["uncertainty_evidence"]["clock_anchor"][
+                "trace_fallback_method"
+            ] = "legacy_spawn_bracket_midpoint_v1"
+        else:
+            raise AssertionError(f"unknown trigger {trigger}")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary) + "\n", encoding="utf-8"
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata) + "\n", encoding="utf-8"
+        )
+        return bundle
+
+    def _whole_window_evaluate(
+        self, bundle: Path, *, role: str, waiver: bool = True
+    ):
+        waiver_map = (
+            {
+                ("bundle_id", bundle.name): run_campaign_module.Waiver(
+                    target_kind="bundle_id",
+                    target=bundle.name,
+                    reason="audit fixture",
+                    approver="test",
+                    timestamp="2026-07-24T00:00:00Z",
+                    scope="any",
+                )
+            }
+            if waiver
+            else {}
+        )
+        source = run_campaign_module.WholeWindowMemberSource(
+            path=bundle,
+            role=role,
+        )
+        with patch.object(
+            run_campaign_module, "validate_bundle", return_value=[]
+        ):
+            return run_campaign_module._whole_window_member(
+                source, waiver_map
+            )
+
     def test_floor_member_fallback_anchor_is_unwaivable_rerun_trigger(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle, raw_summary = self._bundle(
@@ -4976,6 +5044,44 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
         )
         self.assertTrue(evaluation.usable)
         self.assertFalse(evaluation.rerun_required)
+
+    def test_whole_window_floor_member_triggers_are_individually_unwaivable(self):
+        for trigger in (
+            "not_estimable",
+            "clock_anchor_unresolved",
+            "trace_fallback_method",
+        ):
+            with self.subTest(trigger=trigger), tempfile.TemporaryDirectory() as tmp:
+                bundle = self._whole_window_trigger_bundle(
+                    Path(tmp), f"whole-window-{trigger}", trigger
+                )
+                evaluation = self._whole_window_evaluate(
+                    bundle, role="absolute_repeat"
+                )
+            self.assertIn(
+                run_campaign_module.ANCHOR_FALLBACK_MEMBER_REFUSAL,
+                evaluation.collection_integrity_flags,
+            )
+            self.assertTrue(evaluation.rerun_required)
+            self.assertTrue(evaluation.failed)
+            self.assertFalse(evaluation.waived)
+            self.assertFalse(evaluation.usable)
+
+    def test_whole_window_comparative_abba_fallback_is_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._whole_window_trigger_bundle(
+                Path(tmp), "whole-window-abba-fallback", "trace_fallback_method"
+            )
+            evaluation = self._whole_window_evaluate(
+                bundle, role="comparative_abba_member"
+            )
+        self.assertIn(
+            run_campaign_module.ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            evaluation.collection_integrity_flags,
+        )
+        self.assertTrue(evaluation.rerun_required)
+        self.assertTrue(evaluation.failed)
+        self.assertFalse(evaluation.waived)
 
 
 class ProductionUncertaintyAssertionTests(unittest.TestCase):
@@ -5569,6 +5675,18 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "n >= 10"):
             self._drift_bound([8.0 + index * 0.01 for index in range(9)])
+
+    def test_superseded_gross_only_bound_shape_is_intentionally_not_replayable(
+        self,
+    ) -> None:
+        historical_gross_only = self._drift_bound()
+        del historical_gross_only["claim_family_bounds"]
+        del historical_gross_only["freshness"]
+        self.assertFalse(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                historical_gross_only
+            )
+        )
 
     def test_extension_version_and_profile_constraints_fail_closed(self) -> None:
         from joulewise.schemas import SchemaError

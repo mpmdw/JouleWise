@@ -627,7 +627,10 @@ re-derivation reasons. Horizon expiry or any named binding change makes both
 families stale and refuses with the registered `neg8_drift_bound_stale`.
 Missing or conflicting current bindings also refuse stale. An authenticated
 pre-addendum v1 artifact without freshness fields is defensively stale, never
-grandfathered; a malformed or unsealed artifact remains family-underived.
+grandfathered; a malformed or unsealed artifact remains family-underived. The
+superseded pre-SCREEN+BUDGET gross-only shape without `claim_family_bounds` is
+not replayable and refuses as malformed/underived. Pre-addendum replay refers
+only to dual-family artifacts whose freshness block is absent.
 
 ### Consumer wire compatibility (audit P0.3)
 

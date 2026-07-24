@@ -90,6 +90,49 @@ CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD = (
     "common_trace_shift_plus_independent_edge_corners_v3"
 )
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
+ANCHOR_FALLBACK_MEMBER_REFUSAL = "anchor_fallback_member_unusable"
+
+
+def _nested_contains(value: object, target: str) -> bool:
+    if value == target:
+        return True
+    if isinstance(value, Mapping):
+        return any(_nested_contains(child, target) for child in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return any(_nested_contains(child, target) for child in value)
+    return False
+
+
+def anchor_fallback_member_unusable(
+    summary: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+) -> bool:
+    """Whether a production member lacks admissible anchor-width evidence."""
+
+    if not isinstance(summary, Mapping):
+        return False
+    quality = summary.get("measurement_quality")
+    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
+        return False
+    if summary.get("energy_uncertainty_status") != "bounded":
+        return True
+    if _nested_contains(
+        summary.get("window_evidence_precheck", summary.get("claim_eligibility")),
+        "clock_anchor_unresolved",
+    ):
+        return True
+    anchor = None
+    if isinstance(metadata, Mapping):
+        uncertainty = metadata.get("uncertainty_evidence")
+        if isinstance(uncertainty, Mapping):
+            anchor = uncertainty.get("clock_anchor")
+    return bool(
+        isinstance(anchor, Mapping)
+        and (
+            anchor.get("status") == "unresolved"
+            or isinstance(anchor.get("trace_fallback_method"), str)
+        )
+    )
 
 
 def governed_idle_variance_pair(reducer_version: object, method: object) -> bool:
@@ -207,6 +250,7 @@ class BundleEvidence:
     whole_window_drift_allowances: Mapping[str, Mapping[str, Any]] = field(
         default_factory=dict
     )
+    whole_window_drift_allowance_required: bool = False
 
     @property
     def included(self) -> bool:
@@ -797,6 +841,8 @@ def bind_floor_artifact_evidence(
                 raw_config = reader.raw_config()
                 local_problems.extend(strict)
                 local_problems.extend(_source_provenance_admission_problems(metadata, summary))
+                if anchor_fallback_member_unusable(summary, metadata):
+                    local_problems.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
                 if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
                     local_problems.append("calibration bundle status is not succeeded")
                 try:
@@ -1790,9 +1836,12 @@ def load_analysis_inputs(
             runs_root,
             {evidence.bundle_id for evidence in effective.values()},
         )
-        if allowances is not None:
-            for evidence in (*registered.values(), *extras):
-                evidence.whole_window_drift_allowances = allowances
+        for evidence in (*registered.values(), *extras):
+            evidence.whole_window_drift_allowance_required = (
+                allowances.status != "legacy"
+            )
+            if allowances.status == "allowances":
+                evidence.whole_window_drift_allowances = allowances.allowances
     return LoadedAnalysisInputs(
         manifest=manifest,
         manifest_sha256=manifest_sha,
@@ -2336,6 +2385,8 @@ def deterministic_bounds(
         # carries one half and the named contrast total equals the allowance
         # exactly rather than silently doubling it.
         result[NEG8_WHOLE_WINDOW_ALLOWANCE_TERM] = float(allowance_j) / 2.0
+    elif evidence.whole_window_drift_allowance_required:
+        reasons.append("whole_window_drift_allowance_unrecorded")
     return result, tuple(ordered_reason_codes(reasons))
 
 

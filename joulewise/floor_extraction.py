@@ -56,10 +56,12 @@ def _default_strict_validator(path: Path, strict: bool) -> Sequence[str]:
     return validate_bundle(path, strict=strict)
 
 from joulewise.analysis_engine.inputs import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
     BundleEvidence,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     _sha256_file,
     _summary_reducer_version,
+    anchor_fallback_member_unusable,
     anchor_shift_envelope,
     campaign_cooldown_evidence,
     deterministic_bounds,
@@ -112,7 +114,6 @@ EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
 # path exists on paper (docs/phase_2/detection_floor.md) but has no governed
 # bound source yet; naming it fails closed rather than improvising one.
 CAP_HIT_POLICY_EXCLUDE_SAME_SLOT = "exclude_same_slot"
-ANCHOR_FALLBACK_MEMBER_REFUSAL = "anchor_fallback_member_unusable"
 
 READER_THROUGHPUT_FIELD = "inter_token_throughput_tokens_s"
 LEGACY_THROUGHPUT_FIELD = "throughput_tokens_s"
@@ -157,6 +158,7 @@ CELL_REFUSAL_CODES = (
     "whole_window_verdict_conflict",
     "calibration_bracket_exceeds_minted_bound",
     "admissible_set_uncertainty_dominates_point_floor",
+    "whole_window_drift_allowance_unrecorded",
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
@@ -369,54 +371,6 @@ def _read_summary(
     if not isinstance(parsed, Mapping):
         return None, digest, "summary_unreadable"
     return parsed, digest, None
-
-
-def _nested_contains(value: object, target: str) -> bool:
-    if value == target:
-        return True
-    if isinstance(value, Mapping):
-        return any(_nested_contains(child, target) for child in value.values())
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return any(_nested_contains(child, target) for child in value)
-    return False
-
-
-def anchor_fallback_member_unusable(
-    summary: Mapping[str, Any] | None,
-    metadata: Mapping[str, Any] | None,
-) -> bool:
-    """Whether a production member lacks admissible anchor-width evidence.
-
-    Mock telemetry is exempt so fixture-only extraction remains useful without
-    being mistaken for production evidence.  Every real member must carry a
-    bounded uncertainty result and must not carry the unresolved-anchor reason
-    or any trace fallback method.
-    """
-
-    if not isinstance(summary, Mapping):
-        return False
-    quality = summary.get("measurement_quality")
-    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
-        return False
-    if summary.get("energy_uncertainty_status") != "bounded":
-        return True
-    if _nested_contains(
-        summary.get("window_evidence_precheck", summary.get("claim_eligibility")),
-        "clock_anchor_unresolved",
-    ):
-        return True
-    anchor = None
-    if isinstance(metadata, Mapping):
-        uncertainty = metadata.get("uncertainty_evidence")
-        if isinstance(uncertainty, Mapping):
-            anchor = uncertainty.get("clock_anchor")
-    return bool(
-        isinstance(anchor, Mapping)
-        and (
-            anchor.get("status") == "unresolved"
-            or isinstance(anchor.get("trace_fallback_method"), str)
-        )
-    )
 
 
 def _finite(value: object) -> float | None:
@@ -1124,9 +1078,15 @@ def extract_cells(
     whole_window_refusals = _whole_window_extraction_refusals(
         runs_root, referenced_bundle_ids
     )
-    whole_window_allowances = (
+    whole_window_allowance_result = (
         whole_window_drift_allowances(runs_root, referenced_bundle_ids)
         if not whole_window_refusals
+        else None
+    )
+    whole_window_allowances = (
+        whole_window_allowance_result.allowances
+        if whole_window_allowance_result is not None
+        and whole_window_allowance_result.status == "allowances"
         else None
     )
     if whole_window_refusals:
@@ -1135,6 +1095,25 @@ def extract_cells(
                 report,
                 refusal_reasons=tuple(
                     sorted(set(report.refusal_reasons) | set(whole_window_refusals))
+                ),
+                floor=None,
+                n_admitted=0,
+                anchor_shift_bound_max_j=None,
+            )
+            for report in reports
+        ]
+    elif (
+        whole_window_allowance_result is not None
+        and whole_window_allowance_result.status == "absent"
+    ):
+        reports = [
+            replace(
+                report,
+                refusal_reasons=tuple(
+                    sorted(
+                        set(report.refusal_reasons)
+                        | {"whole_window_drift_allowance_unrecorded"}
+                    )
                 ),
                 floor=None,
                 n_admitted=0,

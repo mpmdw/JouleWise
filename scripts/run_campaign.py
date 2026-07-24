@@ -3674,6 +3674,12 @@ def _whole_window_member(
         problems = validate_bundle(bundle_path, strict=True)
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+    collection_flags: set[str] = set()
+    if (
+        source.role in FLOOR_MEMBER_ROLES
+        and anchor_fallback_member_unusable(summary, metadata)
+    ):
+        collection_flags.add(ANCHOR_FALLBACK_MEMBER_REFUSAL)
     config_name = source.config_name or "<whole-window-existing-bundle>"
     run_id = source.run_id or bundle_path.name
     return MemberEvaluation(
@@ -3683,6 +3689,7 @@ def _whole_window_member(
         status=status if isinstance(status, str) else None,
         strict_valid=not problems,
         validation_problems=tuple(problems),
+        collection_integrity_flags=tuple(sorted(collection_flags)),
         waiver=matching_waiver(
             waivers,
             bundle_id=bundle_path.name,

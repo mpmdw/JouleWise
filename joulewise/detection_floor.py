@@ -526,8 +526,20 @@ def _add_whole_window_drift_allowance(
     ):
         raise ValueError("whole-window drift allowance must be finite and > 0")
     allowance = float(allowance)
+    basis_sha256 = whole_window_drift_allowance.get(
+        "whole_window_evaluation_basis_sha256"
+    )
+    if not (
+        isinstance(basis_sha256, str)
+        and len(basis_sha256) == 64
+        and all(character in "0123456789abcdef" for character in basis_sha256)
+    ):
+        raise ValueError(
+            "whole-window drift allowance requires an authenticated evaluation basis"
+        )
     return {
         **record,
+        "whole_window_evaluation_basis_sha256": basis_sha256,
         "whole_window_drift_allowance": dict(whole_window_drift_allowance),
         "drift_widened_unguarded_floor_j": base_unguarded_j + allowance,
         "drift_widened_guarded_floor_j": (
@@ -888,6 +900,7 @@ _DRIFT_WIDENED_FLOOR_KEYS = {
     "drift_widened_unguarded_floor_j",
     "drift_widened_guarded_floor_j",
 }
+_WHOLE_WINDOW_BASIS_KEYS = {"whole_window_evaluation_basis_sha256"}
 _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS = {
     "claim_family",
     "allowance_j",
@@ -1147,6 +1160,20 @@ def _validate_estimate_math(
                         f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
                     )
     present_drift_keys = set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+    basis_present = "whole_window_evaluation_basis_sha256" in record
+    basis_sha256 = record.get("whole_window_evaluation_basis_sha256")
+    if basis_present and not _is_hex(basis_sha256):
+        errors.append(
+            f"{where}.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+        )
+    if basis_present and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
+        errors.append(
+            f"{where}: whole-window basis requires the complete drift-widened field group"
+        )
+    if present_drift_keys and not basis_present:
+        errors.append(
+            f"{where}: whole-window drift-widened fields require an evaluation basis"
+        )
     if present_drift_keys and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
         errors.append(
             f"{where}: whole-window drift-widened fields must be present together"
@@ -1186,6 +1213,12 @@ def _validate_estimate_math(
             ):
                 errors.append(
                     f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+                )
+            elif allowance_record[
+                "whole_window_evaluation_basis_sha256"
+            ] != basis_sha256:
+                errors.append(
+                    f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: does not match record basis"
                 )
             provenance = allowance_record["provenance"]
             if _check_keys(
@@ -1290,7 +1323,9 @@ def _validate_absolute(record, where, errors) -> None:
     if not _check_keys_with_optional(
         record,
         _ABS_KEYS,
-        _WIDENED_FLOOR_KEYS | _DRIFT_WIDENED_FLOOR_KEYS,
+        _WIDENED_FLOOR_KEYS
+        | _DRIFT_WIDENED_FLOOR_KEYS
+        | _WHOLE_WINDOW_BASIS_KEYS,
         where,
         errors,
     ):
@@ -1363,7 +1398,9 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
-        _WIDENED_FLOOR_KEYS | _DRIFT_WIDENED_FLOOR_KEYS,
+        _WIDENED_FLOOR_KEYS
+        | _DRIFT_WIDENED_FLOOR_KEYS
+        | _WHOLE_WINDOW_BASIS_KEYS,
         where,
         errors,
     ):

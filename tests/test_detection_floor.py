@@ -38,8 +38,12 @@ from joulewise.detection_floor import (
 from joulewise.floor_extraction import (
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     CELL_REFUSAL_CODES,
+    CellReport,
+    EXTRACTION_SPEC_SCHEMA_VERSION,
     extract_absolute_cell,
+    extract_cells,
 )
+from joulewise.whole_window import WholeWindowDriftAllowanceResult
 
 TOL = 1e-12
 HEX_A = "a" * 64
@@ -1030,6 +1034,92 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assert_invalid(
             mismatched_family,
             "claim_family does not match metric",
+        )
+
+        omitted = json.loads(json.dumps(artifact))
+        omitted_cell = omitted["cells"][0]
+        for record_name in ("absolute", "comparative"):
+            for field in (
+                "whole_window_drift_allowance",
+                "drift_widened_unguarded_floor_j",
+                "drift_widened_guarded_floor_j",
+            ):
+                omitted_cell[record_name].pop(field)
+        omitted_cell["floor_abs_j"] = omitted_cell["absolute"][
+            "corner_widened_guarded_floor_j"
+        ]
+        omitted_cell["floor_cmp_j"] = omitted_cell["comparative"][
+            "corner_widened_guarded_floor_j"
+        ]
+        omitted_cell["floor_gate_j"] = max(
+            omitted_cell["floor_abs_j"], omitted_cell["floor_cmp_j"]
+        )
+        group = omitted["transport_groups"][0]
+        group["composed_floor_abs_j"] = omitted_cell["floor_abs_j"]
+        group["composed_floor_cmp_j"] = omitted_cell["floor_cmp_j"]
+        group["composed_floor_gate_j"] = omitted_cell["floor_gate_j"]
+        self.assert_invalid(
+            omitted,
+            "whole-window basis requires the complete drift-widened field group",
+        )
+
+    def test_basis_passing_extraction_refuses_absent_allowances(self):
+        floor = absolute_false_effect_floor([1.0, 1.1])
+        report = CellReport(
+            cell_id="basis-cell",
+            kind="absolute",
+            metric="gross_energy_j",
+            window_class="request",
+            cap_hit_policy="exclude_same_slot",
+            members=(),
+            excluded_slots=(),
+            n_planned=2,
+            n_admitted=2,
+            refusal_reasons=(),
+            floor=floor,
+            anchor_shift_bound_max_j=0.01,
+        )
+        spec = {
+            "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+            "cells": [
+                {
+                    "cell_id": "basis-cell",
+                    "kind": "absolute",
+                    "metric": "gross_energy_j",
+                    "window_class": "request",
+                    "members": [{"slot": "A", "bundle_id": "A"}],
+                }
+            ],
+        }
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(
+                "joulewise.floor_extraction.campaign_cooldown_evidence",
+                return_value={},
+            ),
+            patch(
+                "joulewise.floor_extraction.extract_absolute_cell",
+                return_value=report,
+            ),
+            patch(
+                "joulewise.floor_extraction._whole_window_extraction_refusals",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.floor_extraction.whole_window_drift_allowances",
+                return_value=WholeWindowDriftAllowanceResult("absent", {}),
+            ),
+        ):
+            extracted = extract_cells(Path(tmp), spec)
+        self.assertFalse(extracted["all_cells_extractable"])
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            extracted["cells"][0]["refusal_reasons"],
+        )
+        self.assertIsNone(extracted["cells"][0]["floor"])
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            CELL_REFUSAL_CODES,
         )
 
 
