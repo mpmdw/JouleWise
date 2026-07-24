@@ -79,7 +79,6 @@ from joulewise.idle_admission import (  # noqa: E402
     IdleAdmissionExtension,
     evaluate_adapter_wattage_continuity,
     evaluate_cpu_idle_admission,
-    evaluate_neg8_bracket,
     extract_adapter_observation,
     neg8_bracket_not_evaluated,
 )
@@ -110,12 +109,17 @@ from joulewise.output_identity import (  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     OCCURRENCE_SUPERSESSION_SCHEMA,
     build_evaluation_basis,
+    build_neg8_drift_bound_artifact,
     build_row_provenance,
+    evaluate_neg8_point_drift,
+    load_neg8_drift_bound_artifact,
+    mint_neg8_drift_bound_artifact,
     ordinary_present_bundle_paths,
     source_manifest_descriptors,
     supersession_entry_sha256,
     validated_attempt_selection,
     validate_occurrence_supersession_entry,
+    validate_neg8_drift_bound_artifact,
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
@@ -552,6 +556,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--neg8-drift-bound",
+        help=(
+            "Hash-sealed governed NEG-8 point-drift bound artifact consumed by "
+            "whole-window verdict evaluation"
+        ),
+    )
+    parser.add_argument(
+        "--derive-neg8-drift-bound",
+        metavar="CORPUS_JSON",
+        help=(
+            "Mint a governed NEG-8 point-drift bound from a settled n>=10 "
+            "same-condition reference corpus manifest"
+        ),
+    )
+    parser.add_argument(
+        "--neg8-drift-bound-output",
+        metavar="ARTIFACT_JSON",
+        help="Immutable output path for --derive-neg8-drift-bound",
+    )
+    parser.add_argument(
         "--record-supersession",
         metavar="BUNDLE_ID",
         help="Append an explicit ordinary-run occurrence supersession artifact",
@@ -575,21 +599,39 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         int(args.check_prompt_hashes is not None)
         + int(args.whole_window_verdict)
         + int(args.record_supersession is not None)
+        + int(args.derive_neg8_drift_bound is not None)
     )
     if args.config_dir is None and alternate_modes == 0:
         parser.error(
             "config_dir is required unless --check-prompt-hashes or "
-            "--whole-window-verdict or --record-supersession is used"
+            "--whole-window-verdict, --derive-neg8-drift-bound, or "
+            "--record-supersession is used"
         )
     if args.config_dir is not None and alternate_modes:
         parser.error(
             "config_dir cannot be combined with --check-prompt-hashes, "
-            "--whole-window-verdict, or --record-supersession"
+            "--whole-window-verdict, --derive-neg8-drift-bound, or "
+            "--record-supersession"
         )
     if alternate_modes > 1:
         parser.error(
-            "--check-prompt-hashes, --whole-window-verdict, and "
-            "--record-supersession are mutually exclusive"
+            "--check-prompt-hashes, --whole-window-verdict, "
+            "--derive-neg8-drift-bound, and --record-supersession are "
+            "mutually exclusive"
+        )
+    if args.derive_neg8_drift_bound is not None:
+        if args.neg8_drift_bound_output is None:
+            parser.error(
+                "--derive-neg8-drift-bound requires --neg8-drift-bound-output"
+            )
+        if args.neg8_drift_bound is not None:
+            parser.error(
+                "--neg8-drift-bound cannot be combined with "
+                "--derive-neg8-drift-bound"
+            )
+    elif args.neg8_drift_bound_output is not None:
+        parser.error(
+            "--neg8-drift-bound-output requires --derive-neg8-drift-bound"
         )
     if args.record_supersession is not None:
         if not args.quarantine_path or not args.reason:
@@ -3296,6 +3338,24 @@ def _gross_energy_for(evaluation: MemberEvaluation) -> dict[str, float] | None:
     return {"point_j": point, "lower_j": lower, "upper_j": upper}
 
 
+def _idle_subtracted_energy_for(evaluation: MemberEvaluation) -> float | None:
+    """Return the idle-subtracted point companion without making it a gate."""
+
+    summary = evaluation.summary
+    value = (
+        summary.get("idle_subtracted_energy_j")
+        if isinstance(summary, dict)
+        else None
+    )
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+    ):
+        return None
+    return float(value)
+
+
 def _neg8_reference_scientific_config_sha256(
     evaluation: MemberEvaluation,
 ) -> str | None:
@@ -3328,6 +3388,7 @@ def idle_admission_core_verdict(
     *,
     whole_window: bool = False,
     runs_root: Path | None = None,
+    neg8_drift_bound: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
 
@@ -3361,8 +3422,12 @@ def idle_admission_core_verdict(
     }
     conditions: set[str] = set()
     adapter_observations: list[dict[str, Any]] = []
-    neg8_starts: list[tuple[dict[str, float] | None, str | None]] = []
-    neg8_ends: list[tuple[dict[str, float] | None, str | None]] = []
+    neg8_starts: list[
+        tuple[dict[str, float] | None, float | None, str | None]
+    ] = []
+    neg8_ends: list[
+        tuple[dict[str, float] | None, float | None, str | None]
+    ] = []
     for evaluation in evaluations:
         current_environment_reasons = _current_member_environment_refusals(evaluation)
         conditions.update(current_environment_reasons)
@@ -3410,6 +3475,7 @@ def idle_admission_core_verdict(
             neg8_starts.append(
                 (
                     _gross_energy_for(evaluation),
+                    _idle_subtracted_energy_for(evaluation),
                     _neg8_reference_scientific_config_sha256(evaluation),
                 )
             )
@@ -3417,6 +3483,7 @@ def idle_admission_core_verdict(
             neg8_ends.append(
                 (
                     _gross_energy_for(evaluation),
+                    _idle_subtracted_energy_for(evaluation),
                     _neg8_reference_scientific_config_sha256(evaluation),
                 )
             )
@@ -3437,8 +3504,14 @@ def idle_admission_core_verdict(
         conditions.add("neg8_bracket_ambiguous_reference")
     neg8_start = neg8_starts[0][0] if len(neg8_starts) == 1 else None
     neg8_end = neg8_ends[0][0] if len(neg8_ends) == 1 else None
-    start_identity = neg8_starts[0][1] if len(neg8_starts) == 1 else None
-    end_identity = neg8_ends[0][1] if len(neg8_ends) == 1 else None
+    start_idle_subtracted = (
+        neg8_starts[0][1] if len(neg8_starts) == 1 else None
+    )
+    end_idle_subtracted = (
+        neg8_ends[0][1] if len(neg8_ends) == 1 else None
+    )
+    start_identity = neg8_starts[0][2] if len(neg8_starts) == 1 else None
+    end_identity = neg8_ends[0][2] if len(neg8_ends) == 1 else None
     identity_invalid = bool(
         len(neg8_starts) == 1
         and len(neg8_ends) == 1
@@ -3451,10 +3524,13 @@ def idle_admission_core_verdict(
     if identity_invalid:
         conditions.add("neg8_bracket_reference_invalid")
     if whole_window or (neg8_starts and neg8_ends):
-        bracket = evaluate_neg8_bracket(
+        bracket = evaluate_neg8_point_drift(
             {} if identity_invalid else neg8_start,
             {} if identity_invalid else neg8_end,
             extension.neg8_bracket,
+            neg8_drift_bound,
+            start_idle_subtracted_j=start_idle_subtracted,
+            end_idle_subtracted_j=end_idle_subtracted,
         )
     else:
         bracket = neg8_bracket_not_evaluated(
@@ -3996,6 +4072,33 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_derive_neg8_drift_bound(args: argparse.Namespace) -> int:
+    """Mint one immutable, hash-sealed NEG-8 point-drift bound artifact."""
+
+    artifact = mint_neg8_drift_bound_artifact(
+        Path(args.runs_dir), Path(args.derive_neg8_drift_bound)
+    )
+    output = Path(args.neg8_drift_bound_output)
+    raw = (
+        json.dumps(
+            artifact,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    _write_immutable_bytes(output, raw)
+    print(
+        "NEG-8 DRIFT BOUND: "
+        f"{artifact['bound_j']:.12g} J "
+        f"derivation_sha256={artifact['derivation_sha256']} "
+        f"output={output}"
+    )
+    return 0
+
+
 def run_whole_window_verdict(args: argparse.Namespace) -> int:
     """Emit the prospective NEG-8 verdict across a completed runs root."""
 
@@ -4006,6 +4109,9 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
     policy_binding = load_campaign_policy(args.campaign_policy)
+    neg8_drift_bound = load_neg8_drift_bound_artifact(
+        getattr(args, "neg8_drift_bound", None)
+    )
     waivers = load_waivers(args.waivers)
     (
         bundle_sources,
@@ -4024,7 +4130,11 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     waived = [evaluation for evaluation in evaluations if evaluation.waived]
     excluded = [evaluation for evaluation in evaluations if evaluation.failed]
     core = idle_admission_core_verdict(
-        included, policy_binding, whole_window=True, runs_root=runs_dir
+        included,
+        policy_binding,
+        whole_window=True,
+        runs_root=runs_dir,
+        neg8_drift_bound=neg8_drift_bound,
     )
     core_conditions = set(core.get("conditions", []))
     core_conditions.update(selection_conditions)
@@ -4820,6 +4930,9 @@ def run_axi_spec_campaign(
     if not state.valid:
         print("error: AXI analysis manifest is invalid: " + "; ".join(state.problems), file=sys.stderr)
         return 2
+    neg8_drift_bound = load_neg8_drift_bound_artifact(
+        getattr(args, "neg8_drift_bound", None)
+    )
     manifest = state.raw
     manifest_id = manifest["manifest_id"]
     entries = sorted(manifest["entries"], key=lambda row: row["order_index"])
@@ -5490,6 +5603,7 @@ def run_axi_spec_campaign(
                 policy_binding,
                 whole_window=True,
                 runs_root=runs_dir,
+                neg8_drift_bound=neg8_drift_bound,
             )
             extension = policy_binding.idle_admission_extension
             core_reasons = _idle_admission_claim_barrier_reasons(core)
@@ -5597,6 +5711,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     _require_external_campaign_log(log_path)
 
     policy_binding = load_campaign_policy(args.campaign_policy)
+    neg8_drift_bound = load_neg8_drift_bound_artifact(
+        getattr(args, "neg8_drift_bound", None)
+    )
 
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
@@ -6305,7 +6422,10 @@ def run_campaign(args: argparse.Namespace) -> int:
     collection_verdict, collection_reasons = collection_verdict_for(categories)
     sampling_audit = sampling_audit_for(analysis_manifest)
     idle_admission_core = idle_admission_core_verdict(
-        all_evaluations, policy_binding, runs_root=runs_dir
+        all_evaluations,
+        policy_binding,
+        runs_root=runs_dir,
+        neg8_drift_bound=neg8_drift_bound,
     )
     extension = policy_binding.idle_admission_extension
     claim_bearing = bool(
@@ -6373,6 +6493,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_prompt_hash_check(args)
         if args.record_supersession is not None:
             return run_record_supersession(args)
+        if args.derive_neg8_drift_bound is not None:
+            return run_derive_neg8_drift_bound(args)
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)

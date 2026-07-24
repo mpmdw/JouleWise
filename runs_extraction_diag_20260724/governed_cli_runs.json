@@ -1,0 +1,44 @@
+[
+  {
+    "command": [
+      "/Users/edr/code/JouleWise/.venv/bin/python",
+      "/private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/scripts/extract_detection_floors.py",
+      "--help"
+    ],
+    "cwd": "/private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection",
+    "exit_code": 0,
+    "interpretation": "CLI entry exercised successfully. Corpus extraction below uses the same extract_cells implementation with an explicitly diagnostic summary-only strict-validator stub.",
+    "name": "governed_cli_entry_smoke",
+    "stderr": "",
+    "stdout": "usage: extract_detection_floors.py [-h] --runs-root RUNS_ROOT --spec SPEC\n                                   --out OUT [--manifest-id MANIFEST_ID]\n                                   [--hash-bundles]\n\nFail-closed detection-floor extraction CLI (2026-07-19 audit T0.4/T0.6). Runs\n:mod:`joulewise.floor_extraction` over one runs root and one extraction spec,\nwriting a ``joulewise.detection_floor_extraction.v1`` report. Exit codes: *\n``0`` \u2014 every cell extracted under all governed gates; * ``1`` \u2014 the report\nwas written but at least one cell refused (fail-closed evidence refusals are\nrecorded per member/cell, never silently dropped); * ``2`` \u2014 process-input\nerror (bad spec, bad paths); no report is written. Per D-078, corpora recorded\nbefore the trace-time-anchor fix refuse mechanically (their wires cannot carry\nanchor-shift envelopes); this tool never publishes a claim-bearing floor from\nthem.\n\noptions:\n  -h, --help            show this help message and exit\n  --runs-root RUNS_ROOT\n                        corpus root containing the member bundles and\n                        campaign_manifests/\n  --spec SPEC           joulewise.detection_floor_extraction_spec.v1 JSON\n                        document\n  --out OUT             path for the extraction report JSON\n  --manifest-id MANIFEST_ID\n                        analysis manifest id the campaign manifests are bound\n                        to; omit for calibration campaigns recorded with\n                        analysis_manifest_id null\n  --hash-bundles        record complete-bundle and config sha256 pins per\n                        member\n",
+    "tmpdir": "/private/tmp/joulewise-extraction-diag.49kJRm",
+    "tool_mode": "cli_entry_smoke"
+  },
+  {
+    "command": "/Users/edr/code/JouleWise/.venv/bin/python /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/scripts/extract_detection_floors.py --runs-root /Users/edr/code/JouleWise/runs_window_a5_20260723 --spec /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/runs_extraction_diag_20260724/specs/a5_complete_supported_cells.json --out <fresh-output-path>",
+    "cwd": "/private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection",
+    "exit_code": null,
+    "interpretation": "Prepared but intentionally not run to completion: the claim-bearing CLI revalidates ~127 MB raw telemetry per bundle/metric and rederives the already-failed whole-window verdict. This diagnostic extraction instead uses the current D-054 and exact-corner primitives directly.",
+    "name": "a5_complete_supported_cells",
+    "tmpdir": "/private/tmp/joulewise-extraction-diag.49kJRm",
+    "tool_mode": "prepared_replay_spec_not_run"
+  },
+  {
+    "command": "/Users/edr/code/JouleWise/.venv/bin/python /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/scripts/extract_detection_floors.py --runs-root /Users/edr/code/JouleWise/runs_window_a7_20260723 --spec /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/runs_extraction_diag_20260724/specs/a7_complete_supported_cells.json --out <fresh-output-path>",
+    "cwd": "/private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection",
+    "exit_code": null,
+    "interpretation": "Prepared but intentionally not run to completion: the claim-bearing CLI revalidates ~127 MB raw telemetry per bundle/metric and rederives the already-failed whole-window verdict. This diagnostic extraction instead uses the current D-054 and exact-corner primitives directly.",
+    "name": "a7_complete_supported_cells",
+    "tmpdir": "/private/tmp/joulewise-extraction-diag.49kJRm",
+    "tool_mode": "prepared_replay_spec_not_run"
+  },
+  {
+    "command": "/Users/edr/code/JouleWise/.venv/bin/python /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/scripts/extract_detection_floors.py --runs-root /Users/edr/code/JouleWise/runs_window_a8_20260723 --spec /private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection/runs_extraction_diag_20260724/specs/a8_complete_supported_cells.json --out <fresh-output-path>",
+    "cwd": "/private/tmp/claude-501/-Users-edr-code-JouleWise/d714f367-e960-41d5-8ead-04144554e8c1/scratchpad/fix-collection",
+    "exit_code": null,
+    "interpretation": "Prepared but intentionally not run to completion: the claim-bearing CLI revalidates ~127 MB raw telemetry per bundle/metric and rederives the already-failed whole-window verdict. This diagnostic extraction instead uses the current D-054 and exact-corner primitives directly.",
+    "name": "a8_complete_supported_cells",
+    "tmpdir": "/private/tmp/joulewise-extraction-diag.49kJRm",
+    "tool_mode": "prepared_replay_spec_not_run"
+  }
+]

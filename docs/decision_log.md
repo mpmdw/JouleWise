@@ -4470,3 +4470,24 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    drift gate at 0.778 J — the instrument correctly refusing a stale
    bracket); their corpora stand as instrument-proving evidence. The next
    clean bracketed window is the first claim attempt.
+
+10. **NEG-8 drift-gate estimand ruling (2026-07-24; lead-ruled, Ed
+   ratification pending).** The whole-window drift adjudication proved the
+   gate as previously implemented compared the two reference cells'
+   admissible envelopes at opposite corners (~0.9-1.5 J stacked) against
+   an underived 0.05 J constant — structurally unpassable even for a
+   physically perfect window (a8 measured point drift 0.006718 J over
+   2.96 h on ~38.5 J references). Ruling: the gate estimand is POINT
+   DRIFT abs(end_point_gross − start_point_gross); the idle-subtracted
+   point drift and the opposite-corner envelope statistic are recorded
+   diagnostics, never gating (envelope stacking double-counts instrument
+   uncertainty already composed into floor envelopes). The bound is
+   DERIVED: a hash-sealed `joulewise.neg8_drift_bound.v1` artifact minted
+   by governed CLI from a named settled-reference corpus (n>=10,
+   predeclared estimator `d054_point_contrast_guard_v1` =
+   max(sample_range_j, t_{0.975,n-1}·s·sqrt(2))), consumed with full
+   provenance in the verdict output. Registry addition:
+   `neg8_drift_bound_underived` (fail-closed refusal whenever no valid
+   governed bound artifact exists). Windows a6/a8 may be re-verdicted
+   under the derived bound (with explicit waivers for aborted-member
+   fragments); a5 and a7 remain refused on their genuine grounds.

@@ -4,7 +4,6 @@ import importlib.util
 import hashlib
 import io
 import json
-import math
 import os
 import shutil
 import shlex
@@ -5011,6 +5010,37 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             str(self._write_extended_sidecar(profile))
         )
 
+    def _drift_bound(self, points: list[float] | None = None) -> dict:
+        values = (
+            points
+            if points is not None
+            else [8.0 + 0.01 * index for index in range(10)]
+        )
+        return run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id="settled-neg8-test-corpus",
+            condition_id="df-rq-mid",
+            manifest_sha256="a" * 64,
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": f"reference-{index:02d}",
+                    "point_gross_j": point,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        f"reference-{index:02d}".encode()
+                    ).hexdigest(),
+                }
+                for index, point in enumerate(values)
+            ],
+        )
+
+    def _write_drift_bound(self, points: list[float] | None = None) -> Path:
+        path = self.root / "neg8-drift-bound.json"
+        path.write_text(
+            json.dumps(self._drift_bound(points), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return path
+
     def _member(
         self,
         bundle_id: str,
@@ -5019,6 +5049,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         adapter_watts=140,
         adapter_description="140W USB-C Power Adapter",
         gross_energy_j: float | None = None,
+        gross_half_width_j: float = 0.0,
+        idle_subtracted_energy_j: float | None = None,
         admission_decision: str | None = "admitted",
         scientific_sampling_hz: float = 10.0,
         neg8_position: str | None = None,
@@ -5105,11 +5137,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         if gross_energy_j is not None:
             summary = {
                 "gross_energy_j": gross_energy_j,
+                "idle_subtracted_energy_j": idle_subtracted_energy_j,
                 "energy_anchor_shift_envelopes": {
                     "/gross_energy_j": {
                         "point_j": gross_energy_j,
-                        "lower_j": gross_energy_j,
-                        "upper_j": gross_energy_j,
+                        "lower_j": gross_energy_j - gross_half_width_j,
+                        "upper_j": gross_energy_j + gross_half_width_j,
                     }
                 },
             }
@@ -5168,6 +5201,52 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             rebound.to_metadata()["idle_admission_extension"]["sha256"],
         )
 
+    def test_governed_neg8_bound_derivation_cli_writes_sealed_artifact(self) -> None:
+        artifact = self._drift_bound()
+        corpus = self.root / "settled-corpus.json"
+        corpus.write_text("{}\n", encoding="utf-8")
+        output = self.root / "derived-bound.json"
+        args = run_campaign_module.parse_args(
+            [
+                "--derive-neg8-drift-bound",
+                str(corpus),
+                "--neg8-drift-bound-output",
+                str(output),
+                "--runs-dir",
+                str(self.root),
+            ]
+        )
+        with (
+            patch.object(
+                run_campaign_module,
+                "mint_neg8_drift_bound_artifact",
+                return_value=artifact,
+            ) as mint,
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(
+                run_campaign_module.run_derive_neg8_drift_bound(args), 0
+            )
+        mint.assert_called_once_with(self.root, corpus)
+        emitted = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(emitted, artifact)
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(emitted)
+        )
+
+    def test_neg8_bound_builder_requires_ten_members_and_detects_tampering(
+        self,
+    ) -> None:
+        artifact = self._drift_bound()
+        self.assertGreaterEqual(artifact["estimator"]["n"], 10)
+        tampered = json.loads(json.dumps(artifact))
+        tampered["bound_j"] += 1.0
+        self.assertFalse(
+            run_campaign_module.validate_neg8_drift_bound_artifact(tampered)
+        )
+        with self.assertRaisesRegex(ValueError, "n >= 10"):
+            self._drift_bound([8.0 + index * 0.01 for index in range(9)])
+
     def test_extension_version_and_profile_constraints_fail_closed(self) -> None:
         from joulewise.schemas import SchemaError
 
@@ -5213,6 +5292,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
 
     def test_clean_members_pass_with_stable_wattage_and_neg8_bracket(self) -> None:
         binding = self._binding()
+        drift_bound = self._drift_bound()
         evaluations = [
             self._member(
                 "p2-neg8-reference-start__r1",
@@ -5224,12 +5304,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             self._member(
                 "p2-neg8-reference-end__r1",
                 records=_clean_idle_records(),
-                gross_energy_j=8.5,
+                gross_energy_j=8.04,
                 neg8_position="end",
             ),
         ]
         section = run_campaign_module.idle_admission_core_verdict(
-            evaluations, binding
+            evaluations, binding, neg8_drift_bound=drift_bound
         )
         self.assertEqual(section["conditions"], [])
         self.assertTrue(
@@ -5239,10 +5319,89 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             section["adapter_wattage_continuity"]["decision"], "stable"
         )
         self.assertEqual(section["neg8_bracket"]["decision"], "passed")
-        self.assertEqual(section["neg8_bracket"]["abs_delta_j"], 0.5)
+        self.assertAlmostEqual(section["neg8_bracket"]["abs_delta_j"], 0.04)
+        self.assertEqual(
+            section["neg8_bracket"]["drift_bound_artifact"][
+                "derivation_sha256"
+            ],
+            drift_bound["derivation_sha256"],
+        )
         self.assertIsNotNone(
             section["neg8_reference_scientific_config_sha256"]
         )
+
+    def test_point_drift_gates_while_corner_and_idle_sub_are_diagnostics(self) -> None:
+        binding = self._binding()
+        drift_bound = self._drift_bound()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    gross_half_width_j=0.75,
+                    idle_subtracted_energy_j=7.8,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.04,
+                    gross_half_width_j=0.75,
+                    idle_subtracted_energy_j=7.87,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+            neg8_drift_bound=drift_bound,
+        )
+        bracket = section["neg8_bracket"]
+        self.assertEqual(bracket["decision"], "passed")
+        self.assertGreater(
+            bracket["corner_abs_delta_j"], drift_bound["bound_j"]
+        )
+        self.assertEqual(
+            bracket["corner_statistic_role"], "diagnostic_not_gating"
+        )
+        self.assertAlmostEqual(
+            bracket["idle_subtracted_companion"]["abs_delta_j"], 0.07
+        )
+        self.assertEqual(
+            bracket["drift_bound_artifact"]["reference_corpus"]["member_ids"],
+            [f"reference-{index:02d}" for index in range(10)],
+        )
+        self.assertEqual(
+            bracket["drift_bound_artifact"]["estimator"]["id"],
+            "d054_point_contrast_guard_v1",
+        )
+        self.assertEqual(
+            bracket["drift_bound_artifact"]["derivation_sha256"],
+            drift_bound["derivation_sha256"],
+        )
+
+    def test_whole_window_refuses_distinct_underived_bound_condition(self) -> None:
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="start",
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                    neg8_position="end",
+                ),
+            ],
+            binding,
+            whole_window=True,
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_drift_bound_underived", section["conditions"])
 
     def test_neg8_substring_without_declared_role_confers_no_reference(self) -> None:
         # R5 defect shape: these IDs formerly conferred both reference roles.
@@ -5419,6 +5578,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
 
     def test_neg8_bracket_edge_cases_in_verdict(self) -> None:
         binding = self._binding()
+        drift_bound = self._drift_bound()
 
         def section_for(end_gross: float | None) -> dict:
             evaluations = [
@@ -5439,13 +5599,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     )
                 )
             return run_campaign_module.idle_admission_core_verdict(
-                evaluations, binding
+                evaluations, binding, neg8_drift_bound=drift_bound
             )
 
-        exactly_on = section_for(8.5)
-        self.assertEqual(exactly_on["neg8_bracket"]["decision"], "passed")
-        one_ulp_over = section_for(math.nextafter(8.5, math.inf))
-        self.assertEqual(one_ulp_over["neg8_bracket"]["decision"], "failed")
+        within_bound = section_for(8.0 + drift_bound["bound_j"] / 2.0)
+        self.assertEqual(within_bound["neg8_bracket"]["decision"], "passed")
+        above_bound = section_for(8.0 + drift_bound["bound_j"] * 2.0)
+        self.assertEqual(above_bound["neg8_bracket"]["decision"], "failed")
         # Start-only invocation is a per-segment run, not a whole-window pass:
         # the bracket is not evaluated here (non-drift), never a spurious
         # ``failed``/``missing``.
@@ -5859,11 +6019,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 self._member(
                     "p2-neg8-reference-end__r1",
                     records=_clean_idle_records(),
-                    gross_energy_j=8.5,
+                    gross_energy_j=8.04,
                     neg8_position="end",
                 ),
             ],
             binding,
+            neg8_drift_bound=self._drift_bound(),
         )
         self.assertEqual(whole_window["neg8_bracket"]["decision"], "passed")
         self.assertNotIn(
@@ -5872,6 +6033,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
 
     def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
         binding = self._binding()
+        drift_bound_path = self._write_drift_bound()
         bundle_ids = [
             "p2-neg8-reference-start__r1",
             "p2-neg8-reference-end__r1",
@@ -5903,6 +6065,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 str(self.root),
                 "--campaign-policy",
                 str(binding.path),
+                "--neg8-drift-bound",
+                str(drift_bound_path),
             ]
         )
         with (
@@ -5956,6 +6120,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self,
     ) -> None:
         binding = self._binding()
+        drift_bound_path = self._write_drift_bound()
         _members, work_id, quarantine = self._retry_occurrence_fixture(binding)
         record_args = run_campaign_module.parse_args(
             [
@@ -5982,6 +6147,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 str(self.root),
                 "--campaign-policy",
                 str(binding.path),
+                "--neg8-drift-bound",
+                str(drift_bound_path),
             ]
         )
         with (
@@ -6053,6 +6220,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self,
     ) -> None:
         binding = self._binding()
+        drift_bound_path = self._write_drift_bound()
         manifest_members = []
         for bundle_id, status, gross_energy_j, position in (
             ("p2-neg8-reference-start__r1", "succeeded", 8.0, "start"),
@@ -6097,6 +6265,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 str(binding.path),
                 "--waivers",
                 str(waivers),
+                "--neg8-drift-bound",
+                str(drift_bound_path),
             ]
         )
         with (

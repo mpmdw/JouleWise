@@ -11,10 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import statistics
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from joulewise.aggregate import student_t_critical_95
 from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
     IdleAdmissionExtension,
@@ -47,6 +49,14 @@ OCCURRENCE_SUPERSESSION_SCHEMA = (
     "joulewise.campaign_occurrence_supersession.v1"
 )
 CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
+NEG8_DRIFT_BOUND_SCHEMA = "joulewise.neg8_drift_bound.v1"
+NEG8_REFERENCE_CORPUS_SCHEMA = "joulewise.neg8_reference_corpus.v1"
+NEG8_POINT_DRIFT_ESTIMAND = (
+    "abs(end_point_gross_j-start_point_gross_j)"
+)
+NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
+NEG8_DRIFT_MINIMUM_N = 10
+CONDITION_NEG8_DRIFT_BOUND_UNDERIVED = "neg8_drift_bound_underived"
 
 
 def validate_attempt_ledger(*args: Any, **kwargs: Any) -> Any:
@@ -68,6 +78,334 @@ def canonical_sha256(value: Any) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _sha256_text(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _finite_number(value: Any, *, positive: bool = False) -> float | None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+    ):
+        return None
+    number = float(value)
+    if positive and number <= 0.0:
+        return None
+    return number
+
+
+def build_neg8_drift_bound_artifact(
+    *,
+    corpus_id: str,
+    condition_id: str,
+    manifest_sha256: str,
+    scientific_config_sha256: str,
+    members: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Build the predeclared D-054-style point-contrast guard artifact."""
+
+    if not isinstance(corpus_id, str) or not corpus_id.strip():
+        raise ValueError("NEG-8 reference corpus_id must be non-empty")
+    if not isinstance(condition_id, str) or not condition_id.strip():
+        raise ValueError("NEG-8 reference condition_id must be non-empty")
+    if not _sha256_text(manifest_sha256):
+        raise ValueError("NEG-8 reference manifest_sha256 must be lowercase sha256")
+    if not _sha256_text(scientific_config_sha256):
+        raise ValueError(
+            "NEG-8 reference scientific_config_sha256 must be lowercase sha256"
+        )
+    normalized_members: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for member in members:
+        if not isinstance(member, Mapping) or set(member) != {
+            "bundle_id",
+            "point_gross_j",
+            "bundle_evidence_sha256",
+        }:
+            raise ValueError(
+                "NEG-8 reference members require bundle_id, point_gross_j, "
+                "and bundle_evidence_sha256"
+            )
+        bundle_id = member.get("bundle_id")
+        point = _finite_number(member.get("point_gross_j"), positive=True)
+        evidence_sha = member.get("bundle_evidence_sha256")
+        if (
+            not isinstance(bundle_id, str)
+            or not bundle_id
+            or bundle_id in seen_ids
+            or point is None
+            or not _sha256_text(evidence_sha)
+        ):
+            raise ValueError("NEG-8 reference corpus member is invalid or duplicated")
+        seen_ids.add(bundle_id)
+        normalized_members.append(
+            {
+                "bundle_id": bundle_id,
+                "point_gross_j": point,
+                "bundle_evidence_sha256": evidence_sha,
+            }
+        )
+    n = len(normalized_members)
+    if n < NEG8_DRIFT_MINIMUM_N:
+        raise ValueError(
+            f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
+        )
+    points = [member["point_gross_j"] for member in normalized_members]
+    sample_range = max(points) - min(points)
+    sample_stddev = statistics.stdev(points)
+    t_critical = student_t_critical_95(n - 1)
+    prediction = t_critical * sample_stddev * math.sqrt(2.0)
+    bound = max(sample_range, prediction)
+    payload = {
+        "schema_version": NEG8_DRIFT_BOUND_SCHEMA,
+        "estimand": NEG8_POINT_DRIFT_ESTIMAND,
+        "reference_corpus": {
+            "schema_version": NEG8_REFERENCE_CORPUS_SCHEMA,
+            "corpus_id": corpus_id,
+            "freeze_status": "settled_reference",
+            "condition_id": condition_id,
+            "manifest_sha256": manifest_sha256,
+            "scientific_config_sha256": scientific_config_sha256,
+            "member_ids": [member["bundle_id"] for member in normalized_members],
+            "members": normalized_members,
+        },
+        "estimator": {
+            "id": NEG8_DRIFT_ESTIMATOR_ID,
+            "minimum_n": NEG8_DRIFT_MINIMUM_N,
+            "n": n,
+            "sample_range_j": sample_range,
+            "sample_stddev_j": sample_stddev,
+            "student_t_critical_95": t_critical,
+            "prediction_two_point_j": prediction,
+            "formula": (
+                "max(sample_range_j,"
+                "t_0.975,n-1*sample_stddev_j*sqrt(2))"
+            ),
+        },
+        "bound_j": bound,
+    }
+    return {**payload, "derivation_sha256": canonical_sha256(payload)}
+
+
+def validate_neg8_drift_bound_artifact(value: Any) -> bool:
+    """Validate the seal, corpus provenance, and estimator arithmetic."""
+
+    if not isinstance(value, Mapping) or set(value) != {
+        "schema_version",
+        "estimand",
+        "reference_corpus",
+        "estimator",
+        "bound_j",
+        "derivation_sha256",
+    }:
+        return False
+    corpus = value.get("reference_corpus")
+    estimator = value.get("estimator")
+    if (
+        value.get("schema_version") != NEG8_DRIFT_BOUND_SCHEMA
+        or value.get("estimand") != NEG8_POINT_DRIFT_ESTIMAND
+        or not isinstance(corpus, Mapping)
+        or not isinstance(estimator, Mapping)
+        or set(corpus)
+        != {
+            "schema_version",
+            "corpus_id",
+            "freeze_status",
+            "condition_id",
+            "manifest_sha256",
+            "scientific_config_sha256",
+            "member_ids",
+            "members",
+        }
+        or corpus.get("schema_version") != NEG8_REFERENCE_CORPUS_SCHEMA
+        or corpus.get("freeze_status") != "settled_reference"
+        or set(estimator)
+        != {
+            "id",
+            "minimum_n",
+            "n",
+            "sample_range_j",
+            "sample_stddev_j",
+            "student_t_critical_95",
+            "prediction_two_point_j",
+            "formula",
+        }
+    ):
+        return False
+    members = corpus.get("members")
+    member_ids = corpus.get("member_ids")
+    if not isinstance(members, list) or not isinstance(member_ids, list):
+        return False
+    try:
+        expected = build_neg8_drift_bound_artifact(
+            corpus_id=corpus.get("corpus_id"),
+            condition_id=corpus.get("condition_id"),
+            manifest_sha256=corpus.get("manifest_sha256"),
+            scientific_config_sha256=corpus.get("scientific_config_sha256"),
+            members=members,
+        )
+    except (TypeError, ValueError, statistics.StatisticsError):
+        return False
+    return (
+        member_ids == [member.get("bundle_id") for member in members]
+        and dict(value) == expected
+    )
+
+
+def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | None:
+    """Load a governed derived bound; malformed or absent artifacts are underived."""
+
+    if path is None:
+        return None
+    try:
+        raw = Path(path).read_bytes()
+        from joulewise.determinism_gate import (  # noqa: PLC0415
+            _reject_duplicate_json_pairs,
+        )
+
+        value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return dict(value) if validate_neg8_drift_bound_artifact(value) else None
+
+
+def _admissible_energy_set(value: Any) -> tuple[float, float, float] | None:
+    if not isinstance(value, Mapping):
+        return None
+    fields = (
+        _finite_number(value.get("point_j"), positive=True),
+        _finite_number(value.get("lower_j"), positive=True),
+        _finite_number(value.get("upper_j"), positive=True),
+    )
+    if any(item is None for item in fields):
+        return None
+    point, lower, upper = (float(item) for item in fields)
+    return (point, lower, upper) if lower <= point <= upper else None
+
+
+def evaluate_neg8_point_drift(
+    start_gross_j: Any,
+    end_gross_j: Any,
+    policy: Neg8BracketPolicy,
+    drift_bound_artifact: Any,
+    *,
+    start_idle_subtracted_j: Any = None,
+    end_idle_subtracted_j: Any = None,
+) -> dict[str, Any]:
+    """Gate NEG-8 on point drift and retain envelope corners as diagnostics."""
+
+    conditions: set[str] = set()
+    start_set = _admissible_energy_set(start_gross_j)
+    end_set = _admissible_energy_set(end_gross_j)
+    artifact = (
+        dict(drift_bound_artifact)
+        if validate_neg8_drift_bound_artifact(drift_bound_artifact)
+        else None
+    )
+    if artifact is None:
+        conditions.add(CONDITION_NEG8_DRIFT_BOUND_UNDERIVED)
+    if start_gross_j is None or end_gross_j is None:
+        conditions.add("neg8_bracket_missing")
+    elif start_set is None or end_set is None:
+        conditions.add("neg8_bracket_reference_invalid")
+
+    point_delta: float | None = None
+    point_relative: float | None = None
+    corner_delta: float | None = None
+    corner_relative: float | None = None
+    if start_set is not None and end_set is not None:
+        start_point, start_lower, start_upper = start_set
+        end_point, end_lower, end_upper = end_set
+        point_delta = abs(end_point - start_point)
+        point_relative = point_delta / start_point
+        corners = [
+            (start_edge, end_edge)
+            for start_edge in (start_lower, start_upper)
+            for end_edge in (end_lower, end_upper)
+        ]
+        corner_delta = max(
+            abs(end_edge - start_edge) for start_edge, end_edge in corners
+        )
+        corner_relative = max(
+            abs(end_edge - start_edge) / start_edge
+            for start_edge, end_edge in corners
+        )
+        if artifact is not None and point_delta > artifact["bound_j"]:
+            # Retain the registered v1 failure word while changing the governed
+            # estimand.  The additive estimand field disambiguates new rows.
+            conditions.add("neg8_bracket_abs_delta_exceeded")
+
+    idle_start = _finite_number(start_idle_subtracted_j)
+    idle_end = _finite_number(end_idle_subtracted_j)
+    idle_delta = (
+        abs(idle_end - idle_start)
+        if idle_start is not None and idle_end is not None
+        else None
+    )
+    evidence_failure = conditions & {
+        CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
+        "neg8_bracket_missing",
+        "neg8_bracket_reference_invalid",
+    }
+    if evidence_failure:
+        decision = "failed" if policy.require_bracket else "flagged"
+    elif conditions:
+        decision = "failed"
+    else:
+        decision = "passed"
+    return {
+        "schema_version": NEG8_BRACKET_SCHEMA,
+        "estimand": NEG8_POINT_DRIFT_ESTIMAND,
+        "decision": decision,
+        "passed": decision == "passed",
+        "conditions": sorted(conditions),
+        "start_gross_j": start_set[0] if start_set is not None else None,
+        "end_gross_j": end_set[0] if end_set is not None else None,
+        "start_admissible_set_j": (
+            {
+                "point_j": start_set[0],
+                "lower_j": start_set[1],
+                "upper_j": start_set[2],
+            }
+            if start_set is not None
+            else None
+        ),
+        "end_admissible_set_j": (
+            {
+                "point_j": end_set[0],
+                "lower_j": end_set[1],
+                "upper_j": end_set[2],
+            }
+            if end_set is not None
+            else None
+        ),
+        "abs_delta_j": point_delta,
+        "rel_delta": point_relative,
+        "corner_abs_delta_j": corner_delta,
+        "corner_rel_delta": corner_relative,
+        "corner_statistic_role": "diagnostic_not_gating",
+        "idle_subtracted_companion": {
+            "start_point_j": idle_start,
+            "end_point_j": idle_end,
+            "abs_delta_j": idle_delta,
+            "role": "diagnostic_not_gating",
+        },
+        # The v1 sidecar fields remain recorded for legacy wire compatibility;
+        # neither numeric tolerance gates this amended estimand.
+        "policy": {
+            "require_bracket": policy.require_bracket,
+            "max_abs_delta_j": policy.max_abs_delta_j,
+            "max_rel_delta": policy.max_rel_delta,
+        },
+        "drift_bound_artifact": artifact,
+    }
 
 
 def source_manifest_descriptors(
@@ -676,6 +1014,113 @@ def _gross_energy_evidence(
     return fresh, None
 
 
+def _bundle_evidence_sha256(bundle_path: Path) -> str:
+    """Seal the complete regular-file inventory used by a reference member."""
+
+    inventory: dict[str, str] = {}
+    for path in sorted(bundle_path.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("NEG-8 reference bundle inventory contains a symlink")
+        if path.is_file():
+            inventory[path.relative_to(bundle_path).as_posix()] = hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+    if not inventory:
+        raise ValueError("NEG-8 reference bundle inventory is empty")
+    return canonical_sha256(inventory)
+
+
+def mint_neg8_drift_bound_artifact(
+    runs_root: Path, corpus_manifest_path: Path
+) -> dict[str, Any]:
+    """Derive a sealed NEG-8 point-drift bound from a settled corpus manifest."""
+
+    root = Path(runs_root).resolve()
+    manifest_path = Path(corpus_manifest_path)
+    raw = manifest_path.read_bytes()
+    try:
+        from joulewise.determinism_gate import (  # noqa: PLC0415
+            _reject_duplicate_json_pairs,
+        )
+
+        manifest = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ValueError("NEG-8 reference corpus manifest is invalid JSON") from exc
+    if not isinstance(manifest, Mapping) or set(manifest) != {
+        "schema_version",
+        "corpus_id",
+        "freeze_status",
+        "condition_id",
+        "members",
+    }:
+        raise ValueError("NEG-8 reference corpus manifest has invalid keys")
+    if (
+        manifest.get("schema_version") != NEG8_REFERENCE_CORPUS_SCHEMA
+        or manifest.get("freeze_status") != "settled_reference"
+    ):
+        raise ValueError("NEG-8 reference corpus is not governed and settled")
+    members = manifest.get("members")
+    if not isinstance(members, list) or len(members) < NEG8_DRIFT_MINIMUM_N:
+        raise ValueError(
+            f"NEG-8 reference corpus requires n >= {NEG8_DRIFT_MINIMUM_N}"
+        )
+
+    evidence_members: list[dict[str, Any]] = []
+    scientific_identity: str | None = None
+    seen_ids: set[str] = set()
+    for member in members:
+        if not isinstance(member, Mapping) or set(member) != {
+            "bundle_id",
+            "bundle_path",
+        }:
+            raise ValueError("NEG-8 corpus member descriptor has invalid keys")
+        bundle_id = member.get("bundle_id")
+        bundle_path = _safe_source_path(root, member.get("bundle_path"))
+        if (
+            not isinstance(bundle_id, str)
+            or not bundle_id
+            or bundle_id in seen_ids
+            or bundle_path is None
+            or not bundle_path.is_dir()
+        ):
+            raise ValueError("NEG-8 corpus member is invalid, duplicated, or unsafe")
+        seen_ids.add(bundle_id)
+        summary = _read_json_object(bundle_path / "summary_metrics.json")
+        if not _current_strict_summary(summary):
+            raise ValueError(
+                f"NEG-8 corpus member {bundle_id} is not a current strict mint"
+            )
+        identity, canonical = _scientific_config_identity(bundle_path)
+        if identity is None or not canonical:
+            raise ValueError(
+                f"NEG-8 corpus member {bundle_id} is not the canonical condition"
+            )
+        if scientific_identity is None:
+            scientific_identity = identity
+        elif identity != scientific_identity:
+            raise ValueError("NEG-8 reference corpus members are not same-condition")
+        gross, problem = _gross_energy_evidence(bundle_path)
+        if problem is not None or gross is None:
+            raise ValueError(
+                f"NEG-8 corpus member {bundle_id} gross evidence is invalid"
+            )
+        evidence_members.append(
+            {
+                "bundle_id": bundle_id,
+                "point_gross_j": gross["point_j"],
+                "bundle_evidence_sha256": _bundle_evidence_sha256(bundle_path),
+            }
+        )
+    assert scientific_identity is not None
+    return build_neg8_drift_bound_artifact(
+        corpus_id=manifest.get("corpus_id"),
+        condition_id=manifest.get("condition_id"),
+        manifest_sha256=hashlib.sha256(raw).hexdigest(),
+        scientific_config_sha256=scientific_identity,
+        members=evidence_members,
+    )
+
+
 REGISTERED_POLICY_DIR = (
     Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
 )
@@ -772,6 +1217,8 @@ def _derived_neg8_decision(
     policy_value: Any,
     *,
     current: bool = True,
+    point_drift: bool = False,
+    drift_bound_artifact: Any = None,
 ) -> tuple[str | None, str | None]:
     """Re-derive a verdict from source-member summaries, never the stored row.
 
@@ -847,6 +1294,16 @@ def _derived_neg8_decision(
     end = references["end"][0] if len(references["end"]) == 1 else None
     if invalid_role or len(references["start"]) > 1 or len(references["end"]) > 1:
         start = end = None
+    if point_drift:
+        return (
+            evaluate_neg8_point_drift(
+                start,
+                end,
+                policy,
+                drift_bound_artifact,
+            )["decision"],
+            None,
+        )
     return evaluate_neg8_bracket(start, end, policy)["decision"], None
 
 
@@ -1526,6 +1983,20 @@ def _validate_row(
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")
             else:
+                point_drift = "estimand" in bracket
+                if (
+                    point_drift
+                    and bracket.get("estimand") != NEG8_POINT_DRIFT_ESTIMAND
+                ):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                drift_bound_artifact = bracket.get("drift_bound_artifact")
+                if (
+                    drift_bound_artifact is not None
+                    and not validate_neg8_drift_bound_artifact(
+                        drift_bound_artifact
+                    )
+                ):
+                    reasons.add("whole_window_verdict_provenance_invalid")
                 derived_decision, derived_problem = _derived_neg8_decision(
                     verified_source_manifests,
                     runs_root,
@@ -1553,6 +2024,8 @@ def _validate_row(
                             row, runs_root, referenced
                         )
                     ),
+                    point_drift=point_drift,
+                    drift_bound_artifact=drift_bound_artifact,
                 )
                 if derived_problem == "conflict":
                     reasons.add("whole_window_verdict_conflict")
@@ -1762,16 +2235,26 @@ def whole_window_refusal_reasons(
 
 
 __all__ = [
+    "CONDITION_NEG8_DRIFT_BOUND_UNDERIVED",
+    "NEG8_DRIFT_BOUND_SCHEMA",
+    "NEG8_DRIFT_ESTIMATOR_ID",
+    "NEG8_POINT_DRIFT_ESTIMAND",
+    "NEG8_REFERENCE_CORPUS_SCHEMA",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
     "WHOLE_WINDOW_SCHEMA",
     "build_evaluation_basis",
+    "build_neg8_drift_bound_artifact",
     "build_row_provenance",
     "canonical_sha256",
+    "evaluate_neg8_point_drift",
+    "load_neg8_drift_bound_artifact",
+    "mint_neg8_drift_bound_artifact",
     "ordinary_present_bundle_paths",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
     "validate_occurrence_supersession_entry",
+    "validate_neg8_drift_bound_artifact",
     "whole_window_refusal_reasons",
 ]
