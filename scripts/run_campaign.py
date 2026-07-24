@@ -108,9 +108,14 @@ from joulewise.output_identity import (  # noqa: E402
     render_output_identity_report,
 )
 from joulewise.whole_window import (  # noqa: E402
+    OCCURRENCE_SUPERSESSION_SCHEMA,
+    build_evaluation_basis,
     build_row_provenance,
+    ordinary_present_bundle_paths,
     source_manifest_descriptors,
+    supersession_entry_sha256,
     validated_attempt_selection,
+    validate_occurrence_supersession_entry,
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
@@ -118,7 +123,6 @@ from joulewise.calibration_bracketing import (  # noqa: E402
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
     current_environment_refusals,
-    environment_admission_refusals,
     post_run_environment_refusals,
 )
 
@@ -182,10 +186,13 @@ class ConfigError:
 @dataclass(frozen=True)
 class WholeWindowMemberSource:
     path: Path
+    config_name: str | None = None
+    run_id: str | None = None
     role: str | None = None
     sentinel_position: str | None = None
     scientific_config_sha256: str | None = None
     canonical_neg8_workload: bool = False
+    occurrence: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -544,6 +551,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "top-level bundle already present under --runs-dir"
         ),
     )
+    parser.add_argument(
+        "--record-supersession",
+        metavar="BUNDLE_ID",
+        help="Append an explicit ordinary-run occurrence supersession artifact",
+    )
+    parser.add_argument(
+        "--quarantine-path",
+        help="Existing out-of-root bundle directory for --record-supersession",
+    )
+    parser.add_argument(
+        "--reason",
+        help="Operator reason required by --record-supersession",
+    )
     args = parser.parse_args(argv)
     if (args.instrument_calibration_dir is None) != (
         args.instrument_power_policy is None
@@ -551,22 +571,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error(
             "--instrument-calibration-dir and --instrument-power-policy must be supplied together"
         )
-    alternate_modes = int(args.check_prompt_hashes is not None) + int(
-        args.whole_window_verdict
+    alternate_modes = (
+        int(args.check_prompt_hashes is not None)
+        + int(args.whole_window_verdict)
+        + int(args.record_supersession is not None)
     )
     if args.config_dir is None and alternate_modes == 0:
         parser.error(
             "config_dir is required unless --check-prompt-hashes or "
-            "--whole-window-verdict is used"
+            "--whole-window-verdict or --record-supersession is used"
         )
     if args.config_dir is not None and alternate_modes:
         parser.error(
-            "config_dir cannot be combined with --check-prompt-hashes or "
-            "--whole-window-verdict"
+            "config_dir cannot be combined with --check-prompt-hashes, "
+            "--whole-window-verdict, or --record-supersession"
         )
     if alternate_modes > 1:
         parser.error(
-            "--check-prompt-hashes and --whole-window-verdict are mutually exclusive"
+            "--check-prompt-hashes, --whole-window-verdict, and "
+            "--record-supersession are mutually exclusive"
+        )
+    if args.record_supersession is not None:
+        if not args.quarantine_path or not args.reason:
+            parser.error(
+                "--record-supersession requires --quarantine-path and --reason"
+            )
+    elif args.quarantine_path is not None or args.reason is not None:
+        parser.error(
+            "--quarantine-path and --reason require --record-supersession"
         )
     if args.arm_countdown_s < 0:
         parser.error("--arm-countdown-s must be >= 0")
@@ -3082,13 +3114,13 @@ def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
 
     Only ``[1]`` and ``[1, 2]`` are legal, in that order and without
     duplicates.  The final row's admitted bit must support the top-level
-    decision.  Any missing/malformed/unbound ledger returns ``None``.
+    decision.  Environment eligibility is reported separately and does not
+    make a structurally valid ledger disappear.  Any missing/malformed/unbound
+    ledger returns ``None``.
     """
 
     metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
     admission = metadata.get("environment_admission")
-    if _current_member_environment_refusals(evaluation) or environment_admission_refusals(admission):
-        return None
     if not isinstance(admission, dict):
         return None
     attempts = admission.get("attempts")
@@ -3455,7 +3487,9 @@ def idle_admission_core_verdict(
     return section
 
 
-def _whole_window_member(source: WholeWindowMemberSource) -> MemberEvaluation:
+def _whole_window_member(
+    source: WholeWindowMemberSource, waivers: WaiverMap
+) -> MemberEvaluation:
     bundle_path = source.path
     """Strictly validate an existing bundle before whole-window admission."""
 
@@ -3470,13 +3504,22 @@ def _whole_window_member(source: WholeWindowMemberSource) -> MemberEvaluation:
         problems = validate_bundle(bundle_path, strict=True)
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+    config_name = source.config_name or "<whole-window-existing-bundle>"
+    run_id = source.run_id or bundle_path.name
     return MemberEvaluation(
         bundle_id=bundle_path.name,
         bundle_path=bundle_path,
-        config_name="<whole-window-existing-bundle>",
+        config_name=config_name,
         status=status if isinstance(status, str) else None,
         strict_valid=not problems,
         validation_problems=tuple(problems),
+        waiver=matching_waiver(
+            waivers,
+            bundle_id=bundle_path.name,
+            config_name=config_name,
+            config_stem=Path(config_name).stem,
+            run_id=run_id,
+        ),
         summary=summary,
         metadata=metadata,
         declared_role=source.role,
@@ -3486,9 +3529,56 @@ def _whole_window_member(source: WholeWindowMemberSource) -> MemberEvaluation:
     )
 
 
+def _valid_supersession_entries(
+    runs_dir: Path, log_path: Path | None = None
+) -> list[dict[str, Any]]:
+    log_path = log_path or runs_dir / "campaign_log.jsonl"
+    try:
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in lines:
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(value, dict)
+            and value.get("record_type") == "campaign_occurrence_supersession"
+            and validate_occurrence_supersession_entry(value, runs_dir)
+        ):
+            entries.append(value)
+    return entries
+
+
+def _matching_supersession(
+    entries: Sequence[Mapping[str, Any]],
+    bundle_id: str,
+    occurrences: Sequence[Mapping[str, Any]],
+    policy_sha256: str,
+) -> dict[str, Any] | None:
+    selected = dict(occurrences[-1])
+    superseded = [dict(value) for value in occurrences[:-1]]
+    matches = [
+        dict(entry)
+        for entry in entries
+        if entry.get("bundle_id") == bundle_id
+        and entry.get("campaign_policy_sha256") == policy_sha256
+        and entry.get("selected_occurrence") == selected
+        and entry.get("superseded_occurrences") == superseded
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _whole_window_campaign_membership(
-    runs_dir: Path, policy_sha256: str
-) -> tuple[list[WholeWindowMemberSource], list[str], list[str]]:
+    runs_dir: Path, policy_sha256: str, log_path: Path | None = None
+) -> tuple[
+    list[WholeWindowMemberSource],
+    list[str],
+    list[str],
+    list[dict[str, Any]],
+]:
     """Resolve bundle paths from campaign ledgers, never directory order.
 
     Matching manifests are grouped by analysis-manifest identity.  Exactly one
@@ -3499,6 +3589,7 @@ def _whole_window_campaign_membership(
     """
 
     manifest_dir = runs_dir / "campaign_manifests"
+    supersession_entries = _valid_supersession_entries(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
     if manifest_dir.is_dir():
         for manifest_path in sorted(manifest_dir.glob("*.json")):
@@ -3516,6 +3607,7 @@ def _whole_window_campaign_membership(
                 key,
                 {
                     "bundle_ids": [],
+                    "occurrences": [],
                     "manifests": [],
                     "selected_bundle_ids": [],
                     "selected_bundle_paths": {},
@@ -3603,7 +3695,10 @@ def _whole_window_campaign_membership(
             members = manifest.get("members")
             if not isinstance(members, list):
                 continue
-            for member in members:
+            manifest_descriptor = source_manifest_descriptors(
+                runs_dir, [manifest_path]
+            )[0]
+            for member_index, member in enumerate(members):
                 if not isinstance(member, dict) or member.get("execution") != "invoked":
                     continue
                 bundle_ids = member.get("bundle_ids")
@@ -3613,6 +3708,16 @@ def _whole_window_campaign_membership(
                     ]
                     group["bundle_ids"].extend(valid_bundle_ids)
                     provenance = {
+                        "config_name": (
+                            member.get("config")
+                            if isinstance(member.get("config"), str)
+                            else None
+                        ),
+                        "run_id": (
+                            member.get("run_id")
+                            if isinstance(member.get("run_id"), str)
+                            else None
+                        ),
                         "role": member.get("role") if isinstance(member.get("role"), str) else None,
                         "sentinel_position": (
                             member.get("sentinel_position")
@@ -3628,12 +3733,21 @@ def _whole_window_campaign_membership(
                             member.get("canonical_neg8_workload") is True
                         ),
                     }
-                    for bundle_id in valid_bundle_ids:
+                    for bundle_index, bundle_id in enumerate(valid_bundle_ids):
+                        group["occurrences"].append(
+                            {
+                                "bundle_id": bundle_id,
+                                "source_manifest": manifest_descriptor,
+                                "member_index": member_index,
+                                "bundle_index": bundle_index,
+                            }
+                        )
                         prior = group["bundle_provenance"].get(bundle_id)
                         if prior is not None and prior != provenance:
                             group["selection_invalid"] = True
                         group["bundle_provenance"][bundle_id] = provenance
     candidates = []
+    ambiguous_duplicate = False
     for identity, group in groups.items():
         if group["selection_invalid"]:
             continue
@@ -3643,12 +3757,46 @@ def _whole_window_campaign_membership(
             if using_selection
             else group["bundle_ids"]
         )
-        # Occurrence-count doctrine at the PRODUCER too: a manifest listing
-        # the same bundle twice is ambiguous evidence, never silently
-        # deduplicated into a passed verdict (confirmation-round-6 P1).
-        if len(set(raw_bundle_ids)) != len(raw_bundle_ids):
-            continue
-        bundle_ids = raw_bundle_ids
+        active_occurrences: dict[str, dict[str, Any]] = {}
+        used_supersessions: list[dict[str, Any]] = []
+        if using_selection:
+            if len(set(raw_bundle_ids)) != len(raw_bundle_ids):
+                continue
+            bundle_ids = raw_bundle_ids
+        else:
+            bundle_ids = list(dict.fromkeys(raw_bundle_ids))
+            occurrence_resolution_failed = False
+            for bundle_id in bundle_ids:
+                occurrences = [
+                    value
+                    for value in group["occurrences"]
+                    if value.get("bundle_id") == bundle_id
+                ]
+                if len(occurrences) == 1:
+                    active_occurrences[bundle_id] = occurrences[0]
+                    continue
+                present = ordinary_present_bundle_paths(runs_dir, bundle_id)
+                if len(present) > 1:
+                    ambiguous_duplicate = True
+                    occurrence_resolution_failed = True
+                    break
+                supersession = _matching_supersession(
+                    supersession_entries,
+                    bundle_id,
+                    occurrences,
+                    policy_sha256,
+                )
+                if (
+                    len(occurrences) < 2
+                    or present != [runs_dir.resolve() / bundle_id]
+                    or supersession is None
+                ):
+                    occurrence_resolution_failed = True
+                    break
+                active_occurrences[bundle_id] = occurrences[-1]
+                used_supersessions.append(supersession)
+            if occurrence_resolution_failed:
+                continue
         source_manifests = (
             group["selection_manifests"] if using_selection else group["manifests"]
         )
@@ -3662,9 +3810,19 @@ def _whole_window_campaign_membership(
         has_start = "start" in positions
         has_end = "end" in positions
         if has_start and has_end:
-            candidates.append((identity, bundle_ids, source_manifests))
+            candidates.append(
+                (
+                    identity,
+                    bundle_ids,
+                    source_manifests,
+                    active_occurrences,
+                    used_supersessions,
+                )
+            )
     if len(candidates) == 1:
-        identity, bundle_ids, manifests = candidates[0]
+        identity, bundle_ids, manifests, active_occurrences, supersessions = (
+            candidates[0]
+        )
         group = groups[identity]
         paths = (
             [group["selected_bundle_paths"][value] for value in bundle_ids]
@@ -3677,6 +3835,8 @@ def _whole_window_campaign_membership(
             sources.append(
                 WholeWindowMemberSource(
                     path=path,
+                    config_name=provenance.get("config_name"),
+                    run_id=provenance.get("run_id"),
                     role=provenance.get("role"),
                     sentinel_position=provenance.get("sentinel_position"),
                     scientific_config_sha256=provenance.get(
@@ -3685,9 +3845,10 @@ def _whole_window_campaign_membership(
                     canonical_neg8_workload=(
                         provenance.get("canonical_neg8_workload") is True
                     ),
+                    occurrence=active_occurrences.get(bundle_id),
                 )
             )
-        return sources, manifests, []
+        return sources, manifests, [], supersessions
     fallback = sorted(
         path
         for path in runs_dir.iterdir()
@@ -3695,27 +3856,173 @@ def _whole_window_campaign_membership(
     )
     condition = (
         "whole_window_campaign_membership_ambiguous"
-        if len(candidates) > 1
+        if len(candidates) > 1 or ambiguous_duplicate
         else "whole_window_campaign_membership_unresolved"
     )
-    return [WholeWindowMemberSource(path=path) for path in fallback], [], [condition]
+    return (
+        [WholeWindowMemberSource(path=path) for path in fallback],
+        [],
+        [condition],
+        [],
+    )
+
+
+def _basis_member_occurrences(
+    evaluations: Sequence[MemberEvaluation], runs_dir: Path
+) -> list[dict[str, Any]]:
+    root = runs_dir.resolve()
+    occurrences: list[dict[str, Any]] = []
+    for evaluation in evaluations:
+        path = evaluation.bundle_path.resolve()
+        if root not in path.parents:
+            raise ValueError(f"whole-window member escapes runs root: {path}")
+        row: dict[str, Any] = {
+            "bundle_id": evaluation.bundle_id,
+            "bundle_path": path.relative_to(root).as_posix(),
+        }
+        for name, field in (
+            ("config.json", "config_sha256"),
+            ("metadata.json", "metadata_sha256"),
+            ("summary_metrics.json", "summary_sha256"),
+        ):
+            try:
+                row[field] = hashlib.sha256((path / name).read_bytes()).hexdigest()
+            except OSError:
+                row[field] = None
+        occurrences.append(row)
+    return occurrences
+
+
+def run_record_supersession(args: argparse.Namespace) -> int:
+    """Append one explicit operator artifact authorizing an ordinary retry."""
+
+    runs_dir = Path(args.runs_dir)
+    if not runs_dir.is_dir():
+        raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    root = runs_dir.resolve()
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
+    policy_binding = load_campaign_policy(args.campaign_policy)
+    bundle_id = args.record_supersession
+    assert isinstance(bundle_id, str)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    manifest_dir = runs_dir / "campaign_manifests"
+    if manifest_dir.is_dir():
+        for manifest_path in sorted(manifest_dir.glob("*.json")):
+            manifest, problem = _load_json_object(
+                manifest_path, "campaign manifest"
+            )
+            binding = (
+                manifest.get("campaign_policy")
+                if isinstance(manifest, dict)
+                else None
+            )
+            if (
+                problem is not None
+                or manifest is None
+                or manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA
+                or not isinstance(binding, dict)
+                or binding.get("sha256") != policy_binding.sha256
+                or isinstance(manifest.get("attempt_ledger_selection"), dict)
+            ):
+                continue
+            identity = manifest.get("analysis_manifest_id")
+            key = identity if isinstance(identity, str) and identity else "<none>"
+            members = manifest.get("members")
+            if not isinstance(members, list):
+                continue
+            source = source_manifest_descriptors(runs_dir, [manifest_path])[0]
+            for member_index, member in enumerate(members):
+                if (
+                    not isinstance(member, dict)
+                    or member.get("execution") != "invoked"
+                    or not isinstance(member.get("bundle_ids"), list)
+                ):
+                    continue
+                for bundle_index, value in enumerate(member["bundle_ids"]):
+                    if value == bundle_id:
+                        grouped.setdefault(key, []).append(
+                            {
+                                "bundle_id": bundle_id,
+                                "source_manifest": source,
+                                "member_index": member_index,
+                                "bundle_index": bundle_index,
+                            }
+                        )
+    duplicate_groups = [
+        occurrences for occurrences in grouped.values() if len(occurrences) > 1
+    ]
+    if len(duplicate_groups) != 1:
+        raise ValueError(
+            "supersession requires exactly one duplicated ordinary-run "
+            f"membership group for {bundle_id}"
+        )
+    present = ordinary_present_bundle_paths(runs_dir, bundle_id)
+    if present != [root / bundle_id]:
+        raise ValueError(
+            "supersession requires exactly one canonical present bundle and "
+            "no moved copy inside --runs-dir"
+        )
+    quarantine_path = Path(args.quarantine_path).resolve(strict=True)
+    if quarantine_path == root or root in quarantine_path.parents:
+        raise ValueError("--quarantine-path must be outside --runs-dir")
+    quarantine: dict[str, Any] = {"path": str(quarantine_path)}
+    for name, field in (
+        ("config.json", "config_sha256"),
+        ("metadata.json", "metadata_sha256"),
+        ("summary_metrics.json", "summary_sha256"),
+    ):
+        quarantine[field] = hashlib.sha256(
+            (quarantine_path / name).read_bytes()
+        ).hexdigest()
+    occurrences = duplicate_groups[0]
+    row: dict[str, Any] = {
+        "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+        "record_type": "campaign_occurrence_supersession",
+        "timestamp": utc_timestamp(),
+        "runs_root": str(root),
+        "campaign_policy_sha256": policy_binding.sha256,
+        "bundle_id": bundle_id,
+        "selected_occurrence": occurrences[-1],
+        "superseded_occurrences": occurrences[:-1],
+        "quarantine": quarantine,
+        "reason": args.reason,
+    }
+    row["entry_sha256"] = supersession_entry_sha256(row)
+    if not validate_occurrence_supersession_entry(row, runs_dir):
+        raise ValueError("constructed supersession entry failed validation")
+    append_log(log_path, row)
+    print(json.dumps(row, sort_keys=True))
+    return 0
 
 
 def run_whole_window_verdict(args: argparse.Namespace) -> int:
     """Emit the prospective NEG-8 verdict across a completed runs root."""
 
+    evaluation_started_at = utc_timestamp()
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
     policy_binding = load_campaign_policy(args.campaign_policy)
-    bundle_sources, source_manifests, selection_conditions = (
-        _whole_window_campaign_membership(runs_dir, policy_binding.sha256)
+    waivers = load_waivers(args.waivers)
+    (
+        bundle_sources,
+        source_manifests,
+        selection_conditions,
+        occurrence_supersessions,
+    ) = (
+        _whole_window_campaign_membership(
+            runs_dir, policy_binding.sha256, log_path
+        )
     )
-    evaluations = [_whole_window_member(source) for source in bundle_sources]
+    evaluations = [
+        _whole_window_member(source, waivers) for source in bundle_sources
+    ]
     included = [evaluation for evaluation in evaluations if evaluation.usable]
-    excluded = [evaluation for evaluation in evaluations if not evaluation.usable]
+    waived = [evaluation for evaluation in evaluations if evaluation.waived]
+    excluded = [evaluation for evaluation in evaluations if evaluation.failed]
     core = idle_admission_core_verdict(
         included, policy_binding, whole_window=True, runs_root=runs_dir
     )
@@ -3746,14 +4053,24 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     if policy_binding.idle_admission_extension is None:
         status = "invalid"
     elif core_passed:
-        status = "passed"
+        status = "flagged" if waived else "passed"
     elif policy_binding.policy.profile.value == "exploratory":
         status = "flagged"
     else:
         status = "failed"
+    evaluation_completed_at = utc_timestamp()
+    basis = build_evaluation_basis(
+        policy_sha256=policy_binding.sha256,
+        member_occurrences=_basis_member_occurrences(included, runs_dir),
+        calibration_bracket=(
+            core.get("instrument_calibration_bracket")
+            if isinstance(core.get("instrument_calibration_bracket"), dict)
+            else None
+        ),
+    )
     row = {
         "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
-        "timestamp": utc_timestamp(),
+        "timestamp": evaluation_completed_at,
         "record_type": "idle_admission_whole_window_verdict",
         "status": status,
         "claim_licensing": bool(
@@ -3762,8 +4079,16 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
             and policy_binding.idle_admission_extension.claim_bearing
         ),
         "runs_dir": str(runs_dir),
+        "evaluation_scope": {
+            "runs_root": str(runs_dir.resolve()),
+            "started_at": evaluation_started_at,
+            "completed_at": evaluation_completed_at,
+        },
+        "evaluation_basis": basis,
         "campaign_policy": policy_binding.to_metadata(),
         "bundle_ids": [evaluation.bundle_id for evaluation in included],
+        "waived_bundles": [evaluation.to_log() for evaluation in waived],
+        "occurrence_supersessions": occurrence_supersessions,
         "excluded_bundles": [
             {
                 "bundle_id": evaluation.bundle_id,
@@ -5159,6 +5484,7 @@ def run_axi_spec_campaign(
                 selected_evaluations.append(
                     replace(evaluation, bundle_id=physical_id)
                 )
+            evaluation_started_at = utc_timestamp()
             core = idle_admission_core_verdict(
                 selected_evaluations,
                 policy_binding,
@@ -5179,9 +5505,10 @@ def run_axi_spec_campaign(
             descriptors = source_manifest_descriptors(
                 runs_dir, [campaign_provenance_path]
             )
+            evaluation_completed_at = utc_timestamp()
             whole_row = {
                 "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
-                "timestamp": utc_timestamp(),
+                "timestamp": evaluation_completed_at,
                 "record_type": "idle_admission_whole_window_verdict",
                 "status": whole_status,
                 "claim_licensing": bool(
@@ -5190,6 +5517,24 @@ def run_axi_spec_campaign(
                     and extension.claim_bearing
                 ),
                 "runs_dir": str(runs_dir),
+                "evaluation_scope": {
+                    "runs_root": str(runs_dir.resolve()),
+                    "started_at": evaluation_started_at,
+                    "completed_at": evaluation_completed_at,
+                },
+                "evaluation_basis": build_evaluation_basis(
+                    policy_sha256=policy_binding.sha256,
+                    member_occurrences=_basis_member_occurrences(
+                        selected_evaluations, runs_dir
+                    ),
+                    calibration_bracket=(
+                        core.get("instrument_calibration_bracket")
+                        if isinstance(
+                            core.get("instrument_calibration_bracket"), dict
+                        )
+                        else None
+                    ),
+                ),
                 "campaign_policy": policy_binding.to_metadata(),
                 "bundle_ids": [row.bundle_id for row in selected_evaluations],
                 "excluded_bundles": [],
@@ -6026,6 +6371,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.check_prompt_hashes is not None:
             return run_prompt_hash_check(args)
+        if args.record_supersession is not None:
+            return run_record_supersession(args)
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)

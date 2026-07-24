@@ -10,7 +10,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from joulewise.whole_window import validated_attempt_selection
+from joulewise.whole_window import (
+    validated_attempt_selection,
+    whole_window_refusal_reasons,
+)
 from joulewise.analysis_engine.registry import (
     normalized_json_bytes,
     render_dispatch_receipt,
@@ -325,6 +328,81 @@ class WholeWindowSelectionTests(unittest.TestCase):
             )
         self.assertIsNone(frozen_problem)
         self.assertEqual(frozen_decision, "failed")
+
+    def test_partial_and_full_basis_verdicts_coexist_without_latest_wins(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            partial = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A"],
+                "evaluation_basis": {
+                    "sha256": "partial-basis",
+                    "member_occurrences": [{"bundle_id": "A"}],
+                },
+            }
+            full = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A", "B"],
+                "evaluation_basis": {
+                    "sha256": "full-basis",
+                    "member_occurrences": [
+                        {"bundle_id": "A"},
+                        {"bundle_id": "B"},
+                    ],
+                },
+            }
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(partial) + "\n" + json.dumps(full) + "\n"
+            )
+            with patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(True, ()),
+            ) as validate:
+                self.assertEqual(
+                    whole_window_refusal_reasons(root, {"A", "B"}), ()
+                )
+            self.assertEqual(validate.call_count, 1)
+            self.assertEqual(validate.call_args.args[0], full)
+
+    def test_explicit_claim_basis_selects_only_its_matching_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rows = [
+                {
+                    "record_type": "idle_admission_whole_window_verdict",
+                    "bundle_ids": ["A", "B"],
+                    "evaluation_basis": {
+                        "sha256": basis,
+                        "member_occurrences": [
+                            {"bundle_id": "A"},
+                            {"bundle_id": "B"},
+                        ],
+                    },
+                }
+                for basis in ("older-basis", "claim-basis")
+            ]
+            (root / "campaign_log.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in rows)
+            )
+            with patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(True, ()),
+            ) as validate:
+                self.assertEqual(
+                    whole_window_refusal_reasons(
+                        root,
+                        {"A", "B"},
+                        evaluation_basis_sha256="claim-basis",
+                    ),
+                    (),
+                )
+            self.assertEqual(validate.call_count, 1)
+            self.assertEqual(
+                validate.call_args.args[0]["evaluation_basis"]["sha256"],
+                "claim-basis",
+            )
 
 
 if __name__ == "__main__":

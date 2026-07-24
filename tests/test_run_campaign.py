@@ -1501,7 +1501,7 @@ class RunCampaignTests(unittest.TestCase):
                 )
                 + "\n"
             )
-            paths, _sources, conditions = (
+            paths, _sources, conditions, _supersessions = (
                 run_campaign_module._whole_window_campaign_membership(
                     runs_dir, binding.sha256
                 )
@@ -5559,6 +5559,32 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(member["decision"], "failed")
         self.assertIn("cpu_busy_ratio_p95_exceeded", section["conditions"])
 
+    def test_environment_refusal_does_not_hide_valid_retry_telemetry(self) -> None:
+        binding = self._binding()
+        evaluation = self._produced_retry_member(
+            "environment-refused",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=_clean_idle_records(),
+        )
+        with patch.object(
+            run_campaign_module,
+            "_current_member_environment_refusals",
+            return_value=("environment_admission_failed",),
+        ):
+            section = run_campaign_module.idle_admission_core_verdict(
+                [evaluation], binding
+            )
+        self.assertIn("environment_admission_failed", section["conditions"])
+        self.assertNotIn(
+            "idle_admission_attempt_ledger_invalid", section["conditions"]
+        )
+        self.assertNotIn(
+            "cpu_baseline_telemetry_missing", section["conditions"]
+        )
+        self.assertEqual(
+            section["members"][0]["cpu_admission"]["decision"], "admitted"
+        )
+
     def test_missing_final_attempt_telemetry_fails_closed(self) -> None:
         """Fix round 1 (blocker): absent retried telemetry fails closed.
 
@@ -5705,6 +5731,83 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             + "\n"
         )
 
+    def _install_retry_occurrence_manifests(
+        self, binding, bundle_roles
+    ) -> str:
+        manifest_dir = self.root / "campaign_manifests"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        work_id, _position, work = bundle_roles[1]
+
+        def member_row(bundle_id, position, evaluation):
+            return {
+                "config": evaluation.config_name,
+                "run_id": bundle_id,
+                "execution": "invoked",
+                "bundle_ids": [bundle_id],
+                "role": (
+                    run_campaign_module.NEG8_REFERENCE_ROLE
+                    if position is not None
+                    else None
+                ),
+                "sentinel_position": position,
+                "scientific_config_sha256": evaluation.scientific_config_sha256,
+                "canonical_neg8_workload": position is not None,
+            }
+
+        common = {
+            "schema_version": run_campaign_module.CAMPAIGN_PROVENANCE_SCHEMA,
+            "analysis_manifest_id": "window-a",
+            "campaign_policy": {"sha256": binding.sha256},
+        }
+        (manifest_dir / "first-failed.json").write_text(
+            json.dumps(
+                {
+                    **common,
+                    "members": [member_row(work_id, None, work)],
+                }
+            )
+            + "\n"
+        )
+        (manifest_dir / "retry-present.json").write_text(
+            json.dumps(
+                {
+                    **common,
+                    "members": [
+                        member_row(bundle_id, position, evaluation)
+                        for bundle_id, position, evaluation in bundle_roles
+                    ],
+                }
+            )
+            + "\n"
+        )
+        return work_id
+
+    def _retry_occurrence_fixture(self, binding):
+        members = []
+        for bundle_id, gross, position in (
+            ("p2-neg8-reference-start__r1", 8.0, "start"),
+            ("p2-retried-work__r1", None, None),
+            ("p2-neg8-reference-end__r1", 8.04, "end"),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross,
+                neg8_position=position,
+            )
+            members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        work_id = self._install_retry_occurrence_manifests(binding, members)
+        quarantine = Path(tempfile.mkdtemp(prefix="jw-superseded-"))
+        self.addCleanup(shutil.rmtree, quarantine, True)
+        shutil.copytree(self.root / work_id, quarantine / work_id)
+        return members, work_id, quarantine / work_id
+
     def test_neg8_bracket_not_evaluated_for_per_segment_invocations(self) -> None:
         """Fix round 1 (blocker): the bracket is a whole-window check.
 
@@ -5829,6 +5932,199 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertNotIn(
             "neg8_bracket_not_evaluated",
+            verdict["idle_admission_core"]["conditions"],
+        )
+        self.assertEqual(
+            verdict["evaluation_basis"]["schema_version"],
+            "joulewise.idle_admission_evaluation_basis.v1",
+        )
+
+    def test_duplicate_occurrence_without_supersession_still_refuses(self) -> None:
+        binding = self._binding()
+        _members, _work_id, _quarantine = self._retry_occurrence_fixture(binding)
+        _sources, _manifests, conditions, supersessions = (
+            run_campaign_module._whole_window_campaign_membership(
+                self.root, binding.sha256
+            )
+        )
+        self.assertIn(
+            "whole_window_campaign_membership_unresolved", conditions
+        )
+        self.assertEqual(supersessions, [])
+
+    def test_recorded_supersession_resolves_present_retry_and_is_reported(
+        self,
+    ) -> None:
+        binding = self._binding()
+        _members, work_id, quarantine = self._retry_occurrence_fixture(binding)
+        record_args = run_campaign_module.parse_args(
+            [
+                "--record-supersession",
+                work_id,
+                "--quarantine-path",
+                str(quarantine),
+                "--reason",
+                "failed member moved before retry",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                run_campaign_module.run_record_supersession(record_args), 0
+            )
+        verdict_args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(
+                    {
+                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                        "status": "passed",
+                        "pre": {"evidence_sha256": "a" * 64},
+                        "post": {"evidence_sha256": "b" * 64},
+                        "b_fiducial_s": 0.02,
+                    },
+                    (),
+                ),
+            ),
+        ):
+            self.assertEqual(
+                run_campaign_module.run_whole_window_verdict(verdict_args), 0
+            )
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "passed")
+        self.assertEqual(
+            verdict["occurrence_supersessions"][0]["bundle_id"], work_id
+        )
+        self.assertEqual(
+            verdict["evaluation_basis"]["calibration_bracket_set"],
+            {
+                "pre": {"evidence_sha256": "a" * 64},
+                "post": {"evidence_sha256": "b" * 64},
+            },
+        )
+
+    def test_recorded_supersession_never_resolves_two_present_copies(self) -> None:
+        binding = self._binding()
+        _members, work_id, quarantine = self._retry_occurrence_fixture(binding)
+        record_args = run_campaign_module.parse_args(
+            [
+                "--record-supersession",
+                work_id,
+                "--quarantine-path",
+                str(quarantine),
+                "--reason",
+                "failed member moved before retry",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                run_campaign_module.run_record_supersession(record_args), 0
+            )
+        shutil.copytree(self.root / work_id, self.root / "moved-copy")
+        _sources, _manifests, conditions, supersessions = (
+            run_campaign_module._whole_window_campaign_membership(
+                self.root, binding.sha256
+            )
+        )
+        self.assertIn(
+            "whole_window_campaign_membership_ambiguous", conditions
+        )
+        self.assertEqual(supersessions, [])
+
+    def test_whole_window_verdict_honors_and_reports_failed_member_waiver(
+        self,
+    ) -> None:
+        binding = self._binding()
+        manifest_members = []
+        for bundle_id, status, gross_energy_j, position in (
+            ("p2-neg8-reference-start__r1", "succeeded", 8.0, "start"),
+            ("p2-waived-work__r1", "failed", None, None),
+            ("p2-neg8-reference-end__r1", "succeeded", 8.04, "end"),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross_energy_j,
+                neg8_position=position,
+            )
+            manifest_members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": status, **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, manifest_members)
+        waivers = self.root / "waivers.json"
+        waivers.write_text(
+            json.dumps(
+                [
+                    {
+                        "bundle_id": "p2-waived-work__r1",
+                        "reason": "operator reviewed failed member",
+                        "approver": "test-operator",
+                        "timestamp": "2026-07-23T07:00:00Z",
+                        "scope": "status_failed",
+                    }
+                ]
+            )
+            + "\n"
+        )
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+                "--waivers",
+                str(waivers),
+            ]
+        )
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(
+                    {
+                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                        "status": "passed",
+                        "b_fiducial_s": 0.02,
+                    },
+                    (),
+                ),
+            ),
+        ):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "flagged")
+        self.assertEqual(
+            verdict["waived_bundles"][0]["bundle_id"], "p2-waived-work__r1"
+        )
+        self.assertEqual(
+            verdict["waived_bundles"][0]["waiver"]["scope"], "status_failed"
+        )
+        self.assertNotIn(
+            "whole_window_bundle_invalid",
             verdict["idle_admission_core"]["conditions"],
         )
 
