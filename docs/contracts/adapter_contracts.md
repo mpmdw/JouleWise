@@ -359,17 +359,26 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   never a silent pass and never an implicit abort. Unknown adapter wattage
   fails closed when `adapter_wattage.require_known_wattage` is true
   (mandatory for production); stable known wattage passes.
-- **Prospective NEG-8 bracket acceptance**: the campaign verdict compares
-  the start (`*neg8-reference-start*`) and end (`*neg8-reference-end*`)
-  member gross-energy admissible sets from their anchor-shift envelopes.
-  Point-only references are unverifiable and fail closed. The bracket passes
-  only when the worst-case endpoint-pair absolute delta
-  satisfies BOTH `neg8_bracket.max_abs_delta_j` AND
-  `neg8_bracket.max_rel_delta` (maximized over the positive start set);
-  comparisons
-  are `<=`, so exactly-on-threshold passes and one ULP over fails. A
-  missing bracket fails closed when `neg8_bracket.require_bracket` is true
-  (mandatory for production). The bracket is a WHOLE-WINDOW check: the drift
+- **Prospective NEG-8 bracket acceptance** — **Amendment (2026-07-24;
+  lead-ruled, Ed ratification pending), superseding the prior corner-gating
+  sentences in this bullet:** the gate estimand is point drift,
+  `abs(end_point_gross_j - start_point_gross_j)`; the idle-subtracted point
+  drift and the worst-case opposite-corner gross-envelope statistic are
+  recorded diagnostics and never gate. The bound is never a sidecar constant:
+  it is supplied by a hash-sealed `joulewise.neg8_drift_bound.v1` artifact
+  minted from a named, settled, same-condition corpus of at least 10 NEG-8
+  members. The predeclared estimator
+  `d054_point_contrast_guard_v1` is
+  `max(sample_range_j, t_0.975,n-1 * sample_stddev_j * sqrt(2))`: the range
+  retains every observed false point contrast, the Student-t term predicts the
+  contrast between two new same-condition points, and taking the maximum
+  follows D-054 by preventing either empirical extremes or the model term from
+  weakening the guard. Missing or invalid governed bound evidence refuses with
+  `neg8_drift_bound_underived`; a point drift above the derived bound fails,
+  with `<=` passing exactly on the bound. The v1 sidecar's
+  `max_abs_delta_j`/`max_rel_delta` keys remain legacy hash/schema transport
+  fields only for amended rows and do not gate them. The bracket is a
+  WHOLE-WINDOW check: the drift
   comparison is evaluated only by a verdict pass whose evaluated members
   include BOTH the start and end reference bundles. The canonical Window-A
   sequence runs the start and end references as SEPARATE `run_campaign.py`
@@ -425,15 +434,26 @@ At window end, chain scripts can run:
 
 ```sh
 python3 scripts/run_campaign.py --whole-window-verdict \
-  --runs-dir RUNS_ROOT --campaign-policy POLICY_SIDECAR
+  --runs-dir RUNS_ROOT --campaign-policy POLICY_SIDECAR \
+  --neg8-drift-bound NEG8_DRIFT_BOUND.json
 ```
 
 This resolves finalized members from the matching campaign provenance
 ledger (falling back to a diagnostic-only scan that cannot pass when
 membership is unbound), applies ordinary strict bundle validation, appends an
 `idle_admission_whole_window_verdict` row to the campaign log, and evaluates
-NEG-8 in explicit whole-window mode. A required missing reference or a
-threshold failure returns nonzero under production; exploratory remains
+NEG-8 in explicit whole-window mode. The bound artifact is minted separately
+with:
+
+```sh
+python3 scripts/run_campaign.py --derive-neg8-drift-bound SETTLED_CORPUS.json \
+  --neg8-drift-bound-output NEG8_DRIFT_BOUND.json --runs-dir RUNS_ROOT
+```
+
+Its
+verdict copy records the corpus member ids, estimator, and derivation sha256.
+A required missing reference, an underived bound, or a point-drift failure
+returns nonzero under production; exploratory remains
 non-claim-bearing and emits a labeled `flagged` verdict. At consumption, core
 member occurrences are counted rather than set-collapsed: byte-identical or
 same-ID duplicates invalidate provenance. The consumer also reloads the

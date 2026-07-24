@@ -580,6 +580,21 @@ The implementation is
 `joulewise/floor_extraction.py` plus `scripts/extract_detection_floors.py`,
 composing the existing engine primitives rather than re-deriving them.
 
+**NEG-8 amendment (2026-07-24; lead-ruled, Ed ratification pending):** the
+whole-window drift gate estimates
+`abs(end_point_gross_j - start_point_gross_j)`, with idle-subtracted point
+drift and opposite-corner gross-envelope drift reported only as diagnostics.
+Its bound is never hardcoded: a governed CLI mints a hash-sealed
+`joulewise.neg8_drift_bound.v1` artifact from a named, settled-reference corpus
+of `n >= 10` same-condition NEG-8 members, and the verdict records the corpus
+member ids, estimator, and derivation sha256. The predeclared
+`d054_point_contrast_guard_v1` estimator is
+`max(sample_range_j, t_0.975,n-1 * sample_stddev_j * sqrt(2))`; this D-054-style
+maximum preserves the largest observed false point contrast while adding the
+Student-t prediction guard for two new same-condition points. Until that
+artifact exists and validates, the verdict refuses
+`neg8_drift_bound_underived`; envelope corners never determine pass/fail.
+
 ### Consumer wire compatibility (audit P0.3)
 
 The analysis consumer accepts EXACTLY these reducer-version x idle-variance

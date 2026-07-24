@@ -1,0 +1,439 @@
+{
+  "cells": [
+    {
+      "cell_id": "A5-RQ-MID-GROSS-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r01",
+          "slot": "p2015-df-rq-mid-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r02",
+          "slot": "p2015-df-rq-mid-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r03",
+          "slot": "p2015-df-rq-mid-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r04",
+          "slot": "p2015-df-rq-mid-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r05",
+          "slot": "p2015-df-rq-mid-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r06",
+          "slot": "p2015-df-rq-mid-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r07",
+          "slot": "p2015-df-rq-mid-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r08",
+          "slot": "p2015-df-rq-mid-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r09",
+          "slot": "p2015-df-rq-mid-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r10",
+          "slot": "p2015-df-rq-mid-abs-r10"
+        }
+      ],
+      "metric": "gross_energy_j",
+      "window_class": "request"
+    },
+    {
+      "cell_id": "A5-RQ-MID-IDLE-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r01",
+          "slot": "p2015-df-rq-mid-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r02",
+          "slot": "p2015-df-rq-mid-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r03",
+          "slot": "p2015-df-rq-mid-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r04",
+          "slot": "p2015-df-rq-mid-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r05",
+          "slot": "p2015-df-rq-mid-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r06",
+          "slot": "p2015-df-rq-mid-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r07",
+          "slot": "p2015-df-rq-mid-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r08",
+          "slot": "p2015-df-rq-mid-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r09",
+          "slot": "p2015-df-rq-mid-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-rq-mid-abs-r10",
+          "slot": "p2015-df-rq-mid-abs-r10"
+        }
+      ],
+      "metric": "energy_request_j",
+      "window_class": "request"
+    },
+    {
+      "cell_id": "A5-RQ-SHORT-GROSS-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r01",
+          "slot": "p2015-df-rq-short-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r02",
+          "slot": "p2015-df-rq-short-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r03",
+          "slot": "p2015-df-rq-short-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r04",
+          "slot": "p2015-df-rq-short-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r05",
+          "slot": "p2015-df-rq-short-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r06",
+          "slot": "p2015-df-rq-short-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r07",
+          "slot": "p2015-df-rq-short-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r08",
+          "slot": "p2015-df-rq-short-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r09",
+          "slot": "p2015-df-rq-short-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r10",
+          "slot": "p2015-df-rq-short-abs-r10"
+        }
+      ],
+      "metric": "gross_energy_j",
+      "window_class": "request"
+    },
+    {
+      "cell_id": "A5-RQ-SHORT-IDLE-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r01",
+          "slot": "p2015-df-rq-short-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r02",
+          "slot": "p2015-df-rq-short-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r03",
+          "slot": "p2015-df-rq-short-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r04",
+          "slot": "p2015-df-rq-short-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r05",
+          "slot": "p2015-df-rq-short-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r06",
+          "slot": "p2015-df-rq-short-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r07",
+          "slot": "p2015-df-rq-short-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r08",
+          "slot": "p2015-df-rq-short-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r09",
+          "slot": "p2015-df-rq-short-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-rq-short-abs-r10",
+          "slot": "p2015-df-rq-short-abs-r10"
+        }
+      ],
+      "metric": "energy_request_j",
+      "window_class": "request"
+    },
+    {
+      "cell_id": "A5-PH-PREFILL-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r01",
+          "slot": "p2015-df-ph-prefill-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r02",
+          "slot": "p2015-df-ph-prefill-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r03",
+          "slot": "p2015-df-ph-prefill-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r04",
+          "slot": "p2015-df-ph-prefill-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r05",
+          "slot": "p2015-df-ph-prefill-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r06",
+          "slot": "p2015-df-ph-prefill-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r07",
+          "slot": "p2015-df-ph-prefill-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r08",
+          "slot": "p2015-df-ph-prefill-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r09",
+          "slot": "p2015-df-ph-prefill-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r10",
+          "slot": "p2015-df-ph-prefill-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase"
+    },
+    {
+      "cell_id": "A5-PH-DECODE-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r01",
+          "slot": "p2015-df-ph-decode-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r02",
+          "slot": "p2015-df-ph-decode-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r03",
+          "slot": "p2015-df-ph-decode-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r04",
+          "slot": "p2015-df-ph-decode-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r05",
+          "slot": "p2015-df-ph-decode-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r06",
+          "slot": "p2015-df-ph-decode-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r07",
+          "slot": "p2015-df-ph-decode-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r08",
+          "slot": "p2015-df-ph-decode-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r09",
+          "slot": "p2015-df-ph-decode-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r10",
+          "slot": "p2015-df-ph-decode-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.decode",
+      "window_class": "phase"
+    },
+    {
+      "blocks": [
+        {
+          "block_id": "b01",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b01-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b01-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b01-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b01-b2"
+          }
+        },
+        {
+          "block_id": "b02",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b02-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b02-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b02-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b02-b2"
+          }
+        },
+        {
+          "block_id": "b03",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b03-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b03-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b03-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b03-b2"
+          }
+        },
+        {
+          "block_id": "b04",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b04-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b04-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b04-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b04-b2"
+          }
+        },
+        {
+          "block_id": "b05",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b05-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b05-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b05-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b05-b2"
+          }
+        },
+        {
+          "block_id": "b06",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b06-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b06-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b06-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b06-b2"
+          }
+        },
+        {
+          "block_id": "b07",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b07-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b07-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b07-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b07-b2"
+          }
+        },
+        {
+          "block_id": "b08",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b08-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b08-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b08-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b08-b2"
+          }
+        },
+        {
+          "block_id": "b09",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b09-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b09-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b09-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b09-b2"
+          }
+        },
+        {
+          "block_id": "b10",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b10-a1",
+            "A2": "p2015-df-cmp-abba-ph-decode-b10-a2",
+            "B1": "p2015-df-cmp-abba-ph-decode-b10-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b10-b2"
+          }
+        }
+      ],
+      "cell_id": "A5-PH-DECODE-CMP",
+      "kind": "comparative",
+      "metric": "phase_energy_j.decode",
+      "window_class": "phase"
+    },
+    {
+      "cell_id": "A5-PH-SHORT-PREFILL-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r01",
+          "slot": "p2015-df-ph-short-prefill-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r02",
+          "slot": "p2015-df-ph-short-prefill-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r03",
+          "slot": "p2015-df-ph-short-prefill-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r04",
+          "slot": "p2015-df-ph-short-prefill-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r05",
+          "slot": "p2015-df-ph-short-prefill-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r06",
+          "slot": "p2015-df-ph-short-prefill-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r07",
+          "slot": "p2015-df-ph-short-prefill-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r08",
+          "slot": "p2015-df-ph-short-prefill-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r09",
+          "slot": "p2015-df-ph-short-prefill-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r10",
+          "slot": "p2015-df-ph-short-prefill-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase"
+    }
+  ],
+  "schema_version": "joulewise.detection_floor_extraction_spec.v1"
+}

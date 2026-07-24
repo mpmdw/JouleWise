@@ -1,0 +1,149 @@
+{
+  "cells": [
+    {
+      "cell_id": "A7-PH-PREFILL-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r01",
+          "slot": "p2015-df-ph-prefill-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r02",
+          "slot": "p2015-df-ph-prefill-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r03",
+          "slot": "p2015-df-ph-prefill-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r04",
+          "slot": "p2015-df-ph-prefill-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r05",
+          "slot": "p2015-df-ph-prefill-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r06",
+          "slot": "p2015-df-ph-prefill-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r07",
+          "slot": "p2015-df-ph-prefill-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r08",
+          "slot": "p2015-df-ph-prefill-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r09",
+          "slot": "p2015-df-ph-prefill-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-prefill-abs-r10",
+          "slot": "p2015-df-ph-prefill-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase"
+    },
+    {
+      "cell_id": "A7-PH-DECODE-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r01",
+          "slot": "p2015-df-ph-decode-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r02",
+          "slot": "p2015-df-ph-decode-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r03",
+          "slot": "p2015-df-ph-decode-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r04",
+          "slot": "p2015-df-ph-decode-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r05",
+          "slot": "p2015-df-ph-decode-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r06",
+          "slot": "p2015-df-ph-decode-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r07",
+          "slot": "p2015-df-ph-decode-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r08",
+          "slot": "p2015-df-ph-decode-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r09",
+          "slot": "p2015-df-ph-decode-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-decode-abs-r10",
+          "slot": "p2015-df-ph-decode-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.decode",
+      "window_class": "phase"
+    },
+    {
+      "cell_id": "A7-PH-SHORT-PREFILL-ABS",
+      "kind": "absolute",
+      "members": [
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r01",
+          "slot": "p2015-df-ph-short-prefill-abs-r01"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r02",
+          "slot": "p2015-df-ph-short-prefill-abs-r02"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r03",
+          "slot": "p2015-df-ph-short-prefill-abs-r03"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r04",
+          "slot": "p2015-df-ph-short-prefill-abs-r04"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r05",
+          "slot": "p2015-df-ph-short-prefill-abs-r05"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r06",
+          "slot": "p2015-df-ph-short-prefill-abs-r06"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r07",
+          "slot": "p2015-df-ph-short-prefill-abs-r07"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r08",
+          "slot": "p2015-df-ph-short-prefill-abs-r08"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r09",
+          "slot": "p2015-df-ph-short-prefill-abs-r09"
+        },
+        {
+          "bundle_id": "p2015-df-ph-short-prefill-abs-r10",
+          "slot": "p2015-df-ph-short-prefill-abs-r10"
+        }
+      ],
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase"
+    }
+  ],
+  "schema_version": "joulewise.detection_floor_extraction_spec.v1"
+}

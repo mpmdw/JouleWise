@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.whole_window import (
+    build_neg8_drift_bound_artifact,
     validated_attempt_selection,
     whole_window_refusal_reasons,
 )
@@ -326,8 +327,34 @@ class WholeWindowSelectionTests(unittest.TestCase):
             frozen_decision, frozen_problem = _derived_neg8_decision(
                 [manifest], root, policy, current=False
             )
+            drift_bound = build_neg8_drift_bound_artifact(
+                corpus_id="settled-neg8-selection-test",
+                condition_id="df-rq-mid",
+                manifest_sha256="a" * 64,
+                scientific_config_sha256="b" * 64,
+                members=[
+                    {
+                        "bundle_id": f"reference-{index:02d}",
+                        "point_gross_j": 5.0,
+                        "bundle_evidence_sha256": hashlib.sha256(
+                            f"reference-{index:02d}".encode()
+                        ).hexdigest(),
+                    }
+                    for index in range(10)
+                ],
+            )
+            amended_decision, amended_problem = _derived_neg8_decision(
+                [manifest],
+                root,
+                policy,
+                current=True,
+                point_drift=True,
+                drift_bound_artifact=drift_bound,
+            )
         self.assertIsNone(frozen_problem)
         self.assertEqual(frozen_decision, "failed")
+        self.assertIsNone(amended_problem)
+        self.assertEqual(amended_decision, "passed")
 
     def test_partial_and_full_basis_verdicts_coexist_without_latest_wins(
         self,
