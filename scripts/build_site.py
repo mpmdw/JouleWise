@@ -28,6 +28,15 @@ ADVISOR_BRIEF_OUTPUT = "advisor_brief.html"
 PROJECT_STATUS_PAGE_END_MARKER = "<!-- ADVISOR-PAGE-END -->"
 PROJECT_STATUS_SUMMARY_OUTPUT = "project_status.html"
 PROJECT_STATUS_FULL_OUTPUT = "project_status_full.html"
+DECISION_LOG_SOURCE = "docs/decision_log.md"
+DECISION_LOG_OUTPUT = "decision_log.html"
+DECISION_LOG_ARCHIVE_PREFIX = "decision_log_archive_"
+# Pagination is based on source bytes rather than zlib output so identical
+# markdown produces identical page assignments across Python/zlib versions.
+# A packer-side 24,000-byte gzip+Base64 target independently verifies the
+# resulting HTML and retains 20% headroom below the runtime's 30,000-byte cap.
+DECISION_LOG_PART_MARKDOWN_BYTES = 18_000
+DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -118,6 +127,15 @@ class DocPage:
     title: str
     description: str
     group: str
+    listed: bool = True
+
+
+@dataclass(frozen=True)
+class DecisionLogPart:
+    out_name: str
+    title: str
+    markdown: str
+    decision_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -144,7 +162,7 @@ BASE_DOC_PAGES = [
     DocPage("docs/contracts/measurement_methodology.md", "measurement_methodology.html", "Measurement Methodology", "The measurement boundary, statistics, and validation contract.", "Evidence & Contracts"),
     DocPage("docs/contracts/claims_ladder.md", "claims_ladder.html", "Claims Ladder", "Binding reader-facing claim language from 2M onward.", "Evidence & Contracts"),
     DocPage("docs/orchestration.md", "orchestration.html", "The Orchestration Process", "The multi-model loop and artifact system.", "Process & Record"),
-    DocPage("docs/decision_log.md", "decision_log.html", "Decision Log", "Binding design decisions and revisit triggers.", "Process & Record"),
+    DocPage(DECISION_LOG_SOURCE, DECISION_LOG_OUTPUT, "Decision Log", "Binding design decisions and revisit triggers.", "Process & Record"),
     DocPage("docs/council_log.md", "council_log.html", "Council Log", "Cross-model deliberation record.", "Process & Record"),
     DocPage("docs/milestones.md", "milestones.html", "Milestones", "Dates, heartbeats, and academic calendar mapping.", "Process & Record"),
 ]
@@ -308,8 +326,13 @@ def attr_escape(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-def doc_pages(latest_report_source: str) -> list[DocPage]:
-    return [
+def doc_pages(
+    latest_report_source: str,
+    decision_log_part_count: int = 1,
+) -> list[DocPage]:
+    if decision_log_part_count < 1:
+        fail("decision log pagination", DECISION_LOG_SOURCE, "at least one page")
+    pages = [
         *BASE_DOC_PAGES,
         DocPage(
             latest_report_source,
@@ -319,6 +342,24 @@ def doc_pages(latest_report_source: str) -> list[DocPage]:
             "Reports",
         ),
     ]
+    decision_index = next(
+        index
+        for index, page in enumerate(pages)
+        if page.out_name == DECISION_LOG_OUTPUT
+    )
+    archives = [
+        DocPage(
+            DECISION_LOG_SOURCE,
+            f"{DECISION_LOG_ARCHIVE_PREFIX}{number}.html",
+            f"Decision Log — Archive {number}",
+            f"Older binding decisions, continuation {number}.",
+            "Process & Record",
+            listed=False,
+        )
+        for number in range(1, decision_log_part_count)
+    ]
+    pages[decision_index + 1:decision_index + 1] = archives
+    return pages
 
 
 def split_project_status_markdown(md: str) -> dict[str, str]:
@@ -351,6 +392,93 @@ def split_project_status_markdown(md: str) -> dict[str, str]:
         PROJECT_STATUS_SUMMARY_OUTPUT: summary,
         PROJECT_STATUS_FULL_OUTPUT: full_reference,
     }
+
+
+def split_decision_log_markdown(
+    md: str,
+    max_part_markdown_bytes: int = DECISION_LOG_PART_MARKDOWN_BYTES,
+) -> list[DecisionLogPart]:
+    """Split the rendered site view newest-first at complete D-NNN entries.
+
+    The byte ceiling is deliberately source-based, not compression-based:
+    page assignments therefore do not vary with the host zlib version. A
+    single entry may exceed the ceiling because entry boundaries are
+    indivisible; the packer remains the fail-closed authority on the emitted
+    shard target.
+    """
+    if max_part_markdown_bytes < 1:
+        fail("decision log pagination", DECISION_LOG_SOURCE, "positive byte ceiling")
+    matches = list(DECISION_LOG_ENTRY_RE.finditer(md))
+    if not matches:
+        fail(
+            "decision log pagination",
+            DECISION_LOG_SOURCE,
+            "at least one '## D-NNN:' entry",
+        )
+    decision_ids = [match.group("decision_id") for match in matches]
+    if len(set(decision_ids)) != len(decision_ids):
+        fail("decision log pagination", DECISION_LOG_SOURCE, "unique decision IDs")
+
+    preamble = md[:matches[0].start()]
+    entries = [
+        (
+            match.group("decision_id"),
+            md[
+                match.start():
+                matches[index + 1].start() if index + 1 < len(matches) else len(md)
+            ],
+        )
+        for index, match in enumerate(matches)
+    ]
+
+    newest_first_groups: list[list[tuple[str, str]]] = []
+    group: list[tuple[str, str]] = []
+    group_bytes = 0
+    for entry in reversed(entries):
+        entry_bytes = len(entry[1].encode("utf-8"))
+        if group and group_bytes + entry_bytes > max_part_markdown_bytes:
+            newest_first_groups.append(list(reversed(group)))
+            group = []
+            group_bytes = 0
+        group.append(entry)
+        group_bytes += entry_bytes
+    newest_first_groups.append(list(reversed(group)))
+
+    parts: list[DecisionLogPart] = []
+    for index, entries_in_part in enumerate(newest_first_groups):
+        if index == 0:
+            out_name = DECISION_LOG_OUTPUT
+            title = "Decision Log"
+            prefix = (
+                preamble
+                if len(newest_first_groups) == 1
+                else (
+                    "# Decision Log — Recent Entries\n\n"
+                    "The guide and complete decision index continue on Archive 1; "
+                    "the navigation on this page links every rendered part.\n\n"
+                )
+            )
+        else:
+            out_name = f"{DECISION_LOG_ARCHIVE_PREFIX}{index}.html"
+            title = f"Decision Log — Archive {index}"
+            prefix = (
+                preamble
+                if index == 1
+                else (
+                    f"# {title}\n\n"
+                    "This page continues the generated decision-log site view with "
+                    "older complete entries.\n\n"
+                )
+            )
+        parts.append(
+            DecisionLogPart(
+                out_name=out_name,
+                title=title,
+                markdown=prefix + "".join(entry[1] for entry in entries_in_part),
+                decision_ids=tuple(entry[0] for entry in entries_in_part),
+            )
+        )
+    return parts
 
 
 def git_source_stamp(source: str) -> SourceStamp:
@@ -1551,9 +1679,10 @@ LOG_TRIM_DOCS = {
     # Advisor-site size control (capsule 1 MiB cap): log pages keep the full
     # index tables (in the preamble) plus the most recent entries; the repo
     # remains the complete record (D-051 source-of-truth policy).
-    "docs/decision_log.md": (re.compile(r"(?m)^## D-\d"), 6),
     "docs/council_log.md": (re.compile(r"(?m)^## C-\d"), 6),
 }
+
+DECISION_LOG_SITE_ENTRY_COUNT = 6
 
 
 def trim_log_markdown(md: str, heading_re: re.Pattern[str], keep: int, source: str) -> str:
@@ -1570,11 +1699,116 @@ def trim_log_markdown(md: str, heading_re: re.Pattern[str], keep: int, source: s
     return md[: starts[0]] + note + md[starts[-keep] :]
 
 
+def decision_log_site_markdown(md: str) -> str:
+    """Keep the existing bounded site view before lossless page splitting."""
+    return trim_log_markdown(
+        md,
+        DECISION_LOG_ENTRY_RE,
+        DECISION_LOG_SITE_ENTRY_COUNT,
+        DECISION_LOG_SOURCE,
+    )
+
+
+def decision_anchor_slugs(markdown: str) -> dict[str, str]:
+    anchors: dict[str, str] = {}
+    for text, slug in markdown_h2_toc(markdown):
+        match = re.match(r"^(D-\d{3})(?::|\b)", text)
+        if match:
+            anchors[match.group(1)] = slug
+    return anchors
+
+
+def inject_decision_short_anchors(body: str, anchors: dict[str, str]) -> str:
+    for decision_id, slug in anchors.items():
+        heading_re = re.compile(
+            rf'(?P<heading><h2\b[^>]*\bid="{re.escape(slug)}"[^>]*>)',
+            re.IGNORECASE,
+        )
+        body, count = heading_re.subn(
+            f'<span id="{decision_id.lower()}"></span>\\g<heading>',
+            body,
+            count=1,
+        )
+        if count != 1:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                f"rendered heading anchor for {decision_id}",
+            )
+    return body
+
+
+def rewrite_cross_page_anchors(
+    body: str,
+    current_page: str,
+    anchor_pages: dict[str, str],
+) -> str:
+    def replace(match: re.Match[str]) -> str:
+        anchor = match.group("anchor")
+        target_page = anchor_pages.get(anchor)
+        if target_page is None or target_page == current_page:
+            return match.group(0)
+        quote = match.group("quote")
+        return f'{match.group("prefix")}{quote}{target_page}#{anchor}{quote}'
+
+    return re.sub(
+        r'(?P<prefix>\bhref\s*=\s*)(?P<quote>["\'])#(?P<anchor>[^"\']+)(?P=quote)',
+        replace,
+        body,
+        flags=re.IGNORECASE,
+    )
+
+
+def link_decision_index(
+    body: str,
+    anchors: dict[str, str],
+    anchor_pages: dict[str, str],
+) -> str:
+    for decision_id, slug in anchors.items():
+        page = anchor_pages[decision_id.lower()]
+        href = f"{page}#{decision_id.lower()}"
+        cell_re = re.compile(
+            rf"<td>\s*{re.escape(decision_id)}\s*</td>",
+            re.IGNORECASE,
+        )
+        body = cell_re.sub(
+            f'<td><a href="{attr_escape(href)}">{decision_id}</a></td>',
+            body,
+            count=1,
+        )
+    return body
+
+
+def decision_log_navigation(
+    parts: list[DecisionLogPart],
+    current_page: str,
+) -> str:
+    links: list[str] = []
+    for index, part in enumerate(parts):
+        label = "Recent" if index == 0 else f"Archive {index}"
+        if part.out_name == current_page:
+            links.append(f'<strong aria-current="page">{html.escape(label)}</strong>')
+        else:
+            links.append(
+                f'<a href="{attr_escape(part.out_name)}">{html.escape(label)}</a>'
+            )
+    return (
+        '<nav class="doc-meta" aria-label="Decision log parts">'
+        "<span>Decision log parts:</span> "
+        + " · ".join(links)
+        + "</nav>"
+    )
+
+
 def render_doc_page(
     doc: DocPage,
     no_marked: bool,
     stamp: SourceStamp,
     markdown: str | None = None,
+    *,
+    page_navigation: str = "",
+    anchor_pages: dict[str, str] | None = None,
+    decision_anchors: dict[str, str] | None = None,
 ) -> str:
     path = ROOT / doc.source
     md = path.read_text(encoding="utf-8") if markdown is None else markdown
@@ -1585,6 +1819,10 @@ def render_doc_page(
     toc = markdown_h2_toc(md)
     if not no_marked:
         body = inject_heading_ids(body, toc)
+        if decision_anchors:
+            body = inject_decision_short_anchors(body, decision_anchors)
+    if anchor_pages:
+        body = rewrite_cross_page_anchors(body, doc.out_name, anchor_pages)
     toc_links = "\n".join(f'<a href="#{attr_escape(slug)}">{html.escape(text)}</a>' for text, slug in toc)
     if not toc_links:
         toc_links = '<span class="muted">No h2 sections found.</span>'
@@ -1593,12 +1831,55 @@ def render_doc_page(
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div>{toc_links}</aside>
   <div class="doc-wrap {attr_escape(source_class)}">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>{html.escape(doc.source)}</code></p>
+    {page_navigation}
     <div class="provenance-plate">{source_chip(stamp)}</div>
     {body}
+    {page_navigation}
   </div>
 </div>"""
     active = "Status" if doc.source == "PROJECT_STATUS.md" else "Sources"
     return page_shell(doc.title, active, page_body, page_footer([stamp]))
+
+
+def render_decision_log_pages(
+    md: str,
+    no_marked: bool,
+    stamp: SourceStamp,
+) -> dict[str, str]:
+    parts = split_decision_log_markdown(decision_log_site_markdown(md))
+    docs = {
+        doc.out_name: doc
+        for doc in doc_pages("docs/run_reports/unused.md", len(parts))
+        if doc.source == DECISION_LOG_SOURCE
+    }
+    anchors_by_part = {
+        part.out_name: decision_anchor_slugs(part.markdown)
+        for part in parts
+    }
+    anchor_pages: dict[str, str] = {}
+    all_decision_anchors: dict[str, str] = {}
+    for part in parts:
+        for decision_id, slug in anchors_by_part[part.out_name].items():
+            anchor_pages[slug] = part.out_name
+            anchor_pages[decision_id.lower()] = part.out_name
+            all_decision_anchors[decision_id] = slug
+    rendered: dict[str, str] = {}
+    for part in parts:
+        page = render_doc_page(
+            docs[part.out_name],
+            no_marked,
+            stamp,
+            part.markdown,
+            page_navigation=decision_log_navigation(parts, part.out_name),
+            anchor_pages=anchor_pages,
+            decision_anchors=anchors_by_part[part.out_name],
+        )
+        rendered[part.out_name] = link_decision_index(
+            page,
+            all_decision_anchors,
+            anchor_pages,
+        )
+    return rendered
 
 
 def render_advisor_brief_copy(stamp: SourceStamp) -> str:
@@ -1618,7 +1899,7 @@ def render_library(docs: list[DocPage], stamps: dict[str, SourceStamp]) -> str:
     group_html = []
     for group in ["Status & Planning", "Evidence & Contracts", "Process & Record", "Reports"]:
         cards = []
-        for doc in [item for item in docs if item.group == group]:
+        for doc in [item for item in docs if item.group == group and item.listed]:
             stamp = stamps[doc.source]
             cards.append(
                 f"""<a class="lib-card" href="{attr_escape(doc.out_name)}">
@@ -1634,7 +1915,19 @@ def render_library(docs: list[DocPage], stamps: dict[str, SourceStamp]) -> str:
   <p class="lede">Every generated status page is built from these repository documents. Each card carries the source file's own commit stamp.</p>
 </div>
 {''.join(group_html)}"""
-    return page_shell("Sources", "Sources", body, page_footer(stamps[doc.source] for doc in docs))
+    return page_shell(
+        "Sources",
+        "Sources",
+        body,
+        page_footer(stamps[doc.source] for doc in docs if doc.listed),
+    )
+
+
+def remove_stale_decision_log_archives(expected_names: set[str]) -> None:
+    for path in OUT.glob(f"{DECISION_LOG_ARCHIVE_PREFIX}*.html"):
+        if path.name not in expected_names:
+            path.unlink()
+            print(f"removed stale {path.name}")
 
 
 def update_hand_page_nav() -> None:
@@ -1717,7 +2010,10 @@ def build(no_marked: bool = False) -> None:
     report_source = latest_report_source_from_sessions(sessions)
     report_md = read_source(report_source)
     floor_summary = parse_verified_floor_summary(read_json_source(FLOOR_EXTRACTION_SOURCE))
-    docs = doc_pages(report_source)
+    decision_parts = split_decision_log_markdown(
+        decision_log_site_markdown(decision_md)
+    )
+    docs = doc_pages(report_source, len(decision_parts))
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
     for source in [
         ADVISOR_BRIEF_SOURCE,
@@ -1750,7 +2046,17 @@ def build(no_marked: bool = False) -> None:
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
     write(OUT / ADVISOR_BRIEF_OUTPUT, render_advisor_brief_copy(stamps[ADVISOR_BRIEF_SOURCE]))
+    decision_pages = render_decision_log_pages(
+        decision_md,
+        no_marked,
+        stamps[DECISION_LOG_SOURCE],
+    )
+    remove_stale_decision_log_archives(set(decision_pages))
+    for out_name, page in decision_pages.items():
+        write(OUT / out_name, page)
     for doc in docs:
+        if doc.source == DECISION_LOG_SOURCE:
+            continue
         markdown = (
             project_status_pages[doc.out_name]
             if doc.source == "PROJECT_STATUS.md"

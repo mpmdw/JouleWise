@@ -31,11 +31,15 @@ INTERNAL_HREF_REWRITES = {
     "index.html": "/index",
     "../project_critique_review.html": "/project_critique_review.html",
 }
-# TASK_QUEUE.md already drives the advisor-facing Status and Roadmap pages.
-# Packing its generated long-form mirror duplicates that information, dominates
-# routine capsule growth, and adds little advisor value. Keep docs/site's page
-# intact, but serve its stable deep links from Roadmap inside the capsule.
-CAPSULE_PAGE_REDIRECTS = {"task_queue.html": "roadmap.html"}
+# These long-form mirrors remain generated under docs/site, while the capsule
+# serves their stable aliases from the corresponding advisor-facing summary.
+# This preserves source history in git without duplicating the largest views
+# inside Lakebed's 1 MiB artifact.
+CAPSULE_PAGE_REDIRECTS = {
+    "project_status_full.html": "project_status.html",
+    "run_state.html": "status.html",
+    "task_queue.html": "roadmap.html",
+}
 RESERVED_PATHS = {"/", "/index.html"}
 LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
 # Ed's 2026-07-17 AUD-WO-039 right-sizing ruling separates the real-artifact
@@ -58,6 +62,9 @@ LAKEBED_BASE_WRAPPER_BUDGET_BYTES = 122_636
 LAKEBED_MEASURED_METADATA_BYTES = 5_809
 LAKEBED_METADATA_BUDGET_BYTES = 8_192
 MAX_SHARD_BASE64_BYTES = 30_000
+# Decision-log pages are generated below this stricter target so normal source
+# growth and small zlib-version differences cannot consume the runtime limit.
+DECISION_LOG_SHARD_BASE64_TARGET_BYTES = 24_000
 MAX_FIRST_REQUEST_DECODE_BYTES = 32_000
 VALIDATOR_TOKENS = ("process", "fetch", "globalThis", "self")
 UNBOUNDED_FOR_RE = re.compile(r"\bfor\s*\(\s*;")
@@ -602,6 +609,22 @@ def page_shards(pages: dict[str, dict[str, object]]) -> list[list[str]]:
     individual_sizes = {
         path: encode_page_shard(pages, [path])[1]["base64"] for path in pages
     }
+    decision_log_oversized = [
+        path
+        for path, size in individual_sizes.items()
+        if re.fullmatch(r"/decision_log(?:_archive_\d+)?\.html", path)
+        and size > DECISION_LOG_SHARD_BASE64_TARGET_BYTES
+    ]
+    if decision_log_oversized:
+        details = ", ".join(
+            f"{path} ({individual_sizes[path]} bytes)"
+            for path in sorted(decision_log_oversized)
+        )
+        raise CapsulePackError(
+            "decision-log page exceeds "
+            f"{DECISION_LOG_SHARD_BASE64_TARGET_BYTES}-byte pagination target: "
+            f"{details}; adjust entry-boundary pagination"
+        )
     oversized = [path for path, size in individual_sizes.items() if size > MAX_SHARD_BASE64_BYTES]
     if oversized:
         details = ", ".join(f"{path} ({individual_sizes[path]} bytes)" for path in sorted(oversized))
