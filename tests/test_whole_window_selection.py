@@ -18,11 +18,14 @@ from joulewise.whole_window import (
     CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED,
     NEG8_POINT_DRIFT_ESTIMAND,
     NEG8_POINT_DRIFT_CONDITION_CODES,
+    _current_core_rederivation_reasons,
     _current_strict_summary,
+    _derived_neg8_decision,
     _validate_row,
     build_neg8_drift_bound_artifact,
     canonical_sha256,
     custody_telemetry_identity,
+    mint_neg8_drift_bound_artifact,
     validated_attempt_selection,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
@@ -135,6 +138,153 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertFalse(_current_strict_summary(summary, bundle))
+
+    @staticmethod
+    def _custody_triangle_disagreement(root: Path, bundle_id: str) -> Path:
+        bundle = root / bundle_id
+        shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["measurement_quality"]["telemetry_source"] = "mock"
+        summary_path.write_text(
+            json.dumps(summary, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return bundle
+
+    def test_custody_triangle_disagreement_refuses_current_core(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = self._custody_triangle_disagreement(root, "member")
+            with patch(
+                "joulewise.whole_window._manifest_bundle_paths",
+                return_value={"member": bundle},
+            ):
+                reasons = _current_core_rederivation_reasons(
+                    core={},
+                    bundle_ids=["member"],
+                    manifests=[],
+                    runs_root=root,
+                    policy_sha256="a" * 64,
+                )
+        self.assertEqual(reasons, {"bundle_strict_invalid"})
+
+    def test_custody_triangle_disagreement_survives_mixed_current_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            invalid = self._custody_triangle_disagreement(root, "invalid")
+            current = root / "current"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), current)
+            current_summary_path = current / "summary_metrics.json"
+            current_summary = json.loads(
+                current_summary_path.read_text(encoding="utf-8")
+            )
+            current_summary["summary_provenance"]["reducer_version"] = "0.5.2"
+            current_summary_path.write_text(
+                json.dumps(current_summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "joulewise.whole_window._manifest_bundle_paths",
+                return_value={"invalid": invalid, "current": current},
+            ):
+                reasons = _current_core_rederivation_reasons(
+                    core={},
+                    bundle_ids=["invalid", "current"],
+                    manifests=[],
+                    runs_root=root,
+                    policy_sha256="a" * 64,
+                )
+        self.assertIn("bundle_strict_invalid", reasons)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_config_absent_frozen_member_keeps_empty_current_refusal_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "legacy"
+            bundle.mkdir()
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(
+                    {
+                        "summary_provenance": {"reducer_version": "0.4.2"},
+                        "measurement_quality": {
+                            "telemetry_source": "powermetrics"
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "joulewise.whole_window._manifest_bundle_paths",
+                return_value={"legacy": bundle},
+            ):
+                reasons = _current_core_rederivation_reasons(
+                    core={},
+                    bundle_ids=["legacy"],
+                    manifests=[],
+                    runs_root=root,
+                    policy_sha256="a" * 64,
+                )
+        self.assertEqual(reasons, set())
+
+    def test_current_neg8_sentinel_custody_disagreement_is_strict_invalid(self):
+        policy = {
+            "require_bracket": True,
+            "max_abs_delta_j": 0.05,
+            "max_rel_delta": 0.25,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._custody_triangle_disagreement(root, "neg8-s")
+            manifest = {
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "bundle_ids": ["neg8-s"],
+                        "role": "neg8_daily_reference_start",
+                        "sentinel_position": "start",
+                    }
+                ]
+            }
+            decision, problem = _derived_neg8_decision(
+                [manifest],
+                root,
+                policy,
+                current=True,
+            )
+        self.assertIsNone(decision)
+        self.assertEqual(problem, "bundle_strict_invalid")
+
+    def test_neg8_drift_mint_names_custody_triangle_disagreement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = self._custody_triangle_disagreement(root, "member")
+            manifest_path = root / "corpus.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.neg8_reference_corpus.v1",
+                        "corpus_id": "custody-disagreement",
+                        "freeze_status": "settled_reference",
+                        "condition_id": "df-rq-mid",
+                        "members": [
+                            {
+                                "bundle_id": f"member-{index}",
+                                "bundle_path": bundle.name,
+                            }
+                            for index in range(10)
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "custody telemetry triangle disagrees",
+            ):
+                mint_neg8_drift_bound_artifact(root, manifest_path)
 
     def test_basis_row_cannot_downgrade_by_stripping_point_drift_shape(self):
         policy_sha256 = "a" * 64

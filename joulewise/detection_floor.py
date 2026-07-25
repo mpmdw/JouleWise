@@ -1601,11 +1601,11 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
                 f"{where}: absolute and comparative whole-window drift groups must be symmetric and complete"
             )
         else:
-            basis_values = {
+            basis_values = [
                 record.get("whole_window_evaluation_basis_sha256")
                 for record in present_records
-            }
-            if len(basis_values) != 1:
+            ]
+            if any(value != basis_values[0] for value in basis_values[1:]):
                 errors.append(
                     f"{where}: absolute and comparative whole-window evaluation bases disagree"
                 )

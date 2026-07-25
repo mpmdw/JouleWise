@@ -1060,6 +1060,30 @@ class TestArtifactEmitValidate(unittest.TestCase):
             "claim_family does not match metric",
         )
 
+        malformed_basis = json.loads(json.dumps(artifact))
+        for record_name in ("absolute", "comparative"):
+            malformed_basis["cells"][0][record_name][
+                "whole_window_evaluation_basis_sha256"
+            ] = ["not", "hashable"]
+        malformed_errors = validate_floor_artifact(malformed_basis)
+        self.assertTrue(
+            any(
+                "whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+                in error
+                for error in malformed_errors
+            ),
+            malformed_errors,
+        )
+
+        asymmetric_basis = json.loads(json.dumps(malformed_basis))
+        asymmetric_basis["cells"][0]["comparative"][
+            "whole_window_evaluation_basis_sha256"
+        ] = HEX_C
+        self.assert_invalid(
+            asymmetric_basis,
+            "absolute and comparative whole-window evaluation bases disagree",
+        )
+
         omitted = json.loads(json.dumps(artifact))
         omitted_cell = omitted["cells"][0]
         for record_name in ("absolute", "comparative"):

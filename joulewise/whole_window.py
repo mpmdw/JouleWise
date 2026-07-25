@@ -1774,6 +1774,21 @@ def _current_strict_summary(
     )
 
 
+def _custody_strict_invalid(
+    bundle_path: Path,
+    summary: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> bool:
+    """Identify custody-bound bundles whose telemetry triangle disagrees."""
+
+    identity = custody_telemetry_identity(
+        bundle_path,
+        summary=summary,
+        metadata=metadata,
+    )
+    return identity.custody_bound_config and not identity.triangle_agrees
+
+
 def _gross_fields(summary: Any) -> dict[str, float] | None:
     if not isinstance(summary, Mapping):
         return None
@@ -1969,6 +1984,10 @@ def mint_neg8_drift_bound_artifact(
         seen_ids.add(bundle_id)
         summary = _read_json_object(bundle_path / "summary_metrics.json")
         metadata = _read_json_object(bundle_path / "metadata.json")
+        if _custody_strict_invalid(bundle_path, summary, metadata):
+            raise ValueError(
+                f"NEG-8 corpus member {bundle_id} custody telemetry triangle disagrees"
+            )
         if not _current_strict_summary(summary, bundle_path):
             raise ValueError(
                 f"NEG-8 corpus member {bundle_id} is not a current strict mint"
@@ -2197,6 +2216,8 @@ def _derived_neg8_decision(
                         )
                     continue
                 stored_summary = _read_json_object(bundle_path / "summary_metrics.json")
+                if _custody_strict_invalid(bundle_path, stored_summary):
+                    return None, "bundle_strict_invalid"
                 if _current_strict_summary(stored_summary, bundle_path):
                     scientific_sha, canonical = _scientific_config_identity(bundle_path)
                     if (
@@ -2425,6 +2446,16 @@ def _current_core_rederivation_reasons(
         if paths is not None
         else {bundle_id: runs_root / bundle_id for bundle_id in bundle_ids}
     )
+    if any(
+        (path := probe_paths.get(bundle_id)) is not None
+        and _custody_strict_invalid(
+            path,
+            _read_json_object(path / "summary_metrics.json"),
+            _read_json_object(path / "metadata.json"),
+        )
+        for bundle_id in bundle_ids
+    ):
+        reasons.add("bundle_strict_invalid")
     strict_current_ids = {
         bundle_id
         for bundle_id in bundle_ids
@@ -2453,20 +2484,24 @@ def _current_core_rederivation_reasons(
         or not isinstance(extension_value, Mapping)
         or extension_value.get("claim_bearing") is not True
     ):
-        return {"whole_window_verdict_provenance_invalid"}
+        reasons.add("whole_window_verdict_provenance_invalid")
+        return reasons
     try:
         extension = IdleAdmissionExtension.from_mapping(
             dict(extension_value) if isinstance(extension_value, Mapping) else None,
             profile=profile,
         )
     except (TypeError, ValueError):
-        return {"whole_window_verdict_provenance_invalid"}
+        reasons.add("whole_window_verdict_provenance_invalid")
+        return reasons
     try:
         registered_typed_policy = CampaignPolicy.from_mapping(dict(registered))
     except (TypeError, ValueError):
-        return {"whole_window_verdict_provenance_invalid"}
+        reasons.add("whole_window_verdict_provenance_invalid")
+        return reasons
     if paths is None:
-        return {"whole_window_verdict_provenance_invalid"}
+        reasons.add("whole_window_verdict_provenance_invalid")
+        return reasons
 
     derived_members: list[
         tuple[str, Path, Mapping[str, Any], Mapping[str, Any]]
@@ -3038,6 +3073,8 @@ def _validate_row(
                 )
                 if derived_problem == "conflict":
                     reasons.add("whole_window_verdict_conflict")
+                elif derived_problem == "bundle_strict_invalid":
+                    reasons.add("bundle_strict_invalid")
                 elif derived_problem is not None or derived_value is None:
                     reasons.add("whole_window_verdict_provenance_invalid")
                 elif point_drift:

@@ -20,6 +20,7 @@ from joulewise.analysis_engine.artifact import (
 )
 from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
+from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
@@ -34,6 +35,7 @@ from joulewise.analysis_engine.inputs import (
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
 from joulewise.whole_window import (
+    CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
@@ -72,6 +74,16 @@ CLEAN_SOURCE_STATE = {
     "untracked": "clean",
     "diff_sha256": "2" * 64,
 }
+# No strict-valid powermetrics fixture exists in-repo. The positive companions
+# therefore stipulate production telemetry identity while exercising the real
+# strict-valid mock bundles and the real analyze_claims wiring.
+PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
+    custody_bound_config=True,
+    config_backend_class="powermetrics",
+    metadata_backend_class="powermetrics",
+    summary_backend_class="powermetrics",
+    triangle_agrees=True,
+)
 
 
 def install_passing_analysis_whole_window(
@@ -292,6 +304,85 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
         self.assertEqual(validate_claim_verdicts(first), [])
 
+    def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity(
+        self,
+    ):
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            first = analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+            second = analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        self.assertEqual(first, second)
+        self.assertEqual(render_claim_verdicts(first), render_claim_verdicts(second))
+        self.assertEqual(len(first["bundle_audit"]), 30)
+        self.assertTrue(
+            all(row["strict_status"] == "valid" for row in first["bundle_audit"])
+        )
+        self.assertEqual(len(first["families"]), 4)
+        self.assertEqual(len(first["contrasts"]), 24)
+        for contrast in first["contrasts"]:
+            with self.subTest(contrast=contrast["contrast_id"]):
+                evaluation = contrast["claim_evaluation"]
+                self.assertEqual(evaluation["outcome"], "not_resolvable")
+                self.assertFalse(evaluation["claim_ready_for_l2_l3"])
+                self.assertNotIn(
+                    "window_evidence_precheck_missing", evaluation["reason_codes"]
+                )
+                self.assertIn(
+                    "campaign_cooldown_evidence_missing", evaluation["reason_codes"]
+                )
+                self.assertIn(
+                    "floor_transport_inapplicable", evaluation["reason_codes"]
+                )
+                self.assertNotIn(
+                    "loo_magnitude_influential", evaluation["reason_codes"]
+                )
+                self.assertEqual(contrast["estimator"]["n"], 5)
+                self.assertEqual(contrast["estimator"]["df"], 4)
+                self.assertEqual(len(contrast["loo"]["rows"]), 5)
+                self.assertTrue(
+                    all(
+                        "estimate_magnitude" not in row["influence_triggers"]
+                        for row in contrast["loo"]["rows"]
+                    )
+                )
+        by_id = {
+            contrast["contrast_id"]: contrast for contrast in first["contrasts"]
+        }
+        for family in first["families"]:
+            for omission_index in range(5):
+                raw = {
+                    contrast_id: by_id[contrast_id]["loo"]["rows"][
+                        omission_index
+                    ]["raw_p"]
+                    for contrast_id in family["contrast_ids"]
+                }
+                adjusted = holm_adjust(raw, m=family["m"])
+                for contrast_id in family["contrast_ids"]:
+                    self.assertEqual(
+                        by_id[contrast_id]["loo"]["rows"][omission_index][
+                            "adjusted_p"
+                        ],
+                        adjusted[contrast_id],
+                    )
+        omitted_loo = json.loads(json.dumps(first))
+        omitted_loo["contrasts"][0]["loo"] = {"status": "not_run", "rows": []}
+        omitted_loo["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            omitted_loo
+        )
+        self.assertTrue(validate_claim_verdicts(omitted_loo))
+
     def test_analysis_loader_refuses_when_whole_window_verdict_is_missing(self):
         # F5 defect shape: P2-037 formerly loaded cleanup/cooldown/bundles/floor
         # while routing entirely around the campaign-wide causal verdict.
@@ -415,6 +506,51 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 and MOCK_TELEMETRY_CLAIM_REFUSAL
                 in evidence.base_reason_codes
                 for evidence in loaded.registered.values()
+            )
+        )
+
+    def test_named_strata_manifest_preserves_terminal_mock_refusal_with_production_telemetry_identity(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp) / "configs"
+            shutil.copytree(self.config_dir, config_dir)
+            manifest_path = config_dir / "analysis_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            block_ids = manifest["contrasts"][0]["block_ids"]
+            manifest["design"]["randomization"] = {
+                "scheme": "stratified_paired_label_swap",
+                "exchangeability": "within_named_strata",
+                "named_strata": [
+                    {"stratum_id": "early", "block_ids": block_ids[:3]},
+                    {"stratum_id": "late", "block_ids": block_ids[3:]},
+                ],
+            }
+            manifest["manifest_id"] = calculate_manifest_id(manifest)
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=PRODUCTION_TELEMETRY_IDENTITY,
+            ):
+                artifact = analyze_claims(
+                    manifest_path,
+                    self.runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                )
+        self.assertTrue(
+            all(
+                contrast["loo"]["status"] == "complete"
+                for contrast in artifact["contrasts"]
+            )
+        )
+        self.assertTrue(
+            all(
+                len(contrast["loo"]["rows"]) == 5
+                for contrast in artifact["contrasts"]
             )
         )
 
@@ -758,7 +894,66 @@ class AnalysisIntegrationTests(unittest.TestCase):
             contrast["claim_evaluation"]["reason_codes"],
         )
 
-    def test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal(self):
+    def test_private_stochastic_seam_changes_recorded_policy_identity_with_production_telemetry_identity(
+        self,
+    ):
+        def unavailable_floor(contrast, condition_id, rows, floor_artifact):
+            del contrast, condition_id, rows, floor_artifact
+            return None
+
+        def governed_pair_terms(evidence_a, evidence_b, metric):
+            del evidence_a, evidence_b, metric
+            return (
+                (
+                    StochasticVarianceTerm(
+                        "fixture_governed_j2",
+                        variance_a=0.25,
+                        variance_b=0.25,
+                        correlation_scope="independent_run",
+                    ),
+                ),
+                (),
+            )
+
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            artifact = analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+                _floor_request_factory=unavailable_floor,
+                _pair_stochastic_factory=governed_pair_terms,
+            )
+        self.assertIn(
+            "private_test_seam:",
+            artifact["engine"]["policy_identity"]["floor_resolution"],
+        )
+        self.assertIn(
+            "private_test_seam:",
+            artifact["engine"]["policy_identity"]["stochastic_variance"],
+        )
+        estimator = artifact["contrasts"][0]["estimator"]
+        self.assertGreater(estimator["SE_metrology"], 0.0)
+        self.assertGreater(estimator["SE_total"], estimator["SE_repeat"])
+        repeat_width = (
+            estimator["repeat_point_CI95"]["upper"]
+            - estimator["repeat_point_CI95"]["lower"]
+        )
+        metrology_width = (
+            estimator["metrology_aware_CI95"]["upper"]
+            - estimator["metrology_aware_CI95"]["lower"]
+        )
+        self.assertGreater(metrology_width, repeat_width)
+
+    def _exercise_cli_distinct_calibration_binding(
+        self,
+        *,
+        production_identity: bool,
+    ):
+        scenario_suffix = "-production" if production_identity else ""
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         condition_ids = sorted(
             {
@@ -770,9 +965,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         # Calibration and consumer bundles share only the immutable runs root;
         # every calibration run ID below is distinct from every manifest
         # consumer run ID.
-        calibration_root = self.root / "independent-consumer-and-calibration-runs"
+        calibration_root = self.root / (
+            f"independent-consumer-and-calibration-runs{scenario_suffix}"
+        )
         shutil.copytree(self.runs_root, calibration_root)
-        floor_dir = self.root / "independent-floor"
+        floor_dir = self.root / f"independent-floor{scenario_suffix}"
         floor_dir.mkdir(exist_ok=True)
         calibration_plan_path = floor_dir / "calibration_plan.json"
         calibration_plan_path.write_text(
@@ -996,7 +1193,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(exact_floor), [])
         floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
-        output = self.root / "exact-cli-claim-verdicts.json"
+        output = self.root / f"exact-cli-claim-verdicts{scenario_suffix}.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
             code = main(
                 [
@@ -1019,24 +1216,48 @@ class AnalysisIntegrationTests(unittest.TestCase):
             if contrast["metric"]["name"] == "gross_energy_j"
         ]
         self.assertTrue(gross)
-        self.assertTrue(
-            all(
-                contrast["floor"]["status"] == "refused"
-                and all(
-                    "artifact_schema_invalid" in resolution["reason_codes"]
+        if production_identity:
+            self.assertTrue(
+                all(
+                    contrast["floor"]["status"] == "resolved"
+                    for contrast in gross
+                ),
+            )
+            self.assertTrue(
+                all(
+                    resolution["status"] == "exact"
+                    for contrast in gross
                     for resolution in contrast["floor"]["resolutions"]
                 )
-                for contrast in gross
             )
-        )
-        self.assertTrue(
-            all(
-                contrast["loo"] == {"status": "not_run", "rows": []}
-                and MOCK_TELEMETRY_CLAIM_REFUSAL
-                in contrast["claim_evaluation"]["reason_codes"]
-                for contrast in gross
+            self.assertTrue(
+                all(
+                    contrast["loo"]["status"] == "complete"
+                    for contrast in gross
+                )
             )
-        )
+            self.assertTrue(
+                all(len(contrast["loo"]["rows"]) == 5 for contrast in gross)
+            )
+        else:
+            self.assertTrue(
+                all(
+                    contrast["floor"]["status"] == "refused"
+                    and all(
+                        "artifact_schema_invalid" in resolution["reason_codes"]
+                        for resolution in contrast["floor"]["resolutions"]
+                    )
+                    for contrast in gross
+                )
+            )
+            self.assertTrue(
+                all(
+                    contrast["loo"] == {"status": "not_run", "rows": []}
+                    and MOCK_TELEMETRY_CLAIM_REFUSAL
+                    in contrast["claim_evaluation"]["reason_codes"]
+                    for contrast in gross
+                )
+            )
 
         def refresh_first_cell(candidate):
             changed_cell = candidate["cells"][0]
@@ -1225,7 +1446,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
         fabricated_path.write_text(
             json.dumps(fabricated, indent=2) + "\n", encoding="utf-8"
         )
-        fabricated_output = self.root / "fabricated-floor-claim-verdicts.json"
+        fabricated_output = self.root / (
+            f"fabricated-floor-claim-verdicts{scenario_suffix}.json"
+        )
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
             code = main(
                 [
@@ -1262,6 +1485,28 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 for row in affected
             )
         )
+
+    def test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal(self):
+        self._exercise_cli_distinct_calibration_binding(
+            production_identity=False,
+        )
+
+    def test_cli_binds_distinct_calibration_bundles_and_preserves_mock_refusal_with_production_telemetry_identity(
+        self,
+    ):
+        with (
+            mock.patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=PRODUCTION_TELEMETRY_IDENTITY,
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.inputs.anchor_fallback_member_unusable",
+                return_value=False,
+            ),
+        ):
+            self._exercise_cli_distinct_calibration_binding(
+                production_identity=True,
+            )
 
     def test_cli_writes_artifact_and_invalid_input_writes_nothing(self):
         output = self.root / "cli-claim-verdicts.json"
@@ -1436,6 +1681,69 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         )
 
+    def test_valid_replacement_fills_original_slot_without_sixth_block_with_production_telemetry_identity(
+        self,
+    ):
+        runs = self.root / "replacement-production-runs"
+        shutil.copytree(self.runs_root, runs)
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = next(
+            entry
+            for entry in manifest["entries"]
+            if entry["role"] == "condition"
+            and entry["planned_rep_index"] == 1
+            and entry["condition_id"] == "cond-2m-short_short"
+        )
+        shutil.rmtree(runs / target["run_id"])
+        replacement = json.loads(
+            (self.config_dir / target["config"]).read_text(encoding="utf-8")
+        )
+        replacement["run_id"] = target["run_id"] + "-production-replacement"
+        replacement["run_metadata"]["tags"].extend(
+            [
+                f"analysis-replacement-of={target['entry_id']}",
+                "analysis-replacement-reason=bundle_incomplete",
+            ]
+        )
+        config_path = self.root / "replacement-production-config.json"
+        config_path.write_text(
+            json.dumps(replacement, indent=2) + "\n", encoding="utf-8"
+        )
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(
+                main(["run", str(config_path), "--runs-dir", str(runs)]),
+                0,
+            )
+        install_passing_analysis_whole_window(
+            runs,
+            [
+                replacement["run_id"]
+                if entry["entry_id"] == target["entry_id"]
+                else entry["run_id"]
+                for entry in manifest["entries"]
+            ],
+            source_name="replacement-production-whole-window-source",
+        )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            artifact = analyze_claims(
+                self.manifest_path,
+                runs,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        self.assertEqual(
+            len(artifact["sampling_audit"]["valid_replacements"]),
+            1,
+        )
+        self.assertFalse(artifact["sampling_audit"]["top_up_detected"])
+        self.assertEqual(
+            artifact["sampling_audit"]["demoted_contrast_ids"],
+            [],
+        )
+
     def test_replacement_with_changed_rep_tag_is_topup_not_slot_fill(self):
         runs = self.root / "wrong-rep-replacement-runs"
         shutil.copytree(self.runs_root, runs)
@@ -1534,6 +1842,60 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 self.assertEqual(
                     contrast["claim_evaluation"]["outcome"],
                     "not_estimable",
+                )
+
+    def test_incomplete_pair_is_listed_and_never_converted_to_unpaired_samples_with_production_telemetry_identity(
+        self,
+    ):
+        runs = self.root / "incomplete-production-runs"
+        shutil.copytree(self.runs_root, runs)
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = next(
+            entry
+            for entry in manifest["entries"]
+            if entry["role"] == "condition"
+            and entry["planned_rep_index"] == 1
+            and entry["condition_id"] == "cond-2m-short_short"
+        )
+        shutil.rmtree(runs / target["run_id"])
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            artifact = analyze_claims(
+                self.manifest_path,
+                runs,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        affected = [
+            contrast
+            for contrast in artifact["contrasts"]
+            if target["cell_id"]
+            in {
+                contrast["conditions"]["cell_a_id"],
+                contrast["conditions"]["cell_b_id"],
+            }
+        ]
+        self.assertEqual(len(affected), 12)
+        for contrast in affected:
+            with self.subTest(contrast=contrast["contrast_id"]):
+                self.assertEqual(contrast["estimator"]["n"], 4)
+                self.assertEqual(contrast["estimator"]["df"], 3)
+                missing = next(
+                    row
+                    for row in contrast["bundle_blocks"]["blocks"]
+                    if row["block_id"] == target["block_id"]
+                )
+                self.assertFalse(missing["included"])
+                self.assertIn("bundle_missing", missing["reason_codes"])
+                self.assertIn(
+                    "fixed_n_plan_incomplete",
+                    contrast["claim_evaluation"]["reason_codes"],
+                )
+                self.assertEqual(
+                    contrast["claim_evaluation"]["outcome"],
+                    "not_resolvable",
                 )
 
     def test_bundle_config_byte_mutation_is_excluded_even_when_identity_and_metadata_hash_match(self):
@@ -1923,6 +2285,68 @@ class AnalysisIntegrationTests(unittest.TestCase):
             any("must exactly enumerate top-up audits" in error for error in errors),
             errors,
         )
+
+    def test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis_with_production_telemetry_identity(
+        self,
+    ):
+        runs = self.root / "topup-production-runs"
+        shutil.copytree(self.runs_root, runs)
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = next(
+            entry
+            for entry in manifest["entries"]
+            if entry["role"] == "condition"
+            and entry["planned_rep_index"] == 1
+            and entry["condition_id"] == "cond-2m-short_short"
+        )
+        topup = json.loads(
+            (self.config_dir / target["config"]).read_text(encoding="utf-8")
+        )
+        topup["run_id"] = target["run_id"] + "-production-topup"
+        topup["run_metadata"]["tags"] = [
+            "rep6" if tag == "rep1" else tag
+            for tag in topup["run_metadata"]["tags"]
+        ]
+        config_path = self.root / "topup-production-config.json"
+        config_path.write_text(
+            json.dumps(topup, indent=2) + "\n", encoding="utf-8"
+        )
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(
+                main(["run", str(config_path), "--runs-dir", str(runs)]),
+                0,
+            )
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            artifact = analyze_claims(
+                self.manifest_path,
+                runs,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+        self.assertTrue(artifact["sampling_audit"]["top_up_detected"])
+        self.assertEqual(
+            len(artifact["sampling_audit"]["demoted_contrast_ids"]),
+            12,
+        )
+        demoted = [
+            contrast
+            for contrast in artifact["contrasts"]
+            if contrast["sampling"]["confirmatory_status"]
+            == "demoted_exploratory"
+        ]
+        self.assertEqual(len(demoted), 12)
+        for contrast in demoted:
+            self.assertEqual(contrast["estimator"]["n"], 5)
+            self.assertIn(
+                "outcome_dependent_top_up",
+                contrast["claim_evaluation"]["reason_codes"],
+            )
+            self.assertFalse(
+                contrast["claim_evaluation"]["claim_ready_for_l2_l3"]
+            )
 
     def test_unregistered_matching_sentinel_topup_demotes_linked_contrasts(self):
         runs = self.root / "sentinel-topup-runs"
