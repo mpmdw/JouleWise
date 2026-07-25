@@ -988,7 +988,7 @@
       "priority": "p2_next_slice",
       "rank": 47,
       "status": "queued",
-      "status_note": "Minted 2026-07-25. Legitimate refinement, not invented physics — every ingredient is a measured curve or an already-registered bound. Gain expected to be material but not 10x, since the bundle-local term stays adversarial.",
+      "status_note": "Minted 2026-07-25. Quantified same day on a5 decode ABBA (10 complete blocks): implemented worst-case-sum half-width gives a 6.46 J comparative floor; a common-mode proxy gives 2.13 J, a 3x improvement — material, but still above that cell's 0.60 J point floor, so it does not by itself restore extraction under the current gate. Value is in tightening the labelled floor, not in avoiding the label. Fiducial share of the composed bound measured at 80-87%.",
       "stop_card": null
     },
     "FLOOR-LABEL-01": {
@@ -1060,7 +1060,7 @@
       "priority": "p1_phase_gate",
       "rank": 46,
       "status": "queued",
-      "status_note": "Minted 2026-07-25. BLOCKS the queued ABBA collection roadmap: collecting 03/04/05/07/09 at current sizes would hit the same attribution wall three quiet nights later.",
+      "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
     "P1-001": {
