@@ -1721,3 +1721,150 @@ Calibration note: invited-disagreement debate briefs (steelman each
 option, demand failure modes + examiner view) produced markedly higher
 design yield than review-shaped prompts; adopt as the default shape for
 estimand/contract rulings.
+
+## C-033: NEG-8 screen+budget audit gauntlet — a new refuter pairing under A/B, four audit rounds, PR #85 (2026-07-24/25)
+
+Shape: the Ed-ratified SCREEN + BUDGET wave (D-078 clause 10) was taken
+through four adversarial audit rounds (fresh read-only Sol per round;
+rounds 1–3 xhigh, round 4 high) with per-severity refuter tiers using a
+NEW pairing under evaluation — **Opus-contract + Sol-execution distinct
+lenses** (Ed-directed A/B; now the recorded default per the
+instrument-mix-authority memory). Three Sol fix rounds (xhigh, xhigh +
+a high alignment pass, high) plus lead bench fixes closed the findings;
+two lead-owned decision-log addenda were written at the bench between
+rounds. Commit stack on main(`125a48d`): `b120d07` wave → `69b65e5`
+addendum 2 → `ad75542` fix round 1 → `315810a` addendum 3 → `a5a7acf`
+capsule trim → `907ee58` fix round 2 → `dbf6339` fix round 3 →
+`19e15d9` assertion restore → `60b12af` capsule pagination →
+merged `c3e2647` (PR #85, 56 files, +6012/−439).
+
+Layer catches (unique):
+
+- **Auditor (fresh Sol, per round):** found real mechanisms in every
+  round — round 1: estimand-dispatch downgrade (row shape selects the
+  legacy gross-only evaluator), allowance fail-open (missing allowances
+  silently become no allowance), anchor-gate bypass on the
+  existing-bundle re-verdict path, and the refusal-registry gap (the
+  authoritative registry test actually failed on
+  `anchor_fallback_member_unusable`); round 2: coordinated-downgrade v2
+  (strip basis *and* the whole drift group together) and the
+  mock-label seam (`telemetry_source="mock"` defeats both dispatch and
+  the anchor gate); round 3: TypeError on malformed basis values,
+  telemetry-triangle downgrade into the frozen arm at the whole-window
+  barrier, and loss of nonempty positive-path integration coverage;
+  round 4: two omitted assertions in the replacement companion
+  (nonempty affected-contrast set, `n == 5`). BUT it severity-inflated
+  repeatedly — of 7 blocker-tier claims across rounds 1–2, refuter
+  synthesis sustained 3–4 at tier (round 3 and round 4 produced no
+  blockers at all: three should-fix, then one).
+- **Opus-contract refuter (unique):** F2 collapse (the "broken frozen
+  replay" blocker rested on a misreading of the freshness addendum's
+  scoping — landed as a documented superseded gross-only wire, not a
+  code fix); F6 refutation (condition-level distinctness was already
+  contract-discharged at the consumer boundary); G1 re-price (the
+  full-strip variant is a subclass of registered limitation L1, whose
+  closure is queued as FLOOR-BIND-01, not a fresh blocker); G2
+  re-price (the ratified non-mock carve-out plus D-030's
+  strict/raw-evidence binding bound the exposure); blast-radius
+  refutation of the auditor's proposed G2 fixture fix (strict
+  validation binds backend raw evidence, so the naive fix breaks
+  legitimate fixtures); **A1 terminal-mock-bar gap — the session's best
+  catch**: an *honest* mock member could reach claim evidence with all
+  mock-exempted barriers disabled, no attacker required; the NEG-8
+  sentinel route on round-3 F2 (the one route with no downstream
+  catch); and the F3 fixture-fix refutation (a production-promoted
+  fixture cannot be strict-valid — use a patch idiom instead).
+- **Sol-execution refuter (unique):** discovery of the
+  coordinated-downgrade *variants* (strip the drift group and restore
+  the headline floors and the record validates clean — reproduced on
+  the repo fixture, gate `20.799350577898302 → 20.399350577898304`,
+  exactly the fixture's 0.4 J allowance; asymmetric removal from the
+  comparative record alone also validates clean); the G2A adjacent
+  blocker (the reduce layer independently trusts metadata/summary
+  mockness in the environment and CPU-admission barriers, so fresh
+  re-reduction reproduces the forged exemption and strict
+  stored-vs-fresh comparison is not a backstop); identification of the
+  authoritative mockness source (custody-bound
+  `config().hardware_target.telemetry_backend`, bound through
+  `metadata.config_sha256`); the `mock:*` tagged-source class caveat
+  (`axi_valid_burst` config `mock` vs summary `mock:target` — compare
+  backend *class*, not raw strings); and every runnable probe,
+  including the estimand-flip demonstration (`mock` → no refusals vs
+  `powermetrics` → `whole_window_verdict_provenance_invalid` on
+  identical evidence).
+- **Lead (unique):** the two D-078 clause-10 registry addenda (2 and 3)
+  — component-7 anchor-fallback gate ruling derived from the a7-vs-a5
+  prefill-scatter root cause (a7's 11.85 J "floor" was one
+  fallback-anchored member, r03; true floor ≈ 3.3–3.7 J), and the
+  terminal mock bar; severity synthesis on the split verdicts (kept F4
+  at blocker priority on imminent-use grounds against the contract
+  refuter's downgrade); the capsule shard-budget trim (`a5a7acf`) and
+  the pagination ruling that followed (deterministic `D-NNN`
+  pagination + D-076 artifact-cap redirects); the battery-flake
+  adjudications; and the bench fixes (registry clause, the fixture
+  metadata line that blocked Sol's canonical run, the round-4
+  assertion restore).
+
+Rough spend (estimates, not billing truth): the gauntlet proper (audit
+round 1 onward) recorded 11 distinct Sol wrapper invocations — 4 audits
+(3 xhigh, 1 high), 2 execution refuters (both high), 3 implementation
+rounds (xhigh; xhigh + a high alignment pass; high), 1 capsule session
+(xhigh), plus retry attempts on two of them; counting the same day's
+pre-audit wave, fold, fold2 and run-book sessions brings the day's Sol
+total to ~15. Four Opus agents: three contract/design refuters (~96k /
+120k / 144k tokens) plus one dictated-fills drafting/verification agent
+(~115k) — the latter caught five material errors in the lead's own
+dictation of this entry, including the effort-tier discrepancy ruled on
+below. Lead orchestration on top. The
+`codex-usage` ledger reads all zeros for the 5h and 24h windows ("local
+quota signal unavailable in referenced session logs") — the feed is
+suspected broken, so no token-volume snapshot is recorded this session.
+
+Verdict: **the Opus-contract + Sol-execution pairing changed the triage
+outcome in every round it ran** — it collapsed one blocker outright
+(F2), re-priced two (G1, G2), refuted two proposed fixes before they
+landed (G2 fixture, F3 fixture), and produced one blocker the auditor
+never saw (A1 terminal mock bar). The two lenses split on G1/G2 (Sol
+sustained both at blocker; Opus re-priced both) and the lead synthesized
+rather than majority-voted, per §C-028. Adopted as the default
+blocker-refuter shape; memory and skills to be updated by the lead.
+
+Dissent recorded: on F4 the lead overrode the contract refuter's
+downgrade and kept blocker priority, on the grounds that the
+anchor-fallback replay path was about to be exercised by the next
+window's re-verdict. On G1/G2 the lead implemented both fixes despite
+the contract lens's re-price, treating the re-price as a scope
+argument (what is *newly* broken) rather than a licence to defer.
+
+Calibration note: the auditor layer's yield is real but its severity
+calibration is not — four consecutive rounds produced findings worth
+fixing while its blocker tier held at roughly half strength. The
+refuter tier is what converts that into correct triage; running a
+single-lens refuter would have inherited the inflation.
+
+Effort-tier ruling (lead, flagged by the drafting agent's verification
+pass): the execution refuters ran at `high`, not the
+adversarial-review skill's `xhigh` default — deliberately in round 1
+(Ed's A/B spec named "sol high") and carried into round 2 for
+comparability. The A/B verdict therefore stands on high-tier refuters,
+which is the STRONGER form of the result: paired distinct-lens
+refuters at high changed triage outcomes that single-lens xhigh
+refuters have historically missed. Ruling: in the paired-lens shape,
+`high` is the default refuter tier; reserve `xhigh` for single-refuter
+verification or judgment-dense standalone audits. The lead will amend
+the adversarial-review skill's effort note accordingly.
+
+Scorecard (dispositions per docs/orchestration.md): 20 findings raised
+across 4 audit rounds incl. refuter adjacents. Accepted-and-fixed in
+PR #85: 13 (r1 F1/F3/F4/F5/F7; r2 G1/G2/G3 + adjacent A1 terminal mock
+bar; r3 F1/F2/F3; r4 F1). Re-priced by refuters before fixing: 4 of
+those (r1 F4 blocker→should-fix; r2 G1/G2 blocker→should-fix; r1 F2
+blocker→docs-only, landed as contract clarification). Rejected /
+non-obligating: 2 (r1 F6 contract-refuted; r2-A2 traced not-reachable,
+defensive comment only). Queued: 4 → kernel row CUSTODY-HARDEN-01
+(G2A reduce-layer label trust, drift-bound seal authentication, dead
+no-freshness accommodation, artifact_schema_invalid mislabel);
+full-strip custody discrimination remains inside pre-existing
+FLOOR-BIND-01/L1. Owners: all fixed items closed at merge c3e2647
+(lead-verified); queued items owned by the kernel rows named above;
+no open finding without an owner.

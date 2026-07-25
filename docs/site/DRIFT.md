@@ -1,13 +1,28 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-24 (COLLECTION ERA — repo far ahead of capsule).
+Refreshed: 2026-07-25 (CURRENT DEPLOYED BASELINE). Ed redeployed the
+capsule from merged main `c3e2647` (plus the same-day bookkeeping
+refresh: gauntlet run report, C-033, refreshed status surfaces, and the
+council-log capsule redirect) as `dep_2I04CG6tQ4t0mzY7`; the capsule
+configuration timestamp is 2026-07-25T02:30Z (the deployed page's own
+copy of this stamp may read one deploy older — stamp-then-deploy
+ordering artifact, not drift). This deployment
+includes the repaired-instrument collection story, the ratified and
+merged PR #85 SCREEN+BUDGET rules, the gauntlet report, and the
+decision-log pagination/capsule repair. No deployment is outstanding:
+all deploy recommendations below are retained as history and are now
+fulfilled or retired.
+
+Prior refresh: 2026-07-24 (COLLECTION ERA — repo far ahead of capsule).
 Since the last deploy the repo gained: the merged repair PRs #79-#84,
 two nights of collection (229 members, four bracketed windows), the
 NEG-8 drift-gate redesign (debated, Ed-ratified, D-078 clauses 8-10),
 a new plain-language PROJECT_STATUS collection-era section, the
 2026-07-23 collection-arc run report, and council entries C-031/C-032.
-Recommendation unchanged: deploy at the next natural point (after the
-first claim-grade floor table lands, one more window). Ed deploys.
+Historical recommendation (fulfilled by the 2026-07-25 deployment):
+deploy at the next natural point. Ed deployed before the first
+claim-grade floor table because PR #85 and the capsule repair were
+already complete.
 
 Prior refresh: 2026-07-22 (INSTRUMENT REPAIR SIGNED OFF — the good-news
 counterpart to the 07-19d alert below, which remains partly operative
@@ -122,8 +137,8 @@ and awaiting deployment.
   source updates. Other deployed pages remain current as of `b641f26` unless
   their own sources changed after that commit.
 
-**RECOMMENDATION: fold these changes into the next natural Ed-manual deploy;
-a separate near-term redeploy is not warranted.** The post-deploy delta adds
+**HISTORICAL RECOMMENDATION (fulfilled by the 2026-07-25 deployment): fold
+these changes into the next natural Ed-manual deploy.** The post-deploy delta adds
 an explicitly exploratory observation block, feasibility evidence, and
 research-agenda bookkeeping; it does not change a promoted claim, close a live
 gate, or alter the published floor table. If an advisor review will rely on

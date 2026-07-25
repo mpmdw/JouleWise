@@ -616,12 +616,14 @@ Text.
             self.assertEqual(
                 pack_capsule.CAPSULE_PAGE_REDIRECTS,
                 {
+                    "council_log.html": "record.html",
                     "project_status_full.html": "project_status.html",
                     "run_state.html": "status.html",
                     "task_queue.html": "roadmap.html",
                 },
             )
             redirected_source_expectations = {
+                "council_log.html": "docs/council_log.md",
                 "project_status_full.html": "PROJECT_STATUS.md",
                 "run_state.html": "RUN_STATE.md",
                 "task_queue.html": "TASK_QUEUE.md",
@@ -718,12 +720,14 @@ Text.
             self.assertNotIn("estimator-only advisory", pack_stdout.getvalue())
             self.assertEqual(pack_stderr.getvalue(), "")
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
-            # AUD-WO-039 / D-076-pending: measured mode is authoritative; the
-            # conservative estimator is a fallback-only guard and is expected
-            # to overshoot this production-shaped input.
-            self.assertGreater(
+            # AUD-WO-039: measured mode is authoritative; the conservative
+            # estimator is a fallback-only guard. Since the C-033 council-log
+            # capsule redirect, production-shaped input fits even the
+            # estimator's fallback budget; the estimator must never exceed
+            # the invariant 1 MiB cap regardless.
+            self.assertLessEqual(
                 estimated_artifact,
-                pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES,
+                pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES,
             )
             self.assertLessEqual(
                 960_030, pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES

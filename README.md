@@ -15,14 +15,17 @@ The harness is designed around three stable ideas:
   for later audit and analysis.
 
 **Status:** research prototype. The Mac (Apple M3 Max) measurement harness has
-cleared its pre-campaign software review, the analysis path is implemented,
-and the comprehensive audit is closed on `main`. P2-038 is closed by a
-production-shaped merged-main pass, Window A is open, and its first detection-
-floor set is published from 222 distinct strict-valid, collection-usable
-bundles. All 222 are also claim-evidence-flagged, so strict validity is not
-claim readiness and P2-037 claim adjudication remains pending. The verified
-floor table and its caveats are in `PROJECT_STATUS.md`; the shipped advisor
-deliverable is `docs/advisor_briefs/2026-07-17-window-a-brief.html`.
+completed its instrument repair (D-078 phase 0) and the repaired path has
+collected 229 strict members across four bracketed windows, a5-a8. Those
+windows are non-claim-bearing diagnostic, instrument-proving evidence, not
+published floors. The SCREEN+BUDGET rules are ratified and merged
+(D-078 clause 10; council C-033):
+they screen gross and idle-subtracted energy separately, retain a nonzero
+drift allowance for each family, require a fresh 24-hour bound, reject
+fallback-clock members from floor cells, and bar mock evidence from claims.
+The next step is one clean prospective quiet-machine window following
+`docs/phase_2/window_runbook.md`, producing the first claim-grade floors
+before the a8 re-verdict and Splitwise sizing.
 
 The post-audit architectural verdicts remain deliberately bounded: AXI-SB is
 `supported` for native static-batch runtime feasibility with request-scoped
@@ -87,15 +90,16 @@ execution and per-round observability only. Their thinking-mode,
 unmatched-output throughput inversion is hypothesis-generating, not energy
 evidence.
 
-Window A remains open and still requires Ed and a quiet Mac. The
-production-shaped P2-038 gate is closed and the first request, phase, and suite
-false-effect guard floors are published. Every reported energy value uses the
-basis-and-boundary labels in `PROJECT_STATUS.md`: gross is the D-067 headline
-basis; idle-subtracted energy is a labeled within-device secondary view; the
-current floors use the Apple M3 Max / powermetrics SoC-rail boundary. The floor
-corpus does not itself promote a claim, and P2-037 adjudication remains pending.
-Use the generated state kernel—not this summary—to select the next live or
-agent-lane step.
+Window A remains open and still requires Ed and a quiet Mac. The repaired
+instrument has produced the 229-member a5-a8 diagnostic collection, and the
+merged screening and uncertainty-budget rules (D-078 clause 10) are ready for prospective
+use. The next claim attempt must follow the run-book: mint the drift bound
+inside the quiet window, then collect a start triplet, midpoint reference, and
+end triplet around the science members. A passing window will support the
+first claim-grade floors; only then do the a8 re-verdict and Splitwise sizing
+follow. The earlier 222-bundle floor publication remains a caveated historical
+record. Use the generated state kernel—not this summary—to select the next
+live or agent-lane step.
 
 A separate nine-bundle follow-on is now available as an explicitly
 **exploratory, unmatched, no-claim** observation block. All nine bundles are

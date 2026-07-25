@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "First live collection arc: 4 bracketed windows, 229 members, 3 collection-path repair PRs, NEG-8 gate adjudication (point-drift ruling pending Ed)",
-    "path": "docs/run_reports/2026-07-23-window-a-collection-arc.md"
+    "label": "SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next",
+    "path": "docs/run_reports/2026-07-24-screen-budget-gauntlet.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -611,6 +611,38 @@
       "priority": "p3_research_expansion",
       "rank": 27,
       "status": "shelved",
+      "stop_card": null
+    },
+    "CUSTODY-HARDEN-01": {
+      "acceptance": {
+        "evidence": [
+          "Reduce-layer environment/CPU claim barriers derive mockness from the custody-bound config, with metadata/summary-label early returns removed",
+          "Drift-bound artifact corpus identities resolve against repo-registered or custody-bound bytes (seal no longer self-certifying)",
+          "Dead pre-addendum no-freshness accommodation removed or pinned as intentional forward-compatibility",
+          "artifact_schema_invalid evidence-binding mislabel renamed or documented at emission site"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CUSTODY-HARDEN-01/acceptance",
+          "label": "CUSTODY-HARDEN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the PR #85 gauntlet's deferred custody-hardening seams: config-derived mockness reaches the reduce-layer barriers, the drift-bound seal stops being self-certifying, and two diagnostic nits are resolved."
+      },
+      "authority": {
+        "label": "C-033 gauntlet deferrals (council log; detail in docs/run_reports/2026-07-24-screen-budget-gauntlet.md)",
+        "path": "docs/council_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Custody hardening follow-on from the screen+budget gauntlet: reduce-layer label-trust removal (G2A), drift-bound seal authentication (A3-r2), dead no-freshness accommodation disposition, artifact_schema_invalid mislabel.",
+      "id": "CUSTODY-HARDEN-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 43,
+      "status": "queued",
+      "status_note": "Minted 2026-07-25 from PR #85 gauntlet deferrals; triangle-agreement enforcement (merged) already raises these seams to three-file forgery cost.",
       "stop_card": null
     },
     "DOC-008": {
@@ -1415,13 +1447,13 @@
         "lead_only",
         "pre_window_a_gate"
       ],
-      "goal": "Detection-floor calibration campaign: expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA; daily fixed reference cell at window start/end (NEG-8); Window-B-start revalidation cell (CP-6).",
+      "goal": "Collect the first claim-grade Window A floors in one clean prospective quiet window per the claim-window run-book: mint the drift bound in-window, then run the start triplet, midpoint reference, and end triplet before the a8 re-verdict and Splitwise sizing.",
       "id": "P2-015",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 1,
       "status": "partial",
-      "status_note": "Start gate: PR #79 (D-078 repair) merges to main first; collection runs on merged main.",
+      "status_note": "PR #79 instrument repair and PR #85 SCREEN+BUDGET rules are merged; the start gate is one clean quiet window executed per docs/phase_2/window_runbook.md.",
       "stop_card": null
     },
     "P2-016": {
@@ -2268,5 +2300,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-24"
+  "updated": "2026-07-25"
 }

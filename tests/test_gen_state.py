@@ -32,6 +32,8 @@ EXPECTED_IDS = {
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # D-078 confirmation-round-9 follow-up
     "FLOOR-BIND-01",
+    # C-033 screen+budget gauntlet deferrals (2026-07-25)
+    "CUSTODY-HARDEN-01",
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
@@ -168,9 +170,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_46(self):
+    def test_exact_live_id_set_47(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 46)
+        self.assertEqual(len(self.tasks), 47)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

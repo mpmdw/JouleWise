@@ -4471,8 +4471,10 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    bracket); their corpora stand as instrument-proving evidence. The next
    clean bracketed window is the first claim attempt.
 
-10. **NEG-8 drift-gate estimand ruling (2026-07-24; lead-ruled, Ed
-   ratification pending).** The whole-window drift adjudication proved the
+10. **NEG-8 drift-gate estimand ruling (2026-07-24; lead-ruled; RATIFIED
+   in amended SCREEN+BUDGET form by the clause-10 addendum below — this
+   original gross-only form was superseded the same day and never
+   collected under).** The whole-window drift adjudication proved the
    gate as previously implemented compared the two reference cells'
    admissible envelopes at opposite corners (~0.9-1.5 J stacked) against
    an underived 0.05 J constant — structurally unpassable even for a

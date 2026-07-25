@@ -1,35 +1,23 @@
 # JouleWise Run State
 
-Last updated: 2026-07-22. **D-078 P0 INSTRUMENT REPAIR SIGNED OFF at
-`040ca3a` (branch `impl/p0-instrument-repair`, PR open for Ed-named
-merge).** Nine confirmation rounds converged (27→8→9→7→3→6→3→5→1
-findings/round); round 9 was FINAL per the Ed-ratified cap and its one
-surviving blocker is now REGISTERED LIMITATION L1 (D-078 clause 8):
-canonical floor/MDE artifacts are claim-licensing ONLY from
-same-custody-session governed extraction until FLOOR-BIND-01 (P1,
-agent lane) binds them to extraction evidence. Suite at sign-off:
-2088 passed / 0 failures. Instrument state: B_fiducial 27.373 ms from
-the sealed 40-pulse v2 validation run (~87% confidence on the 95th
-percentile; the claim-bearing nonparametric 95/95 bound under
-registered assumptions T1-T3 is minted by the fresh 59-pulse v3
-calibration that brackets the next collection window), composed
-per-edge bound B_bundle+B_fiducial+span, corner-exact two-edge
-envelopes, exact corner-maximized D-054 floors with corner-widened
-records, protocol v3 (59 pulses), mandatory pre/post calibration
-bracketing with consumed bracket maximum, dual-clock + ClockStamp
-physical-sanity + executed-schedule authentication (understated-bound
-paths killed). NEXT (ordered; roadmap:
-`docs/phase_2/splitwise_replication_roadmap.md`): (1) Ed merges the PR;
-(2) [QUIET-MAC] fresh v3 pulse calibration BRACKETING a Window-A
-re-collection window — ping Ed to schedule (no measurements run without
-the window); (3) then P2-006 Qwen2.5-1.5B/7B pair campaign per the
-roadmap. The 2026-07-19 soundness-gate context (trace-time-anchor
-defect voiding claim use of all prior powermetrics corpora; 288-bundle
-recal corpus retained as instrument/calibration evidence; record:
-`docs/reviews/2026-07-19-measurement-soundness-audit.md`) is now
-addressed in code at this head; corpus salvage remains a separate Ed
-ruling. The 2026-07-17 published floor table is caveated pending
-re-adjudication.
+Last updated: 2026-07-25. **Main is at `c3e2647`: PR #79's D-078
+instrument repair merged on 2026-07-22, and PR #85's ratified
+SCREEN+BUDGET rules are merged with green CI after the four-round
+adversarial gauntlet.** The repaired-instrument collection contains 229
+strict members across four bracketed windows (a5-a8). Those windows are
+non-claim-bearing diagnostic, instrument-proving evidence; they do not
+license a floor or research claim.
+
+The merged rules now screen gross and idle-subtracted energy separately,
+carry a never-zero drift allowance for each family, require a fresh
+24-hour drift bound, reject fallback-clock members from floor/claim cells,
+derive mockness from custody-bound config, and bar terminal mock evidence.
+NEXT: use one clean `[QUIET-MAC]` window and follow
+`docs/phase_2/window_runbook.md` exactly — mint the bound inside the
+window, collect the start triplet, midpoint reference, and end triplet,
+and produce the first claim-grade floors. Then re-verdict a8 and size the
+Splitwise campaign. The capsule was redeployed from `c3e2647` as
+`dep_2I04CG6tQ4t0mzY7` at 2026-07-25T01:46Z.
 
 Prior context (historical, pre-repair; superseded by the sign-off above):
 PRs #77 and #78 are both MERGED (#78 at b52abf3). The recal windows of
@@ -117,7 +105,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-24). Latest report: [First live collection arc: 4 bracketed windows, 229 members, 3 collection-path repair PRs, NEG-8 gate adjudication (point-drift ruling pending Ed)](docs/run_reports/2026-07-23-window-a-collection-arc.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-25). Latest report: [SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next](docs/run_reports/2026-07-24-screen-budget-gauntlet.md).
 
 ### [ED-EXTERNAL]
 
@@ -125,7 +113,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- READY — Q1 `P2-015`: Detection-floor calibration campaign: expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA; daily fixed reference cell at window start/end (NEG-8); Window-B-start revalidation cell (CP-6).
+- READY — Q1 `P2-015`: Collect the first claim-grade Window A floors in one clean prospective quiet window per the claim-window run-book: mint the drift bound in-window, then run the start triplet, midpoint reference, and end triplet before the a8 re-verdict and Splitwise sizing.
 
 ### [AGENT]
 
@@ -248,18 +236,20 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**Collection era open (2026-07-24): PRs #79-#82 merged; four bracketed
-windows collected (229 strict members; corpora a5-a8) under the repaired
-instrument; instrument point repeatability 0.0067 J / ~38.5 J over 3 h;
-claim licensing gated on the NEG-8 point-drift ruling (lead-ruled, Ed
-ratification pending) + derived drift bound + remaining cells.** Record:
-`docs/run_reports/2026-07-23-window-a-collection-arc.md`. Prior state:
+**Collection era open (2026-07-25): main `c3e2647` contains the merged
+instrument repair (PR #79) and the merged SCREEN+BUDGET rules (PR #85).
+The 229-member a5-a8 collection is non-claim-bearing diagnostic,
+instrument-proving evidence.** The next claim attempt is one clean
+prospective quiet window per `docs/phase_2/window_runbook.md`, with an
+in-window bound mint and start-triplet + midpoint + end-triplet
+references. A passing window produces the first claim-grade floors;
+the a8 re-verdict and Splitwise sizing follow. Records:
+`docs/run_reports/2026-07-23-window-a-collection-arc.md` and
+`docs/run_reports/2026-07-24-screen-budget-gauntlet.md`.
 
-The D-078 Phase-0 instrument repair is SIGNED OFF (2026-07-22): code
-head `040ca3a`, close-out `debc6d2`, PR #79 open for Ed-named merge,
-registered limitation L1 recorded, FLOOR-BIND-01 queued, and the next
-step is the v3-bracketed Window-A re-collection. Full state in the
-header above; record:
+The D-078 Phase-0 instrument repair was signed off and merged through
+PR #79 on 2026-07-22. Registered limitation L1 remains owned by
+FLOOR-BIND-01; it does not reopen the completed repair. Record:
 `docs/run_reports/2026-07-20-p0-instrument-repair.md`. Earlier arcs below
 are historical.
 
@@ -385,9 +375,18 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
-- **D-078 sign-off gate (2026-07-22, current):** branch
+- **Merged main `c3e2647` / PR #85 (2026-07-25, current):** the
+  SCREEN+BUDGET implementation completed four adversarial audit rounds.
+  Final PR-head CI was green on all five checks (`build`,
+  `installed-wheel`, `release-chain`, `test (3.11)`, `test (3.14)`).
+  The final lead-side suite recorded 2141 passed / 21 skipped; its one
+  battery-timing flake passed on rerun. The capsule was redeployed as
+  `dep_2I04CG6tQ4t0mzY7` at 2026-07-25T01:46Z.
+- **D-078 repair sign-off gate (2026-07-22, historical merged gate):**
+  branch
   `impl/p0-instrument-repair` code/test head `040ca3a` (docs-only
-  close-out `debc6d2` carries it unchanged): lead-run
+  close-out `debc6d2` carries it unchanged; merged through PR #79):
+  lead-run
   `pytest -q tests/` = **2088 passed, 15 skipped, 1570 subtests, 0
   failures**; round-9 focused review surface 357 passed at the same
   head. Entries below are historical.
@@ -564,14 +563,13 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- (2026-07-22) Branch `impl/p0-instrument-repair` is at close-out head
-  `debc6d2` (pushed; PR #79 open). Main is at the `b2f7d2c` checkpoint
-  and will be superseded by the PR merge — this file's branch copy is
-  the current one. The it-p0 integration worktree lives in the
-  session-d714f367 scratchpad; session-6e0fe1ee scratchpad holds the
-  resume-pointer history. Older note (2026-07-13, historical): main was
-  at the post-#65 merge, clean; merged bridge branches deleted; Lakebed
-  upload Ed-completed and lead-verified.
+- (2026-07-25) `main` and `origin/main` are at `c3e2647`, the PR #85
+  merge. PR #79's repair and PR #85's SCREEN+BUDGET implementation are
+  both landed; final PR-head CI is green. The current working tree
+  contains intentional lead bookkeeping and run-book/report work that
+  must be preserved; it is not a clean measurement checkout. The next
+  quiet-window operator must start from a separate clean, merged-main
+  measurement checkout per `docs/phase_2/window_runbook.md`.
 - The generated state-kernel blocks are authoritative for work selection.
   Hand-authored `RUN_STATE.md` and `TASK_QUEUE.md` text remains authoritative
   only for its own factual, policy, and historical domains;

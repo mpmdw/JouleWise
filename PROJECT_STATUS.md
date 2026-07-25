@@ -10,15 +10,15 @@ are provided for anyone who wants the full evidence trail.
   `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
   the current verification result. This page deliberately does not duplicate
   volatile commit, pull-request, queue, or test-count facts.
-- Repository state: the comprehensive audit is closed on `main`. P2-038 is
-  closed by a merged-main production-shaped pass, and Window A is open. Its
-  floor campaign produced 222 distinct strict-valid, collection-usable bundles;
-  the verified floor extraction and advisor brief are published in the
-  repository. Every bundle is also claim-evidence-flagged, so strict validity
-  is not claim readiness and P2-037 claim adjudication remains pending. A
-  separate nine-bundle OLMoE/Qwen block is now extracted below as explicitly
-  exploratory, unmatched, claim-evidence-flagged observations; it does not
-  change that gate. The dated update ledger carries the merge pointers.
+- Repository state: `main` contains the repaired measurement
+  instrument (D-078 phase 0) and the audited screening and
+  uncertainty-budget rules (D-078 clause 10; council C-033).
+  The repaired-instrument collection has 229 members across four bracketed
+  windows, a5-a8. Those windows are useful diagnostic evidence that the
+  instrument works, but they are not claim-bearing and do not yet publish a
+  floor. The next step is one clean prospective quiet-machine collection
+  following `docs/phase_2/window_runbook.md`; if it passes, it will produce
+  the first claim-grade floors before the a8 re-verdict and Splitwise sizing.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -30,21 +30,26 @@ are provided for anyone who wants the full evidence trail.
 
 ## Current Repository View — 30-second read
 
-**Window A is open and its first floor set is published.** P2-038 closed after
-the production-shaped runner path passed on merged `main`; the retained failed
-shakedowns had already caught a missing telemetry bracket, idle-window
-contamination, and an anchor-lag error before the floor corpus began. The
-campaign then yielded 222 distinct bundles, all strict-valid and
-collection-usable. Independent extraction and verification confirmed the floor
-table below, and the shipped advisor brief presents the same evidence.
+**The repaired instrument has completed its first collection era, but the
+first claim-grade floor is still ahead.** The D-078 phase-0 repair fixed the timing and
+calibration path on 2026-07-22. Four bracketed windows then collected 229
+strict members (a5-a8). They are retained as non-claim-bearing diagnostic,
+instrument-proving evidence: they showed that the repaired path works and
+exposed the remaining drift-screen problem, but they are not a published
+floor set.
 
-This is calibration evidence, not a promoted research result: all 222 bundles
-are claim-evidence-flagged, short prefill is not resolvable, and comparative
-tails show drift/ordering structure. P2-037 claim adjudication remains
-pending before any floor-backed L2/L3 claim. A 2026-07-19 re-calibration under
-the D-077 guard has re-measured the suite cells clean — preliminary
-readout in the dated section below and the advisor update brief. AXI-SB remains `supported` for native static-batch runtime
-feasibility with request-scoped observability; AXI-SC is
+That problem is now resolved in the merged SCREEN+BUDGET rules (D-078 clause 10). Gross and
+idle-subtracted energy are screened separately; each passing window keeps a
+nonzero drift allowance in its uncertainty budget; the drift bound expires
+after 24 hours; fallback-clock members cannot support a floor; and mock
+evidence is identified from the bound configuration and barred from claims.
+The next quiet session will mint its bound inside the window and collect
+three start references, one midpoint reference, and three end references.
+The older 222-bundle floor table below remains visible as a caveated historical
+record, not the current measurement posture.
+
+AXI-SB remains `supported` for native static-batch runtime feasibility with
+request-scoped observability; AXI-SC is
 `unsupported_for_joulewise` on the pinned runtime because the required
 speculative-decode/MTP observability or execution surface is absent. Neither
 verdict is an energy result. Remote protocol pins remain PROVISIONAL, and the
@@ -171,6 +176,24 @@ first claim-grade detection-floor table, which then sizes the Splitwise
 replication experiments. Records:
 `docs/run_reports/2026-07-23-window-a-collection-arc.md`, decision log
 D-078 clauses 8-10.
+
+**SCREENING RULES BUILT, AUDITED, AND MERGED (2026-07-25; council
+C-033).**
+The redesigned stability screen described above is now implemented and
+on main: both energy families are screened separately, every passing
+window carries an explicit drift allowance into its error bars, drift
+limits expire after 24 hours so stale calibrations cannot be reused,
+and a measurement whose internal clock had to be guessed can never
+anchor a result (that one rule alone corrected a floor that was
+overstated by roughly a factor of three). The code went through an
+unusually deep adversarial review — four independent audit rounds and
+three rounds of cross-examination between two different AI models —
+which caught and fixed several ways the new rules could have been
+silently bypassed. The step-by-step measurement procedure for the next
+collection session is written up in
+`docs/phase_2/window_runbook.md`. Records:
+`docs/run_reports/2026-07-24-screen-budget-gauntlet.md`, council log
+C-033.
 
 ### Exploratory follow-on — not a promoted claim
 

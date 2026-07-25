@@ -36,6 +36,7 @@ INTERNAL_HREF_REWRITES = {
 # This preserves source history in git without duplicating the largest views
 # inside Lakebed's 1 MiB artifact.
 CAPSULE_PAGE_REDIRECTS = {
+    "council_log.html": "record.html",
     "project_status_full.html": "project_status.html",
     "run_state.html": "status.html",
     "task_queue.html": "roadmap.html",
