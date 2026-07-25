@@ -36,6 +36,9 @@ EXPECTED_IDS = {
     "CUSTODY-HARDEN-01",
     # 2026-07-25 collection-night max-bracket consumption gap
     "CAL-REBRACKET-01",
+    # 2026-07-25 attribution-limit adjudication
+    "FLOOR-LABEL-01", "FLOOR-WORKLOAD-SIZING-01",
+    "FLOOR-COMMONMODE-01", "PHASE-SHARE-ESTIMAND-01",
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
@@ -172,9 +175,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_48(self):
+    def test_exact_live_id_set_52(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 48)
+        self.assertEqual(len(self.tasks), 52)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

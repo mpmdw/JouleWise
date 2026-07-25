@@ -959,6 +959,110 @@
       "status_note": "Minted 2026-07-22 from confirmation round 9 (CR9-1, lead-reproduced). L1 workflow rule mitigates until closed.",
       "stop_card": null
     },
+    "FLOOR-COMMONMODE-01": {
+      "acceptance": {
+        "evidence": [
+          "Block-timescale fiducial stationarity registered as a NAMED transfer assumption with its evidence",
+          "Estimator pre-registered before it touches claim-bearing data",
+          "The identical estimator applied to BOTH the calibration blocks and the consuming science contrast (a floor calibrated with cancellation the consumer does not get would understate false effects)",
+          "Quantified gain on a5/a10 blocks versus the worst-case-sum default"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FLOOR-COMMONMODE-01/acceptance",
+          "label": "FLOOR-COMMONMODE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fiducial term is ~80% of the composed anchor bound (24.9 of ~31.1 ms, verified) and is literally the same artifact for all four members of a block; treating it as four independent adversarial draws is itself an unphysical modelling choice."
+      },
+      "authority": {
+        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Pre-register and evaluate a common-mode anchor estimator for ABBA blocks: sweep one shared fiducial shift across all four members, re-integrate measured curves, and add only genuinely per-bundle components adversarially.",
+      "id": "FLOOR-COMMONMODE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 47,
+      "status": "queued",
+      "status_note": "Minted 2026-07-25. Legitimate refinement, not invented physics — every ingredient is a measured curve or an already-registered bound. Gain expected to be material but not 10x, since the bundle-local term stays adversarial.",
+      "stop_card": null
+    },
+    "FLOOR-LABEL-01": {
+      "acceptance": {
+        "evidence": [
+          "D-078 amendment ratified by Ed BEFORE any code softening (closed-registry channel)",
+          "Extraction emits a labelled claim-path floor with floor_source naming the dominant uncertainty term",
+          "Point (repeatability) floor preserved and reported separately as a diagnostic",
+          "Single-count discipline recorded: effective clearable effect = floor + claim-side bound; neither may be optimized away",
+          "a10 phase cells extract as labelled attribution-limited floors"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FLOOR-LABEL-01/acceptance",
+          "label": "FLOOR-LABEL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Attribution-limited floors become claimable and labelled, so instrument-limited windows publish an honest floor instead of refusing."
+      },
+      "authority": {
+        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-054 floor semantics / closed-registry amendment rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No code change to the dominating-uncertainty gate before Ed ratifies the D-078 amendment; the registry channel is mandatory."
+        }
+      ],
+      "flags": [],
+      "goal": "Convert admissible_set_uncertainty_dominates_point_floor from hard refusal to a labelled claim path (floor_source names the dominant term; point floor retained as repeatability diagnostic), after Ed ratifies the D-078 amendment.",
+      "id": "FLOOR-LABEL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 45,
+      "status": "queued",
+      "status_note": "Minted 2026-07-25. D-054 defines the floor as a practical prediction bound on FALSE OBSERVED EFFECTS, not a repeatability statistic; the corner-widened maximum satisfies that definition. GATE: Ed ratifies the amendment first — do not soften the gate in code before ratification.",
+      "stop_card": null
+    },
+    "FLOOR-WORKLOAD-SIZING-01": {
+      "acceptance": {
+        "evidence": [
+          "Measured effect-to-floor ratio at candidate workload sizes, from a pilot rather than assumption",
+          "Re-sized configs for the remaining floor stages, with the sizing rationale recorded",
+          "Explicit decision on which queued stages are collected at which sizes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FLOOR-WORKLOAD-SIZING-01/acceptance",
+          "label": "FLOOR-WORKLOAD-SIZING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Anchor-attribution error is approximately duration-independent (~1 J regardless of phase size) while effects scale with workload, so lengthening prefill/decode raises effect-to-floor linearly at zero instrument cost."
+      },
+      "authority": {
+        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-size the floor/science campaign workloads so measured effects clear the duration-independent attribution floor, and pilot the resulting effect-to-floor ratio before spending quiet-machine nights on ABBA collection at current sizes.",
+      "id": "FLOOR-WORKLOAD-SIZING-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 46,
+      "status": "queued",
+      "status_note": "Minted 2026-07-25. BLOCKS the queued ABBA collection roadmap: collecting 03/04/05/07/09 at current sizes would hit the same attribution wall three quiet nights later.",
+      "stop_card": null
+    },
     "P1-001": {
       "acceptance": {
         "evidence": [
@@ -2294,6 +2398,37 @@
       "priority": "p3_research_expansion",
       "rank": 21,
       "status": "blocked",
+      "stop_card": null
+    },
+    "PHASE-SHARE-ESTIMAND-01": {
+      "acceptance": {
+        "evidence": [
+          "Determined whether _corner_composed_anchor_shift_envelope treats the shared interior boundary independently",
+          "Joint envelope over the single boundary-position parameter derived by re-integration sweep (measured-curve arithmetic only)",
+          "Quantified effect on the phase-asymmetry claim envelope versus the independent-box treatment"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PHASE-SHARE-ESTIMAND-01/acceptance",
+          "label": "PHASE-SHARE-ESTIMAND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Treating each phase's anchor envelope as an independent box double-spends the shared interior boundary and inflates uncertainty on exactly the split/share quantity the Splitwise replication needs."
+      },
+      "authority": {
+        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Investigate the anti-correlated prefill/decode boundary error: energy a shift removes from one phase it adds to the other, so the phase-share estimand has ONE boundary nuisance parameter whose joint envelope is a curve, not a box.",
+      "id": "PHASE-SHARE-ESTIMAND-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 48,
+      "status": "queued",
+      "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
     "TOOL-01": {
