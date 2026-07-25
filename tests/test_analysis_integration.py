@@ -1743,6 +1743,19 @@ class AnalysisIntegrationTests(unittest.TestCase):
             artifact["sampling_audit"]["demoted_contrast_ids"],
             [],
         )
+        affected = [
+            contrast
+            for contrast in artifact["contrasts"]
+            if target["cell_id"]
+            in {
+                contrast["conditions"]["cell_a_id"],
+                contrast["conditions"]["cell_b_id"],
+            }
+        ]
+        self.assertTrue(affected)
+        self.assertTrue(
+            all(contrast["estimator"]["n"] == 5 for contrast in affected)
+        )
 
     def test_replacement_with_changed_rep_tag_is_topup_not_slot_fill(self):
         runs = self.root / "wrong-rep-replacement-runs"
