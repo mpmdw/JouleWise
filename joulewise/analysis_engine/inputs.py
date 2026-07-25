@@ -29,7 +29,13 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     validate_floor_artifact,
 )
-from joulewise.whole_window import whole_window_refusal_reasons
+from joulewise.whole_window import (
+    NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    custody_telemetry_identity,
+    neg8_claim_family_for_metric,
+    whole_window_drift_allowances,
+    whole_window_refusal_reasons,
+)
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -85,6 +91,63 @@ CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD = (
     "common_trace_shift_plus_independent_edge_corners_v3"
 )
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
+ANCHOR_FALLBACK_MEMBER_REFUSAL = "anchor_fallback_member_unusable"
+MOCK_TELEMETRY_CLAIM_REFUSAL = "mock_telemetry_claim_ineligible"
+
+
+def _nested_contains(value: object, target: str) -> bool:
+    if value == target:
+        return True
+    if isinstance(value, Mapping):
+        return any(_nested_contains(child, target) for child in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return any(_nested_contains(child, target) for child in value)
+    return False
+
+
+def anchor_fallback_member_unusable(
+    summary: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+    bundle_path: Path | None = None,
+) -> bool:
+    """Whether a production member lacks admissible anchor-width evidence.
+
+    Mock-config and config-absent members are exempt so fixture-only
+    extraction remains useful without being mistaken for production evidence.
+    The production gate is the addendum in
+    ``docs/phase_2/detection_floor.md``.
+    """
+
+    if not isinstance(summary, Mapping):
+        return False
+    if bundle_path is None:
+        return False
+    identity = custody_telemetry_identity(
+        bundle_path,
+        summary=summary,
+        metadata=metadata,
+    )
+    if identity.production_predicate_exempt:
+        return False
+    if summary.get("energy_uncertainty_status") != "bounded":
+        return True
+    if _nested_contains(
+        summary.get("window_evidence_precheck", summary.get("claim_eligibility")),
+        "clock_anchor_unresolved",
+    ):
+        return True
+    anchor = None
+    if isinstance(metadata, Mapping):
+        uncertainty = metadata.get("uncertainty_evidence")
+        if isinstance(uncertainty, Mapping):
+            anchor = uncertainty.get("clock_anchor")
+    return bool(
+        isinstance(anchor, Mapping)
+        and (
+            anchor.get("status") == "unresolved"
+            or isinstance(anchor.get("trace_fallback_method"), str)
+        )
+    )
 
 
 def governed_idle_variance_pair(reducer_version: object, method: object) -> bool:
@@ -199,6 +262,10 @@ class BundleEvidence:
     expected_config_sha256: str | None = None
     window_prechecks: dict[str, dict[str, Any]] = field(default_factory=dict)
     campaign_cooldown: Mapping[str, Any] | None = None
+    whole_window_drift_allowances: Mapping[str, Mapping[str, Any]] = field(
+        default_factory=dict
+    )
+    whole_window_drift_allowance_required: bool = False
 
     @property
     def included(self) -> bool:
@@ -789,6 +856,20 @@ def bind_floor_artifact_evidence(
                 raw_config = reader.raw_config()
                 local_problems.extend(strict)
                 local_problems.extend(_source_provenance_admission_problems(metadata, summary))
+                telemetry_identity = custody_telemetry_identity(
+                    path,
+                    summary=summary,
+                    metadata=metadata,
+                )
+                if (
+                    telemetry_identity.custody_bound_config
+                    and not telemetry_identity.triangle_agrees
+                ):
+                    local_problems.append("bundle_strict_invalid")
+                if telemetry_identity.mock_config:
+                    local_problems.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
+                if anchor_fallback_member_unusable(summary, metadata, path):
+                    local_problems.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
                 if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
                     local_problems.append("calibration bundle status is not succeeded")
                 try:
@@ -1493,6 +1574,16 @@ def _read_bundle(
     strict_problems = tuple(
         (*strict_problems, *_source_provenance_admission_problems(metadata, summary))
     )
+    telemetry_identity = custody_telemetry_identity(
+        path,
+        summary=summary,
+        metadata=metadata,
+    )
+    if (
+        telemetry_identity.custody_bound_config
+        and not telemetry_identity.triangle_agrees
+    ):
+        strict_problems = (*strict_problems, "bundle_strict_invalid")
     config_sha256 = _sha256_file(path / "config.json")
     expected_config_sha256 = (
         None if allow_replacement_tags else _expected_bundle_config_sha256(source_config)
@@ -1518,6 +1609,8 @@ def _read_bundle(
         reasons.append("config_hash_mismatch")
     if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
         reasons.append("bundle_status_not_succeeded")
+    if telemetry_identity.mock_config:
+        reasons.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
     inclusion = "included" if not reasons else "excluded"
     return BundleEvidence(
         entry=entry,
@@ -1777,6 +1870,23 @@ def load_analysis_inputs(
         for evidence in (*registered.values(), *extras):
             for reason in whole_window_reasons:
                 _exclude_evidence(evidence, reason)
+    else:
+        allowances = whole_window_drift_allowances(
+            runs_root,
+            {evidence.bundle_id for evidence in effective.values()},
+        )
+        for evidence in (*registered.values(), *extras):
+            # A ``legacy`` result is never an allowance waiver: every
+            # governed non-current reducer pair is already claim-ineligible
+            # via deterministic_bounds' universal clock_anchor_unresolved
+            # barrier (and floor extraction separately requires the current
+            # anchor envelope). This flag only distinguishes current rows that
+            # must carry the newly authenticated allowance group.
+            evidence.whole_window_drift_allowance_required = (
+                allowances.status != "legacy"
+            )
+            if allowances.status == "allowances":
+                evidence.whole_window_drift_allowances = allowances.allowances
     return LoadedAnalysisInputs(
         manifest=manifest,
         manifest_sha256=manifest_sha,
@@ -2302,6 +2412,26 @@ def deterministic_bounds(
         else:
             reasons.append("interpolation_bound_unrecorded")
         record_anchor_term(None)
+    family = neg8_claim_family_for_metric(name)
+    allowance = evidence.whole_window_drift_allowances.get(family)
+    allowance_j = (
+        allowance.get("allowance_j")
+        if isinstance(allowance, Mapping)
+        else None
+    )
+    if (
+        not isinstance(allowance_j, bool)
+        and isinstance(allowance_j, int | float)
+        and math.isfinite(float(allowance_j))
+        and float(allowance_j) > 0.0
+    ):
+        # The paired estimator's existing deterministic wire adds the A and B
+        # member bounds. This is one campaign-window allowance, so each side
+        # carries one half and the named contrast total equals the allowance
+        # exactly rather than silently doubling it.
+        result[NEG8_WHOLE_WINDOW_ALLOWANCE_TERM] = float(allowance_j) / 2.0
+    elif evidence.whole_window_drift_allowance_required:
+        reasons.append("whole_window_drift_allowance_unrecorded")
     return result, tuple(ordered_reason_codes(reasons))
 
 
@@ -2503,14 +2633,22 @@ def resolve_floor(
         comparative = cell.get("comparative")
         floor_abs = (
             absolute.get(
-                "corner_widened_guarded_floor_j", cell.get("floor_abs_j")
+                "drift_widened_guarded_floor_j",
+                absolute.get(
+                    "corner_widened_guarded_floor_j",
+                    cell.get("floor_abs_j"),
+                ),
             )
             if isinstance(absolute, Mapping)
             else cell.get("floor_abs_j")
         )
         floor_cmp = (
             comparative.get(
-                "corner_widened_guarded_floor_j", cell.get("floor_cmp_j")
+                "drift_widened_guarded_floor_j",
+                comparative.get(
+                    "corner_widened_guarded_floor_j",
+                    cell.get("floor_cmp_j"),
+                ),
             )
             if isinstance(comparative, Mapping)
             else cell.get("floor_cmp_j")

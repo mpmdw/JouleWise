@@ -506,6 +506,31 @@ console.log(JSON.stringify({
             with self.assertRaisesRegex(pack_capsule.CapsulePackError, "split the page"):
                 pack_capsule.page_shards(pages)
 
+    def test_decision_log_page_shard_enforces_pagination_margin(self):
+        pages = {
+            "/decision_log_archive_1.html": {
+                "html": "".join(
+                    chr(33 + (index * 37) % 90)
+                    for index in range(80_000)
+                ),
+                "sources": [],
+                "aliases": [],
+            }
+        }
+        with (
+            mock.patch.object(pack_capsule, "MAX_SHARD_BASE64_BYTES", 1_000_000),
+            mock.patch.object(
+                pack_capsule,
+                "DECISION_LOG_SHARD_BASE64_TARGET_BYTES",
+                100,
+            ),
+            self.assertRaisesRegex(
+                pack_capsule.CapsulePackError,
+                "decision-log page exceeds 100-byte pagination target",
+            ),
+        ):
+            pack_capsule.page_shards(pages)
+
     def test_runtime_decode_budget_fails_closed(self):
         pack_capsule.enforce_runtime_decode_budget(
             {"first_request_decode": pack_capsule.MAX_FIRST_REQUEST_DECODE_BYTES}

@@ -56,10 +56,13 @@ def _default_strict_validator(path: Path, strict: bool) -> Sequence[str]:
     return validate_bundle(path, strict=strict)
 
 from joulewise.analysis_engine.inputs import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
     BundleEvidence,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
     _sha256_file,
     _summary_reducer_version,
+    anchor_fallback_member_unusable,
     anchor_shift_envelope,
     campaign_cooldown_evidence,
     deterministic_bounds,
@@ -74,7 +77,12 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
 )
-from joulewise.whole_window import whole_window_refusal_reasons
+from joulewise.whole_window import (
+    custody_telemetry_identity,
+    neg8_claim_family_for_metric,
+    whole_window_drift_allowances,
+    whole_window_refusal_reasons,
+)
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.environment_admission import (
     current_environment_refusals,
@@ -85,6 +93,7 @@ __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
     "EXTRACTION_SPEC_SCHEMA_VERSION",
     "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
+    "ANCHOR_FALLBACK_MEMBER_REFUSAL",
     "CELL_REFUSAL_CODES",
     "READER_THROUGHPUT_FIELD",
     "LEGACY_THROUGHPUT_FIELD",
@@ -93,6 +102,7 @@ __all__ = [
     "CellReport",
     "FloorExtractionError",
     "governed_cell_metric",
+    "anchor_fallback_member_unusable",
     "reader_throughput_tokens_s",
     "extract_absolute_cell",
     "extract_comparative_cell",
@@ -135,6 +145,7 @@ CELL_REFUSAL_CODES = (
     "insufficient_members_after_exclusion",
     "anchor_energy_envelope_unrecorded",
     "anchor_energy_envelope_exceeds_quarter_metric",
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
     "clock_anchor_unresolved",
     "environment_admission_missing",
     "cpu_admission_unenforced",
@@ -149,6 +160,8 @@ CELL_REFUSAL_CODES = (
     "whole_window_verdict_conflict",
     "calibration_bracket_exceeds_minted_bound",
     "admissible_set_uncertainty_dominates_point_floor",
+    "whole_window_drift_allowance_unrecorded",
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
@@ -258,6 +271,7 @@ class CellReport:
     refusal_reasons: tuple[str, ...]
     floor: FloorEstimate | None
     anchor_shift_bound_max_j: float | None
+    whole_window_drift_allowance: Mapping[str, Any] | None = None
 
     @property
     def extractable(self) -> bool:
@@ -266,6 +280,18 @@ class CellReport:
     def as_row(self) -> dict[str, Any]:
         floor_row: dict[str, Any] | None = None
         if self.floor is not None:
+            allowance = (
+                float(self.whole_window_drift_allowance["allowance_j"])
+                if isinstance(self.whole_window_drift_allowance, Mapping)
+                and isinstance(
+                    self.whole_window_drift_allowance.get("allowance_j"),
+                    int | float,
+                )
+                and not isinstance(
+                    self.whole_window_drift_allowance.get("allowance_j"), bool
+                )
+                else None
+            )
             floor_row = {
                 "kind": self.floor.kind,
                 "n": self.floor.n,
@@ -280,6 +306,23 @@ class CellReport:
                 "guarded_floor_j": self.floor.guarded_floor_j,
                 "smoke_only": self.floor.guarded_floor_j is None,
             }
+            if allowance is not None:
+                floor_row.update(
+                    {
+                        "whole_window_drift_allowance_j": allowance,
+                        "whole_window_drift_allowance_provenance": dict(
+                            self.whole_window_drift_allowance
+                        ),
+                        "drift_widened_unguarded_floor_j": (
+                            self.floor.unguarded_floor_j + allowance
+                        ),
+                        "drift_widened_guarded_floor_j": (
+                            self.floor.guarded_floor_j + allowance
+                            if self.floor.guarded_floor_j is not None
+                            else None
+                        ),
+                    }
+                )
         return {
             "cell_id": self.cell_id,
             "kind": self.kind,
@@ -292,6 +335,20 @@ class CellReport:
             "extractable": self.extractable,
             "refusal_reasons": list(self.refusal_reasons),
             "floor": floor_row,
+            "claim_family": neg8_claim_family_for_metric(self.metric),
+            "whole_window_drift_allowance": (
+                dict(self.whole_window_drift_allowance)
+                if isinstance(self.whole_window_drift_allowance, Mapping)
+                else None
+            ),
+            "operative_floor_j": (
+                floor_row.get(
+                    "drift_widened_guarded_floor_j",
+                    floor_row.get("guarded_floor_j"),
+                )
+                if floor_row is not None
+                else None
+            ),
             "anchor_shift_bound_max_j": self.anchor_shift_bound_max_j,
             "members": [member.as_row() for member in self.members],
         }
@@ -338,12 +395,18 @@ def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | Non
 def _cpu_admission_bundle_reasons(
     path: Path, summary: Mapping[str, Any]
 ) -> tuple[str, ...]:
-    quality = summary.get("measurement_quality")
-    if isinstance(quality, Mapping) and quality.get("telemetry_source") == "mock":
-        return ()
     try:
         metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata = None
+    telemetry_identity = custody_telemetry_identity(
+        path,
+        summary=summary,
+        metadata=metadata if isinstance(metadata, Mapping) else None,
+    )
+    if telemetry_identity.production_predicate_exempt:
+        return ()
+    if not isinstance(metadata, Mapping):
         return ("environment_admission_missing",)
     admission = metadata.get("environment_admission") if isinstance(metadata, Mapping) else None
     reasons = set(environment_admission_refusals(admission))
@@ -398,6 +461,24 @@ def _evaluate_member(
         reasons.append(read_problem)
     else:
         assert summary is not None
+        try:
+            parsed_metadata = json.loads(
+                (path / "metadata.json").read_text(encoding="utf-8")
+            )
+            metadata = (
+                parsed_metadata
+                if isinstance(parsed_metadata, Mapping)
+                else None
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            metadata = None
+        telemetry_identity = custody_telemetry_identity(
+            path,
+            summary=summary,
+            metadata=metadata,
+        )
+        if anchor_fallback_member_unusable(summary, metadata, path):
+            reasons.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
         # A claim-bearing floor may only be extracted from a STRICT-VALID
         # bundle (D-030): the measured window, summed curve, and re-reduction
         # of the raw artifacts must all agree with summary_metrics.json.  A
@@ -409,8 +490,15 @@ def _evaluate_member(
             strict_problems = tuple(strict_validator(path, True))
         except Exception:  # noqa: BLE001 - validator failure is never a pass
             strict_problems = ("strict validation raised",)
+        if (
+            telemetry_identity.custody_bound_config
+            and not telemetry_identity.triangle_agrees
+        ):
+            strict_problems = (*strict_problems, "telemetry triangle disagreement")
         if strict_problems:
             reasons.append("bundle_strict_invalid")
+        if telemetry_identity.mock_config:
+            reasons.append(MOCK_TELEMETRY_CLAIM_REFUSAL)
         if summary.get("status") != "succeeded":
             reasons.append("bundle_status_not_succeeded")
         reasons.extend(_cpu_admission_bundle_reasons(path, summary))
@@ -454,7 +542,7 @@ def _evaluate_member(
             relative_path=bundle_id,
             path=path,
             summary=summary,
-            metadata=None,
+            metadata=metadata,
             raw_config=None,
             strict_problems=(),
             base_reason_codes=(),
@@ -647,9 +735,23 @@ def extract_absolute_cell(
 
     refusals: list[str] = []
     excluded_slots: list[str] = []
+    fallback_exclusion_diagnostics: list[str] = []
     admitted: list[MemberReport] = []
     final_reports: list[MemberReport] = []
     for member in reports:
+        if ANCHOR_FALLBACK_MEMBER_REFUSAL in member.reasons:
+            excluded_slots.append(member.slot)
+            final_reports.append(_exclude(member))
+            fallback_exclusion_diagnostics.extend(
+                reason
+                for reason in member.reasons
+                if reason
+                not in {
+                    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+                    "clock_anchor_unresolved",
+                }
+            )
+            continue
         if member.cap_hit:
             excluded_slots.append(member.slot)
             final_reports.append(_exclude(member))
@@ -666,6 +768,7 @@ def extract_absolute_cell(
     if not refusals:
         if len(admitted) < 2:
             refusals.append("insufficient_members_after_exclusion")
+            refusals.extend(fallback_exclusion_diagnostics)
         else:
             anchor_values = [
                 member.anchor_shift_bound_j
@@ -785,6 +888,7 @@ def extract_comparative_cell(
     block_deltas: list[float] = []
     block_half_widths: list[float] = []
     admitted_members: list[MemberReport] = []
+    fallback_exclusion_diagnostics: list[str] = []
     for block, block_id in zip(blocks, block_ids):
         block_members = block["members"]
         evaluated = [
@@ -802,6 +906,23 @@ def extract_comparative_cell(
             )
             for position in _ABBA_POSITIONS
         ]
+        if any(
+            ANCHOR_FALLBACK_MEMBER_REFUSAL in member.reasons
+            for member in evaluated
+        ):
+            excluded_slots.append(block_id)
+            final_reports.extend(_exclude(member) for member in evaluated)
+            fallback_exclusion_diagnostics.extend(
+                reason
+                for member in evaluated
+                for reason in member.reasons
+                if reason
+                not in {
+                    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+                    "clock_anchor_unresolved",
+                }
+            )
+            continue
         if any(member.cap_hit for member in evaluated):
             excluded_slots.append(block_id)
             final_reports.extend(_exclude(member) for member in evaluated)
@@ -833,6 +954,7 @@ def extract_comparative_cell(
     if not refusals:
         if len(block_deltas) < 2:
             refusals.append("insufficient_members_after_exclusion")
+            refusals.extend(fallback_exclusion_diagnostics)
         else:
             anchor_values = [
                 member.anchor_shift_bound_j
@@ -977,6 +1099,17 @@ def extract_cells(
     whole_window_refusals = _whole_window_extraction_refusals(
         runs_root, referenced_bundle_ids
     )
+    whole_window_allowance_result = (
+        whole_window_drift_allowances(runs_root, referenced_bundle_ids)
+        if not whole_window_refusals
+        else None
+    )
+    whole_window_allowances = (
+        whole_window_allowance_result.allowances
+        if whole_window_allowance_result is not None
+        and whole_window_allowance_result.status == "allowances"
+        else None
+    )
     if whole_window_refusals:
         reports = [
             replace(
@@ -987,6 +1120,35 @@ def extract_cells(
                 floor=None,
                 n_admitted=0,
                 anchor_shift_bound_max_j=None,
+            )
+            for report in reports
+        ]
+    elif (
+        whole_window_allowance_result is not None
+        and whole_window_allowance_result.status == "absent"
+    ):
+        reports = [
+            replace(
+                report,
+                refusal_reasons=tuple(
+                    sorted(
+                        set(report.refusal_reasons)
+                        | {"whole_window_drift_allowance_unrecorded"}
+                    )
+                ),
+                floor=None,
+                n_admitted=0,
+                anchor_shift_bound_max_j=None,
+            )
+            for report in reports
+        ]
+    elif whole_window_allowances is not None:
+        reports = [
+            replace(
+                report,
+                whole_window_drift_allowance=whole_window_allowances[
+                    neg8_claim_family_for_metric(report.metric)
+                ],
             )
             for report in reports
         ]
@@ -1074,6 +1236,14 @@ def extract_cells(
         "cells": [report.as_row() for report in reports],
         "spec_membership_refusals": spec_membership_refusals,
         "idle_admission_refusals": list(whole_window_refusals),
+        "whole_window_drift_allowances": (
+            {
+                family: dict(value)
+                for family, value in whole_window_allowances.items()
+            }
+            if whole_window_allowances is not None
+            else None
+        ),
         "all_cells_extractable": (
             all(report.extractable for report in reports)
             and not spec_membership_refusals

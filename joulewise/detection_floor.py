@@ -508,7 +508,52 @@ def build_method_block() -> dict:
     }
 
 
-def build_absolute_record(estimate: FloorEstimate, bundle_observations: Sequence[Mapping]) -> dict:
+def _add_whole_window_drift_allowance(
+    record: dict,
+    *,
+    base_unguarded_j: float,
+    base_guarded_j: float | None,
+    whole_window_drift_allowance: Mapping | None,
+) -> dict:
+    if whole_window_drift_allowance is None:
+        return record
+    allowance = whole_window_drift_allowance.get("allowance_j")
+    if (
+        isinstance(allowance, bool)
+        or not isinstance(allowance, int | float)
+        or not math.isfinite(float(allowance))
+        or float(allowance) <= 0.0
+    ):
+        raise ValueError("whole-window drift allowance must be finite and > 0")
+    allowance = float(allowance)
+    basis_sha256 = whole_window_drift_allowance.get(
+        "whole_window_evaluation_basis_sha256"
+    )
+    if not (
+        isinstance(basis_sha256, str)
+        and len(basis_sha256) == 64
+        and all(character in "0123456789abcdef" for character in basis_sha256)
+    ):
+        raise ValueError(
+            "whole-window drift allowance requires an authenticated evaluation basis"
+        )
+    return {
+        **record,
+        "whole_window_evaluation_basis_sha256": basis_sha256,
+        "whole_window_drift_allowance": dict(whole_window_drift_allowance),
+        "drift_widened_unguarded_floor_j": base_unguarded_j + allowance,
+        "drift_widened_guarded_floor_j": (
+            base_guarded_j + allowance if base_guarded_j is not None else None
+        ),
+    }
+
+
+def build_absolute_record(
+    estimate: FloorEstimate,
+    bundle_observations: Sequence[Mapping],
+    *,
+    whole_window_drift_allowance: Mapping | None = None,
+) -> dict:
     if estimate.kind != "absolute":
         raise ValueError("absolute record requires an absolute FloorEstimate")
     if len(bundle_observations) != estimate.n:
@@ -528,7 +573,7 @@ def build_absolute_record(estimate: FloorEstimate, bundle_observations: Sequence
         if estimate.corner_widened_unguarded_floor_j is not None
         else estimate.guarded_floor_j
     )
-    return {
+    record = {
         "n": estimate.n,
         "mean_j": estimate.mean_j,
         "residuals_j": list(estimate.deviations_j),
@@ -544,9 +589,20 @@ def build_absolute_record(estimate: FloorEstimate, bundle_observations: Sequence
         "corner_widened_guarded_floor_j": widened_guarded,
         "bundle_observations": [dict(obs) for obs in bundle_observations],
     }
+    return _add_whole_window_drift_allowance(
+        record,
+        base_unguarded_j=widened_unguarded,
+        base_guarded_j=widened_guarded,
+        whole_window_drift_allowance=whole_window_drift_allowance,
+    )
 
 
-def build_comparative_record(estimate: FloorEstimate, blocks: Sequence[Mapping]) -> dict:
+def build_comparative_record(
+    estimate: FloorEstimate,
+    blocks: Sequence[Mapping],
+    *,
+    whole_window_drift_allowance: Mapping | None = None,
+) -> dict:
     if estimate.kind != "comparative":
         raise ValueError("comparative record requires a comparative FloorEstimate")
     if len(blocks) != estimate.n:
@@ -566,7 +622,7 @@ def build_comparative_record(estimate: FloorEstimate, blocks: Sequence[Mapping])
         if estimate.corner_widened_unguarded_floor_j is not None
         else estimate.guarded_floor_j
     )
-    return {
+    record = {
         "n_blocks": estimate.n,
         "mean_delta_j": estimate.mean_j,
         "block_deltas_j": list(estimate.deviations_j),
@@ -582,6 +638,12 @@ def build_comparative_record(estimate: FloorEstimate, blocks: Sequence[Mapping])
         "corner_widened_guarded_floor_j": widened_guarded,
         "blocks": [dict(block) for block in blocks],
     }
+    return _add_whole_window_drift_allowance(
+        record,
+        base_unguarded_j=widened_unguarded,
+        base_guarded_j=widened_guarded,
+        whole_window_drift_allowance=whole_window_drift_allowance,
+    )
 
 
 def build_floor_cell(
@@ -608,13 +670,23 @@ def build_floor_cell(
             STACK_IDENTITY_DOMAIN, stack_identity
         )
     floor_abs = (
-        absolute.get("corner_widened_guarded_floor_j", absolute.get("guarded_floor_j"))
+        absolute.get(
+            "drift_widened_guarded_floor_j",
+            absolute.get(
+                "corner_widened_guarded_floor_j",
+                absolute.get("guarded_floor_j"),
+            ),
+        )
         if absolute is not None
         else None
     )
     floor_cmp = (
         comparative.get(
-            "corner_widened_guarded_floor_j", comparative.get("guarded_floor_j")
+            "drift_widened_guarded_floor_j",
+            comparative.get(
+                "corner_widened_guarded_floor_j",
+                comparative.get("guarded_floor_j"),
+            ),
         )
         if comparative is not None
         else None
@@ -822,6 +894,25 @@ _WIDENED_FLOOR_KEYS = {
     "admissible_half_widths_j",
     "corner_widened_unguarded_floor_j",
     "corner_widened_guarded_floor_j",
+}
+_DRIFT_WIDENED_FLOOR_KEYS = {
+    "whole_window_drift_allowance",
+    "drift_widened_unguarded_floor_j",
+    "drift_widened_guarded_floor_j",
+}
+_WHOLE_WINDOW_BASIS_KEYS = {"whole_window_evaluation_basis_sha256"}
+_WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS = {
+    "claim_family",
+    "allowance_j",
+    "observed_trajectory_excursion_j",
+    "derived_repeatability_bound_j",
+    "provenance",
+    "whole_window_evaluation_basis_sha256",
+}
+_WHOLE_WINDOW_DRIFT_PROVENANCE_KEYS = {
+    "bound_derivation_sha256",
+    "observed_component",
+    "derived_component",
 }
 _OBS_KEYS = {"bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
 _BLOCK_KEYS = {
@@ -1068,6 +1159,106 @@ def _validate_estimate_math(
                     errors.append(
                         f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
                     )
+    present_drift_keys = set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+    basis_present = "whole_window_evaluation_basis_sha256" in record
+    basis_sha256 = record.get("whole_window_evaluation_basis_sha256")
+    if basis_present and not _is_hex(basis_sha256):
+        errors.append(
+            f"{where}.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+        )
+    if basis_present and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
+        errors.append(
+            f"{where}: whole-window basis requires the complete drift-widened field group"
+        )
+    if present_drift_keys and not basis_present:
+        errors.append(
+            f"{where}: whole-window drift-widened fields require an evaluation basis"
+        )
+    if present_drift_keys and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
+        errors.append(
+            f"{where}: whole-window drift-widened fields must be present together"
+        )
+    elif present_drift_keys:
+        allowance_record = record.get("whole_window_drift_allowance")
+        allowance: float | None = None
+        if _check_keys(
+            allowance_record,
+            _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS,
+            f"{where}.whole_window_drift_allowance",
+            errors,
+        ):
+            claim_family = allowance_record["claim_family"]
+            if claim_family not in {"gross_energy", "idle_subtracted_energy"}:
+                errors.append(
+                    f"{where}.whole_window_drift_allowance.claim_family: invalid family"
+                )
+            observed = allowance_record["observed_trajectory_excursion_j"]
+            derived = allowance_record["derived_repeatability_bound_j"]
+            stored_allowance = allowance_record["allowance_j"]
+            if any(
+                not _is_number(value) or value < 0.0
+                for value in (observed, derived)
+            ) or not _is_number(stored_allowance) or stored_allowance <= 0.0:
+                errors.append(
+                    f"{where}.whole_window_drift_allowance: numeric components must be finite, nonnegative, and allowance_j > 0"
+                )
+            elif not _close(stored_allowance, max(observed, derived)):
+                errors.append(
+                    f"{where}.whole_window_drift_allowance.allowance_j: must equal max(observed, derived)"
+                )
+            else:
+                allowance = float(stored_allowance)
+            if not _is_hex(
+                allowance_record["whole_window_evaluation_basis_sha256"]
+            ):
+                errors.append(
+                    f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+                )
+            elif allowance_record[
+                "whole_window_evaluation_basis_sha256"
+            ] != basis_sha256:
+                errors.append(
+                    f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: does not match record basis"
+                )
+            provenance = allowance_record["provenance"]
+            if _check_keys(
+                provenance,
+                _WHOLE_WINDOW_DRIFT_PROVENANCE_KEYS,
+                f"{where}.whole_window_drift_allowance.provenance",
+                errors,
+            ):
+                if not _is_hex(provenance["bound_derivation_sha256"]):
+                    errors.append(
+                        f"{where}.whole_window_drift_allowance.provenance.bound_derivation_sha256: must be 64 lowercase hex chars"
+                    )
+                if provenance["observed_component"] != (
+                    "trajectory_excursion_max_j"
+                ) or provenance["derived_component"] != (
+                    "derived_repeatability_bound_j"
+                ):
+                    errors.append(
+                        f"{where}.whole_window_drift_allowance.provenance: component names are invalid"
+                    )
+        if allowance is not None:
+            if not _close(
+                record.get("drift_widened_unguarded_floor_j"),
+                widened_unguarded + allowance,
+            ):
+                errors.append(
+                    f"{where}: drift_widened_unguarded_floor_j must equal corner-widened floor plus allowance"
+                )
+            expected_drift_guarded = (
+                widened_guarded + allowance
+                if widened_guarded is not None
+                else None
+            )
+            if not _close(
+                record.get("drift_widened_guarded_floor_j"),
+                expected_drift_guarded,
+            ):
+                errors.append(
+                    f"{where}: drift_widened_guarded_floor_j must equal corner-widened guarded floor plus allowance"
+                )
     stddev_key = "sample_stddev_j"
     checks = [
         (stddev_key, est.sample_stddev_j),
@@ -1130,7 +1321,13 @@ def _validate_stress_observed(observed, where, errors) -> None:
 
 def _validate_absolute(record, where, errors) -> None:
     if not _check_keys_with_optional(
-        record, _ABS_KEYS, _WIDENED_FLOOR_KEYS, where, errors
+        record,
+        _ABS_KEYS,
+        _WIDENED_FLOOR_KEYS
+        | _DRIFT_WIDENED_FLOOR_KEYS
+        | _WHOLE_WINDOW_BASIS_KEYS,
+        where,
+        errors,
     ):
         return
     residuals = record["residuals_j"]
@@ -1199,7 +1396,13 @@ def _validate_absolute(record, where, errors) -> None:
 
 def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -> None:
     if not _check_keys_with_optional(
-        record, _CMP_KEYS, _WIDENED_FLOOR_KEYS, where, errors
+        record,
+        _CMP_KEYS,
+        _WIDENED_FLOOR_KEYS
+        | _DRIFT_WIDENED_FLOOR_KEYS
+        | _WHOLE_WINDOW_BASIS_KEYS,
+        where,
+        errors,
     ):
         return
     deltas = record["block_deltas_j"]
@@ -1354,15 +1557,84 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
             errors,
             calibration_plan_sha256,
         )
+    metric = cell["key"].get("metric") if isinstance(cell["key"], Mapping) else None
+    expected_claim_family = (
+        "idle_subtracted_energy"
+        if metric in {"energy_request_j", "idle_subtracted_energy_j"}
+        else "gross_energy"
+    )
+    present_records = [
+        record for record in (absolute, comparative) if isinstance(record, Mapping)
+    ]
+    grouped_records = [
+        record
+        for record in present_records
+        if "whole_window_evaluation_basis_sha256" in record
+        or bool(set(record) & _DRIFT_WIDENED_FLOOR_KEYS)
+    ]
+    allowance_records = [
+        record.get("whole_window_drift_allowance")
+        for record in present_records
+        if "whole_window_drift_allowance" in record
+    ]
+    for allowance_record in allowance_records:
+        if (
+            isinstance(allowance_record, Mapping)
+            and allowance_record.get("claim_family") != expected_claim_family
+        ):
+            errors.append(
+                f"{where}: whole-window drift allowance claim_family does not match metric"
+            )
+    if grouped_records:
+        complete_group = all(
+            "whole_window_evaluation_basis_sha256" in record
+            and set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+            == _DRIFT_WIDENED_FLOOR_KEYS
+            for record in present_records
+        )
+        if (
+            len(grouped_records) != len(present_records)
+            or len(allowance_records) != len(present_records)
+            or not complete_group
+        ):
+            errors.append(
+                f"{where}: absolute and comparative whole-window drift groups must be symmetric and complete"
+            )
+        else:
+            basis_values = [
+                record.get("whole_window_evaluation_basis_sha256")
+                for record in present_records
+            ]
+            if any(value != basis_values[0] for value in basis_values[1:]):
+                errors.append(
+                    f"{where}: absolute and comparative whole-window evaluation bases disagree"
+                )
+            if any(
+                allowance_record != allowance_records[0]
+                for allowance_record in allowance_records[1:]
+            ):
+                errors.append(
+                    f"{where}: absolute and comparative whole-window drift allowances disagree"
+                )
 
     expected_abs = (
-        absolute.get("corner_widened_guarded_floor_j", absolute.get("guarded_floor_j"))
+        absolute.get(
+            "drift_widened_guarded_floor_j",
+            absolute.get(
+                "corner_widened_guarded_floor_j",
+                absolute.get("guarded_floor_j"),
+            ),
+        )
         if isinstance(absolute, Mapping)
         else None
     )
     expected_cmp = (
         comparative.get(
-            "corner_widened_guarded_floor_j", comparative.get("guarded_floor_j")
+            "drift_widened_guarded_floor_j",
+            comparative.get(
+                "corner_widened_guarded_floor_j",
+                comparative.get("guarded_floor_j"),
+            ),
         )
         if isinstance(comparative, Mapping)
         else None
@@ -1423,6 +1695,20 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
         eligibility = cell["eligibility"]
         if eligibility["use_role"] != "primary_claim_gate":
             errors.append(f"{where}.eligibility: claim_ready requires primary_claim_gate use_role")
+        if eligibility["use_role"] == "primary_claim_gate" and (
+            len(grouped_records) != len(present_records)
+            or len(allowance_records) != len(present_records)
+            or not present_records
+            or any(
+                "whole_window_evaluation_basis_sha256" not in record
+                or set(record) & _DRIFT_WIDENED_FLOOR_KEYS
+                != _DRIFT_WIDENED_FLOOR_KEYS
+                for record in present_records
+            )
+        ):
+            errors.append(
+                f"{where}.eligibility: claim_ready primary_claim_gate requires a whole-window basis and complete drift-widened field group"
+            )
         minimum_n = eligibility["minimum_claim_n"]
         if isinstance(minimum_n, int) and not isinstance(minimum_n, bool):
             absolute_n = absolute.get("n") if isinstance(absolute, Mapping) else None

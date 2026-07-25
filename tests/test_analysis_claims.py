@@ -7,8 +7,11 @@ import copy
 import gzip
 import hashlib
 import json
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.analysis_engine.artifact import (
     calculate_claim_verdicts_id,
@@ -28,26 +31,37 @@ from joulewise.analysis_engine.claims import (
     ordered_reason_codes,
 )
 from joulewise.analysis_engine.inputs import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
     AnalysisInputError,
     BundleEvidence,
     FloorRequest,
     FloorResolution,
     GOVERNED_REDUCER_IDLE_METHOD_PAIRS,
     LoadedAnalysisInputs,
+    MOCK_TELEMETRY_CLAIM_REFUSAL,
+    _read_bundle,
     anchor_shift_envelope,
+    bind_floor_artifact_evidence,
     deterministic_bounds,
     governed_stochastic_variance,
     metric_value,
     resolve_floor,
     window_evidence_precheck,
 )
+from joulewise.cli import validate_bundle
 from joulewise.analysis_engine.sensitivity import (
     influence_triggers,
     randomization_check,
     summarize_loo,
 )
 from joulewise.detection_floor import comparative_false_effect_floor
-from tests.test_detection_floor import make_artifact, make_cell, make_consumer
+from joulewise.whole_window import CustodyTelemetryIdentity
+from tests.test_detection_floor import (
+    make_artifact,
+    make_cell,
+    make_consumer,
+    whole_window_allowance,
+)
 
 
 HEX = "a" * 64
@@ -281,7 +295,11 @@ def minimal_artifact():
 class ClaimOutcomeTests(unittest.TestCase):
     def test_environment_barrier_reasons_are_canonical_reducer_codes(self):
         self.assertTrue(
-            {"environment_admission_failed", "environment_override"}
+            {
+                "environment_admission_failed",
+                "environment_override",
+                MOCK_TELEMETRY_CLAIM_REFUSAL,
+            }
             <= REDUCER_REASON_CODES
         )
 
@@ -473,6 +491,163 @@ class SensitivityTests(unittest.TestCase):
 
 
 class InputSeamTests(unittest.TestCase):
+    def test_label_disagreement_is_strict_invalid_at_claim_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle = runs_root / "member"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            source_config = json.loads(
+                (bundle / "config.json").read_text(encoding="utf-8")
+            )
+            with (
+                patch(
+                    "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.analysis_engine.inputs._realized_identity_matches_config",
+                    return_value=True,
+                ),
+            ):
+                evidence = _read_bundle(
+                    {},
+                    bundle,
+                    runs_root,
+                    source_config,
+                    strict_validator=lambda path, strict: (),
+                )
+        self.assertIn("bundle_strict_invalid", evidence.base_reason_codes)
+        self.assertNotIn(
+            MOCK_TELEMETRY_CLAIM_REFUSAL,
+            evidence.base_reason_codes,
+        )
+
+    def test_honest_strict_mock_member_is_refused_at_claim_boundary(self):
+        fixture = Path("tests/fixtures/axi_valid_burst")
+        source_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(validate_bundle(fixture, strict=True), [])
+        with (
+            patch(
+                "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._realized_identity_matches_config",
+                return_value=True,
+            ),
+        ):
+            evidence = _read_bundle(
+                {},
+                fixture,
+                fixture.parent,
+                source_config,
+                strict_validator=lambda path, strict: validate_bundle(
+                    path, strict=strict
+                ),
+            )
+        self.assertEqual(
+            evidence.base_reason_codes,
+            (MOCK_TELEMETRY_CLAIM_REFUSAL,),
+        )
+        self.assertEqual(evidence.strict_problems, ())
+        self.assertEqual(evidence.inclusion_status, "excluded")
+
+    def test_floor_binding_rejects_comparative_abba_fallback_member(self):
+        artifact = make_artifact()
+        fallback_bundle_id = "cell-1-b0-A1"
+        stack_identity = artifact["cells"][0]["source_regime"][
+            "stack_identity"
+        ]
+
+        class FakeReader:
+            def __init__(self, path):
+                self.path = Path(path)
+
+            def raw_summary(self):
+                return {
+                    "status": "succeeded",
+                    "measurement_quality": {
+                        "telemetry_source": "powermetrics"
+                    },
+                    "energy_uncertainty_status": "bounded",
+                    "gross_energy_j": 100.0,
+                }
+
+            def raw_metadata(self):
+                anchor = {"status": "bounded"}
+                if self.path.name == fallback_bundle_id:
+                    anchor["trace_fallback_method"] = (
+                        "legacy_spawn_bracket_midpoint_v1"
+                    )
+                return {
+                    "uncertainty_evidence": {"clock_anchor": anchor}
+                }
+
+            def raw_config(self):
+                return {}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(
+                "joulewise.analysis_engine.inputs._campaign_order_binding_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.BundleReader",
+                FakeReader,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.complete_bundle_sha256",
+                return_value="a" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._sha256_file",
+                return_value="b" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.scientific_config_identity",
+                return_value={"identity": "test"},
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.floor_stack_identity",
+                return_value=stack_identity,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=CustodyTelemetryIdentity(
+                    custody_bound_config=True,
+                    config_backend_class="powermetrics",
+                    metadata_backend_class="powermetrics",
+                    summary_backend_class="powermetrics",
+                    triangle_agrees=True,
+                ),
+            ),
+        ):
+            binding = bind_floor_artifact_evidence(
+                artifact,
+                Path(tmp) / "floor.json",
+                Path(tmp) / "runs",
+                strict_validator=lambda path, strict: [],
+            )
+        self.assertNotIn("cell-1", binding.bound_cell_ids)
+        self.assertIn(
+            ANCHOR_FALLBACK_MEMBER_REFUSAL,
+            binding.problems_by_cell["cell-1"],
+        )
+
     def test_combined_floor_uses_every_selected_absolute_and_comparative_max(self):
         resolutions = (
             FloorResolution(
@@ -915,6 +1090,42 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(resolution.status, "transported")
         self.assertEqual(resolution.floor_gate_j, 3.2578982723565812)
 
+    def test_engine_consumes_whole_window_drift_widened_floor(self):
+        allowance = whole_window_allowance()
+        cell = make_cell(
+            energies=[0.0, 1.0, -1.0, 0.0, 0.0],
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.01] * 5,
+            whole_window_drift_allowance=allowance,
+        )
+        artifact = make_artifact([cell])
+        artifact["calibration_scope"] = "window_a"
+        consumer = make_consumer()
+        request = FloorRequest(
+            backend=consumer.pop("backend"),
+            metric=consumer.pop("metric"),
+            window_class=consumer.pop("window_class"),
+            condition_family_id=consumer.pop("condition_family_id"),
+            condition_family_sha256=consumer.pop("condition_family_sha256"),
+            stack_identity_sha256=consumer.pop("stack_identity_sha256"),
+            consumer_stress=consumer,
+        )
+        resolution = resolve_floor(artifact, HEX, request)
+        self.assertEqual(resolution.status, "transported")
+        expected = max(
+            cell["absolute"]["drift_widened_guarded_floor_j"],
+            cell["comparative"]["drift_widened_guarded_floor_j"],
+        )
+        self.assertEqual(resolution.floor_gate_j, expected)
+        self.assertEqual(
+            expected,
+            max(
+                cell["absolute"]["corner_widened_guarded_floor_j"],
+                cell["comparative"]["corner_widened_guarded_floor_j"],
+            )
+            + allowance["allowance_j"],
+        )
+
     def test_engine_consumes_comparative_widened_floor_as_operative_gate(self):
         deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
         cell = make_cell(
@@ -1256,6 +1467,57 @@ class AnchorBoundPropagationTests(unittest.TestCase):
         # crosses zero even though every member passed its envelope gate.
         self.assertLess(estimate.decision_interval.lower, 0.0)
         self.assertGreater(estimate.metrology_aware_ci95.lower, 0.0)
+
+    def test_whole_window_allowance_is_one_named_contrast_term(self):
+        allowance = whole_window_allowance(value=0.6, observed=0.5, derived=0.6)
+        evidence = _bounds_evidence(self._summary())
+        evidence.whole_window_drift_allowances = {
+            "gross_energy": allowance
+        }
+        bounds, reasons = deterministic_bounds(evidence, self.GROSS_METRIC)
+        self.assertEqual(reasons, ())
+        self.assertEqual(bounds["E_whole_window_drift_allowance_j"], 0.3)
+
+        term = DeterministicBoundTerm(
+            "E_whole_window_drift_allowance_j",
+            bound_a=bounds["E_whole_window_drift_allowance_j"],
+            bound_b=bounds["E_whole_window_drift_allowance_j"],
+        )
+        estimate = estimate_paired_blocks(
+            tuple(
+                PairedObservation(
+                    f"b-{index}",
+                    100.0,
+                    101.0,
+                    deterministic_terms=(term,),
+                )
+                for index in range(5)
+            )
+        )
+        self.assertEqual(
+            {
+                row.name: row.bound
+                for row in estimate.deterministic_bounds
+            }["E_whole_window_drift_allowance_j"],
+            0.6,
+        )
+
+    def test_required_whole_window_allowance_missing_refuses_metric(self):
+        evidence = _bounds_evidence(self._summary())
+        evidence.whole_window_drift_allowance_required = True
+        bounds, reasons = deterministic_bounds(evidence, self.GROSS_METRIC)
+        self.assertNotIn("E_whole_window_drift_allowance_j", bounds)
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            reasons,
+        )
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            REDUCER_REASON_CODES,
+        )
+        result = evaluation(base_reason_codes=reasons)
+        self.assertEqual(result["outcome"], "not_resolvable")
+        self.assertFalse(result["claim_ready_for_l2_l3"])
 
     def test_new_anchor_reason_codes_are_registered_and_not_resolvable(self):
         added = {

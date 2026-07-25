@@ -15,6 +15,10 @@ drift banner if so.
   content modules under `server/content/` (bounded gzip+Base64 page shards,
   one shared style/freshness archive, a synchronous route/source manifest,
   and provenance stamps parsed from the pages).
+- The generated decision-log site view is split deterministically at complete
+  `## D-NNN` entry boundaries into `decision_log.html` (recent entries) and
+  numbered archive pages. Every part retains the `docs/decision_log.md`
+  provenance stamp used by the freshness layer.
 - `server/index.ts` registers one HTTP endpoint per page (canonical path +
   aliases), lazily decodes and caches only the requested shard, and serves `/style.css`,
   `/api/freshness` (live), and `/api/health`.
@@ -100,6 +104,33 @@ without a redeploy. It fails soft: if GitHub or outbound access is unavailable,
 it returns the newest cached markdown-derived payload when available, marks
 those source rows stale, and sets `unavailableRefresh: true`; otherwise, the
 baked page remains the source of visible truth.
+
+## Decision-log pagination
+
+The capsule still uses the bounded advisor-site view established for the
+1 MiB artifact cap: the full decision index and the six most recent complete
+entries are rendered, while the repository file remains the complete record.
+`build_site.py` now paginates that rendered view automatically and
+deterministically from source-byte counts, never splitting an entry. The
+packer independently refuses any decision-log part above 24,000 gzip+Base64
+bytes, leaving 20% margin below the 30,000-byte runtime shard ceiling.
+
+Every part links to every other part. Generated table-of-contents links,
+cross-entry fragment links, and the visible decision-index links for rendered
+entries are rewritten to the page that owns the target; each rendered entry
+also gets a stable short `#d-nnn` anchor. A previously bookmarked long
+title-derived fragment on `decision_log.html` cannot redirect itself after
+that entry moves to a numbered archive; use the decision index or the stable
+short anchor on the generated owning page. Archive numbering is relative to
+recency and can change when newer decisions are added.
+
+The generated `project_status_full.html` and `run_state.html` deep views remain
+under `docs/site/` for git and static-site readers. In the size-constrained
+capsule, their stable aliases resolve to `project_status.html` and
+`status.html`, respectively, just as `task_queue.html` resolves to
+`roadmap.html`. Those target pages carry the owning `PROJECT_STATUS.md`,
+`RUN_STATE.md`, and `TASK_QUEUE.md` source stamps, so the freshness layer does
+not claim an unrelated source for a redirected view.
 
 ## ED-MANUAL-ONLY production smoke / inspection
 

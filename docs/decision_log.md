@@ -4522,3 +4522,41 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    energy-measurement literature is in flight and feeds the collection
    design. Economics note recorded: Ed values artifact quality over
    time/tokens/machine-hours (project runs months ahead of deadline).
+
+   **Clause-10 addendum 2 — screen+budget wave registry + anchor-fallback
+   gate ruling (lead, 2026-07-24).** Registers the wave's spellings in
+   the D-078 closed registry: `neg8_idle_sub_drift_bound_underived`,
+   `neg8_bracket_idle_sub_abs_delta_exceeded`, and
+   `neg8_drift_bound_stale` (freshness horizon exceeded or
+   re-derivation trigger fired) — the ratified clause-10 design's
+   concrete spellings — plus `anchor_fallback_member_unusable`
+   (unwaivable, no waiver spelling exists: a fallback-clock-anchored
+   member may not anchor a floor or claim cell; in a floor cell it is
+   an unwaivable re-run trigger). The latter is a LEAD-INITIATED
+   ruling from the 2026-07-24 a7-vs-a5 prefill-scatter root cause
+   (`a7_vs_a5_prefill_scatter_analysis.md`): a7's 11.85 J prefill
+   "floor" was one fallback-anchored member (r03), half-width-zero
+   envelope — instrument artifact (true floor ≈ 3.3–3.7 J).
+   Flagged for Ed's PR-gate review. Also registered (fix-round F3):
+   `whole_window_drift_allowance_unrecorded` (passing basis-bearing
+   verdict with no authenticated per-family allowance, or a claim
+   missing its named allowance term — refuse, never zero; in both the
+   floor-extraction and reducer vocabularies, mirroring
+   `interpolation_bound_unrecorded`).
+
+   **Clause-10 addendum 3 — terminal mock bar (lead, 2026-07-24).** The
+   ratified premise "mock telemetry can never bear claims" had no
+   terminal enforcement at the analysis claim boundary: honest mock
+   members reached floor cells and claim evidence with the
+   mock-exempted barriers disabled. Registered
+   spelling: `mock_telemetry_claim_ineligible` (claim-bearing
+   consumption of a member whose custody-bound config telemetry backend
+   is the mock class; refuse — development-only evidence, no waiver
+   spelling exists). Mockness derives from the custody-bound config
+   (`hardware_target.telemetry_backend`, bytes bound via
+   `metadata.config_sha256`), never from summary/metadata labels alone;
+   where such a config exists, config/metadata/summary telemetry
+   identities must agree by backend class (governed `mock:*` tags are
+   mock class) or the bundle is strict-invalid. Config absence is
+   non-production evidence (fixture-only permissive paths keep their
+   ratified intent). Lead-initiated; flagged for Ed's PR-gate review.

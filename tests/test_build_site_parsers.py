@@ -3,6 +3,8 @@ import contextlib
 import gzip
 import io
 import json
+import random
+import re
 import shutil
 import subprocess
 import sys
@@ -326,6 +328,111 @@ Text.
             rendered[build_site.PROJECT_STATUS_FULL_OUTPUT],
         )
 
+    def test_oversized_decision_log_paginates_deterministically_under_target(self):
+        generator = random.Random(20260724)
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        entries = []
+        for number in range(1, 7):
+            payload = "".join(generator.choice(alphabet) for _ in range(9_000))
+            cross_link = (
+                "\n\n[Jump to the oldest decision](#d-001-entry-1).\n"
+                if number == 6
+                else ""
+            )
+            entries.append(
+                f"## D-{number:03d}: Entry {number}\n\n{payload}{cross_link}\n\n"
+            )
+        index = "\n".join(
+            f"| D-{number:03d} | Entry {number} | accepted |"
+            for number in range(1, 7)
+        )
+        markdown = (
+            "# Decision Log\n\n"
+            "Synthetic pagination fixture.\n\n"
+            "## Index\n\n"
+            "| ID | Title | Status |\n"
+            "|---|---|---|\n"
+            f"{index}\n\n---\n\n"
+            + "".join(entries)
+        )
+        stamp = build_site.SourceStamp(build_site.DECISION_LOG_SOURCE, "abc1234")
+        previous_unavailable = build_site.MARKED_UNAVAILABLE
+        previous_warned = build_site.MARKED_FALLBACK_WARNED
+        try:
+            build_site.MARKED_UNAVAILABLE = True
+            build_site.MARKED_FALLBACK_WARNED = True
+            first = build_site.render_decision_log_pages(markdown, False, stamp)
+            second = build_site.render_decision_log_pages(markdown, False, stamp)
+        finally:
+            build_site.MARKED_UNAVAILABLE = previous_unavailable
+            build_site.MARKED_FALLBACK_WARNED = previous_warned
+
+        self.assertEqual(first, second)
+        self.assertGreater(len(first), 1)
+        main_doc = next(
+            doc
+            for doc in build_site.doc_pages("docs/run_reports/example.md")
+            if doc.out_name == build_site.DECISION_LOG_OUTPUT
+        )
+        with (
+            mock.patch.object(build_site, "MARKED_UNAVAILABLE", True),
+            mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", True),
+        ):
+            unsplit = build_site.compact_generated_html(
+                build_site.render_doc_page(
+                    main_doc,
+                    False,
+                    stamp,
+                    build_site.decision_log_site_markdown(markdown),
+                )
+            )
+        unsplit_pages = {
+            "/decision_log.html": {
+                "html": unsplit,
+                "sources": [{"source": stamp.source, "commit": stamp.commit}],
+                "aliases": [],
+            }
+        }
+        self.assertGreater(
+            pack_capsule.encode_page_shard(
+                unsplit_pages, ["/decision_log.html"]
+            )[1]["base64"],
+            pack_capsule.MAX_SHARD_BASE64_BYTES,
+        )
+
+        packed_pages = {}
+        for out_name, rendered in first.items():
+            path = f"/{out_name}"
+            packed_pages[path] = {
+                "html": build_site.compact_generated_html(rendered),
+                "sources": [{"source": stamp.source, "commit": stamp.commit}],
+                "aliases": [],
+            }
+            self.assertLessEqual(
+                pack_capsule.encode_page_shard(
+                    packed_pages, [path]
+                )[1]["base64"],
+                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+            )
+            self.assertEqual(
+                pack_capsule.extract_stamps(out_name, rendered),
+                [{"source": build_site.DECISION_LOG_SOURCE, "commit": "abc1234"}],
+            )
+        pack_capsule.page_shards(packed_pages)
+
+        oldest_page = next(
+            out_name
+            for out_name, rendered in first.items()
+            if 'id="d-001"' in rendered
+        )
+        self.assertIn(
+            f'href="{oldest_page}#d-001-entry-1"',
+            first[build_site.DECISION_LOG_OUTPUT],
+        )
+        combined = "".join(first.values())
+        for number in range(1, 7):
+            self.assertEqual(combined.count(f'id="d-{number:03d}"'), 1)
+
     def _assert_production_build_output_packs_below_lakebed_budget(
         self, *, force_offline_renderer: bool
     ):
@@ -397,14 +504,66 @@ Text.
                 decoded_shards.append(decoded)
             expected_names = {
                 "adapter_contracts.html", "advisor_brief.html", "agent_plan.html", "claims_ladder.html",
-                "council_log.html", "decision_log.html", "index.html",
+                "council_log.html", "index.html",
                 "latest_run_report.html", "library.html", "measurement_methodology.html",
                 "milestones.html", "orchestration.html", "process.html",
                 "project_status.html", "project_status_full.html", "readme.html", "record.html", "research.html",
                 "results.html", "risk_register.html", "roadmap.html", "run_state.html",
                 "status.html", "task_queue.html",
             }
+            decision_names = {
+                path.name
+                for path in site.glob("decision_log*.html")
+            }
+            self.assertIn(build_site.DECISION_LOG_OUTPUT, decision_names)
+            self.assertTrue(
+                any(
+                    name.startswith(build_site.DECISION_LOG_ARCHIVE_PREFIX)
+                    for name in decision_names
+                )
+            )
+            expected_names.update(decision_names)
             self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            retained_decision_ids = {
+                decision_id
+                for part in build_site.split_decision_log_markdown(
+                    build_site.decision_log_site_markdown(
+                        build_site.read_source(build_site.DECISION_LOG_SOURCE)
+                    )
+                )
+                for decision_id in part.decision_ids
+            }
+            rendered_decision_html = "".join(
+                (site / name).read_text(encoding="utf-8")
+                for name in sorted(decision_names)
+            )
+            self.assertEqual(
+                {
+                    decision_id.upper()
+                    for decision_id in re.findall(
+                        r'id="(d-\d{3})"',
+                        rendered_decision_html,
+                    )
+                },
+                retained_decision_ids,
+            )
+            for name in decision_names:
+                decision_path = pack_capsule.canonical_path(
+                    pack_capsule.page_aliases(site / name)
+                )
+                self.assertLessEqual(
+                    pack_capsule.encode_page_shard(
+                        pages, [decision_path]
+                    )[1]["base64"],
+                    pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+                )
+                self.assertEqual(
+                    [
+                        stamp["source"]
+                        for stamp in pages[decision_path]["sources"]
+                    ],
+                    [build_site.DECISION_LOG_SOURCE],
+                )
             for status_name in (
                 build_site.PROJECT_STATUS_SUMMARY_OUTPUT,
                 build_site.PROJECT_STATUS_FULL_OUTPUT,
@@ -412,8 +571,24 @@ Text.
                 status_path = pack_capsule.canonical_path(
                     pack_capsule.page_aliases(site / status_name)
                 )
+                status_pages = pages
+                if status_path not in pages:
+                    status_pages = {
+                        status_path: {
+                            **pack_capsule.pack_page(
+                                pack_capsule.PageSpec(
+                                    path=site / status_name,
+                                    page_name=status_name,
+                                    aliases=pack_capsule.page_aliases(
+                                        site / status_name
+                                    ),
+                                )
+                            ),
+                            "aliases": [],
+                        }
+                    }
                 status_size = pack_capsule.encode_page_shard(
-                    pages, [status_path]
+                    status_pages, [status_path]
                 )[1]["base64"]
                 self.assertLessEqual(
                     status_size,
@@ -440,9 +615,31 @@ Text.
                 self.assertIn('href="project_status.html"', shell_html)
             self.assertEqual(
                 pack_capsule.CAPSULE_PAGE_REDIRECTS,
-                {"task_queue.html": "roadmap.html"},
+                {
+                    "project_status_full.html": "project_status.html",
+                    "run_state.html": "status.html",
+                    "task_queue.html": "roadmap.html",
+                },
             )
-            capsule_names = expected_names - {"task_queue.html"}
+            redirected_source_expectations = {
+                "project_status_full.html": "PROJECT_STATUS.md",
+                "run_state.html": "RUN_STATE.md",
+                "task_queue.html": "TASK_QUEUE.md",
+            }
+            for source_name, target_name in pack_capsule.CAPSULE_PAGE_REDIRECTS.items():
+                target_path = pack_capsule.canonical_path(
+                    pack_capsule.page_aliases(site / target_name)
+                )
+                self.assertIn(
+                    redirected_source_expectations[source_name],
+                    {
+                        stamp["source"]
+                        for stamp in pages[target_path]["sources"]
+                    },
+                )
+            capsule_names = expected_names - set(
+                pack_capsule.CAPSULE_PAGE_REDIRECTS
+            )
             expected_canonical = {
                 pack_capsule.canonical_path(pack_capsule.page_aliases(site / name))
                 for name in capsule_names

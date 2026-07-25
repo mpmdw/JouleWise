@@ -359,36 +359,75 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   never a silent pass and never an implicit abort. Unknown adapter wattage
   fails closed when `adapter_wattage.require_known_wattage` is true
   (mandatory for production); stable known wattage passes.
-- **Prospective NEG-8 bracket acceptance** — **Amendment (2026-07-24;
-  lead-ruled, Ed ratification pending), superseding the prior corner-gating
-  sentences in this bullet:** the gate estimand is point drift,
-  `abs(end_point_gross_j - start_point_gross_j)`; the idle-subtracted point
-  drift and the worst-case opposite-corner gross-envelope statistic are
-  recorded diagnostics and never gate. The bound is never a sidecar constant:
-  it is supplied by a hash-sealed `joulewise.neg8_drift_bound.v1` artifact
-  minted from a named, settled, same-condition corpus of at least 10 NEG-8
-  members. The predeclared estimator
-  `d054_point_contrast_guard_v1` is
-  `max(sample_range_j, t_0.975,n-1 * sample_stddev_j * sqrt(2))`: the range
-  retains every observed false point contrast, the Student-t term predicts the
-  contrast between two new same-condition points, and taking the maximum
-  follows D-054 by preventing either empirical extremes or the model term from
-  weakening the guard. Missing or invalid governed bound evidence refuses with
-  `neg8_drift_bound_underived`; a point drift above the derived bound fails,
-  with `<=` passing exactly on the bound. The v1 sidecar's
-  `max_abs_delta_j`/`max_rel_delta` keys remain legacy hash/schema transport
-  fields only for amended rows and do not gate them. The bracket is a
-  WHOLE-WINDOW check: the drift
-  comparison is evaluated only by a verdict pass whose evaluated members
-  include BOTH the start and end reference bundles. The canonical Window-A
-  sequence runs the start and end references as SEPARATE `run_campaign.py`
-  invocations, so a per-segment invocation (only one reference, or neither)
-  records the non-drift condition `neg8_bracket_not_evaluated` with decision
-  `not_evaluated` instead of a spurious `failed`/`missing`; to obtain the
-  bracket comparison, run a whole-window verdict pass over both reference
-  bundles together. A reference bundle that is genuinely absent from a
-  whole-window pass is still caught by the collection verdict's
-  missing/failed member handling, not silently dropped.
+- **Prospective NEG-8 SCREEN + BUDGET** — **Ed-ratified 2026-07-24,
+  superseding the prior gross-only amendment:** the screen is claim-family
+  aligned. It independently gates gross and idle-subtracted point drift
+  against distinct bounds derived from the same named, settled,
+  same-condition `n >= 10` corpus. The hash-sealed
+  `joulewise.neg8_drift_bound.v1` artifact records both families. For legacy
+  one-member endpoints, `d054_point_contrast_guard_v1` remains
+  `max(sample_range_j, t_0.975,n-1 * s * sqrt(2))`. Prospective endpoints are
+  three members each: the screen uses the start/end endpoint means, records
+  their standard errors, and compares the absolute mean delta (not a second
+  SEM-inflated margin) to
+  `max(mean(largest_3)-mean(smallest_3),
+  t_0.975,n-1 * s * sqrt(2/3))`. The extreme-triplet term retains the largest
+  corpus-supported endpoint-mean contrast; the Student-t term predicts two
+  new three-member endpoint means. Recording SEM without adding it again
+  avoids double-counting repeatability already represented by the bound.
+  Gross envelope corners remain diagnostics only.
+
+  Every evaluated window also mints a strictly positive allowance per family:
+  `max(max(start_mean,midpoint,end_mean)-min(...), derived_bound)`. One
+  midpoint member is mandatory for the prospective 3+1+3 protocol, so a
+  non-monotone interior excursion cannot disappear behind similar endpoints.
+  No duration multiplier is applied: the settled corpus identifies
+  repeatability, not a drift-per-time law, and inventing linear physics would
+  be less defensible than the observed trajectory maximum. The verdict records
+  the no-scaling decision, member counts/means/SEMs, midpoint, excursion,
+  selected bound, allowance, and derivation hash. Floor records add the
+  family-matched allowance after the guarded/corner-widened floor; validation
+  recomputes the sum and claim consumption uses both the drift-widened floor
+  and the named deterministic allowance term.
+
+  Missing/invalid family evidence refuses distinctly:
+  `neg8_drift_bound_underived` (gross) and
+  `neg8_idle_sub_drift_bound_underived` (idle-subtracted); both spellings are
+  Ed-ratified D-078 registry additions. Family failures retain
+  `neg8_bracket_abs_delta_exceeded` for gross and add
+  `neg8_bracket_idle_sub_abs_delta_exceeded` for idle-subtracted. A delta
+  exactly on its bound passes. The v1 sidecar's
+  `max_abs_delta_j`/`max_rel_delta` remain legacy transport fields and do not
+  gate amended rows.
+
+  **BOUND FRESHNESS addendum — Ed-ratified 2026-07-24:** the same sealed
+  artifact carries `freshness.derived_at_s`, a fixed 24-hour
+  `max_age_s = 86400`, and exact OS-build, power-supply-identity, and
+  calibration-artifact-identity bindings. Twenty-four hours mirrors the
+  governed instrument-calibration horizon: it permits one controlled
+  measurement day without treating repeatability as indefinitely
+  transferable. Evaluation records its timestamp, expiry, artifact and
+  observed bindings, binding-resolution status, and every triggered
+  re-derivation reason. Horizon expiry, OS build change, power-supply change,
+  calibration identity change, or unresolved current binding makes both
+  family bounds stale and refuses with the registered
+  `neg8_drift_bound_stale`. A v1 artifact with an authentic pre-addendum seal
+  but no freshness block is replay-readable only to produce that stale
+  refusal; it is never grandfathered. Malformed or unsealed artifacts remain
+  underived under the two family-specific spellings. The superseded
+  pre-SCREEN+BUDGET gross-only v1 shape (no `claim_family_bounds`) is not
+  replayable and refuses as malformed/underived; "pre-addendum replay" applies
+  only to the dual-family shape with `claim_family_bounds` present and
+  freshness absent.
+
+  The bracket is a WHOLE-WINDOW check: the evaluated basis must contain both
+  endpoints. Legacy pair-only windows (a5-a8) remain evaluable as 1+0+1:
+  both families screen and each allowance is `max(abs(delta), bound)`.
+  Replicated endpoints plus midpoint apply prospectively; existing
+  basis-scoped legacy verdict rows retain their frozen interpretation.
+  Per-segment invocations with only one endpoint (or neither) record
+  `neg8_bracket_not_evaluated`, never a spurious missing/failure. A reference
+  genuinely absent from an explicit whole-window pass still fails closed.
 
 Verdict surface: `scripts/run_campaign.py` records the additive
 `idle_admission_core` section (schema
@@ -442,7 +481,7 @@ This resolves finalized members from the matching campaign provenance
 ledger (falling back to a diagnostic-only scan that cannot pass when
 membership is unbound), applies ordinary strict bundle validation, appends an
 `idle_admission_whole_window_verdict` row to the campaign log, and evaluates
-NEG-8 in explicit whole-window mode. The bound artifact is minted separately
+NEG-8 in explicit whole-window mode. The dual-family bound artifact is minted separately
 with:
 
 ```sh
@@ -450,10 +489,11 @@ python3 scripts/run_campaign.py --derive-neg8-drift-bound SETTLED_CORPUS.json \
   --neg8-drift-bound-output NEG8_DRIFT_BOUND.json --runs-dir RUNS_ROOT
 ```
 
-Its
-verdict copy records the corpus member ids, estimator, and derivation sha256.
-A required missing reference, an underived bound, or a point-drift failure
-returns nonzero under production; exploratory remains
+Its verdict copy records the corpus member ids, both single-member and
+triplet-mean estimators, the freshness horizon/bindings, and the derivation
+sha256. A required missing reference, either family-specific underived bound,
+a stale bound, or either point-drift failure returns nonzero under production;
+exploratory remains
 non-claim-bearing and emits a labeled `flagged` verdict. At consumption, core
 member occurrences are counted rather than set-collapsed: byte-identical or
 same-ID duplicates invalidate provenance. The consumer also reloads the
@@ -518,6 +558,33 @@ For an accepted nonzero wall-minus-monotonic span, the reducer treats the span
 as independent start/end edge uncertainty in addition to the common trace
 translation. Opposite pre/post-step edge shifts are therefore covered by the
 reported joule envelope. Spans above the 5 ms ceiling remain hard refusals.
+
+**ANCHOR-FALLBACK MEMBER GATE addendum — lead-initiated 2026-07-24:** a
+production floor member is not a zero-width point when its energy uncertainty
+is missing or `not_estimable`, its evidence contains
+`clock_anchor_unresolved`, or its clock anchor records a trace fallback
+(including `legacy_spawn_bracket_midpoint_v1`). Extraction marks the member
+`anchor_fallback_member_unusable` and applies the existing same-slot
+disposition: exclude the absolute slot or its whole ABBA block, then recompute
+membership and the small-sample guard. If the remainder cannot satisfy floor
+policy the cell refuses. For floor roles, the campaign runner treats the same
+code as an unwaivable acquisition failure and rerun trigger. The failed
+fragment remains in custody and must follow the existing
+quarantine/supersession procedure before replacement; it is never recovered
+by silently accepting the fallback endpoint. The 10 ms wall-versus-monotonic
+spawn bracket remains strict.
+
+**TELEMETRY IDENTITY + TERMINAL MOCK BAR addendum — D-078 clause 10
+addendum 3:** when `metadata.config_sha256` authenticates `config.json`, the
+typed config's `hardware_target.telemetry_backend` is the mockness authority.
+Its backend class must agree with `metadata.adapters.telemetry.name` and
+`summary.measurement_quality.telemetry_source`; governed `mock:*` summary
+sources are the `mock` class. A disagreement is `bundle_strict_invalid`.
+Without a custody-bound config the evidence is non-production (fixture-only
+consumers retain their permissive role), never production evidence inferred
+from a summary label. At claim admission, a custody-bound mock backend refuses
+unwaivably as `mock_telemetry_claim_ineligible`; campaign collection/readiness
+behavior remains unchanged.
 
 ## Structured Failure Reasons
 

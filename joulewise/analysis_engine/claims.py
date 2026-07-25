@@ -38,6 +38,8 @@ REDUCER_REASON_CODES = frozenset(
         "clock_bound_unrecorded",
         "clock_bound_exceeds_quarter_window",
         "interpolation_bound_unrecorded",
+        "whole_window_drift_allowance_unrecorded",
+        "mock_telemetry_claim_ineligible",
         "drift_term_unknown",
         "idle_baseline_unrecorded",
         "cooldown_cap_hit",

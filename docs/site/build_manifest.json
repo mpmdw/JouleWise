@@ -1,7 +1,7 @@
 {
   "renderer": {
     "markedVersion": "18.0.6",
-    "mode": "marked",
+    "mode": "offline-fallback",
     "offlineImplementation": "builtin-v1"
   },
   "schema": "joulewise-site-build/v1"

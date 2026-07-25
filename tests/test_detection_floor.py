@@ -6,10 +6,12 @@ worked example.
 """
 
 import json
+import hashlib
 import math
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
@@ -34,11 +36,35 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     validate_floor_artifact,
 )
+from joulewise.floor_extraction import (
+    ANCHOR_FALLBACK_MEMBER_REFUSAL,
+    CELL_REFUSAL_CODES,
+    CellReport,
+    EXTRACTION_SPEC_SCHEMA_VERSION,
+    extract_absolute_cell,
+    extract_cells,
+)
+from joulewise.whole_window import WholeWindowDriftAllowanceResult
 
 TOL = 1e-12
 HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
+
+
+def whole_window_allowance(value=0.4, observed=0.3, derived=0.4):
+    return {
+        "claim_family": "gross_energy",
+        "allowance_j": value,
+        "observed_trajectory_excursion_j": observed,
+        "derived_repeatability_bound_j": derived,
+        "provenance": {
+            "bound_derivation_sha256": HEX_B,
+            "observed_component": "trajectory_excursion_max_j",
+            "derived_component": "derived_repeatability_bound_j",
+        },
+        "whole_window_evaluation_basis_sha256": HEX_C,
+    }
 
 
 class TestCompleteBundleHash(unittest.TestCase):
@@ -64,6 +90,167 @@ class TestCompleteBundleHash(unittest.TestCase):
             (bundle / "alias").symlink_to("payload")
             with self.assertRaisesRegex(ValueError, "not a regular file"):
                 complete_bundle_sha256(bundle)
+
+
+class TestAnchorFallbackFloorMemberGate(unittest.TestCase):
+    @staticmethod
+    def _summary(value: float, *, fallback: bool = False) -> dict:
+        return {
+            "status": "succeeded",
+            "summary_provenance": {"reducer_version": "0.5.2"},
+            "measurement_quality": {
+                "telemetry_source": "powermetrics",
+                "cooldown_cap_hit": None,
+                "idle_window_suspect": False,
+            },
+            "energy_uncertainty_status": (
+                "not_estimable" if fallback else "bounded"
+            ),
+            "gross_energy_j": value,
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": {
+                    "method": "common_trace_shift_plus_independent_edge_corners_v3",
+                    "anchor_bound_s": 0.01,
+                    "point_j": value,
+                    "lower_j": value - 0.01,
+                    "upper_j": value + 0.01,
+                    "max_abs_delta_j": 0.01,
+                }
+            },
+            "window_evidence_precheck": {
+                "gross_request": {
+                    "eligible": not fallback,
+                    "reasons": (
+                        ["clock_anchor_unresolved"] if fallback else []
+                    ),
+                }
+            },
+        }
+
+    @staticmethod
+    def _write_member(
+        root: Path, bundle_id: str, value: float, *, fallback: bool = False
+    ) -> None:
+        bundle = root / bundle_id
+        bundle.mkdir()
+        config = json.loads(
+            Path("tests/fixtures/d078_r01/config.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        config["run_id"] = bundle_id
+        config_raw = (
+            json.dumps(config, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        (bundle / "config.json").write_bytes(config_raw)
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(
+                TestAnchorFallbackFloorMemberGate._summary(
+                    value, fallback=fallback
+                ),
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        anchor = (
+            {
+                "status": "unresolved",
+                "trace_fallback_method": "legacy_spawn_bracket_midpoint_v1",
+            }
+            if fallback
+            else {"status": "bounded"}
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "config_sha256": hashlib.sha256(config_raw).hexdigest(),
+                    "adapters": {"telemetry": {"name": "powermetrics"}},
+                    "uncertainty_evidence": {"clock_anchor": anchor},
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def _extract(self, root: Path, values: list[float], *, fallback_at=None):
+        bundle_ids = [f"member-{index}" for index in range(len(values))]
+        for index, (bundle_id, value) in enumerate(
+            zip(bundle_ids, values, strict=True)
+        ):
+            self._write_member(
+                root,
+                bundle_id,
+                value,
+                fallback=index == fallback_at,
+            )
+        cooldowns = {
+            bundle_id: {"result": "recovered", "verified": True}
+            for bundle_id in bundle_ids
+        }
+        with (
+            patch(
+                "joulewise.floor_extraction._cpu_admission_bundle_reasons",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.floor_extraction.window_evidence_precheck",
+                return_value={"eligible": True, "reasons": []},
+            ),
+            patch(
+                "joulewise.floor_extraction.deterministic_bounds",
+                return_value=(
+                    {"E_interpolation_joint_edge_bound_j": 0.0},
+                    (),
+                ),
+            ),
+        ):
+            return extract_absolute_cell(
+                cell_id="anchor-member-gate",
+                metric="gross_energy_j",
+                window_class="request",
+                members=[
+                    {"slot": f"r{index + 1}", "bundle_id": bundle_id}
+                    for index, bundle_id in enumerate(bundle_ids)
+                ],
+                runs_root=root,
+                cooldowns=cooldowns,
+                strict_validator=lambda path, strict: [],
+            )
+
+    def test_fallback_member_is_excluded_and_remaining_members_define_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = [10.0, 10.1, 10.2, 10.3, 10.4, 0.01]
+            report = self._extract(root, values, fallback_at=5)
+        self.assertTrue(report.extractable)
+        self.assertEqual(report.n_admitted, 5)
+        self.assertEqual(report.excluded_slots, ("r6",))
+        excluded = next(member for member in report.members if member.excluded)
+        self.assertIn(ANCHOR_FALLBACK_MEMBER_REFUSAL, excluded.reasons)
+        self.assertIn(ANCHOR_FALLBACK_MEMBER_REFUSAL, CELL_REFUSAL_CODES)
+        self.assertEqual(
+            report.floor,
+            absolute_false_effect_floor(
+                values[:5], admissible_half_widths_j=[0.01] * 5
+            ),
+        )
+
+    def test_fully_anchored_cell_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            values = [10.0, 10.1, 10.2, 10.3, 10.4, 10.5]
+            report = self._extract(root, values)
+        self.assertTrue(report.extractable)
+        self.assertEqual(report.n_admitted, 6)
+        self.assertEqual(report.excluded_slots, ())
+        self.assertEqual(
+            report.floor,
+            absolute_false_effect_floor(
+                values, admissible_half_widths_j=[0.01] * 6
+            ),
+        )
 
 
 def condition_family(condition_id):
@@ -368,7 +555,17 @@ def make_cell(
     condition="cf-1",
     absolute_half_widths=None,
     comparative_half_widths=None,
+    whole_window_drift_allowance=None,
 ):
+    if whole_window_drift_allowance is None:
+        # Claim-ready fixtures must carry the clause-9 current allowance
+        # group. The smallest positive float preserves the historical fixture
+        # floor values while still exercising the complete governed wire.
+        whole_window_drift_allowance = whole_window_allowance(
+            value=5e-324,
+            observed=0.0,
+            derived=5e-324,
+        )
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
     abs_est = absolute_false_effect_floor(
@@ -421,8 +618,16 @@ def make_cell(
             "claim_usable": True,
             "reason_codes": [],
         },
-        absolute=build_absolute_record(abs_est, observations),
-        comparative=build_comparative_record(cmp_est, blocks),
+        absolute=build_absolute_record(
+            abs_est,
+            observations,
+            whole_window_drift_allowance=whole_window_drift_allowance,
+        ),
+        comparative=build_comparative_record(
+            cmp_est,
+            blocks,
+            whole_window_drift_allowance=whole_window_drift_allowance,
+        ),
         source_regime=regime if regime is not None else make_regime(),
         transport_group_id="tg-1",
         provenance={
@@ -802,6 +1007,227 @@ class TestArtifactEmitValidate(unittest.TestCase):
         artifact = make_artifact()
         artifact["idle_drift_guard"]["n_bundles"] = 1
         self.assert_invalid(artifact, "n_bundles and bundle_sha256 length disagree")
+
+    def test_whole_window_allowance_is_additive_and_recomputed(self):
+        allowance = whole_window_allowance()
+        cell = make_cell(whole_window_drift_allowance=allowance)
+        artifact = make_artifact([cell])
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        for record_name in ("absolute", "comparative"):
+            record = cell[record_name]
+            self.assertEqual(record["whole_window_drift_allowance"], allowance)
+            self.assertTrue(
+                close(
+                    record["drift_widened_unguarded_floor_j"],
+                    record["corner_widened_unguarded_floor_j"]
+                    + allowance["allowance_j"],
+                )
+            )
+            self.assertTrue(
+                close(
+                    record["drift_widened_guarded_floor_j"],
+                    record["corner_widened_guarded_floor_j"]
+                    + allowance["allowance_j"],
+                )
+            )
+
+        tampered = json.loads(json.dumps(artifact))
+        tampered["cells"][0]["absolute"][
+            "drift_widened_guarded_floor_j"
+        ] -= 0.1
+        self.assert_invalid(
+            tampered,
+            "drift_widened_guarded_floor_j must equal",
+        )
+
+        understated = json.loads(json.dumps(artifact))
+        understated["cells"][0]["comparative"][
+            "whole_window_drift_allowance"
+        ]["allowance_j"] = 0.2
+        self.assert_invalid(
+            understated,
+            "must equal max(observed, derived)",
+        )
+
+        mismatched_family = json.loads(json.dumps(artifact))
+        for record_name in ("absolute", "comparative"):
+            mismatched_family["cells"][0][record_name][
+                "whole_window_drift_allowance"
+            ]["claim_family"] = "idle_subtracted_energy"
+        self.assert_invalid(
+            mismatched_family,
+            "claim_family does not match metric",
+        )
+
+        malformed_basis = json.loads(json.dumps(artifact))
+        for record_name in ("absolute", "comparative"):
+            malformed_basis["cells"][0][record_name][
+                "whole_window_evaluation_basis_sha256"
+            ] = ["not", "hashable"]
+        malformed_errors = validate_floor_artifact(malformed_basis)
+        self.assertTrue(
+            any(
+                "whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+                in error
+                for error in malformed_errors
+            ),
+            malformed_errors,
+        )
+
+        asymmetric_basis = json.loads(json.dumps(malformed_basis))
+        asymmetric_basis["cells"][0]["comparative"][
+            "whole_window_evaluation_basis_sha256"
+        ] = HEX_C
+        self.assert_invalid(
+            asymmetric_basis,
+            "absolute and comparative whole-window evaluation bases disagree",
+        )
+
+        omitted = json.loads(json.dumps(artifact))
+        omitted_cell = omitted["cells"][0]
+        for record_name in ("absolute", "comparative"):
+            for field in (
+                "whole_window_drift_allowance",
+                "drift_widened_unguarded_floor_j",
+                "drift_widened_guarded_floor_j",
+            ):
+                omitted_cell[record_name].pop(field)
+        omitted_cell["floor_abs_j"] = omitted_cell["absolute"][
+            "corner_widened_guarded_floor_j"
+        ]
+        omitted_cell["floor_cmp_j"] = omitted_cell["comparative"][
+            "corner_widened_guarded_floor_j"
+        ]
+        omitted_cell["floor_gate_j"] = max(
+            omitted_cell["floor_abs_j"], omitted_cell["floor_cmp_j"]
+        )
+        group = omitted["transport_groups"][0]
+        group["composed_floor_abs_j"] = omitted_cell["floor_abs_j"]
+        group["composed_floor_cmp_j"] = omitted_cell["floor_cmp_j"]
+        group["composed_floor_gate_j"] = omitted_cell["floor_gate_j"]
+        self.assert_invalid(
+            omitted,
+            "whole-window basis requires the complete drift-widened field group",
+        )
+
+        full_strip = json.loads(json.dumps(artifact))
+        full_strip_cell = full_strip["cells"][0]
+        for record_name in ("absolute", "comparative"):
+            for field in (
+                "whole_window_evaluation_basis_sha256",
+                "whole_window_drift_allowance",
+                "drift_widened_unguarded_floor_j",
+                "drift_widened_guarded_floor_j",
+            ):
+                full_strip_cell[record_name].pop(field)
+        full_strip_cell["floor_abs_j"] = full_strip_cell["absolute"][
+            "corner_widened_guarded_floor_j"
+        ]
+        full_strip_cell["floor_cmp_j"] = full_strip_cell["comparative"][
+            "corner_widened_guarded_floor_j"
+        ]
+        full_strip_cell["floor_gate_j"] = max(
+            full_strip_cell["floor_abs_j"], full_strip_cell["floor_cmp_j"]
+        )
+        full_strip_group = full_strip["transport_groups"][0]
+        full_strip_group["composed_floor_abs_j"] = full_strip_cell["floor_abs_j"]
+        full_strip_group["composed_floor_cmp_j"] = full_strip_cell["floor_cmp_j"]
+        full_strip_group["composed_floor_gate_j"] = full_strip_cell["floor_gate_j"]
+        self.assert_invalid(
+            full_strip,
+            "claim_ready primary_claim_gate requires a whole-window basis",
+        )
+
+        comparative_strip = json.loads(json.dumps(artifact))
+        comparative_strip_cell = comparative_strip["cells"][0]
+        for field in (
+            "whole_window_evaluation_basis_sha256",
+            "whole_window_drift_allowance",
+            "drift_widened_unguarded_floor_j",
+            "drift_widened_guarded_floor_j",
+        ):
+            comparative_strip_cell["comparative"].pop(field)
+        comparative_strip_cell["floor_cmp_j"] = comparative_strip_cell[
+            "comparative"
+        ]["corner_widened_guarded_floor_j"]
+        comparative_strip_cell["floor_gate_j"] = max(
+            comparative_strip_cell["floor_abs_j"],
+            comparative_strip_cell["floor_cmp_j"],
+        )
+        comparative_strip_group = comparative_strip["transport_groups"][0]
+        comparative_strip_group["composed_floor_abs_j"] = (
+            comparative_strip_cell["floor_abs_j"]
+        )
+        comparative_strip_group["composed_floor_cmp_j"] = (
+            comparative_strip_cell["floor_cmp_j"]
+        )
+        comparative_strip_group["composed_floor_gate_j"] = (
+            comparative_strip_cell["floor_gate_j"]
+        )
+        self.assert_invalid(
+            comparative_strip,
+            "whole-window drift groups must be symmetric and complete",
+        )
+
+    def test_basis_passing_extraction_refuses_absent_allowances(self):
+        floor = absolute_false_effect_floor([1.0, 1.1])
+        report = CellReport(
+            cell_id="basis-cell",
+            kind="absolute",
+            metric="gross_energy_j",
+            window_class="request",
+            cap_hit_policy="exclude_same_slot",
+            members=(),
+            excluded_slots=(),
+            n_planned=2,
+            n_admitted=2,
+            refusal_reasons=(),
+            floor=floor,
+            anchor_shift_bound_max_j=0.01,
+        )
+        spec = {
+            "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+            "cells": [
+                {
+                    "cell_id": "basis-cell",
+                    "kind": "absolute",
+                    "metric": "gross_energy_j",
+                    "window_class": "request",
+                    "members": [{"slot": "A", "bundle_id": "A"}],
+                }
+            ],
+        }
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(
+                "joulewise.floor_extraction.campaign_cooldown_evidence",
+                return_value={},
+            ),
+            patch(
+                "joulewise.floor_extraction.extract_absolute_cell",
+                return_value=report,
+            ),
+            patch(
+                "joulewise.floor_extraction._whole_window_extraction_refusals",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.floor_extraction.whole_window_drift_allowances",
+                return_value=WholeWindowDriftAllowanceResult("absent", {}),
+            ),
+        ):
+            extracted = extract_cells(Path(tmp), spec)
+        self.assertFalse(extracted["all_cells_extractable"])
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            extracted["cells"][0]["refusal_reasons"],
+        )
+        self.assertIsNone(extracted["cells"][0]["floor"])
+        self.assertIn(
+            "whole_window_drift_allowance_unrecorded",
+            CELL_REFUSAL_CODES,
+        )
 
 
 def make_consumer(**overrides):
