@@ -30,7 +30,9 @@ from joulewise.detection_floor import (
     validate_floor_artifact,
 )
 from joulewise.whole_window import (
+    CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -266,6 +268,7 @@ class BundleEvidence:
         default_factory=dict
     )
     whole_window_drift_allowance_required: bool = False
+    consumption_provenance: Mapping[str, Any] | None = None
 
     @property
     def included(self) -> bool:
@@ -291,7 +294,19 @@ class BundleEvidence:
             "summary_status": self.summary.get("status") if isinstance(self.summary, Mapping) else None,
             "base_reason_codes": list(self.base_reason_codes),
             "window_prechecks": {
-                key: dict(value) for key, value in sorted(self.window_prechecks.items())
+                **{
+                    key: dict(value)
+                    for key, value in sorted(self.window_prechecks.items())
+                },
+                **(
+                    {
+                        CONSUMPTION_PROVENANCE_PRECHECK_KEY: dict(
+                            self.consumption_provenance
+                        )
+                    }
+                    if isinstance(self.consumption_provenance, Mapping)
+                    else {}
+                ),
             },
             "cooldown_cap_hit": quality.get("cooldown_cap_hit") if isinstance(quality, Mapping) else None,
             "campaign_cooldown": (
@@ -1858,9 +1873,17 @@ def load_analysis_inputs(
     )
     for evidence in (*registered.values(), *extras):
         evidence.campaign_cooldown = cooldown_by_bundle.get(evidence.bundle_id)
+    effective_bundle_ids = {
+        evidence.bundle_id for evidence in effective.values()
+    }
+    consumption_session = AuthenticatedConsumptionSession(
+        runs_root,
+        effective_bundle_ids,
+    )
     whole_window_reasons = whole_window_refusal_reasons(
         runs_root,
-        {evidence.bundle_id for evidence in effective.values()},
+        effective_bundle_ids,
+        consumption_session=consumption_session,
     )
     if whole_window_reasons:
         # The whole-window NEG-8/adapter/CPU verdict is a campaign-wide causal
@@ -1871,9 +1894,26 @@ def load_analysis_inputs(
             for reason in whole_window_reasons:
                 _exclude_evidence(evidence, reason)
     else:
+        if consumption_session.ready:
+            for evidence in (*registered.values(), *extras):
+                operative_summary = consumption_session.summary_for(
+                    evidence.bundle_id
+                )
+                if isinstance(operative_summary, Mapping):
+                    # Stored summary bytes and their digest remain the custody
+                    # authority.  Claim math consumes this in-memory widened
+                    # view, and the audit row records the complete discharge.
+                    evidence.summary = operative_summary
+                    evidence.window_prechecks.clear()
+                    evidence.consumption_provenance = (
+                        consumption_session.provenance_for(
+                            evidence.bundle_id
+                        )
+                    )
         allowances = whole_window_drift_allowances(
             runs_root,
-            {evidence.bundle_id for evidence in effective.values()},
+            effective_bundle_ids,
+            consumption_session=consumption_session,
         )
         for evidence in (*registered.values(), *extras):
             # A ``legacy`` result is never an allowance waiver: every

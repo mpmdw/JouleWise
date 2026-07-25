@@ -323,13 +323,13 @@ class _PermissiveStrictValidatorMixin:
         self.addCleanup(patcher.stop)
         whole_window_patcher = mock.patch(
             "joulewise.floor_extraction._whole_window_extraction_refusals",
-            lambda runs_root, referenced_bundle_ids: (),
+            lambda runs_root, referenced_bundle_ids, **_kwargs: (),
         )
         whole_window_patcher.start()
         self.addCleanup(whole_window_patcher.stop)
         allowance_patcher = mock.patch(
             "joulewise.floor_extraction.whole_window_drift_allowances",
-            lambda runs_root, referenced_bundle_ids: (
+            lambda runs_root, referenced_bundle_ids, **_kwargs: (
                 WholeWindowDriftAllowanceResult("legacy", {})
             ),
         )
@@ -1510,6 +1510,109 @@ class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.Test
             small_sample_guard_factor(5) * report.floor.unguarded_floor_j,
         )
         self.assertEqual(report.anchor_shift_bound_max_j, 0.01)
+
+    def test_member_report_carries_complete_operative_envelope_and_discharge(self) -> None:
+        class FakeConsumptionSession:
+            ready = True
+            refusal_reasons = ()
+
+            def __init__(self, root: Path):
+                self.root = root
+                self._summaries: dict[str, dict] = {}
+
+            def summary_for(self, bundle_id: str) -> dict:
+                if bundle_id not in self._summaries:
+                    summary = json.loads(
+                        (
+                            self.root / bundle_id / "summary_metrics.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    point = float(summary["gross_energy_j"])
+                    envelope = summary["energy_anchor_shift_envelopes"][
+                        "/gross_energy_j"
+                    ]
+                    envelope.update(
+                        {
+                            "anchor_bound_s": 0.08,
+                            "lower_j": point - 0.02,
+                            "upper_j": point + 0.02,
+                            "max_abs_delta_j": 0.02,
+                        }
+                    )
+                    summary["energy_bound_terms_j"][
+                        "E_clock_anchor_shift_bound_j"
+                    ] = 0.02
+                    self._summaries[bundle_id] = summary
+                return self._summaries[bundle_id]
+
+            def provenance_for(self, bundle_id: str) -> dict:
+                envelope = self.summary_for(bundle_id)[
+                    "energy_anchor_shift_envelopes"
+                ]["/gross_energy_j"]
+                return {
+                    "consumption_semantics_id": (
+                        "d078_authenticated_max_bracket_rederivation_v1"
+                    ),
+                    "minted_bound_dominated": True,
+                    "minted_fiducial_bound_s": 0.05,
+                    "operative_fiducial_bound_s": 0.08,
+                    "calibration_bracket": {
+                        "pre": {
+                            "bundle_id": "pre",
+                            "manifest_sha256": "1" * 64,
+                            "calibration_evidence_sha256": "2" * 64,
+                        },
+                        "post": {
+                            "bundle_id": "post",
+                            "manifest_sha256": "3" * 64,
+                            "calibration_evidence_sha256": "4" * 64,
+                        },
+                    },
+                    "operative_envelopes": {
+                        "/gross_energy_j": {
+                            **envelope,
+                            "half_width_j": 0.02,
+                        }
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root, members = self._build_corpus(tmp)
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-LONG-PROMPT",
+                metric="gross_energy_j",
+                window_class="request",
+                members=members,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+                consumption_session=FakeConsumptionSession(runs_root),
+            )
+
+        admitted = next(member for member in report.members if not member.excluded)
+        row = admitted.as_row()
+        envelope = row["operative_anchor_envelope"]
+        self.assertEqual(
+            set(envelope),
+            {
+                "method",
+                "anchor_bound_s",
+                "point_j",
+                "lower_j",
+                "upper_j",
+                "max_abs_delta_j",
+                "half_width_j",
+            },
+        )
+        self.assertEqual(envelope["anchor_bound_s"], 0.08)
+        provenance = row["consumption_provenance"]
+        self.assertTrue(provenance["minted_bound_dominated"])
+        self.assertEqual(provenance["operative_fiducial_bound_s"], 0.08)
+        self.assertEqual(
+            provenance["calibration_bracket"]["post"][
+                "calibration_evidence_sha256"
+            ],
+            "4" * 64,
+        )
 
     def test_missing_campaign_evidence_fails_the_whole_cell(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -26,6 +26,7 @@ from joulewise.analysis_engine.estimators import (
     estimate_paired_blocks,
 )
 from joulewise.analysis_engine.claims import (
+    REASON_CODES,
     REDUCER_REASON_CODES,
     evaluate_claim,
     ordered_reason_codes,
@@ -1524,8 +1525,9 @@ class AnchorBoundPropagationTests(unittest.TestCase):
             "clock_anchor_unresolved",
             "anchor_energy_envelope_unrecorded",
             "anchor_energy_envelope_exceeds_quarter_metric",
+            "calibration_bracket_exceeds_minted_bound",
         }
-        self.assertLessEqual(added, REDUCER_REASON_CODES)
+        self.assertLessEqual(added, REASON_CODES)
         self.assertEqual(sorted(added), ordered_reason_codes(added))
         for reason in sorted(added):
             with self.subTest(reason=reason):

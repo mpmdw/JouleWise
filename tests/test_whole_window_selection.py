@@ -8,9 +8,13 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from joulewise.whole_window import (
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+    AuthenticatedConsumptionSession,
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
     CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
@@ -902,6 +906,381 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 validate.call_args.args[0]["evaluation_basis"]["sha256"],
                 "claim-basis",
             )
+
+    def test_consumption_semantics_dispatch_is_not_latest_wins(self) -> None:
+        """A later mint-time row cannot displace explicit widened semantics."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            widened = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A", "B"],
+                "evaluation_basis": {
+                    "sha256": "shared-basis",
+                    "consumption_semantics_id": (
+                        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                    ),
+                    "member_occurrences": [
+                        {"bundle_id": "A"},
+                        {"bundle_id": "B"},
+                    ],
+                },
+            }
+            mint_time = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A", "B"],
+                "evaluation_basis": {
+                    "sha256": "shared-basis",
+                    "consumption_semantics_id": (
+                        MINTED_CONSUMPTION_SEMANTICS_ID
+                    ),
+                    "member_occurrences": [
+                        {"bundle_id": "A"},
+                        {"bundle_id": "B"},
+                    ],
+                },
+            }
+            # Put the mint-time row last: file order must not affect dispatch.
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(widened) + "\n" + json.dumps(mint_time) + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(True, ()),
+            ) as validate:
+                self.assertEqual(
+                    whole_window_refusal_reasons(root, {"A", "B"}),
+                    (),
+                )
+        self.assertEqual(validate.call_count, 1)
+        self.assertEqual(
+            validate.call_args.args[0]["evaluation_basis"][
+                "consumption_semantics_id"
+            ],
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        )
+
+
+class MaxBracketConsumptionTests(unittest.TestCase):
+    """Defect-shaped CAL-REBRACKET-01 reducer/session regressions."""
+
+    @staticmethod
+    def _bracket(bound_s: float) -> dict:
+        return {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": bound_s,
+            "pre": {
+                "manifest_sha256": "a" * 64,
+                "evidence_sha256": "b" * 64,
+                "b_fiducial_s": bound_s - 0.001,
+            },
+            "post": {
+                "manifest_sha256": "c" * 64,
+                "evidence_sha256": "d" * 64,
+                "b_fiducial_s": bound_s,
+            },
+        }
+
+    @staticmethod
+    def _summary(point: float, bound_s: float, half_width: float) -> dict:
+        def envelope(value: float) -> dict:
+            return {
+                "method": (
+                    "common_trace_shift_plus_independent_edge_corners_v3"
+                ),
+                "anchor_bound_s": bound_s,
+                "point_j": value,
+                "lower_j": value - half_width,
+                "upper_j": value + half_width,
+                "max_abs_delta_j": half_width,
+            }
+
+        return {
+            "status": "succeeded",
+            "summary_provenance": {"reducer_version": "0.5.2"},
+            "measurement_quality": {"telemetry_source": "powermetrics"},
+            "gross_energy_j": point,
+            "phase_energy_j": {"prefill": point / 2.0},
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": envelope(point),
+                "/phase_energy_j/prefill": envelope(point / 2.0),
+            },
+            "window_evidence_precheck": {
+                "gross_request": {"eligible": True, "reasons": []},
+                "phase": {
+                    "prefill": {"eligible": True, "reasons": []}
+                },
+            },
+        }
+
+    def test_identity_monotone_phase_coverage_and_short_tail(self) -> None:
+        """The consumption override is welded to the real mint reducer path."""
+
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+            reduce_bundle,
+        )
+        from tests.test_reduce import D078R01RegressionTests
+
+        helper = D078R01RegressionTests()
+        evidence = helper._valid_instrument_evidence()
+        minted_fiducial = float(evidence["b_fiducial_s"])
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = helper._bundle_with_calibration(
+                tmp,
+                evidence=evidence,
+            )
+            minted = reduce_bundle(
+                bundle, reducer_version="0.5.2"
+            ).to_dict()
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            identity = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=minted_fiducial,
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=minted_fiducial + 0.001,
+            )
+            short_tail = (
+                _rederive_summary_for_authenticated_fiducial_bound(
+                    bundle,
+                    authenticated_fiducial_bound_s=minted_fiducial + 2.0,
+                )
+            )
+
+        minted_envelopes = minted["energy_anchor_shift_envelopes"]
+        self.assertEqual(
+            identity["energy_anchor_shift_envelopes"],
+            minted_envelopes,
+        )
+        self.assertEqual(
+            set(widened["energy_anchor_shift_envelopes"]),
+            set(minted_envelopes),
+        )
+        for pointer, minted_envelope in minted_envelopes.items():
+            with self.subTest(pointer=pointer):
+                wider = widened["energy_anchor_shift_envelopes"][pointer]
+                self.assertEqual(
+                    wider["point_j"], minted_envelope["point_j"]
+                )
+                self.assertLessEqual(
+                    wider["lower_j"], minted_envelope["lower_j"]
+                )
+                self.assertGreaterEqual(
+                    wider["upper_j"], minted_envelope["upper_j"]
+                )
+        self.assertIn(
+            "/phase_energy_j/prefill",
+            widened["energy_anchor_shift_envelopes"],
+        )
+        self.assertIn(
+            "post_window_trace_tail_shorter_than_anchor_bound",
+            short_tail["window_evidence_precheck"]["gross_request"][
+                "reasons"
+            ],
+        )
+        self.assertNotIn("energy_anchor_shift_envelopes", short_tail)
+
+    def test_session_caches_complete_widened_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            widened = self._summary(40.0, 0.03, 0.2)
+            # A metric-local refusal that already existed at mint time is not
+            # a widening failure. The affected metric remains barred for its
+            # own consumer, while complete whole-window rebracketing proceeds.
+            for summary in (minted, widened):
+                summary["window_evidence_precheck"]["phase"]["setup"] = {
+                    "eligible": False,
+                    "reasons": ["clock_bound_exceeds_quarter_window"],
+                }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=widened,
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(rederive.call_count, 1)
+        self.assertIs(session.summary_for("member"), widened)
+        provenance = session.provenance_for("member")
+        self.assertTrue(provenance["minted_bound_dominated"])
+        self.assertEqual(
+            set(provenance["operative_envelopes"]),
+            {"/gross_energy_j", "/phase_energy_j/prefill"},
+        )
+        for envelope in provenance["operative_envelopes"].values():
+                self.assertAlmostEqual(envelope["half_width_j"], 0.2)
+        self.assertEqual(
+            provenance["calibration_bracket"]["post"][
+                "evidence_sha256"
+            ],
+            "d" * 64,
+        )
+
+    def test_provenance_scalar_disagreement_blocks_before_rederivation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.01
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertEqual(
+            session.refusal_reasons,
+            ("whole_window_verdict_provenance_invalid",),
+        )
+        self.assertIsNone(session.summary_for("member"))
+        rederive.assert_not_called()
+
+    def test_session_propagates_short_tail_leaf_without_minted_fallback(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            failed = {
+                **minted,
+                "energy_anchor_shift_envelopes": None,
+                "window_evidence_precheck": {
+                    "gross_request": {
+                        "eligible": False,
+                        "reasons": [
+                            "post_window_trace_tail_shorter_than_anchor_bound"
+                        ],
+                    }
+                },
+            }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=failed,
+                ),
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertEqual(
+            session.refusal_reasons,
+            ("post_window_trace_tail_shorter_than_anchor_bound",),
+        )
+        self.assertIsNone(session.summary_for("member"))
+        self.assertIsNone(session.provenance_for("member"))
 
 
 if __name__ == "__main__":

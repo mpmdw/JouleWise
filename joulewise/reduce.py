@@ -1724,6 +1724,7 @@ def _derive_anchor_context(
     *,
     strict_calibration: bool = True,
     reducer_version: str,
+    authenticated_fiducial_bound_override_s: float | None = None,
 ) -> _AnchorContext:
     """Re-derive the D-078 censored-intersection anchor from primary evidence.
 
@@ -1814,6 +1815,26 @@ def _derive_anchor_context(
                 else "instrument_calibration_invalid"
             )
             return _unresolved_anchor_context(stable)
+        if authenticated_fiducial_bound_override_s is not None:
+            override = authenticated_fiducial_bound_override_s
+            if (
+                isinstance(override, bool)
+                or not isinstance(override, int | float)
+                or not math.isfinite(float(override))
+                or float(override) < 0.0
+                or fiducial_bound_s is None
+                or float(override) + 1e-12 < fiducial_bound_s
+                or reducer_version not in {REDUCER_VERSION, AXI_REDUCER_VERSION}
+            ):
+                return _unresolved_anchor_context(
+                    "instrument_calibration_invalid"
+                )
+            # This override is private to the governed consumption session.
+            # The session authenticates both bracket artifacts from primary
+            # evidence and passes their maximum; the reducer still
+            # independently authenticates this member's mint calibration
+            # above and refuses any attempted narrowing.
+            fiducial_bound_s = float(override)
     effective_bound_s = _compose_causal_anchor_bound_s(
         bundle_bound_s,
         fiducial_bound_s,
@@ -2585,6 +2606,7 @@ def reduce_bundle(
     path: Path,
     *,
     reducer_version: str | None = None,
+    _authenticated_fiducial_bound_override_s: float | None = None,
 ) -> SummaryMetrics | SummaryMetricsV060:
     """Reduce the bundle at ``path`` to a :class:`SummaryMetrics`.
 
@@ -2631,6 +2653,9 @@ def reduce_bundle(
                 metadata,
                 idle_baseline,
                 reducer_version=reducer_version,
+                authenticated_fiducial_bound_override_s=(
+                    _authenticated_fiducial_bound_override_s
+                ),
             )
         return _reduce(
             reader,
@@ -2638,6 +2663,9 @@ def reduce_bundle(
             metadata,
             idle_baseline,
             reducer_version=reducer_version,
+            authenticated_fiducial_bound_override_s=(
+                _authenticated_fiducial_bound_override_s
+            ),
         )
     except (_ReduceError, BundleReadError, OverflowError) as exc:
         summary_type = (
@@ -2653,6 +2681,36 @@ def reduce_bundle(
             idle_baseline=idle_baseline,
             measurement_quality=_failed_quality(config, metadata, idle_baseline),
         )
+
+
+def _rederive_summary_for_authenticated_fiducial_bound(
+    path: Path,
+    *,
+    authenticated_fiducial_bound_s: float,
+) -> dict[str, Any]:
+    """Re-run the mint reducer in memory under one authenticated wider bound.
+
+    This is deliberately a narrow, output-free consumption seam.  It does
+    not accept a reducer version or persist a replacement summary: dispatch
+    remains bound to the member's stored reducer identity and
+    ``summary_metrics.json`` remains immutable.  The only caller is the
+    collection-scoped authenticated consumption session, which derives the
+    scalar from the primary-evidence calibration bracket.
+    """
+
+    if (
+        isinstance(authenticated_fiducial_bound_s, bool)
+        or not isinstance(authenticated_fiducial_bound_s, int | float)
+        or not math.isfinite(float(authenticated_fiducial_bound_s))
+        or float(authenticated_fiducial_bound_s) < 0.0
+    ):
+        raise ValueError("authenticated fiducial bound must be finite and nonnegative")
+    return reduce_bundle(
+        Path(path),
+        _authenticated_fiducial_bound_override_s=float(
+            authenticated_fiducial_bound_s
+        ),
+    ).to_dict()
 
 
 def _resolve_reducer_version(
@@ -2807,6 +2865,7 @@ def _reduce_v060(
     idle_baseline: IdleBaseline | None,
     *,
     reducer_version: str = AXI_FROZEN_REDUCER_VERSION,
+    authenticated_fiducial_bound_override_s: float | None = None,
 ) -> SummaryMetricsV060:
     evidence_problems = axi_v2_validation_problems(
         reader,
@@ -2837,6 +2896,9 @@ def _reduce_v060(
             metadata,
             strict_calibration=reducer_version == AXI_REDUCER_VERSION,
             reducer_version=reducer_version,
+            authenticated_fiducial_bound_override_s=(
+                authenticated_fiducial_bound_override_s
+            ),
         )
         if not anchor_ctx.telemetry_is_powermetrics:
             # See the 0.5.1 arm: anchor-era semantics are powermetrics-only.
@@ -3372,6 +3434,7 @@ def _reduce(
     idle_baseline: IdleBaseline | None,
     *,
     reducer_version: str,
+    authenticated_fiducial_bound_override_s: float | None = None,
 ) -> SummaryMetrics:
     window = reader.measured_window()
     if window is None:
@@ -3395,6 +3458,9 @@ def _reduce(
             metadata,
             strict_calibration=reducer_version == REDUCER_VERSION,
             reducer_version=reducer_version,
+            authenticated_fiducial_bound_override_s=(
+                authenticated_fiducial_bound_override_s
+            ),
         )
         if not anchor_ctx.telemetry_is_powermetrics:
             # The D-078 anchor defect and its envelope are native-stamped

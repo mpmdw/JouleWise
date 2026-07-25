@@ -36,7 +36,10 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import calibration_bracket_for_bundles
-from joulewise.reduce import _verify_instrument_calibration
+from joulewise.reduce import (
+    _rederive_summary_for_authenticated_fiducial_bound,
+    _verify_instrument_calibration,
+)
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy, TelemetryBackend
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
@@ -47,6 +50,11 @@ WHOLE_WINDOW_PROVENANCE_SCHEMA = (
 WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA = (
     "joulewise.idle_admission_evaluation_basis.v1"
 )
+MINTED_CONSUMPTION_SEMANTICS_ID = "d078_minted_envelopes_v1"
+MAX_BRACKET_CONSUMPTION_SEMANTICS_ID = (
+    "d078_authenticated_max_bracket_rederivation_v1"
+)
+CONSUMPTION_PROVENANCE_PRECHECK_KEY = "calibration_rebracket_consumption"
 OCCURRENCE_SUPERSESSION_SCHEMA = (
     "joulewise.campaign_occurrence_supersession.v1"
 )
@@ -96,6 +104,418 @@ class WholeWindowDriftAllowanceResult:
 
     status: str
     allowances: Mapping[str, Mapping[str, Any]]
+
+
+_REDERIVATION_LEAF_REASONS = frozenset(
+    {
+        "post_window_trace_tail_shorter_than_anchor_bound",
+        "clock_bound_exceeds_quarter_window",
+        "anchor_energy_envelope_exceeds_quarter_metric",
+        "anchor_energy_envelope_unrecorded",
+        "clock_anchor_unresolved",
+        "instrument_calibration_missing",
+        "instrument_calibration_mismatch",
+        "instrument_calibration_invalid",
+        "instrument_calibration_stale",
+        "negative_power_sample",
+    }
+)
+
+
+def _nested_rederivation_leaf_occurrences(
+    value: object,
+    *,
+    path: tuple[str, ...] = (),
+) -> set[tuple[tuple[str, ...], str]]:
+    """Locate leaf refusals so only widening-introduced failures discharge."""
+
+    reasons: set[tuple[tuple[str, ...], str]] = set()
+    if isinstance(value, Mapping):
+        raw = value.get("reasons")
+        if isinstance(raw, list):
+            reasons.update(
+                (path, reason)
+                for reason in raw
+                if isinstance(reason, str)
+                and reason in _REDERIVATION_LEAF_REASONS
+            )
+        for key, child in value.items():
+            reasons.update(
+                _nested_rederivation_leaf_occurrences(
+                    child,
+                    path=(*path, str(key)),
+                )
+            )
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for index, child in enumerate(value):
+            reasons.update(
+                _nested_rederivation_leaf_occurrences(
+                    child,
+                    path=(*path, str(index)),
+                )
+            )
+    return reasons
+
+
+def _complete_envelope_record(value: object) -> dict[str, Any] | None:
+    """Normalize the complete operative envelope required by GOV-02."""
+
+    if not isinstance(value, Mapping):
+        return None
+    method = value.get("method")
+    numeric: dict[str, float] = {}
+    for field_name in (
+        "anchor_bound_s",
+        "point_j",
+        "lower_j",
+        "upper_j",
+        "max_abs_delta_j",
+    ):
+        candidate = value.get(field_name)
+        if (
+            isinstance(candidate, bool)
+            or not isinstance(candidate, int | float)
+            or not math.isfinite(float(candidate))
+        ):
+            return None
+        numeric[field_name] = float(candidate)
+    if (
+        not isinstance(method, str)
+        or not method
+        or numeric["anchor_bound_s"] < 0.0
+        or numeric["max_abs_delta_j"] < 0.0
+        or not (
+            numeric["lower_j"]
+            <= numeric["point_j"]
+            <= numeric["upper_j"]
+        )
+    ):
+        return None
+    half_width_j = max(
+        numeric["point_j"] - numeric["lower_j"],
+        numeric["upper_j"] - numeric["point_j"],
+        numeric["max_abs_delta_j"],
+    )
+    return {
+        "method": method,
+        **numeric,
+        "half_width_j": half_width_j,
+    }
+
+
+class AuthenticatedConsumptionSession:
+    """One collection-scoped authenticated max-bracket consumption session.
+
+    The session owns bracket authentication, computes the operative fiducial
+    bound from primary evidence, and memoizes every in-memory member
+    re-reduction.  It never persists or substitutes a summary artifact.
+    """
+
+    def __init__(
+        self,
+        runs_root: Path,
+        referenced_bundle_ids: set[str],
+        *,
+        evaluation_basis_sha256: str | None = None,
+    ) -> None:
+        self.runs_root = Path(runs_root)
+        self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
+        self.evaluation_basis_sha256 = evaluation_basis_sha256
+        self.calibration_bracket: Mapping[str, Any] | None = None
+        self.operative_fiducial_bound_s: float | None = None
+        self.refusal_reasons: tuple[str, ...] = ()
+        self._prepared = False
+        self._preparation_identity: tuple[tuple[str, str], ...] | None = None
+        self._summaries: dict[str, Mapping[str, Any]] = {}
+        self._provenance: dict[str, Mapping[str, Any]] = {}
+
+    @property
+    def ready(self) -> bool:
+        return self._prepared and not self.refusal_reasons
+
+    def _prepare(
+        self,
+        *,
+        bundle_paths: Mapping[str, Path],
+        policy: CampaignPolicy,
+    ) -> None:
+        identity = tuple(
+            sorted(
+                (bundle_id, str(Path(path).resolve()))
+                for bundle_id, path in bundle_paths.items()
+            )
+        )
+        if self._prepared:
+            if identity != self._preparation_identity:
+                self.refusal_reasons = tuple(
+                    sorted(
+                        set(self.refusal_reasons)
+                        | {"whole_window_verdict_provenance_invalid"}
+                    )
+                )
+            return
+        self._prepared = True
+        self._preparation_identity = identity
+        reasons: set[str] = set()
+        if (
+            not self.referenced_bundle_ids.issubset(bundle_paths)
+            or not bundle_paths
+        ):
+            self.refusal_reasons = (
+                "whole_window_verdict_provenance_invalid",
+            )
+            return
+
+        bracket, bracket_reasons = calibration_bracket_for_bundles(
+            self.runs_root,
+            [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
+            policy.calibration_bracketing,
+        )
+        self.calibration_bracket = bracket
+        reasons.update(bracket_reasons)
+        raw_bound = bracket.get("b_fiducial_s")
+        if (
+            isinstance(raw_bound, bool)
+            or not isinstance(raw_bound, int | float)
+            or not math.isfinite(float(raw_bound))
+            or float(raw_bound) < 0.0
+        ):
+            if not reasons:
+                reasons.add("instrument_calibration_invalid")
+            self.refusal_reasons = tuple(sorted(reasons))
+            return
+        operative_bound = float(raw_bound)
+        self.operative_fiducial_bound_s = operative_bound
+
+        physics_cache: dict[str, float] = {}
+        pending: list[
+            tuple[
+                str,
+                Path,
+                Mapping[str, Any],
+                Mapping[str, Any],
+                float,
+                bool,
+            ]
+        ] = []
+        for bundle_id, path in sorted(bundle_paths.items()):
+            stored_summary = _read_json_object(path / "summary_metrics.json")
+            metadata = _read_json_object(path / "metadata.json")
+            if not _current_strict_summary(stored_summary, path):
+                self._summaries[bundle_id] = stored_summary or {}
+                continue
+            calibration = (
+                metadata.get("instrument_calibration")
+                if isinstance(metadata, Mapping)
+                else None
+            )
+            authenticated: float | None = None
+            detail: str | None = "instrument_calibration_invalid"
+            if isinstance(calibration, Mapping) and isinstance(metadata, Mapping):
+                try:
+                    authenticated, detail = _verify_instrument_calibration(
+                        BundleReader(path),
+                        dict(metadata),
+                        dict(calibration),
+                        strict_physics=True,
+                        physics_cache=physics_cache,
+                    )
+                except (BundleReadError, OSError, TypeError, ValueError):
+                    authenticated = None
+                    detail = "instrument_calibration_invalid"
+            if (
+                detail is not None
+                or authenticated is None
+                or not math.isfinite(authenticated)
+                or authenticated < 0.0
+            ):
+                reasons.add(
+                    detail
+                    if detail in _REDERIVATION_LEAF_REASONS
+                    else "instrument_calibration_invalid"
+                )
+                continue
+            metadata_scalar = (
+                calibration.get("verified_effective_b_fiducial_s")
+                if isinstance(calibration, Mapping)
+                else None
+            )
+            if (
+                isinstance(metadata_scalar, bool)
+                or not isinstance(metadata_scalar, int | float)
+                or not math.isfinite(float(metadata_scalar))
+                or abs(float(metadata_scalar) - authenticated) > 1e-9
+            ):
+                # Preserve the existing provenance taxonomy: widening never
+                # cures a stored scalar that disagrees with primary evidence.
+                reasons.add("whole_window_verdict_provenance_invalid")
+                continue
+            pending.append(
+                (
+                    bundle_id,
+                    path,
+                    stored_summary or {},
+                    metadata,
+                    float(authenticated),
+                    operative_bound > float(authenticated) + 1e-12,
+                )
+            )
+
+        if reasons:
+            self.refusal_reasons = tuple(sorted(reasons))
+            return
+
+        for (
+            bundle_id,
+            path,
+            stored_summary,
+            _metadata,
+            minted_bound,
+            dominated,
+        ) in pending:
+            operative_summary: Mapping[str, Any] = stored_summary
+            if dominated:
+                try:
+                    operative_summary = (
+                        _rederive_summary_for_authenticated_fiducial_bound(
+                            path,
+                            authenticated_fiducial_bound_s=operative_bound,
+                        )
+                    )
+                except (
+                    BundleReadError,
+                    OSError,
+                    OverflowError,
+                    TypeError,
+                    ValueError,
+                ):
+                    reasons.add("instrument_calibration_invalid")
+                    continue
+                operative_leaf_occurrences = (
+                    _nested_rederivation_leaf_occurrences(
+                        operative_summary.get("window_evidence_precheck")
+                        if isinstance(operative_summary, Mapping)
+                        else None
+                    )
+                )
+                stored_leaf_occurrences = (
+                    _nested_rederivation_leaf_occurrences(
+                        stored_summary.get("window_evidence_precheck")
+                    )
+                )
+                leaf_reasons = {
+                    reason
+                    for _path, reason in (
+                        operative_leaf_occurrences
+                        - stored_leaf_occurrences
+                    )
+                }
+                if leaf_reasons:
+                    reasons.update(leaf_reasons)
+                    continue
+                if operative_summary.get("status") != "succeeded":
+                    reasons.add("instrument_calibration_invalid")
+                    continue
+
+            minted_envelopes = stored_summary.get(
+                "energy_anchor_shift_envelopes"
+            )
+            operative_envelopes = operative_summary.get(
+                "energy_anchor_shift_envelopes"
+            )
+            if not isinstance(minted_envelopes, Mapping) or not isinstance(
+                operative_envelopes, Mapping
+            ):
+                reasons.add("anchor_energy_envelope_unrecorded")
+                continue
+            complete: dict[str, dict[str, Any]] = {}
+            coverage_failed = False
+            for pointer, minted_value in minted_envelopes.items():
+                minted_record = _complete_envelope_record(minted_value)
+                operative_record = _complete_envelope_record(
+                    operative_envelopes.get(pointer)
+                )
+                if (
+                    not isinstance(pointer, str)
+                    or minted_record is None
+                    or operative_record is None
+                ):
+                    coverage_failed = True
+                    continue
+                if (
+                    operative_record["point_j"] != minted_record["point_j"]
+                    or operative_record["lower_j"]
+                    > minted_record["lower_j"] + 1e-12
+                    or operative_record["upper_j"]
+                    < minted_record["upper_j"] - 1e-12
+                    or operative_record["half_width_j"]
+                    + 1e-12
+                    < minted_record["half_width_j"]
+                ):
+                    coverage_failed = True
+                    continue
+                complete[pointer] = operative_record
+            if coverage_failed or set(complete) != set(minted_envelopes):
+                reasons.add("anchor_energy_envelope_unrecorded")
+                continue
+            self._summaries[bundle_id] = operative_summary
+            self._provenance[bundle_id] = {
+                "consumption_semantics_id": (
+                    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                ),
+                "minted_bound_dominated": dominated,
+                "minted_fiducial_bound_s": minted_bound,
+                "operative_fiducial_bound_s": operative_bound,
+                "calibration_bracket": {
+                    "pre": (
+                        dict(bracket["pre"])
+                        if isinstance(bracket.get("pre"), Mapping)
+                        else None
+                    ),
+                    "post": (
+                        dict(bracket["post"])
+                        if isinstance(bracket.get("post"), Mapping)
+                        else None
+                    ),
+                },
+                "operative_envelopes": complete,
+            }
+
+        if reasons or any(
+            bundle_id not in self._summaries
+            for bundle_id, *_rest in pending
+        ):
+            self._summaries.clear()
+            self._provenance.clear()
+            self.refusal_reasons = tuple(
+                sorted(reasons or {"instrument_calibration_invalid"})
+            )
+            return
+        self.refusal_reasons = ()
+
+    def summary_for(self, bundle_id: str) -> Mapping[str, Any] | None:
+        """Return the operative in-memory summary only after full discharge."""
+
+        if not self.ready:
+            return None
+        return self._summaries.get(bundle_id)
+
+    def provenance_for(self, bundle_id: str) -> Mapping[str, Any] | None:
+        """Return the durable per-member discharge record."""
+
+        if not self.ready:
+            return None
+        return self._provenance.get(bundle_id)
+
+    def provenance_by_bundle(self) -> Mapping[str, Mapping[str, Any]]:
+        """Return complete basis provenance for a non-clobbering verdict row."""
+
+        if not self.ready:
+            return {}
+        return {
+            bundle_id: dict(record)
+            for bundle_id, record in sorted(self._provenance.items())
+        }
 
 
 @dataclass(frozen=True)
@@ -1259,8 +1679,25 @@ def build_evaluation_basis(
     policy_sha256: str,
     member_occurrences: Sequence[Mapping[str, Any]],
     calibration_bracket: Mapping[str, Any] | None,
+    consumption_semantics_id: str = MINTED_CONSUMPTION_SEMANTICS_ID,
+    consumption_provenance: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Bind one verdict to physical member bytes and its calibration pair."""
+
+    if consumption_semantics_id not in {
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    }:
+        raise ValueError(
+            f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
+        )
+    if (
+        consumption_semantics_id == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        and not isinstance(consumption_provenance, Mapping)
+    ):
+        raise ValueError(
+            "max-bracket consumption semantics require complete provenance"
+        )
 
     occurrences = sorted(
         (dict(value) for value in member_occurrences),
@@ -1288,7 +1725,23 @@ def build_evaluation_basis(
         "policy_sha256": policy_sha256,
         "member_occurrences": occurrences,
         "calibration_bracket_set": bracket_set,
+        "consumption_semantics_id": consumption_semantics_id,
     }
+    if consumption_semantics_id == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+        assert isinstance(consumption_provenance, Mapping)
+        expected_ids = {
+            value.get("bundle_id")
+            for value in occurrences
+            if isinstance(value.get("bundle_id"), str)
+        }
+        if set(consumption_provenance) != expected_ids:
+            raise ValueError(
+                "max-bracket consumption provenance must cover every basis member"
+            )
+        payload["consumption_provenance"] = {
+            bundle_id: dict(consumption_provenance[bundle_id])
+            for bundle_id in sorted(consumption_provenance)
+        }
     return {**payload, "sha256": canonical_sha256(payload)}
 
 
@@ -2431,6 +2884,7 @@ def _current_core_rederivation_reasons(
     manifests: Sequence[Mapping[str, Any]],
     runs_root: Path,
     policy_sha256: Any,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> set[str]:
     """Recompute current-mint CPU/environment/adapter labels from members."""
 
@@ -2583,11 +3037,33 @@ def _current_core_rederivation_reasons(
         stored = core.get("adapter_wattage_continuity")
         if not isinstance(stored, Mapping) or dict(stored) != derived:
             reasons.add("adapter_continuity_failed")
-        calibration_bracket, calibration_reasons = calibration_bracket_for_bundles(
-            runs_root,
-            [path for _bundle_id, path, _metadata, _cpu in derived_members],
-            registered_typed_policy.calibration_bracketing,
-        )
+        if consumption_session is not None:
+            consumption_session._prepare(
+                bundle_paths={
+                    bundle_id: path
+                    for bundle_id, path, _metadata, _cpu in derived_members
+                },
+                policy=registered_typed_policy,
+            )
+            calibration_bracket = (
+                dict(consumption_session.calibration_bracket)
+                if isinstance(
+                    consumption_session.calibration_bracket, Mapping
+                )
+                else None
+            )
+            calibration_reasons = consumption_session.refusal_reasons
+        else:
+            calibration_bracket, calibration_reasons = (
+                calibration_bracket_for_bundles(
+                    runs_root,
+                    [
+                        path
+                        for _bundle_id, path, _metadata, _cpu in derived_members
+                    ],
+                    registered_typed_policy.calibration_bracketing,
+                )
+            )
         stored_calibration_bracket = core.get("instrument_calibration_bracket")
         if (
             not isinstance(stored_calibration_bracket, Mapping)
@@ -2606,8 +3082,10 @@ def _current_core_rederivation_reasons(
             if isinstance(calibration_bracket, Mapping)
             else None
         )
-        if not isinstance(bracket_bound, bool) and isinstance(
-            bracket_bound, int | float
+        if (
+            consumption_session is None
+            and not isinstance(bracket_bound, bool)
+            and isinstance(bracket_bound, int | float)
         ):
             physics_cache: dict[str, float] = {}
             for _bundle_id, _path, member_metadata, _cpu in derived_members:
@@ -2655,6 +3133,102 @@ def _current_core_rederivation_reasons(
     return reasons
 
 
+def _row_consumption_semantics_id(row: Mapping[str, Any]) -> str:
+    basis = row.get("evaluation_basis")
+    value = (
+        basis.get("consumption_semantics_id")
+        if isinstance(basis, Mapping)
+        else None
+    )
+    if value is None:
+        value = row.get("consumption_semantics_id")
+    return (
+        value
+        if isinstance(value, str)
+        else MINTED_CONSUMPTION_SEMANTICS_ID
+    )
+
+
+def _consumption_provenance_valid(
+    basis: Mapping[str, Any],
+    occurrences: Sequence[Mapping[str, Any]],
+) -> bool:
+    semantics_id = basis.get(
+        "consumption_semantics_id",
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+    )
+    provenance = basis.get("consumption_provenance")
+    if semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+        return provenance is None
+    if semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID or not isinstance(
+        provenance, Mapping
+    ):
+        return False
+    occurrence_ids = {
+        value.get("bundle_id")
+        for value in occurrences
+        if isinstance(value.get("bundle_id"), str)
+    }
+    if set(provenance) != occurrence_ids:
+        return False
+    bracket_set = basis.get("calibration_bracket_set")
+    if not isinstance(bracket_set, Mapping):
+        return False
+    for bundle_id in sorted(occurrence_ids):
+        record = provenance.get(bundle_id)
+        if not isinstance(record, Mapping) or record.get(
+            "consumption_semantics_id"
+        ) != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+            return False
+        dominated = record.get("minted_bound_dominated")
+        minted = _finite_number(record.get("minted_fiducial_bound_s"))
+        operative = _finite_number(record.get("operative_fiducial_bound_s"))
+        calibration = record.get("calibration_bracket")
+        envelopes = record.get("operative_envelopes")
+        if (
+            not isinstance(dominated, bool)
+            or minted is None
+            or minted < 0.0
+            or operative is None
+            or operative < minted - 1e-12
+            or dominated != (operative > minted + 1e-12)
+            or not isinstance(calibration, Mapping)
+            or {
+                "pre": calibration.get("pre"),
+                "post": calibration.get("post"),
+            }
+            != {
+                "pre": bracket_set.get("pre"),
+                "post": bracket_set.get("post"),
+            }
+            or not isinstance(envelopes, Mapping)
+            or not envelopes
+        ):
+            return False
+        for descriptor in (calibration.get("pre"), calibration.get("post")):
+            if (
+                not isinstance(descriptor, Mapping)
+                or not _sha256_text(descriptor.get("manifest_sha256"))
+                or not _sha256_text(descriptor.get("evidence_sha256"))
+            ):
+                return False
+        if any(
+            not isinstance(pointer, str)
+            or not pointer.startswith("/")
+            or _complete_envelope_record(envelope) is None
+            or "half_width_j" not in envelope
+            or not math.isclose(
+                float(envelope["half_width_j"]),
+                float(_complete_envelope_record(envelope)["half_width_j"]),
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+            for pointer, envelope in envelopes.items()
+        ):
+            return False
+    return True
+
+
 def _validated_evaluation_basis(
     row: Mapping[str, Any], runs_root: Path
 ) -> Mapping[str, Any] | None:
@@ -2693,6 +3267,7 @@ def _validated_evaluation_basis(
         or not isinstance(occurrences, list)
         or not occurrences
         or bracket_set != expected_bracket_set
+        or not _consumption_provenance_valid(basis, occurrences)
     ):
         return None
     ids: list[str] = []
@@ -2851,7 +3426,11 @@ def _basis_source_manifests(
 
 
 def _validate_row(
-    row: Mapping[str, Any], runs_root: Path, referenced: set[str]
+    row: Mapping[str, Any],
+    runs_root: Path,
+    referenced: set[str],
+    *,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
     basis_present = "evaluation_basis" in row
@@ -2859,6 +3438,18 @@ def _validate_row(
     if basis_present and basis is None:
         reasons.add("whole_window_verdict_provenance_invalid")
     if row.get("schema_version") != WHOLE_WINDOW_SCHEMA:
+        reasons.add("whole_window_verdict_provenance_invalid")
+    row_semantics = _row_consumption_semantics_id(row)
+    if row_semantics not in {
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    }:
+        reasons.add("whole_window_verdict_provenance_invalid")
+    if row_semantics == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID and (
+        not isinstance(row.get("evaluation_basis"), Mapping)
+        or row["evaluation_basis"].get("consumption_semantics_id")
+        != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+    ):
         reasons.add("whole_window_verdict_provenance_invalid")
     bundle_ids = row.get("bundle_ids")
     if (
@@ -2977,6 +3568,7 @@ def _validate_row(
                 manifests=verified_source_manifests,
                 runs_root=runs_root,
                 policy_sha256=policy_sha,
+                consumption_session=consumption_session,
             )
         )
 
@@ -3214,6 +3806,7 @@ def whole_window_refusal_reasons(
     referenced_bundle_ids: set[str],
     *,
     evaluation_basis_sha256: str | None = None,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[str, ...]:
     """Return refusals from the verdict governing the requested exact basis."""
 
@@ -3222,6 +3815,14 @@ def whole_window_refusal_reasons(
         "adapter_continuity_evidence_missing",
         "cpu_admission_core_missing",
     )
+    if consumption_session is not None and (
+        Path(runs_root) != consumption_session.runs_root
+        or frozenset(referenced_bundle_ids)
+        != consumption_session.referenced_bundle_ids
+        or evaluation_basis_sha256
+        != consumption_session.evaluation_basis_sha256
+    ):
+        return ("whole_window_verdict_provenance_invalid",)
     try:
         lines = (Path(runs_root) / "campaign_log.jsonl").read_text(
             encoding="utf-8"
@@ -3281,10 +3882,26 @@ def whole_window_refusal_reasons(
         # exists. Once a runner records bases, legacy rows never govern the
         # new claim path.
         overlapping = verdict_rows
+    widened_rows = [
+        row
+        for row in overlapping
+        if _row_consumption_semantics_id(row)
+        == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+    ]
+    if widened_rows:
+        # Semantic dispatch is explicit.  A max-bracket row supersedes no
+        # mint-time history; it is selected because the consumer requests
+        # these semantics, independent of append order.
+        overlapping = widened_rows
     valid: list[Mapping[str, Any]] = []
     invalid_reasons: set[str] = set()
     for row in overlapping:
-        ok, reasons = _validate_row(row, Path(runs_root), referenced_bundle_ids)
+        ok, reasons = _validate_row(
+            row,
+            Path(runs_root),
+            referenced_bundle_ids,
+            consumption_session=consumption_session,
+        )
         if ok:
             valid.append(row)
         else:
@@ -3340,6 +3957,7 @@ def whole_window_drift_allowances(
     referenced_bundle_ids: set[str],
     *,
     evaluation_basis_sha256: str | None = None,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> WholeWindowDriftAllowanceResult:
     """Return authenticated family allowances for the selected passing basis.
 
@@ -3353,6 +3971,7 @@ def whole_window_drift_allowances(
         root,
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
+        consumption_session=consumption_session,
     ):
         return WholeWindowDriftAllowanceResult("absent", {})
     try:
@@ -3371,8 +3990,14 @@ def whole_window_drift_allowances(
     basis_rows = [
         row for row in rows if isinstance(row.get("evaluation_basis"), Mapping)
     ]
+    semantic_rows = [
+        row
+        for row in (basis_rows or rows)
+        if _row_consumption_semantics_id(row)
+        == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+    ]
     candidates: list[Mapping[str, Any]] = []
-    for row in basis_rows or rows:
+    for row in semantic_rows or basis_rows or rows:
         basis = row.get("evaluation_basis")
         if isinstance(basis, Mapping):
             occurrences = basis.get("member_occurrences")
@@ -3401,7 +4026,12 @@ def whole_window_drift_allowances(
                 else set()
             )
             selected = bool(ids.intersection(referenced_bundle_ids))
-        if selected and _validate_row(row, root, referenced_bundle_ids)[0]:
+        if selected and _validate_row(
+            row,
+            root,
+            referenced_bundle_ids,
+            consumption_session=consumption_session,
+        )[0]:
             candidates.append(row)
     if not candidates:
         return WholeWindowDriftAllowanceResult("absent", {})
@@ -3467,6 +4097,7 @@ def whole_window_drift_allowances(
 
 
 __all__ = [
+    "AuthenticatedConsumptionSession",
     "CONDITION_NEG8_DRIFT_BOUND_STALE",
     "CONDITION_NEG8_IDLE_SUB_DRIFT_BOUND_UNDERIVED",
     "CONDITION_NEG8_IDLE_SUB_POINT_DRIFT_EXCEEDED",
@@ -3483,6 +4114,9 @@ __all__ = [
     "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
     "NEG8_WHOLE_WINDOW_ALLOWANCE_TERM",
+    "CONSUMPTION_PROVENANCE_PRECHECK_KEY",
+    "MAX_BRACKET_CONSUMPTION_SEMANTICS_ID",
+    "MINTED_CONSUMPTION_SEMANTICS_ID",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
