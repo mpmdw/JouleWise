@@ -4,7 +4,7 @@ Refreshed: 2026-07-25 (CURRENT DEPLOYED BASELINE). Ed redeployed the
 capsule from merged main `c3e2647` (plus the same-day bookkeeping
 refresh: gauntlet run report, C-033, refreshed status surfaces, and the
 council-log capsule redirect) as `dep_2I04CG6tQ4t0mzY7`; the capsule
-configuration timestamp is 2026-07-25T02:30Z (the deployed page's own
+configuration timestamp is 2026-07-25T02:44Z (the deployed page's own
 copy of this stamp may read one deploy older — stamp-then-deploy
 ordering artifact, not drift). This deployment
 includes the repaired-instrument collection story, the ratified and
