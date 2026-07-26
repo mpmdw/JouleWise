@@ -229,7 +229,7 @@ class AuthenticatedConsumptionSession:
         self._summaries: dict[str, Mapping[str, Any]] = {}
         self._provenance: dict[str, Mapping[str, Any]] = {}
         self._row_validation_results: dict[
-            tuple[str, tuple[str, ...]],
+            tuple[str, str, tuple[str, ...], str | None],
             tuple[bool, tuple[str, ...]],
         ] = {}
 
@@ -3188,14 +3188,28 @@ def _consumption_provenance_valid(
         if isinstance(value, Mapping)
         and isinstance(value.get("bundle_id"), str)
     }
+    # Explicit digest selection deliberately permits a basis whose
+    # occurrences cover more than the requested replay subset. The ordinary
+    # path remains exact-set selection.
     if (
         len(occurrence_ids) != len(occurrences)
         or len(occurrences_by_id) != len(occurrences)
         or set(provenance) != occurrence_ids
         or (
             session_ready
-            and occurrence_ids
-            != set(consumption_session.referenced_bundle_ids)
+            and (
+                (
+                    consumption_session.evaluation_basis_sha256 is not None
+                    and not set(
+                        consumption_session.referenced_bundle_ids
+                    ).issubset(occurrence_ids)
+                )
+                or (
+                    consumption_session.evaluation_basis_sha256 is None
+                    and occurrence_ids
+                    != set(consumption_session.referenced_bundle_ids)
+                )
+            )
         )
     ):
         return False
@@ -3561,7 +3575,9 @@ def _validate_row(
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
 
-    cache_key: tuple[str, tuple[str, ...]] | None = None
+    cache_key: tuple[str, str, tuple[str, ...], str | None] | None = None
+    if consumption_session is not None and not consumption_session.ready:
+        consumption_session._row_validation_results.clear()
     if (
         consumption_session is not None
         and Path(runs_root) == consumption_session.runs_root
@@ -3571,7 +3587,9 @@ def _validate_row(
         try:
             cache_key = (
                 canonical_sha256(row),
+                str(Path(runs_root).resolve()),
                 tuple(sorted(referenced)),
+                consumption_session.evaluation_basis_sha256,
             )
         except (TypeError, ValueError):
             cache_key = None
@@ -4179,8 +4197,20 @@ def whole_window_drift_allowances(
         ]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return WholeWindowDriftAllowanceResult("absent", {})
+    overlapping_rows = []
+    for row in rows:
+        bundle_ids = row.get("bundle_ids")
+        ids = (
+            {item for item in bundle_ids if isinstance(item, str)}
+            if isinstance(bundle_ids, list)
+            else set()
+        )
+        if ids.intersection(referenced_bundle_ids):
+            overlapping_rows.append(row)
     basis_rows = [
-        row for row in rows if isinstance(row.get("evaluation_basis"), Mapping)
+        row
+        for row in overlapping_rows
+        if isinstance(row.get("evaluation_basis"), Mapping)
     ]
     if basis_rows:
         selected_basis_rows: list[Mapping[str, Any]] = []
@@ -4210,7 +4240,10 @@ def whole_window_drift_allowances(
         selected_basis_rows = []
     semantic_rows = [
         row
-        for row in (selected_basis_rows or (rows if not basis_rows else []))
+        for row in (
+            selected_basis_rows
+            or (overlapping_rows if not basis_rows else [])
+        )
         if _row_consumption_semantics_id(row)
         == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
     ]
@@ -4218,7 +4251,7 @@ def whole_window_drift_allowances(
     for row in (
         semantic_rows
         or selected_basis_rows
-        or (rows if not basis_rows else [])
+        or (overlapping_rows if not basis_rows else [])
     ):
         basis = row.get("evaluation_basis")
         if isinstance(basis, Mapping):

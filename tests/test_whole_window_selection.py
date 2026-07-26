@@ -466,62 +466,24 @@ class WholeWindowSelectionTests(unittest.TestCase):
         self.assertEqual(result.status, "absent")
         self.assertEqual(result.allowances, {})
 
-    def test_drift_allowance_semantics_dispatch_is_scoped_to_requested_basis(
+    def test_unrelated_basis_row_does_not_hide_basisless_frozen_replay(
         self,
     ) -> None:
-        """A widened row for basis B cannot hide a minted row for basis A."""
-
-        family_records = {
-            family: {
-                "drift_allowance_j": allowance,
-                "trajectory_excursion_max_j": allowance / 2.0,
-                "derived_repeatability_bound_j": allowance,
-                "provenance": {"bound_derivation_sha256": digest * 64},
-            }
-            for family, allowance, digest in (
-                ("gross_energy", 0.4, "a"),
-                ("idle_subtracted_energy", 0.5, "b"),
-            )
-        }
-        allowances = {
-            family: {
-                "claim_family": family,
-                "allowance_j": record["drift_allowance_j"],
-                "observed_trajectory_excursion_j": record[
-                    "trajectory_excursion_max_j"
-                ],
-                "derived_repeatability_bound_j": record[
-                    "derived_repeatability_bound_j"
-                ],
-                "provenance": record["provenance"],
-            }
-            for family, record in family_records.items()
-        }
-
-        def row(
-            bundle_id: str,
-            semantics_id: str,
-            basis_sha256: str,
-        ) -> dict:
-            return {
-                "record_type": "idle_admission_whole_window_verdict",
-                "bundle_ids": [bundle_id],
-                "evaluation_basis": {
-                    "sha256": basis_sha256,
-                    "consumption_semantics_id": semantics_id,
-                    "member_occurrences": [{"bundle_id": bundle_id}],
-                },
-                "idle_admission_core": {
-                    "neg8_bracket": {
-                        "claim_families": family_records,
-                        "drift_allowances": allowances,
-                    }
-                },
-            }
+        """Basis detection follows the same requested-ID scope as selection."""
 
         rows = [
-            row("A", MINTED_CONSUMPTION_SEMANTICS_ID, "a" * 64),
-            row("B", MAX_BRACKET_CONSUMPTION_SEMANTICS_ID, "b" * 64),
+            {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A"],
+            },
+            {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["B"],
+                "evaluation_basis": {
+                    "sha256": "b" * 64,
+                    "member_occurrences": [{"bundle_id": "B"}],
+                },
+            },
         ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -541,14 +503,8 @@ class WholeWindowSelectionTests(unittest.TestCase):
             ):
                 result = whole_window_drift_allowances(root, {"A"})
 
-        self.assertEqual(result.status, "allowances")
-        self.assertEqual(set(result.allowances), set(allowances))
-        self.assertEqual(
-            result.allowances["gross_energy"][
-                "whole_window_evaluation_basis_sha256"
-            ],
-            "a" * 64,
-        )
+        self.assertEqual(result.status, "legacy")
+        self.assertEqual(result.allowances, {})
 
     def _real_fixture(self, root: Path):
         _registry, manifest, _raw, _configs, _roster = evidence_for("draft")
@@ -1052,24 +1008,22 @@ class MaxBracketConsumptionTests(unittest.TestCase):
 
     EXPECTED_MINTED_ANCHOR_BOUND_S = 0.07799298220062004
     EXPECTED_OPERATIVE_ANCHOR_BOUND_S = 0.07899298220062004
+    _physics_cache: dict[str, float] = {}
 
     @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        from joulewise.reduce import (
-            _rederive_summary_for_authenticated_fiducial_bound,
-            reduce_bundle,
-        )
+    def _build_v052_bundle(
+        cls,
+        fixture_root: Path,
+    ) -> tuple[Path, dict, float, float]:
+        """Construct an independent real reducer fixture for one defect shape."""
+
+        from joulewise.reduce import reduce_bundle
         from tests.test_reduce import D078R01RegressionTests
 
-        cls._fixture_tmp = tempfile.TemporaryDirectory()
-        fixture_root = Path(cls._fixture_tmp.name)
         helper = D078R01RegressionTests()
         evidence = helper._valid_instrument_evidence()
-        cls.minted_fiducial_bound_s = float(evidence["b_fiducial_s"])
-        cls.operative_fiducial_bound_s = (
-            cls.minted_fiducial_bound_s + 0.001
-        )
+        minted_fiducial_bound_s = float(evidence["b_fiducial_s"])
+        operative_fiducial_bound_s = minted_fiducial_bound_s + 0.001
 
         v052_root = fixture_root / "v052"
         v052_root.mkdir()
@@ -1078,64 +1032,21 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             evidence=evidence,
         )
         cls._install_suite_shape(bundle)
-        physics_cache: dict[str, float] = {}
-        cls.minted = reduce_bundle(
+        minted = reduce_bundle(
             bundle,
             reducer_version="0.5.2",
-            _instrument_calibration_physics_cache=physics_cache,
+            _instrument_calibration_physics_cache=cls._physics_cache,
         ).to_dict()
         (bundle / "summary_metrics.json").write_text(
-            json.dumps(cls.minted, sort_keys=True) + "\n",
+            json.dumps(minted, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        cls.identity = _rederive_summary_for_authenticated_fiducial_bound(
+        return (
             bundle,
-            authenticated_fiducial_bound_s=cls.minted_fiducial_bound_s,
-            _instrument_calibration_physics_cache=physics_cache,
+            minted,
+            minted_fiducial_bound_s,
+            operative_fiducial_bound_s,
         )
-        cls.widened = _rederive_summary_for_authenticated_fiducial_bound(
-            bundle,
-            authenticated_fiducial_bound_s=cls.operative_fiducial_bound_s,
-            _instrument_calibration_physics_cache=physics_cache,
-        )
-        cls.short_tail = (
-            _rederive_summary_for_authenticated_fiducial_bound(
-                bundle,
-                authenticated_fiducial_bound_s=(
-                    cls.minted_fiducial_bound_s + 2.0
-                ),
-                _instrument_calibration_physics_cache=physics_cache,
-            )
-        )
-
-        axi_bundle = cls._install_axi_shape(
-            fixture_root / "axi-v062",
-            calibrated_source=bundle,
-        )
-        axi_physics_cache: dict[str, float] = {}
-        cls.axi_minted = reduce_bundle(
-            axi_bundle,
-            reducer_version="0.6.2",
-            _instrument_calibration_physics_cache=axi_physics_cache,
-        ).to_dict()
-        (axi_bundle / "summary_metrics.json").write_text(
-            json.dumps(cls.axi_minted, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        cls.axi_widened = (
-            _rederive_summary_for_authenticated_fiducial_bound(
-                axi_bundle,
-                authenticated_fiducial_bound_s=(
-                    cls.operative_fiducial_bound_s
-                ),
-                _instrument_calibration_physics_cache=axi_physics_cache,
-            )
-        )
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls._fixture_tmp.cleanup()
-        super().tearDownClass()
 
     @staticmethod
     def _install_suite_shape(bundle: Path) -> None:
@@ -1389,45 +1300,60 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def _consumption_provenance_fixture(
         self,
         root: Path,
+        *,
+        occurrence_ids: tuple[str, ...] = ("member",),
+        referenced_ids: set[str] | None = None,
+        evaluation_basis_sha256: str | None = None,
     ) -> tuple[dict, list[dict], AuthenticatedConsumptionSession]:
-        bundle = root / "member"
-        bundle.mkdir()
-        summary = self._summary(40.0, 0.02, 0.1)
-        (bundle / "summary_metrics.json").write_text(
-            json.dumps(summary) + "\n",
-            encoding="utf-8",
+        session = AuthenticatedConsumptionSession(
+            root,
+            referenced_ids if referenced_ids is not None else set(occurrence_ids),
+            evaluation_basis_sha256=evaluation_basis_sha256,
         )
-        session = AuthenticatedConsumptionSession(root, {"member"})
         session._prepared = True
         session.calibration_bracket = self._bracket(0.03)
         session.operative_fiducial_bound_s = 0.03
-        complete = {
-            pointer: {
-                **envelope,
-                "anchor_bound_s": 0.03,
-                "lower_j": float(envelope["point_j"]) - 0.2,
-                "upper_j": float(envelope["point_j"]) + 0.2,
-                "max_abs_delta_j": 0.2,
-                "half_width_j": 0.2,
+        provenance: dict[str, dict] = {}
+        occurrences: list[dict] = []
+        for index, bundle_id in enumerate(occurrence_ids):
+            bundle = root / bundle_id
+            bundle.mkdir()
+            summary = self._summary(40.0 + index, 0.02, 0.1)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(summary) + "\n",
+                encoding="utf-8",
+            )
+            complete = {
+                pointer: {
+                    **envelope,
+                    "anchor_bound_s": 0.03,
+                    "lower_j": float(envelope["point_j"]) - 0.2,
+                    "upper_j": float(envelope["point_j"]) + 0.2,
+                    "max_abs_delta_j": 0.2,
+                    "half_width_j": 0.2,
+                }
+                for pointer, envelope in summary[
+                    "energy_anchor_shift_envelopes"
+                ].items()
             }
-            for pointer, envelope in summary[
-                "energy_anchor_shift_envelopes"
-            ].items()
-        }
-        record = {
-            "consumption_semantics_id": (
-                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
-            ),
-            "minted_bound_dominated": True,
-            "minted_fiducial_bound_s": 0.02,
-            "operative_fiducial_bound_s": 0.03,
-            "calibration_bracket": {
-                "pre": dict(session.calibration_bracket["pre"]),
-                "post": dict(session.calibration_bracket["post"]),
-            },
-            "operative_envelopes": complete,
-        }
-        session._provenance["member"] = record
+            record = {
+                "consumption_semantics_id": (
+                    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                ),
+                "minted_bound_dominated": True,
+                "minted_fiducial_bound_s": 0.02,
+                "operative_fiducial_bound_s": 0.03,
+                "calibration_bracket": {
+                    "pre": dict(session.calibration_bracket["pre"]),
+                    "post": dict(session.calibration_bracket["post"]),
+                },
+                "operative_envelopes": complete,
+            }
+            session._provenance[bundle_id] = record
+            provenance[bundle_id] = json.loads(json.dumps(record))
+            occurrences.append(
+                {"bundle_id": bundle_id, "bundle_path": bundle_id}
+            )
         basis = {
             "consumption_semantics_id": (
                 MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
@@ -1436,13 +1362,8 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 "pre": dict(session.calibration_bracket["pre"]),
                 "post": dict(session.calibration_bracket["post"]),
             },
-            "consumption_provenance": {
-                "member": json.loads(json.dumps(record))
-            },
+            "consumption_provenance": provenance,
         }
-        occurrences = [
-            {"bundle_id": "member", "bundle_path": "member"}
-        ]
         return basis, occurrences, session
 
     def test_persisted_operative_bound_must_equal_authenticated_bracket_max(
@@ -1519,15 +1440,100 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 )
             )
 
+    def test_explicit_sha_selection_accepts_superset_basis_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member"},
+                evaluation_basis_sha256="e" * 64,
+            )
+            self.assertTrue(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_set_equality_selection_rejects_superset_basis_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member"},
+            )
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_explicit_sha_selection_rejects_genuinely_mismatched_set(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member", "missing"},
+                evaluation_basis_sha256="e" * 64,
+            )
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
     def test_rederivation_is_identity_at_the_minted_bound(self) -> None:
-        minted_envelopes = self.minted["energy_anchor_shift_envelopes"]
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, minted_bound, _operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            identity = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=minted_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        minted_envelopes = minted["energy_anchor_shift_envelopes"]
         self.assertEqual(
-            self.identity["energy_anchor_shift_envelopes"],
+            identity["energy_anchor_shift_envelopes"],
             minted_envelopes,
         )
 
     def test_rederivation_covers_every_named_metric_family(self) -> None:
-        widened_envelopes = self.widened["energy_anchor_shift_envelopes"]
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        widened_envelopes = widened["energy_anchor_shift_envelopes"]
         expected_pointers = {
             "/gross_energy_j",
             "/idle_subtracted_energy_j",
@@ -1548,14 +1554,33 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def test_dominated_member_strictly_widens_every_named_metric_family(
         self,
     ) -> None:
-        minted_envelopes = self.minted["energy_anchor_shift_envelopes"]
-        widened_envelopes = self.widened["energy_anchor_shift_envelopes"]
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        minted_envelopes = minted["energy_anchor_shift_envelopes"]
+        widened_envelopes = widened["energy_anchor_shift_envelopes"]
         self.assertEqual(set(widened_envelopes), set(minted_envelopes))
         for pointer, minted_envelope in minted_envelopes.items():
             with self.subTest(pointer=pointer):
                 wider = widened_envelopes[pointer]
                 self.assertEqual(
                     wider["point_j"], minted_envelope["point_j"]
+                )
+                self.assertLessEqual(
+                    wider["lower_j"], minted_envelope["lower_j"]
+                )
+                self.assertGreaterEqual(
+                    wider["upper_j"], minted_envelope["upper_j"]
                 )
                 self.assertGreater(
                     self._half_width(wider),
@@ -1565,16 +1590,27 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def test_rederivation_records_the_expected_operative_anchor_bound(
         self,
     ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
         self.assertAlmostEqual(
-            self.minted["energy_anchor_shift_envelopes"][
+            minted["energy_anchor_shift_envelopes"][
                 "/gross_energy_j"
             ]["anchor_bound_s"],
             self.EXPECTED_MINTED_ANCHOR_BOUND_S,
             places=12,
         )
-        for pointer, envelope in self.widened[
-            "energy_anchor_shift_envelopes"
-        ].items():
+        for pointer, envelope in widened["energy_anchor_shift_envelopes"].items():
             with self.subTest(pointer=pointer):
                 self.assertAlmostEqual(
                     envelope["anchor_bound_s"],
@@ -1585,8 +1621,38 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def test_reducer_0_6_2_uses_the_same_authenticated_override_path(
         self,
     ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+            reduce_bundle,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_bundle, _source_minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(root)
+            )
+            axi_bundle = self._install_axi_shape(
+                root / "axi-v062",
+                calibrated_source=source_bundle,
+            )
+            axi_minted = reduce_bundle(
+                axi_bundle,
+                reducer_version="0.6.2",
+                _instrument_calibration_physics_cache=self._physics_cache,
+            ).to_dict()
+            (axi_bundle / "summary_metrics.json").write_text(
+                json.dumps(axi_minted, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            axi_widened = (
+                _rederive_summary_for_authenticated_fiducial_bound(
+                    axi_bundle,
+                    authenticated_fiducial_bound_s=operative_bound,
+                    _instrument_calibration_physics_cache=self._physics_cache,
+                )
+            )
         self.assertEqual(
-            self.axi_minted["summary_provenance"]["reducer_version"],
+            axi_minted["summary_provenance"]["reducer_version"],
             "0.6.2",
         )
         expected_pointers = {
@@ -1596,18 +1662,16 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             "/phase_energy_j/decode",
         }
         self.assertEqual(
-            set(self.axi_widened["energy_anchor_shift_envelopes"]),
+            set(axi_widened["energy_anchor_shift_envelopes"]),
             expected_pointers,
         )
         for pointer in expected_pointers:
             with self.subTest(pointer=pointer):
-                minted = self.axi_minted["energy_anchor_shift_envelopes"][
-                    pointer
-                ]
-                widened = self.axi_widened["energy_anchor_shift_envelopes"][
-                    pointer
-                ]
+                minted = axi_minted["energy_anchor_shift_envelopes"][pointer]
+                widened = axi_widened["energy_anchor_shift_envelopes"][pointer]
                 self.assertEqual(widened["point_j"], minted["point_j"])
+                self.assertLessEqual(widened["lower_j"], minted["lower_j"])
+                self.assertGreaterEqual(widened["upper_j"], minted["upper_j"])
                 self.assertGreater(
                     self._half_width(widened),
                     self._half_width(minted),
@@ -1621,13 +1685,28 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def test_rederivation_refuses_when_the_trace_tail_is_too_short(
         self,
     ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _minted, minted_bound, _operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            short_tail = (
+                _rederive_summary_for_authenticated_fiducial_bound(
+                    bundle,
+                    authenticated_fiducial_bound_s=minted_bound + 2.0,
+                    _instrument_calibration_physics_cache=self._physics_cache,
+                )
+            )
         self.assertIn(
             "post_window_trace_tail_shorter_than_anchor_bound",
-            self.short_tail["window_evidence_precheck"]["gross_request"][
+            short_tail["window_evidence_precheck"]["gross_request"][
                 "reasons"
             ],
         )
-        self.assertNotIn("energy_anchor_shift_envelopes", self.short_tail)
+        self.assertNotIn("energy_anchor_shift_envelopes", short_tail)
 
     def test_session_caches_complete_widened_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1762,7 +1841,9 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         )
         rederive.assert_not_called()
 
-    def test_session_caches_successful_row_authentication(self) -> None:
+    def test_session_authentication_cache_is_scoped_and_fail_closed(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             session = AuthenticatedConsumptionSession(root, {"member"})
@@ -1784,10 +1865,91 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {"member"},
                     consumption_session=session,
                 )
+                self.assertEqual(authenticate.call_count, 1)
+
+                other_root = root / "other-root"
+                other_root.mkdir()
+                _validate_row(
+                    row,
+                    other_root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                _validate_row(
+                    row,
+                    root,
+                    {"other-member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 3)
+
+                # The selected basis is part of cache identity even within
+                # one session object.
+                session.evaluation_basis_sha256 = "a" * 64
+                basis_first = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                basis_second = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 4)
+
+                failure_row = {"record_type": "test", "value": "failure"}
+                authenticate.return_value = (False, ("refused",))
+                failure_first = _validate_row(
+                    failure_row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                failure_second = _validate_row(
+                    failure_row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 6)
+
+                # Losing readiness invalidates prior successes rather than
+                # leaving them available if mutable session state recovers.
+                authenticate.return_value = (True, ())
+                session.refusal_reasons = ("instrument_calibration_invalid",)
+                _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(session._row_validation_results, {})
+                session.refusal_reasons = ()
+                recovered = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                cached_recovered = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
 
         self.assertEqual(first, (True, ()))
         self.assertEqual(second, first)
-        authenticate.assert_called_once()
+        self.assertEqual(basis_first, (True, ()))
+        self.assertEqual(basis_second, basis_first)
+        self.assertEqual(failure_first, (False, ("refused",)))
+        self.assertEqual(failure_second, failure_first)
+        self.assertEqual(recovered, (True, ()))
+        self.assertEqual(cached_recovered, recovered)
+        self.assertEqual(authenticate.call_count, 8)
 
     def test_provenance_scalar_disagreement_blocks_before_rederivation(
         self,
