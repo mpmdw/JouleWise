@@ -7,6 +7,13 @@ decided about the system; this file records HOW cross-model review
 reached it). One entry per council session; keep entries concise —
 positions, votes, resolutions, and follow-ups, not transcripts.
 
+Cross-session model-allocation evidence — which instrument (gpt-5.6-sol,
+Opus 5, Fable, or the lead at the bench) should be assigned to which task
+class, and what each layer has actually caught — lives in
+`docs/process/model_allocation_ledger.md`. This file remains the ONE home
+for per-session deliberation narrative; that ledger is the ONE home for
+the structured, adjudicable allocation record.
+
 Standing council roles (adopted C-001; process decision D-031):
 
 - **Claude (lead/orchestrator)** — scopes work, diagnoses live/hardware
