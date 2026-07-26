@@ -11,6 +11,12 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
+    attribution_single_count_discipline,
+)
+
 
 CLAIM_OUTCOMES = frozenset(
     {
@@ -250,6 +256,7 @@ def evaluate_claim(
     confirmatory_status: str = "confirmatory",
     evidence_class: str = "current",
     sensitivity_blocking: bool = False,
+    floor_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply the adjudicated five-outcome precedence.
 
@@ -264,6 +271,37 @@ def evaluate_claim(
     metrology_interval = _interval(metrology_aware_ci95)
     decision = _interval(decision_interval)
     floor = _finite(floor_gate_j)
+    attribution_metadata: dict[str, Any] | None = None
+    if floor_metadata is not None:
+        expected_keys = {
+            "floor_limit_class",
+            "floor_source",
+            "point_floor_diagnostics",
+            "single_count_discipline",
+        }
+        if (
+            not isinstance(floor_metadata, Mapping)
+            or set(floor_metadata) != expected_keys
+            or floor_metadata.get("floor_limit_class")
+            != ATTRIBUTION_LIMIT_CLASS
+            or floor_metadata.get("floor_source") != ATTRIBUTION_FLOOR_SOURCE
+            or not isinstance(
+                floor_metadata.get("point_floor_diagnostics"), Mapping
+            )
+            or floor_metadata.get("single_count_discipline")
+            != attribution_single_count_discipline()
+        ):
+            reasons.add("floor_artifact_invalid")
+        else:
+            attribution_metadata = {
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "published_floor_j": floor,
+                "point_floor_diagnostics": dict(
+                    floor_metadata["point_floor_diagnostics"]
+                ),
+                "single_count_discipline": attribution_single_count_discipline(),
+            }
 
     if numeric_estimate is None or metrology_interval is None or decision is None:
         reasons.add("metric_missing_or_nonfinite")
@@ -346,13 +384,16 @@ def evaluate_claim(
     ceiling = "L2" if claim_ready else "L1"
 
     ordered = ordered_reason_codes(reasons)
-    return {
+    result = {
         "outcome": outcome,
         "direction": direction,
         "reason_codes": ordered,
         "claim_ready_for_l2_l3": claim_ready,
         "claim_level_ceiling": ceiling,
     }
+    if attribution_metadata is not None:
+        result["floor_limit"] = attribution_metadata
+    return result
 
 
 __all__ = [

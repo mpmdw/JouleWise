@@ -25,6 +25,7 @@ from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     FloorEvidenceBinding,
+    FloorRequest,
     MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
     campaign_cooldown_evidence,
@@ -44,8 +45,11 @@ from joulewise.whole_window import (
 )
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     abba_delta,
     absolute_false_effect_floor,
+    attribution_single_count_discipline,
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
@@ -303,6 +307,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     contrast["loo"],
                     {"status": "not_run", "rows": []},
                 )
+                self.assertNotIn("floor_limit_class", contrast["floor"])
+                self.assertNotIn("floor_limit", evaluation)
+                self.assertTrue(
+                    all(
+                        "floor_limit_class" not in resolution
+                        for resolution in contrast["floor"]["resolutions"]
+                    )
+                )
         self.assertEqual(validate_claim_verdicts(first), [])
 
     def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity(
@@ -383,6 +395,172 @@ class AnalysisIntegrationTests(unittest.TestCase):
             omitted_loo
         )
         self.assertTrue(validate_claim_verdicts(omitted_loo))
+
+    def test_attribution_limited_floor_is_claim_bearing_in_final_artifact(self):
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = manifest["contrasts"][0]
+        selector = target["floor_selector"]
+        condition_ids = selector["condition_family_ids"]
+        cells = [
+            make_cell(
+                cell_id=f"attribution-{condition_id}",
+                condition=condition_id,
+                energies=[0.0] * 5,
+                deltas=[0.0] * 5,
+                absolute_half_widths=[0.5] * 5,
+                comparative_half_widths=[0.5] * 5,
+            )
+            for condition_id in condition_ids
+        ]
+        for cell in cells:
+            cell["key"].update(
+                backend="powermetrics",
+                metric=selector["metric"],
+                window_class=selector["window_class"],
+            )
+            cell["transport_group_id"] = "tg-analysis-attribution"
+        group = build_transport_group(
+            transport_group_id="tg-analysis-attribution",
+            backend="powermetrics",
+            metric=selector["metric"],
+            window_class=selector["window_class"],
+            stack_identity=cells[0]["source_regime"]["stack_identity"],
+            source_cells=cells,
+            allowed_consumer_condition_families=[
+                {
+                    key: cell["key"][key]
+                    for key in (
+                        "condition_family_id",
+                        "condition_family_definition",
+                        "condition_family_sha256",
+                    )
+                }
+                for cell in cells
+            ],
+        )
+        floor_artifact = build_floor_artifact(
+            artifact_id="analysis-attribution-floor",
+            calibration_scope="window_a",
+            provenance=make_artifact()["provenance"],
+            cells=cells,
+            transport_groups=[group],
+            idle_drift_guard={
+                "calibration_status": "calibrated",
+                "method": "p2_015_prediction_guard_v1",
+                "guard_w": 0.25,
+                "n_bundles": 2,
+                "bundle_sha256": ["1" * 64, "2" * 64],
+                "cell_id": cells[0]["cell_id"],
+                "artifact_sha256": "3" * 64,
+            },
+        )
+        self.assertEqual(validate_floor_artifact(floor_artifact), [])
+        cells_by_condition = {
+            cell["key"]["condition_family_id"]: cell for cell in cells
+        }
+
+        def labelled_floor_request(
+            contrast, condition_id, rows, artifact
+        ):
+            del rows, artifact
+            if contrast["contrast_id"] != target["contrast_id"]:
+                return None
+            cell = cells_by_condition[condition_id]
+            return FloorRequest(
+                backend=cell["key"]["backend"],
+                metric=cell["key"]["metric"],
+                window_class=cell["key"]["window_class"],
+                condition_family_id=condition_id,
+                condition_family_sha256=cell["key"][
+                    "condition_family_sha256"
+                ],
+                stack_identity_sha256=cell["source_regime"][
+                    "stack_identity_sha256"
+                ],
+                consumer_stress={},
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            floor_path = Path(tmp) / "attribution-floor.json"
+            floor_path.write_text(
+                json.dumps(floor_artifact, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            artifact = analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                floor_path,
+                strict_validator=validate_bundle,
+                _floor_request_factory=labelled_floor_request,
+            )
+
+        observed = next(
+            contrast
+            for contrast in artifact["contrasts"]
+            if contrast["contrast_id"] == target["contrast_id"]
+        )
+        floor = observed["floor"]
+        self.assertEqual(floor["status"], "resolved")
+        self.assertEqual(
+            floor["floor_limit_class"],
+            ATTRIBUTION_LIMIT_CLASS,
+        )
+        self.assertEqual(floor["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(
+            floor["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+        self.assertEqual(
+            set(floor["point_floor_diagnostics"]),
+            {cell["cell_id"] for cell in cells},
+        )
+        for resolution, cell in zip(
+            floor["resolutions"], cells, strict=True
+        ):
+            self.assertEqual(resolution["status"], "exact")
+            self.assertEqual(
+                resolution["floor_gate_j"],
+                cell["floor_gate_j"],
+            )
+            self.assertEqual(
+                resolution["floor_limit_class"],
+                ATTRIBUTION_LIMIT_CLASS,
+            )
+        expected_floor = max(cell["floor_gate_j"] for cell in cells)
+        self.assertEqual(floor["active_floor_j"], expected_floor)
+        evaluation = observed["claim_evaluation"]
+        self.assertNotIn(
+            "floor_transport_inapplicable",
+            evaluation["reason_codes"],
+        )
+        self.assertEqual(
+            evaluation["floor_limit"],
+            {
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "published_floor_j": expected_floor,
+                "point_floor_diagnostics": floor[
+                    "point_floor_diagnostics"
+                ],
+                "single_count_discipline": (
+                    attribution_single_count_discipline()
+                ),
+            },
+        )
+        self.assertEqual(validate_claim_verdicts(artifact), [])
+        missing_single_count = json.loads(json.dumps(artifact))
+        del missing_single_count["contrasts"][
+            artifact["contrasts"].index(observed)
+        ]["claim_evaluation"]["floor_limit"]["single_count_discipline"]
+        missing_single_count["claim_verdicts_id"] = (
+            calculate_claim_verdicts_id(missing_single_count)
+        )
+        self.assertTrue(
+            any(
+                "single_count_discipline" in error
+                for error in validate_claim_verdicts(missing_single_count)
+            )
+        )
 
     def test_analysis_loader_refuses_when_whole_window_verdict_is_missing(self):
         # F5 defect shape: P2-037 formerly loaded cleanup/cooldown/bundles/floor

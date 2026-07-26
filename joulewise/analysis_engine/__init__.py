@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+
+from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
+    attribution_single_count_discipline,
+)
 
 from .artifact import finalize_claim_verdicts, write_claim_verdicts_atomic
 from .claims import evaluate_claim, ordered_reason_codes
@@ -197,7 +204,39 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
     floor_gate = max((value.floor_gate_j for value in usable if value.floor_gate_j is not None), default=None)
     if not all_usable:
         floor_abs = floor_cmp = floor_gate = None
-    return {
+    resolution_rows = []
+    for value in resolutions:
+        row = {
+            "status": value.status,
+            "source_cell_ids": list(value.source_cell_ids),
+            "transport_group_id": value.transport_group_id,
+            "transport_rule_id": value.transport_rule_id,
+            "floor_abs_j": value.floor_abs_j,
+            "floor_cmp_j": value.floor_cmp_j,
+            "floor_gate_j": value.floor_gate_j,
+            "reason_codes": list(value.reason_codes),
+        }
+        if (
+            value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
+            and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
+            and isinstance(value.point_floor_diagnostics, Mapping)
+            and value.single_count_discipline
+            == attribution_single_count_discipline()
+        ):
+            row.update(
+                {
+                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                    "point_floor_diagnostics": copy.deepcopy(
+                        dict(value.point_floor_diagnostics)
+                    ),
+                    "single_count_discipline": (
+                        attribution_single_count_discipline()
+                    ),
+                }
+            )
+        resolution_rows.append(row)
+    result = {
         "status": "resolved" if all_usable else "refused",
         "floor_row_ids": sorted({cell for value in resolutions for cell in value.source_cell_ids}),
         "floor_abs_j": floor_abs,
@@ -210,20 +249,41 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
             if all_usable
             else "refused"
         ),
-        "resolutions": [
-            {
-                "status": value.status,
-                "source_cell_ids": list(value.source_cell_ids),
-                "transport_group_id": value.transport_group_id,
-                "transport_rule_id": value.transport_rule_id,
-                "floor_abs_j": value.floor_abs_j,
-                "floor_cmp_j": value.floor_cmp_j,
-                "floor_gate_j": value.floor_gate_j,
-                "reason_codes": list(value.reason_codes),
-            }
-            for value in resolutions
-        ],
+        "resolutions": resolution_rows,
     }
+    limited = [
+        value
+        for value in usable
+        if value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
+        and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
+        and isinstance(value.point_floor_diagnostics, Mapping)
+        and value.single_count_discipline
+        == attribution_single_count_discipline()
+    ]
+    if all_usable and limited:
+        diagnostics: dict[str, Any] = {}
+        for value in limited:
+            source_diagnostics = dict(value.point_floor_diagnostics or {})
+            source_keyed = set(value.source_cell_ids).issubset(
+                source_diagnostics
+            )
+            for source_cell_id in value.source_cell_ids:
+                diagnostics[source_cell_id] = copy.deepcopy(
+                    source_diagnostics[source_cell_id]
+                    if source_keyed
+                    else source_diagnostics
+                )
+        result.update(
+            {
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "point_floor_diagnostics": diagnostics,
+                "single_count_discipline": (
+                    attribution_single_count_discipline()
+                ),
+            }
+        )
+    return result
 
 
 def _entries_for_contrast(
@@ -759,6 +819,21 @@ def _evaluation(
     ):
         all_reasons.append("randomization_sensitivity_disagrees")
         sensitivity_blocking = True
+    floor_metadata = (
+        {
+            "floor_source": active_floor["floor_source"],
+            "floor_limit_class": active_floor["floor_limit_class"],
+            "point_floor_diagnostics": active_floor[
+                "point_floor_diagnostics"
+            ],
+            "single_count_discipline": active_floor[
+                "single_count_discipline"
+            ],
+        }
+        if active_floor.get("floor_limit_class")
+        == ATTRIBUTION_LIMIT_CLASS
+        else None
+    )
     return evaluate_claim(
         estimate=estimate.estimate if estimate is not None else None,
         metrology_aware_ci95=(
@@ -775,6 +850,7 @@ def _evaluation(
         confirmatory_status=prepared["confirmatory_status"],
         evidence_class=prepared["evidence_class"],
         sensitivity_blocking=sensitivity_blocking,
+        floor_metadata=floor_metadata,
     )
 
 

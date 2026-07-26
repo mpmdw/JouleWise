@@ -598,6 +598,50 @@ method, `anchor_bound_s`, point, lower, upper, maximum delta, and half-width.
 Whole-window verification, floor extraction, and analysis input loading share
 this same session contract.
 
+### Attribution-limited floor claim path (D-078 clause 11, Ed-ratified 2026-07-25)
+
+`admissible_set_uncertainty_dominates_point_floor` remains in the closed D-078
+registry but is a labelled floor condition when it is the sole condition on a
+cell and exact corner evaluation produced a floor. Such a cell is
+claim-bearing. Its extraction and canonical floor rows carry
+`floor_conditions:
+["admissible_set_uncertainty_dominates_point_floor"]`,
+`floor_limit_class: "attribution_limited"`, and
+`floor_source: "E_clock_anchor_shift_bound_j"`. The published floor is the
+corner-widened maximum, including the governed whole-window drift allowance
+where applicable. It is never the narrower point-scatter value.
+
+The point-scatter value remains alongside under `point_floor_diagnostic` with
+`label: "repeatability_diagnostic"` and `published_claim_floor: false`. Any
+additional refusal stays terminal and nulls claim-bearing floor consumption;
+the attribution label never rescues an unsound corpus. Rows whose widened
+uncertainty does not trigger the registered condition retain their existing
+shape and bytes.
+
+Every extraction, canonical floor, transported-floor, and claim/analysis
+artifact publishing this class must carry an exact
+`single_count_discipline` object:
+
+```json
+{
+  "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+  "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+  "floor_role": "calibration_false_effect_bound",
+  "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+  "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+  "both_terms_required": true,
+  "apparent_double_count_removal_forbidden": true,
+  "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+}
+```
+
+The repeated anchor source is deliberate: the floor is a calibration bound on
+false observed effects, while the decision interval uses the claim-side
+measurement bound. Thus the effective clearable effect is
+`FLOOR + CLAIM-SIDE BOUND` (approximately 5 J for the measured phase
+contrasts), not the floor alone. Consumers must preserve both roles and the
+object above; neither term may later be removed as an apparent double count.
+
 Append-only verdict history dispatches this behavior semantically, never by
 file order. Mint-time rows carry
 `consumption_semantics_id = d078_minted_envelopes_v1`; rows produced for the

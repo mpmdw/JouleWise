@@ -38,11 +38,16 @@ __all__ = [
     "GUARD_REFERENCE_N",
     "GUARD_MINIMUM_N",
     "MAX_EXACT_ADMISSIBLE_CORNER_N",
+    "ATTRIBUTION_LIMIT_CLASS",
+    "ATTRIBUTION_FLOOR_SOURCE",
+    "SINGLE_COUNT_DISCIPLINE_ID",
     "TRANSPORT_REASON_CODES",
     "STACK_IDENTITY_DOMAIN",
     "CONDITION_FAMILY_DOMAIN",
     "FloorEstimate",
     "small_sample_guard_factor",
+    "admissible_set_uncertainty_dominates_point_floor",
+    "attribution_single_count_discipline",
     "absolute_false_effect_floor",
     "comparative_false_effect_floor",
     "abba_delta",
@@ -73,6 +78,9 @@ CONDITION_FAMILY_DOMAIN = "joulewise.condition_family.v1"
 GUARD_REFERENCE_N = 10
 GUARD_MINIMUM_N = 5
 MAX_EXACT_ADMISSIBLE_CORNER_N = 16
+ATTRIBUTION_LIMIT_CLASS = "attribution_limited"
+ATTRIBUTION_FLOOR_SOURCE = "E_clock_anchor_shift_bound_j"
+SINGLE_COUNT_DISCIPLINE_ID = "attribution_floor_plus_claim_side_bound.v1"
 _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
@@ -140,6 +148,24 @@ TRANSPORT_REASON_CODES = (
     "consumer_term_unknown",
     "transport_group_incomplete",
 )
+
+
+def attribution_single_count_discipline() -> dict[str, object]:
+    """Return the D-078 clause-11 non-removable two-role composition rule."""
+
+    return {
+        "rule_id": SINGLE_COUNT_DISCIPLINE_ID,
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
+        "both_terms_required": True,
+        "apparent_double_count_removal_forbidden": True,
+        "statement": (
+            "effective clearable effect = floor + claim-side bound; "
+            "neither term may be removed as an apparent double count"
+        ),
+    }
 
 
 def canonical_domain_sha256(domain: str, value: Mapping) -> str:
@@ -361,6 +387,78 @@ def _apply_admissible_set_guard(
         corner_widened_unguarded_floor_j=unguarded,
         corner_widened_guarded_floor_j=guarded,
     )
+
+
+def _point_floor_diagnostic(estimate: FloorEstimate) -> dict[str, object]:
+    point_unguarded = max(
+        estimate.max_abs_deviation_j,
+        estimate.prediction_component_j,
+    )
+    point_guarded = (
+        estimate.guard_factor * point_unguarded
+        if estimate.guard_factor is not None
+        else None
+    )
+    return {
+        "label": "repeatability_diagnostic",
+        "published_claim_floor": False,
+        "unguarded_floor_j": point_unguarded,
+        "guard_factor": estimate.guard_factor,
+        "guarded_floor_j": point_guarded,
+    }
+
+
+def admissible_set_uncertainty_dominates_point_floor(
+    estimate: FloorEstimate,
+) -> bool:
+    """Classify the registered D-078 condition without turning it into refusal.
+
+    This reproduces the original terminal gate's exact comparison: the
+    largest linear residual/contrast admitted by the member anchor envelopes
+    is compared with the guarded point-only false-effect floor.  The complete
+    corner-maximized floor remains the published number.
+    """
+
+    widths = estimate.admissible_half_widths_j
+    if not widths or not any(widths):
+        return False
+    diagnostic = _point_floor_diagnostic(estimate)
+    point_gate = diagnostic["guarded_floor_j"]
+    if point_gate is None:
+        point_gate = diagnostic["unguarded_floor_j"]
+    if estimate.kind == "absolute":
+        n = estimate.n
+        width_sum = math.fsum(widths)
+        uncertainty_max = max(
+            abs(residual)
+            + width * (n - 1) / n
+            + (width_sum - width) / n
+            for residual, width in zip(
+                estimate.deviations_j, widths, strict=True
+            )
+        )
+    elif estimate.kind == "comparative":
+        uncertainty_max = _linear_corner_widened_max(
+            estimate.deviations_j, widths
+        )
+    else:
+        raise ValueError(f"unknown floor kind: {estimate.kind!r}")
+    return uncertainty_max > point_gate
+
+
+def _add_attribution_limit_metadata(
+    record: dict,
+    estimate: FloorEstimate,
+) -> dict:
+    if not admissible_set_uncertainty_dominates_point_floor(estimate):
+        return record
+    return {
+        **record,
+        "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+        "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+        "point_floor_diagnostic": _point_floor_diagnostic(estimate),
+        "single_count_discipline": attribution_single_count_discipline(),
+    }
 
 
 def _corner_maximized_unguarded_floor(
@@ -589,6 +687,7 @@ def build_absolute_record(
         "corner_widened_guarded_floor_j": widened_guarded,
         "bundle_observations": [dict(obs) for obs in bundle_observations],
     }
+    record = _add_attribution_limit_metadata(record, estimate)
     return _add_whole_window_drift_allowance(
         record,
         base_unguarded_j=widened_unguarded,
@@ -638,6 +737,7 @@ def build_comparative_record(
         "corner_widened_guarded_floor_j": widened_guarded,
         "blocks": [dict(block) for block in blocks],
     }
+    record = _add_attribution_limit_metadata(record, estimate)
     return _add_whole_window_drift_allowance(
         record,
         base_unguarded_j=widened_unguarded,
@@ -695,7 +795,7 @@ def build_floor_cell(
         floor_gate: Optional[float] = max(floor_abs, floor_cmp)
     else:
         floor_gate = None
-    return {
+    record = {
         "cell_id": cell_id,
         "key": key_record,
         "eligibility": dict(eligibility),
@@ -708,6 +808,31 @@ def build_floor_cell(
         "transport_group_id": transport_group_id,
         "provenance": dict(provenance),
     }
+    limited_records = [
+        value
+        for value in (absolute, comparative)
+        if isinstance(value, Mapping)
+        and value.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+    ]
+    if limited_records:
+        record.update(
+            {
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "point_floor_diagnostics": {
+                    name: dict(value["point_floor_diagnostic"])
+                    for name, value in (
+                        ("absolute", absolute),
+                        ("comparative", comparative),
+                    )
+                    if isinstance(value, Mapping)
+                    and value.get("floor_limit_class")
+                    == ATTRIBUTION_LIMIT_CLASS
+                },
+                "single_count_discipline": attribution_single_count_discipline(),
+            }
+        )
+    return record
 
 
 def compose_transport_group(source_cells: Sequence[Mapping]) -> dict:
@@ -760,7 +885,7 @@ def build_transport_group(
     composed = compose_transport_group(source_cells)
     stack = dict(stack_identity)
     stack_hash = canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack)
-    return {
+    record = {
         "transport_group_id": transport_group_id,
         "rule_id": TRANSPORT_RULE_ID,
         "backend": backend,
@@ -775,6 +900,26 @@ def build_transport_group(
         "composed_floor_gate_j": composed["composed_floor_gate_j"],
         "stress_envelope": composed["stress_envelope"],
     }
+    limited_sources = [
+        cell
+        for cell in source_cells
+        if cell.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+    ]
+    if limited_sources:
+        record.update(
+            {
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "point_floor_diagnostics": {
+                    str(cell["cell_id"]): copy.deepcopy(
+                        cell["point_floor_diagnostics"]
+                    )
+                    for cell in limited_sources
+                },
+                "single_count_discipline": attribution_single_count_discipline(),
+            }
+        )
+    return record
 
 
 def build_floor_artifact(
@@ -899,6 +1044,25 @@ _DRIFT_WIDENED_FLOOR_KEYS = {
     "whole_window_drift_allowance",
     "drift_widened_unguarded_floor_j",
     "drift_widened_guarded_floor_j",
+}
+_ATTRIBUTION_LIMIT_RECORD_KEYS = {
+    "floor_source",
+    "floor_limit_class",
+    "point_floor_diagnostic",
+    "single_count_discipline",
+}
+_ATTRIBUTION_LIMIT_CONTAINER_KEYS = {
+    "floor_source",
+    "floor_limit_class",
+    "point_floor_diagnostics",
+    "single_count_discipline",
+}
+_POINT_FLOOR_DIAGNOSTIC_KEYS = {
+    "label",
+    "published_claim_floor",
+    "unguarded_floor_j",
+    "guard_factor",
+    "guarded_floor_j",
 }
 _WHOLE_WINDOW_BASIS_KEYS = {"whole_window_evaluation_basis_sha256"}
 _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS = {
@@ -1117,6 +1281,7 @@ def _validate_estimate_math(
 ) -> None:
     n = len(deviations)
     est = _floor_estimate(kind, list(deviations), mean, prediction_extra)
+    classified_estimate = est
     present_widened_keys = set(record) & _WIDENED_FLOOR_KEYS
     widened_unguarded = est.unguarded_floor_j
     widened_guarded = est.guarded_floor_j
@@ -1159,6 +1324,17 @@ def _validate_estimate_math(
                     errors.append(
                         f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
                     )
+                classified_estimate = _apply_admissible_set_guard(
+                    est,
+                    widened_unguarded,
+                    widths,
+                )
+    _validate_attribution_limit_metadata(
+        record,
+        classified_estimate,
+        where,
+        errors,
+    )
     present_drift_keys = set(record) & _DRIFT_WIDENED_FLOOR_KEYS
     basis_present = "whole_window_evaluation_basis_sha256" in record
     basis_sha256 = record.get("whole_window_evaluation_basis_sha256")
@@ -1289,6 +1465,68 @@ def _validate_estimate_math(
             errors.append(f"{where}: stored guarded_floor_j does not match recomputed value")
 
 
+def _validate_attribution_limit_metadata(
+    record,
+    estimate: FloorEstimate,
+    where,
+    errors,
+) -> None:
+    present = set(record) & _ATTRIBUTION_LIMIT_RECORD_KEYS
+    expected = admissible_set_uncertainty_dominates_point_floor(estimate)
+    if present and present != _ATTRIBUTION_LIMIT_RECORD_KEYS:
+        errors.append(
+            f"{where}: attribution-limit metadata fields must be present together"
+        )
+        return
+    if expected and present != _ATTRIBUTION_LIMIT_RECORD_KEYS:
+        errors.append(
+            f"{where}: attribution-limited floor requires labelled metadata"
+        )
+        return
+    if not expected and present:
+        errors.append(
+            f"{where}: attribution-limit metadata is forbidden when uncertainty does not dominate"
+        )
+        return
+    if not present:
+        return
+    if record.get("floor_source") != ATTRIBUTION_FLOOR_SOURCE:
+        errors.append(
+            f"{where}.floor_source: must name {ATTRIBUTION_FLOOR_SOURCE!r}"
+        )
+    if record.get("floor_limit_class") != ATTRIBUTION_LIMIT_CLASS:
+        errors.append(
+            f"{where}.floor_limit_class: must be {ATTRIBUTION_LIMIT_CLASS!r}"
+        )
+    diagnostic = record.get("point_floor_diagnostic")
+    expected_diagnostic = _point_floor_diagnostic(estimate)
+    if _check_keys(
+        diagnostic,
+        _POINT_FLOOR_DIAGNOSTIC_KEYS,
+        f"{where}.point_floor_diagnostic",
+        errors,
+    ):
+        if diagnostic.get("label") != "repeatability_diagnostic":
+            errors.append(
+                f"{where}.point_floor_diagnostic.label: must identify repeatability"
+            )
+        if diagnostic.get("published_claim_floor") is not False:
+            errors.append(
+                f"{where}.point_floor_diagnostic.published_claim_floor: must be false"
+            )
+        for key in ("unguarded_floor_j", "guard_factor", "guarded_floor_j"):
+            if not _close(diagnostic.get(key), expected_diagnostic[key]):
+                errors.append(
+                    f"{where}.point_floor_diagnostic.{key}: does not match point-only floor"
+                )
+    if record.get("single_count_discipline") != (
+        attribution_single_count_discipline()
+    ):
+        errors.append(
+            f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+        )
+
+
 def _validate_bound_terms(terms, where, errors) -> None:
     if not isinstance(terms, Mapping) or set(terms) != set(_BOUND_TERMS):
         errors.append(f"{where}: bound_terms must contain exactly {sorted(_BOUND_TERMS)}")
@@ -1325,7 +1563,8 @@ def _validate_absolute(record, where, errors) -> None:
         _ABS_KEYS,
         _WIDENED_FLOOR_KEYS
         | _DRIFT_WIDENED_FLOOR_KEYS
-        | _WHOLE_WINDOW_BASIS_KEYS,
+        | _WHOLE_WINDOW_BASIS_KEYS
+        | _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
         errors,
     ):
@@ -1400,7 +1639,8 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
         _CMP_KEYS,
         _WIDENED_FLOOR_KEYS
         | _DRIFT_WIDENED_FLOOR_KEYS
-        | _WHOLE_WINDOW_BASIS_KEYS,
+        | _WHOLE_WINDOW_BASIS_KEYS
+        | _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
         errors,
     ):
@@ -1513,7 +1753,13 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
 
 
 def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
-    if not _check_keys(cell, _CELL_KEYS, where, errors):
+    if not _check_keys_with_optional(
+        cell,
+        _CELL_KEYS,
+        _ATTRIBUTION_LIMIT_CONTAINER_KEYS,
+        where,
+        errors,
+    ):
         return
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
         if cell["key"]["window_class"] not in _WINDOW_CLASSES:
@@ -1566,6 +1812,50 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
     present_records = [
         record for record in (absolute, comparative) if isinstance(record, Mapping)
     ]
+    limited_records = [
+        record
+        for record in present_records
+        if record.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+    ]
+    present_limit_keys = set(cell) & _ATTRIBUTION_LIMIT_CONTAINER_KEYS
+    if limited_records:
+        if present_limit_keys != _ATTRIBUTION_LIMIT_CONTAINER_KEYS:
+            errors.append(
+                f"{where}: attribution-limited component requires complete cell metadata"
+            )
+        else:
+            if cell.get("floor_source") != ATTRIBUTION_FLOOR_SOURCE:
+                errors.append(
+                    f"{where}.floor_source: must name {ATTRIBUTION_FLOOR_SOURCE!r}"
+                )
+            if cell.get("floor_limit_class") != ATTRIBUTION_LIMIT_CLASS:
+                errors.append(
+                    f"{where}.floor_limit_class: must be {ATTRIBUTION_LIMIT_CLASS!r}"
+                )
+            expected_diagnostics = {
+                name: record["point_floor_diagnostic"]
+                for name, record in (
+                    ("absolute", absolute),
+                    ("comparative", comparative),
+                )
+                if isinstance(record, Mapping)
+                and record.get("floor_limit_class")
+                == ATTRIBUTION_LIMIT_CLASS
+            }
+            if cell.get("point_floor_diagnostics") != expected_diagnostics:
+                errors.append(
+                    f"{where}.point_floor_diagnostics: must match labelled components"
+                )
+            if cell.get("single_count_discipline") != (
+                attribution_single_count_discipline()
+            ):
+                errors.append(
+                    f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+                )
+    elif present_limit_keys:
+        errors.append(
+            f"{where}: attribution-limit cell metadata is forbidden without a labelled component"
+        )
     grouped_records = [
         record
         for record in present_records
@@ -1729,7 +2019,13 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
 
 
 def _validate_transport_group(group, where, cells_by_id, errors) -> None:
-    if not _check_keys(group, _GROUP_KEYS, where, errors):
+    if not _check_keys_with_optional(
+        group,
+        _GROUP_KEYS,
+        _ATTRIBUTION_LIMIT_CONTAINER_KEYS,
+        where,
+        errors,
+    ):
         return
     if group["rule_id"] != TRANSPORT_RULE_ID:
         errors.append(f"{where}: rule_id must be {TRANSPORT_RULE_ID!r}")
@@ -1783,6 +2079,44 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
             for term in _BOUND_TERMS:
                 if not _close(stored_terms[term], expected_envelope["bound_term_maxima"][term]):
                     errors.append(f"{where}.stress_envelope.bound_term_maxima.{term}: does not match recomputed composition")
+    limited_sources = [
+        cell
+        for cell in sources
+        if cell.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+    ]
+    present_limit_keys = set(group) & _ATTRIBUTION_LIMIT_CONTAINER_KEYS
+    if limited_sources:
+        expected_diagnostics = {
+            str(cell["cell_id"]): cell["point_floor_diagnostics"]
+            for cell in limited_sources
+        }
+        if present_limit_keys != _ATTRIBUTION_LIMIT_CONTAINER_KEYS:
+            errors.append(
+                f"{where}: attribution-limited source requires complete group metadata"
+            )
+        else:
+            if group.get("floor_source") != ATTRIBUTION_FLOOR_SOURCE:
+                errors.append(
+                    f"{where}.floor_source: must name {ATTRIBUTION_FLOOR_SOURCE!r}"
+                )
+            if group.get("floor_limit_class") != ATTRIBUTION_LIMIT_CLASS:
+                errors.append(
+                    f"{where}.floor_limit_class: must be {ATTRIBUTION_LIMIT_CLASS!r}"
+                )
+            if group.get("point_floor_diagnostics") != expected_diagnostics:
+                errors.append(
+                    f"{where}.point_floor_diagnostics: must preserve source diagnostics"
+                )
+            if group.get("single_count_discipline") != (
+                attribution_single_count_discipline()
+            ):
+                errors.append(
+                    f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+                )
+    elif present_limit_keys:
+        errors.append(
+            f"{where}: attribution-limit group metadata is forbidden without a labelled source"
+        )
     families = group["allowed_consumer_condition_families"]
     if not isinstance(families, list):
         errors.append(f"{where}: allowed_consumer_condition_families must be an array")

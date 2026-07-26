@@ -55,7 +55,12 @@ from joulewise.analysis_engine.sensitivity import (
     randomization_check,
     summarize_loo,
 )
-from joulewise.detection_floor import comparative_false_effect_floor
+from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
+    attribution_single_count_discipline,
+    comparative_false_effect_floor,
+)
 from joulewise.whole_window import CustodyTelemetryIdentity
 from tests.test_detection_floor import (
     make_artifact,
@@ -1160,6 +1165,66 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(resolution.status, "exact")
         self.assertEqual(resolution.floor_cmp_j, widened)
         self.assertEqual(resolution.floor_gate_j, widened)
+
+    def test_labelled_floor_resolves_and_remains_claim_bearing(self):
+        cell = make_cell(
+            energies=[0.0] * 5,
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.5] * 5,
+            comparative_half_widths=[0.5] * 5,
+        )
+        artifact = make_artifact([cell])
+        artifact["calibration_scope"] = "window_a"
+        consumer = make_consumer(
+            condition_family_id=cell["key"]["condition_family_id"],
+            condition_family_sha256=cell["key"]["condition_family_sha256"],
+        )
+        request = FloorRequest(
+            backend=consumer.pop("backend"),
+            metric=consumer.pop("metric"),
+            window_class=consumer.pop("window_class"),
+            condition_family_id=consumer.pop("condition_family_id"),
+            condition_family_sha256=consumer.pop("condition_family_sha256"),
+            stack_identity_sha256=consumer.pop("stack_identity_sha256"),
+            consumer_stress=consumer,
+        )
+        resolution = resolve_floor(artifact, HEX, request)
+        self.assertEqual(resolution.status, "exact")
+        self.assertEqual(
+            resolution.floor_limit_class,
+            ATTRIBUTION_LIMIT_CLASS,
+        )
+        self.assertEqual(resolution.floor_source, ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(
+            resolution.single_count_discipline,
+            attribution_single_count_discipline(),
+        )
+        self.assertIsNotNone(resolution.point_floor_diagnostics)
+        result = evaluate_claim(
+            estimate=10.0,
+            metrology_aware_ci95={"lower": 9.5, "upper": 10.5},
+            decision_interval={"lower": 9.25, "upper": 10.75},
+            floor_gate_j=resolution.floor_gate_j,
+            adjusted_rejected=True,
+            floor_metadata={
+                "floor_limit_class": resolution.floor_limit_class,
+                "floor_source": resolution.floor_source,
+                "point_floor_diagnostics": resolution.point_floor_diagnostics,
+                "single_count_discipline": (
+                    resolution.single_count_discipline
+                ),
+            },
+        )
+        self.assertEqual(result["outcome"], "direction_supported")
+        self.assertTrue(result["claim_ready_for_l2_l3"])
+        self.assertEqual(
+            result["floor_limit"]["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+        self.assertEqual(
+            result["floor_limit"]["published_floor_j"],
+            resolution.floor_gate_j,
+        )
 
     def test_smoke_floor_and_pending_idle_guard_are_never_claim_usable(self):
         smoke = make_artifact()

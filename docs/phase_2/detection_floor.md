@@ -72,6 +72,16 @@ The calibration manifest produces one row per
   duplicate-label contrasts.
 - `floor_gate_j`: `max(floor_abs_j, floor_cmp_j)`, matching
   `analysis_plans.md`.
+- When the registered condition
+  `admissible_set_uncertainty_dominates_point_floor` is the sole cell
+  condition, the row is claim-ready and additionally carries
+  `floor_limit_class: "attribution_limited"`,
+  `floor_source: "E_clock_anchor_shift_bound_j"`, a
+  `point_floor_diagnostic` labelled `repeatability_diagnostic` with
+  `published_claim_floor: false`, and the machine-readable
+  `single_count_discipline` object specified below. The published component
+  and `floor_gate_j` use the corner-widened value, never that point
+  diagnostic.
 - `n_bundles`, bundle hashes, strict-validation status, manifest hash, backend,
   rail manifest, stack identity, sampling requested/observed, and the exact
   workload/profile condition.
@@ -101,6 +111,38 @@ Estimator rule:
 - When `5 <= n < 10`, multiply the applicable false-effect guard floor by the
   pre-registered small-sample guard factor recorded in the manifest. Cells with
   `n < 5` are smoke evidence only and cannot support L2/L3 claim gates.
+
+The attribution-limited path does not relax corpus soundness. The registered
+condition is moved from `refusal_reasons` to `floor_conditions` only when it
+is the sole condition and the exact corner-widened floor exists. Any other
+refusal remains terminal, leaves the cell non-claim-bearing, and cannot be
+rescued by the attribution label. The registered spelling is retained
+verbatim; it now names a labelled condition, not permission to publish a
+repeatability-only number.
+
+Every extraction, canonical floor, transported-floor, or claim/analysis
+artifact that publishes an attribution-limited floor carries this exact
+object:
+
+```json
+{
+  "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+  "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+  "floor_role": "calibration_false_effect_bound",
+  "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+  "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+  "both_terms_required": true,
+  "apparent_double_count_removal_forbidden": true,
+  "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+}
+```
+
+This is the D-078 clause-11 single-count discipline. The anchor term
+legitimately appears once in the calibrated false-effect floor and separately
+in the claim decision interval as measurement uncertainty. Therefore the
+effective clearable effect is `FLOOR + CLAIM-SIDE BOUND`, approximately 5 J
+for the measured phase contrasts, not the floor alone. The two roles are
+distinct and neither may be optimized away as an apparent double count.
 
 Rationale: the previous population-percentile floor target at `n = 10` is not
 identifiable enough for this campaign. With 10 samples, even the sample maximum
@@ -774,12 +816,20 @@ disagreement remains `whole_window_verdict_conflict`.
 - Floor estimation operates on admissible energy sets, not point estimates
   alone. The operative absolute floor is no smaller than the largest admitted
   member half-width; an ABBA block uses the propagated half-width of its four
-  signed members. If that set width exceeds the guarded point-only floor, the
-  cell records the widened floor diagnostically but refuses extraction with
-  `admissible_set_uncertainty_dominates_point_floor`.
+  signed members. If that set width exceeds the guarded point-only floor and
+  no other refusal exists, the cell remains extractable with registered
+  `floor_conditions:
+  ["admissible_set_uncertainty_dominates_point_floor"]`,
+  `floor_limit_class: "attribution_limited"`, and
+  `floor_source: "E_clock_anchor_shift_bound_j"`. The corner-widened maximum
+  is the published claim floor; the point-only floor remains alongside as a
+  non-publishing `repeatability_diagnostic`. Any additional refusal still
+  refuses the cell.
 - The engine consumes the anchor bound as the deterministic term
   `E_clock_anchor_shift_bound_j` in absolute and paired contrasts. Passing
   the per-metric envelope gate does NOT make a comparative contrast
   identifiable: the contrast's decision interval consumes the bound
-  explicitly, and interpolation terms stay separate (never double-counted
-  into the anchor term).
+  explicitly, and interpolation terms stay separate. For an
+  attribution-limited floor, this is the required second role in the
+  machine-readable single-count rule: the effective clearing bar is floor
+  plus claim-side bound, not either term alone.
