@@ -573,47 +573,6 @@
       "status": "blocked",
       "stop_card": null
     },
-    "CAL-REBRACKET-01": {
-      "acceptance": {
-        "evidence": [
-          "A governed prospective-reduction flow re-reduces a complete 37-occurrence evaluation basis under the authenticated max(B_pre,B_post), never a caller-supplied scalar",
-          "Derived summaries land in a dedicated custody directory with a hash-sealed manifest binding source/raw/stored-summary/reducer/calibration/policy/derived hashes",
-          "Whole-window verification and extraction select the exact revised basis and reject incomplete, mixed, duplicated, or latest-wins artifacts",
-          "Regressions cover omitted references, substituted summaries, scalar inflation, partial coverage, conflicting basis rows",
-          "Windows a10 and a9 re-reduced and consumed; a10 phase floors extracted with drift allowances"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CAL-REBRACKET-01/acceptance",
-          "label": "CAL-REBRACKET-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Close the max-bracket consumption gap: post>pre calibration windows (a coin flip) are structurally unconsumable until the D-078-required prospective re-reduction flow exists."
-      },
-      "authority": {
-        "label": "D-078 bracketing ruling (max(B_pre,B_post)) + 2026-07-25 collection-night consult (S1 design in job tmp bracket_consult.md)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "No-verdict-shopping ruling",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "The earliest valid causal post-calibration is the operative post; later valid captures never replace it, and retrying a valid calibration to seek a smaller bound is forbidden."
-        }
-      ],
-      "flags": [],
-      "goal": "Implement the governed max-bracket prospective re-reduction flow (authenticated bracket max, sealed reduction manifest, basis revision, consumption binding), then re-reduce and extract windows a10/a9.",
-      "id": "CAL-REBRACKET-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 44,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25 from the first collection night under the merged rules: a9+a10 both PASSED verdicts at mint; consumption refused calibration_bracket_exceeds_minted_bound (post 25.046ms > pre 24.879ms minted). Operator deviation recorded: post-cal pulse-failure retry outside the run-book's clock-anchor-only retry shape (evidence preserved; earliest-valid-causal selection unaffected).",
-      "stop_card": null
-    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -1011,17 +970,7 @@
         "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
         "path": "docs/decision_log.md"
       },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "sequencing: both modify floor_extraction.py; widened envelopes feed the labelled floor",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "CAL-REBRACKET-01"
-        }
-      ],
+      "dependencies": [],
       "fallback": null,
       "fences": [
         {
@@ -1038,8 +987,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 45,
-      "status": "blocked",
-      "status_note": "Minted 2026-07-25. GATE DISCHARGED same day: Ed ratified the D-078 clause-11 amendment, so the labelled claim path is now authorised. Implements floor_source labelling, retains the point floor as the repeatability diagnostic, and carries the single-count statement into every publishing artifact. Sequenced AFTER CAL-REBRACKET-01 merges (both modify floor_extraction.py and the widened envelopes are the input to the labelled floor).",
+      "status": "queued",
+      "status_note": "Minted 2026-07-25; ratification gate discharged by Ed same day (D-078 clause 11). UNBLOCKED 2026-07-26: CAL-REBRACKET-01 merged (PR #86, 7b12f20), so the widened envelopes that feed the labelled floor are now produced by the governed consumption path. Implements floor_source labelling, retains the point floor as the repeatability diagnostic, and carries the single-count statement into every publishing artifact.",
       "stop_card": null
     },
     "FLOOR-WORKLOAD-SIZING-01": {

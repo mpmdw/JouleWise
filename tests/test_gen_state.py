@@ -34,8 +34,6 @@ EXPECTED_IDS = {
     "FLOOR-BIND-01",
     # C-033 screen+budget gauntlet deferrals (2026-07-25)
     "CUSTODY-HARDEN-01",
-    # 2026-07-25 collection-night max-bracket consumption gap
-    "CAL-REBRACKET-01",
     # 2026-07-25 attribution-limit adjudication
     "FLOOR-LABEL-01", "FLOOR-WORKLOAD-SIZING-01",
     "FLOOR-COMMONMODE-01", "PHASE-SHARE-ESTIMAND-01",
@@ -49,7 +47,7 @@ EXPECTED_IDS = {
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
-TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
+TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
                 "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP"}
 
 
@@ -175,9 +173,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_52(self):
+    def test_exact_live_id_set_51(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 52)
+        self.assertEqual(len(self.tasks), 51)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
