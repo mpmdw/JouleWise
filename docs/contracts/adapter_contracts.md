@@ -559,6 +559,57 @@ as independent start/end edge uncertainty in addition to the common trace
 translation. Opposite pre/post-step edge shifts are therefore covered by the
 reported joule envelope. Spans above the 5 ms ceiling remain hard refusals.
 
+**MAX-BRACKET CONSUMPTION addendum — CAL-REBRACKET-01:** current-mint
+members retain their original `summary_metrics.json` as the immutable custody
+authority. A claim consumer creates one collection-scoped authenticated
+consumption session for the exact whole-window basis. That session rehashes
+and validates the pre/post calibration artifacts through the primary-evidence
+bracket join, derives
+`B_operative = max(B_pre, B_post)` from those authenticated artifacts, and
+independently authenticates each member's minted calibration. Neither a
+caller-supplied scalar nor a scalar copied from verdict or bundle metadata can
+select the operative bound. A disagreement between the member's stored
+calibration scalar and its authenticated value remains
+`whole_window_verdict_provenance_invalid`.
+
+When `B_operative` exceeds a member's authenticated minted bound, the session
+re-runs the member's recorded current reducer in memory with an authenticated
+fiducial-bound override. The override enters the existing
+`_compose_causal_anchor_bound_s` and anchor-envelope machinery; it does not
+move the anchor point or any NEG-8 point-drift input. The re-derivation must
+cover every envelope pointer minted for the member, including request gross,
+idle-subtracted/request energy, token-normalized energy, every phase, and
+suite item/block/level paths. Point values must be identical and every
+operative interval must contain its minted interval. Re-derivation is cached
+once per member for the session and is never written as a replacement or
+derived-summary artifact.
+
+The cure is all-or-nothing across the basis. Without a successful session,
+`calibration_bracket_exceeds_minted_bound` remains terminal. If any widened
+member fails, no member may fall back to its minted envelope; the consumer
+propagates the existing leaf reason, including
+`post_window_trace_tail_shorter_than_anchor_bound`,
+`clock_bound_exceeds_quarter_window`,
+`anchor_energy_envelope_exceeds_quarter_metric`,
+`clock_anchor_unresolved`, or `instrument_calibration_invalid`. Successful
+consumption records `minted_bound_dominated`, the minted and operative bounds,
+both complete calibration descriptors/hashes, and every operative envelope's
+method, `anchor_bound_s`, point, lower, upper, maximum delta, and half-width.
+Whole-window verification, floor extraction, and analysis input loading share
+this same session contract.
+
+Append-only verdict history dispatches this behavior semantically, never by
+file order. Mint-time rows carry
+`consumption_semantics_id = d078_minted_envelopes_v1`; rows produced for the
+widened view carry
+`d078_authenticated_max_bracket_rederivation_v1` plus complete per-member
+consumption provenance in the evaluation basis. A widened row may coexist
+with its mint-time row without conflict because consumers select the explicit
+semantics; appending a later row under the same semantics does not confer
+authority. Floor-extraction and claim audit reports retain the same operative
+envelope and calibration discharge so downstream use is reviewable without
+altering the minted summary.
+
 **ANCHOR-FALLBACK MEMBER GATE addendum — lead-initiated 2026-07-24:** a
 production floor member is not a zero-width point when its energy uncertainty
 is missing or `not_estimable`, its evidence contains

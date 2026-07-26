@@ -664,6 +664,48 @@ composition. Consumers preserve its fields but stop on the registered
 `clock_anchor_unresolved` version barrier. Current 0.5.2/0.6.2 evidence uses
 the additive composition and is the only repaired claim-bearing mint.
 
+### Governed max-bracket consumption (CAL-REBRACKET-01)
+
+Members mint their summaries under an authenticated member-local calibration
+bound, but claims consume the whole window under
+`B_operative = max(B_pre, B_post)`. The whole-window join, floor extraction,
+and `load_analysis_inputs` therefore use one collection-scoped authenticated
+consumption session. It authenticates the two bracket artifacts from primary
+evidence, authenticates each current member's own calibration, computes the
+maximum itself, and caches one in-memory operative summary per member. Stored
+summary bytes remain authoritative and untouched; there is no persisted
+re-reduced-summary artifact class.
+
+For a dominated member, the session calls the recorded 0.5.2/0.6.2 reducer
+with the authenticated wider fiducial bound. This is the mint-time
+`_compose_causal_anchor_bound_s` and envelope path, not a second formula.
+Anchor points and NEG-8 point screens remain identical. The session requires
+identity at the minted bound and monotone containment when widened for every
+minted pointer: `/gross_energy_j`, `/energy_request_j`,
+`/idle_subtracted_energy_j`, token-normalized request paths,
+`/phase_energy_j/<phase>`, and suite item/block/level paths.
+
+The default gate is unchanged: a consumer without this successful re-
+derivation refuses `calibration_bracket_exceeds_minted_bound`. The cure is
+basis-complete. A failure for any affected member clears every cached
+operative view and propagates the registered leaf reason; it never substitutes
+that member's narrower minted envelope. Stored calibration-scalar disagreement
+continues to refuse `whole_window_verdict_provenance_invalid`.
+
+Extraction member rows and analysis bundle-audit rows record the consumed
+metric's complete operative envelope (method, operative `anchor_bound_s`,
+point, lower, upper, maximum delta, and half-width), the member's minted
+bound, `B_operative`, `minted_bound_dominated`, and both calibration
+descriptors/hashes. The extraction report also carries the complete
+per-member map. These are provenance fields, not terminal reasons.
+
+Append-only whole-window history uses explicit semantic dispatch:
+`d078_minted_envelopes_v1` for mint-time evaluation and
+`d078_authenticated_max_bracket_rederivation_v1` for a basis carrying the
+complete discharge. Rows with those two semantics may coexist. Selection is
+by semantics and exact evaluation basis, never by append order; same-semantic
+disagreement remains `whole_window_verdict_conflict`.
+
 ### Campaign cooldown join and cap-hit disposition (audit P0.4)
 
 - Bundle summaries alone never prove the cooldown gate:

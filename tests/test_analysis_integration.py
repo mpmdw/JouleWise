@@ -23,6 +23,7 @@ from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
+    CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     FloorEvidenceBinding,
     MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
@@ -402,6 +403,112 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 self.assertIn(
                     "whole_window_neg8_verdict_missing", evidence.base_reason_codes
                 )
+
+    def test_analysis_loader_consumes_session_operated_envelopes(self):
+        """Claim inputs use the authenticated widened view, not stored bounds."""
+
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target_id = manifest["entries"][0]["run_id"]
+        summary_path = self.runs_root / target_id / "summary_metrics.json"
+        stored_bytes = summary_path.read_bytes()
+        widened_by_bundle: dict[str, Mapping[str, object]] = {}
+
+        class FakeConsumptionSession:
+            def __init__(self, runs_root, bundle_ids):
+                self.runs_root = Path(runs_root)
+                self.bundle_ids = frozenset(bundle_ids)
+                self.ready = True
+                self.refusal_reasons = ()
+
+            def summary_for(self, bundle_id):
+                summary = json.loads(
+                    (self.runs_root / bundle_id / "summary_metrics.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                point = float(summary["gross_energy_j"])
+                summary["energy_anchor_shift_envelopes"] = {
+                    "/gross_energy_j": {
+                        "method": "authenticated_anchor_shift_extrema_v1",
+                        "anchor_bound_s": 0.03,
+                        "point_j": point,
+                        "lower_j": point - 0.25,
+                        "upper_j": point + 0.25,
+                        "max_abs_delta_j": 0.25,
+                    }
+                }
+                widened_by_bundle[bundle_id] = summary
+                return summary
+
+            def provenance_for(self, bundle_id):
+                envelope = widened_by_bundle[bundle_id][
+                    "energy_anchor_shift_envelopes"
+                ]["/gross_energy_j"]
+                return {
+                    "consumption_semantics_id": (
+                        "d078_authenticated_max_bracket_rederivation_v1"
+                    ),
+                    "minted_bound_dominated": True,
+                    "minted_fiducial_bound_s": 0.01,
+                    "operative_fiducial_bound_s": 0.03,
+                    "calibration_bracket": {
+                        "pre": {
+                            "bundle_id": "pre",
+                            "manifest_sha256": "1" * 64,
+                            "calibration_evidence_sha256": "2" * 64,
+                        },
+                        "post": {
+                            "bundle_id": "post",
+                            "manifest_sha256": "3" * 64,
+                            "calibration_evidence_sha256": "4" * 64,
+                        },
+                    },
+                    "operative_envelopes": {
+                        "/gross_energy_j": {
+                            **envelope,
+                            "half_width_j": 0.25,
+                        }
+                    },
+                }
+
+        with (
+            mock.patch(
+                "joulewise.analysis_engine.inputs.AuthenticatedConsumptionSession",
+                FakeConsumptionSession,
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.inputs.whole_window_refusal_reasons",
+                return_value=(),
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.inputs.whole_window_drift_allowances",
+                return_value=mock.Mock(status="legacy", allowances={}),
+            ),
+        ):
+            loaded = load_analysis_inputs(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+
+        target = next(
+            evidence
+            for evidence in loaded.effective.values()
+            if evidence.bundle_id == target_id
+        )
+        self.assertIs(target.summary, widened_by_bundle[target_id])
+        self.assertEqual(
+            target.summary["energy_anchor_shift_envelopes"][
+                "/gross_energy_j"
+            ]["anchor_bound_s"],
+            0.03,
+        )
+        self.assertIn(
+            CONSUMPTION_PROVENANCE_PRECHECK_KEY,
+            target.audit_row()["window_prechecks"],
+        )
+        self.assertEqual(summary_path.read_bytes(), stored_bytes)
 
     def test_production_request_factory_reaches_predeclared_transport(self):
         loaded = load_analysis_inputs(

@@ -8,9 +8,13 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from joulewise.whole_window import (
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+    AuthenticatedConsumptionSession,
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
     CONDITION_NEG8_GROSS_POINT_DRIFT_EXCEEDED,
@@ -20,6 +24,7 @@ from joulewise.whole_window import (
     NEG8_POINT_DRIFT_CONDITION_CODES,
     _current_core_rederivation_reasons,
     _current_strict_summary,
+    _consumption_provenance_valid,
     _derived_neg8_decision,
     _validate_row,
     build_neg8_drift_bound_artifact,
@@ -459,6 +464,46 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     root, {"A", "B"}
                 )
         self.assertEqual(result.status, "absent")
+        self.assertEqual(result.allowances, {})
+
+    def test_unrelated_basis_row_does_not_hide_basisless_frozen_replay(
+        self,
+    ) -> None:
+        """Basis detection follows the same requested-ID scope as selection."""
+
+        rows = [
+            {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A"],
+            },
+            {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["B"],
+                "evaluation_basis": {
+                    "sha256": "b" * 64,
+                    "member_occurrences": [{"bundle_id": "B"}],
+                },
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "campaign_log.jsonl").write_text(
+                "".join(json.dumps(value) + "\n" for value in rows),
+                encoding="utf-8",
+            )
+            with (
+                patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.whole_window._validate_row",
+                    return_value=(True, ()),
+                ),
+            ):
+                result = whole_window_drift_allowances(root, {"A"})
+
+        self.assertEqual(result.status, "legacy")
         self.assertEqual(result.allowances, {})
 
     def _real_fixture(self, root: Path):
@@ -902,6 +947,1128 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 validate.call_args.args[0]["evaluation_basis"]["sha256"],
                 "claim-basis",
             )
+
+    def test_consumption_semantics_dispatch_is_not_latest_wins(self) -> None:
+        """A later mint-time row cannot displace explicit widened semantics."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            widened = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A", "B"],
+                "evaluation_basis": {
+                    "sha256": "shared-basis",
+                    "consumption_semantics_id": (
+                        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                    ),
+                    "member_occurrences": [
+                        {"bundle_id": "A"},
+                        {"bundle_id": "B"},
+                    ],
+                },
+            }
+            mint_time = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": ["A", "B"],
+                "evaluation_basis": {
+                    "sha256": "shared-basis",
+                    "consumption_semantics_id": (
+                        MINTED_CONSUMPTION_SEMANTICS_ID
+                    ),
+                    "member_occurrences": [
+                        {"bundle_id": "A"},
+                        {"bundle_id": "B"},
+                    ],
+                },
+            }
+            # Put the mint-time row last: file order must not affect dispatch.
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(widened) + "\n" + json.dumps(mint_time) + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(True, ()),
+            ) as validate:
+                self.assertEqual(
+                    whole_window_refusal_reasons(root, {"A", "B"}),
+                    (),
+                )
+        self.assertEqual(validate.call_count, 1)
+        self.assertEqual(
+            validate.call_args.args[0]["evaluation_basis"][
+                "consumption_semantics_id"
+            ],
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        )
+
+
+class MaxBracketConsumptionTests(unittest.TestCase):
+    """Defect-shaped CAL-REBRACKET-01 reducer/session regressions."""
+
+    EXPECTED_MINTED_ANCHOR_BOUND_S = 0.07799298220062004
+    EXPECTED_OPERATIVE_ANCHOR_BOUND_S = 0.07899298220062004
+    _physics_cache: dict[str, float] = {}
+
+    @classmethod
+    def _build_v052_bundle(
+        cls,
+        fixture_root: Path,
+    ) -> tuple[Path, dict, float, float]:
+        """Construct an independent real reducer fixture for one defect shape."""
+
+        from joulewise.reduce import reduce_bundle
+        from tests.test_reduce import D078R01RegressionTests
+
+        helper = D078R01RegressionTests()
+        evidence = helper._valid_instrument_evidence()
+        minted_fiducial_bound_s = float(evidence["b_fiducial_s"])
+        operative_fiducial_bound_s = minted_fiducial_bound_s + 0.001
+
+        v052_root = fixture_root / "v052"
+        v052_root.mkdir()
+        bundle = helper._bundle_with_calibration(
+            v052_root,
+            evidence=evidence,
+        )
+        cls._install_suite_shape(bundle)
+        minted = reduce_bundle(
+            bundle,
+            reducer_version="0.5.2",
+            _instrument_calibration_physics_cache=cls._physics_cache,
+        ).to_dict()
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(minted, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return (
+            bundle,
+            minted,
+            minted_fiducial_bound_s,
+            operative_fiducial_bound_s,
+        )
+
+    @staticmethod
+    def _install_suite_shape(bundle: Path) -> None:
+        """Add one real item/block/level window to the powermetrics fixture."""
+
+        shutil.copyfile(
+            Path("configs/suite_manifests/mock_suite_manifest.json"),
+            bundle / "suite_manifest.json",
+        )
+        events_path = bundle / "events.jsonl"
+        events = [
+            json.loads(line)
+            for line in events_path.read_text(encoding="utf-8").splitlines()
+        ]
+        start_s = next(
+            float(row["timestamp_s"])
+            for row in events
+            if row.get("event_type") == "phase_start"
+            and row.get("phase") == "prefill"
+        )
+        end_s = next(
+            float(row["timestamp_s"])
+            for row in events
+            if row.get("event_type") == "phase_end"
+            and row.get("phase") == "decode"
+        )
+        starts = [
+            ("suite_start", {}),
+            ("block_start", {"block_id": "block_a"}),
+            ("level_start", {"level_id": "level_1"}),
+            (
+                "item_start",
+                {"item_id": "mock_item_001", "item_index": 0},
+            ),
+        ]
+        ends = [
+            (
+                "item_end",
+                {
+                    "item_id": "mock_item_001",
+                    "item_index": 0,
+                    "status": "succeeded",
+                },
+            ),
+            ("level_end", {"level_id": "level_1"}),
+            ("block_end", {"block_id": "block_a"}),
+            ("suite_end", {}),
+        ]
+
+        def marker(event_type: str, metadata: dict, timestamp_s: float) -> dict:
+            return {
+                "event_type": event_type,
+                "message": "",
+                "metadata": metadata,
+                "phase": "suite",
+                "timestamp_s": timestamp_s,
+            }
+
+        shaped: list[dict] = []
+        for row in events:
+            if (
+                row.get("event_type") == "phase_start"
+                and row.get("phase") == "prefill"
+            ):
+                shaped.extend(
+                    marker(event_type, metadata, start_s)
+                    for event_type, metadata in starts
+                )
+            shaped.append(row)
+            if (
+                row.get("event_type") == "phase_end"
+                and row.get("phase") == "decode"
+            ):
+                shaped.extend(
+                    marker(event_type, metadata, end_s)
+                    for event_type, metadata in ends
+                )
+        events_path.write_text(
+            "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in shaped
+            ),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _install_axi_shape(
+        destination: Path,
+        *,
+        calibrated_source: Path,
+    ) -> Path:
+        """Bind the committed AXI event-v2 fixture to real powermetrics bytes."""
+
+        shutil.copytree(Path("tests/fixtures/axi_valid_burst"), destination)
+        shutil.copytree(
+            calibrated_source / "calibration",
+            destination / "calibration",
+        )
+        shutil.copytree(
+            calibrated_source / "raw",
+            destination / "raw",
+            dirs_exist_ok=True,
+        )
+        shutil.copyfile(
+            calibrated_source / "power_trace.csv",
+            destination / "power_trace.csv",
+        )
+
+        config_path = destination / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["hardware_target"]["id"] = "macbook_m3_max"
+        config["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config["sampling"]["power_hz"] = 10.0
+        config_raw = (
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        config_path.write_bytes(config_raw)
+
+        source_metadata = json.loads(
+            (calibrated_source / "metadata.json").read_text(encoding="utf-8")
+        )
+        axi_metadata = json.loads(
+            (destination / "metadata.json").read_text(encoding="utf-8")
+        )
+        for key in ("batch", "event_semantics_version", "runtime", "speculation"):
+            source_metadata[key] = axi_metadata[key]
+        source_metadata["runtime"]["primary_source_identity"] = "powermetrics"
+        source_metadata["config_sha256"] = hashlib.sha256(
+            config_raw
+        ).hexdigest()
+        source_metadata["run_id"] = config["run_id"]
+        (destination / "metadata.json").write_text(
+            json.dumps(source_metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        start_s = 1784491122.85
+        scale = 0.4 / 2.2
+        events_path = destination / "events.jsonl"
+        events = [
+            json.loads(line)
+            for line in events_path.read_text(encoding="utf-8").splitlines()
+        ]
+        for row in events:
+            row["timestamp_s"] = start_s + float(row["timestamp_s"]) * scale
+            metadata = row.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            admitted_at_s = metadata.get("admitted_at_s")
+            if isinstance(admitted_at_s, int | float) and not isinstance(
+                admitted_at_s, bool
+            ):
+                metadata["admitted_at_s"] = (
+                    start_s + float(admitted_at_s) * scale
+                )
+            if "source_identity" in metadata:
+                metadata["source_identity"] = "powermetrics"
+        events.insert(
+            0,
+            {
+                "event_type": "run_started",
+                "message": "run started",
+                "metadata": {},
+                "phase": "run",
+                "timestamp_s": start_s - 0.1,
+            },
+        )
+        events_path.write_text(
+            "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in events
+            ),
+            encoding="utf-8",
+        )
+
+        token_path = destination / "outputs" / "request_tokens.jsonl"
+        tokens = [
+            json.loads(line)
+            for line in token_path.read_text(encoding="utf-8").splitlines()
+        ]
+        for row in tokens:
+            row["timestamp_s"] = (
+                start_s + float(row["timestamp_s"]) * scale
+            )
+        token_path.write_text(
+            "".join(
+                json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+                for row in tokens
+            ),
+            encoding="utf-8",
+        )
+        (destination / "summary_metrics.json").unlink()
+        return destination
+
+    @staticmethod
+    def _half_width(envelope: dict) -> float:
+        return max(
+            float(envelope["point_j"]) - float(envelope["lower_j"]),
+            float(envelope["upper_j"]) - float(envelope["point_j"]),
+            float(envelope["max_abs_delta_j"]),
+        )
+
+    @staticmethod
+    def _bracket(bound_s: float) -> dict:
+        return {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": bound_s,
+            "pre": {
+                "manifest_sha256": "a" * 64,
+                "evidence_sha256": "b" * 64,
+                "b_fiducial_s": bound_s - 0.001,
+            },
+            "post": {
+                "manifest_sha256": "c" * 64,
+                "evidence_sha256": "d" * 64,
+                "b_fiducial_s": bound_s,
+            },
+        }
+
+    @staticmethod
+    def _summary(point: float, bound_s: float, half_width: float) -> dict:
+        def envelope(value: float) -> dict:
+            return {
+                "method": (
+                    "common_trace_shift_plus_independent_edge_corners_v3"
+                ),
+                "anchor_bound_s": bound_s,
+                "point_j": value,
+                "lower_j": value - half_width,
+                "upper_j": value + half_width,
+                "max_abs_delta_j": half_width,
+            }
+
+        return {
+            "status": "succeeded",
+            "summary_provenance": {"reducer_version": "0.5.2"},
+            "measurement_quality": {"telemetry_source": "powermetrics"},
+            "gross_energy_j": point,
+            "phase_energy_j": {"prefill": point / 2.0},
+            "energy_anchor_shift_envelopes": {
+                "/gross_energy_j": envelope(point),
+                "/phase_energy_j/prefill": envelope(point / 2.0),
+            },
+            "window_evidence_precheck": {
+                "gross_request": {"eligible": True, "reasons": []},
+                "phase": {
+                    "prefill": {"eligible": True, "reasons": []}
+                },
+            },
+        }
+
+    def _consumption_provenance_fixture(
+        self,
+        root: Path,
+        *,
+        occurrence_ids: tuple[str, ...] = ("member",),
+        referenced_ids: set[str] | None = None,
+        evaluation_basis_sha256: str | None = None,
+    ) -> tuple[dict, list[dict], AuthenticatedConsumptionSession]:
+        session = AuthenticatedConsumptionSession(
+            root,
+            referenced_ids if referenced_ids is not None else set(occurrence_ids),
+            evaluation_basis_sha256=evaluation_basis_sha256,
+        )
+        session._prepared = True
+        session.calibration_bracket = self._bracket(0.03)
+        session.operative_fiducial_bound_s = 0.03
+        provenance: dict[str, dict] = {}
+        occurrences: list[dict] = []
+        for index, bundle_id in enumerate(occurrence_ids):
+            bundle = root / bundle_id
+            bundle.mkdir()
+            summary = self._summary(40.0 + index, 0.02, 0.1)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(summary) + "\n",
+                encoding="utf-8",
+            )
+            complete = {
+                pointer: {
+                    **envelope,
+                    "anchor_bound_s": 0.03,
+                    "lower_j": float(envelope["point_j"]) - 0.2,
+                    "upper_j": float(envelope["point_j"]) + 0.2,
+                    "max_abs_delta_j": 0.2,
+                    "half_width_j": 0.2,
+                }
+                for pointer, envelope in summary[
+                    "energy_anchor_shift_envelopes"
+                ].items()
+            }
+            record = {
+                "consumption_semantics_id": (
+                    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                ),
+                "minted_bound_dominated": True,
+                "minted_fiducial_bound_s": 0.02,
+                "operative_fiducial_bound_s": 0.03,
+                "calibration_bracket": {
+                    "pre": dict(session.calibration_bracket["pre"]),
+                    "post": dict(session.calibration_bracket["post"]),
+                },
+                "operative_envelopes": complete,
+            }
+            session._provenance[bundle_id] = record
+            provenance[bundle_id] = json.loads(json.dumps(record))
+            occurrences.append(
+                {"bundle_id": bundle_id, "bundle_path": bundle_id}
+            )
+        basis = {
+            "consumption_semantics_id": (
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            ),
+            "calibration_bracket_set": {
+                "pre": dict(session.calibration_bracket["pre"]),
+                "post": dict(session.calibration_bracket["post"]),
+            },
+            "consumption_provenance": provenance,
+        }
+        return basis, occurrences, session
+
+    def test_persisted_operative_bound_must_equal_authenticated_bracket_max(
+        self,
+    ) -> None:
+        for persisted_bound in (0.029, 0.031):
+            with self.subTest(
+                persisted_bound=persisted_bound
+            ), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                basis, occurrences, session = (
+                    self._consumption_provenance_fixture(root)
+                )
+                record = basis["consumption_provenance"]["member"]
+                record["operative_fiducial_bound_s"] = persisted_bound
+                record["minted_bound_dominated"] = True
+                self.assertFalse(
+                    _consumption_provenance_valid(
+                        basis,
+                        occurrences,
+                        runs_root=root,
+                        consumption_session=session,
+                    )
+                )
+
+    def test_persisted_pointer_subset_cannot_discharge_gov_02(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = (
+                self._consumption_provenance_fixture(root)
+            )
+            del basis["consumption_provenance"]["member"][
+                "operative_envelopes"
+            ]["/phase_energy_j/prefill"]
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_persisted_record_must_equal_session_discharge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = (
+                self._consumption_provenance_fixture(root)
+            )
+            basis["consumption_provenance"]["member"][
+                "minted_fiducial_bound_s"
+            ] = 0.019
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_authenticated_session_provenance_is_accepted_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = (
+                self._consumption_provenance_fixture(root)
+            )
+            self.assertTrue(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_explicit_sha_selection_accepts_superset_basis_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member"},
+                evaluation_basis_sha256="e" * 64,
+            )
+            self.assertTrue(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_set_equality_selection_rejects_superset_basis_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member"},
+            )
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_explicit_sha_selection_rejects_genuinely_mismatched_set(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            basis, occurrences, session = self._consumption_provenance_fixture(
+                root,
+                occurrence_ids=("member", "extra"),
+                referenced_ids={"member", "missing"},
+                evaluation_basis_sha256="e" * 64,
+            )
+            self.assertFalse(
+                _consumption_provenance_valid(
+                    basis,
+                    occurrences,
+                    runs_root=root,
+                    consumption_session=session,
+                )
+            )
+
+    def test_rederivation_is_identity_at_the_minted_bound(self) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, minted_bound, _operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            identity = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=minted_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        minted_envelopes = minted["energy_anchor_shift_envelopes"]
+        self.assertEqual(
+            identity["energy_anchor_shift_envelopes"],
+            minted_envelopes,
+        )
+
+    def test_rederivation_covers_every_named_metric_family(self) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        widened_envelopes = widened["energy_anchor_shift_envelopes"]
+        expected_pointers = {
+            "/gross_energy_j",
+            "/idle_subtracted_energy_j",
+            "/energy_request_j",
+            "/energy_token_j",
+            "/energy_output_token_j",
+            "/phase_energy_j/prefill",
+            "/phase_energy_j/decode",
+            "/suite_item_energy_j/0:mock_item_001",
+            "/suite_block_energy_j/block_a",
+            "/suite_level_energy_j/block_a~1level_1",
+        }
+        self.assertEqual(
+            set(widened_envelopes),
+            expected_pointers,
+        )
+
+    def test_dominated_member_strictly_widens_every_named_metric_family(
+        self,
+    ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        minted_envelopes = minted["energy_anchor_shift_envelopes"]
+        widened_envelopes = widened["energy_anchor_shift_envelopes"]
+        self.assertEqual(set(widened_envelopes), set(minted_envelopes))
+        for pointer, minted_envelope in minted_envelopes.items():
+            with self.subTest(pointer=pointer):
+                wider = widened_envelopes[pointer]
+                self.assertEqual(
+                    wider["point_j"], minted_envelope["point_j"]
+                )
+                self.assertLessEqual(
+                    wider["lower_j"], minted_envelope["lower_j"]
+                )
+                self.assertGreaterEqual(
+                    wider["upper_j"], minted_envelope["upper_j"]
+                )
+                self.assertGreater(
+                    self._half_width(wider),
+                    self._half_width(minted_envelope),
+                )
+
+    def test_rederivation_records_the_expected_operative_anchor_bound(
+        self,
+    ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            widened = _rederive_summary_for_authenticated_fiducial_bound(
+                bundle,
+                authenticated_fiducial_bound_s=operative_bound,
+                _instrument_calibration_physics_cache=self._physics_cache,
+            )
+        self.assertAlmostEqual(
+            minted["energy_anchor_shift_envelopes"][
+                "/gross_energy_j"
+            ]["anchor_bound_s"],
+            self.EXPECTED_MINTED_ANCHOR_BOUND_S,
+            places=12,
+        )
+        for pointer, envelope in widened["energy_anchor_shift_envelopes"].items():
+            with self.subTest(pointer=pointer):
+                self.assertAlmostEqual(
+                    envelope["anchor_bound_s"],
+                    self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+                    places=12,
+                )
+
+    def test_reducer_0_6_2_uses_the_same_authenticated_override_path(
+        self,
+    ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+            reduce_bundle,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_bundle, _source_minted, _minted_bound, operative_bound = (
+                self._build_v052_bundle(root)
+            )
+            axi_bundle = self._install_axi_shape(
+                root / "axi-v062",
+                calibrated_source=source_bundle,
+            )
+            axi_minted = reduce_bundle(
+                axi_bundle,
+                reducer_version="0.6.2",
+                _instrument_calibration_physics_cache=self._physics_cache,
+            ).to_dict()
+            (axi_bundle / "summary_metrics.json").write_text(
+                json.dumps(axi_minted, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            axi_widened = (
+                _rederive_summary_for_authenticated_fiducial_bound(
+                    axi_bundle,
+                    authenticated_fiducial_bound_s=operative_bound,
+                    _instrument_calibration_physics_cache=self._physics_cache,
+                )
+            )
+        self.assertEqual(
+            axi_minted["summary_provenance"]["reducer_version"],
+            "0.6.2",
+        )
+        expected_pointers = {
+            "/gross_energy_j",
+            "/idle_subtracted_energy_j",
+            "/phase_energy_j/prefill",
+            "/phase_energy_j/decode",
+        }
+        self.assertEqual(
+            set(axi_widened["energy_anchor_shift_envelopes"]),
+            expected_pointers,
+        )
+        for pointer in expected_pointers:
+            with self.subTest(pointer=pointer):
+                minted = axi_minted["energy_anchor_shift_envelopes"][pointer]
+                widened = axi_widened["energy_anchor_shift_envelopes"][pointer]
+                self.assertEqual(widened["point_j"], minted["point_j"])
+                self.assertLessEqual(widened["lower_j"], minted["lower_j"])
+                self.assertGreaterEqual(widened["upper_j"], minted["upper_j"])
+                self.assertGreater(
+                    self._half_width(widened),
+                    self._half_width(minted),
+                )
+                self.assertAlmostEqual(
+                    widened["anchor_bound_s"],
+                    self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+                    places=12,
+                )
+
+    def test_rederivation_refuses_when_the_trace_tail_is_too_short(
+        self,
+    ) -> None:
+        from joulewise.reduce import (
+            _rederive_summary_for_authenticated_fiducial_bound,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _minted, minted_bound, _operative_bound = (
+                self._build_v052_bundle(Path(tmp))
+            )
+            short_tail = (
+                _rederive_summary_for_authenticated_fiducial_bound(
+                    bundle,
+                    authenticated_fiducial_bound_s=minted_bound + 2.0,
+                    _instrument_calibration_physics_cache=self._physics_cache,
+                )
+            )
+        self.assertIn(
+            "post_window_trace_tail_shorter_than_anchor_bound",
+            short_tail["window_evidence_precheck"]["gross_request"][
+                "reasons"
+            ],
+        )
+        self.assertNotIn("energy_anchor_shift_envelopes", short_tail)
+
+    def test_session_caches_complete_widened_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            widened = self._summary(40.0, 0.03, 0.2)
+            # A metric-local refusal that already existed at mint time is not
+            # a widening failure. The affected metric remains barred for its
+            # own consumer, while complete whole-window rebracketing proceeds.
+            for summary in (minted, widened):
+                summary["window_evidence_precheck"]["phase"]["setup"] = {
+                    "eligible": False,
+                    "reasons": ["clock_bound_exceeds_quarter_window"],
+                }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ) as verify,
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=widened,
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(rederive.call_count, 1)
+        self.assertIs(
+            verify.call_args.kwargs["physics_cache"],
+            rederive.call_args.kwargs[
+                "_instrument_calibration_physics_cache"
+            ],
+        )
+        self.assertIs(session.summary_for("member"), widened)
+        provenance = session.provenance_for("member")
+        self.assertTrue(provenance["minted_bound_dominated"])
+        self.assertEqual(
+            set(provenance["operative_envelopes"]),
+            {"/gross_energy_j", "/phase_energy_j/prefill"},
+        )
+        for envelope in provenance["operative_envelopes"].values():
+                self.assertAlmostEqual(envelope["half_width_j"], 0.2)
+        self.assertEqual(
+            provenance["calibration_bracket"]["post"][
+                "evidence_sha256"
+            ],
+            "d" * 64,
+        )
+
+    def test_session_skips_rederivation_for_undominated_member(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.03, 0.2)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.03
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.03, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(session.summary_for("member"), minted)
+        self.assertFalse(
+            session.provenance_for("member")["minted_bound_dominated"]
+        )
+        rederive.assert_not_called()
+
+    def test_session_authentication_cache_is_scoped_and_fail_closed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            session._prepared = True
+            row = {"record_type": "test", "value": 1}
+            with patch(
+                "joulewise.whole_window._validate_row_uncached",
+                return_value=(True, ()),
+            ) as authenticate:
+                first = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                second = _validate_row(
+                    json.loads(json.dumps(row)),
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 1)
+
+                other_root = root / "other-root"
+                other_root.mkdir()
+                _validate_row(
+                    row,
+                    other_root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                _validate_row(
+                    row,
+                    root,
+                    {"other-member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 3)
+
+                # The selected basis is part of cache identity even within
+                # one session object.
+                session.evaluation_basis_sha256 = "a" * 64
+                basis_first = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                basis_second = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 4)
+
+                failure_row = {"record_type": "test", "value": "failure"}
+                authenticate.return_value = (False, ("refused",))
+                failure_first = _validate_row(
+                    failure_row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                failure_second = _validate_row(
+                    failure_row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(authenticate.call_count, 6)
+
+                # Losing readiness invalidates prior successes rather than
+                # leaving them available if mutable session state recovers.
+                authenticate.return_value = (True, ())
+                session.refusal_reasons = ("instrument_calibration_invalid",)
+                _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                self.assertEqual(session._row_validation_results, {})
+                session.refusal_reasons = ()
+                recovered = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+                cached_recovered = _validate_row(
+                    row,
+                    root,
+                    {"member"},
+                    consumption_session=session,
+                )
+
+        self.assertEqual(first, (True, ()))
+        self.assertEqual(second, first)
+        self.assertEqual(basis_first, (True, ()))
+        self.assertEqual(basis_second, basis_first)
+        self.assertEqual(failure_first, (False, ("refused",)))
+        self.assertEqual(failure_second, failure_first)
+        self.assertEqual(recovered, (True, ()))
+        self.assertEqual(cached_recovered, recovered)
+        self.assertEqual(authenticate.call_count, 8)
+
+    def test_provenance_scalar_disagreement_blocks_before_rederivation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.01
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertEqual(
+            session.refusal_reasons,
+            ("whole_window_verdict_provenance_invalid",),
+        )
+        self.assertIsNone(session.summary_for("member"))
+        rederive.assert_not_called()
+
+    def test_session_propagates_short_tail_leaf_without_minted_fallback(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            failed = {
+                **minted,
+                "energy_anchor_shift_envelopes": None,
+                "window_evidence_precheck": {
+                    "gross_request": {
+                        "eligible": False,
+                        "reasons": [
+                            "post_window_trace_tail_shorter_than_anchor_bound"
+                        ],
+                    }
+                },
+            }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=failed,
+                ),
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertEqual(
+            session.refusal_reasons,
+            ("post_window_trace_tail_shorter_than_anchor_bound",),
+        )
+        self.assertIsNone(session.summary_for("member"))
+        self.assertIsNone(session.provenance_for("member"))
 
 
 if __name__ == "__main__":

@@ -78,6 +78,8 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
 )
 from joulewise.whole_window import (
+    AuthenticatedConsumptionSession,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -234,6 +236,8 @@ class MemberReport:
     excluded: bool
     reasons: tuple[str, ...]
     anchor_shift_bound_j: float | None
+    operative_anchor_envelope: Mapping[str, Any] | None
+    consumption_provenance: Mapping[str, Any] | None
     summary_sha256: str | None
     bundle_sha256: str | None
     config_sha256: str | None
@@ -251,6 +255,16 @@ class MemberReport:
             "excluded": self.excluded,
             "reasons": list(self.reasons),
             "anchor_shift_bound_j": self.anchor_shift_bound_j,
+            "operative_anchor_envelope": (
+                dict(self.operative_anchor_envelope)
+                if isinstance(self.operative_anchor_envelope, Mapping)
+                else None
+            ),
+            "consumption_provenance": (
+                dict(self.consumption_provenance)
+                if isinstance(self.consumption_provenance, Mapping)
+                else None
+            ),
             "summary_sha256": self.summary_sha256,
             "bundle_sha256": self.bundle_sha256,
             "config_sha256": self.config_sha256,
@@ -441,6 +455,7 @@ def _evaluate_member(
     cooldowns: Mapping[str, Mapping[str, Any]],
     hash_bundles: bool,
     strict_validator: StrictValidator,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> MemberReport:
     """Evaluate every governed member gate; reasons are fail-closed evidence."""
 
@@ -456,6 +471,8 @@ def _evaluate_member(
     reasons: list[str] = []
     value: float | None = None
     anchor_bound: float | None = None
+    operative_anchor_envelope: Mapping[str, Any] | None = None
+    consumption_provenance: Mapping[str, Any] | None = None
     cap_hit = False
     if read_problem is not None:
         reasons.append(read_problem)
@@ -536,6 +553,22 @@ def _evaluate_member(
         if summary_cap_hit is True and not cap_hit:
             reasons.append("cooldown_cap_hit_unverified")
 
+        consumption_failed = False
+        if consumption_session is not None:
+            if not consumption_session.ready:
+                reasons.extend(consumption_session.refusal_reasons)
+                consumption_failed = True
+            else:
+                operative_summary = consumption_session.summary_for(bundle_id)
+                if not isinstance(operative_summary, Mapping):
+                    reasons.append("whole_window_verdict_provenance_invalid")
+                    consumption_failed = True
+                else:
+                    summary = operative_summary
+                    consumption_provenance = (
+                        consumption_session.provenance_for(bundle_id)
+                    )
+
         evidence = BundleEvidence(
             entry={},
             bundle_id=bundle_id,
@@ -557,57 +590,69 @@ def _evaluate_member(
             "metric_tag": f"{slot}:{metric}",
             "window_class": window_class,
         }
-        precheck = window_evidence_precheck(evidence, precheck_metric)
-        precheck_reasons = [
-            reason
-            for reason in precheck.get("reasons", [])
-            # cap-hit is dispositioned by same-slot exclusion below, not by
-            # refusing the whole cell.
-            if reason != "cooldown_cap_hit"
-        ]
-        reasons.extend(precheck_reasons)
+        if not consumption_failed:
+            precheck = window_evidence_precheck(evidence, precheck_metric)
+            precheck_reasons = [
+                reason
+                for reason in precheck.get("reasons", [])
+                # cap-hit is dispositioned by same-slot exclusion below, not by
+                # refusing the whole cell.
+                if reason != "cooldown_cap_hit"
+            ]
+            reasons.extend(precheck_reasons)
 
-        value = _member_metric_value(summary, _precheck_metric_name(metric))
-        if value is None:
-            reasons.append("metric_missing_or_nonfinite")
-        else:
-            envelope, _envelope_problem = anchor_shift_envelope(
+            value = _member_metric_value(
                 summary, _precheck_metric_name(metric)
             )
-            if envelope is None:
-                # Anchor-shift envelopes are REQUIRED for claim-bearing floor
-                # extraction on every wire (D-078 gate 1); pre-anchor corpora
-                # refuse here mechanically.
-                reasons.append("anchor_energy_envelope_unrecorded")
-            elif not math.isclose(
-                envelope["point_j"], value, rel_tol=1e-9, abs_tol=1e-12
-            ):
-                reasons.append("anchor_energy_envelope_unrecorded")
+            if value is None:
+                reasons.append("metric_missing_or_nonfinite")
             else:
-                bounds, bound_reasons = deterministic_bounds(evidence, precheck_metric)
-                reasons.extend(bound_reasons)
-                if not bound_reasons:
+                envelope, _envelope_problem = anchor_shift_envelope(
+                    summary, _precheck_metric_name(metric)
+                )
+                if envelope is None:
+                    # Anchor-shift envelopes are REQUIRED for claim-bearing
+                    # floor extraction on every wire (D-078 gate 1);
+                    # pre-anchor corpora refuse here mechanically.
+                    reasons.append("anchor_energy_envelope_unrecorded")
+                elif not math.isclose(
+                    envelope["point_j"],
+                    value,
+                    rel_tol=1e-9,
+                    abs_tol=1e-12,
+                ):
+                    reasons.append("anchor_energy_envelope_unrecorded")
+                else:
                     half_width = max(
                         envelope["point_j"] - envelope["lower_j"],
                         envelope["upper_j"] - envelope["point_j"],
                         envelope.get("max_abs_delta_j", 0.0),
                     )
-                    joint = bounds.get("E_interpolation_joint_edge_bound_j", 0.0)
-                    total = half_width + joint
-                    # This is the half-width of the member's admissible energy
-                    # set, not merely a diagnostic clock term.  Floor math
-                    # consumes it below; discarding it would let tightly
-                    # clustered point estimates hide wide causal uncertainty.
-                    anchor_bound = total
-                    if value == 0.0:
-                        if total > 0.0:
+                    operative_anchor_envelope = {
+                        **envelope,
+                        "half_width_j": half_width,
+                    }
+                    bounds, bound_reasons = deterministic_bounds(
+                        evidence, precheck_metric
+                    )
+                    reasons.extend(bound_reasons)
+                    if not bound_reasons:
+                        joint = bounds.get(
+                            "E_interpolation_joint_edge_bound_j", 0.0
+                        )
+                        total = half_width + joint
+                        # This is the half-width of the member's admissible
+                        # energy set, not merely a diagnostic clock term.
+                        anchor_bound = total
+                        if value == 0.0:
+                            if total > 0.0:
+                                reasons.append(
+                                    "anchor_energy_envelope_exceeds_quarter_metric"
+                                )
+                        elif total / abs(value) > ANCHOR_QUARTER_METRIC_LIMIT:
                             reasons.append(
                                 "anchor_energy_envelope_exceeds_quarter_metric"
                             )
-                    elif total / abs(value) > ANCHOR_QUARTER_METRIC_LIMIT:
-                        reasons.append(
-                            "anchor_energy_envelope_exceeds_quarter_metric"
-                        )
 
     bundle_sha256: str | None = None
     config_sha256: str | None = None
@@ -633,6 +678,8 @@ def _evaluate_member(
         excluded=False,
         reasons=tuple(dict.fromkeys(reasons)),
         anchor_shift_bound_j=anchor_bound,
+        operative_anchor_envelope=operative_anchor_envelope,
+        consumption_provenance=consumption_provenance,
         summary_sha256=summary_sha256,
         bundle_sha256=bundle_sha256,
         config_sha256=config_sha256,
@@ -658,6 +705,8 @@ def _exclude(member: MemberReport) -> MemberReport:
         excluded=True,
         reasons=member.reasons,
         anchor_shift_bound_j=member.anchor_shift_bound_j,
+        operative_anchor_envelope=member.operative_anchor_envelope,
+        consumption_provenance=member.consumption_provenance,
         summary_sha256=member.summary_sha256,
         bundle_sha256=member.bundle_sha256,
         config_sha256=member.config_sha256,
@@ -703,6 +752,7 @@ def extract_absolute_cell(
     cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> CellReport:
     """Extract one absolute D-054 cell under the audit gates."""
 
@@ -730,6 +780,7 @@ def extract_absolute_cell(
                 cooldowns=cooldowns,
                 hash_bundles=hash_bundles,
                 strict_validator=validator,
+                consumption_session=consumption_session,
             )
         )
 
@@ -853,6 +904,7 @@ def extract_comparative_cell(
     cap_hit_policy: str = CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> CellReport:
     """Extract one comparative (ABBA) D-054 cell under the audit gates.
 
@@ -903,6 +955,7 @@ def extract_comparative_cell(
                 cooldowns=cooldowns,
                 hash_bundles=hash_bundles,
                 strict_validator=validator,
+                consumption_session=consumption_session,
             )
             for position in _ABBA_POSITIONS
         ]
@@ -1046,6 +1099,20 @@ def extract_cells(
     runs_root = Path(runs_root)
     cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
     referenced_bundle_ids = _spec_referenced_bundle_ids(cells)
+    consumption_session = AuthenticatedConsumptionSession(
+        runs_root,
+        referenced_bundle_ids,
+    )
+    whole_window_refusals = _whole_window_extraction_refusals(
+        runs_root,
+        referenced_bundle_ids,
+        consumption_session=consumption_session,
+    )
+    member_consumption_session = (
+        consumption_session
+        if consumption_session.ready or consumption_session.refusal_reasons
+        else None
+    )
     reports: list[CellReport] = []
     seen_cell_ids: set[str] = set()
     for cell in cells:
@@ -1072,6 +1139,7 @@ def extract_cells(
                     cap_hit_policy=str(cap_hit_policy),
                     hash_bundles=hash_bundles,
                     strict_validator=validator,
+                    consumption_session=member_consumption_session,
                 )
             )
         elif kind == "comparative":
@@ -1089,6 +1157,7 @@ def extract_cells(
                     cap_hit_policy=str(cap_hit_policy),
                     hash_bundles=hash_bundles,
                     strict_validator=validator,
+                    consumption_session=member_consumption_session,
                 )
             )
         else:
@@ -1096,14 +1165,13 @@ def extract_cells(
                 f"{cell_id}: kind must be 'absolute' or 'comparative', got {kind!r}"
             )
 
-    whole_window_refusals = _whole_window_extraction_refusals(
-        runs_root, referenced_bundle_ids
-    )
-    whole_window_allowance_result = (
-        whole_window_drift_allowances(runs_root, referenced_bundle_ids)
-        if not whole_window_refusals
-        else None
-    )
+    whole_window_allowance_result = None
+    if not whole_window_refusals:
+        whole_window_allowance_result = whole_window_drift_allowances(
+            runs_root,
+            referenced_bundle_ids,
+            consumption_session=consumption_session,
+        )
     whole_window_allowances = (
         whole_window_allowance_result.allowances
         if whole_window_allowance_result is not None
@@ -1224,6 +1292,27 @@ def extract_cells(
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
         "runs_root": str(runs_root),
         "manifest_id": manifest_id,
+        "consumption_semantics_id": (
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            if consumption_session.ready
+            else None
+        ),
+        "consumption_provenance": (
+            {
+                bundle_id: dict(provenance)
+                for bundle_id in sorted(referenced_bundle_ids)
+                if isinstance(
+                    (
+                        provenance := consumption_session.provenance_for(
+                            bundle_id
+                        )
+                    ),
+                    Mapping,
+                )
+            }
+            if consumption_session.ready
+            else None
+        ),
         "governance": {
             "d078_gate": (
                 "No claim-bearing floor or MDE may be published from corpora "
@@ -1252,11 +1341,18 @@ def extract_cells(
 
 
 def _whole_window_extraction_refusals(
-    runs_root: Path, referenced_bundle_ids: set[str]
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[str, ...]:
     """Consume a hash-bound verdict that covers every referenced bundle."""
 
-    return whole_window_refusal_reasons(runs_root, referenced_bundle_ids)
+    return whole_window_refusal_reasons(
+        runs_root,
+        referenced_bundle_ids,
+        consumption_session=consumption_session,
+    )
 
 
 def _spec_referenced_bundle_ids(cells: Sequence[Mapping[str, Any]]) -> set[str]:

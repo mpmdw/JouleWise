@@ -26,6 +26,7 @@ from scripts.run_campaign import (
 )
 from joulewise.environment import evaluate_environment_policy
 from joulewise.whole_window import (
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_DRIFT_BOUND_MAX_AGE_S,
     canonical_sha256,
 )
@@ -6861,6 +6862,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(
             verdict["evaluation_basis"]["schema_version"],
             "joulewise.idle_admission_evaluation_basis.v1",
+        )
+        self.assertEqual(
+            verdict["evaluation_basis"]["consumption_semantics_id"],
+            MINTED_CONSUMPTION_SEMANTICS_ID,
         )
 
     def test_duplicate_occurrence_without_supersession_still_refuses(self) -> None:
