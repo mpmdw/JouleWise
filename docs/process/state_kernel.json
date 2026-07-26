@@ -1011,15 +1011,25 @@
         "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
         "path": "docs/decision_log.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "sequencing: both modify floor_extraction.py; widened envelopes feed the labelled floor",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CAL-REBRACKET-01"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "D-054 floor semantics / closed-registry amendment rule",
+            "label": "D-078 clause 11 (Ed-ratified 2026-07-25)",
             "path": "docs/decision_log.md"
           },
-          "rule": "No code change to the dominating-uncertainty gate before Ed ratifies the D-078 amendment; the registry channel is mandatory."
+          "rule": "Every artifact publishing an attribution-limited floor must state the single-count discipline explicitly: effective clearable effect = floor + claim-side bound (~5 J for phase contrasts); neither term may later be removed as an apparent double count."
         }
       ],
       "flags": [],
@@ -1028,8 +1038,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 45,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25. D-054 defines the floor as a practical prediction bound on FALSE OBSERVED EFFECTS, not a repeatability statistic; the corner-widened maximum satisfies that definition. GATE: Ed ratifies the amendment first — do not soften the gate in code before ratification.",
+      "status": "blocked",
+      "status_note": "Minted 2026-07-25. GATE DISCHARGED same day: Ed ratified the D-078 clause-11 amendment, so the labelled claim path is now authorised. Implements floor_source labelling, retains the point floor as the repeatability diagnostic, and carries the single-count statement into every publishing artifact. Sequenced AFTER CAL-REBRACKET-01 merges (both modify floor_extraction.py and the widened envelopes are the input to the labelled floor).",
       "stop_card": null
     },
     "FLOOR-WORKLOAD-SIZING-01": {
