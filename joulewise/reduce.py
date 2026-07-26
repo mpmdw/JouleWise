@@ -1725,6 +1725,7 @@ def _derive_anchor_context(
     strict_calibration: bool = True,
     reducer_version: str,
     authenticated_fiducial_bound_override_s: float | None = None,
+    instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> _AnchorContext:
     """Re-derive the D-078 censored-intersection anchor from primary evidence.
 
@@ -1803,6 +1804,7 @@ def _derive_anchor_context(
             metadata,
             calibration,
             strict_physics=strict_calibration,
+            physics_cache=instrument_calibration_physics_cache,
         )
         if detail is not None:
             stable = (
@@ -2607,6 +2609,7 @@ def reduce_bundle(
     *,
     reducer_version: str | None = None,
     _authenticated_fiducial_bound_override_s: float | None = None,
+    _instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> SummaryMetrics | SummaryMetricsV060:
     """Reduce the bundle at ``path`` to a :class:`SummaryMetrics`.
 
@@ -2656,6 +2659,9 @@ def reduce_bundle(
                 authenticated_fiducial_bound_override_s=(
                     _authenticated_fiducial_bound_override_s
                 ),
+                instrument_calibration_physics_cache=(
+                    _instrument_calibration_physics_cache
+                ),
             )
         return _reduce(
             reader,
@@ -2665,6 +2671,9 @@ def reduce_bundle(
             reducer_version=reducer_version,
             authenticated_fiducial_bound_override_s=(
                 _authenticated_fiducial_bound_override_s
+            ),
+            instrument_calibration_physics_cache=(
+                _instrument_calibration_physics_cache
             ),
         )
     except (_ReduceError, BundleReadError, OverflowError) as exc:
@@ -2687,6 +2696,7 @@ def _rederive_summary_for_authenticated_fiducial_bound(
     path: Path,
     *,
     authenticated_fiducial_bound_s: float,
+    _instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Re-run the mint reducer in memory under one authenticated wider bound.
 
@@ -2709,6 +2719,9 @@ def _rederive_summary_for_authenticated_fiducial_bound(
         Path(path),
         _authenticated_fiducial_bound_override_s=float(
             authenticated_fiducial_bound_s
+        ),
+        _instrument_calibration_physics_cache=(
+            _instrument_calibration_physics_cache
         ),
     ).to_dict()
 
@@ -2866,6 +2879,7 @@ def _reduce_v060(
     *,
     reducer_version: str = AXI_FROZEN_REDUCER_VERSION,
     authenticated_fiducial_bound_override_s: float | None = None,
+    instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> SummaryMetricsV060:
     evidence_problems = axi_v2_validation_problems(
         reader,
@@ -2898,6 +2912,9 @@ def _reduce_v060(
             reducer_version=reducer_version,
             authenticated_fiducial_bound_override_s=(
                 authenticated_fiducial_bound_override_s
+            ),
+            instrument_calibration_physics_cache=(
+                instrument_calibration_physics_cache
             ),
         )
         if not anchor_ctx.telemetry_is_powermetrics:
@@ -3435,6 +3452,7 @@ def _reduce(
     *,
     reducer_version: str,
     authenticated_fiducial_bound_override_s: float | None = None,
+    instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> SummaryMetrics:
     window = reader.measured_window()
     if window is None:
@@ -3460,6 +3478,9 @@ def _reduce(
             reducer_version=reducer_version,
             authenticated_fiducial_bound_override_s=(
                 authenticated_fiducial_bound_override_s
+            ),
+            instrument_calibration_physics_cache=(
+                instrument_calibration_physics_cache
             ),
         )
         if not anchor_ctx.telemetry_is_powermetrics:

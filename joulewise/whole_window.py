@@ -228,6 +228,10 @@ class AuthenticatedConsumptionSession:
         self._preparation_identity: tuple[tuple[str, str], ...] | None = None
         self._summaries: dict[str, Mapping[str, Any]] = {}
         self._provenance: dict[str, Mapping[str, Any]] = {}
+        self._row_validation_results: dict[
+            tuple[str, tuple[str, ...]],
+            tuple[bool, tuple[str, ...]],
+        ] = {}
 
     @property
     def ready(self) -> bool:
@@ -380,6 +384,7 @@ class AuthenticatedConsumptionSession:
                         _rederive_summary_for_authenticated_fiducial_bound(
                             path,
                             authenticated_fiducial_bound_s=operative_bound,
+                            _instrument_calibration_physics_cache=physics_cache,
                         )
                     )
                 except (
@@ -3152,6 +3157,9 @@ def _row_consumption_semantics_id(row: Mapping[str, Any]) -> str:
 def _consumption_provenance_valid(
     basis: Mapping[str, Any],
     occurrences: Sequence[Mapping[str, Any]],
+    *,
+    runs_root: Path,
+    consumption_session: AuthenticatedConsumptionSession | None,
 ) -> bool:
     semantics_id = basis.get(
         "consumption_semantics_id",
@@ -3164,21 +3172,109 @@ def _consumption_provenance_valid(
         provenance, Mapping
     ):
         return False
+    session_ready = (
+        consumption_session is not None
+        and consumption_session.ready
+        and Path(runs_root) == consumption_session.runs_root
+    )
     occurrence_ids = {
         value.get("bundle_id")
         for value in occurrences
         if isinstance(value.get("bundle_id"), str)
     }
-    if set(provenance) != occurrence_ids:
+    occurrences_by_id = {
+        value.get("bundle_id"): value
+        for value in occurrences
+        if isinstance(value, Mapping)
+        and isinstance(value.get("bundle_id"), str)
+    }
+    if (
+        len(occurrence_ids) != len(occurrences)
+        or len(occurrences_by_id) != len(occurrences)
+        or set(provenance) != occurrence_ids
+        or (
+            session_ready
+            and occurrence_ids
+            != set(consumption_session.referenced_bundle_ids)
+        )
+    ):
         return False
     bracket_set = basis.get("calibration_bracket_set")
-    if not isinstance(bracket_set, Mapping):
+    authenticated_bracket = (
+        consumption_session.calibration_bracket
+        if session_ready
+        else bracket_set
+    )
+    if (
+        not isinstance(bracket_set, Mapping)
+        or not isinstance(authenticated_bracket, Mapping)
+        or (
+            session_ready
+            and {
+                "pre": bracket_set.get("pre"),
+                "post": bracket_set.get("post"),
+            }
+            != {
+                "pre": authenticated_bracket.get("pre"),
+                "post": authenticated_bracket.get("post"),
+            }
+        )
+    ):
         return False
+    pre_bound = _finite_number(
+        (
+            authenticated_bracket.get("pre") or {}
+        ).get("b_fiducial_s")
+        if isinstance(authenticated_bracket.get("pre"), Mapping)
+        else None
+    )
+    post_bound = _finite_number(
+        (
+            authenticated_bracket.get("post") or {}
+        ).get("b_fiducial_s")
+        if isinstance(authenticated_bracket.get("post"), Mapping)
+        else None
+    )
+    persisted_bracket_max = (
+        max(pre_bound, post_bound)
+        if pre_bound is not None and post_bound is not None
+        else None
+    )
+    authenticated_operative = _finite_number(
+        consumption_session.operative_fiducial_bound_s
+        if session_ready
+        else persisted_bracket_max
+    )
+    if (
+        pre_bound is None
+        or pre_bound < 0.0
+        or post_bound is None
+        or post_bound < 0.0
+        or authenticated_operative is None
+        or not math.isclose(
+            authenticated_operative,
+            max(pre_bound, post_bound),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+    ):
+        return False
+    root = Path(runs_root).resolve()
     for bundle_id in sorted(occurrence_ids):
         record = provenance.get(bundle_id)
+        expected_record = (
+            consumption_session.provenance_for(bundle_id)
+            if session_ready
+            else record
+        )
         if not isinstance(record, Mapping) or record.get(
             "consumption_semantics_id"
         ) != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+            return False
+        if (
+            not isinstance(expected_record, Mapping)
+            or dict(record) != dict(expected_record)
+        ):
             return False
         dominated = record.get("minted_bound_dominated")
         minted = _finite_number(record.get("minted_fiducial_bound_s"))
@@ -3190,6 +3286,12 @@ def _consumption_provenance_valid(
             or minted is None
             or minted < 0.0
             or operative is None
+            or not math.isclose(
+                operative,
+                authenticated_operative,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
             or operative < minted - 1e-12
             or dominated != (operative > minted + 1e-12)
             or not isinstance(calibration, Mapping)
@@ -3226,11 +3328,31 @@ def _consumption_provenance_valid(
             for pointer, envelope in envelopes.items()
         ):
             return False
+        occurrence_path = _safe_source_path(
+            root, occurrences_by_id[bundle_id].get("bundle_path")
+        )
+        minted_summary = (
+            _read_json_object(occurrence_path / "summary_metrics.json")
+            if occurrence_path is not None
+            else None
+        )
+        minted_envelopes = (
+            minted_summary.get("energy_anchor_shift_envelopes")
+            if isinstance(minted_summary, Mapping)
+            else None
+        )
+        if not isinstance(minted_envelopes, Mapping) or set(envelopes) != set(
+            minted_envelopes
+        ):
+            return False
     return True
 
 
 def _validated_evaluation_basis(
-    row: Mapping[str, Any], runs_root: Path
+    row: Mapping[str, Any],
+    runs_root: Path,
+    *,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> Mapping[str, Any] | None:
     basis = row.get("evaluation_basis")
     if not isinstance(basis, Mapping):
@@ -3267,7 +3389,12 @@ def _validated_evaluation_basis(
         or not isinstance(occurrences, list)
         or not occurrences
         or bracket_set != expected_bracket_set
-        or not _consumption_provenance_valid(basis, occurrences)
+        or not _consumption_provenance_valid(
+            basis,
+            occurrences,
+            runs_root=runs_root,
+            consumption_session=consumption_session,
+        )
     ):
         return None
     ids: list[str] = []
@@ -3432,9 +3559,59 @@ def _validate_row(
     *,
     consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
+    """Authenticate a verdict row once per collection-scoped session."""
+
+    cache_key: tuple[str, tuple[str, ...]] | None = None
+    if (
+        consumption_session is not None
+        and Path(runs_root) == consumption_session.runs_root
+        and frozenset(referenced)
+        == consumption_session.referenced_bundle_ids
+    ):
+        try:
+            cache_key = (
+                canonical_sha256(row),
+                tuple(sorted(referenced)),
+            )
+        except (TypeError, ValueError):
+            cache_key = None
+        if (
+            cache_key is not None
+            and consumption_session.ready
+            and cache_key in consumption_session._row_validation_results
+        ):
+            return consumption_session._row_validation_results[cache_key]
+
+    result = _validate_row_uncached(
+        row,
+        runs_root,
+        referenced,
+        consumption_session=consumption_session,
+    )
+    if (
+        cache_key is not None
+        and result[0]
+        and consumption_session is not None
+        and consumption_session.ready
+    ):
+        consumption_session._row_validation_results[cache_key] = result
+    return result
+
+
+def _validate_row_uncached(
+    row: Mapping[str, Any],
+    runs_root: Path,
+    referenced: set[str],
+    *,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
+) -> tuple[bool, tuple[str, ...]]:
     reasons: set[str] = set()
     basis_present = "evaluation_basis" in row
-    basis = _validated_evaluation_basis(row, runs_root)
+    basis = _validated_evaluation_basis(
+        row,
+        runs_root,
+        consumption_session=consumption_session,
+    )
     if basis_present and basis is None:
         reasons.add("whole_window_verdict_provenance_invalid")
     if row.get("schema_version") != WHOLE_WINDOW_SCHEMA:
@@ -3571,6 +3748,21 @@ def _validate_row(
                 consumption_session=consumption_session,
             )
         )
+    if (
+        row_semantics == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        and (
+            basis is None
+            or consumption_session is None
+            or not consumption_session.ready
+            or not _consumption_provenance_valid(
+                basis,
+                basis.get("member_occurrences", []),
+                runs_root=runs_root,
+                consumption_session=consumption_session,
+            )
+        )
+    ):
+        reasons.add("whole_window_verdict_provenance_invalid")
 
     if isinstance(core, Mapping):
         bracket = core.get("neg8_bracket")
@@ -3990,14 +4182,44 @@ def whole_window_drift_allowances(
     basis_rows = [
         row for row in rows if isinstance(row.get("evaluation_basis"), Mapping)
     ]
+    if basis_rows:
+        selected_basis_rows: list[Mapping[str, Any]] = []
+        for row in basis_rows:
+            basis = row["evaluation_basis"]
+            occurrences = basis.get("member_occurrences")
+            ids = (
+                {
+                    item.get("bundle_id")
+                    for item in occurrences
+                    if isinstance(item, Mapping)
+                    and isinstance(item.get("bundle_id"), str)
+                }
+                if isinstance(occurrences, list)
+                else set()
+            )
+            if evaluation_basis_sha256 is not None:
+                selected = (
+                    basis.get("sha256") == evaluation_basis_sha256
+                    and referenced_bundle_ids.issubset(ids)
+                )
+            else:
+                selected = ids == referenced_bundle_ids
+            if selected:
+                selected_basis_rows.append(row)
+    else:
+        selected_basis_rows = []
     semantic_rows = [
         row
-        for row in (basis_rows or rows)
+        for row in (selected_basis_rows or (rows if not basis_rows else []))
         if _row_consumption_semantics_id(row)
         == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
     ]
     candidates: list[Mapping[str, Any]] = []
-    for row in semantic_rows or basis_rows or rows:
+    for row in (
+        semantic_rows
+        or selected_basis_rows
+        or (rows if not basis_rows else [])
+    ):
         basis = row.get("evaluation_basis")
         if isinstance(basis, Mapping):
             occurrences = basis.get("member_occurrences")
