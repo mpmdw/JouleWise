@@ -753,6 +753,28 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(request)
         self.assertEqual(request.condition_family_id, condition_id)
         self.assertEqual(request.stack_identity_sha256, group["stack_identity_sha256"])
+        for invalid_class in (
+            None,
+            "joulewise.detection_floor_extraction.v1",
+        ):
+            noncanonical = json.loads(json.dumps(artifact))
+            if invalid_class is None:
+                noncanonical.pop("schema_version")
+            else:
+                noncanonical.update(
+                    schema_version=invalid_class,
+                    artifact_class="extraction_report",
+                    claim_bearing=False,
+                )
+            self.assertIsNone(
+                floor_request_for_evidence(
+                    noncanonical,
+                    binding,
+                    contrast,
+                    condition_id,
+                    evidence,
+                )
+            )
 
     def test_named_strata_manifest_preserves_terminal_mock_refusal(self):
         with tempfile.TemporaryDirectory() as tmp:

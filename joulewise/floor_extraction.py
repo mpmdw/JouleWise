@@ -1,7 +1,9 @@
 """Fail-closed detection-floor extraction gates (2026-07-19 audit T0.4/T0.6).
 
-This module is the prospective, claim-bearing extraction path for D-054
-detection-floor cells.  It composes ONLY existing governed primitives:
+This module produces a governed, non-claim-bearing extraction report for D-054
+detection-floor cells.  A separate canonical mint is required before any
+report can license a claim.  Extraction composes ONLY existing governed
+primitives:
 
 * the hash-verified campaign cooldown join
   (:func:`joulewise.analysis_engine.inputs.campaign_cooldown_evidence`) —
@@ -98,6 +100,7 @@ from joulewise.environment_admission import (
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
     "EXTRACTION_SPEC_SCHEMA_VERSION",
+    "EXTRACTION_ARTIFACT_CLASS",
     "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
     "ANCHOR_FALLBACK_MEMBER_REFUSAL",
     "CELL_REFUSAL_CODES",
@@ -118,6 +121,7 @@ __all__ = [
 
 EXTRACTION_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
 EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
+EXTRACTION_ARTIFACT_CLASS = "extraction_report"
 
 # The only implemented cap-hit disposition.  A governed drift-term retention
 # path exists on paper (docs/phase_2/detection_floor.md) but has no governed
@@ -296,8 +300,40 @@ class CellReport:
     refusal_reasons: tuple[str, ...]
     floor: FloorEstimate | None
     anchor_shift_bound_max_j: float | None
+    absolute_admissible_half_widths_j: tuple[float, ...] = ()
+    block_admissible_half_widths_j: tuple[float, ...] = ()
     whole_window_drift_allowance: Mapping[str, Any] | None = None
     point_floor_diagnostic: FloorEstimate | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse a guarded report that cannot seed the future governed mint."""
+
+        if self.floor is None or self.floor.guarded_floor_j is None:
+            return
+        widths = (
+            self.absolute_admissible_half_widths_j
+            if self.kind == "absolute"
+            else self.block_admissible_half_widths_j
+            if self.kind == "comparative"
+            else ()
+        )
+        if len(widths) == self.floor.n and all(
+            not isinstance(width, bool)
+            and isinstance(width, (int, float))
+            and math.isfinite(float(width))
+            and float(width) > 0.0
+            for width in widths
+        ):
+            return
+        field = (
+            "absolute_admissible_half_widths_j"
+            if self.kind == "absolute"
+            else "block_admissible_half_widths_j"
+        )
+        raise FloorExtractionError(
+            f"{self.cell_id}: guarded extraction requires {field} to contain "
+            f"exactly {self.floor.n} positive finite values"
+        )
 
     @property
     def floor_conditions(self) -> tuple[str, ...]:
@@ -395,6 +431,14 @@ class CellReport:
             "anchor_shift_bound_max_j": self.anchor_shift_bound_max_j,
             "members": [member.as_row() for member in self.members],
         }
+        if self.kind == "absolute":
+            row["absolute_admissible_half_widths_j"] = list(
+                self.absolute_admissible_half_widths_j
+            )
+        elif self.kind == "comparative":
+            row["block_admissible_half_widths_j"] = list(
+                self.block_admissible_half_widths_j
+            )
         if self.floor_conditions:
             row["floor_conditions"] = list(self.floor_conditions)
         if self.floor_conditions and self.floor is not None:
@@ -877,6 +921,7 @@ def extract_absolute_cell(
 
     floor: FloorEstimate | None = None
     anchor_max: float | None = None
+    absolute_half_widths: list[float] = []
     if not refusals:
         if len(admitted) < 2:
             refusals.append("insufficient_members_after_exclusion")
@@ -890,6 +935,7 @@ def extract_absolute_cell(
             anchor_max = max(anchor_values) if anchor_values else None
             values = [member.value_j for member in admitted]  # type: ignore[list-item]
             widths = [member.anchor_shift_bound_j for member in admitted]
+            absolute_half_widths = [float(width) for width in widths]  # type: ignore[arg-type]
             point_floor = absolute_false_effect_floor(values)
             if (
                 len(values) > MAX_EXACT_ADMISSIBLE_CORNER_N
@@ -934,6 +980,7 @@ def extract_absolute_cell(
             else None
         ),
         anchor_shift_bound_max_j=anchor_max,
+        absolute_admissible_half_widths_j=tuple(absolute_half_widths),
         point_floor_diagnostic=point_floor if attribution_limited else None,
     )
 
@@ -1102,6 +1149,7 @@ def extract_comparative_cell(
             else None
         ),
         anchor_shift_bound_max_j=anchor_max,
+        block_admissible_half_widths_j=tuple(block_half_widths),
         point_floor_diagnostic=point_floor if attribution_limited else None,
     )
 
@@ -1320,6 +1368,8 @@ def extract_cells(
 
     result = {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
+        "artifact_class": EXTRACTION_ARTIFACT_CLASS,
+        "claim_bearing": False,
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
         "runs_root": str(runs_root),
         "manifest_id": manifest_id,

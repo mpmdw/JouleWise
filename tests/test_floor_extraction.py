@@ -23,7 +23,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
+from joulewise.analysis_engine.artifact import validate_claim_verdicts
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    FloorRequest,
+    campaign_cooldown_evidence,
+    is_canonical_claim_bearing_floor_artifact,
+    load_floor_artifact,
+    resolve_floor,
+    unavailable_floor_resolution,
+)
 from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
@@ -35,6 +44,8 @@ from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     CELL_LABELLED_CONDITION_CODES,
     CELL_REFUSAL_CODES,
+    EXTRACTION_ARTIFACT_CLASS,
+    EXTRACTION_SCHEMA_VERSION,
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
     LEGACY_THROUGHPUT_FIELD,
@@ -1960,6 +1971,10 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         self.assertTrue(report.extractable)
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 3.0 - 1e-12)
+        self.assertEqual(
+            report.as_row()["block_admissible_half_widths_j"],
+            [1.0] * 5,
+        )
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
@@ -2176,6 +2191,58 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertFalse((Path(tmp) / "report.json").exists())
 
+    def test_guarded_cell_without_positive_widths_fails_producer_and_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp) / "runs"
+            runs_root.mkdir()
+            bundle_ids = [f"widthless-r{index}" for index in range(5)]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for index, bundle_id in enumerate(bundle_ids):
+                write_bundle(
+                    runs_root,
+                    bundle_id,
+                    make_summary(40.0 + 0.1 * index, anchor_bound=0.0),
+                )
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "B1-WIDTHLESS-GUARDED",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": bundle_id, "bundle_id": bundle_id}
+                            for bundle_id in bundle_ids
+                        ],
+                    }
+                ],
+            }
+            with self.assertRaisesRegex(
+                FloorExtractionError,
+                "positive finite values",
+            ):
+                extract_cells(runs_root, spec)
+
+            spec_path = Path(tmp) / "spec.json"
+            spec_path.write_text(json.dumps(spec), encoding="utf-8")
+            out_path = Path(tmp) / "report.json"
+            stderr = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
+                code = extract_main(
+                    [
+                        "--runs-root",
+                        str(runs_root),
+                        "--spec",
+                        str(spec_path),
+                        "--out",
+                        str(out_path),
+                    ]
+                )
+            self.assertNotEqual(code, 0)
+            self.assertIn("positive finite values", stderr.getvalue())
+            self.assertFalse(out_path.exists())
+
     def test_spec_extraction_via_extract_cells_matches_direct_calls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)
@@ -2207,8 +2274,9 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             self.assertEqual(report["cells"][0], direct.as_row())
 
     def test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction(self) -> None:
-        # Defect shape F2: identical point estimates cannot erase their
-        # nonzero admissible energy-set width.
+        # B1 counterexample: guarded n=5, attribution-limited, and positive
+        # source widths. The report preserves those widths but is never a
+        # claim licence.
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)
             bundle_ids = [f"z-r{index}" for index in range(5)]
@@ -2241,6 +2309,16 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                     ],
                 },
             )
+            extraction_path = Path(tmp) / "extraction-report.json"
+            extraction_path.write_text(
+                json.dumps(extraction_artifact, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "artifact class",
+            ):
+                load_floor_artifact(extraction_path)
         self.assertTrue(report.extractable)
         self.assertIn(
             "admissible_set_uncertainty_dominates_point_floor",
@@ -2250,6 +2328,10 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 0.01)
         self.assertTrue(math.isfinite(report.floor.guarded_floor_j))
         row = report.as_row()
+        self.assertEqual(
+            row["absolute_admissible_half_widths_j"],
+            [0.01] * 5,
+        )
         self.assertEqual(row["refusal_reasons"], [])
         self.assertEqual(
             row["floor_conditions"],
@@ -2272,6 +2354,43 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             extraction_artifact["single_count_discipline"],
             attribution_single_count_discipline(),
         )
+        self.assertEqual(
+            extraction_artifact["schema_version"],
+            EXTRACTION_SCHEMA_VERSION,
+        )
+        self.assertEqual(
+            extraction_artifact["artifact_class"],
+            EXTRACTION_ARTIFACT_CLASS,
+        )
+        self.assertIs(extraction_artifact["claim_bearing"], False)
+        self.assertEqual(
+            extraction_artifact["cells"][0][
+                "absolute_admissible_half_widths_j"
+            ],
+            [0.01] * 5,
+        )
+        self.assertFalse(
+            is_canonical_claim_bearing_floor_artifact(extraction_artifact)
+        )
+        request = FloorRequest(
+            backend="powermetrics",
+            metric="gross_energy_j",
+            window_class="request",
+            condition_family_id="counterexample",
+            condition_family_sha256="a" * 64,
+            stack_identity_sha256="b" * 64,
+            consumer_stress={},
+        )
+        for resolution in (
+            resolve_floor(extraction_artifact, "c" * 64, request),
+            unavailable_floor_resolution(extraction_artifact, "c" * 64),
+        ):
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("artifact_schema_invalid",),
+            )
+        self.assertTrue(validate_claim_verdicts(extraction_artifact))
         self.assertGreater(
             row["operative_floor_j"],
             row["point_floor_diagnostic"]["guarded_floor_j"],

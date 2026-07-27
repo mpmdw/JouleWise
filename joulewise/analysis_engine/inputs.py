@@ -24,6 +24,7 @@ from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    SCHEMA_VERSION as CANONICAL_CLAIM_BEARING_FLOOR_CLASS,
     STACK_IDENTITY_DOMAIN,
     TRANSPORT_RULE_ID,
     attribution_single_count_discipline,
@@ -98,6 +99,23 @@ CLAIM_BEARING_ANCHOR_SHIFT_ENVELOPE_METHOD = (
 ANCHOR_SHIFT_BOUND_TERM = "E_clock_anchor_shift_bound_j"
 ANCHOR_FALLBACK_MEMBER_REFUSAL = "anchor_fallback_member_unusable"
 MOCK_TELEMETRY_CLAIM_REFUSAL = "mock_telemetry_claim_ineligible"
+
+
+def is_canonical_claim_bearing_floor_artifact(
+    artifact: Mapping[str, Any],
+) -> bool:
+    """Return whether the artifact carries the one claim-licensing class marker.
+
+    The exact canonical floor schema version is the class marker. Extraction
+    reports, absent markers, and unknown future classes all refuse; structural
+    validation and per-cell readiness remain separate additional gates.
+    """
+
+    return (
+        isinstance(artifact, Mapping)
+        and artifact.get("schema_version")
+        == CANONICAL_CLAIM_BEARING_FLOOR_CLASS
+    )
 
 
 def _nested_contains(value: object, target: str) -> bool:
@@ -405,6 +423,11 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
 
 def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
     value, raw = _load_json_object(path, "floor artifact")
+    if not is_canonical_claim_bearing_floor_artifact(value):
+        raise AnalysisInputError(
+            "invalid floor artifact: artifact class must be "
+            f"{CANONICAL_CLAIM_BEARING_FLOOR_CLASS!r}"
+        )
     errors = validate_floor_artifact(value)
     if errors:
         raise AnalysisInputError("invalid floor artifact: " + "; ".join(errors))
@@ -789,7 +812,14 @@ def bind_floor_artifact_evidence(
 
     floor_path = Path(floor_path)
     runs_root = Path(runs_root)
-    global_problems = list(_campaign_order_binding_problems(artifact, floor_path, runs_root))
+    global_problems = []
+    if not is_canonical_claim_bearing_floor_artifact(artifact):
+        global_problems.append(
+            "artifact_schema_invalid: floor artifact class is absent or unknown"
+        )
+    global_problems.extend(
+        _campaign_order_binding_problems(artifact, floor_path, runs_root)
+    )
     bound_ids: set[str] = set()
     identities: dict[str, str] = {}
     stack_hashes: dict[str, str] = {}
@@ -2491,6 +2521,8 @@ def floor_request_for_evidence(
 ) -> FloorRequest | None:
     """Build the production typed request from independently bound evidence."""
 
+    if not is_canonical_claim_bearing_floor_artifact(artifact):
+        return None
     if not evidence:
         return None
     backends = {
@@ -2625,6 +2657,8 @@ def resolve_floor(
     """
 
     preflight_reasons: list[str] = []
+    if not is_canonical_claim_bearing_floor_artifact(artifact):
+        preflight_reasons.append("artifact_schema_invalid")
     if artifact.get("calibration_scope") == "smoke":
         preflight_reasons.append("cell_not_claim_ready")
     if request.metric == "energy_request_j":
@@ -2922,6 +2956,11 @@ def unavailable_floor_resolution(
 ) -> FloorResolution:
     """Fail closed when no exact declared-input row or private seam resolves."""
 
+    reason = (
+        "consumer_term_unknown"
+        if is_canonical_claim_bearing_floor_artifact(artifact)
+        else "artifact_schema_invalid"
+    )
     return FloorResolution(
         status="refused",
         artifact_id=str(artifact.get("artifact_id", "")),
@@ -2932,7 +2971,7 @@ def unavailable_floor_resolution(
         floor_abs_j=None,
         floor_cmp_j=None,
         floor_gate_j=None,
-        reason_codes=("consumer_term_unknown",),
+        reason_codes=(reason,),
     )
 
 
@@ -2947,6 +2986,7 @@ __all__ = [
     "LoadedAnalysisInputs",
     "deterministic_bounds",
     "governed_stochastic_variance",
+    "is_canonical_claim_bearing_floor_artifact",
     "load_analysis_inputs",
     "load_floor_artifact",
     "load_manifest",

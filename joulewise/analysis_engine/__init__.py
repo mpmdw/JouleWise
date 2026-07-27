@@ -35,6 +35,7 @@ from .inputs import (
     floor_binding_reason_codes,
     floor_request_for_evidence,
     governed_stochastic_variance,
+    is_canonical_claim_bearing_floor_artifact,
     load_analysis_inputs,
     metric_value,
     resolve_floor,
@@ -428,6 +429,8 @@ def _prepare_contrast(
     block_rows: list[dict[str, Any]] = []
     observation_parts: list[dict[str, Any]] = []
     global_reasons: list[str] = []
+    if not is_canonical_claim_bearing_floor_artifact(inputs.floor_artifact):
+        global_reasons.append("floor_artifact_invalid")
     included_by_condition: dict[str, list[BundleEvidence]] = {
         contrast["condition_a_id"]: [],
         contrast["condition_b_id"]: [],

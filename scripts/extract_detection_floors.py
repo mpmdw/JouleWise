@@ -6,10 +6,12 @@ spec, writing a ``joulewise.detection_floor_extraction.v1`` report.
 
 Exit codes:
 
-* ``0`` — every cell extracted under all governed gates;
+* ``0`` — every cell extracted under all governed gates and every guarded
+  cell preserved its positive finite admissible half-widths;
 * ``1`` — the report was written but at least one cell refused (fail-closed
   evidence refusals are recorded per member/cell, never silently dropped);
-* ``2`` — process-input error (bad spec, bad paths); no report is written.
+* ``2`` — process-input or producer-validation error (bad spec, bad paths,
+  incomplete guarded cell); no report is written.
 
 Per D-078, corpora recorded before the trace-time-anchor fix refuse
 mechanically (their wires cannot carry anchor-shift envelopes); this tool

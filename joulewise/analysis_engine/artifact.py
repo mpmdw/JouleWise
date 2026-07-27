@@ -31,6 +31,8 @@ from .sensitivity import influence_triggers
 
 SCHEMA_VERSION = "joulewise.claim_verdicts.v1"
 ALGORITHM_VERSION = "1"
+CANONICAL_FLOOR_RESOLUTION_POLICY = "declared_exact_bundle_config_floor_v1"
+PRIVATE_TEST_SEAM_POLICY_PREFIX = "private_test_seam:"
 ID_RE = re.compile(r"^cv-[0-9a-f]{64}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -817,6 +819,16 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                     errors.append(
                         f"artifact.engine.policy_identity.{key_name}: must be nonempty"
                     )
+            floor_policy = policy.get("floor_resolution")
+            if (
+                isinstance(floor_policy, str)
+                and floor_policy != CANONICAL_FLOOR_RESOLUTION_POLICY
+                and not floor_policy.startswith(PRIVATE_TEST_SEAM_POLICY_PREFIX)
+            ):
+                errors.append(
+                    "artifact.engine.policy_identity.floor_resolution: "
+                    "absent or unknown claim-licensing class"
+                )
 
     inputs = value.get("inputs")
     if _exact_keys(inputs, _INPUT_KEYS, "artifact.inputs", errors):

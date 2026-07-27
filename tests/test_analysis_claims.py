@@ -1543,6 +1543,19 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(ambiguous.status, "refused")
         self.assertEqual(ambiguous.reason_codes, ("transport_group_incomplete",))
 
+        for marker in (None, "joulewise.unknown_floor_artifact.v1"):
+            malformed_class = copy.deepcopy(artifact)
+            if marker is None:
+                malformed_class.pop("schema_version")
+            else:
+                malformed_class["schema_version"] = marker
+            class_refusal = resolve_floor(malformed_class, HEX, request)
+            self.assertEqual(class_refusal.status, "refused")
+            self.assertEqual(
+                class_refusal.reason_codes,
+                ("artifact_schema_invalid",),
+            )
+
     def test_engine_consumes_corner_widened_guarded_floor(self):
         cell = make_cell(
             energies=[0.0, 1.0, -1.0, 0.0, 0.0],
@@ -2165,6 +2178,11 @@ class ClaimArtifactTests(unittest.TestCase):
             "not_a_reason"
         ]
         mutants.append(bad_reason)
+        unknown_floor_class = copy.deepcopy(artifact)
+        unknown_floor_class["engine"]["policy_identity"][
+            "floor_resolution"
+        ] = "unknown_floor_resolution"
+        mutants.append(unknown_floor_class)
         for mutant in mutants:
             mutant["claim_verdicts_id"] = calculate_claim_verdicts_id(mutant)
             with self.subTest(mutant=mutants.index(mutant)):
