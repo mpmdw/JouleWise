@@ -556,6 +556,7 @@ def make_cell(
     deltas=None,
     regime=None,
     condition="cf-1",
+    metric="gross_energy_j",
     absolute_half_widths=None,
     comparative_half_widths=None,
     whole_window_drift_allowance=None,
@@ -610,7 +611,7 @@ def make_cell(
         cell_id=cell_id,
         key={
             "backend": "powermetrics",
-            "metric": "energy_wall_j",
+            "metric": metric,
             "window_class": "request",
             **condition_family(condition),
         },
@@ -647,7 +648,7 @@ def make_artifact(cells=None):
     group = build_transport_group(
         transport_group_id="tg-1",
         backend="powermetrics",
-        metric="energy_wall_j",
+        metric=cells[0]["key"]["metric"],
         window_class="request",
         stack_identity=cells[0]["source_regime"]["stack_identity"],
         source_cells=cells,
@@ -659,10 +660,14 @@ def make_artifact(cells=None):
     return build_floor_artifact(
         artifact_id="floor-artifact-test-1",
         calibration_scope="smoke",
+        source_class="synthetic",
         provenance={
             "calibration_plan": {"plan_id": "plan-1", "sha256": HEX_A},
             "order_manifest": {"manifest_id": "manifest-1", "sha256": HEX_A},
             "campaign_log": {"sha256": HEX_A},
+            "extraction_report_sha256": HEX_B,
+            "extraction_spec_sha256": HEX_C,
+            "mint_tool_version": "joulewise.floor_mint.v1",
             "implementation": {
                 "project_commit": "0" * 40,
                 "project_tree_state": "clean",
@@ -678,8 +683,123 @@ class TestArtifactEmitValidate(unittest.TestCase):
     def test_valid_artifact_passes_and_round_trips(self):
         artifact = make_artifact()
         self.assertEqual(validate_floor_artifact(artifact), [])
+        self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_source_class_is_closed_data_vocabulary(self):
+        for source_class in ("prospective", "retrospective", "synthetic"):
+            artifact = make_artifact()
+            artifact["source_class"] = source_class
+            self.assertEqual(validate_floor_artifact(artifact), [])
+
+        artifact = make_artifact()
+        artifact["source_class"] = "claim_eligible"
+        self.assert_invalid(artifact, "invalid source_class")
+
+        artifact = make_artifact()
+        del artifact["source_class"]
+        self.assert_invalid(artifact, "missing key 'source_class'")
+
+    def test_provenance_precondition_pins_are_structurally_validated(self):
+        mutations = (
+            (
+                lambda provenance: provenance["calibration_plan"].__setitem__(
+                    "plan_id", ""
+                ),
+                "calibration_plan.plan_id: must be a nonempty string",
+            ),
+            (
+                lambda provenance: provenance["calibration_plan"].__setitem__(
+                    "sha256", "short"
+                ),
+                "calibration_plan.sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance["order_manifest"].__setitem__(
+                    "manifest_id", ""
+                ),
+                "order_manifest.manifest_id: must be a nonempty string",
+            ),
+            (
+                lambda provenance: provenance["order_manifest"].__setitem__(
+                    "sha256", HEX_A.upper()
+                ),
+                "order_manifest.sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance["campaign_log"].__setitem__(
+                    "sha256", "short"
+                ),
+                "campaign_log.sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance.pop("extraction_report_sha256"),
+                "missing key 'extraction_report_sha256'",
+            ),
+            (
+                lambda provenance: provenance.__setitem__(
+                    "extraction_report_sha256", HEX_A.upper()
+                ),
+                "extraction_report_sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance.__setitem__(
+                    "extraction_spec_sha256", "short"
+                ),
+                "extraction_spec_sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance.__setitem__("mint_tool_version", " "),
+                "mint_tool_version: must be a nonempty string",
+            ),
+            (
+                lambda provenance: provenance["implementation"].__setitem__(
+                    "project_commit", "0" * 39
+                ),
+                "project_commit: must be 40 lowercase hex chars",
+            ),
+            (
+                lambda provenance: provenance["implementation"].__setitem__(
+                    "project_tree_state", "unknown"
+                ),
+                "project_tree_state: must be 'clean' or 'dirty'",
+            ),
+            (
+                lambda provenance: provenance["implementation"].__setitem__(
+                    "python_package", "other"
+                ),
+                "python_package: must be 'joulewise'",
+            ),
+        )
+        for mutate, expected in mutations:
+            with self.subTest(expected=expected):
+                artifact = make_artifact()
+                mutate(artifact["provenance"])
+                self.assert_invalid(artifact, expected)
+
+    def test_canonical_metric_vocabulary_rejects_unresolvable_typo(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["key"]["metric"] = "gross_energy_j_typo"
+        self.assert_invalid(artifact, "invalid metric")
+
+    def test_widened_floor_fields_are_required_even_when_widths_are_zero(self):
+        zero_width_artifact = make_artifact()
+        for record_name in ("absolute", "comparative"):
+            record = zero_width_artifact["cells"][0][record_name]
+            expected_n = record["n"] if record_name == "absolute" else record["n_blocks"]
+            self.assertEqual(record["admissible_half_widths_j"], [0.0] * expected_n)
+
+        for record_name in ("absolute", "comparative"):
+            for field in (
+                "admissible_half_widths_j",
+                "corner_widened_unguarded_floor_j",
+                "corner_widened_guarded_floor_j",
+            ):
+                with self.subTest(record=record_name, field=field):
+                    artifact = make_artifact()
+                    del artifact["cells"][0][record_name][field]
+                    self.assert_invalid(artifact, f"missing key {field!r}")
 
     def test_widened_floor_record_round_trips_and_rejects_tampering(self):
         cell = make_cell(
@@ -755,6 +875,9 @@ class TestArtifactEmitValidate(unittest.TestCase):
 
     def test_non_dominating_widened_cell_keeps_frozen_bytes(self):
         cell = make_cell(
+            # Historical noncanonical label retained only for this byte pin.
+            # This cell is deliberately not passed to artifact validation.
+            metric="energy_wall_j",
             absolute_half_widths=[0.001] * len(FIXTURE_A_ENERGIES),
             comparative_half_widths=[0.001] * len(FIXTURE_B_DELTAS),
         )
@@ -1306,7 +1429,7 @@ def make_consumer(**overrides):
     family = condition_family("cf-2")
     consumer = {
         "backend": "powermetrics",
-        "metric": "energy_wall_j",
+        "metric": "gross_energy_j",
         "window_class": "request",
         "stack_identity_sha256": canonical_domain_sha256(
             STACK_IDENTITY_DOMAIN, stack

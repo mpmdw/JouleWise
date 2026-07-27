@@ -1891,6 +1891,18 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         self.assertIsNone(report.floor.guard_factor)
         assert report.point_floor_diagnostic is not None
         row = report.as_row()
+        self.assertEqual(
+            row["floor"]["admissible_half_widths_j"],
+            [0.02, 0.02],
+        )
+        self.assertEqual(
+            row["floor"]["corner_widened_unguarded_floor_j"],
+            report.floor.corner_widened_unguarded_floor_j,
+        )
+        self.assertEqual(
+            row["floor"]["corner_widened_guarded_floor_j"],
+            report.floor.corner_widened_guarded_floor_j,
+        )
         self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
         self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
         self.assertEqual(

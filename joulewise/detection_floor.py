@@ -86,6 +86,18 @@ _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
 _CALIBRATION_SCOPES = ("window_a", "window_b_revalidation", "smoke")
 _WINDOW_CLASSES = ("request", "phase", "item", "level", "session")
+_METRICS = (
+    "gross_energy_j",
+    "energy_request_j",
+    "idle_subtracted_energy_j",
+    "phase_energy_j.prefill",
+    "phase_energy_j.decode",
+)
+# DATA FOR A FUTURE GATE, NOT ENFORCEMENT: source_class records how the
+# artifact's source evidence was obtained, but it does not make that evidence
+# claim-eligible. The enforcement counterpart is a separate registered task:
+# claims.evaluate_claim must take a required, non-defaulting source_class.
+_SOURCE_CLASSES = ("prospective", "retrospective", "synthetic")
 _USE_ROLES = ("primary_claim_gate", "smoke_only", "staleness_sentinel")
 _STATUSES = ("claim_ready", "smoke_only", "incomplete", "stale")
 _APPLICABILITIES = ("required", "not_applicable", "unknown")
@@ -929,6 +941,7 @@ def build_floor_artifact(
     provenance: Mapping,
     cells: Sequence[Mapping],
     transport_groups: Sequence[Mapping],
+    source_class: str = "synthetic",
     idle_drift_guard: Optional[Mapping] = None,
 ) -> dict:
     if idle_drift_guard is None:
@@ -965,6 +978,7 @@ def build_floor_artifact(
         "schema_version": SCHEMA_VERSION,
         "artifact_id": artifact_id,
         "calibration_scope": calibration_scope,
+        "source_class": source_class,
         "method": build_method_block(),
         "provenance": dict(provenance),
         "idle_drift_guard": dict(idle_drift_guard),
@@ -981,6 +995,7 @@ _TOP_KEYS = {
     "schema_version",
     "artifact_id",
     "calibration_scope",
+    "source_class",
     "method",
     "provenance",
     "idle_drift_guard",
@@ -1009,6 +1024,11 @@ _KEY_KEYS = {
     "condition_family_sha256",
 }
 _ELIGIBILITY_KEYS = {"use_role", "minimum_claim_n", "status", "claim_usable", "reason_codes"}
+_WIDENED_FLOOR_KEYS = {
+    "admissible_half_widths_j",
+    "corner_widened_unguarded_floor_j",
+    "corner_widened_guarded_floor_j",
+}
 _ABS_KEYS = {
     "n",
     "mean_j",
@@ -1021,7 +1041,7 @@ _ABS_KEYS = {
     "guard_factor",
     "guarded_floor_j",
     "bundle_observations",
-}
+} | _WIDENED_FLOOR_KEYS
 _CMP_KEYS = {
     "n_blocks",
     "mean_delta_j",
@@ -1034,12 +1054,7 @@ _CMP_KEYS = {
     "guard_factor",
     "guarded_floor_j",
     "blocks",
-}
-_WIDENED_FLOOR_KEYS = {
-    "admissible_half_widths_j",
-    "corner_widened_unguarded_floor_j",
-    "corner_widened_guarded_floor_j",
-}
+} | _WIDENED_FLOOR_KEYS
 _DRIFT_WIDENED_FLOOR_KEYS = {
     "whole_window_drift_allowance",
     "drift_widened_unguarded_floor_j",
@@ -1094,6 +1109,23 @@ _MEMBER_KEYS = {
     "bundle_sha256",
     "config_sha256",
     "metric_value_j",
+}
+_PROVENANCE_KEYS = {
+    "calibration_plan",
+    "order_manifest",
+    "campaign_log",
+    "extraction_report_sha256",
+    "extraction_spec_sha256",
+    "mint_tool_version",
+    "implementation",
+}
+_CALIBRATION_PLAN_KEYS = {"plan_id", "sha256"}
+_ORDER_MANIFEST_KEYS = {"manifest_id", "sha256"}
+_CAMPAIGN_LOG_KEYS = {"sha256"}
+_IMPLEMENTATION_KEYS = {
+    "project_commit",
+    "project_tree_state",
+    "python_package",
 }
 _CELL_PROVENANCE_KEYS = {
     "absolute_calibration_cell_id",
@@ -1269,6 +1301,95 @@ def _validate_idle_drift_guard(guard, where, errors) -> None:
         errors.append(f"{where}.calibration_status: invalid status {status!r}")
 
 
+def _validate_provenance(provenance, where, errors) -> str | None:
+    if not _check_keys(provenance, _PROVENANCE_KEYS, where, errors):
+        return None
+
+    calibration_plan_sha256 = None
+    calibration_plan = provenance["calibration_plan"]
+    if _check_keys(
+        calibration_plan,
+        _CALIBRATION_PLAN_KEYS,
+        f"{where}.calibration_plan",
+        errors,
+    ):
+        if (
+            not isinstance(calibration_plan["plan_id"], str)
+            or not calibration_plan["plan_id"].strip()
+        ):
+            errors.append(
+                f"{where}.calibration_plan.plan_id: must be a nonempty string"
+            )
+        if not _is_hex(calibration_plan["sha256"]):
+            errors.append(
+                f"{where}.calibration_plan.sha256: must be 64 lowercase hex chars"
+            )
+        else:
+            calibration_plan_sha256 = calibration_plan["sha256"]
+
+    order_manifest = provenance["order_manifest"]
+    if _check_keys(
+        order_manifest,
+        _ORDER_MANIFEST_KEYS,
+        f"{where}.order_manifest",
+        errors,
+    ):
+        if (
+            not isinstance(order_manifest["manifest_id"], str)
+            or not order_manifest["manifest_id"].strip()
+        ):
+            errors.append(
+                f"{where}.order_manifest.manifest_id: must be a nonempty string"
+            )
+        if not _is_hex(order_manifest["sha256"]):
+            errors.append(
+                f"{where}.order_manifest.sha256: must be 64 lowercase hex chars"
+            )
+
+    campaign_log = provenance["campaign_log"]
+    if _check_keys(
+        campaign_log,
+        _CAMPAIGN_LOG_KEYS,
+        f"{where}.campaign_log",
+        errors,
+    ) and not _is_hex(campaign_log["sha256"]):
+        errors.append(
+            f"{where}.campaign_log.sha256: must be 64 lowercase hex chars"
+        )
+
+    for key in ("extraction_report_sha256", "extraction_spec_sha256"):
+        if not _is_hex(provenance[key]):
+            errors.append(f"{where}.{key}: must be 64 lowercase hex chars")
+    if (
+        not isinstance(provenance["mint_tool_version"], str)
+        or not provenance["mint_tool_version"].strip()
+    ):
+        errors.append(f"{where}.mint_tool_version: must be a nonempty string")
+
+    implementation = provenance["implementation"]
+    if _check_keys(
+        implementation,
+        _IMPLEMENTATION_KEYS,
+        f"{where}.implementation",
+        errors,
+    ):
+        if not _is_hex(implementation["project_commit"], length=40):
+            errors.append(
+                f"{where}.implementation.project_commit: "
+                "must be 40 lowercase hex chars"
+            )
+        if implementation["project_tree_state"] not in ("clean", "dirty"):
+            errors.append(
+                f"{where}.implementation.project_tree_state: "
+                "must be 'clean' or 'dirty'"
+            )
+        if implementation["python_package"] != "joulewise":
+            errors.append(
+                f"{where}.implementation.python_package: must be 'joulewise'"
+            )
+    return calibration_plan_sha256
+
+
 def _validate_estimate_math(
     record,
     where,
@@ -1282,53 +1403,49 @@ def _validate_estimate_math(
     n = len(deviations)
     est = _floor_estimate(kind, list(deviations), mean, prediction_extra)
     classified_estimate = est
-    present_widened_keys = set(record) & _WIDENED_FLOOR_KEYS
     widened_unguarded = est.unguarded_floor_j
     widened_guarded = est.guarded_floor_j
-    if present_widened_keys and present_widened_keys != _WIDENED_FLOOR_KEYS:
-        errors.append(f"{where}: widened floor fields must be present together")
-    elif present_widened_keys:
-        widths = record.get("admissible_half_widths_j")
-        if (
-            not isinstance(widths, list)
-            or len(widths) != n
-            or any(not _is_number(width) or width < 0.0 for width in widths)
-        ):
-            errors.append(
-                f"{where}: admissible_half_widths_j must contain n finite nonnegative numbers"
+    widths = record["admissible_half_widths_j"]
+    if (
+        not isinstance(widths, list)
+        or len(widths) != n
+        or any(not _is_number(width) or width < 0.0 for width in widths)
+    ):
+        errors.append(
+            f"{where}: admissible_half_widths_j must contain n finite nonnegative numbers"
+        )
+    else:
+        try:
+            corner_floor = _corner_maximized_unguarded_floor(
+                point_values, widths, kind=kind
             )
+        except (TypeError, ValueError) as exc:
+            errors.append(f"{where}: widened floor cannot be recomputed: {exc}")
         else:
-            try:
-                corner_floor = _corner_maximized_unguarded_floor(
-                    point_values, widths, kind=kind
+            widened_unguarded = max(est.unguarded_floor_j, corner_floor)
+            widened_guarded = (
+                est.guard_factor * widened_unguarded
+                if est.guard_factor is not None
+                else None
+            )
+            if not _close(
+                record["corner_widened_unguarded_floor_j"],
+                widened_unguarded,
+            ):
+                errors.append(
+                    f"{where}: stored corner_widened_unguarded_floor_j does not match full corner enumeration"
                 )
-            except (TypeError, ValueError) as exc:
-                errors.append(f"{where}: widened floor cannot be recomputed: {exc}")
-            else:
-                widened_unguarded = max(est.unguarded_floor_j, corner_floor)
-                widened_guarded = (
-                    est.guard_factor * widened_unguarded
-                    if est.guard_factor is not None
-                    else None
+            if not _close(
+                record["corner_widened_guarded_floor_j"], widened_guarded
+            ):
+                errors.append(
+                    f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
                 )
-                if not _close(
-                    record.get("corner_widened_unguarded_floor_j"),
-                    widened_unguarded,
-                ):
-                    errors.append(
-                        f"{where}: stored corner_widened_unguarded_floor_j does not match full corner enumeration"
-                    )
-                if not _close(
-                    record.get("corner_widened_guarded_floor_j"), widened_guarded
-                ):
-                    errors.append(
-                        f"{where}: stored corner_widened_guarded_floor_j does not match full corner enumeration"
-                    )
-                classified_estimate = _apply_admissible_set_guard(
-                    est,
-                    widened_unguarded,
-                    widths,
-                )
+            classified_estimate = _apply_admissible_set_guard(
+                est,
+                widened_unguarded,
+                widths,
+            )
     _validate_attribution_limit_metadata(
         record,
         classified_estimate,
@@ -1561,8 +1678,7 @@ def _validate_absolute(record, where, errors) -> None:
     if not _check_keys_with_optional(
         record,
         _ABS_KEYS,
-        _WIDENED_FLOOR_KEYS
-        | _DRIFT_WIDENED_FLOOR_KEYS
+        _DRIFT_WIDENED_FLOOR_KEYS
         | _WHOLE_WINDOW_BASIS_KEYS
         | _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
@@ -1637,8 +1753,7 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
-        _WIDENED_FLOOR_KEYS
-        | _DRIFT_WIDENED_FLOOR_KEYS
+        _DRIFT_WIDENED_FLOOR_KEYS
         | _WHOLE_WINDOW_BASIS_KEYS
         | _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
@@ -1764,6 +1879,8 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
         if cell["key"]["window_class"] not in _WINDOW_CLASSES:
             errors.append(f"{where}.key: invalid window_class")
+        if cell["key"]["metric"] not in _METRICS:
+            errors.append(f"{where}.key: invalid metric")
         _validate_condition_family(
             {
                 key: cell["key"][key]
@@ -2141,23 +2258,17 @@ def validate_floor_artifact(value: Mapping) -> list:
         errors.append(f"artifact: schema_version must be {SCHEMA_VERSION!r}")
     if value["calibration_scope"] not in _CALIBRATION_SCOPES:
         errors.append("artifact: invalid calibration_scope")
+    if value["source_class"] not in _SOURCE_CLASSES:
+        errors.append("artifact: invalid source_class")
     if not isinstance(value["artifact_id"], str) or not value["artifact_id"]:
         errors.append("artifact: artifact_id must be a nonempty string")
     if value["method"] != build_method_block():
         errors.append("artifact: method block does not match the canonical v1 method")
-    calibration_plan_sha256 = None
-    if not isinstance(value["provenance"], Mapping):
-        errors.append("artifact: provenance must be an object")
-    else:
-        calibration_plan = value["provenance"].get("calibration_plan")
-        if not isinstance(calibration_plan, Mapping):
-            errors.append("artifact.provenance.calibration_plan: must be an object")
-        elif not _is_hex(calibration_plan.get("sha256")):
-            errors.append(
-                "artifact.provenance.calibration_plan.sha256: must be 64 lowercase hex chars"
-            )
-        else:
-            calibration_plan_sha256 = calibration_plan["sha256"]
+    calibration_plan_sha256 = _validate_provenance(
+        value["provenance"],
+        "artifact.provenance",
+        errors,
+    )
     _validate_idle_drift_guard(value["idle_drift_guard"], "artifact.idle_drift_guard", errors)
 
     cells = value["cells"]
