@@ -100,6 +100,48 @@ Desk checks on data already on disk, run BEFORE collection:
 - **Two consecutive same-signature member failures → stop the night**, write the
   handoff, fall back to desk work. No third attempt on the same signature.
 
+## 5a. OUTCOME (appended after the checks ran, before collection)
+
+**H1 KILLED. H3 KILLED. H2 CONFIRMED.** Window B and window C do not share a cause.
+
+Fiducial decomposition (`joulewise/powermetrics_fiducial.py:884`,
+`b = max pulse-edge residual + effective trace-anchor bound`):
+
+| term | pre | post | Δ | share |
+|---|---:|---:|---:|---:|
+| pulse-edge onset residual | 33.2366 ms | 22.4335 ms | +10.8031 | **93.28%** |
+| effective anchor bound | 2.1992 | 1.4209 | +0.7783 | 6.72% |
+| wall-minus-monotonic term | 0.8469 | 1.0483 | **−0.2015** | opposite sign |
+
+Large wall-clock adjustments DID occur inside window B (interval rates −160.69,
+−109.63, +100.09 ppm; max step 40.09 ms; max rate 244.98 ppm) — but **neither
+overlapped a calibration**. Pre-calibration: +0.844 ms over 197.97 s, +4.26 ppm,
+no step > 0.028 ms. Post: +1.047 ms over 198.48 s, +5.28 ppm, no step > 0.035 ms.
+
+H3 was falsified separately by the bracket population: the 7 prior passing
+brackets drifted 0.167–2.901 ms (median 1.69), and `instrument_calibration_mismatch`
+had **never fired** before window B. Lead independently confirmed both by grep and
+by enumerating all 22 valid calibrations; B's pre (35.436 ms) is the corpus maximum.
+The competing "21% of pairs exceed the gate" figure was computed over ADJACENT
+CALIBRATIONS ACROSS THE WHOLE CORPUS, including cross-campaign pairs, which is the
+wrong population — brackets are pre/post within one campaign. That figure is void.
+
+**Decision taken: window C then window D tonight. Window B deferred.** Clock
+controls apply to C only. B's dominant term is fiducial onset-residual
+repeatability (thermal vs dispatch fraction UNKNOWN) and no mitigation for it
+exists yet; re-collecting B tonight would test a hypothesis already killed.
+
+### Note on the pre-registration itself
+
+The §4 criterion was imperfectly specified. It asked whether the fiducial is
+"monotonic-only" (binary) and whether the wall−monotonic series is "flat".
+Neither held literally — the fiducial IS wall-sensitive, and the series was NOT
+flat. Read literally, the §5 rule would not have fired. What actually decided it
+was the FRACTIONAL attribution: the wall term contributed −0.20 ms against a
++11.58 ms failure. Recorded here rather than silently reinterpreted: a
+pre-registered criterion should be stated as an attribution fraction, not a
+binary, and future pre-registrations in this project should follow that form.
+
 ## 6. Open, not blocking
 
 The identity of the clock adjuster is unproven (`clock_sync.status` is
