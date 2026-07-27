@@ -22,7 +22,10 @@ from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
 from .estimators import tost_p_value
 from .multiplicity import adjust_p_values
-from .ratio import validate_ratio_estimand
+from .ratio import (
+    ratio_floor_diagnostic_collision_source_ids,
+    validate_ratio_estimand,
+)
 from .sensitivity import influence_triggers
 
 
@@ -2041,6 +2044,30 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                     )
             else:
                 errors.append(f"{where}.floor.status: invalid")
+
+        if (
+            isinstance(metric, Mapping)
+            and metric.get("ratio_estimand") is not None
+        ):
+            collision_source_ids = (
+                ratio_floor_diagnostic_collision_source_ids(floor)
+                if isinstance(floor, Mapping)
+                else ()
+            )
+            evaluation_reasons = (
+                evaluation.get("reason_codes")
+                if isinstance(evaluation, Mapping)
+                else None
+            )
+            if collision_source_ids and (
+                not isinstance(evaluation_reasons, list)
+                or "ratio_floor_conversion_undefined"
+                not in evaluation_reasons
+            ):
+                errors.append(
+                    f"{where}.claim_evaluation.reason_codes: ratio diagnostic "
+                    "collision requires ratio_floor_conversion_undefined"
+                )
 
         multiplicity_evidence = contrast["multiplicity"]
         if _exact_keys(
