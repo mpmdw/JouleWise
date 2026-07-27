@@ -970,26 +970,34 @@ class InputSeamTests(unittest.TestCase):
         source_diagnostics = {
             "C1": {"absolute": copy.deepcopy(leaf)}
         }
-        floor = {
-            "status": "resolved",
-            "floor_abs_j": 0.8,
-            "floor_cmp_j": 0.8,
-            "active_floor_j": 0.8,
-            "point_floor_diagnostics": copy.deepcopy(source_diagnostics),
-            "resolutions": [
-                {
-                    "status": "transported",
-                    "source_cell_ids": ["C1"],
-                    "floor_abs_j": 0.4,
-                    "floor_cmp_j": 0.4,
-                    "floor_gate_j": 0.4,
-                    "point_floor_diagnostics": copy.deepcopy(
+        floor = _combined_floor(
+            tuple(
+                FloorResolution(
+                    status="transported",
+                    artifact_id="df",
+                    artifact_sha256=HEX,
+                    source_cell_ids=("C1",),
+                    transport_group_id="tg-1",
+                    transport_rule_id=(
+                        "same_stack_componentwise_worst_case.v1"
+                    ),
+                    floor_abs_j=0.4,
+                    floor_cmp_j=0.4,
+                    floor_gate_j=0.4,
+                    reason_codes=(),
+                    floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                    floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                    point_floor_diagnostics=copy.deepcopy(
                         source_diagnostics
                     ),
-                }
+                    single_count_discipline=(
+                        attribution_single_count_discipline()
+                    ),
+                )
                 for _ in range(2)
-            ],
-        }
+            )
+        )
+        self.assertEqual(floor["active_floor_j"], 0.4)
 
         converted, reasons = convert_floor_to_ratio_units(
             metric,
@@ -998,74 +1006,84 @@ class InputSeamTests(unittest.TestCase):
         )
 
         self.assertEqual(reasons, ("ratio_floor_conversion_undefined",))
-        self.assertEqual(converted, floor)
+        self.assertEqual(converted["floor_abs_j"], 0.006)
+        self.assertEqual(converted["floor_cmp_j"], 0.006)
+        self.assertEqual(converted["active_floor_j"], 0.006)
+        self.assertEqual(
+            [
+                resolution["floor_gate_j"]
+                for resolution in converted["resolutions"]
+            ],
+            [0.004, 0.002],
+        )
+        self.assertEqual(
+            converted["point_floor_diagnostics"],
+            {
+                "C1": {
+                    "condition_a": {
+                        "absolute": {
+                            **leaf,
+                            "unguarded_floor_j": 0.004,
+                            "guarded_floor_j": 0.006,
+                        }
+                    },
+                    "condition_b": {
+                        "absolute": {
+                            **leaf,
+                            "unguarded_floor_j": 0.002,
+                            "guarded_floor_j": 0.003,
+                        }
+                    },
+                }
+            },
+        )
+        self.assertEqual(floor["active_floor_j"], 0.4)
 
         artifact = minimal_artifact()
         contrast = artifact["contrasts"][0]
         contrast["metric"]["unit"] = "J/token"
         contrast["metric"]["ratio_estimand"] = metric["ratio_estimand"]
+        contrast["floor"] = converted
+        contrast["claim_evaluation"] = evaluate_claim(
+            estimate=contrast["estimator"]["estimate"],
+            metrology_aware_ci95=contrast["estimator"][
+                "metrology_aware_CI95"
+            ],
+            decision_interval=contrast["deterministic_bounds"][
+                "decision_interval"
+            ],
+            floor_gate_j=converted["active_floor_j"],
+            adjusted_rejected=contrast["multiplicity"]["rejected"],
+            base_reason_codes=reasons,
+            floor_metadata={
+                "floor_source": converted["floor_source"],
+                "floor_limit_class": converted["floor_limit_class"],
+                "point_floor_diagnostics": converted[
+                    "point_floor_diagnostics"
+                ],
+                "single_count_discipline": converted[
+                    "single_count_discipline"
+                ],
+            },
+        )
+        self.assertEqual(
+            contrast["claim_evaluation"]["outcome"],
+            "not_resolvable",
+        )
+        self.assertFalse(
+            contrast["claim_evaluation"]["claim_ready_for_l2_l3"]
+        )
 
-        def scaled_diagnostics(factor):
-            scaled = copy.deepcopy(source_diagnostics)
-            scaled["C1"]["absolute"]["unguarded_floor_j"] *= factor
-            scaled["C1"]["absolute"]["guarded_floor_j"] *= factor
-            return scaled
+        published = finalize_claim_verdicts(artifact)
 
-        scaled_a = scaled_diagnostics(0.01)
-        scaled_b = scaled_diagnostics(0.005)
-        resolutions = []
-        for factor, diagnostics in (
-            (0.01, scaled_a),
-            (0.005, scaled_b),
-        ):
-            resolutions.append(
-                {
-                    "status": "transported",
-                    "source_cell_ids": ["C1"],
-                    "transport_group_id": "tg-1",
-                    "transport_rule_id": "same_stack_componentwise_worst_case.v1",
-                    "floor_abs_j": 0.4 * factor,
-                    "floor_cmp_j": 0.4 * factor,
-                    "floor_gate_j": 0.4 * factor,
-                    "reason_codes": [],
-                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
-                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
-                    "point_floor_diagnostics": diagnostics,
-                    "single_count_discipline": (
-                        attribution_single_count_discipline()
-                    ),
-                }
-            )
-        contrast["floor"] = {
-            "status": "resolved",
-            "floor_row_ids": ["C1"],
-            "floor_abs_j": 0.006,
-            "floor_cmp_j": 0.006,
-            "active_floor_j": 0.006,
-            "transport_verdict": "transported",
-            "resolutions": resolutions,
-            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
-            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
-            "point_floor_diagnostics": scaled_b,
-            "single_count_discipline": attribution_single_count_discipline(),
-        }
-        contrast["claim_evaluation"]["floor_limit"] = {
-            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
-            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
-            "published_floor_j": 0.006,
-            "point_floor_diagnostics": scaled_b,
-            "single_count_discipline": attribution_single_count_discipline(),
-        }
-        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
-
-        errors = validate_claim_verdicts(artifact)
-        self.assertTrue(
-            any(
-                "transported resolutions conflict for source cell 'C1'"
-                in error
-                for error in errors
-            ),
-            errors,
+        self.assertEqual(validate_claim_verdicts(published), [])
+        self.assertEqual(
+            published["contrasts"][0]["floor"]["active_floor_j"],
+            0.006,
+        )
+        self.assertEqual(
+            published["contrasts"][0]["claim_evaluation"]["reason_codes"],
+            ["ratio_floor_conversion_undefined"],
         )
 
     def test_loo_floor_resolution_receives_only_retained_physical_blocks(self):

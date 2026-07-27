@@ -729,11 +729,11 @@ class TestArtifactEmitValidate(unittest.TestCase):
                         errors,
                     )
 
-    def test_zero_repeatability_uses_other_operative_bound_and_smoke_stays_readable(self):
+    def test_zero_repeatability_refuses_claim_bearing_even_with_allowance_but_permits_smoke(self):
         allowance = whole_window_allowance(
-            value=1.0,
+            value=1.1e-12,
             observed=0.0,
-            derived=1.0,
+            derived=1.1e-12,
         )
         cell = make_cell(
             energies=[50.0] * 5,
@@ -744,15 +744,25 @@ class TestArtifactEmitValidate(unittest.TestCase):
         )
         artifact = make_artifact([cell])
 
-        self.assertEqual(cell["floor_abs_j"], 1.0)
-        self.assertEqual(cell["floor_cmp_j"], 1.0)
-        self.assertEqual(validate_floor_artifact(artifact), [])
+        self.assertEqual(cell["floor_abs_j"], 1.1e-12)
+        self.assertEqual(cell["floor_cmp_j"], 1.1e-12)
+        errors = validate_floor_artifact(artifact)
+        for component in ("absolute", "comparative"):
+            self.assertTrue(
+                any(
+                    f"cells[0].{component}: instrument_calibration_invalid:"
+                    in error
+                    for error in errors
+                ),
+                errors,
+            )
 
         smoke_cell = make_cell(
             energies=[50.0] * 5,
             deltas=[0.0] * 5,
             absolute_half_widths=[0.0] * 5,
             comparative_half_widths=[0.0] * 5,
+            whole_window_drift_allowance=allowance,
         )
         smoke_cell["eligibility"].update(
             use_role="smoke_only",

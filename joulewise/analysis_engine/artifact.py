@@ -1686,7 +1686,7 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             resolution_abs: list[float] = []
             resolution_cmp: list[float] = []
             resolution_gates: list[float] = []
-            limited_resolutions: list[Mapping[str, Any]] = []
+            limited_resolutions: list[tuple[int, Mapping[str, Any]]] = []
             if not isinstance(resolutions, list) or not resolutions:
                 errors.append(f"{where}.floor.resolutions: must be a nonempty array")
             else:
@@ -1758,7 +1758,9 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                                 f"{resolution_where}: attribution metadata requires a usable resolution"
                             )
                         else:
-                            limited_resolutions.append(resolution)
+                            limited_resolutions.append(
+                                (resolution_index, resolution)
+                            )
                     if status in {"exact", "transported"}:
                         if not source_ids:
                             errors.append(
@@ -1838,8 +1840,10 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         f"{where}.floor",
                         errors,
                     )
-                    expected_diagnostics: dict[str, Any] = {}
-                    for resolution in limited_resolutions:
+                    diagnostics_by_source: dict[
+                        str, list[tuple[int, Any]]
+                    ] = {}
+                    for resolution_index, resolution in limited_resolutions:
                         source_ids = resolution.get("source_cell_ids")
                         source_diagnostics = resolution.get(
                             "point_floor_diagnostics"
@@ -1852,21 +1856,46 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             for source_cell_id, diagnostic in (
                                 source_diagnostics.items()
                             ):
-                                if (
-                                    source_cell_id in expected_diagnostics
-                                    and expected_diagnostics[source_cell_id]
-                                    != diagnostic
-                                ):
-                                    errors.append(
-                                        f"{where}.floor.point_floor_diagnostics: transported resolutions conflict for source cell {source_cell_id!r}"
+                                if isinstance(source_cell_id, str):
+                                    diagnostics_by_source.setdefault(
+                                        source_cell_id, []
+                                    ).append(
+                                        (resolution_index, diagnostic)
                                     )
-                                expected_diagnostics[source_cell_id] = diagnostic
                         else:
                             for source_cell_id in source_ids:
                                 if isinstance(source_cell_id, str):
-                                    expected_diagnostics[source_cell_id] = (
-                                        source_diagnostics
+                                    diagnostics_by_source.setdefault(
+                                        source_cell_id, []
+                                    ).append(
+                                        (resolution_index, source_diagnostics)
                                     )
+                    expected_diagnostics: dict[str, Any] = {}
+                    ratio_floor = (
+                        isinstance(metric, Mapping)
+                        and metric.get("ratio_estimand") is not None
+                    )
+                    condition_labels = ("condition_a", "condition_b")
+                    for source_cell_id, entries in diagnostics_by_source.items():
+                        first = entries[0][1]
+                        if all(
+                            diagnostic == first
+                            for _, diagnostic in entries[1:]
+                        ):
+                            expected_diagnostics[source_cell_id] = first
+                        elif ratio_floor and all(
+                            index < len(condition_labels)
+                            for index, _ in entries
+                        ):
+                            expected_diagnostics[source_cell_id] = {
+                                condition_labels[index]: diagnostic
+                                for index, diagnostic in entries
+                            }
+                        else:
+                            errors.append(
+                                f"{where}.floor.point_floor_diagnostics: transported resolutions conflict for source cell {source_cell_id!r}"
+                            )
+                            expected_diagnostics[source_cell_id] = entries[-1][1]
                     if floor.get("point_floor_diagnostics") != (
                         expected_diagnostics
                     ):

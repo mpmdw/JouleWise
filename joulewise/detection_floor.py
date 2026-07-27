@@ -1550,21 +1550,11 @@ def _validate_physical_floor_evidence(
     )
     if not (widths_absent or widths_all_zero):
         return
-    operative_floor = record.get(
-        "drift_widened_guarded_floor_j",
-        record.get(
-            "corner_widened_guarded_floor_j",
-            record.get("guarded_floor_j"),
-        ),
-    )
-    if _is_number(operative_floor) and not _close(operative_floor, 0.0):
-        return
     # Exact-zero repeatability with no nonzero member uncertainty cannot
-    # support a claim when no other operative bound keeps the published floor
-    # away from zero. This instrument's measured repeatability is ~0.29-0.49 J
-    # on ~50 J points; a floor many orders below that is a
-    # serialization/degenerate-fixture defect, not a measurement. Smoke and
-    # replay-only records remain readable because they cannot license claims.
+    # describe physical claim-bearing evidence. A whole-window allowance can
+    # widen the operative floor, but it cannot turn impossible scatter into a
+    # legitimate instrument observation. Smoke and replay-only records remain
+    # readable because they cannot license claims.
     errors.append(
         f"{where}: instrument_calibration_invalid: degenerate deviations with "
         "absent or all-zero admissible_half_widths_j cannot support a physical "
