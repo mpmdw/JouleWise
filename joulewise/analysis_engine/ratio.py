@@ -42,6 +42,54 @@ RATIO_ESTIMAND_KEYS = frozenset(
     }
 )
 RATIO_FORMS = frozenset({"mean_of_request_ratios", "ratio_of_totals"})
+_RATIO_DIAGNOSTIC_CONDITIONS = ("condition_a", "condition_b")
+
+
+def ratio_floor_diagnostic_collision_source_ids(
+    floor: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Return source IDs whose published ratio diagnostics collide by condition."""
+
+    collisions: set[str] = set()
+    published = floor.get("point_floor_diagnostics")
+    if isinstance(published, Mapping):
+        for source_id, diagnostic in published.items():
+            if (
+                isinstance(source_id, str)
+                and isinstance(diagnostic, Mapping)
+                and set(diagnostic) == set(_RATIO_DIAGNOSTIC_CONDITIONS)
+            ):
+                collisions.add(source_id)
+
+    diagnostics_by_source: dict[str, list[Any]] = {}
+    resolutions = floor.get("resolutions")
+    if not isinstance(resolutions, list):
+        return tuple(sorted(collisions))
+    for resolution in resolutions:
+        if not isinstance(resolution, Mapping):
+            continue
+        source_ids = resolution.get("source_cell_ids")
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if not isinstance(source_ids, list) or not isinstance(
+            diagnostics, Mapping
+        ):
+            continue
+        if resolution.get("status") == "transported":
+            for source_id, diagnostic in diagnostics.items():
+                if isinstance(source_id, str):
+                    diagnostics_by_source.setdefault(source_id, []).append(
+                        diagnostic
+                    )
+        elif resolution.get("status") == "exact":
+            for source_id in source_ids:
+                if isinstance(source_id, str):
+                    diagnostics_by_source.setdefault(source_id, []).append(
+                        diagnostics
+                    )
+    for source_id, entries in diagnostics_by_source.items():
+        if any(diagnostic != entries[0] for diagnostic in entries[1:]):
+            collisions.add(source_id)
+    return tuple(sorted(collisions))
 
 
 def convert_floor_to_ratio_units(
@@ -98,7 +146,7 @@ def convert_floor_to_ratio_units(
     diagnostics_by_source: dict[str, list[tuple[str, Any]]] = {}
     diagnostic_scales: dict[str, float] = {}
     colliding_source_ids: set[str] = set()
-    condition_labels = ("condition_a", "condition_b")
+    condition_labels = _RATIO_DIAGNOSTIC_CONDITIONS
     for resolution, factor, condition_label in zip(
         resolutions, factors, condition_labels, strict=True
     ):
@@ -193,7 +241,10 @@ def convert_floor_to_ratio_units(
     if published_diagnostics is not None:
         for source_id, entries in diagnostics_by_source.items():
             first = entries[0][1]
-            if all(diagnostic == first for _, diagnostic in entries[1:]):
+            if (
+                source_id not in colliding_source_ids
+                and all(diagnostic == first for _, diagnostic in entries[1:])
+            ):
                 published_diagnostics[source_id] = first
                 continue
             # One transported source can serve both conditions even though
@@ -524,6 +575,7 @@ __all__ = [
     "convert_floor_to_ratio_units",
     "estimate_manifest_observations",
     "estimation_metric",
+    "ratio_floor_diagnostic_collision_source_ids",
     "ratio_collection_evidence_reasons",
     "ratio_evidence_reasons",
     "ratio_observation_from_evidence",

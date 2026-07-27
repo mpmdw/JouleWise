@@ -1379,7 +1379,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             absolute = build_absolute_record(
                 absolute_false_effect_floor(
-                    [row["metric_value_j"] for row in observations]
+                    [row["metric_value_j"] for row in observations],
+                    admissible_half_widths_j=[5e-324] * len(observations),
                 ),
                 observations,
                 whole_window_drift_allowance=drift_allowance,
@@ -1409,7 +1410,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     }
                 )
             comparative = build_comparative_record(
-                comparative_false_effect_floor([block["delta_j"] for block in blocks]),
+                comparative_false_effect_floor(
+                    [block["delta_j"] for block in blocks],
+                    admissible_half_widths_j=[5e-324] * len(blocks),
+                ),
                 blocks,
                 whole_window_drift_allowance=drift_allowance,
             )
@@ -1583,7 +1587,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
             changed_cell["comparative"] = build_comparative_record(
                 comparative_false_effect_floor(
-                    [block["delta_j"] for block in changed_blocks]
+                    [block["delta_j"] for block in changed_blocks],
+                    admissible_half_widths_j=[5e-324] * len(changed_blocks),
                 ),
                 changed_blocks,
                 whole_window_drift_allowance=changed_cell["comparative"][
@@ -1724,7 +1729,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
             observation["metric_value_j"] += 1.0
         fabricated_cell["absolute"] = build_absolute_record(
             absolute_false_effect_floor(
-                [observation["metric_value_j"] for observation in fake_observations]
+                [observation["metric_value_j"] for observation in fake_observations],
+                admissible_half_widths_j=[5e-324] * len(fake_observations),
             ),
             fake_observations,
             whole_window_drift_allowance=fabricated_cell["absolute"][

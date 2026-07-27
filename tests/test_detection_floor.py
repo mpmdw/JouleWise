@@ -571,6 +571,10 @@ def make_cell(
         )
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
+    if absolute_half_widths is None:
+        absolute_half_widths = [5e-324] * len(energies)
+    if comparative_half_widths is None:
+        comparative_half_widths = [5e-324] * len(deltas)
     abs_est = absolute_false_effect_floor(
         energies, admissible_half_widths_j=absolute_half_widths
     )
@@ -702,10 +706,15 @@ class TestArtifactEmitValidate(unittest.TestCase):
         ).encode("utf-8")
         self.assertEqual(after, before)
 
-    def test_degenerate_floor_with_absent_or_zero_widths_refuses(self):
-        for width_shape in ("absent", "all_zero"):
+    def test_claim_bearing_floor_requires_present_strictly_positive_widths(self):
+        for width_shape in ("absent", "empty", "all_zero", "contains_zero"):
             with self.subTest(width_shape=width_shape):
-                cell = make_cell(energies=[0.0] * 5, deltas=[0.0] * 5)
+                cell = make_cell(
+                    energies=[0.0] * 5,
+                    deltas=[0.0] * 5,
+                    absolute_half_widths=[0.0] * 5,
+                    comparative_half_widths=[0.0] * 5,
+                )
                 artifact = make_artifact([cell])
                 self.assertEqual(cell["floor_gate_j"], 5e-324)
                 if width_shape == "absent":
@@ -716,6 +725,18 @@ class TestArtifactEmitValidate(unittest.TestCase):
                             "corner_widened_guarded_floor_j",
                         ):
                             cell[component].pop(field)
+                elif width_shape == "empty":
+                    for component in ("absolute", "comparative"):
+                        cell[component]["admissible_half_widths_j"] = []
+                elif width_shape == "contains_zero":
+                    for component in ("absolute", "comparative"):
+                        cell[component]["admissible_half_widths_j"] = [
+                            0.01,
+                            0.01,
+                            0.0,
+                            0.01,
+                            0.01,
+                        ]
 
                 errors = validate_floor_artifact(artifact)
 
@@ -728,6 +749,35 @@ class TestArtifactEmitValidate(unittest.TestCase):
                         ),
                         errors,
                     )
+
+    def test_nonzero_scatter_cannot_bypass_nonpositive_width_refusal(self):
+        next_50 = math.nextafter(50.0, math.inf)
+        allowance = whole_window_allowance(
+            value=1.1e-12,
+            observed=0.0,
+            derived=1.1e-12,
+        )
+        cell = make_cell(
+            energies=[50.0, 50.0, 50.0, 50.0, next_50],
+            deltas=[0.0, 0.0, 0.0, 0.0, math.ulp(100.0)],
+            absolute_half_widths=[0.0] * 5,
+            comparative_half_widths=[0.0] * 5,
+            whole_window_drift_allowance=allowance,
+        )
+        self.assertTrue(any(value != 0.0 for value in cell["absolute"]["residuals_j"]))
+        self.assertTrue(any(value != 0.0 for value in cell["comparative"]["block_deltas_j"]))
+
+        errors = validate_floor_artifact(make_artifact([cell]))
+
+        for component in ("absolute", "comparative"):
+            self.assertTrue(
+                any(
+                    f"cells[0].{component}: instrument_calibration_invalid:"
+                    in error
+                    for error in errors
+                ),
+                errors,
+            )
 
     def test_zero_repeatability_refuses_claim_bearing_even_with_allowance_but_permits_smoke(self):
         allowance = whole_window_allowance(

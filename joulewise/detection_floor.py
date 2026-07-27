@@ -1527,9 +1527,8 @@ def _validate_attribution_limit_metadata(
         )
 
 
-def _validate_physical_floor_evidence(
+def _validate_claim_bearing_widths(
     record,
-    deviations,
     where,
     errors,
     *,
@@ -1537,28 +1536,18 @@ def _validate_physical_floor_evidence(
 ) -> None:
     if not claim_bearing:
         return
-    if len(deviations) < GUARD_MINIMUM_N or not all(
-        deviation == 0.0 for deviation in deviations
-    ):
-        return
     widths = record.get("admissible_half_widths_j")
-    widths_absent = widths is None
-    widths_all_zero = (
+    widths_present_and_positive = (
         isinstance(widths, list)
         and bool(widths)
-        and all(_is_number(width) and width == 0.0 for width in widths)
+        and all(_is_number(width) and width > 0.0 for width in widths)
     )
-    if not (widths_absent or widths_all_zero):
+    if widths_present_and_positive:
         return
-    # Exact-zero repeatability with no nonzero member uncertainty cannot
-    # describe physical claim-bearing evidence. A whole-window allowance can
-    # widen the operative floor, but it cannot turn impossible scatter into a
-    # legitimate instrument observation. Smoke and replay-only records remain
-    # readable because they cannot license claims.
     errors.append(
-        f"{where}: instrument_calibration_invalid: degenerate deviations with "
-        "absent or all-zero admissible_half_widths_j cannot support a physical "
-        "detection floor"
+        f"{where}: instrument_calibration_invalid: claim-bearing detection "
+        "floors require a nonempty admissible_half_widths_j array containing "
+        "only strictly positive values"
     )
 
 
@@ -1656,9 +1645,8 @@ def _validate_absolute(record, where, errors, *, claim_bearing) -> None:
         errors.append(f"{where}: stored max_abs_residual_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_residual_j"]):
         errors.append(f"{where}: max_abs_residual_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_physical_floor_evidence(
+    _validate_claim_bearing_widths(
         record,
-        expected_residuals,
         where,
         errors,
         claim_bearing=claim_bearing,
@@ -1789,9 +1777,8 @@ def _validate_comparative(
         errors.append(f"{where}: stored max_abs_delta_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_delta_j"]):
         errors.append(f"{where}: max_abs_delta_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_physical_floor_evidence(
+    _validate_claim_bearing_widths(
         record,
-        expected_deltas,
         where,
         errors,
         claim_bearing=claim_bearing,

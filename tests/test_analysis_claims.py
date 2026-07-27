@@ -1039,6 +1039,34 @@ class InputSeamTests(unittest.TestCase):
         )
         self.assertEqual(floor["active_floor_j"], 0.4)
 
+        zero_diagnostic_floor = copy.deepcopy(floor)
+        for resolution in zero_diagnostic_floor["resolutions"]:
+            diagnostic = resolution["point_floor_diagnostics"]["C1"][
+                "absolute"
+            ]
+            diagnostic["unguarded_floor_j"] = 0.0
+            diagnostic["guarded_floor_j"] = 0.0
+        zero_published = zero_diagnostic_floor["point_floor_diagnostics"][
+            "C1"
+        ]["absolute"]
+        zero_published["unguarded_floor_j"] = 0.0
+        zero_published["guarded_floor_j"] = 0.0
+
+        zero_converted, zero_reasons = convert_floor_to_ratio_units(
+            metric,
+            observations,
+            zero_diagnostic_floor,
+        )
+
+        self.assertEqual(
+            zero_reasons,
+            ("ratio_floor_conversion_undefined",),
+        )
+        self.assertEqual(
+            set(zero_converted["point_floor_diagnostics"]["C1"]),
+            {"condition_a", "condition_b"},
+        )
+
         artifact = minimal_artifact()
         contrast = artifact["contrasts"][0]
         contrast["metric"]["unit"] = "J/token"
@@ -1084,6 +1112,47 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(
             published["contrasts"][0]["claim_evaluation"]["reason_codes"],
             ["ratio_floor_conversion_undefined"],
+        )
+
+        omitted_reason = copy.deepcopy(published)
+        omitted_contrast = omitted_reason["contrasts"][0]
+        omitted_floor = omitted_contrast["floor"]
+        omitted_contrast["claim_evaluation"] = evaluate_claim(
+            estimate=omitted_contrast["estimator"]["estimate"],
+            metrology_aware_ci95=omitted_contrast["estimator"][
+                "metrology_aware_CI95"
+            ],
+            decision_interval=omitted_contrast["deterministic_bounds"][
+                "decision_interval"
+            ],
+            floor_gate_j=omitted_floor["active_floor_j"],
+            adjusted_rejected=omitted_contrast["multiplicity"]["rejected"],
+            base_reason_codes=(),
+            floor_metadata={
+                "floor_source": omitted_floor["floor_source"],
+                "floor_limit_class": omitted_floor["floor_limit_class"],
+                "point_floor_diagnostics": omitted_floor[
+                    "point_floor_diagnostics"
+                ],
+                "single_count_discipline": omitted_floor[
+                    "single_count_discipline"
+                ],
+            },
+        )
+        omitted_reason["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            omitted_reason
+        )
+
+        omitted_errors = validate_claim_verdicts(omitted_reason)
+
+        self.assertTrue(
+            any(
+                "ratio diagnostic collision requires "
+                "ratio_floor_conversion_undefined"
+                in error
+                for error in omitted_errors
+            ),
+            omitted_errors,
         )
 
     def test_loo_floor_resolution_receives_only_retained_physical_blocks(self):
