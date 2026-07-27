@@ -302,8 +302,9 @@ class CellReport:
     @property
     def floor_conditions(self) -> tuple[str, ...]:
         if (
-            self.point_floor_diagnostic is not None
-            and CELL_LABELLED_CONDITION_CODES[0] in self.refusal_reasons
+            self.floor is not None
+            and self.point_floor_diagnostic is not None
+            and set(self.refusal_reasons) == set(CELL_LABELLED_CONDITION_CODES)
         ):
             return CELL_LABELLED_CONDITION_CODES
         return ()

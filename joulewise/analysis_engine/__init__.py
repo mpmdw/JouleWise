@@ -264,15 +264,13 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
         diagnostics: dict[str, Any] = {}
         for value in limited:
             source_diagnostics = dict(value.point_floor_diagnostics or {})
-            source_keyed = set(value.source_cell_ids).issubset(
-                source_diagnostics
-            )
-            for source_cell_id in value.source_cell_ids:
-                diagnostics[source_cell_id] = copy.deepcopy(
-                    source_diagnostics[source_cell_id]
-                    if source_keyed
-                    else source_diagnostics
-                )
+            if value.status == "transported":
+                diagnostics.update(copy.deepcopy(source_diagnostics))
+            else:
+                for source_cell_id in value.source_cell_ids:
+                    diagnostics[source_cell_id] = copy.deepcopy(
+                        source_diagnostics
+                    )
         result.update(
             {
                 "floor_source": ATTRIBUTION_FLOOR_SOURCE,

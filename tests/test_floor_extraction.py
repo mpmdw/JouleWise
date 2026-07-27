@@ -33,6 +33,8 @@ from joulewise.detection_floor import (
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
 from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
+    CELL_LABELLED_CONDITION_CODES,
+    CELL_REFUSAL_CODES,
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
     LEGACY_THROUGHPUT_FIELD,
@@ -1889,6 +1891,24 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         # n_blocks=2 < 5: smoke-only, the guarded floor MUST be withheld.
         self.assertIsNone(report.floor.guarded_floor_j)
         self.assertIsNone(report.floor.guard_factor)
+        assert report.point_floor_diagnostic is not None
+        row = report.as_row()
+        self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
+        self.assertEqual(
+            row["point_floor_diagnostic"],
+            {
+                "label": "repeatability_diagnostic",
+                "published_claim_floor": False,
+                "unguarded_floor_j": report.point_floor_diagnostic.unguarded_floor_j,
+                "guard_factor": None,
+                "guarded_floor_j": None,
+            },
+        )
+        self.assertEqual(
+            row["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
 
     def test_delta_sign_and_magnitude_use_frozen_abba_formula(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1943,6 +1963,12 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_labelled_conditions_remain_bound_to_d078_reason_registry(self) -> None:
+        self.assertLessEqual(
+            set(CELL_LABELLED_CONDITION_CODES),
+            set(CELL_REFUSAL_CODES),
+        )
+
     def test_phase_cell_reading_whole_request_gross_fails_loudly(self) -> None:
         with self.assertRaisesRegex(FloorExtractionError, "phase_energy_j"):
             governed_cell_metric("gross_energy_j", "phase")
@@ -2385,8 +2411,12 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         self.assertIsNone(cell["floor"])
         self.assertEqual(
             cell["refusal_reasons"],
-            ["whole_window_verdict_conflict"],
+            [
+                "admissible_set_uncertainty_dominates_point_floor",
+                "whole_window_verdict_conflict",
+            ],
         )
+        self.assertNotIn("floor_conditions", cell)
         self.assertNotIn("single_count_discipline", artifact)
 
 

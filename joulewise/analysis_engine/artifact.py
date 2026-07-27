@@ -1840,16 +1840,14 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             source_diagnostics, Mapping
                         ):
                             continue
-                        source_keyed = set(source_ids).issubset(
-                            source_diagnostics
-                        )
-                        for source_cell_id in source_ids:
-                            if isinstance(source_cell_id, str):
-                                expected_diagnostics[source_cell_id] = (
-                                    source_diagnostics[source_cell_id]
-                                    if source_keyed
-                                    else source_diagnostics
-                                )
+                        if resolution.get("status") == "transported":
+                            expected_diagnostics.update(source_diagnostics)
+                        else:
+                            for source_cell_id in source_ids:
+                                if isinstance(source_cell_id, str):
+                                    expected_diagnostics[source_cell_id] = (
+                                        source_diagnostics
+                                    )
                     if floor.get("point_floor_diagnostics") != (
                         expected_diagnostics
                     ):

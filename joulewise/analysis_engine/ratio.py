@@ -90,6 +90,11 @@ def convert_floor_to_ratio_units(
             len(tokens_b) / sum(tokens_b),
         )
 
+    published_diagnostics = (
+        {}
+        if isinstance(converted.get("point_floor_diagnostics"), Mapping)
+        else None
+    )
     for resolution, factor in zip(resolutions, factors, strict=True):
         if not isinstance(resolution, dict):
             return converted, ("ratio_floor_conversion_undefined",)
@@ -103,6 +108,44 @@ def convert_floor_to_ratio_units(
             ):
                 return converted, ("ratio_floor_conversion_undefined",)
             resolution[key] = float(value) * factor
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if diagnostics is not None:
+            stack = [diagnostics]
+            while stack:
+                diagnostic = stack.pop()
+                if not isinstance(diagnostic, dict):
+                    return converted, ("ratio_floor_conversion_undefined",)
+                for key, value in diagnostic.items():
+                    if key in ("unguarded_floor_j", "guarded_floor_j"):
+                        if value is None:
+                            continue
+                        if (
+                            isinstance(value, bool)
+                            or not isinstance(value, (int, float))
+                            or not math.isfinite(float(value))
+                            or float(value) < 0.0
+                        ):
+                            return converted, (
+                                "ratio_floor_conversion_undefined",
+                            )
+                        diagnostic[key] = float(value) * factor
+                    elif isinstance(value, dict):
+                        stack.append(value)
+            if published_diagnostics is not None:
+                source_ids = resolution.get("source_cell_ids")
+                if not isinstance(source_ids, list):
+                    return converted, ("ratio_floor_conversion_undefined",)
+                if resolution.get("status") == "transported":
+                    published_diagnostics.update(copy.deepcopy(diagnostics))
+                else:
+                    for source_id in source_ids:
+                        if not isinstance(source_id, str):
+                            return converted, (
+                                "ratio_floor_conversion_undefined",
+                            )
+                        published_diagnostics[source_id] = copy.deepcopy(
+                            diagnostics
+                        )
 
     converted["floor_abs_j"] = sum(
         float(value["floor_abs_j"]) for value in resolutions
@@ -113,6 +156,8 @@ def convert_floor_to_ratio_units(
     converted["active_floor_j"] = max(
         converted["floor_abs_j"], converted["floor_cmp_j"]
     )
+    if published_diagnostics is not None:
+        converted["point_floor_diagnostics"] = published_diagnostics
     return converted, ()
 
 

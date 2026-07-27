@@ -681,11 +681,60 @@ class TestArtifactEmitValidate(unittest.TestCase):
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
 
+    def test_normal_non_degenerate_artifact_validates_without_mutation(self):
+        artifact = make_artifact()
+        before = json.dumps(
+            artifact,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        after = json.dumps(
+            artifact,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+        self.assertEqual(after, before)
+
+    def test_degenerate_floor_with_absent_or_zero_widths_refuses(self):
+        for width_shape in ("absent", "all_zero"):
+            with self.subTest(width_shape=width_shape):
+                cell = make_cell(energies=[0.0] * 5, deltas=[0.0] * 5)
+                artifact = make_artifact([cell])
+                self.assertEqual(cell["floor_gate_j"], 5e-324)
+                if width_shape == "absent":
+                    for component in ("absolute", "comparative"):
+                        for field in (
+                            "admissible_half_widths_j",
+                            "corner_widened_unguarded_floor_j",
+                            "corner_widened_guarded_floor_j",
+                        ):
+                            cell[component].pop(field)
+
+                errors = validate_floor_artifact(artifact)
+
+                for component in ("absolute", "comparative"):
+                    self.assertTrue(
+                        any(
+                            f"cells[0].{component}: instrument_calibration_invalid:"
+                            in error
+                            for error in errors
+                        ),
+                        errors,
+                    )
+
     def test_widened_floor_record_round_trips_and_rejects_tampering(self):
         cell = make_cell(
             energies=[0.0, 1.0, -1.0, 0.0, 0.0],
             deltas=[0.0] * 5,
             absolute_half_widths=[0.01] * 5,
+            comparative_half_widths=[0.01] * 5,
         )
         artifact = make_artifact([cell])
         record = artifact["cells"][0]["absolute"]
@@ -775,6 +824,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
         cell = make_cell(
             energies=[0.0] * 5,
             deltas=[1.0, -1.0, 0.0, 0.0, 0.0],
+            absolute_half_widths=[0.01] * 5,
             comparative_half_widths=[0.5] * 5,
         )
         artifact = make_artifact([cell])

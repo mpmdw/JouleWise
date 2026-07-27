@@ -19,6 +19,7 @@ from joulewise.analysis_engine.artifact import (
     validate_claim_verdicts,
 )
 from joulewise.analysis_manifest import calculate_manifest_id
+from joulewise.adapters.mock_runtime import DECODE_SECONDS_PER_OUTPUT_TOKEN
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (
@@ -1320,7 +1321,32 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         json.dumps(calibration_config, indent=2, sort_keys=True) + "\n",
                         encoding="utf-8",
                     )
-                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    # These bundles stand in for physical calibration evidence,
+                    # so they must not claim impossible exact-zero repeatability.
+                    # Vary only the mock runtime timing: scientific config
+                    # identity stays fixed, while the first five runs acquire
+                    # nonzero absolute residuals and the later A/B/B/A blocks
+                    # acquire nonzero, block-varying deltas.
+                    if index < 5:
+                        decode_offset_s = (-2, -1, 0, 1, 2)[index] * 0.0001
+                    else:
+                        block_index = (index - 5) // 4
+                        sequence_index = (index - 5) % 4
+                        decode_offset_s = (
+                            0.0,
+                            (block_index + 1) * 0.0001,
+                            (block_index + 1) * 0.00015,
+                            0.0,
+                        )[sequence_index]
+                    with (
+                        mock.patch(
+                            "joulewise.adapters.mock_runtime."
+                            "DECODE_SECONDS_PER_OUTPUT_TOKEN",
+                            DECODE_SECONDS_PER_OUTPUT_TOKEN + decode_offset_s,
+                        ),
+                        redirect_stdout(io.StringIO()),
+                        redirect_stderr(io.StringIO()),
+                    ):
                         code = main(
                             ["run", str(config_path), "--runs-dir", str(calibration_root)]
                         )

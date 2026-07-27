@@ -1527,6 +1527,31 @@ def _validate_attribution_limit_metadata(
         )
 
 
+def _validate_physical_floor_evidence(record, deviations, where, errors) -> None:
+    if len(deviations) < GUARD_MINIMUM_N or not all(
+        deviation == 0.0 for deviation in deviations
+    ):
+        return
+    widths = record.get("admissible_half_widths_j")
+    widths_absent = widths is None
+    widths_all_zero = (
+        isinstance(widths, list)
+        and bool(widths)
+        and all(_is_number(width) and width == 0.0 for width in widths)
+    )
+    if not (widths_absent or widths_all_zero):
+        return
+    # Exact-zero repeatability with no nonzero member uncertainty cannot
+    # describe real instrument data. This instrument's measured repeatability
+    # is ~0.29-0.49 J on ~50 J points; a floor many orders below that is a
+    # serialization/degenerate-fixture defect, not a measurement.
+    errors.append(
+        f"{where}: instrument_calibration_invalid: degenerate deviations with "
+        "absent or all-zero admissible_half_widths_j cannot support a physical "
+        "detection floor"
+    )
+
+
 def _validate_bound_terms(terms, where, errors) -> None:
     if not isinstance(terms, Mapping) or set(terms) != set(_BOUND_TERMS):
         errors.append(f"{where}: bound_terms must contain exactly {sorted(_BOUND_TERMS)}")
@@ -1621,6 +1646,7 @@ def _validate_absolute(record, where, errors) -> None:
         errors.append(f"{where}: stored max_abs_residual_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_residual_j"]):
         errors.append(f"{where}: max_abs_residual_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
+    _validate_physical_floor_evidence(record, expected_residuals, where, errors)
     _validate_estimate_math(
         record,
         where,
@@ -1740,6 +1766,7 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
         errors.append(f"{where}: stored max_abs_delta_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_delta_j"]):
         errors.append(f"{where}: max_abs_delta_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
+    _validate_physical_floor_evidence(record, expected_deltas, where, errors)
     _validate_estimate_math(
         record,
         where,
