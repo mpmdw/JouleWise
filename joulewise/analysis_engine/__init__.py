@@ -197,6 +197,13 @@ def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
 
 
 def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
+    if any(
+        resolution.status == "exact" and len(resolution.source_cell_ids) != 1
+        for resolution in resolutions
+    ):
+        raise AnalysisInputError(
+            "exact floor resolution must name exactly one source cell"
+        )
     usable = [resolution for resolution in resolutions if resolution.status in {"exact", "transported"}]
     all_usable = bool(resolutions) and len(usable) == len(resolutions)
     floor_abs = max((value.floor_abs_j for value in usable if value.floor_abs_j is not None), default=None)
@@ -264,15 +271,13 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
         diagnostics: dict[str, Any] = {}
         for value in limited:
             source_diagnostics = dict(value.point_floor_diagnostics or {})
-            source_keyed = set(value.source_cell_ids).issubset(
-                source_diagnostics
-            )
-            for source_cell_id in value.source_cell_ids:
-                diagnostics[source_cell_id] = copy.deepcopy(
-                    source_diagnostics[source_cell_id]
-                    if source_keyed
-                    else source_diagnostics
-                )
+            if value.status == "transported":
+                diagnostics.update(copy.deepcopy(source_diagnostics))
+            else:
+                for source_cell_id in value.source_cell_ids:
+                    diagnostics[source_cell_id] = copy.deepcopy(
+                        source_diagnostics
+                    )
         result.update(
             {
                 "floor_source": ATTRIBUTION_FLOOR_SOURCE,

@@ -90,7 +90,18 @@ def convert_floor_to_ratio_units(
             len(tokens_b) / sum(tokens_b),
         )
 
-    for resolution, factor in zip(resolutions, factors, strict=True):
+    published_diagnostics = (
+        {}
+        if isinstance(converted.get("point_floor_diagnostics"), Mapping)
+        else None
+    )
+    diagnostics_by_source: dict[str, list[tuple[str, Any]]] = {}
+    diagnostic_scales: dict[str, float] = {}
+    colliding_source_ids: set[str] = set()
+    condition_labels = ("condition_a", "condition_b")
+    for resolution, factor, condition_label in zip(
+        resolutions, factors, condition_labels, strict=True
+    ):
         if not isinstance(resolution, dict):
             return converted, ("ratio_floor_conversion_undefined",)
         for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
@@ -103,6 +114,71 @@ def convert_floor_to_ratio_units(
             ):
                 return converted, ("ratio_floor_conversion_undefined",)
             resolution[key] = float(value) * factor
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if diagnostics is not None:
+            stack = [diagnostics]
+            while stack:
+                diagnostic = stack.pop()
+                if not isinstance(diagnostic, dict):
+                    return converted, ("ratio_floor_conversion_undefined",)
+                for key, value in diagnostic.items():
+                    if key in ("unguarded_floor_j", "guarded_floor_j"):
+                        if value is None:
+                            continue
+                        if (
+                            isinstance(value, bool)
+                            or not isinstance(value, (int, float))
+                            or not math.isfinite(float(value))
+                            or float(value) < 0.0
+                        ):
+                            return converted, (
+                                "ratio_floor_conversion_undefined",
+                            )
+                        diagnostic[key] = float(value) * factor
+                    elif isinstance(value, dict):
+                        stack.append(value)
+            if published_diagnostics is not None:
+                source_ids = resolution.get("source_cell_ids")
+                if not isinstance(source_ids, list):
+                    return converted, ("ratio_floor_conversion_undefined",)
+                if resolution.get("status") == "transported":
+                    for source_id, diagnostic in diagnostics.items():
+                        if not isinstance(source_id, str):
+                            return converted, (
+                                "ratio_floor_conversion_undefined",
+                            )
+                        previous_scale = diagnostic_scales.get(source_id)
+                        if previous_scale is not None and not math.isclose(
+                            previous_scale,
+                            factor,
+                            rel_tol=0.0,
+                            abs_tol=0.0,
+                        ):
+                            colliding_source_ids.add(source_id)
+                        diagnostic_scales[source_id] = factor
+                        diagnostics_by_source.setdefault(source_id, []).append(
+                            (condition_label, copy.deepcopy(diagnostic))
+                        )
+                elif resolution.get("status") == "exact":
+                    for source_id in source_ids:
+                        if not isinstance(source_id, str):
+                            return converted, (
+                                "ratio_floor_conversion_undefined",
+                            )
+                        previous_scale = diagnostic_scales.get(source_id)
+                        if previous_scale is not None and not math.isclose(
+                            previous_scale,
+                            factor,
+                            rel_tol=0.0,
+                            abs_tol=0.0,
+                        ):
+                            colliding_source_ids.add(source_id)
+                        diagnostic_scales[source_id] = factor
+                        diagnostics_by_source.setdefault(source_id, []).append(
+                            (condition_label, copy.deepcopy(diagnostics))
+                        )
+                else:
+                    return converted, ("ratio_floor_conversion_undefined",)
 
     converted["floor_abs_j"] = sum(
         float(value["floor_abs_j"]) for value in resolutions
@@ -113,7 +189,28 @@ def convert_floor_to_ratio_units(
     converted["active_floor_j"] = max(
         converted["floor_abs_j"], converted["floor_cmp_j"]
     )
-    return converted, ()
+    diagnostic_collision = bool(colliding_source_ids)
+    if published_diagnostics is not None:
+        for source_id, entries in diagnostics_by_source.items():
+            first = entries[0][1]
+            if all(diagnostic == first for _, diagnostic in entries[1:]):
+                published_diagnostics[source_id] = first
+                continue
+            # One transported source can serve both conditions even though
+            # their frozen token denominators differ. Preserve both diagnostic
+            # projections; the operative floor conversion remains numeric,
+            # while the reason code keeps the claim fail-closed.
+            diagnostic_collision = True
+            published_diagnostics[source_id] = {
+                condition_label: diagnostic
+                for condition_label, diagnostic in entries
+            }
+        converted["point_floor_diagnostics"] = published_diagnostics
+    return converted, (
+        ("ratio_floor_conversion_undefined",)
+        if diagnostic_collision
+        else ()
+    )
 
 
 def validate_ratio_estimand(value: object) -> Mapping[str, Any]:

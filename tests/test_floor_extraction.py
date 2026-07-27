@@ -1889,6 +1889,24 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         # n_blocks=2 < 5: smoke-only, the guarded floor MUST be withheld.
         self.assertIsNone(report.floor.guarded_floor_j)
         self.assertIsNone(report.floor.guard_factor)
+        assert report.point_floor_diagnostic is not None
+        row = report.as_row()
+        self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
+        self.assertEqual(
+            row["point_floor_diagnostic"],
+            {
+                "label": "repeatability_diagnostic",
+                "published_claim_floor": False,
+                "unguarded_floor_j": report.point_floor_diagnostic.unguarded_floor_j,
+                "guard_factor": None,
+                "guarded_floor_j": None,
+            },
+        )
+        self.assertEqual(
+            row["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
 
     def test_delta_sign_and_magnitude_use_frozen_abba_formula(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2385,8 +2403,12 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         self.assertIsNone(cell["floor"])
         self.assertEqual(
             cell["refusal_reasons"],
-            ["whole_window_verdict_conflict"],
+            [
+                "admissible_set_uncertainty_dominates_point_floor",
+                "whole_window_verdict_conflict",
+            ],
         )
+        self.assertNotIn("floor_conditions", cell)
         self.assertNotIn("single_count_discipline", artifact)
 
 

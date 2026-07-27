@@ -23,8 +23,10 @@ from joulewise.analysis_engine import _combined_floor, _interpolation_reasons, _
 from joulewise.analysis_engine.estimators import (
     DeterministicBoundTerm,
     PairedObservation,
+    RatioObservation,
     estimate_paired_blocks,
 )
+from joulewise.analysis_engine.ratio import convert_floor_to_ratio_units
 from joulewise.analysis_engine.claims import (
     REASON_CODES,
     REDUCER_REASON_CODES,
@@ -685,6 +687,404 @@ class InputSeamTests(unittest.TestCase):
         self.assertEqual(combined["floor_abs_j"], 4.0)
         self.assertEqual(combined["floor_cmp_j"], 7.0)
         self.assertEqual(combined["active_floor_j"], 7.0)
+
+    def test_partially_limited_transport_preserves_only_labelled_source(self):
+        diagnostic = {
+            "absolute": {
+                "label": "repeatability_diagnostic",
+                "published_claim_floor": False,
+                "unguarded_floor_j": 0.4,
+                "guard_factor": 1.5,
+                "guarded_floor_j": 0.6,
+            }
+        }
+        combined = _combined_floor(
+            (
+                FloorResolution(
+                    status="transported",
+                    artifact_id="df",
+                    artifact_sha256=HEX,
+                    source_cell_ids=("C1", "C2"),
+                    transport_group_id="tg1",
+                    transport_rule_id="rule",
+                    floor_abs_j=0.5,
+                    floor_cmp_j=1.0,
+                    floor_gate_j=1.0,
+                    reason_codes=(),
+                    floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                    floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                    point_floor_diagnostics={"C1": diagnostic},
+                    single_count_discipline=attribution_single_count_discipline(),
+                ),
+            )
+        )
+        self.assertEqual(
+            combined["point_floor_diagnostics"],
+            {"C1": diagnostic},
+        )
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        contrast["floor"] = combined
+        contrast["claim_evaluation"]["floor_limit"] = {
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "published_floor_j": combined["active_floor_j"],
+            "point_floor_diagnostics": combined["point_floor_diagnostics"],
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        self.assertEqual(validate_claim_verdicts(artifact), [])
+
+    def test_multi_source_exact_resolution_is_rejected_at_both_boundaries(self):
+        diagnostic_c1 = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+        diagnostic_c2 = {
+            **diagnostic_c1,
+            "unguarded_floor_j": 0.5,
+            "guarded_floor_j": 0.75,
+        }
+        source_diagnostics = {
+            "C1": diagnostic_c1,
+            "C2": diagnostic_c2,
+        }
+        resolution = FloorResolution(
+            status="exact",
+            artifact_id="df",
+            artifact_sha256=HEX,
+            source_cell_ids=("C1", "C2"),
+            transport_group_id=None,
+            transport_rule_id="direct",
+            floor_abs_j=0.5,
+            floor_cmp_j=1.0,
+            floor_gate_j=1.0,
+            reason_codes=(),
+            floor_source=ATTRIBUTION_FLOOR_SOURCE,
+            floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+            point_floor_diagnostics=source_diagnostics,
+            single_count_discipline=attribution_single_count_discipline(),
+        )
+
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "exact floor resolution must name exactly one source cell",
+        ):
+            _combined_floor((resolution,))
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        wrongly_nested = {
+            source_id: copy.deepcopy(source_diagnostics)
+            for source_id in ("C1", "C2")
+        }
+        contrast["floor"] = {
+            "status": "resolved",
+            "floor_row_ids": ["C1", "C2"],
+            "floor_abs_j": 0.5,
+            "floor_cmp_j": 1.0,
+            "active_floor_j": 1.0,
+            "transport_verdict": "exact",
+            "resolutions": [
+                {
+                    "status": "exact",
+                    "source_cell_ids": ["C1", "C2"],
+                    "transport_group_id": None,
+                    "transport_rule_id": "direct",
+                    "floor_abs_j": 0.5,
+                    "floor_cmp_j": 1.0,
+                    "floor_gate_j": 1.0,
+                    "reason_codes": [],
+                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                    "point_floor_diagnostics": source_diagnostics,
+                    "single_count_discipline": (
+                        attribution_single_count_discipline()
+                    ),
+                }
+            ],
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "point_floor_diagnostics": wrongly_nested,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        contrast["claim_evaluation"]["floor_limit"] = {
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "published_floor_j": 1.0,
+            "point_floor_diagnostics": wrongly_nested,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "exact resolution must name exactly one source cell" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_ratio_conversion_scales_labelled_point_floor_diagnostics(self):
+        metric = {
+            "ratio_estimand": {
+                "form": "mean_of_request_ratios",
+                "numerator_metric": "energy_request_j",
+                "denominator": "runtime_observed_output_tokens",
+                "denominator_unit": "token",
+                "tokenizer_scope": "same_identity_required",
+                "output_policy_scope": "same_policy_required",
+            }
+        }
+        observations = tuple(
+            RatioObservation(
+                block_id=f"block-{index}",
+                energy_a_j=1.0,
+                energy_b_j=1.0,
+                output_tokens_a=100,
+                output_tokens_b=200,
+                token_count_source_a="runtime_observed",
+                token_count_source_b="runtime_observed",
+                stop_reason_a="length",
+                stop_reason_b="length",
+                output_policy_a="fixed",
+                output_policy_b="fixed",
+                tokenizer_identity_a="tokenizer",
+                tokenizer_identity_b="tokenizer",
+            )
+            for index in (1, 2)
+        )
+        leaf = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+        floor = {
+            "status": "resolved",
+            "floor_abs_j": 0.8,
+            "floor_cmp_j": 0.8,
+            "active_floor_j": 0.8,
+            "point_floor_diagnostics": {
+                source_id: {"absolute": copy.deepcopy(leaf)}
+                for source_id in ("C1", "C2")
+            },
+            "resolutions": [
+                {
+                    "status": "exact",
+                    "source_cell_ids": [source_id],
+                    "floor_abs_j": 0.4,
+                    "floor_cmp_j": 0.4,
+                    "floor_gate_j": 0.4,
+                    "point_floor_diagnostics": {"absolute": copy.deepcopy(leaf)},
+                }
+                for source_id in ("C1", "C2")
+            ],
+        }
+
+        converted, reasons = convert_floor_to_ratio_units(
+            metric,
+            observations,
+            floor,
+        )
+
+        self.assertEqual(reasons, ())
+        self.assertAlmostEqual(
+            converted["resolutions"][0]["point_floor_diagnostics"]["absolute"][
+                "guarded_floor_j"
+            ],
+            0.006,
+        )
+        self.assertAlmostEqual(
+            converted["resolutions"][1]["point_floor_diagnostics"]["absolute"][
+                "guarded_floor_j"
+            ],
+            0.003,
+        )
+        self.assertAlmostEqual(
+            converted["point_floor_diagnostics"]["C1"]["absolute"][
+                "guarded_floor_j"
+            ],
+            0.006,
+        )
+        self.assertAlmostEqual(
+            converted["point_floor_diagnostics"]["C1"]["absolute"][
+                "unguarded_floor_j"
+            ],
+            0.004,
+        )
+        self.assertAlmostEqual(
+            converted["point_floor_diagnostics"]["C2"]["absolute"][
+                "guarded_floor_j"
+            ],
+            0.003,
+        )
+        self.assertEqual(
+            floor["point_floor_diagnostics"]["C1"]["absolute"][
+                "guarded_floor_j"
+            ],
+            0.6,
+        )
+
+    def test_ratio_conversion_preserves_colliding_transport_diagnostics(self):
+        metric = {
+            "ratio_estimand": {
+                "form": "mean_of_request_ratios",
+                "numerator_metric": "energy_request_j",
+                "denominator": "runtime_observed_output_tokens",
+                "denominator_unit": "token",
+                "tokenizer_scope": "same_identity_required",
+                "output_policy_scope": "same_policy_required",
+            }
+        }
+        observations = (
+            RatioObservation(
+                block_id="block-1",
+                energy_a_j=1.0,
+                energy_b_j=1.0,
+                output_tokens_a=100,
+                output_tokens_b=200,
+                token_count_source_a="runtime_observed",
+                token_count_source_b="runtime_observed",
+                stop_reason_a="length",
+                stop_reason_b="length",
+                output_policy_a="fixed",
+                output_policy_b="fixed",
+                tokenizer_identity_a="tokenizer",
+                tokenizer_identity_b="tokenizer",
+            ),
+        )
+        leaf = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+        source_diagnostics = {
+            "C1": {"absolute": copy.deepcopy(leaf)}
+        }
+        floor = _combined_floor(
+            tuple(
+                FloorResolution(
+                    status="transported",
+                    artifact_id="df",
+                    artifact_sha256=HEX,
+                    source_cell_ids=("C1",),
+                    transport_group_id="tg-1",
+                    transport_rule_id=(
+                        "same_stack_componentwise_worst_case.v1"
+                    ),
+                    floor_abs_j=0.4,
+                    floor_cmp_j=0.4,
+                    floor_gate_j=0.4,
+                    reason_codes=(),
+                    floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                    floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                    point_floor_diagnostics=copy.deepcopy(
+                        source_diagnostics
+                    ),
+                    single_count_discipline=(
+                        attribution_single_count_discipline()
+                    ),
+                )
+                for _ in range(2)
+            )
+        )
+        self.assertEqual(floor["active_floor_j"], 0.4)
+
+        converted, reasons = convert_floor_to_ratio_units(
+            metric,
+            observations,
+            floor,
+        )
+
+        self.assertEqual(reasons, ("ratio_floor_conversion_undefined",))
+        self.assertEqual(converted["floor_abs_j"], 0.006)
+        self.assertEqual(converted["floor_cmp_j"], 0.006)
+        self.assertEqual(converted["active_floor_j"], 0.006)
+        self.assertEqual(
+            [
+                resolution["floor_gate_j"]
+                for resolution in converted["resolutions"]
+            ],
+            [0.004, 0.002],
+        )
+        self.assertEqual(
+            converted["point_floor_diagnostics"],
+            {
+                "C1": {
+                    "condition_a": {
+                        "absolute": {
+                            **leaf,
+                            "unguarded_floor_j": 0.004,
+                            "guarded_floor_j": 0.006,
+                        }
+                    },
+                    "condition_b": {
+                        "absolute": {
+                            **leaf,
+                            "unguarded_floor_j": 0.002,
+                            "guarded_floor_j": 0.003,
+                        }
+                    },
+                }
+            },
+        )
+        self.assertEqual(floor["active_floor_j"], 0.4)
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        contrast["metric"]["unit"] = "J/token"
+        contrast["metric"]["ratio_estimand"] = metric["ratio_estimand"]
+        contrast["floor"] = converted
+        contrast["claim_evaluation"] = evaluate_claim(
+            estimate=contrast["estimator"]["estimate"],
+            metrology_aware_ci95=contrast["estimator"][
+                "metrology_aware_CI95"
+            ],
+            decision_interval=contrast["deterministic_bounds"][
+                "decision_interval"
+            ],
+            floor_gate_j=converted["active_floor_j"],
+            adjusted_rejected=contrast["multiplicity"]["rejected"],
+            base_reason_codes=reasons,
+            floor_metadata={
+                "floor_source": converted["floor_source"],
+                "floor_limit_class": converted["floor_limit_class"],
+                "point_floor_diagnostics": converted[
+                    "point_floor_diagnostics"
+                ],
+                "single_count_discipline": converted[
+                    "single_count_discipline"
+                ],
+            },
+        )
+        self.assertEqual(
+            contrast["claim_evaluation"]["outcome"],
+            "not_resolvable",
+        )
+        self.assertFalse(
+            contrast["claim_evaluation"]["claim_ready_for_l2_l3"]
+        )
+
+        published = finalize_claim_verdicts(artifact)
+
+        self.assertEqual(validate_claim_verdicts(published), [])
+        self.assertEqual(
+            published["contrasts"][0]["floor"]["active_floor_j"],
+            0.006,
+        )
+        self.assertEqual(
+            published["contrasts"][0]["claim_evaluation"]["reason_codes"],
+            ["ratio_floor_conversion_undefined"],
+        )
 
     def test_loo_floor_resolution_receives_only_retained_physical_blocks(self):
         evidence = []
