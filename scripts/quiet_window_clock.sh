@@ -103,6 +103,29 @@ do_disable() {
   fi
   echo "  network time synchronisation: ${state:-Off}"
 
+  # Record the pinned-clock provenance for the close-out. With sync off the
+  # clock free-runs, so the offset at pin time bounds the absolute wall error
+  # for everything collected tonight.
+  local stamp record_dir
+  record_dir="/Users/edr/JouleWise-window-custody/clock_pin_records"
+  mkdir -p "$record_dir" 2>/dev/null
+  stamp="$(TZ=UTC date '+%Y%m%dT%H%M%SZ')"
+  printf 'pinned_at_utc=%s\noffset_at_pin_s=%s\ntime_server=%s\n' \
+    "$stamp" "$offset" "$TIME_SERVER" > "$record_dir/pin-$stamp.txt"
+  echo "  provenance recorded: $record_dir/pin-$stamp.txt"
+
+  bold ""
+  warn "READ THIS — what pinning the clock does to the 5 ms anchor gate:"
+  cat <<'EOW'
+  With network time disabled, the wall clock and the monotonic clock derive
+  from the SAME oscillator. The 5 ms wall-minus-monotonic predicate will
+  therefore pass BY CONSTRUCTION, not because the environment is clean.
+  The gate is not measuring anything tonight. That is the intended effect —
+  it removes the adjuster — but a green anchor result tonight is NOT
+  evidence of a quiet clock, and must not be cited as such. Record in the
+  window close-out that automatic network time was disabled, so nobody
+  later reads these members' anchor pass as an independent instrument check.
+EOW
   bold ""
   bold "Step 3/3 — settle before collecting"
   cat <<EOF
@@ -110,16 +133,29 @@ do_disable() {
   The chain also settles ${SETTLE_S}s on its own before the pre-calibration,
   so launching immediately is acceptable if you would rather not wait twice.
 
-$(bold "Ready. Launch window C:")
+$(bold "Run window C FIRST.") Its failure mode fires per-member under
+  --max-failures 1, so it shakes down this mitigation cheaply: if members
+  still fail the anchor gate with sync disabled, the adjuster was not
+  network time sync, and you abort ~40 minutes in instead of 3h25 in.
+
   caffeinate -is /bin/zsh /Users/edr/JouleWise-window-plans/window_c_20260726/window-chain.zsh \\
                           /Users/edr/JouleWise-window-plans/window_c_20260726
 
-$(bold "Then window D:")
+$(bold "Then the second window") (which one depends on the desk checks — window B
+  only if its bracket drift was shown to be clock-related, otherwise window D):
+
   caffeinate -is /bin/zsh /Users/edr/JouleWise-window-plans/window_d_20260726/window-chain.zsh \\
                           /Users/edr/JouleWise-window-plans/window_d_20260726
 
+$(warn "DO NOT re-enable sync between windows.") Re-enabling injects exactly the
+  excursion being avoided, right where the next window's calibration sits.
+  Pin once, run every window, restore at the end.
+
 $(warn "AFTER the last window completes, restore normal timekeeping:")
   scripts/quiet_window_clock.sh enable
+
+  If a window crashes and you stop for the night, still run 'enable' — the
+  clock stays free-running otherwise, drifting ~0.5-1.5 s per day.
 EOF
 }
 
