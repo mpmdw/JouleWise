@@ -6,7 +6,7 @@
 
 **Applies to:** claim-bearing Mac measurement windows after PR #85
 
-**Main authorities:** D-077 and D-078 in `docs/decision_log.md`,
+**Main authorities:** D-077, D-078, and D-079 in `docs/decision_log.md`,
 `docs/phase_2/detection_floor.md`,
 `configs/campaign_policies/quiet_mac_p2_production.json`, and
 `configs/campaigns/window_references/README.md`
@@ -237,6 +237,9 @@ science stage. Dry-run mode does not write campaign-log entries.
   machine goes quiet. Leave the machine untouched and idle for at least 10
   minutes before launching the chain. This is in addition to the 180-second
   stage settle, not satisfied by it.
+- [ ] Confirm the chain carries the §5B pre-flight calibration screen and
+  that the frozen plan records the pre-registered retry bound (D-079
+  clause 3).
 - [ ] Confirm both fresh runs roots do not already contain member bundles.
 - [ ] Confirm the backup destination exists and has enough free space.
 - [ ] Close every agent and browser-automation session.
@@ -381,6 +384,77 @@ one member refuses with `wall_minus_monotonic_span_exceeded`:
 every refusal stays exactly as written. This recovery relaxes no acceptance
 condition; it replaces one lost member with a properly collected one.
 
+## 5B. Pre-flight calibration screen (D-079 clause 3)
+
+**What this catches, in plain language.** The pre-calibration measures how
+badly the power instrument can be wrong about *when* energy was used. It
+reduces to one number, the fiducial bound (`b_fiducial_s` in
+`instrument_evidence.json`). Most captures land near 27 ms. Occasionally the
+GPU is still ramping its clock and voltage up through low-frequency states
+while the calibration pulses run — the raw evidence shows the GPU is not
+idle — and the estimator, which fits each pulse as a clean rectangle with a
+movable start time, absorbs that ramp as an apparent shift in the pulse's
+start. The result is an out-of-family calibration. Window B on 2026-07-26 hit
+exactly this: a 35.435841 ms pre-calibration, the highest in the entire
+corpus, which was only discovered at the post-calibration and cost the whole
+3.5-hour campaign. The condition cannot be predicted before a calibration is
+taken, but a four-minute calibration detects it reliably. That asymmetry is
+the entire point of this step.
+
+**The screen.** Immediately after the pre-calibration mints, and before any
+member is collected:
+
+1. Read `b_fiducial_s` from the newly minted
+   `RUNS_ROOT/instrument_validation/<id>/instrument_evidence.json`.
+2. Require `b_fiducial_s <= 0.033558756679900` (33.558756680 ms). This is the
+   larger, and so the more conservative, of the prior observed maximum
+   (33.558756680 ms) and the 95% Student-t upper level for a new observation
+   over the same n=19 corpus (33.353749299 ms).
+3. If the value exceeds the threshold, **abort before member 1** and go to
+   the retry rules below. Do not proceed and hope the post-calibration
+   agrees; it will not save the window, and every member collected after a
+   failing pre-calibration is wasted quiet time.
+4. If the value passes, continue the chain unchanged.
+
+The chain in §6 performs steps 1–3 automatically, so the operator still never
+inspects logs mid-run. The threshold is a derived, provenance-bound number,
+not a house style: it is valid only for Mac15,9 / macOS 25F84 /
+`ac_high_power` / 100 ms cadence / `joint_loss_sublevel_interval_branch_v2`
+bindings, and it is re-derived when any of those change (D-079 clause 3).
+
+This screen is a **level** check on one calibration, and is entirely separate
+from the **drift** check between the two calibrations in §8. A level failure
+is an out-of-family systematic condition and is never budgeted (D-079
+clause 2).
+
+**Retry rules — the cause-removal test.**
+
+- A failing pre-calibration ends **that attempt**, not necessarily the night.
+- A retry is permitted **only** when a specific, named cause has been
+  identified **and removed**. Record the retry as a deviation in the
+  close-out, preserve both attempts as immutable evidence, and stay inside
+  the retry count pre-registered in the frozen plan.
+- **With no identifiable cause, the window ends.** Stop, preserve everything,
+  and take the disposition to the lead.
+- The line that matters: re-running until the number passes is selection on
+  the **outcome**. That is calibration shopping, it makes the accepted
+  calibration the luckiest draw rather than a representative one, and it
+  would invalidate every claim built on the window. Re-running after removing
+  a named **cause** is legitimate, because the second attempt measures a
+  genuinely different machine state.
+- Worked example (2026-07-27, window C): Apple's XProtect malware scanner was
+  observed at 94% CPU as the window's first member began. The environment
+  gate refused the member — correctly. The scanner was identified as the
+  cause, the operator waited 14 minutes for it to finish, and the relaunched
+  window collected 59/59 clean. Named cause, removed, verified, recorded:
+  that is a legitimate retry. "It failed, so I ran it again" is not.
+
+D-079 defines this screen on the pre-calibration only. If the **post**
+calibration's level exceeds the same threshold, the members are already
+collected and no retry can help: preserve everything, record it in the
+close-out, do not budget the excess (D-079 clause 2), and refer the
+disposition to the lead.
+
 ## 6. The foreground measurement chain
 
 Save the following as `WINDOW_PLAN_ROOT/window-chain.zsh`, review it, and
@@ -501,6 +575,33 @@ calibrate_with_clock_retry() {
   print -r -- "$candidate"
 }
 
+# D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
+# pre-calibration before any member is collected. Threshold is bindings-bound
+# (Mac15,9 / macOS 25F84 / ac_high_power / 100 ms / estimator v2); see §5B.
+PRE_CAL_FIDUCIAL_MAX_S=0.033558756679900
+
+screen_pre_calibration() {
+  local dir="$1"
+  local b
+
+  b="$(/usr/bin/jq -r '.b_fiducial_s // empty' \
+    "$dir/instrument_evidence.json")"
+  if [ -z "$b" ]; then
+    echo "pre-calibration has no fiducial bound: $dir" >&2
+    return 1
+  fi
+  echo "$(timestamp) pre_calibration_fiducial_s=$b" \
+    >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  if (( b > PRE_CAL_FIDUCIAL_MAX_S )); then
+    echo "pre-calibration fiducial $b exceeds D-079 screen $PRE_CAL_FIDUCIAL_MAX_S" >&2
+    echo "$(timestamp) pre_calibration_screen=failed" \
+      >> "$OPERATOR_LOG_ROOT/window-chain.log"
+    return 1
+  fi
+  echo "$(timestamp) pre_calibration_screen=passed" \
+    >> "$OPERATOR_LOG_ROOT/window-chain.log"
+}
+
 run_stage() {
   local root="$1"
   local log="$2"
@@ -540,6 +641,9 @@ echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
 PRE_CAL_DIR="$(calibrate_with_clock_retry pre)"
 echo "$(timestamp) pre_calibration=$PRE_CAL_DIR" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+
+# Abort before member 1 if the pre-calibration is out of family (§5B).
+screen_pre_calibration "$PRE_CAL_DIR"
 
 # The reference corpus and bound are minted inside this same quiet window.
 run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_DIR" \
@@ -609,8 +713,23 @@ After `measurement_complete`, wake the display once.
   `RUNS_ROOT/instrument_validation/`.
 - [ ] Confirm both are within 24 hours and share the same power-policy and
   instrument bindings.
-- [ ] Confirm bracket-bound drift is within the production policy's
-  `0.01 s`.
+- [ ] Confirm bracket-bound drift against the **derived** screen of
+  `0.010818 s` (10.817749309 ms), not the old underived `0.010 s`
+  constant (D-079 clause 1). Drift within the screen passes clean.
+- [ ] If drift is slightly above the screen, the window is **not**
+  discarded: the excess becomes an added uncertainty term carried into
+  every floor and claim the window produces, so the floor publishes wider.
+  Do not compute or apply that allowance by hand — the governed verdict and
+  extraction own it, exactly as they own the NEG-8 drift allowances.
+- [ ] Confirm the excess being budgeted is ordinary repeatability scatter and
+  **not** a known systematic defect (D-079 clause 2). A budget may never
+  absorb a measurement already known to be wrong for an identified reason;
+  that would launder the defect into a respectable-looking interval. In
+  particular, a pre-calibration that failed the §5B level screen is never
+  budgetable, and its window is not claim-bearing — window B (2026-07-26,
+  drift 11.581436 ms on a 35.435841 ms pre-calibration) is the standing
+  example, and `instrument_calibration_mismatch` is the correct verdict for
+  it.
 - [ ] Confirm the bound artifact was minted during this window from all 12
   members in `BOUND_RUNS_ROOT`.
 - [ ] Confirm the bound freshness block says `max_age_s: 86400` and matches
@@ -657,6 +776,8 @@ budget carried into every matching floor or claim envelope.
 | Display awake, screensaver engaged, `environment_admission_failed`, or CPU admission failure | The measurement environment was contaminated or unknown. | Lose the affected member. Stop the stage, remove the cause, settle 180 seconds, and rerun into a clean slot. Never waive admission. |
 | `clock_anchor_unresolved` on calibration | The calibration capture could not be causally anchored. | Preserve it, settle, and retry once into a new validation directory. Abort after the second failure or any different calibration reason. |
 | `pulse_calibration_rollover_gate_timeout` | Native powermetrics time did not advance before the pulse train. | Abort calibration and preserve the evidence. Repair machine state outside the window. |
+| Pre-calibration fiducial above `0.033558756679900` (chain aborts before member 1) | The pre-calibration is out of family — typically a GPU clock/voltage ramp aliased into the fitted pulse start (D-079 clause 3). | Do not collect. Retry only after naming and removing a specific cause, within the pre-registered retry count, recording both attempts as evidence (§5B). With no identifiable cause, end the window. Never re-run merely to obtain a passing number. |
+| Bracket drift above `0.010818 s` (D-079 derived screen) | Either ordinary repeatability scatter slightly over the screen, or an out-of-family systematic. | If the pre-calibration passed the §5B level screen, the window survives: the excess is carried by the governed extraction as an added uncertainty term and floors publish wider. If the §5B level screen failed, the excess is not budgetable and the window is not claim-bearing (D-079 clause 2). Never hand-apply an allowance. |
 | `instrument_calibration_bracket_missing` | The claim members lack a valid causal pre/post calibration pair. | Mark the window non-claim-bearing. Never borrow a calibration from another power or machine state. |
 | `calibration_bracket_exceeds_minted_bound` | The post calibration's bound is larger than one or more member envelopes minted under the pre calibration. | Do not patch metadata. Re-reduce only through a governed prospective path; otherwise recollect. |
 | `neg8_drift_bound_underived` or `neg8_idle_sub_drift_bound_underived` | One family has no authenticated derived bound. | Collect the complete settled-reference corpus and mint the dual-family artifact. Never insert a constant or borrow the other family. |

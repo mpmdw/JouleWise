@@ -101,6 +101,7 @@ be re-derived by a future agent gets an entry here.
 | D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
 | D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
 | D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted; operative under Ed's direction through the full repair arc (close-out cap explicitly Ed-ratified 2026-07-22; original-text ratification rides PR #79 review) |
+| D-079 | Calibration acceptance v2: derived bracket screen plus budget, a pre-flight calibration screen with cause-removal retry, one general production scope name, and publishing the decode floor now | accepted (Ed-ratified 2026-07-27) |
 
 ---
 
@@ -4628,3 +4629,250 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
    is approximately duration-independent while effects scale with
    workload, so longer prefill/decode raises effect-to-floor linearly at
    zero instrument cost (queue FLOOR-WORKLOAD-SIZING-01).
+
+## D-079: Calibration acceptance v2 — derived bracket screen plus budget, pre-flight calibration screen with cause-removal retry, one general production scope name, and publishing the decode floor now
+
+- Date: 2026-07-27
+- Status: accepted (Ed-ratified)
+- Phase: 2 / measurement
+- Applies to: `configs/campaign_policies/quiet_mac_p2_production.json`,
+  `joulewise/calibration_bracketing.py`, `joulewise/detection_floor.py`,
+  `docs/phase_2/window_runbook.md`
+
+Terms, in plain language, because this entry is read by people outside the
+project:
+
+- **Calibration (fiducial capture).** A 59-pulse capture, run under the
+  protocol-v3 recipe, in which the machine is commanded to draw a known
+  square-shaped burst of GPU power at known times. Comparing commanded times
+  against the power instrument's reported times measures how far the
+  instrument's picture of *when* energy was used can be wrong. The capture
+  reduces to a single number, the **fiducial bound** (`b_fiducial_s` in the
+  evidence file): the largest timing error the capture can rule out.
+- **Calibration bracket.** For a claim-bearing window, one calibration before
+  the first measured run (the **pre-calibration**) and one after the last
+  (the **post-calibration**). **Bracket drift** is the absolute difference
+  between the two fiducial bounds. Large drift means the instrument did not
+  behave the same way at both ends of the window, so neither number can be
+  trusted to describe the middle.
+- **Screen plus budget.** The acceptance pattern Ed ratified in D-078 clause
+  10 for the NEG-8 drift gate: a *screen* that refuses genuinely anomalous
+  windows, plus a nonzero *allowance* (budget) that is added to the published
+  uncertainty of everything the window produces, so that passing a screen is
+  never mistaken for a proof of zero error.
+- **Detection floor.** The smallest energy difference the instrument can
+  honestly claim to have observed. A wider uncertainty term makes the floor
+  larger, i.e. the published claim weaker but true.
+
+Context. The production policy constant `calibration_bracket_max_drift_s`
+(currently `0.01`, `configs/campaign_policies/quiet_mac_p2_production.json`)
+decides whether a window may bear claims: the reducer refuses when bracket
+drift exceeds it (`joulewise/calibration_bracketing.py:291`). That constant
+was never derived. It sat *below* the repeatability of the very estimator it
+judges — structurally the same defect D-078 clause 10 diagnosed and repaired
+for the NEG-8 drift gate, where an underived 0.05 J constant was compared
+against a statistic that could not physically be that small. Window B
+(`runs_window_b_20260726`, 59/59 members collected clean) is the first window
+the constant ever refused: pre 35.435841 ms, post 23.854405 ms, drift
+11.581436 ms against the 10 ms constant, refusal
+`instrument_calibration_mismatch`.
+
+Derivation evidence (reproduced by the lead from primary artifacts). The
+derivation set is the n=19 valid protocol-v3 fiducial captures that precede
+window B, all sharing Mac15,9 / macOS 25F84 / `ac_high_power` / 100 ms
+sampling cadence / `joint_loss_sublevel_interval_branch_v2` estimator
+bindings. Window B's own calibration pair was **excluded** from the
+derivation set, so the threshold could not be fitted to the case it would
+judge (a blind derivation). The set gives mean 26.950034 ms, sample standard
+deviation 2.970761 ms, sample range 10.817749309 ms, and a Student-t
+prediction level of 8.826912 ms; mean, standard deviation and range
+reproduce exactly from the stored `instrument_evidence.json` files, and the
+prediction level reproduces to 0.0004 ms under the D-078 clause-10
+predeclared estimator shape `t_{0.975,n-1}·s·sqrt(2)`. Adding the four later
+valid window-C/D calibrations as a sensitivity check leaves the range, and
+therefore the derived limit, unchanged.
+
+1. **The bracket limit becomes a DERIVED screen plus a budget, not a hard
+   cliff (Ed-ratified).** The derived bracket limit is
+   `max(sample range, Student-t prediction) = 10.817749309 ms`, i.e.
+   `0.010818 s` if the policy keeps six decimal places. Drift within that
+   bound passes clean. Drift *slightly above* it no longer discards the
+   window: the excess becomes an added uncertainty term carried into every
+   floor and every claim the window produces, so the floor publishes wider
+   rather than the measurement being thrown away. This is the same shape Ed
+   ratified for NEG-8 in D-078 clause 10, and it follows the project's
+   standing philosophy — publish labelled with the honest wider number rather
+   than refuse. The derived screen is bound to its provenance exactly as the
+   NEG-8 bound artifact is: estimator revision, OS build, hardware model,
+   power policy, sampling cadence, and a freshness horizon, with a distinct
+   stale-bound refusal when any of them changes.
+
+   *Options considered.* (a) Keep `0.010` and treat window B as simply lost —
+   rejected: an underived constant below its own estimator's repeatability
+   cannot distinguish a bad window from an ordinary draw, and the same
+   constant would keep destroying good windows. (b) Loosen the constant to
+   admit window B — rejected outright as waiving a gate to obtain a desired
+   outcome. (c) Derive a hard limit and keep refusing above it — rejected:
+   a hard cliff throws away hours of clean data for a millisecond of
+   scatter, and a pass/fail screen alone lets a barely-passing window
+   publish as if its drift were zero. (d) Derived screen plus propagated
+   budget — chosen.
+
+2. **The budget covers REPEATABILITY SCATTER ONLY and may never absorb a
+   known systematic defect.** This is the load-bearing limit on clause 1 and
+   is stated first because it is the part that can be abused. A budget turns
+   an excess into published uncertainty; if it were applied to a measurement
+   already *known* to be wrong for an identified reason, it would launder
+   that defect into a respectable-looking interval. Window B's 11.581436 ms
+   excursion is therefore **not budgetable**: its pre-calibration
+   (35.435841 ms) is the highest fiducial in the entire corpus and its cause
+   is identified (clause 3). Operationally the two failure modes get two
+   separate tests, and only one of them is budgetable:
+
+   - the **pre-calibration level check** (clause 3) catches out-of-family
+     systematic behaviour and is never budgetable;
+   - the **bracket drift check** (clause 1) catches ordinary repeatability
+     and is budgetable.
+
+   Window B fails the level check. `instrument_calibration_mismatch` remains
+   the scientifically correct verdict for window B, and its data is **not**
+   claim-bearing.
+
+3. **A pre-flight calibration screen on the pre-calibration's own level, with
+   cause-removal retry semantics (Ed-ratified, Ed-refined).** Cause
+   established for window B, from primary evidence: the failure decomposes
+   into 93.28% pulse-edge onset residual (33.236622 ms pre → 22.433503 ms
+   post) and 6.72% effective anchor bound, while the wall-clock-versus-
+   monotonic term moved −0.201464 ms, i.e. *opposite* to the failure
+   direction. It is not a wall-clock problem. The onset residual is produced
+   by a GPU dynamic voltage and frequency management (DVFM) power ramp: the
+   estimator fits each calibration pulse as a rectangle of constant
+   amplitude with a movable start time, but the raw GPU residency evidence
+   shows `idle_ratio = 0.0` — the GPU was not idle, it was ramping through
+   low-frequency states — and the estimator aliases that ramp into an
+   apparent shift of the pulse's start time. The effect is run-local, not
+   deterministic: the same pulse 19 fits at 31.5 ms in window B's
+   pre-calibration, 17.0 ms in a normal run (a10), and 2.0 ms in window B's
+   post-calibration.
+
+   Adopted screen: `pre.b_fiducial_s <= 0.033558756679900`
+   (33.558756680 ms) — the more conservative (larger) of the prior observed
+   maximum (33.558756680 ms) and the 95% Student-t upper level for a new
+   observation, `mean + t·s·sqrt(1 + 1/n)` (33.353749299 ms). Window B's
+   pre-calibration exceeds it by 1.877084200 ms, so the condition would have
+   been caught by a roughly four-minute pre-calibration instead of at the end
+   of a 3.5-hour campaign. The condition is not reliably predictable before a
+   calibration is taken, but it is cheaply detectable by one; that asymmetry
+   is the whole value of the screen. The threshold is proposed from 19
+   sessions, is provenance-bound like any other derived bound, and is to be
+   revisited prospectively as the corpus grows.
+
+   **Retry semantics.** A failing pre-calibration ends *that attempt*. A
+   retry is permitted **only** when a specific, named cause has been
+   identified and removed; the retry is recorded as a deviation, both
+   attempts are preserved as immutable evidence, and the number of retries is
+   bounded and pre-registered in the frozen plan. **Absent an identifiable
+   cause, the window ends.** The distinction that matters, and the reason
+   this is not a matter of taste: re-running until the number passes is
+   selection on the *outcome* — calibration shopping — and would invalidate
+   the science, because the accepted calibration would then be the luckiest
+   draw rather than a representative one. Re-running after removing a named
+   *cause* is legitimate, because the second attempt measures a genuinely
+   different machine state. Worked precedent, 2026-07-27: Apple's XProtect
+   malware scanner was observed at 94% CPU as a window's first member began,
+   the environment gate correctly refused the member, the scanner was
+   identified as the cause, the operator waited 14 minutes for it to finish,
+   and the relaunched window collected 59/59 clean. That is cause removal,
+   not shopping.
+
+   *Options considered.* (a) No pre-flight screen; discover the problem at
+   the post-calibration — rejected: it costs a whole quiet window per
+   occurrence and window time is the project's scarcest physical resource.
+   (b) Screen, with any failing attempt ending the night outright (the lead's
+   first formulation) — rejected by Ed as too blunt: it discards windows for
+   removable, identified causes such as a background scanner. (c) Screen,
+   with retries permitted freely — rejected: that is calibration shopping.
+   (d) Screen with cause-removal retry under a pre-registered bound —
+   chosen.
+
+4. **One general scope name for post-window-A production windows.**
+   `_CALIBRATION_SCOPES` (`joulewise/detection_floor.py:87`) is currently
+   `("window_a", "window_b_revalidation", "smoke")`. Windows C and D have no
+   legal scope name, which blocks minting any canonical floor artifact from
+   them. Adopted: add **one** general scope name covering post-window-A
+   production windows, rather than minting a new literal per window forever.
+   Rationale: the scope field records *what kind* of measurement a window was,
+   not *which* window it was; which window is already recorded in artifact
+   provenance (runs root, campaign manifests, member occurrence set), so a
+   per-window literal duplicates provenance in a closed enum and guarantees a
+   code change before every future window. The existing `window_a` and
+   `window_b_revalidation` literals are retained as historical names; nothing
+   already minted is renamed. The code change itself is a separate queued
+   task, not part of this entry.
+
+   *Options considered.* (a) Add `window_c` and `window_d` now — rejected:
+   unbounded growth, and a code change gating every future collection.
+   (b) Drop the closed enum and accept free-form scope strings — rejected:
+   the closed vocabulary is what stops an unrecognised scope from quietly
+   becoming a pass. (c) One general production scope name — chosen.
+
+5. **Publish the decode-phase floor now; pursue prefill separately
+   (Ed-ratified).** A cell reaches `claim_ready` only when it has *both* an
+   absolute and a comparative floor component in the same cell
+   (`joulewise/detection_floor.py:2011`). Window a10 supplies the absolute
+   component. Window C (40 decode ABBA members; the first comparative window
+   in project history to pass its whole-window verdict) supplies the decode
+   comparative component. Both windows are on disk and both passed. Adopted:
+   mint and publish the decode-phase floor now from a10 + window C, and treat
+   the prefill half — which needs a window-B re-collection under clause 3's
+   screen — as separate, later work. Rationale: the decode floor does not get
+   worse when prefill arrives, and a published floor in hand de-risks the
+   capstone against further collection setbacks.
+
+   **Correction of previously circulated numbers.** The lead earlier
+   circulated a10's floors as approximately 3.17 J prefill and 2.94 J decode.
+   A first real mint attempt established that those are the
+   **attribution-width floors before the whole-window drift allowance** is
+   added — that is, the uncertainty from timing attribution alone. The
+   **canonical operative floors**, which additionally include the window's
+   0.652272 J drift allowance and are the numbers that may be published or
+   compared against effect sizes, are **3.823787 J prefill** and
+   **3.592138 J decode**. Both quantities stay on the record and must always
+   be labelled: the attribution-width floor is a diagnostic; the operative
+   floor is the claim gate. Neither replaces D-078 clause 11's single-count
+   discipline — the effective clearable effect remains the operative floor
+   plus the claim-side bound.
+
+   *Options considered.* (a) Hold everything until a prefill comparative
+   window exists — rejected: it makes the project's first claim-grade number
+   hostage to one more successful overnight collection. (b) Publish a
+   prefill+decode pair using window B's data — rejected under clause 2;
+   window B is not claim-bearing. (c) Publish decode now, prefill later —
+   chosen.
+
+Considerations. Clauses 1 and 3 pull in opposite directions on purpose:
+clause 1 makes the instrument *less* prone to discarding good data, and
+clause 3 makes it *more* prone to stopping early on genuinely anomalous
+data. That is the intended shape — spend cheap minutes to refuse bad
+measurements, and spend published uncertainty rather than whole windows on
+ordinary scatter. Ed's standing rigor-spiral guardrail (D-078 clause 10)
+applies to clause 1: the budget widens floors, so the floor-versus-expected-
+effect ratio is checked at every extraction, and the Splitwise-class effects
+this program targets clear the widened bar with margin.
+
+Consequences. The production policy gains a derived, provenance-bound
+bracket screen plus a propagated allowance in place of one underived
+constant; the collection procedure gains a pre-flight gate and an explicit
+retry doctrine (`docs/phase_2/window_runbook.md` §5B, §8, §10); the floor
+artifact vocabulary gains one general production scope name; and the decode
+floor becomes publishable ahead of prefill. Windows a9, a10, C and D are
+unaffected in their stored bytes — every change here is prospective, and no
+stored summary or verdict is rewritten.
+
+Revisit when: the calibration corpus grows enough to re-derive either bound
+on a materially larger n; the fiducial onset-residual (GPU DVFM ramp)
+investigation produces an estimator that no longer aliases a power ramp into
+a start-time shift, which would change both bounds; the hardware, OS build,
+power policy, sampling cadence, or estimator identity changes; or a
+pre-flight failure occurs whose cause is identified but whose removal cannot
+be verified, which would test the retry doctrine's boundary.
