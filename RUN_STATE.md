@@ -1,23 +1,63 @@
 # JouleWise Run State
 
-Last updated: 2026-07-25. **Main is at `c3e2647`: PR #79's D-078
-instrument repair merged on 2026-07-22, and PR #85's ratified
-SCREEN+BUDGET rules are merged with green CI after the four-round
-adversarial gauntlet.** The repaired-instrument collection contains 229
-strict members across four bracketed windows (a5-a8). Those windows are
-non-claim-bearing diagnostic, instrument-proving evidence; they do not
-license a floor or research claim.
+This file is the single running pointer for the project: the one doc to
+read to get back here. Session records live in `docs/run_reports/` and
+`docs/process_traces/`; deliberation lives in `docs/council_log.md`;
+policy lives in `docs/decision_log.md`. The three dated restart docs
+`docs/process_traces/RESUME-2026-07-26.md`, `RESUME-2026-07-27.md`, and
+`RESUME-2026-07-28.md` are now point-in-time session records only — each
+carries a superseded banner, and everything still current in them is
+folded in below. Do not create another dated restart doc; update this
+file instead.
 
-The merged rules now screen gross and idle-subtracted energy separately,
-carry a never-zero drift allowance for each family, require a fresh
-24-hour drift bound, reject fallback-clock members from floor/claim cells,
-derive mockness from custody-bound config, and bar terminal mock evidence.
-NEXT: use one clean `[QUIET-MAC]` window and follow
-`docs/phase_2/window_runbook.md` exactly — mint the bound inside the
-window, collect the start triplet, midpoint reference, and end triplet,
-and produce the first claim-grade floors. Then re-verdict a8 and size the
-Splitwise campaign. The capsule was redeployed from `c3e2647` as
-`dep_2I04CG6tQ4t0mzY7` at 2026-07-25T01:46Z.
+Last updated: 2026-07-27. **Main is at `7337b33`.** `FLOOR-LABEL-01` is
+MERGED (merge commit `3055315`), implementing Ed-ratified D-078 clause
+11: attribution-limited floors are now a LABELLED CLAIM PATH — publish
+the corner-widened floor with `floor_source` and `floor_limit_class`,
+keep the point floor as a repeatability diagnostic that is never the
+published claim floor, and carry a machine-readable single-count
+statement into every publishing artifact. Suite 2194 OK on merged main,
+lead-verified. D-079 (calibration acceptance v2) and D-080 (standing
+fresh-eyes sweep) are recorded in `docs/decision_log.md`. Main also
+carries three new operator tools — `scripts/quiet_window_clock.sh`,
+`scripts/prewindow_check.sh`, `scripts/window_status.sh` — and
+`WINDOW_STATUS.md`, a live phone-readable status file published only
+between runs, never while a window is in flight.
+
+**Measurement is no longer the blocker; the mint is.** Windows C
+(decode comparative) and D (absolute) both PASSED their whole-window
+verdicts — C is the first comparative window in project history to pass
+— and a9/a10 remain PASSED. What stands between the project and its
+first published floor is that **the mint has never been built**:
+`build_floor_cell` / `build_floor_artifact` / `build_absolute_record` /
+`build_comparative_record` in `joulewise/detection_floor.py` have ZERO
+non-test call sites, and `scripts/extract_detection_floors.py` writes an
+extraction report and stops.
+
+NEXT: build the floor mint and mint the first published floor. In order —
+land the pre-mint schema hardening on branch `impl/floor-mint` @
+`617060a` (pushed, suite 2198 OK, NOT yet merged); verify the a10-absolute
+/ window-C-decode-comparative pairing (a GO/NO-GO, not a task); adopt the
+one general production `calibration_scope` name per D-079 clause 4
+(proposed literal `production_window`); resolve the 30-vs-37 member
+authentication mismatch; then write `scripts/mint_floor_artifact.py`,
+pre-register expected values from verdict-stage numbers, and mint. Detail
+and blockers are in "Current Project Status" below. Window B
+re-collection follows, under the D-079 pre-flight screen.
+
+Prior head (historical, superseded by the block above): main was at
+`c3e2647` on 2026-07-25 — PR #79's D-078 instrument repair merged on
+2026-07-22, and PR #85's ratified SCREEN+BUDGET rules merged with green
+CI after the four-round adversarial gauntlet. The repaired-instrument
+collection contains 229 strict members across four bracketed windows
+(a5-a8); those windows are non-claim-bearing diagnostic,
+instrument-proving evidence and do not license a floor or research claim.
+The merged rules screen gross and idle-subtracted energy separately, carry
+a never-zero drift allowance for each family, require a fresh 24-hour
+drift bound, reject fallback-clock members from floor/claim cells, derive
+mockness from custody-bound config, and bar terminal mock evidence. The
+capsule was redeployed from `c3e2647` as `dep_2I04CG6tQ4t0mzY7` at
+2026-07-25T01:46Z.
 
 Prior context (historical, pre-repair; superseded by the sign-off above):
 PRs #77 and #78 are both MERGED (#78 at b52abf3). The recal windows of
@@ -236,16 +276,119 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**Collection era open (2026-07-25): main `c3e2647` contains the merged
-instrument repair (PR #79) and the merged SCREEN+BUDGET rules (PR #85).
-The 229-member a5-a8 collection is non-claim-bearing diagnostic,
-instrument-proving evidence.** The next claim attempt is one clean
-prospective quiet window per `docs/phase_2/window_runbook.md`, with an
-in-window bound mint and start-triplet + midpoint + end-triplet
-references. A passing window produces the first claim-grade floors;
-the a8 re-verdict and Splitwise sizing follow. Records:
-`docs/run_reports/2026-07-23-window-a-collection-arc.md` and
+**Mint era open (2026-07-27): main `7337b33`. The data exists and passes;
+the code path that turns it into a published floor does not exist yet.**
+
+### The central measurement fact (read before any measurement decision)
+
+The instrument is **attribution-limited (~1 J), not noise-limited
+(~0.3 J)** — D-078 clause 11, Ed-ratified. Floors publish LABELLED with
+the widened number; the point floor is a repeatability diagnostic that
+may never be the published claim floor. The anchor term appears in
+**both** the floor and each claim's decision interval, so the effective
+clearable effect is floor + claim-side bound ≈ 5 J for phase contrasts,
+and neither term may later be deleted as an apparent double count. Do
+not launch an instrument-tightening program; it was measured and
+eliminated.
+
+### Collection state
+
+| Window | Contents | Verdict | Notes |
+|---|---|---|---|
+| a9, a10 | earlier corpora | **PASSED** | a10 supplies the absolute component |
+| **B** (`04_phase_prefill_abba`) | 40 prefill ABBA members, 59/59 collected clean | **FAILED** | `instrument_calibration_mismatch`, bracket drift 11.581436 ms; preserved, not claim-bearing |
+| **C** (`05_phase_decode_abba`) | 40 decode ABBA members, 59/59 collected | **PASSED** | bracket drift 1.279 ms; first comparative window in project history to pass |
+| **D** (absolute) | 30 claim members, 49/49 collected | **PASSED** | bracket drift 0.484 ms, tightest of the campaign |
+
+Window B's cause is established and is NOT a clock problem: a GPU DVFM
+power ramp that the rectangular-pulse fiducial estimator aliases into an
+apparent onset shift (93.28% of the drift; the wall-clock term moved the
+OPPOSITE way, −0.201464 ms). D-079 clause 3 adds a pre-flight screen that
+detects it in the ~4-minute pre-calibration, with cause-removal (never
+outcome-selection) retry semantics.
+
+**Corrected floor figures — the old ones must not be repeated.** a10's
+canonical operative floors are **3.823787 J prefill / 3.592138 J
+decode**, INCLUDING the 0.652272 J whole-window drift allowance. The
+3.17 / 2.94 J numbers circulated earlier are the attribution-width floors
+BEFORE the allowance and are diagnostics only (D-079 clause 5).
+
+### The critical path: build the mint
+
+`build_floor_cell` / `build_floor_artifact` / `build_absolute_record` /
+`build_comparative_record` in `joulewise/detection_floor.py` have zero
+non-test call sites; `scripts/extract_detection_floors.py` writes an
+extraction report and stops. Established blockers:
+
+1. **`claim_ready` requires an absolute AND a comparative record in the
+   SAME cell**, so a10 alone mints a structurally `smoke_only` artifact.
+   Mint #1 must pair a10's absolute cell with window C's decode
+   comparative. Verifying that the two share backend, metric,
+   `window_class`, condition family, and stack identity is a GO/NO-GO,
+   not a task.
+2. **A 30-vs-37 member authentication mismatch:** the a10 phase spec
+   selects 30 members; the passed verdict authenticates 37. Extraction of
+   the authenticated basis takes **20 min 36 s** on real data — budget
+   for it.
+3. **Windows C and D have no legal `calibration_scope`.**
+   `_CALIBRATION_SCOPES` is `("window_a", "window_b_revalidation",
+   "smoke")`. D-079 clause 4 adopts one general production name; proposed
+   literal `production_window`.
+4. **Pre-mint schema hardening is written but unmerged:** branch
+   `impl/floor-mint` @ `617060a` (pushed) makes the extraction report
+   export the admissible half-widths it already computes, and moves
+   `_WIDENED_FLOOR_KEYS` from optional into the required key sets so
+   width ABSENCE is a schema error rather than a silent fall-back to the
+   point-only floor. Suite 2198 OK.
+
+### Disk
+
+Disk was 99% full; it now has **33 GB free** after evicting
+already-backed-up iCloud copies (6497 files, 0 failures, nothing
+deleted). A window writes ~6 GB. A ruled selective-prune plan exists for
+a5/a7/a8 — 878 `powermetrics.plist` traces ≈ 26 GB versus 1.3 GB of
+everything else — archive and evict the traces, keep every small evidence
+file resident, and **DELETE NOTHING**. It awaits two Ed confirmations
+before any plist deletion (see "What needs Ed"). Do not touch
+`runs_window_a5_quarantine`; quarantine is evidence.
+
+### Orchestration
+
+Global `CLAUDE.md` hard rule 11 now defines the topology: Fable as
+MAGISTRATE and Ed's direct, Opus 5 as LIEUTENANT / operational chief, a
+cold-Fable-instance gate with mandatory (not discretionary) triggers, and
+an enumerated forbidden-to-decide-alone list for the lieutenant. D-080's
+standing fresh-eyes sweep is the first exercise of that list.
+
+### What needs Ed
+
+1. The two disk questions, before any plist deletion: (a) is iCloud-only
+   acceptable for the bulk traces, or does he want a second copy first;
+   (b) does selective prune replace his literal "delete locally"
+   instruction.
+2. **AC power** for measurement windows — the production policy requires
+   it and the machine was on battery.
+3. A magistrate ruling on a conflict between D-080 and D-061: D-080's
+   anti-ritual clause 4(ii) evaluates a rotating lens against the
+   two-zero-sessions drop rule, which D-061 explicitly superseded with an
+   expected-loss adjudication ("three applicable exposures TRIGGER an
+   expected-loss review decision, never automatic deletion").
+4. `FLOOR-WORKLOAD-SIZING-01` — resizing floors resizes the science, so
+   it is a pre-registration change and therefore Ed's call.
+5. Window B's disposition.
+
+Records: `docs/process_traces/RESUME-2026-07-28.md` (freshest session
+record, superseded as a pointer), `RESUME-2026-07-27.md`,
+`RESUME-2026-07-26.md`, `docs/process_traces/2026-07-26-prereg-clock-mitigation.md`,
+`docs/run_reports/2026-07-23-window-a-collection-arc.md`, and
 `docs/run_reports/2026-07-24-screen-budget-gauntlet.md`.
+
+**Historical (2026-07-25, superseded by the block above):** main
+`c3e2647` contained the merged instrument repair (PR #79) and the merged
+SCREEN+BUDGET rules (PR #85); the 229-member a5-a8 collection is
+non-claim-bearing diagnostic, instrument-proving evidence, and the next
+claim attempt was then framed as one clean prospective quiet window per
+`docs/phase_2/window_runbook.md`.
 
 The D-078 Phase-0 instrument repair was signed off and merged through
 PR #79 on 2026-07-22. Registered limitation L1 remains owned by
@@ -293,6 +436,17 @@ work-selection authority. Use the generated region above for selection.
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-27 evening session record (windows C/D passed; the mint is the
+  critical path; D-079/D-080): `docs/process_traces/RESUME-2026-07-28.md`
+  (superseded as a pointer by this file)
+- 2026-07-26 evening session record (window B failed on calibration
+  bracket drift; FLOOR-LABEL gauntlet parked):
+  `docs/process_traces/RESUME-2026-07-27.md` (superseded as a pointer)
+- 2026-07-26 session record (FLOOR-LABEL-01 in gauntlet; windows B/C/D
+  planned): `docs/process_traces/RESUME-2026-07-26.md` (superseded as a
+  pointer)
+- 2026-07-26 pre-registered clock-pin mitigation and its outcome:
+  `docs/process_traces/2026-07-26-prereg-clock-mitigation.md`
 - 2026-07-18 Claude Code script bridge + native pet integration:
   `docs/run_reports/2026-07-18-claude-codex-pet-observer.md`
 - 2026-07-13 Bridge v1: bridge-protocol/v1 contract + scripts/bridge tooling
@@ -375,7 +529,18 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
-- **Merged main `c3e2647` / PR #85 (2026-07-25, current):** the
+- **Merged main `7337b33` (2026-07-27, current):** `FLOOR-LABEL-01`
+  merged at `3055315` under the D-072 gate shape (independent Opus
+  contract lens returning "comparative coverage COMPLETE" plus a fresh
+  Sol xhigh audit, fix rounds each delta-re-audited, five independently
+  audited correctness fixes); lead-verified suite **2194 OK** on merged
+  main. Branch `impl/floor-mint` @ `617060a` (pushed, unmerged) records
+  suite **2198 OK (skipped=24)** from that 2194 baseline plus four
+  regressions. Window C's bracket drift (1.279 ms) and window D's
+  (0.484 ms) reproduce from the stored `instrument_evidence.json`
+  fiducial bounds in `runs_window_c_20260726/instrument_validation/` and
+  `runs_window_d_20260726/instrument_validation/`.
+- **Merged main `c3e2647` / PR #85 (2026-07-25, historical):** the
   SCREEN+BUDGET implementation completed four adversarial audit rounds.
   Final PR-head CI was green on all five checks (`build`,
   `installed-wheel`, `release-chain`, `test (3.11)`, `test (3.14)`).
@@ -563,13 +728,29 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- (2026-07-25) `main` and `origin/main` are at `c3e2647`, the PR #85
-  merge. PR #79's repair and PR #85's SCREEN+BUDGET implementation are
-  both landed; final PR-head CI is green. The current working tree
-  contains intentional lead bookkeeping and run-book/report work that
-  must be preserved; it is not a clean measurement checkout. The next
-  quiet-window operator must start from a separate clean, merged-main
-  measurement checkout per `docs/phase_2/window_runbook.md`.
+- (2026-07-27) `main` and `origin/main` are at `7337b33`. Branch
+  `impl/floor-mint` @ `617060a` is pushed and NOT merged; it carries the
+  pre-mint floor schema hardening. The window C/D/B runs roots
+  (`runs_window_{b,c,d}_20260726` and their `_bound` siblings) are
+  resident in the working tree, and custody material lives OUTSIDE the
+  repo at `~/JouleWise-window-custody/` — an agent searching only the
+  repo will wrongly report quarantined evidence missing. Disk has 33 GB
+  free; a window writes ~6 GB. The next quiet-window operator must start
+  from a separate clean, merged-main measurement checkout per
+  `docs/phase_2/window_runbook.md`.
+- The generated state-kernel regions in this file and `TASK_QUEUE.md` are
+  IN SYNC with `docs/process/state_kernel.json`
+  (`python3 scripts/gen_state.py --check` exits 0), but the kernel's own
+  content is stale as of 2026-07-27: it is stamped `updated: 2026-07-25`,
+  its `latest_report` still points at
+  `docs/run_reports/2026-07-24-screen-budget-gauntlet.md`, `FLOOR-LABEL-01`
+  is still `READY` though it merged at `3055315`, and no row exists for
+  the floor-mint work. Fixing that means editing the kernel and then
+  running `python3 scripts/gen_state.py` — never hand-editing the
+  generated regions.
+- (2026-07-25, historical) `main` and `origin/main` were at `c3e2647`,
+  the PR #85 merge; PR #79's repair and PR #85's SCREEN+BUDGET
+  implementation both landed with green final PR-head CI.
 - The generated state-kernel blocks are authoritative for work selection.
   Hand-authored `RUN_STATE.md` and `TASK_QUEUE.md` text remains authoritative
   only for its own factual, policy, and historical domains;
