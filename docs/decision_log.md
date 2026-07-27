@@ -102,6 +102,7 @@ be re-derived by a future agent gets an entry here.
 | D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
 | D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted; operative under Ed's direction through the full repair arc (close-out cap explicitly Ed-ratified 2026-07-22; original-text ratification rides PR #79 review) |
 | D-079 | Calibration acceptance v2: derived bracket screen plus budget, a pre-flight calibration screen with cause-removal retry, one general production scope name, and publishing the decode floor now | accepted (Ed-ratified 2026-07-27) |
+| D-080 | Standing fresh-eyes sweep: a periodic, non-reactive outside review on one cadence unit, a rotating second lens, and a mechanically generated packet | accepted (magistrate-ratified 2026-07-27) |
 
 ---
 
@@ -4876,3 +4877,159 @@ a start-time shift, which would change both bounds; the hardware, OS build,
 power policy, sampling cadence, or estimator identity changes; or a
 pre-flight failure occurs whose cause is identified but whose removal cannot
 be verified, which would test the retry doctrine's boundary.
+
+## D-080: Standing fresh-eyes sweep — a periodic, non-reactive outside review
+
+- Date: 2026-07-27
+- Status: accepted (drafted by the lieutenant, magistrate-ratified 2026-07-27)
+- Phase: cross-phase / process instrumentation
+- Applies to: the `council` skill (the ONE home for the mechanism), the
+  `operation-loop` skill (firing rule only), `docs/council_log.md`,
+  `docs/process/model_allocation_ledger.md`
+
+Terms, in plain language, because this entry is read by people outside the
+project:
+
+- **Reactive trigger.** An existing rule that summons an outside reviewer when a
+  named condition occurs — a second fix round on the same defect, a contract
+  change, an irreversible action. It fires on a problem someone has already
+  recognised.
+- **Sweep.** A review that happens on a schedule rather than in response to a
+  problem, and that arrives with no question in hand.
+- **Cold lens.** A reviewer started in a fresh session with none of the working
+  session's context, so it does not inherit the working session's assumptions.
+- **Magistrate / lieutenant / cold gate.** The orchestration roles defined by
+  the operator's global orchestration rule 11, which is the authority for the
+  topology; this entry references it and does not restate it.
+
+Context. Every escalation trigger in the process stack is reactive, and a
+trigger catches only what can be NAMED in advance. The two costliest failures of
+2026-07-26/27 were nameless until postmortem: roughly ten hours of an open quiet
+measurement window lost to an untracked background job, and six fix rounds spent
+building a guard on the wrong axis. Neither had a recognised condition to fire
+on, so no trigger could have fired. Nothing in the stack was periodic and
+outside-facing, which left that whole class of failure uncovered.
+
+1. **A standing fresh-eyes sweep is adopted, on ONE cadence unit.** The sweep
+   runs every **10 delegated invocations**, plus mandatorily at every **phase
+   boundary**. The number 10 is explicitly PROVISIONAL and is to be calibrated
+   against `docs/process/model_allocation_ledger.md` after two sessions.
+
+   *Options considered.* (a) The lieutenant's draft cadence — an OR over
+   invocation count, wall-clock time, and phase boundaries — rejected by the
+   magistrate as the first of three amendments: three counters means three ways
+   to argue about whether the mechanism fired, and a cadence that can be argued
+   about is a cadence that will be argued away. (b) Wall-clock as the unit —
+   rejected outright: "active session work" is a clock nobody keeps, and three
+   hours of bookkeeping is not three hours of hot integration. (c) Invocation
+   count plus phase boundaries — chosen: the count is already in the manifest
+   event stream, it scales with work density rather than elapsed time, and it is
+   unarguable.
+
+2. **Composition rotates: a cold Fable lens every sweep, plus one alternating
+   second lens.** The cold Fable instance (fresh session, no loop context) runs
+   at every sweep and never rotates out — it is the raison d'être, the only lens
+   aimed at the nameless failure class. The second lens alternates between the
+   Opus contract lens and the Sol execution lens. All three run only at phase
+   boundaries, or when the cold lens flags something material.
+
+   *Options considered.* (a) The lieutenant's draft — cold lens plus both
+   verification lenses at every sweep, justified by the execution lens's record
+   of catches — rejected by the magistrate as the second amendment, and the
+   justification corrected as a MISCITATION: the execution lens's famous catches
+   (a 5e-324 floor exploit, a wall-clock slew, GPU DVFM aliasing) were all made
+   in REACTIVE review with a specific artifact in hand. A sweep arrives with no
+   question, and an execution lens with no target degenerates into "run the
+   tests again." Contract and execution are verification lenses, and the
+   existing adversarial gauntlet already exercises both reactively at every
+   review. (b) Cold lens alone, always — rejected: cross-model diversity is
+   cheap and a fresh same-family instance still shares its family's
+   dispositions. (c) Cold lens plus one rotating verification lens — chosen.
+
+3. **The packet has six sections and five of them are MECHANICALLY GENERATED.**
+   Sections (a)–(e) are generated from manifests and logs rather than composed:
+   (a) the phase objective VERBATIM as stated at phase start; (b) the mechanical
+   log since the last sweep — invocations, one-line outcomes, and round counts
+   per objective; (c) time and spend against plan; (d) the next three planned
+   actions; (e) open anomalies, INCLUDING everything observed and explained
+   away. Only (f) is composed: current beliefs and the steelman against them.
+
+   *Options considered.* (a) The lieutenant's draft organising principle — a
+   packet built as "the assembler's evidence against itself" — rejected by the
+   magistrate as the third amendment, and this is the crux of the ratification:
+   such a packet contains only NAMED doubts, which is the exact thing the sweep
+   exists to escape. If the assembler could state the case against its own work,
+   it would not need fresh eyes. The assembler's blind spots ARE the target, so
+   the assembler's hit rate must not be load-bearing. (b) A wholly mechanical
+   packet with no composed section — rejected: the steelman section is cheap and
+   gives the reviewer the working position to push against. (c) Five mechanical
+   sections plus one composed — chosen. Each mechanical section is aimed at an
+   observed failure shape: round counts per objective expose the
+   six-round-guard pattern without anyone recognising it; time and spend against
+   plan expose the ten-hour-loss shape; explained-away anomalies are where a
+   time-anchor defect (D-078) and a screensaver contamination both hid; and
+   drift between the objective as stated and the objective as pursued is
+   precisely what cold eyes see and warm eyes do not.
+
+4. **Anti-ritual clauses, including falsifiability of the mechanism itself.**
+   (i) Only PLAN-CHANGING catches count — a catch that altered no decision is
+   ritual's camouflage. (ii) Evaluation is over SESSIONS, matching the existing
+   zero-unique-catch rule: a rotating lens with zero plan-changing catches over
+   two full sessions rotates down; the cold lens is evaluated on a one-phase
+   window and is not exempt. (iii) The MECHANISM ITSELF is falsifiable — if the
+   whole sweep produces no plan-changing catch across one full phase, it returns
+   to the magistrate for termination or redesign. The real anti-ritual guard,
+   however, is clause 3's mechanical packet: ritual enters through the packet
+   first, by way of sections nobody generates honestly.
+
+   *Options considered.* (a) Adopt the sweep with no termination condition —
+   rejected: a periodic mechanism with no way to die is the definition of
+   ritual, and the process stack already requires layers to justify themselves
+   on evidence (D-061). (b) Count all catches — rejected: catch counts that
+   include catches nobody acted on measure activity, not value.
+
+5. **The sweep supplements the reactive triggers and never replaces them.** All
+   mandatory reactive triggers stand unchanged. One asymmetric reset rule: a
+   trigger consult may reset the sweep counter ONLY IF its packet included the
+   sweep's mechanical sections, because the function — outside eyes on raw state
+   — was just served. A sweep NEVER satisfies a trigger, because a trigger
+   consult carries a specific question that a decision is waiting on. No
+   mechanism may be skipped on the theory that the other covers it.
+
+   *Options considered.* (a) Symmetric substitution in both directions —
+   rejected: it would let a scheduled review with no question in hand stand in
+   for an adjudication a decision is blocked on. (b) No interaction at all,
+   both always run — rejected as needless duplication in the narrow case where
+   the trigger consult already saw the mechanical packet.
+
+6. **Records.** Sweep outcomes go to `docs/council_log.md` with PER-LENS
+   attribution, feeding `docs/process/model_allocation_ledger.md`. Per-lens
+   attribution is what makes clause 4(ii) computable.
+
+Considerations. This is the first exercise of the global orchestration rule 11
+forbidden-to-decide-alone list: ratifying process rules, changing cadence
+numbers, and dropping or adding a mechanism are all outside the lieutenant's
+authority, so the lieutenant drafted and the magistrate ratified with three
+amendments. That split is itself evidence for the rule — the amendments were not
+edits to wording but reversals of the draft's cadence design, its lens
+composition, and its packet organising principle. Note also the tension the
+mechanism deliberately accepts: the council doctrine is otherwise "by trigger,
+never by ritual", and this mechanism is periodic on purpose; clause 4 is what
+pays for that exception, and D-061's evidence discipline for review layers
+applies to the sweep exactly as it applies to any other layer. The ONE home for
+the mechanism is the `council` skill; the `operation-loop` skill carries only
+the firing rule and a pointer.
+
+Consequences. The process stack gains one periodic outside review with a fixed
+cadence unit, a rotating second lens, a mostly mechanical packet, and an
+explicit termination condition. Packet sections (b) and (c) require the
+delegated-invocation event stream (D-064) to be readable per phase, which it
+already is. No existing trigger, gate, or review layer changes.
+
+Revisit when: two sessions of sweep data exist, at which point the provisional
+cadence number 10 is calibrated against the model-allocation ledger; a rotating
+lens records zero plan-changing catches over two full sessions; the sweep
+produces no plan-changing catch across one full phase, which returns the whole
+mechanism to the magistrate; or the mechanical packet's sections stop being
+generable from manifests and logs, which would make the packet composed and
+void clause 3's guarantee.
