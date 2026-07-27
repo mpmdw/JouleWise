@@ -50,8 +50,12 @@ calibration.
   adapter-continuity, anchor-fallback, mock-telemetry, or drift-allowance
   failures.
 - [ ] Back up the immutable corpus before extraction.
-- [ ] Until FLOOR-BIND-01 closes, perform claim-bearing extraction in the
-  same lead-controlled custody session as collection and verdict production.
+- [ ] Until FLOOR-BIND-01 closes, honour registered limitation L1: a
+  claim-bearing analysis may consume a floor artifact only when that artifact
+  was produced by the governed extraction in the same lead-controlled custody
+  session as **the analysis**. L1 binds extraction to analysis, not collection
+  to extraction — collection may happen in an earlier session — but extraction
+  and the analysis that consumes its floors may never be split.
 
 The practical target is one compact 2–4 hour window. If the work will not fit,
 split it into another independently calibrated window. A long window is not
@@ -225,6 +229,14 @@ science stage. Dry-run mode does not write campaign-log entries.
 - [ ] Finish or pause Time Machine, software updates, indexing churn, large
   downloads, and cloud uploads.
 - [ ] Confirm `sudo -n powermetrics` succeeds.
+- [ ] Perform the pre-window clock stabilization in §5A. It needs
+  administrator rights, so only Ed can do it and the chain cannot.
+- [ ] Let idle-triggered background daemons run **before** the window, not
+  inside it. macOS starts idle-only work — XProtect's scheduled malware scan
+  is the documented instance — in roughly the first 10 minutes after the
+  machine goes quiet. Leave the machine untouched and idle for at least 10
+  minutes before launching the chain. This is in addition to the 180-second
+  stage settle, not satisfied by it.
 - [ ] Confirm both fresh runs roots do not already contain member bundles.
 - [ ] Confirm the backup destination exists and has enough free space.
 - [ ] Close every agent and browser-automation session.
@@ -242,6 +254,132 @@ That script uses transient display sleep and does not change persistent
 display or screensaver settings. The campaign still arms and re-probes on
 every invocation; the preparation script is not a certificate for later
 members.
+
+An idle-triggered daemon that fires inside the window contaminates the member
+it lands on and will fail CPU admission. That is the gate working, not a false
+alarm: window a9's first bound-corpus member was lost exactly this way and was
+correctly caught. The response is always preserve, quarantine, supersede, then
+relaunch (§10). It is never a waiver and never `--environment-override`.
+
+## 5A. Pre-window clock stabilization (administrator step; Ed performs it)
+
+**This is operational stabilization, not a protocol waiver.** The 5 ms
+wall-versus-monotonic anchor ceiling stays exactly where it is. It is never
+relaxed, widened, or waived, and a member that trips it is still lost. The
+steps below reduce how often the machine trips it. They do not change what
+trips it.
+
+### What went wrong, in plain language
+
+Every measured member must be anchored causally in time. The anchor check
+compares two clocks: the **wall clock**, which is the machine's idea of the
+current date and time and which network time synchronisation adjusts, and the
+**monotonic clock**, a counter that only ever counts forward and is never
+adjusted. The difference between them must stay within `5 ms`
+(`MAX_WALL_MINUS_MONOTONIC_SPAN_S`, `joulewise/uncertainty_evidence.py:22`)
+across a member's clock stamps. When it does not, the predicate at
+`joulewise/uncertainty_evidence.py:367` refuses the member with the detail
+string `wall_minus_monotonic_span_exceeded`.
+
+Two consecutive window-C collection attempts on 2026-07-26 failed on exactly
+that, and on nothing else:
+
+| Attempt | Member that failed | Observed span | Implied rate |
+|---|---|---:|---:|
+| 1 | `p2015-df-cmp-abba-ph-decode-b02-b2` | 5.544 ms | about +110 ppm |
+| 2 | `neg8-refcorpus-r11` | 7.769 ms | about −158 ppm |
+
+Rates of that size are what `adjtime(2)` produces. `adjtime(2)` is the system
+call network time synchronisation uses to correct the wall clock by speeding
+it up or slowing it down by a fraction of a percent, instead of jumping it, so
+that time keeps increasing. The evidence shows a **slew** — a gradual change
+of rate — and not a demonstrated discrete step: no timestamp ever moved
+backward, and the native powermetrics second counter advanced only by 0 or 1
+whole seconds. A step hidden inside the roughly 44-second gap between stamps
+cannot be categorically excluded.
+
+Two things are unknown and must be written as unknown wherever this is
+reported:
+
+- **The responsible process is unknown.** `joulewise/environment.py:908`
+  assigns `clock_sync.status = "limited_without_admin"` unconditionally, and
+  the `timed_running` field only reports whether `pgrep` found the process.
+  Every member, passing and failing alike, reported `timed_running=true`. The
+  macOS `timed` daemon is therefore **plausible but unproven**; attributing it
+  would require privileged inspection of the unified log.
+- **The correlation with time of day is noted but unproven.** Window B had
+  zero occurrences across 59 members, collected 23:57–03:15 local. Window C
+  ran roughly 7% per member — 2 occurrences across about 30 members, collected
+  03:17–05:19 local. Do not assert a nightly maintenance-window cause.
+
+What is established: only a privileged wall-clock adjuster can produce this.
+Ordinary sampling load, thermal state, and CPU activity cannot move the wall
+clock relative to the monotonic clock. The excursion also self-clears — member
+`neg8-refcorpus-r12`, collected immediately after the failing `r11`, anchored
+cleanly with a 0.305 ms span.
+
+### Before the window (administrator rights required)
+
+macOS gates both the read and the write of this setting behind administrator
+rights (`systemsetup -getusingnetworktime` and
+`systemsetup -setusingnetworktime`), so the chain script can neither perform
+nor verify this step. Ed performs it by hand.
+
+- [ ] **Confirm the system clock is actually correct first.** Disabling
+  automatic time on a wrong clock freezes that error in place for the whole
+  window. Compare the system clock against an independent trusted source and
+  correct it before going further.
+- [ ] Record the current setting so it can be restored:
+
+  ```sh
+  sudo systemsetup -getusingnetworktime
+  ```
+
+- [ ] Disable automatic network time adjustment:
+
+  ```sh
+  sudo systemsetup -setusingnetworktime off
+  ```
+
+- [ ] Settle 150–240 seconds — use 180 — after this administrator action, as
+  after any other operator activity, before launching the chain.
+- [ ] After the window closes, meaning after `measurement_complete`, the
+  whole-window verdict, and the backup, re-enable it:
+
+  ```sh
+  sudo systemsetup -setusingnetworktime on
+  ```
+
+- [ ] Record in the close-out that automatic time was disabled, when it was
+  disabled, and when it was restored.
+
+Leaving automatic time off is not a protocol state. It is a temporary machine
+condition the operator owns for one window, and the close-out must show it was
+returned.
+
+### If a single member still fails the anchor
+
+Stabilization lowers the rate; it does not make the failure impossible. When
+one member refuses with `wall_minus_monotonic_span_exceeded`:
+
+- [ ] **Do not mint a bound, a verdict, or a floor from a basis that contains
+  the invalid occurrence.** An invalid member never becomes a valid one.
+- [ ] Preserve and quarantine **only the invalid member**. Valid members
+  already collected stay exactly where they are.
+- [ ] Settle conservatively — at least the full 180 seconds, and longer if the
+  machine has been touched.
+- [ ] Rerun that member's exact frozen config. Change nothing else in the
+  plan.
+- [ ] Strict-validate the replacement with
+  `.venv/bin/python -m joulewise validate-bundle --strict`.
+- [ ] Record supersession of the old occurrence using the existing procedure
+  in §10, "Slot quarantine and supersession".
+- [ ] Rerun the dual-family bound mint so the bound derives from the repaired
+  corpus.
+
+`--max-failures` stays at 1. Every admission gate, every family screen, and
+every refusal stays exactly as written. This recovery relaxes no acceptance
+condition; it replaces one lost member with a properly collected one.
 
 ## 6. The foreground measurement chain
 
@@ -570,6 +708,34 @@ occurrence:
 
 Two present bundles for one occurrence always refuse.
 
+### Post-calibration failure and the a10 recorded deviation
+
+The chain retries a calibration exactly once, and only when the sole reason is
+`clock_anchor_unresolved` (`calibrate_with_clock_retry`, §6). Any other
+calibration reason aborts, as the table above requires.
+
+Window a10 recorded an operator deviation against that rule. Its first post
+calibration, `20260725T055825`, failed with pulse-detection reasons rather
+than `clock_anchor_unresolved`; the frozen run-book said abort and repair the
+machine outside the window. The lead instead settled and retried, and the
+retry, `20260725T060617`, was valid. Both captures are preserved.
+
+What kept that deviation from corrupting the record is the discipline that
+still binds every operator here:
+
+- [ ] Preserve every failed calibration attempt under
+  `RUNS_ROOT/instrument_validation/`. Never delete or overwrite one.
+- [ ] Consume the **earliest valid causal post calibration**. Never select
+  among valid captures on the basis of the bound each one produces. In a10 no
+  such selection occurred, and that is why the retry was recoverable.
+- [ ] Record any retry, its reason, and both directory names in the close-out
+  as a deviation.
+
+Whether a post-calibration retry is permitted for a non-clock failure is not
+settled by this run-book. Until Ed rules (§13.2), the standing instruction
+remains abort and repair outside the window, and any retry is a recorded
+deviation rather than a licensed step.
+
 ## 11. Back up, then extract in the same custody session
 
 Back up the claim corpus:
@@ -621,6 +787,10 @@ Record:
 - every failed, quarantined, superseded, or waived occurrence;
 - backup destination and exit status;
 - extraction artifact path and result;
+- whether automatic network time was disabled for this window, when it was
+  disabled, and when it was restored (§5A);
+- every calibration attempt, including failed ones, and any retry recorded as
+  a deviation;
 - member counts by distinct bundle ID, never by campaign-log line.
 
 Call the window **claim-bearing** only when the whole-window verdict is
@@ -628,3 +798,41 @@ Call the window **claim-bearing** only when the whole-window verdict is
 same-custody extraction completes with no refusal. Otherwise preserve the
 evidence and report the strongest lower, non-claim-bearing status it actually
 earned.
+
+## 13. Open questions for Ed (recorded, not adopted)
+
+Nothing in this section is in force. Do not act on any of it during a window.
+It is recorded here so the argument is not lost between sessions.
+
+### 13.1 A governed member-level retry for `clock_anchor_unresolved`
+
+**Observation.** `calibrate_with_clock_retry` (§6) already treats
+`clock_anchor_unresolved` as the one retryable condition **for calibrations**,
+retrying once after a settle. There is no equivalent retry for **members**. A
+single member that hits the same transient clock condition fails that member,
+and under `--max-failures 1` that one failure aborts the whole stage.
+
+**For.** The condition is demonstrably transient and self-clearing: in §5A,
+`neg8-refcorpus-r11` failed at a 7.769 ms span and `r12`, collected
+immediately after it, anchored cleanly at 0.305 ms. A governed member-level
+retry — once only, after a full settle, restricted to
+`clock_anchor_unresolved` alone, with the failed occurrence quarantined and
+superseded exactly as today — would have saved both lost windows.
+
+**Against.** Any retry loosens the fail-closed posture. A systematic clock
+problem would present as a run of individually retried transients, and the
+retry would mask it: the window would look healthy while producing members
+collected under a drifting clock. The current behaviour makes the problem
+loud, which is the only reason it was diagnosed at all.
+
+This is a protocol change affecting claim-bearing data, so it is explicitly
+Ed's call. Do not implement it, and do not treat a hand retry as an
+equivalent.
+
+### 13.2 Post-calibration retry shape for a non-clock failure
+
+Raised by the window-a10 deviation recorded in §10, "Post-calibration failure
+and the a10 recorded deviation". The question is whether a post calibration
+that fails for a reason other than `clock_anchor_unresolved` may be retried
+once after a settle, or must abort the window as the current text requires.
+Undecided; the current text stands.

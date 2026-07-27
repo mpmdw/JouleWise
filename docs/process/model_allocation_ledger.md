@@ -177,10 +177,18 @@ per-invocation detail; the row says so.
 | L-034 | 2026-07-24/25 | C-033 | Severity synthesis on split verdicts, two decision-log addenda, capsule budget/pagination rulings, bench fixes | lead-bench | `unknown` (see A-10) | severity adjudication + rulings | lead synthesized rather than majority-voted where the two lenses split (G1, G2) | **the two D-078 clause-10 addenda** (anchor-fallback gate ruling derived from the a7-vs-a5 prefill-scatter root cause — a7's 11.85 J "floor" was one fallback-anchored member, true floor ≈ 3.3–3.7 J; and the terminal mock bar); severity synthesis keeping F4 at blocker against the contract refuter's downgrade; the capsule shard-budget trim and pagination ruling; the battery-flake adjudications; the bench fixes | fixed constant | `docs/council_log.md` §C-033 "Lead (unique)" (l.1795-1806) and "Dissent recorded" (l.1832-1837) |
 | L-035 | 2026-07-24/25 | C-033 | Full-suite gate at each commit head, on the lead bench | lead-bench | n/a | live verification | 5 gated heads | **1**: the D-078 registry test failing at `e7cbf35` (2113 passed / 1 failed), fixed by addendum 2 — the auditor had reported the registry gap, the lead gate is what proved it live | fixed constant; note the intermediate heads have no CI, only lead-bench receipts | `docs/run_reports/2026-07-24-screen-budget-gauntlet.md` §Lead gates |
 
-**Row count: 35.** Fully evidenced (no `unknown` field): **19**. Rows
-carrying at least one `unknown` field: **16** (L-001, L-002, L-003,
+| L-036 | 2026-07-25/26 | C-038 (FLOOR-LABEL-01) | End-to-end contract lens over the labelled attribution-limited floor path for comparative (ABBA) cells: extraction → canonical floor record → transport group → resolution → claim evaluation → final artifact (~164k tokens, 50 tool uses, ~11 min) | **Opus 5 subagent** | `unknown` — the session records tokens/tool-uses/wall-clock, not an effort tier (same gap as A-5) | contract-lens review of a whole path | verdict **"COMPARATIVE COVERAGE: COMPLETE"**; 4 should-fix + 4 nits | **4**: (a) `_combined_floor` key-sniffing misattributes point-floor diagnostics for a *partially* attribution-limited transport group — publishing one cell's repeatability numbers under another cell's ID — and the heuristic is mirrored bug-for-bug in `artifact.py`, so validation recomputes the same wrong answer and it ships; (b) `floor_conditions` proxies soleness through a stale field that post-construction mutation does not clear; (c) ratio-unit floors publish a J/token claim floor beside joule-valued diagnostics, making the diagnostic read ~150× larger than the floor and **inverting the very relationship the label exists to communicate**; (d) no assertion pins the labelled fields on a comparative extraction row, with 80 ABBA members about to be collected against that path. Plus: `scripts/build_site.py` and `scripts/build_capstone.py` contain **zero** references to the new fields (lead-verified on `impl/floor-label`) | **strong; second trial of the contract lens.** Found a cross-cell *attribution* defect that a validate-or-not probe structurally cannot see — the complement of L-037's catch on the same artifact | `docs/council_log.md` §C-038 "Opus 5 contract lens"; `joulewise/analysis_engine/__init__.py:192` (`_combined_floor`, on `main`); `joulewise/floor_extraction.py` (`floor_conditions`, on `impl/floor-label`) |
+| L-037 | 2026-07-25/26 | C-038 (FLOOR-LABEL-01) | Fresh read-only independent audit of the FLOOR-LABEL-01 head (~23 min) | Sol | xhigh | independent adversarial audit | 1 blocker + 1 should_fix; blocker **adjudicated down to registered limitation L1** by the lead | **1, and it is a first**: a runnable probe (V3) showing that the same comparative blocks minted **without** admissible half-widths validate clean via `validate_floor_artifact` and yield `floor_gate` **5e-324 J** vs **2.6484 J** with widths — an artifact that licenses any effect. Sol had no knowledge of L1, so independent rediscovery was **correct reviewer behaviour**, and this is the **first executable demonstration** of a limitation previously argued only on paper | right instrument. Note the pattern: the *audit* was correct-as-found and the *severity* was still the lead's to price against `docs/decision_log.md` — consistent with L-030's severity-calibration finding | `docs/council_log.md` §C-038 "Sol xhigh independent audit"; `docs/decision_log.md` clause 8 (l.4407) and L1 registration (l.4421) |
+| L-038 | 2026-07-25/26 | C-038 (window C) | Root-cause diagnosis of the repeated window-C collection failure (~17 min) | Sol | xhigh | non-local root-cause diagnosis | root cause at **high confidence**, with an explicit UNKNOWN preserved | **3**: (1) transient **wall-clock-vs-monotonic slew exceeding the governed 5 ms anchor ceiling** — `MAX_WALL_MINUS_MONOTONIC_SPAN_S = 0.005`, gate `joulewise/uncertainty_evidence.py:367`, detail `wall_minus_monotonic_span_exceeded` l.369; 5.544 ms (≈ +110 ppm) and 7.769 ms (≈ −158 ppm); (2) **corrected the lead's hypothesis** — the failing members' shorter duration was a *consequence* of reduction, not a cause; (3) **correctly refused** to attribute the adjustment to macOS `timed`, marking it UNKNOWN because `joulewise/environment.py:908` assigns `limited_without_admin` unconditionally (the field cannot distinguish "not synchronising" from "no privilege to see it") | **strong.** Refusing to over-attribute is itself the catch — the disciplined UNKNOWN is what keeps a plausible-but-unevidenced cause out of the record | `docs/council_log.md` §C-038 "Sol xhigh diagnosis"; `runs_window_c_20260726_bound/neg8-refcorpus-r11/metadata.json` (`wall_minus_monotonic_span_s` = 0.007769107818603516) |
+| L-039 | 2026-07-25/26 | C-038 (process) | Adjudication of the lead's own process failure (the lost quiet window), question pre-assembled by the lead: 21k tokens, **zero tool uses**, 108 s | **Fable subagent** | `unknown` | severity/merit adjudication of a pre-assembled question | decisive; **overturned the lead's own self-diagnosis** and replaced its draft rule with a better-shaped set | **4**: (1) the lead's proposed "act-anyway deadline" rule was **not** the generalization — with a working wake mechanism the information-block would have cost **17 minutes**, so the 10-hour loss is fully explained mechanically; (2) named the underlying disposition — *the lead applies rigorous verification to WORK PRODUCTS but exempts its own PREMISES ABOUT THE ENVIRONMENT*; (3) rules R1 (turn-end invariant: end only with work complete or a harness-registered wake source named explicitly), R2 (quiet-window dominance with stop-loss + a heartbeat that checks for an in-flight measurement before acting), R3 (premise labeling); (4) identified failure modes the lead's own rules missed, incl. that **more wakeups can contaminate a live measurement**. It recommended **no demotion**, explicitly arguing against its own promotion because it would operate the same harness with the same wake semantics | **strong — the best-supported Fable datum in this ledger.** Zero retrieval, pure judgment on an assembled question, 108 s, and it beat the lead on the lead's own failure. Distinguishes the task class **"adjudicate a pre-assembled question"** (Fable: strong) from **"gather then judge"** (untested) | `docs/council_log.md` §C-038 "Fable adjudication" and "Verdict and calibration" |
+| L-040 | 2026-07-25/26 | C-038 | Lead adjudication + gates: severity re-pricing, restart-vs-resume ruling, gate-integrity refusals, predicate verification | lead-bench | `high` (**Ed-confirmed**, §2a) | severity adjudication + gate integrity | 5 catches, 2 of them refusals to weaken a gate | **5**: (1) detected its **own** suite verification was worthless because it piped output through `tail`, discarding the summary line and masking the real exit code behind tail's; (2) adjudicated Sol's blocker to L1 by **reading the primary source** rather than accepting the delivered severity, and recorded that FLOOR-LABEL-01 **modestly WIDENS L1's blast radius** (attribution-limited cells that previously refused, and were therefore sterile, now publish); (3) chose **full restart over resume** for window C because resuming would mint a second pre-calibration and `latest_calibration()` would select it, silently breaking the pre/post bracket; (4) **refused to raise `--max-failures`**, which would have "fixed" the failures by accepting corrupted members; (5) hand-verified that the refactored dominance predicate reproduces both prior inline gates for absolute and comparative **before either reviewer reported** | fixed constant. Catches (3) and (4) are the shape no delegated layer produces: **refusing a change that would make the run succeed** | `docs/council_log.md` §C-038 "Lead (Opus 5) bench catches" |
+| L-041 | 2026-07-25/26 | C-038 (collection) | Live quiet-Mac collection of measurement windows B, C, D | lead-bench | `high` (**Ed-confirmed**, §2a) | live / hardware verification | **Window B**: 59/59 members, zero failures/waivers/missing; fresh NEG-8 dual-family drift bound minted in-window (gross single-member endpoint 0.750924420078 J; replicated-endpoint n=3 0.570267900616 J). **Whole-window verdict PENDING at time of writing — no result asserted.** **Window C**: two attempts, both failed on the clock slew, both preserved in custody quarantine (attempt 1 at ABBA member 7/40; attempt 2 at the dual-family bound mint, refusing `neg8-refcorpus-r11`). **Window D**: not started | n/a — this is the instrument layer, not a review layer; the catches it fed are L-038 and L-040 | fixed constant (global hard rule 1). Recorded here because **~10 hours of this window were lost to a lead process error** (L-042), not to hardware | `docs/council_log.md` §C-038 "Collection outcomes"; `runs_window_b_20260726*/campaign_log.jsonl`; `runs_window_b_20260726_bound/neg8-drift-bound.json` |
+| L-042 | 2026-07-25/26 | C-038 | **Lead-side invocation and turn-management defects** (recorded as an allocation datum in the L-020 sense: the instrument was fine, the lead's operation of it was not) | lead-bench | `high` (**Ed-confirmed**, §2a) | delegation operation | 5 recorded errors; ~10 h of open quiet window lost | **n/a — these are errors, not catches.** (1) Launched the Sol diagnosis with `nohup … &`, **outside harness tracking**, then ended the turn "holding until the diagnosis lands" — no wake could fire; the Mac never slept (`pmset -g log`) and **~10 hours of quiet window were lost, enough for both remaining collection windows**. THE most expensive process error of the campaign. (2) Over-read run-book §1 to mean the lead must not launch measurement windows; corrected by Ed. (3) Asserted Ed's session model as fact against the TUI banner; `/model` resolved it (A-10) — the banner was wrong, but the lead's certainty was unwarranted. (4) Three failed `codex-run-v3` invocations from guessing at the interface instead of reading the error; actual cause: the literal in-prompt `WRITE_SCOPE:` line **must be valid JSON**. (5) Launched the FLOOR-LABEL-01 fix round **without a sandbox flag**, defaulting to a read-only workspace: `apply_patch` rejected, **no work done, wrapper still exited 0** — only the report envelope (`status: blocked, completion: none`) revealed it | **lead-side failure mode, not an instrument verdict.** Errors 1 and 5 are the expensive ones; error 5 plus the `tail` catch in L-040 are the two data points behind **A-14 (exit status is not evidence of work done)** | `docs/council_log.md` §C-038 "Lead errors (recorded plainly)"; §6 A-14 below |
+
+**Row count: 42.** Fully evidenced (no `unknown` field): **24**. Rows
+carrying at least one `unknown` field: **18** (L-001, L-002, L-003,
 L-004, L-006, L-008, L-010, L-014, L-016, L-021, L-023, L-024, L-027,
-L-031, L-033, L-034) — see §6 for what drives
+L-031, L-033, L-034, L-036, L-039) — see §6 for what drives
 them (mostly missing effort records, unattributed catches in index-row
 entries, and the lead-instrument gap). One row (L-024) has an `unknown`
 *instrument*, which makes it unusable for allocation until resolved.
@@ -197,15 +205,18 @@ in this repo.
 | Task class | Instrument currently assigned | Evidence | Confidence |
 |---|---|---|---|
 | Enforced-`WRITE_SCOPE` implementation | **Sol** (`high` default, `xhigh` for design-bearing rounds) | L-005, L-014, L-017, L-020, L-029; the enforcement machinery itself (exit-77 scope backstop, `NEEDS_SCOPE` early return, v3 manifests) exists only on the Sol path — `docs/council_log.md` §C-028 "Process artifacts adopted this arc" | **strong** |
-| Independent adversarial audit | **Sol**, fresh read-only session per round | L-018, L-026, L-030; C-033 records real mechanisms in all four rounds | **strong on yield, weak on severity** — auditor severity inflation is recorded as systematic, not incidental (`~/.claude/skills/adversarial-review/SKILL.md` §C-033) |
-| Contract-lens refutation | **Opus 5** | L-031 only | **provisional** — decisive within one arc, never run against a control |
+| Independent adversarial audit | **Sol**, fresh read-only session per round | L-018, L-026, L-030, L-037; C-033 records real mechanisms in all four rounds, and C-038's single audit produced a first-ever executable demonstration of registered limitation L1 | **strong on yield, weak on severity** — auditor severity inflation is recorded as systematic, not incidental (`~/.claude/skills/adversarial-review/SKILL.md` §C-033). L-037 refines this: the *finding* was correct-as-found and the *pricing* was still the lead's, against the primary source |
+| Contract-lens refutation / whole-path contract review | **Opus 5** | L-031, L-036 | **provisional, strengthened** — two arcs, both decisive, still **never run against a control** (see §5 Q1). In both, the Opus lens found defects of *attribution and contract semantics* that a validate-or-not probe cannot reach |
+| Non-local root-cause diagnosis of a live failure | **Sol** `xhigh` | L-038 (clock-anchor slew; corrected the lead's hypothesis and preserved a disciplined UNKNOWN rather than over-attributing) | **provisional** — one strong datum, but note it also produced the session's *unique* value: an explicit refusal to name a cause the evidence could not support |
 | Execution-lens refutation with runnable probes | **Sol** at `high` | L-032, plus the C-028 refuter distribution (~16 refuters: ~70% confirmed / ~15% narrowed / ~15% refuted, narrowings highest-value) | **strong** |
 | Delta re-audit after every fix round | **Sol** | L-009 (DRA-001), L-012 (9 catches, 2 lead corrections), L-020 (8th datum), L-026, L-029, L-030; ten-plus "fix rounds introduce defects" data points across arcs | **strong** |
 | Integration review over a merged tree | **Sol** (`high`/`xhigh`) | L-005 (38 pre-merge cross-stream failures), L-009 (XSI-1), L-022 (**0** catches) | **provisional** — yield is real but bursty; the zero-catch datum is tallied against the drop rule |
 | Design consult (pre-decision) | historically **Sol** `xhigh`; per the 2026-07-26 dictate the default lieutenant is now **Opus 5**, with **Fable** on genuinely major calls | Sol side: L-010 (3 design wins over the lead), L-011 (5 amendments + 1 bug), L-028 (structural correction adopted). Opus 5 side: **no attributed design-consult catch in the repo record** | Sol: **strong**. Opus 5 as design consult: **untested**. Fable as design consult: **untested in-repo** (see A-9) |
 | Evidence-bounded writing / bookkeeping finalization (dictated fills) | **Fable** historically; **Opus 5** per the cost order | L-021 (Fable: 5 anomalies, ~94k tokens), L-033 (Opus 5: 5 errors in the lead's dictation, ~115k), L-016 (Fable critic: 3 gaps); the C-028 close also records the Fable dictated-fills pattern catching lead miscounts | **provisional** for both; the two instruments have one comparable datum each and have never been run on the same artifact |
 | Live / hardware verification | **lead-bench only** | L-006, L-023, L-035; global rule 1; `~/.claude/skills/codex-delegation/SKILL.md` §Delegate vs keep ("final verification, always") | **strong — and a fixed constant, not an allocation question** |
-| Severity adjudication and split-verdict synthesis | **lead-bench** | L-027, L-034; the split-verdict rule ("synthesize from both evidence chains, never majority-vote") is doctrine from `~/.claude/skills/adversarial-review/SKILL.md` §C-028 | **strong** |
+| Severity adjudication and split-verdict synthesis | **lead-bench** | L-027, L-034, L-040; the split-verdict rule ("synthesize from both evidence chains, never majority-vote") is doctrine from `~/.claude/skills/adversarial-review/SKILL.md` §C-028 | **strong** |
+| **Adjudicating a PRE-ASSEMBLED question** (the facts are gathered; what is wanted is judgment) | **Fable** | L-039: 21k tokens, **zero tool uses**, 108 s, overturned the lead's own self-diagnosis of the lead's own failure, produced a better rule set than the lead had drafted, found failure modes the lead missed, and declined its own promotion | **provisional but strong for a single datum** — and it isolates the variable: with zero retrieval, the entire yield is judgment. Distinct from "gather then judge", which remains **untested** for Fable |
+| Refusing to weaken a gate to make a run succeed | **lead-bench only** | L-040 catches (3) and (4): full restart over resume because resuming would mint a second pre-calibration that `latest_calibration()` would silently select; refusal to raise `--max-failures` when that would have "fixed" failures by accepting corrupted members | **strong — and structurally undelegatable.** A delegated layer asked to make a run succeed has no standing to decide the run should not |
 | Merge decision | **lead** under D-072 (full gate shape), with Ed naming the merge when the harness declines agent self-merge | `docs/process_traces/RESUME-2026-07-26.md` §6 (D-072); C-032/bridge (Ed named PR #65 after the harness declined); C-036 (3 self-merges under Ed's in-session delegation) | **strong** |
 | Multi-stream orchestration by subagent directors | **retired** — lead-driven pipelines are the default | C-010 ("lead-driven pipelines validated, zero stalls, no subagent directors"); C-006 interventions I-1/I-2 | **strong (negative result)** |
 | Redundant same-lens refutation by Opus | **retired at C-006, re-scoped at C-033** | L-001 (0 unique catches) vs L-031; the C-033 amendment states plainly that C-006 measured Opus as a *redundant* lens, not a *distinct* one | **provisional** — the reconciliation is an argument, not a measurement |
@@ -220,10 +231,23 @@ in this repo.
 Each is phrased so a future session can design a test.
 
 **Q1 — Does the Opus-contract + Sol-execution pairing actually outperform
-2× Sol at equal cost?** C-033 is a **single-arm** result: the pairing ran,
+2× Sol at equal cost?** C-033 was a **single-arm** result: the pairing ran,
 it changed triage in every round, and it was promoted to default. No
 control arm was run — nobody gave the same review packet to two Sol
-refuters with distinct lenses and compared. The relevant comparison is
+refuters with distinct lenses and compared.
+
+**Update, C-038 (2026-07-25/26): a second informal trial, still no
+control.** Over the FLOOR-LABEL-01 head the two lenses again found
+things the other structurally could not: the Opus contract lens (L-036)
+traced the *whole labelled path* and found a cross-cell **attribution**
+defect mirrored bug-for-bug into the validator — invisible to a probe
+that only asks "does this validate?" — while Sol (L-037) produced a
+**runnable artifact-substitution probe** with concrete gate numbers
+(`floor_gate` 5e-324 J vs 2.6484 J), invisible to a reader tracing
+intended semantics. Two trials, two complementary yields, **zero
+control arms**. Under the project's own "≥2 trials before roster change"
+protocol the trial *count* is now met and the *design* still is not
+(see A-8). The relevant comparison is
 also not free: Ed's cost order puts Opus 5 at roughly half Fable and Sol
 at ~free, so 2× Sol is strictly cheaper and the pairing must beat it, not
 merely work. *Test:* the sealed same-packet A/B protocol already defined
@@ -350,6 +374,19 @@ doctrine promotion". The promotion may well be right — this ledger notes
 only that it is not the evidence standard the project wrote for itself.
 See §5 Q1.
 
+**A-8 update (2026-07-26): now at two informal trials, still unsealed.**
+C-038 ran the pairing a second time (L-036 Opus contract lens + L-037
+Sol execution audit on the FLOOR-LABEL-01 head) and each lens again
+caught what the other structurally could not. That satisfies the
+*count* in C-019's "≥2 trials before roster change" but not its
+*design*: **there is still no pre-registered sealed A/B**, no control
+arm, and no blind scoring of unique / overlap / false-positive findings.
+By the project's own protocol the pairing therefore **remains
+unpromoted** — it is the working default on argument and accumulating
+informal evidence, not on the evidence standard the project wrote for
+itself. Do not record it as doctrine-promoted until the sealed A/B in
+§5 Q1 has actually been run.
+
 **A-9 — `docs/process_traces/RESUME-2026-07-26.md` §7 records a
 superseded instruction, and two Fable claims the repo does not
 corroborate.** §7 states Ed's 2026-07-25 standing instruction to consult
@@ -427,3 +464,33 @@ for 2026-07-08 (×2), 2026-07-09 (×3), 2026-07-12, 2026-07-13 (×2) and
 2026-07-16 — and are the single most useful source for this ledger.
 Sessions that skip the table cannot be back-filled without re-reading
 transcripts that are deliberately not kept.
+
+**A-14 — EXIT STATUS IS NOT EVIDENCE OF WORK DONE.** Twice in the single
+session C-038 (2026-07-25/26) an exit code masked a non-result:
+
+1. The lead launched the FLOOR-LABEL-01 fix round via `codex-run-v3`
+   **without a sandbox flag**, so it defaulted to a **read-only
+   workspace**. `apply_patch` was rejected and the session **did no
+   work whatsoever**. The wrapper nevertheless **exited 0**. Only the
+   governed report envelope — `status: blocked, completion: none` —
+   revealed it.
+2. The lead verified its own test suite by piping the run through
+   `tail`, which **discarded the summary line** and returned **tail's**
+   exit status rather than the suite's. The verification was worthless
+   and looked green.
+
+Both are lead-side operation defects (L-042, L-040), not instrument
+defects, and both would have been caught by the same rule:
+
+> **The evidence of work done is the governed report envelope
+> (`status` / `completion`) for a delegated run, and the suite's own
+> summary line for a local run. Never a shell exit code. Never a
+> truncated stream.**
+
+This bears directly on how delegated work must be verified, which is
+why it lives here and not only in the council entry: a ledger row
+recording "Outcome: clean, rc=0" is **not** evidence that an
+instrument did anything. Every future row's `Outcome` field must trace
+to an envelope or a summary line, per the §Anti-fabrication rule. The
+generalization is recorded in `docs/council_log.md` §C-038
+("Generalization adopted this session").

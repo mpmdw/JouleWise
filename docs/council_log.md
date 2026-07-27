@@ -71,6 +71,7 @@ standing instructions.
 | C-027 | 2026-07-09 | Whole-project council review with gpt-5.6-sol xhigh (first production session; 7 lenses: topdocs/rigor/stats/meta/reverse/arch/negspace + counterreview + independent Fable-tier final examiner; full record `docs/reviews/2026-07-09-c027-whole-project-review.md`) | 8 blocker clusters confirmed (token-denominator mislabel, superseded D-053 prose, RUN_STATE dual next-action, claim machinery unimplemented+unowned, empty D-050 manifest, four D-031 direct-to-main commits, evidence-integrity trio, protocol blockers); claim surfaces corrected same session; 14 follow-up queue rows + NV-GATE-2 additions to P2-005; D-060 proposed + D-061..D-063 accepted; counterreview reversed the lead twice (legacy-gate framing, restructure staging) |
 | C-031 | 2026-07-22 | D-078 P0 instrument-repair close-out (round-8/8b landing + §C-028 delta re-audit with 3 lenses / 11 refuter runs, round-9 FINAL confirmation, L1 adjudication, PR #79) | Round-8b delta re-audit caught the understated-B_fiducial ClockStamp blocker two audited rounds missed; refuters killed 2 findings, narrowed 1, split 1 (lead-synthesized); CR9-1 adjudicated as registered limitation L1 + FLOOR-BIND-01; failure modes recorded (content-filter refuter kills -> data-quality rephrase; bench-edit-during-enforced-scope false attribution; review-genre null-final recovery) |
 | C-032 | 2026-07-24 | NEG-8 drift-gate estimand debate (Ed-directed pre-ratification cross-model debate; Sol xhigh peer vs lead ruling) | Peer disagreed on inferential role (screen != stability proof) and was adjudicated CORRECT; Ed ratified the amended screen+budget design (option F full) with rigor-spiral + no-invented-physics guardrails; second recorded case of peer design judgment overturning a lead ruling pre-implementation |
+| C-038 | 2026-07-25/26 | FLOOR-LABEL-01 gauntlet close (D-078 cl.11 labelled attribution-limited floors) + quiet-window collection; Ed re-proportioned the instrument mix mid-session (Opus 5 subagents = primary delegated lieutenant, Fable on genuine need, Sol = execution workhorse, lead adjudicates); full entry below | Opus-contract lens verdict COMPARATIVE COVERAGE: COMPLETE with 4 should-fix / 4 nits, incl. the `_combined_floor` key-sniffing misattribution mirrored bug-for-bug into `artifact.py` (so validation recomputes the same wrong answer and ships) and the ratio-unit floor/diagnostic inversion; Sol xhigh audit's 1 blocker (runnable V3 probe: comparative blocks minted WITHOUT admissible half-widths validate clean, floor_gate 5e-324 J vs 2.6484 J) ADJUDICATED DOWN to registered limitation L1 — first concrete demonstration of L1, and FLOOR-LABEL-01 recorded as modestly WIDENING its blast radius; Sol xhigh clock diagnosis root-caused window C to transient wall-vs-monotonic slew over the 5 ms ceiling (7.769 ms verified) and corrected the lead's duration hypothesis; Fable adjudication (zero tool uses, 108 s) OVERTURNED the lead's own self-diagnosis and named the disposition (rigorous on work products, exempts its own premises about the environment) → rules R1/R2/R3, no demotion; window B 59/59 clean (whole-window verdict PENDING), window C failed twice on clock slew, window D not started; FIVE lead errors recorded, incl. the ~10-hour lost quiet window (untracked `nohup` + turn ended with no wake source) and TWO exit-status masking incidents → generalization: EXIT STATUS IS NOT EVIDENCE OF WORK DONE |
 
 ---
 
@@ -1875,3 +1876,230 @@ full-strip custody discrimination remains inside pre-existing
 FLOOR-BIND-01/L1. Owners: all fixed items closed at merge c3e2647
 (lead-verified); queued items owned by the kernel rows named above;
 no open finding without an owner.
+
+---
+
+## C-038: FLOOR-LABEL-01 gauntlet close + quiet-window collection — an instrument-mix re-proportioning, a lost quiet window, and two exit codes that lied (2026-07-25/26)
+
+Shape: finish the FLOOR-LABEL-01 gauntlet (D-078 clause 11 — labelled
+attribution-limited floors, unblocked by CAL-REBRACKET-01 / PR #86) and
+then spend the quiet-Mac window collecting three measurement windows.
+Lead instrument: **Opus 5 (1M context), effort `high`, confirmed by Ed
+via the interactive `/model` command** (the TUI banner disagreed; see
+`docs/process/model_allocation_ledger.md` §6 A-10). Mid-session Ed
+**re-proportioned the instrument mix**: Opus 5 subagents become the
+primary delegated lieutenant, Fable is consulted when genuinely needed,
+Sol remains the execution workhorse, and the lead adjudicates rather
+than performing the labor. The standing dictate is recorded in the
+`instrument-mix-authority` memory and in the ledger §2 — this entry is
+the first session run under it.
+
+### Layer catches (unique)
+
+- **Opus 5 contract lens** (subagent; ~164k tokens, 50 tool uses,
+  ~11 min). Verdict **"COMPARATIVE COVERAGE: COMPLETE"** — it traced
+  the labelled path end-to-end for comparative (ABBA) cells through
+  extraction → canonical floor record → transport group → resolution →
+  claim evaluation → final artifact. 4 should-fixes, 4 nits. Unique:
+  (a) the `_combined_floor` **key-sniffing heuristic** misattributes
+  point-floor diagnostics for a *partially* attribution-limited
+  transport group, publishing one cell's repeatability numbers under a
+  different cell's ID — and the same heuristic is mirrored bug-for-bug
+  in `artifact.py`, so validation recomputes the identical wrong answer
+  and it ships (`joulewise/analysis_engine/__init__.py:192`
+  `_combined_floor`, verified on `main`); (b) `floor_conditions` proxies
+  soleness through a **stale field that post-construction mutation does
+  not clear** (`joulewise/floor_extraction.py` on `impl/floor-label`);
+  (c) **ratio-unit floors publish a J/token claim floor beside
+  joule-valued diagnostics**, making the diagnostic read ~150× larger
+  than the floor and inverting exactly the relationship the label exists
+  to communicate; (d) **no assertion pins the labelled fields on a
+  comparative extraction row** — while 80 ABBA members were about to be
+  collected against that path. It also flagged that
+  `scripts/build_site.py` and `scripts/build_capstone.py` contain
+  **zero** references to the new fields (lead-verified on
+  `impl/floor-label`: zero hits for `attribution_limited` /
+  `floor_label` / `labelled` / `floor_conditions` in both).
+- **Sol xhigh independent audit** (fresh, read-only, ~23 min):
+  1 blocker + 1 should_fix. Unique: a **runnable probe (V3)**
+  demonstrating that the same comparative blocks minted **without**
+  admissible half-widths validate clean via `validate_floor_artifact`
+  and yield `floor_gate` **5e-324 J** versus **2.6484 J** with widths —
+  an artifact that licenses any effect at all. The lead **adjudicated
+  this blocker DOWN to registered limitation L1**
+  (`docs/decision_log.md` clause 8, confirmation round 9, 2026-07-22 —
+  clause header at l.4407, L1 registered at l.4421), which already
+  describes exactly this substitution exposure. Sol was a fresh reviewer
+  with no knowledge of L1, so **re-finding it was correct reviewer
+  behaviour**, and the probe is the **first concrete demonstration** of
+  a limitation that had until now been argued only on paper. Recorded
+  with the adjudication: FLOOR-LABEL-01 **modestly WIDENS L1's blast
+  radius**, because attribution-limited cells that previously refused
+  (and were therefore sterile) now publish.
+- **Sol xhigh diagnosis** (clock anchor, ~17 min): root cause at **high
+  confidence** — transient **wall-clock-versus-monotonic slew exceeding
+  the governed 5 ms anchor ceiling**
+  (`MAX_WALL_MINUS_MONOTONIC_SPAN_S = 0.005`, gate at
+  `joulewise/uncertainty_evidence.py:367`, detail code
+  `wall_minus_monotonic_span_exceeded` at l.369): **5.544 ms
+  (≈ +110 ppm)** and **7.769 ms (≈ −158 ppm)**. It **corrected the
+  lead's hypothesis** by establishing that the failing members' shorter
+  duration was a *consequence* of reduction, not a cause. It also
+  **correctly refused** to attribute the adjustment to macOS `timed`,
+  marking it UNKNOWN because `joulewise/environment.py` assigns
+  `limited_without_admin` unconditionally (assignment at l.908, inside
+  `_probe_clock_sync` at l.904) — i.e. the field cannot distinguish
+  "not synchronising" from "we lack the privilege to see it".
+- **Fable adjudication** (21k tokens, **zero tool uses**, 108 s),
+  consulted on the lead's own process failure. It **corrected the
+  lead's self-diagnosis**: the lead's proposed "act-anyway deadline"
+  rule was *not* the right generalization, because with a working wake
+  mechanism the information-block would have cost **17 minutes** — the
+  10-hour loss is fully explained mechanically, not by a missing
+  deadline policy. It then named the underlying disposition: **the lead
+  applies rigorous verification to WORK PRODUCTS but exempts its own
+  PREMISES ABOUT THE ENVIRONMENT.** Rule set produced: **R1** turn-end
+  invariant (end a turn only with the work complete, or with a
+  harness-registered wake source named explicitly); **R2**
+  quiet-window dominance, with a stop-loss and a heartbeat that checks
+  for an in-flight measurement before acting; **R3** premise labeling.
+  It identified failure modes the lead's own rules missed — notably
+  that **more wakeups can contaminate a live measurement**. It
+  recommended **no demotion**, explicitly arguing against its own
+  promotion on the grounds that it would operate the same harness with
+  the same wake semantics.
+- **Lead (Opus 5) bench catches:** detected that its own suite
+  verification was **worthless because it piped output through `tail`**,
+  which discarded the summary line and masked the real exit code behind
+  tail's; **adjudicated Sol's blocker to L1 by reading the primary
+  source** rather than accepting the delivered severity; chose **full
+  restart over resume** for window C because resuming would mint a
+  second pre-calibration and `latest_calibration()` would select it,
+  silently breaking the pre/post bracket; **refused to raise
+  `--max-failures`** when doing so would have "fixed" the failures by
+  accepting corrupted members; and hand-verified that the refactored
+  dominance predicate reproduces both prior inline gates for absolute
+  and comparative **before either reviewer reported**.
+
+### Lead errors (recorded plainly)
+
+1. **The lost quiet window — the most expensive process error of the
+   campaign.** The lead launched the Sol clock diagnosis with
+   `nohup … &`, i.e. **outside harness tracking**, and then ended the
+   turn "holding until the diagnosis lands". No wake could fire. The
+   Mac never slept (`pmset -g log`), and **~10 hours of open quiet
+   window were lost** — enough for both remaining collection windows.
+   This is the failure Fable's R1/R2 answer.
+2. **Over-read run-book §1** to mean the lead must not launch
+   measurement windows. Corrected by Ed.
+3. **Asserted Ed's session model as fact** while the TUI banner said
+   otherwise; `/model` resolved it to Opus 5 (1M). The banner was
+   wrong — but the lead's *certainty* was unwarranted either way.
+4. **Three failed `codex-run-v3` invocations** from guessing at the
+   interface instead of reading the error. The actual cause: the
+   literal in-prompt `WRITE_SCOPE:` line must be **valid JSON**.
+5. **The FLOOR-LABEL-01 fix round was launched without a sandbox
+   flag**, so it defaulted to a **read-only workspace**; `apply_patch`
+   was rejected and the session **did no work**. The wrapper still
+   **exited 0**, and only the governed report envelope
+   (`status: blocked, completion: none`) revealed it.
+
+**Generalization adopted this session (from errors 5 and the `tail`
+catch above): EXIT STATUS IS NOT EVIDENCE OF WORK DONE.** Twice in one
+session an exit code masked a non-result — a wrapper returning 0 over a
+blocked, read-only Sol session, and a test suite whose summary and exit
+status were both swallowed by `tail`. The evidence of work done is the
+**governed report envelope** (`status` / `completion`) for delegated
+runs and the **suite's own summary line** for local runs. Never a shell
+exit code, and never a truncated stream. Mirrored into
+`docs/process/model_allocation_ledger.md` §6 A-14, because it bears
+directly on how delegated work must be verified.
+
+### Collection outcomes
+
+- **Window B** (`04_phase_prefill_abba`): **59/59 members, zero
+  failures, zero waivers, zero missing** (lead-verified: 47 campaign
+  members + 12 reference-corpus members across
+  `runs_window_b_20260726/` and `runs_window_b_20260726_bound/`; every
+  `collection.categories` block reports empty `failed` / `missing` /
+  `waived`). Pre-calibration **07:04:09Z**, post-calibration
+  **10:15:52Z**, `measurement_complete` **10:15:52Z** (lead-reported;
+  the two calibration bundles' `sampling_stopped` events are at
+  07:03:57Z and 10:15:40Z, ~12 s before each reported stamp —
+  consistent, not contradicted). Fresh **NEG-8 dual-family drift bound
+  minted in-window**: gross single-member endpoint bound
+  **0.750924420078 J**, replicated-endpoint (n=3) bound
+  **0.570267900616 J** (verified in
+  `runs_window_b_20260726_bound/neg8-drift-bound.json`, fields
+  `single_member_endpoint_bound_j` and `replicated_endpoint_bound_j`;
+  the lead's dictation called the latter the "triplet mean").
+  **The whole-window verdict was still running when this entry was
+  written and is recorded as PENDING. No result is asserted here.**
+- **Window C** (`05_phase_decode_abba`): **two attempts, both failed on
+  the clock slew**, both preserved in custody quarantine. Attempt 1 died
+  at **ABBA member 7/40**; attempt 2 at the **dual-family bound mint**,
+  which refused member `neg8-refcorpus-r11` (verified: that member's
+  `metadata.json` carries `wall_minus_monotonic_span_s` =
+  0.007769107818603516 s, and no `neg8-drift-bound.json` was produced in
+  `runs_window_c_20260726_bound/`).
+- **Window D**: **not started** (`runs_window_d_20260726*` are empty).
+
+### Rough spend (estimates, not billing truth)
+
+Four delegated calls carry figures: the Opus 5 contract lens ~164k
+tokens / 50 tool uses / ~11 min; the Fable adjudication 21k tokens /
+**zero tool uses** / 108 s; the Sol xhigh independent audit ~23 min and
+the Sol xhigh clock diagnosis ~17 min (wall-clock only — per A-11 the
+`codex-usage` feed remains unreliable, so no Sol token figures are
+recorded). Lead orchestration, the bench catches, and all live
+verification on top. Three additional `codex-run-v3` invocations failed
+outright on the `WRITE_SCOPE` JSON defect (error 4) and a fourth did no
+work under the read-only sandbox default (error 5).
+
+### Verdict and calibration
+
+- **The Opus-contract + Sol-execution pairing gained a second trial**,
+  and each lens again found something the other structurally could not:
+  the Opus lens traced a *whole labelled path* and found a
+  cross-cell **attribution** defect mirrored into the validator (a
+  contract-shaped catch, invisible to a probe that only asks "does this
+  validate?"), while Sol produced a **runnable artifact-substitution
+  probe** with concrete gate numbers (an execution-shaped catch,
+  invisible to a reader tracing intended semantics). This is now two
+  informal trials — **still not the pre-registered sealed A/B the
+  project's own ≥2-trials protocol demands** (see ledger §6 A-8 and
+  §5 Q1); the pairing remains the working default on argument, not on
+  the project's own evidence standard.
+- **Fable as adjudicator of a pre-assembled question is the session's
+  strongest allocation datum**: 21k tokens, **zero tool uses**, 108
+  seconds, and it **overturned the lead's own conclusion** about the
+  lead's own failure, produced a better-shaped rule set than the lead
+  had drafted, found failure modes the lead missed, and declined its own
+  promotion. The generalizable shape is that the question had already
+  been assembled — Fable did no retrieval, only judgment.
+- **The auditor-adjudication pattern held again:** a fresh reviewer's
+  blocker was correct-as-found and still correctly re-priced by the lead
+  against the primary source. Sol's ignorance of L1 was a *feature*
+  (independent rediscovery), and the lead reading `decision_log.md`
+  rather than accepting the delivered severity is what converted it into
+  the right record: **L1 stands, its blast radius is now recorded as
+  wider, and it gained its first executable demonstration.**
+
+### Dictated-fact verification notes
+
+This entry was written from lead dictation and verified against primary
+evidence. Two dictated line numbers were **off and are corrected above**:
+the anchor-ceiling gate is at `joulewise/uncertainty_evidence.py:367`
+(dictated `:366`, which is the offset-envelope computation), and the
+unconditional `limited_without_admin` assignment is at
+`joulewise/environment.py:908` inside `_probe_clock_sync` at l.904
+(dictated `:904`). Two dictated facts could **not** be corroborated in
+the surviving tree and are recorded as **lead-reported**: the
+**5.544 ms** slew instance (no `wall_minus_monotonic_span_s` above
+5 ms survives outside `neg8-refcorpus-r11`'s 7.769 ms, consistent with
+attempt 1 having been quarantined out of `runs_window_c_20260726/`,
+which now holds only its `instrument_validation` bundle), and the exact
+window-B calibration stamps (see above). No window-C quarantine
+directory was located under the repository root; only
+`runs_window_a5_quarantine/` exists from an earlier arc, so the custody
+location for the two window-C attempts is **not verified here**.
