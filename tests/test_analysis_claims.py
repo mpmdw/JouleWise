@@ -736,6 +736,100 @@ class InputSeamTests(unittest.TestCase):
         artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
         self.assertEqual(validate_claim_verdicts(artifact), [])
 
+    def test_multi_source_exact_resolution_is_rejected_at_both_boundaries(self):
+        diagnostic_c1 = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+        diagnostic_c2 = {
+            **diagnostic_c1,
+            "unguarded_floor_j": 0.5,
+            "guarded_floor_j": 0.75,
+        }
+        source_diagnostics = {
+            "C1": diagnostic_c1,
+            "C2": diagnostic_c2,
+        }
+        resolution = FloorResolution(
+            status="exact",
+            artifact_id="df",
+            artifact_sha256=HEX,
+            source_cell_ids=("C1", "C2"),
+            transport_group_id=None,
+            transport_rule_id="direct",
+            floor_abs_j=0.5,
+            floor_cmp_j=1.0,
+            floor_gate_j=1.0,
+            reason_codes=(),
+            floor_source=ATTRIBUTION_FLOOR_SOURCE,
+            floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+            point_floor_diagnostics=source_diagnostics,
+            single_count_discipline=attribution_single_count_discipline(),
+        )
+
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "exact floor resolution must name exactly one source cell",
+        ):
+            _combined_floor((resolution,))
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        wrongly_nested = {
+            source_id: copy.deepcopy(source_diagnostics)
+            for source_id in ("C1", "C2")
+        }
+        contrast["floor"] = {
+            "status": "resolved",
+            "floor_row_ids": ["C1", "C2"],
+            "floor_abs_j": 0.5,
+            "floor_cmp_j": 1.0,
+            "active_floor_j": 1.0,
+            "transport_verdict": "exact",
+            "resolutions": [
+                {
+                    "status": "exact",
+                    "source_cell_ids": ["C1", "C2"],
+                    "transport_group_id": None,
+                    "transport_rule_id": "direct",
+                    "floor_abs_j": 0.5,
+                    "floor_cmp_j": 1.0,
+                    "floor_gate_j": 1.0,
+                    "reason_codes": [],
+                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                    "point_floor_diagnostics": source_diagnostics,
+                    "single_count_discipline": (
+                        attribution_single_count_discipline()
+                    ),
+                }
+            ],
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "point_floor_diagnostics": wrongly_nested,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        contrast["claim_evaluation"]["floor_limit"] = {
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "published_floor_j": 1.0,
+            "point_floor_diagnostics": wrongly_nested,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "exact resolution must name exactly one source cell" in error
+                for error in errors
+            ),
+            errors,
+        )
+
     def test_ratio_conversion_scales_labelled_point_floor_diagnostics(self):
         metric = {
             "ratio_estimand": {
@@ -836,6 +930,142 @@ class InputSeamTests(unittest.TestCase):
                 "guarded_floor_j"
             ],
             0.6,
+        )
+
+    def test_ratio_conversion_refuses_conflicting_transport_diagnostic_scales(self):
+        metric = {
+            "ratio_estimand": {
+                "form": "mean_of_request_ratios",
+                "numerator_metric": "energy_request_j",
+                "denominator": "runtime_observed_output_tokens",
+                "denominator_unit": "token",
+                "tokenizer_scope": "same_identity_required",
+                "output_policy_scope": "same_policy_required",
+            }
+        }
+        observations = (
+            RatioObservation(
+                block_id="block-1",
+                energy_a_j=1.0,
+                energy_b_j=1.0,
+                output_tokens_a=100,
+                output_tokens_b=200,
+                token_count_source_a="runtime_observed",
+                token_count_source_b="runtime_observed",
+                stop_reason_a="length",
+                stop_reason_b="length",
+                output_policy_a="fixed",
+                output_policy_b="fixed",
+                tokenizer_identity_a="tokenizer",
+                tokenizer_identity_b="tokenizer",
+            ),
+        )
+        leaf = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+        source_diagnostics = {
+            "C1": {"absolute": copy.deepcopy(leaf)}
+        }
+        floor = {
+            "status": "resolved",
+            "floor_abs_j": 0.8,
+            "floor_cmp_j": 0.8,
+            "active_floor_j": 0.8,
+            "point_floor_diagnostics": copy.deepcopy(source_diagnostics),
+            "resolutions": [
+                {
+                    "status": "transported",
+                    "source_cell_ids": ["C1"],
+                    "floor_abs_j": 0.4,
+                    "floor_cmp_j": 0.4,
+                    "floor_gate_j": 0.4,
+                    "point_floor_diagnostics": copy.deepcopy(
+                        source_diagnostics
+                    ),
+                }
+                for _ in range(2)
+            ],
+        }
+
+        converted, reasons = convert_floor_to_ratio_units(
+            metric,
+            observations,
+            floor,
+        )
+
+        self.assertEqual(reasons, ("ratio_floor_conversion_undefined",))
+        self.assertEqual(converted, floor)
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        contrast["metric"]["unit"] = "J/token"
+        contrast["metric"]["ratio_estimand"] = metric["ratio_estimand"]
+
+        def scaled_diagnostics(factor):
+            scaled = copy.deepcopy(source_diagnostics)
+            scaled["C1"]["absolute"]["unguarded_floor_j"] *= factor
+            scaled["C1"]["absolute"]["guarded_floor_j"] *= factor
+            return scaled
+
+        scaled_a = scaled_diagnostics(0.01)
+        scaled_b = scaled_diagnostics(0.005)
+        resolutions = []
+        for factor, diagnostics in (
+            (0.01, scaled_a),
+            (0.005, scaled_b),
+        ):
+            resolutions.append(
+                {
+                    "status": "transported",
+                    "source_cell_ids": ["C1"],
+                    "transport_group_id": "tg-1",
+                    "transport_rule_id": "same_stack_componentwise_worst_case.v1",
+                    "floor_abs_j": 0.4 * factor,
+                    "floor_cmp_j": 0.4 * factor,
+                    "floor_gate_j": 0.4 * factor,
+                    "reason_codes": [],
+                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                    "point_floor_diagnostics": diagnostics,
+                    "single_count_discipline": (
+                        attribution_single_count_discipline()
+                    ),
+                }
+            )
+        contrast["floor"] = {
+            "status": "resolved",
+            "floor_row_ids": ["C1"],
+            "floor_abs_j": 0.006,
+            "floor_cmp_j": 0.006,
+            "active_floor_j": 0.006,
+            "transport_verdict": "transported",
+            "resolutions": resolutions,
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "point_floor_diagnostics": scaled_b,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        contrast["claim_evaluation"]["floor_limit"] = {
+            "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+            "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+            "published_floor_j": 0.006,
+            "point_floor_diagnostics": scaled_b,
+            "single_count_discipline": attribution_single_count_discipline(),
+        }
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "transported resolutions conflict for source cell 'C1'"
+                in error
+                for error in errors
+            ),
+            errors,
         )
 
     def test_loo_floor_resolution_receives_only_retained_physical_blocks(self):

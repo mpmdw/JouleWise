@@ -95,6 +95,36 @@ def convert_floor_to_ratio_units(
         if isinstance(converted.get("point_floor_diagnostics"), Mapping)
         else None
     )
+    diagnostic_scales: dict[str, float] = {}
+    for resolution, factor in zip(resolutions, factors, strict=True):
+        if not isinstance(resolution, Mapping):
+            return converted, ("ratio_floor_conversion_undefined",)
+        diagnostics = resolution.get("point_floor_diagnostics")
+        if diagnostics is None:
+            continue
+        if not isinstance(diagnostics, Mapping):
+            return converted, ("ratio_floor_conversion_undefined",)
+        if resolution.get("status") == "transported":
+            source_ids = diagnostics
+        elif resolution.get("status") == "exact":
+            source_ids = resolution.get("source_cell_ids")
+            if not isinstance(source_ids, list):
+                return converted, ("ratio_floor_conversion_undefined",)
+        else:
+            return converted, ("ratio_floor_conversion_undefined",)
+        for source_id in source_ids:
+            if not isinstance(source_id, str):
+                return converted, ("ratio_floor_conversion_undefined",)
+            previous_scale = diagnostic_scales.get(source_id)
+            if previous_scale is not None and not math.isclose(
+                previous_scale,
+                factor,
+                rel_tol=0.0,
+                abs_tol=0.0,
+            ):
+                return converted, ("ratio_floor_conversion_undefined",)
+            diagnostic_scales[source_id] = factor
+
     for resolution, factor in zip(resolutions, factors, strict=True):
         if not isinstance(resolution, dict):
             return converted, ("ratio_floor_conversion_undefined",)

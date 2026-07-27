@@ -729,6 +729,45 @@ class TestArtifactEmitValidate(unittest.TestCase):
                         errors,
                     )
 
+    def test_zero_repeatability_uses_other_operative_bound_and_smoke_stays_readable(self):
+        allowance = whole_window_allowance(
+            value=1.0,
+            observed=0.0,
+            derived=1.0,
+        )
+        cell = make_cell(
+            energies=[50.0] * 5,
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.0] * 5,
+            comparative_half_widths=[0.0] * 5,
+            whole_window_drift_allowance=allowance,
+        )
+        artifact = make_artifact([cell])
+
+        self.assertEqual(cell["floor_abs_j"], 1.0)
+        self.assertEqual(cell["floor_cmp_j"], 1.0)
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        smoke_cell = make_cell(
+            energies=[50.0] * 5,
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.0] * 5,
+            comparative_half_widths=[0.0] * 5,
+        )
+        smoke_cell["eligibility"].update(
+            use_role="smoke_only",
+            status="smoke_only",
+            claim_usable=False,
+        )
+        for component in ("absolute", "comparative"):
+            for field in (
+                "admissible_half_widths_j",
+                "corner_widened_unguarded_floor_j",
+                "corner_widened_guarded_floor_j",
+            ):
+                smoke_cell[component].pop(field)
+        self.assertEqual(validate_floor_artifact(make_artifact([smoke_cell])), [])
+
     def test_widened_floor_record_round_trips_and_rejects_tampering(self):
         cell = make_cell(
             energies=[0.0, 1.0, -1.0, 0.0, 0.0],

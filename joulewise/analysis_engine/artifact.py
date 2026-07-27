@@ -1736,6 +1736,14 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         errors.append(f"{resolution_where}.status: invalid")
                         continue
                     resolution_statuses.append(status)
+                    if (
+                        status == "exact"
+                        and isinstance(source_ids, list)
+                        and len(source_ids) != 1
+                    ):
+                        errors.append(
+                            f"{resolution_where}.source_cell_ids: exact resolution must name exactly one source cell"
+                        )
                     resolution_limit_keys = (
                         set(resolution) & _ATTRIBUTION_FLOOR_KEYS
                     )
@@ -1841,7 +1849,18 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         ):
                             continue
                         if resolution.get("status") == "transported":
-                            expected_diagnostics.update(source_diagnostics)
+                            for source_cell_id, diagnostic in (
+                                source_diagnostics.items()
+                            ):
+                                if (
+                                    source_cell_id in expected_diagnostics
+                                    and expected_diagnostics[source_cell_id]
+                                    != diagnostic
+                                ):
+                                    errors.append(
+                                        f"{where}.floor.point_floor_diagnostics: transported resolutions conflict for source cell {source_cell_id!r}"
+                                    )
+                                expected_diagnostics[source_cell_id] = diagnostic
                         else:
                             for source_cell_id in source_ids:
                                 if isinstance(source_cell_id, str):

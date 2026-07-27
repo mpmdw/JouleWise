@@ -1527,7 +1527,16 @@ def _validate_attribution_limit_metadata(
         )
 
 
-def _validate_physical_floor_evidence(record, deviations, where, errors) -> None:
+def _validate_physical_floor_evidence(
+    record,
+    deviations,
+    where,
+    errors,
+    *,
+    claim_bearing,
+) -> None:
+    if not claim_bearing:
+        return
     if len(deviations) < GUARD_MINIMUM_N or not all(
         deviation == 0.0 for deviation in deviations
     ):
@@ -1541,10 +1550,21 @@ def _validate_physical_floor_evidence(record, deviations, where, errors) -> None
     )
     if not (widths_absent or widths_all_zero):
         return
+    operative_floor = record.get(
+        "drift_widened_guarded_floor_j",
+        record.get(
+            "corner_widened_guarded_floor_j",
+            record.get("guarded_floor_j"),
+        ),
+    )
+    if _is_number(operative_floor) and not _close(operative_floor, 0.0):
+        return
     # Exact-zero repeatability with no nonzero member uncertainty cannot
-    # describe real instrument data. This instrument's measured repeatability
-    # is ~0.29-0.49 J on ~50 J points; a floor many orders below that is a
-    # serialization/degenerate-fixture defect, not a measurement.
+    # support a claim when no other operative bound keeps the published floor
+    # away from zero. This instrument's measured repeatability is ~0.29-0.49 J
+    # on ~50 J points; a floor many orders below that is a
+    # serialization/degenerate-fixture defect, not a measurement. Smoke and
+    # replay-only records remain readable because they cannot license claims.
     errors.append(
         f"{where}: instrument_calibration_invalid: degenerate deviations with "
         "absent or all-zero admissible_half_widths_j cannot support a physical "
@@ -1582,7 +1602,7 @@ def _validate_stress_observed(observed, where, errors) -> None:
     _validate_bound_terms(observed["bound_terms"], where, errors)
 
 
-def _validate_absolute(record, where, errors) -> None:
+def _validate_absolute(record, where, errors, *, claim_bearing) -> None:
     if not _check_keys_with_optional(
         record,
         _ABS_KEYS,
@@ -1646,7 +1666,13 @@ def _validate_absolute(record, where, errors) -> None:
         errors.append(f"{where}: stored max_abs_residual_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_residual_j"]):
         errors.append(f"{where}: max_abs_residual_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_physical_floor_evidence(record, expected_residuals, where, errors)
+    _validate_physical_floor_evidence(
+        record,
+        expected_residuals,
+        where,
+        errors,
+        claim_bearing=claim_bearing,
+    )
     _validate_estimate_math(
         record,
         where,
@@ -1659,7 +1685,14 @@ def _validate_absolute(record, where, errors) -> None:
     )
 
 
-def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -> None:
+def _validate_comparative(
+    record,
+    where,
+    errors,
+    calibration_plan_sha256=None,
+    *,
+    claim_bearing,
+) -> None:
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
@@ -1766,7 +1799,13 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
         errors.append(f"{where}: stored max_abs_delta_j does not match recomputed value")
     if not _is_floor_j(record["max_abs_delta_j"]):
         errors.append(f"{where}: max_abs_delta_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
-    _validate_physical_floor_evidence(record, expected_deltas, where, errors)
+    _validate_physical_floor_evidence(
+        record,
+        expected_deltas,
+        where,
+        errors,
+        claim_bearing=claim_bearing,
+    )
     _validate_estimate_math(
         record,
         where,
@@ -1821,14 +1860,26 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
 
     absolute = cell["absolute"]
     comparative = cell["comparative"]
+    claim_bearing = bool(
+        eligibility_valid
+        and cell["eligibility"].get("use_role") == "primary_claim_gate"
+        and cell["eligibility"].get("status") == "claim_ready"
+        and cell["eligibility"].get("claim_usable") is True
+    )
     if absolute is not None:
-        _validate_absolute(cell["absolute"], f"{where}.absolute", errors)
+        _validate_absolute(
+            cell["absolute"],
+            f"{where}.absolute",
+            errors,
+            claim_bearing=claim_bearing,
+        )
     if comparative is not None:
         _validate_comparative(
             cell["comparative"],
             f"{where}.comparative",
             errors,
             calibration_plan_sha256,
+            claim_bearing=claim_bearing,
         )
     metric = cell["key"].get("metric") if isinstance(cell["key"], Mapping) else None
     expected_claim_family = (

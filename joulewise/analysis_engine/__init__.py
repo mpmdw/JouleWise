@@ -197,6 +197,13 @@ def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
 
 
 def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
+    if any(
+        resolution.status == "exact" and len(resolution.source_cell_ids) != 1
+        for resolution in resolutions
+    ):
+        raise AnalysisInputError(
+            "exact floor resolution must name exactly one source cell"
+        )
     usable = [resolution for resolution in resolutions if resolution.status in {"exact", "transported"}]
     all_usable = bool(resolutions) and len(usable) == len(resolutions)
     floor_abs = max((value.floor_abs_j for value in usable if value.floor_abs_j is not None), default=None)
