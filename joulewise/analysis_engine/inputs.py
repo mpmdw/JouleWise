@@ -22,8 +22,11 @@ from typing import Any, Callable, Mapping, Sequence
 from joulewise.analysis_manifest import validate_analysis_manifest
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     STACK_IDENTITY_DOMAIN,
     TRANSPORT_RULE_ID,
+    attribution_single_count_discipline,
     canonical_domain_sha256,
     complete_bundle_sha256,
     transport_refusal_reasons,
@@ -199,6 +202,10 @@ class FloorResolution:
     floor_cmp_j: float | None
     floor_gate_j: float | None
     reason_codes: tuple[str, ...]
+    floor_source: str | None = None
+    floor_limit_class: str | None = None
+    point_floor_diagnostics: Mapping[str, Any] | None = None
+    single_count_discipline: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -2710,6 +2717,27 @@ def resolve_floor(
             for value in values
         ):
             reasons.append("cell_not_claim_ready")
+        limit_class = cell.get("floor_limit_class")
+        floor_source = cell.get("floor_source")
+        point_diagnostics = cell.get("point_floor_diagnostics")
+        single_count = cell.get("single_count_discipline")
+        limit_metadata_present = any(
+            key in cell
+            for key in (
+                "floor_limit_class",
+                "floor_source",
+                "point_floor_diagnostics",
+                "single_count_discipline",
+            )
+        )
+        attribution_limited = (
+            limit_class == ATTRIBUTION_LIMIT_CLASS
+            and floor_source == ATTRIBUTION_FLOOR_SOURCE
+            and isinstance(point_diagnostics, Mapping)
+            and single_count == attribution_single_count_discipline()
+        )
+        if limit_metadata_present and not attribution_limited:
+            reasons.append("artifact_schema_invalid")
         if reasons:
             return FloorResolution(
                 status="refused",
@@ -2734,6 +2762,22 @@ def resolve_floor(
             floor_cmp_j=float(values[1]),
             floor_gate_j=float(values[2]),
             reason_codes=(),
+            floor_source=(
+                ATTRIBUTION_FLOOR_SOURCE if attribution_limited else None
+            ),
+            floor_limit_class=(
+                ATTRIBUTION_LIMIT_CLASS if attribution_limited else None
+            ),
+            point_floor_diagnostics=(
+                copy.deepcopy(dict(point_diagnostics))
+                if attribution_limited
+                else None
+            ),
+            single_count_discipline=(
+                attribution_single_count_discipline()
+                if attribution_limited
+                else None
+            ),
         )
     if len(exact) > 1:
         return FloorResolution(
@@ -2808,6 +2852,24 @@ def resolve_floor(
         for cell_id in group.get("source_cell_ids", ())
     ):
         refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
+    limit_metadata_present = any(
+        key in group
+        for key in (
+            "floor_limit_class",
+            "floor_source",
+            "point_floor_diagnostics",
+            "single_count_discipline",
+        )
+    )
+    attribution_limited = (
+        group.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+        and group.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
+        and isinstance(group.get("point_floor_diagnostics"), Mapping)
+        and group.get("single_count_discipline")
+        == attribution_single_count_discipline()
+    )
+    if limit_metadata_present and not attribution_limited:
+        refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
     if refusals:
         return FloorResolution(
             status="refused",
@@ -2832,6 +2894,26 @@ def resolve_floor(
         floor_cmp_j=float(group["composed_floor_cmp_j"]),
         floor_gate_j=float(group["composed_floor_gate_j"]),
         reason_codes=(),
+        floor_source=(
+            ATTRIBUTION_FLOOR_SOURCE
+            if attribution_limited
+            else None
+        ),
+        floor_limit_class=(
+            ATTRIBUTION_LIMIT_CLASS
+            if attribution_limited
+            else None
+        ),
+        point_floor_diagnostics=(
+            copy.deepcopy(dict(group["point_floor_diagnostics"]))
+            if attribution_limited
+            else None
+        ),
+        single_count_discipline=(
+            attribution_single_count_discipline()
+            if attribution_limited
+            else None
+        ),
     )
 
 

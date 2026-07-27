@@ -25,6 +25,11 @@ from unittest import mock
 
 from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
 from joulewise.detection_floor import small_sample_guard_factor
+from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
+    attribution_single_count_discipline,
+)
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
 from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
@@ -1867,7 +1872,7 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
                 runs_root=runs_root,
                 cooldowns=campaign_cooldown_evidence(runs_root),
             )
-        self.assertFalse(report.extractable)
+        self.assertTrue(report.extractable)
         self.assertIn(
             "admissible_set_uncertainty_dominates_point_floor",
             report.refusal_reasons,
@@ -1884,6 +1889,24 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         # n_blocks=2 < 5: smoke-only, the guarded floor MUST be withheld.
         self.assertIsNone(report.floor.guarded_floor_j)
         self.assertIsNone(report.floor.guard_factor)
+        assert report.point_floor_diagnostic is not None
+        row = report.as_row()
+        self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
+        self.assertEqual(
+            row["point_floor_diagnostic"],
+            {
+                "label": "repeatability_diagnostic",
+                "published_claim_floor": False,
+                "unguarded_floor_j": report.point_floor_diagnostic.unguarded_floor_j,
+                "guard_factor": None,
+                "guarded_floor_j": None,
+            },
+        )
+        self.assertEqual(
+            row["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
 
     def test_delta_sign_and_magnitude_use_frozen_abba_formula(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2175,7 +2198,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             )
             self.assertEqual(report["cells"][0], direct.as_row())
 
-    def test_zero_scatter_with_nonzero_admissible_width_refuses_extraction(self) -> None:
+    def test_zero_scatter_with_nonzero_admissible_width_is_labelled_extraction(self) -> None:
         # Defect shape F2: identical point estimates cannot erase their
         # nonzero admissible energy-set width.
         with tempfile.TemporaryDirectory() as tmp:
@@ -2192,7 +2215,25 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                 runs_root=runs_root,
                 cooldowns=campaign_cooldown_evidence(runs_root),
             )
-        self.assertFalse(report.extractable)
+            extraction_artifact = extract_cells(
+                runs_root,
+                {
+                    "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                    "cells": [
+                        {
+                            "cell_id": "DF-RQ-GROSS-MID",
+                            "kind": "absolute",
+                            "metric": "gross_energy_j",
+                            "window_class": "request",
+                            "members": [
+                                {"slot": bundle_id, "bundle_id": bundle_id}
+                                for bundle_id in bundle_ids
+                            ],
+                        }
+                    ],
+                },
+            )
+        self.assertTrue(report.extractable)
         self.assertIn(
             "admissible_set_uncertainty_dominates_point_floor",
             report.refusal_reasons,
@@ -2200,8 +2241,35 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 0.01)
         self.assertTrue(math.isfinite(report.floor.guarded_floor_j))
+        row = report.as_row()
+        self.assertEqual(row["refusal_reasons"], [])
+        self.assertEqual(
+            row["floor_conditions"],
+            ["admissible_set_uncertainty_dominates_point_floor"],
+        )
+        self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
+        self.assertEqual(
+            row["point_floor_diagnostic"]["label"],
+            "repeatability_diagnostic",
+        )
+        self.assertFalse(
+            row["point_floor_diagnostic"]["published_claim_floor"]
+        )
+        self.assertEqual(
+            row["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+        self.assertEqual(
+            extraction_artifact["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+        self.assertGreater(
+            row["operative_floor_j"],
+            row["point_floor_diagnostic"]["guarded_floor_j"],
+        )
 
-    def test_point_floor_cannot_hide_twenty_joule_admissible_half_width(self) -> None:
+    def test_point_floor_cannot_replace_widened_published_floor(self) -> None:
         # F2 audit reproduction: ten nearly identical ~100 J point estimates
         # each admit +/-20 J.  The old point-only estimator reported a tiny
         # floor and declared the cell extractable.
@@ -2223,13 +2291,22 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                 runs_root=runs_root,
                 cooldowns=campaign_cooldown_evidence(runs_root),
             )
-        self.assertFalse(report.extractable)
+        self.assertTrue(report.extractable)
         self.assertIn(
             "admissible_set_uncertainty_dominates_point_floor",
             report.refusal_reasons,
         )
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 20.0)
+        row = report.as_row()
+        self.assertEqual(
+            row["operative_floor_j"],
+            row["floor"]["guarded_floor_j"],
+        )
+        self.assertGreater(
+            row["operative_floor_j"],
+            row["point_floor_diagnostic"]["guarded_floor_j"],
+        )
 
     def test_seventeen_member_nonzero_width_cell_refuses_exact_corner_overflow(self) -> None:
         # K1 cap defect shape: exact full-floor enumeration is governed only
@@ -2260,7 +2337,7 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
         )
         self.assertIsNone(report.floor)
 
-    def test_alternating_ten_member_corner_residual_refuses_extraction(self) -> None:
+    def test_alternating_ten_member_corner_residual_is_labelled_extraction(self) -> None:
         # G1 exact review counterexample: points alternate 99.5/100.5 J and
         # every member admits +/-1 J.  A residual corner reaches 2.3 J, not
         # the old max-width shortcut's 1 J.
@@ -2282,13 +2359,57 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                 runs_root=runs_root,
                 cooldowns=campaign_cooldown_evidence(runs_root),
             )
-        self.assertFalse(report.extractable)
+        self.assertTrue(report.extractable)
         self.assertIn(
             "admissible_set_uncertainty_dominates_point_floor",
             report.refusal_reasons,
         )
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 2.3 - 1e-12)
+        self.assertEqual(
+            report.as_row()["floor_limit_class"],
+            ATTRIBUTION_LIMIT_CLASS,
+        )
+
+    def test_additional_refusal_is_not_rescued_by_attribution_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle_ids = [f"label-plus-refusal-r{index}" for index in range(5)]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for bundle_id in bundle_ids:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "LABEL-PLUS-REFUSAL",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": bundle_id, "bundle_id": bundle_id}
+                            for bundle_id in bundle_ids
+                        ],
+                    }
+                ],
+            }
+            with mock.patch(
+                "joulewise.floor_extraction._whole_window_extraction_refusals",
+                return_value=("whole_window_verdict_conflict",),
+            ):
+                artifact = extract_cells(runs_root, spec)
+        cell = artifact["cells"][0]
+        self.assertFalse(cell["extractable"])
+        self.assertIsNone(cell["floor"])
+        self.assertEqual(
+            cell["refusal_reasons"],
+            [
+                "admissible_set_uncertainty_dominates_point_floor",
+                "whole_window_verdict_conflict",
+            ],
+        )
+        self.assertNotIn("floor_conditions", cell)
+        self.assertNotIn("single_count_discipline", artifact)
 
 
 class CapHitVerificationGateTests(_PermissiveStrictValidatorMixin, unittest.TestCase):

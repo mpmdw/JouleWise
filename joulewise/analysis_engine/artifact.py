@@ -12,11 +12,20 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
+    attribution_single_count_discipline,
+)
+
 from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
 from .estimators import tost_p_value
 from .multiplicity import adjust_p_values
-from .ratio import validate_ratio_estimand
+from .ratio import (
+    ratio_floor_diagnostic_collision_source_ids,
+    validate_ratio_estimand,
+)
 from .sensitivity import influence_triggers
 
 
@@ -210,6 +219,26 @@ _FLOOR_RESOLUTION_KEYS = {
     "floor_gate_j",
     "reason_codes",
 }
+_ATTRIBUTION_FLOOR_KEYS = {
+    "floor_source",
+    "floor_limit_class",
+    "point_floor_diagnostics",
+    "single_count_discipline",
+}
+_FLOOR_LIMIT_KEYS = {
+    "floor_source",
+    "floor_limit_class",
+    "published_floor_j",
+    "point_floor_diagnostics",
+    "single_count_discipline",
+}
+_POINT_FLOOR_DIAGNOSTIC_KEYS = {
+    "label",
+    "published_claim_floor",
+    "unguarded_floor_j",
+    "guard_factor",
+    "guarded_floor_j",
+}
 _MULTIPLICITY_EVIDENCE_KEYS = {"raw_p", "adjusted_p", "rejected"}
 _RANDOMIZATION_KEYS = {
     "status",
@@ -360,6 +389,76 @@ def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -
     if extra:
         errors.append(f"{where}: unrecognized key(s): {', '.join(extra)}")
     return not missing and not extra
+
+
+def _exact_keys_with_optional_group(
+    value: Any,
+    required: set[str],
+    optional: set[str],
+    where: str,
+    errors: list[str],
+) -> bool:
+    if not isinstance(value, Mapping):
+        errors.append(f"{where}: must be an object")
+        return False
+    expected = required | (optional if set(value) & optional else set())
+    return _exact_keys(value, expected, where, errors)
+
+
+def _validate_point_floor_diagnostics(
+    value: Any,
+    where: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(value, Mapping) or not value:
+        errors.append(f"{where}: must be a nonempty diagnostic mapping")
+        return
+    if set(value) == _POINT_FLOOR_DIAGNOSTIC_KEYS:
+        if value.get("label") != "repeatability_diagnostic":
+            errors.append(f"{where}.label: must identify repeatability")
+        if value.get("published_claim_floor") is not False:
+            errors.append(f"{where}.published_claim_floor: must be false")
+        for key in ("unguarded_floor_j", "guarded_floor_j"):
+            if not _number(value.get(key), nonnegative=True):
+                errors.append(f"{where}.{key}: must be nonnegative")
+        if not _number(value.get("guard_factor"), nullable=True, nonnegative=True):
+            errors.append(f"{where}.guard_factor: must be nonnegative or null")
+        return
+    for key, child in value.items():
+        if not isinstance(key, str) or not key:
+            errors.append(f"{where}: diagnostic keys must be nonempty strings")
+            continue
+        _validate_point_floor_diagnostics(
+            child,
+            f"{where}.{key}",
+            errors,
+        )
+
+
+def _validate_attribution_floor_metadata(
+    value: Mapping[str, Any],
+    where: str,
+    errors: list[str],
+) -> None:
+    if value.get("floor_source") != ATTRIBUTION_FLOOR_SOURCE:
+        errors.append(
+            f"{where}.floor_source: must name {ATTRIBUTION_FLOOR_SOURCE!r}"
+        )
+    if value.get("floor_limit_class") != ATTRIBUTION_LIMIT_CLASS:
+        errors.append(
+            f"{where}.floor_limit_class: must be {ATTRIBUTION_LIMIT_CLASS!r}"
+        )
+    _validate_point_floor_diagnostics(
+        value.get("point_floor_diagnostics"),
+        f"{where}.point_floor_diagnostics",
+        errors,
+    )
+    if value.get("single_count_discipline") != (
+        attribution_single_count_discipline()
+    ):
+        errors.append(
+            f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+        )
 
 
 def _finite_json(value: Any, where: str, errors: list[str]) -> None:
@@ -550,6 +649,15 @@ def _validate_cross_field_claim_semantics(
 
     reasons = evaluation.get("reason_codes")
     if isinstance(reasons, list):
+        floor_metadata = (
+            {
+                key: floor[key]
+                for key in _ATTRIBUTION_FLOOR_KEYS
+            }
+            if set(floor) & _ATTRIBUTION_FLOOR_KEYS
+            == _ATTRIBUTION_FLOOR_KEYS
+            else None
+        )
         try:
             recomputed = evaluate_claim(
                 estimate=float(estimate) if _number(estimate) else None,
@@ -578,6 +686,7 @@ def _validate_cross_field_claim_semantics(
                 claim_role=str(contrast.get("claim_role", "")),
                 confirmatory_status=str(sampling.get("confirmatory_status", "")),
                 evidence_class=str(evidence_class),
+                floor_metadata=floor_metadata,
             )
         except (TypeError, ValueError):
             recomputed = None
@@ -588,6 +697,12 @@ def _validate_cross_field_claim_semantics(
                 "reason_codes",
                 "claim_ready_for_l2_l3",
                 "claim_level_ceiling",
+                *(
+                    ("floor_limit",)
+                    if "floor_limit" in evaluation
+                    or "floor_limit" in recomputed
+                    else ()
+                ),
             ):
                 if evaluation.get(key) != recomputed[key]:
                     errors.append(
@@ -1148,7 +1263,13 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             continue
         contrast_by_id[contrast_id] = contrast
         evaluation = contrast["claim_evaluation"]
-        if _exact_keys(evaluation, _EVALUATION_KEYS, f"{where}.claim_evaluation", errors):
+        if _exact_keys_with_optional_group(
+            evaluation,
+            _EVALUATION_KEYS,
+            {"floor_limit"},
+            f"{where}.claim_evaluation",
+            errors,
+        ):
             if not isinstance(evaluation["outcome"], str) or evaluation[
                 "outcome"
             ] not in CLAIM_OUTCOMES:
@@ -1177,6 +1298,30 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                 "claim_level_ceiling"
             ] not in {"L0", "L1", "L2", "L3", "L4"}:
                 errors.append(f"{where}.claim_evaluation.claim_level_ceiling: invalid")
+            floor_limit = evaluation.get("floor_limit")
+            if isinstance(floor_limit, Mapping):
+                if _exact_keys(
+                    floor_limit,
+                    _FLOOR_LIMIT_KEYS,
+                    f"{where}.claim_evaluation.floor_limit",
+                    errors,
+                ):
+                    _validate_attribution_floor_metadata(
+                        floor_limit,
+                        f"{where}.claim_evaluation.floor_limit",
+                        errors,
+                    )
+                    if not _number(
+                        floor_limit.get("published_floor_j"),
+                        nonnegative=True,
+                    ):
+                        errors.append(
+                            f"{where}.claim_evaluation.floor_limit.published_floor_j: must be nonnegative"
+                        )
+            elif "floor_limit" in evaluation:
+                errors.append(
+                    f"{where}.claim_evaluation.floor_limit: must be an object"
+                )
         if not isinstance(contrast["sensitivity_status"], str) or contrast[
             "sensitivity_status"
         ] not in {
@@ -1528,7 +1673,13 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             )
 
         floor = contrast["floor"]
-        if _exact_keys(floor, _FLOOR_KEYS, f"{where}.floor", errors):
+        if _exact_keys_with_optional_group(
+            floor,
+            _FLOOR_KEYS,
+            _ATTRIBUTION_FLOOR_KEYS,
+            f"{where}.floor",
+            errors,
+        ):
             floor_row_ids = _string_list(
                 floor["floor_row_ids"], f"{where}.floor.floor_row_ids", errors
             )
@@ -1538,13 +1689,18 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             resolution_abs: list[float] = []
             resolution_cmp: list[float] = []
             resolution_gates: list[float] = []
+            limited_resolutions: list[tuple[int, Mapping[str, Any]]] = []
             if not isinstance(resolutions, list) or not resolutions:
                 errors.append(f"{where}.floor.resolutions: must be a nonempty array")
             else:
                 for resolution_index, resolution in enumerate(resolutions):
                     resolution_where = f"{where}.floor.resolutions[{resolution_index}]"
-                    if not _exact_keys(
-                        resolution, _FLOOR_RESOLUTION_KEYS, resolution_where, errors
+                    if not _exact_keys_with_optional_group(
+                        resolution,
+                        _FLOOR_RESOLUTION_KEYS,
+                        _ATTRIBUTION_FLOOR_KEYS,
+                        resolution_where,
+                        errors,
                     ):
                         continue
                     _string_list(
@@ -1583,6 +1739,31 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         errors.append(f"{resolution_where}.status: invalid")
                         continue
                     resolution_statuses.append(status)
+                    if (
+                        status == "exact"
+                        and isinstance(source_ids, list)
+                        and len(source_ids) != 1
+                    ):
+                        errors.append(
+                            f"{resolution_where}.source_cell_ids: exact resolution must name exactly one source cell"
+                        )
+                    resolution_limit_keys = (
+                        set(resolution) & _ATTRIBUTION_FLOOR_KEYS
+                    )
+                    if resolution_limit_keys:
+                        _validate_attribution_floor_metadata(
+                            resolution,
+                            resolution_where,
+                            errors,
+                        )
+                        if status not in {"exact", "transported"}:
+                            errors.append(
+                                f"{resolution_where}: attribution metadata requires a usable resolution"
+                            )
+                        else:
+                            limited_resolutions.append(
+                                (resolution_index, resolution)
+                            )
                     if status in {"exact", "transported"}:
                         if not source_ids:
                             errors.append(
@@ -1646,6 +1827,120 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             ):
                 errors.append(
                     f"{where}.floor.floor_row_ids: must exactly match resolution source rows"
+                )
+            floor_limit_keys = set(floor) & _ATTRIBUTION_FLOOR_KEYS
+            publishes_attribution_floor = bool(
+                limited_resolutions and floor.get("status") == "resolved"
+            )
+            if publishes_attribution_floor:
+                if floor_limit_keys != _ATTRIBUTION_FLOOR_KEYS:
+                    errors.append(
+                        f"{where}.floor: attribution-limited resolution requires complete floor metadata"
+                    )
+                else:
+                    _validate_attribution_floor_metadata(
+                        floor,
+                        f"{where}.floor",
+                        errors,
+                    )
+                    diagnostics_by_source: dict[
+                        str, list[tuple[int, Any]]
+                    ] = {}
+                    for resolution_index, resolution in limited_resolutions:
+                        source_ids = resolution.get("source_cell_ids")
+                        source_diagnostics = resolution.get(
+                            "point_floor_diagnostics"
+                        )
+                        if not isinstance(source_ids, list) or not isinstance(
+                            source_diagnostics, Mapping
+                        ):
+                            continue
+                        if resolution.get("status") == "transported":
+                            for source_cell_id, diagnostic in (
+                                source_diagnostics.items()
+                            ):
+                                if isinstance(source_cell_id, str):
+                                    diagnostics_by_source.setdefault(
+                                        source_cell_id, []
+                                    ).append(
+                                        (resolution_index, diagnostic)
+                                    )
+                        else:
+                            for source_cell_id in source_ids:
+                                if isinstance(source_cell_id, str):
+                                    diagnostics_by_source.setdefault(
+                                        source_cell_id, []
+                                    ).append(
+                                        (resolution_index, source_diagnostics)
+                                    )
+                    expected_diagnostics: dict[str, Any] = {}
+                    ratio_floor = (
+                        isinstance(metric, Mapping)
+                        and metric.get("ratio_estimand") is not None
+                    )
+                    condition_labels = ("condition_a", "condition_b")
+                    for source_cell_id, entries in diagnostics_by_source.items():
+                        first = entries[0][1]
+                        if all(
+                            diagnostic == first
+                            for _, diagnostic in entries[1:]
+                        ):
+                            expected_diagnostics[source_cell_id] = first
+                        elif ratio_floor and all(
+                            index < len(condition_labels)
+                            for index, _ in entries
+                        ):
+                            expected_diagnostics[source_cell_id] = {
+                                condition_labels[index]: diagnostic
+                                for index, diagnostic in entries
+                            }
+                        else:
+                            errors.append(
+                                f"{where}.floor.point_floor_diagnostics: transported resolutions conflict for source cell {source_cell_id!r}"
+                            )
+                            expected_diagnostics[source_cell_id] = entries[-1][1]
+                    if floor.get("point_floor_diagnostics") != (
+                        expected_diagnostics
+                    ):
+                        errors.append(
+                            f"{where}.floor.point_floor_diagnostics: must preserve resolution diagnostics by source cell"
+                        )
+            elif floor_limit_keys:
+                errors.append(
+                    f"{where}.floor: attribution metadata is forbidden without a labelled resolution"
+                )
+
+            evaluation_floor_limit = (
+                evaluation.get("floor_limit")
+                if isinstance(evaluation, Mapping)
+                else None
+            )
+            if publishes_attribution_floor:
+                if not isinstance(evaluation_floor_limit, Mapping):
+                    errors.append(
+                        f"{where}.claim_evaluation.floor_limit: required for an attribution-limited floor"
+                    )
+                elif floor_limit_keys == _ATTRIBUTION_FLOOR_KEYS:
+                    for key in (
+                        "floor_source",
+                        "floor_limit_class",
+                        "point_floor_diagnostics",
+                        "single_count_discipline",
+                    ):
+                        if evaluation_floor_limit.get(key) != floor.get(key):
+                            errors.append(
+                                f"{where}.claim_evaluation.floor_limit.{key}: must match the published floor"
+                            )
+                    if not _same_number(
+                        evaluation_floor_limit.get("published_floor_j"),
+                        floor.get("active_floor_j"),
+                    ):
+                        errors.append(
+                            f"{where}.claim_evaluation.floor_limit.published_floor_j: must match active_floor_j"
+                        )
+            elif evaluation_floor_limit is not None:
+                errors.append(
+                    f"{where}.claim_evaluation.floor_limit: forbidden without an attribution-limited floor"
                 )
             complete_resolution_set = bool(resolutions) and len(
                 resolution_statuses
@@ -1749,6 +2044,30 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                     )
             else:
                 errors.append(f"{where}.floor.status: invalid")
+
+        if (
+            isinstance(metric, Mapping)
+            and metric.get("ratio_estimand") is not None
+        ):
+            collision_source_ids = (
+                ratio_floor_diagnostic_collision_source_ids(floor)
+                if isinstance(floor, Mapping)
+                else ()
+            )
+            evaluation_reasons = (
+                evaluation.get("reason_codes")
+                if isinstance(evaluation, Mapping)
+                else None
+            )
+            if collision_source_ids and (
+                not isinstance(evaluation_reasons, list)
+                or "ratio_floor_conversion_undefined"
+                not in evaluation_reasons
+            ):
+                errors.append(
+                    f"{where}.claim_evaluation.reason_codes: ratio diagnostic "
+                    "collision requires ratio_floor_conversion_undefined"
+                )
 
         multiplicity_evidence = contrast["multiplicity"]
         if _exact_keys(
@@ -2446,9 +2765,14 @@ def validate_claim_verdicts_for_claim_index(value: Any) -> list[str]:
                 if isinstance(contrast, Mapping)
                 else None
             )
+            evaluation_order = _CLAIMS_INDEX_KEY_ORDERS[
+                "artifact.claim_evaluation"
+            ]
+            if isinstance(evaluation, Mapping) and "floor_limit" in evaluation:
+                evaluation_order = (*evaluation_order, "floor_limit")
             _claims_index_key_order(
                 evaluation,
-                _CLAIMS_INDEX_KEY_ORDERS["artifact.claim_evaluation"],
+                evaluation_order,
                 f"artifact.contrasts[{index}].claim_evaluation",
                 errors,
             )

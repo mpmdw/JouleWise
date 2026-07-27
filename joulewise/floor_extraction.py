@@ -70,10 +70,14 @@ from joulewise.analysis_engine.inputs import (
     window_evidence_precheck,
 )
 from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     FloorEstimate,
     MAX_EXACT_ADMISSIBLE_CORNER_N,
     abba_delta,
     absolute_false_effect_floor,
+    admissible_set_uncertainty_dominates_point_floor,
+    attribution_single_count_discipline,
     comparative_false_effect_floor,
     complete_bundle_sha256,
 )
@@ -97,6 +101,7 @@ __all__ = [
     "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
     "ANCHOR_FALLBACK_MEMBER_REFUSAL",
     "CELL_REFUSAL_CODES",
+    "CELL_LABELLED_CONDITION_CODES",
     "READER_THROUGHPUT_FIELD",
     "LEGACY_THROUGHPUT_FIELD",
     "ANCHOR_QUARTER_METRIC_LIMIT",
@@ -126,9 +131,12 @@ LEGACY_THROUGHPUT_FIELD = "throughput_tokens_s"
 # quarter of the point magnitude (adjudicated 2026-07-19 design).
 ANCHOR_QUARTER_METRIC_LIMIT = 0.25
 
-# Closed refusal vocabulary for cell-level extraction refusals.  Member-level
-# ``reasons`` additionally carry governed reducer/engine reason codes
-# verbatim from window_evidence_precheck / deterministic_bounds.
+# Closed registered vocabulary historically exposed as ``CELL_REFUSAL_CODES``.
+# D-078 clause 11 reclassifies the spelling in
+# ``CELL_LABELLED_CONDITION_CODES`` as non-terminal when it is the sole
+# condition and an exact widened floor exists.  Keeping it in this tuple
+# preserves registry/API coherence; it must not be treated as a terminal
+# refusal merely because the legacy container name says "refusal".
 CELL_REFUSAL_CODES = (
     "bundle_missing",
     "summary_unreadable",
@@ -164,6 +172,9 @@ CELL_REFUSAL_CODES = (
     "admissible_set_uncertainty_dominates_point_floor",
     "whole_window_drift_allowance_unrecorded",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
+)
+CELL_LABELLED_CONDITION_CODES = (
+    "admissible_set_uncertainty_dominates_point_floor",
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
@@ -286,10 +297,28 @@ class CellReport:
     floor: FloorEstimate | None
     anchor_shift_bound_max_j: float | None
     whole_window_drift_allowance: Mapping[str, Any] | None = None
+    point_floor_diagnostic: FloorEstimate | None = None
+
+    @property
+    def floor_conditions(self) -> tuple[str, ...]:
+        if (
+            self.floor is not None
+            and self.point_floor_diagnostic is not None
+            and set(self.refusal_reasons) == set(CELL_LABELLED_CONDITION_CODES)
+        ):
+            return CELL_LABELLED_CONDITION_CODES
+        return ()
+
+    @property
+    def terminal_refusal_reasons(self) -> tuple[str, ...]:
+        conditions = set(self.floor_conditions)
+        return tuple(
+            reason for reason in self.refusal_reasons if reason not in conditions
+        )
 
     @property
     def extractable(self) -> bool:
-        return not self.refusal_reasons and self.floor is not None
+        return not self.terminal_refusal_reasons and self.floor is not None
 
     def as_row(self) -> dict[str, Any]:
         floor_row: dict[str, Any] | None = None
@@ -337,7 +366,7 @@ class CellReport:
                         ),
                     }
                 )
-        return {
+        row = {
             "cell_id": self.cell_id,
             "kind": self.kind,
             "metric": self.metric,
@@ -347,7 +376,7 @@ class CellReport:
             "n_admitted": self.n_admitted,
             "excluded_slots": list(self.excluded_slots),
             "extractable": self.extractable,
-            "refusal_reasons": list(self.refusal_reasons),
+            "refusal_reasons": list(self.terminal_refusal_reasons),
             "floor": floor_row,
             "claim_family": neg8_claim_family_for_metric(self.metric),
             "whole_window_drift_allowance": (
@@ -366,6 +395,38 @@ class CellReport:
             "anchor_shift_bound_max_j": self.anchor_shift_bound_max_j,
             "members": [member.as_row() for member in self.members],
         }
+        if self.floor_conditions:
+            row["floor_conditions"] = list(self.floor_conditions)
+        if self.floor_conditions and self.floor is not None:
+            point = self.point_floor_diagnostic
+            assert point is not None
+            row.update(
+                {
+                    "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                    "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                    "point_floor_diagnostic": {
+                        "label": "repeatability_diagnostic",
+                        "published_claim_floor": False,
+                        "unguarded_floor_j": point.unguarded_floor_j,
+                        "guard_factor": point.guard_factor,
+                        "guarded_floor_j": point.guarded_floor_j,
+                    },
+                    "single_count_discipline": (
+                        attribution_single_count_discipline()
+                    ),
+                }
+            )
+        return row
+
+
+def _sole_attribution_limit(
+    refusals: Sequence[str],
+    floor: FloorEstimate | None,
+) -> bool:
+    return (
+        floor is not None
+        and set(refusals) == set(CELL_LABELLED_CONDITION_CODES)
+    )
 
 
 def _read_summary(
@@ -835,34 +896,21 @@ def extract_absolute_cell(
                 and any(width > 0.0 for width in widths)  # type: ignore[operator]
             ):
                 refusals.append(
-                    "admissible_set_uncertainty_dominates_point_floor"
+                    CELL_LABELLED_CONDITION_CODES[0]
                 )
             else:
                 floor = absolute_false_effect_floor(
                     values,
                     admissible_half_widths_j=widths,  # type: ignore[arg-type]
                 )
-            point_gate = (
-                point_floor.guarded_floor_j
-                if point_floor.guarded_floor_j is not None
-                else point_floor.unguarded_floor_j
-            )
-            n = len(values)
-            width_sum = math.fsum(widths)  # type: ignore[arg-type]
-            widened_residual_max = max(
-                abs(value - point_floor.mean_j)
-                + width * (n - 1) / n
-                + (width_sum - width) / n
-                for value, width in zip(values, widths, strict=True)  # type: ignore[arg-type]
-            )
-            if (
-                len(values) <= MAX_EXACT_ADMISSIBLE_CORNER_N
-                and widened_residual_max > point_gate
+            if floor is not None and (
+                admissible_set_uncertainty_dominates_point_floor(floor)
             ):
                 refusals.append(
-                    "admissible_set_uncertainty_dominates_point_floor"
+                    CELL_LABELLED_CONDITION_CODES[0]
                 )
 
+    attribution_limited = _sole_attribution_limit(refusals, floor)
     return CellReport(
         cell_id=cell_id,
         kind="absolute",
@@ -874,22 +922,19 @@ def extract_absolute_cell(
         n_planned=len(reports),
         n_admitted=(
             len(admitted)
-            if not refusals
-            or set(refusals)
-            == {"admissible_set_uncertainty_dominates_point_floor"}
+            if not refusals or attribution_limited
             else 0
         ),
         refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
-        # Preserve the conservative widened number as a diagnostic even when
-        # it proves that the point-scatter floor itself is not extractable.
+        # Preserve the conservative widened number for the clause-11 labelled
+        # claim path. The separately stored point floor is diagnostic only.
         floor=(
             floor
-            if not refusals
-            or set(refusals)
-            == {"admissible_set_uncertainty_dominates_point_floor"}
+            if not refusals or attribution_limited
             else None
         ),
         anchor_shift_bound_max_j=anchor_max,
+        point_floor_diagnostic=point_floor if attribution_limited else None,
     )
 
 
@@ -1021,32 +1066,21 @@ def extract_comparative_cell(
                 and any(width > 0.0 for width in block_half_widths)
             ):
                 refusals.append(
-                    "admissible_set_uncertainty_dominates_point_floor"
+                    CELL_LABELLED_CONDITION_CODES[0]
                 )
             else:
                 floor = comparative_false_effect_floor(
                     block_deltas,
                     admissible_half_widths_j=block_half_widths,
                 )
-            point_gate = (
-                point_floor.guarded_floor_j
-                if point_floor.guarded_floor_j is not None
-                else point_floor.unguarded_floor_j
-            )
-            widened_delta_max = max(
-                abs(delta) + width
-                for delta, width in zip(
-                    block_deltas, block_half_widths, strict=True
-                )
-            )
-            if (
-                len(block_deltas) <= MAX_EXACT_ADMISSIBLE_CORNER_N
-                and widened_delta_max > point_gate
+            if floor is not None and (
+                admissible_set_uncertainty_dominates_point_floor(floor)
             ):
                 refusals.append(
-                    "admissible_set_uncertainty_dominates_point_floor"
+                    CELL_LABELLED_CONDITION_CODES[0]
                 )
 
+    attribution_limited = _sole_attribution_limit(refusals, floor)
     return CellReport(
         cell_id=cell_id,
         kind="comparative",
@@ -1058,20 +1092,17 @@ def extract_comparative_cell(
         n_planned=len(blocks),
         n_admitted=(
             len(block_deltas)
-            if not refusals
-            or set(refusals)
-            == {"admissible_set_uncertainty_dominates_point_floor"}
+            if not refusals or attribution_limited
             else 0
         ),
         refusal_reasons=tuple(sorted(dict.fromkeys(refusals))),
         floor=(
             floor
-            if not refusals
-            or set(refusals)
-            == {"admissible_set_uncertainty_dominates_point_floor"}
+            if not refusals or attribution_limited
             else None
         ),
         anchor_shift_bound_max_j=anchor_max,
+        point_floor_diagnostic=point_floor if attribution_limited else None,
     )
 
 
@@ -1287,7 +1318,7 @@ def extract_cells(
         for bundle_id in unattributable_omitted
     ]
 
-    return {
+    result = {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
         "runs_root": str(runs_root),
@@ -1338,6 +1369,9 @@ def extract_cells(
             and not spec_membership_refusals
         ),
     }
+    if any(report.floor_conditions and report.floor is not None for report in reports):
+        result["single_count_discipline"] = attribution_single_count_discipline()
+    return result
 
 
 def _whole_window_extraction_refusals(

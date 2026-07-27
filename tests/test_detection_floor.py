@@ -14,6 +14,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.detection_floor import (
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     CONDITION_FAMILY_DOMAIN,
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
@@ -33,6 +35,7 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
     small_sample_guard_factor,
+    attribution_single_count_discipline,
     transport_refusal_reasons,
     validate_floor_artifact,
 )
@@ -698,6 +701,74 @@ class TestArtifactEmitValidate(unittest.TestCase):
                 "full corner enumeration" in error
                 for error in validate_floor_artifact(artifact)
             )
+        )
+
+    def test_attribution_limited_artifact_is_labelled_and_single_counted(self):
+        cell = make_cell(
+            energies=[0.0] * 5,
+            deltas=[0.0] * 5,
+            absolute_half_widths=[0.5] * 5,
+            comparative_half_widths=[0.5] * 5,
+        )
+        artifact = make_artifact([cell])
+        self.assertEqual(validate_floor_artifact(artifact), [])
+        stored = artifact["cells"][0]
+        self.assertEqual(
+            stored["floor_limit_class"],
+            ATTRIBUTION_LIMIT_CLASS,
+        )
+        self.assertEqual(stored["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
+        self.assertEqual(
+            stored["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+        for component in ("absolute", "comparative"):
+            record = stored[component]
+            self.assertEqual(
+                record["point_floor_diagnostic"],
+                {
+                    "label": "repeatability_diagnostic",
+                    "published_claim_floor": False,
+                    "unguarded_floor_j": 0.0,
+                    "guard_factor": 1.5,
+                    "guarded_floor_j": 0.0,
+                },
+            )
+            self.assertGreater(
+                record["corner_widened_guarded_floor_j"],
+                record["point_floor_diagnostic"]["guarded_floor_j"],
+            )
+        group = artifact["transport_groups"][0]
+        self.assertEqual(
+            group["single_count_discipline"],
+            attribution_single_count_discipline(),
+        )
+
+        del stored["absolute"]["single_count_discipline"]
+        self.assertTrue(
+            any(
+                "attribution-limit metadata fields must be present together"
+                in error
+                for error in validate_floor_artifact(artifact)
+            )
+        )
+
+    def test_non_dominating_widened_cell_keeps_frozen_bytes(self):
+        cell = make_cell(
+            absolute_half_widths=[0.001] * len(FIXTURE_A_ENERGIES),
+            comparative_half_widths=[0.001] * len(FIXTURE_B_DELTAS),
+        )
+        self.assertNotIn("floor_limit_class", cell)
+        rendered = json.dumps(
+            cell,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+        self.assertEqual(
+            hashlib.sha256(rendered).hexdigest(),
+            "9a57d1c6b7efa1806358249791f6723f5fb90255ef6efecf7c3554a743e14710",
         )
 
     def test_comparative_widened_floor_round_trips_and_rejects_tampering(self):
