@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-27. **Main is at `7337b33`.** `FLOOR-LABEL-01` is
+Last updated: 2026-07-28. **Main is at `7337b33`.** `FLOOR-LABEL-01` is
 MERGED (merge commit `3055315`), implementing Ed-ratified D-078 clause
 11: attribution-limited floors are now a LABELLED CLAIM PATH — publish
 the corner-widened floor with `floor_source` and `floor_limit_class`,
@@ -343,14 +343,27 @@ extraction report and stops. Established blockers:
 
 ### Disk
 
-Disk was 99% full; it now has **33 GB free** after evicting
-already-backed-up iCloud copies (6497 files, 0 failures, nothing
-deleted). A window writes ~6 GB. A ruled selective-prune plan exists for
-a5/a7/a8 — 878 `powermetrics.plist` traces ≈ 26 GB versus 1.3 GB of
-everything else — archive and evict the traces, keep every small evidence
-file resident, and **DELETE NOTHING**. It awaits two Ed confirmations
-before any plist deletion (see "What needs Ed"). Do not touch
-`runs_window_a5_quarantine`; quarantine is evidence.
+**EXECUTED 2026-07-28 (Ed-authorized 2026-07-27: iCloud-only acceptable,
+delete after verified upload — resolving both open disk questions).**
+Disk now has **86 GB free** (was 33 GB). The selective-prune plan was
+generalized to every runs corpus: all 27 corpora are archived in
+`~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/` with a
+per-corpus `MANIFEST.sha256`. Verification before any deletion: APFS-clone
+name+byte parity; `brctl evict` of 100% of files (evict success = upload
+complete); rematerialize-and-rehash of 20,028 files from iCloud (100% of
+small evidence files + sampled traces) against the manifests — 0
+mismatches. Then 1,848 `powermetrics*.plist` traces ≈ 61 GB were deleted
+locally; **every small evidence file remains resident**, each pruned dir
+carries `PRUNED.md` + `MANIFEST.sha256`. Restoring any trace =
+`brctl download` its path under the archive.
+
+Kept fully local (no deletion): `runs_window_a10_20260725(+_bound)` and
+`runs_window_c_20260726(+_bound)` (mint #1 inputs),
+`runs_window_a5_quarantine` (quarantine is evidence), and in `runs/` the
+six frozen acceptance-gate bundles (`example-mac-mlx-*`) + `experiments/`
+custody — the retained-corpus strict gate re-ran green post-prune (3/3,
+incl. six-bundle strict validation), and keep-list file counts verified
+unchanged.
 
 ### Orchestration
 
@@ -362,10 +375,10 @@ standing fresh-eyes sweep is the first exercise of that list.
 
 ### What needs Ed
 
-1. The two disk questions, before any plist deletion: (a) is iCloud-only
-   acceptable for the bulk traces, or does he want a second copy first;
-   (b) does selective prune replace his literal "delete locally"
-   instruction.
+1. RESOLVED 2026-07-27/28: Ed answered both disk questions (iCloud-only
+   acceptable; delete after verified upload) and the archive+prune
+   executed — see "Disk" above. Note the traces are now iCloud-only
+   (single durable copy); flag if a second physical copy is wanted.
 2. **AC power** for measurement windows — the production policy requires
    it and the machine was on battery.
 3. A magistrate ruling on a conflict between D-080 and D-061: D-080's
@@ -436,6 +449,9 @@ work-selection authority. Use the generated region above for selection.
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-28 iCloud archive + verified selective prune of all runs
+  corpora (61 GB freed; keep-list intact; strict corpus gate green):
+  `docs/run_reports/2026-07-28-icloud-archive-prune.md`
 - 2026-07-27 evening session record (windows C/D passed; the mint is the
   critical path; D-079/D-080): `docs/process_traces/RESUME-2026-07-28.md`
   (superseded as a pointer by this file)
@@ -529,6 +545,19 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
+- **Post-prune suite on `7337b33` + docs edits (2026-07-28, lead-run):**
+  `Ran 2194 tests`, `FAILED (errors=2, skipped=12)`. The two errors are
+  `test_build_site_parsers` Lakebed-budget tests and are **pre-existing
+  at HEAD, independent of the prune**: `32e510a` rewrote Session History
+  with `docs/process_traces/` pointers, but `scripts/build_site.py
+  parse_session_history` requires a backticked `docs/run_reports/...md`
+  pointer in each dated bullet (verified by running the parser directly
+  on the pristine HEAD file — same failure). The affected surface for the
+  prune itself, `tests.test_corpus_strict_validation`, is 3/3 OK
+  post-prune. NEEDS A RULING: either the parser learns the Ed-adopted
+  pointer-retirement convention (accept `docs/process_traces/` pointers),
+  or Session History bullets must carry run-report pointers — site
+  contract, advisor-facing, not decided unilaterally here.
 - **Merged main `7337b33` (2026-07-27, current):** `FLOOR-LABEL-01`
   merged at `3055315` under the D-072 gate shape (independent Opus
   contract lens returning "comparative coverage COMPLETE" plus a fresh
@@ -730,12 +759,13 @@ current restart instructions. Current state is the C-028 block above.
 
 - (2026-07-27) `main` and `origin/main` are at `7337b33`. Branch
   `impl/floor-mint` @ `617060a` is pushed and NOT merged; it carries the
-  pre-mint floor schema hardening. The window C/D/B runs roots
-  (`runs_window_{b,c,d}_20260726` and their `_bound` siblings) are
-  resident in the working tree, and custody material lives OUTSIDE the
-  repo at `~/JouleWise-window-custody/` — an agent searching only the
-  repo will wrongly report quarantined evidence missing. Disk has 33 GB
-  free; a window writes ~6 GB. The next quiet-window operator must start
+  pre-mint floor schema hardening. Window C (+bound) and a10 (+bound)
+  remain FULLY resident in the working tree (mint #1 inputs); windows B/D
+  and all other runs corpora are locally pruned to small evidence files
+  (traces archived + verified in iCloud, see "Disk" above), and custody
+  material lives OUTSIDE the repo at `~/JouleWise-window-custody/` — an
+  agent searching only the repo will wrongly report quarantined evidence
+  missing. Disk has 86 GB free; a window writes ~6 GB. The next quiet-window operator must start
   from a separate clean, merged-main measurement checkout per
   `docs/phase_2/window_runbook.md`.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
