@@ -32,13 +32,98 @@ GO/NO-GO: **GO** on identity, magistrate-adjudicated from primary
 evidence. In-scope test modules 184 OK; final canonical rerun at
 `1d83d68` was in flight at checkpoint — UNVERIFIED, re-verify first.
 
-NEXT (in order): (1) close the two remaining suite errors on
-`impl/mint-tool` @ `1d83d68` — lead-verified tail `Ran 2241 tests,
-FAILED (errors=2, skipped=21)`: both in
-`tests/test_analysis_integration.py:1468`
-(`_exercise_cli_distinct_calibration_binding` builds v1-shaped
-`provenance["order_manifest"]`; needs the v2 component-scoped provenance
-shape — test-only but STRUCTURAL, not mechanical; then green suite);
+## ACTIVE RESUME SCRIPT (2026-07-29 harness-update checkpoint; resume EXACTLY here)
+
+Ed's live directive: 24-HOUR SPLITWISE GOAL — decode-phase claim(s)
+(Qwen2.5 1.5B vs 7B) for his professor, quiet window authorized (AC
+power connected), window timing delegated to the lead. Gates are never
+waived for the deadline.
+
+Ed-ratified THIS SESSION (record at next bookkeeping as D-083/D-084):
+- Published operative decode floor for mint #1 = the CELL GATE
+  **7.377086 J** (comparative-dominant), both components labelled
+  (absolute 3.592138 / comparative 7.377086); pre-registration literal
+  amends to the gate value as a HARD six-decimal literal (never
+  parameterized — that conditional bounds finding B4).
+- Cold-gate ruling adopted: refusal-scope spec
+  (`docs/phase_2/refusal_scope_spec.md`, on branch) ratified;
+  anchor_energy_envelope_unrecorded metric-local at recognized paths.
+
+State: branch `impl/mint-tool` @ `f63a334` (pushed; 16 commits; every
+post-base fix commit delta-audited CLEAN: 81193f5, c698711→FIX-5,
+7168130, b08a1ec, f63a334). Canonical suite at f63a334: `Ran 2255
+tests, OK (skipped=21)` uncontended, lead-verified. MINT INPUTS BANKED
+(final-head governed extractions, lead-run, values stable across 3 code
+revisions):
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/a10_extraction_report_final.json`
+(prefill 3.823787 / decode 3.592138, short-prefill honest refusal) and
+`.../window_c_extraction_report_final.json` (comparative 7.377086, all
+cells extractable). Comparative floor independently recomputed
+bit-exact; attribution-limited (width 6.31 J via 4-member Σ|c_i|w_i
+composition — verified matches ratified estimator; scatter 0.63 J).
+That scratchpad dir persists on disk — the successor session references
+it by ABSOLUTE path (its own scratchpad will differ).
+
+RESUME (in order):
+1. Read the COMPLETE final gauntlet packet:
+   `/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/packet/PACKET-FINAL.md`
+   (self-contained; 7 findings + W1; §9 names one superseded Sol
+   refuter to harvest from disk as corroboration-only — never let its
+   stale premise reopen B4; §8 records the director's
+   fabrication-retraction, read artifacts not prose). Adjudicated
+   state: B1 REFUTED (collector-side nit registered); B2 should-fix
+   PRE-EXISTING (queue row); B3 SPLIT — REFERRED TO MAGISTRATE
+   (adjudicate from packet: Sol's D-078 cl.11 vs Opus's D-082 cl.2
+   framing — check whether they address different objects); B4
+   should-fix under the hard-literal conditional — CLOSE ANYWAY by
+   authenticating the comparative allowance against window C's verdict
+   basis; the conditional's independence requirement is ALREADY MET
+   (the 7.377086 literal was recomputed bit-exact from primary corpus
+   bytes, independent of the extraction pipeline — the formal
+   verification report's lead-side leg; its Sol leg was still pending
+   at checkpoint); B5 resolved by Ed ratification, BINDING repair
+   order: B4 fix → contract amendment (pin BOTH allowances + composed
+   floor; supersession note on the 3.592138 clause) → re-pin literal
+   "7.377086"; S1 should-fix (fix in the same round); S2 nit; W1
+   closed (MATCH, ABBA-inversion explained on record).
+2. Fix round per that order on `impl/mint-tool` (Sol xhigh, one commit)
+   + delta re-audit → lead suite → mint run
+   (`scripts/mint_floor_artifact.py` over the banked reports; validate
+   == []; exclusive output) → PR → D-072 gate → merge. Note
+   docs/phase_2/floor_mint_contract.md amendment rides the fix commit.
+3. Splitwise campaign (checkpoint commit `3a73b03` on the branch:
+   `docs/phase_2/splitwise_decode_campaign.md`, WIP-marked, NOT a frozen
+   plan): evidence base + duration arithmetic DONE (~2.9 h window at
+   n_blocks=10 incl. 20% margin — fits; 7B per-member ~120-130 s
+   estimated, unmeasured). STEP 0 FOR THE SUCCESSOR:
+   start the 7B download immediately —
+   `mlx-community/Qwen2.5-7B-Instruct-4bit` (~4.3 GB), exact pinned
+   command in the checkpoint doc; CHECK DISK first (doc cites ~13 GB
+   free via WINDOW_STATUS — possibly stale, verify); download must
+   complete BEFORE the quiet window (network during collection =
+   contamination). No Sol run was in flight — nothing to harvest.
+   Outstanding deliverables listed in the doc (generator, 7B profile,
+   order manifest, frozen plan, pre-reg sheet vs 7.377086 + claim-side
+   bound, operator checklist delta, validator runs). Magistrate
+   ratifies the frozen plan + pre-reg sheet before the window.
+4. QUIET WINDOW (evening target): full agent quiet-lock first
+   (no-agent rule absolute); runbook `docs/phase_2/window_runbook.md`
+   incl. §5B pre-flight screen (threshold 0.033558756679900 s — already
+   encoded in the runbook chain, no new code needed); Splitwise decode
+   ABBA collection (~40 members + references + neg8 bound in-window).
+5. Post-window (agents OK): verdict → governed extraction → analysis
+   engine claims (floor gate 7.377086 + claim-side bound) →
+   plain-language advisor brief (professor-facing rule).
+6. Bookkeeping owed: D-083/D-084 entries; council-log C-039 addendum;
+   process-trace fold from
+   `.../9c166892-.../scratchpad/trace-2026-07-28-mint.md`; consistency
+   sweep; DRIFT.md; kernel refresh; queue rows TEST-SPEED-01 +
+   TEST-ISOLATION (shared custody dir) + E1/E2 registrations + collector
+   device.boundary nit.
+
+Historical NEXT (superseded by the block above): (1) close the two
+remaining suite errors on `impl/mint-tool` @ `1d83d68` — DONE via
+FIX rounds 81193f5/c698711/FIX-5;
 (2) full-tier adversarial review of `git diff
 main...impl/mint-tool` (two accepted strict-direction interpretation
 calls are settled, see the run report); fix rounds with delta re-audits;
