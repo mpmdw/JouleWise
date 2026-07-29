@@ -50,6 +50,8 @@ from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    neg8_claim_family_for_metric,
+    whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
 
@@ -77,7 +79,8 @@ WINDOW_C_SPEC_MEMBERS = 40
 EXPECTED_ABSOLUTE_N = 10
 EXPECTED_COMPARATIVE_N_BLOCKS = 10
 A10_DRIFT_ALLOWANCE_J = 0.652271753365838
-EXPECTED_OPERATIVE_FLOOR_TEXT = "3.592138"
+WINDOW_C_DRIFT_ALLOWANCE_J = 0.5812720449734456
+EXPECTED_OPERATIVE_FLOOR_TEXT = "7.377086"
 A10_ORDER_MANIFEST_ID = "p2-015-02_phase_absolute-order-v1"
 WINDOW_C_ORDER_MANIFEST_ID = "p2-015-05_phase_decode_abba-order-v1"
 A10_CELL_ID = "df-ph-decode-absolute"
@@ -100,6 +103,7 @@ ConsumptionAuthenticator = Callable[
     ...,
     tuple[Mapping[str, Mapping[str, Any]], str],
 ]
+AllowanceDeriver = Callable[..., Any]
 
 _BINDING_SUMMARY_CACHE: dict[
     tuple[str, str, tuple[tuple[str, str], ...]],
@@ -994,6 +998,7 @@ def _authenticate_component(
     consumption_authenticator: ConsumptionAuthenticator = (
         _authenticated_consumption_summaries
     ),
+    allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
 ) -> AuthenticatedComponent:
     report, report_raw = _load_json_object(paths.report_path, "extraction report")
     spec, spec_raw = _load_json_object(paths.spec_path, "extraction spec")
@@ -1024,6 +1029,7 @@ def _authenticate_component(
     report_members, widths = _report_members(cell, spec_cell, paths.expected_kind)
     _verify_report_widths(cell, widths)
     spec_ids = _spec_member_ids(spec)
+    referenced_bundle_ids = set(spec_ids)
     target_ids = {
         row.get("bundle_id")
         for row in report_members
@@ -1031,7 +1037,7 @@ def _authenticate_component(
     }
     operative_summaries, actual_semantics = consumption_authenticator(
         paths.evidence_root,
-        set(spec_ids),
+        referenced_bundle_ids,
         expected_basis_sha256,
         target_bundle_ids=target_ids,
     )
@@ -1071,6 +1077,7 @@ def _authenticate_component(
     campaign_rows, campaign_raw = _load_json_lines(
         paths.evidence_root / "campaign_log.jsonl", "campaign log"
     )
+    campaign_log_sha256 = _sha256(campaign_raw)
     basis_members = _evaluation_basis_members(
         campaign_rows, expected_basis_sha256
     )
@@ -1088,6 +1095,66 @@ def _authenticate_component(
     if not isinstance(floor_basis, Mapping) or dict(floor_basis) != dict(allowance):
         raise MintError("floor allowance provenance differs from component allowance")
 
+    campaign_log_path = paths.evidence_root / "campaign_log.jsonl"
+    try:
+        allowance_session = AuthenticatedConsumptionSession(
+            paths.evidence_root,
+            referenced_bundle_ids,
+            evaluation_basis_sha256=expected_basis_sha256,
+        )
+        allowance_result = allowance_deriver(
+            paths.evidence_root,
+            referenced_bundle_ids,
+            evaluation_basis_sha256=expected_basis_sha256,
+            consumption_session=allowance_session,
+        )
+    except Exception as exc:
+        if (
+            _sha256_file(campaign_log_path, "campaign log")
+            != campaign_log_sha256
+        ):
+            raise MintError(
+                "campaign log changed during whole-window allowance "
+                "re-derivation"
+            ) from exc
+        raise MintError(
+            "whole-window drift allowance is not derivable from "
+            f"authenticated campaign evidence: {type(exc).__name__}: {exc}"
+        ) from exc
+    # The derivation re-reads campaign_log.jsonl. Re-pin the bytes afterward
+    # so the authenticated input and the derivation input share one custody
+    # identity even if the file was concurrently replaced.
+    if _sha256_file(campaign_log_path, "campaign log") != campaign_log_sha256:
+        raise MintError(
+            "campaign log changed during whole-window allowance re-derivation"
+        )
+    if getattr(allowance_result, "status", None) != "allowances":
+        raise MintError(
+            "whole-window drift allowance is not derivable from "
+            "authenticated campaign evidence "
+            f"(status={getattr(allowance_result, 'status', None)!r})"
+        )
+    derived_allowances = getattr(allowance_result, "allowances", None)
+    claim_family = neg8_claim_family_for_metric(METRIC)
+    derived_allowance = (
+        derived_allowances.get(claim_family)
+        if isinstance(derived_allowances, Mapping)
+        else None
+    )
+    if not isinstance(derived_allowance, Mapping):
+        raise MintError(
+            "authenticated whole-window drift allowance is missing "
+            f"claim family {claim_family!r}"
+        )
+    # Both records are JSON-number mappings parsed by Python. Exact nested
+    # equality enforces the contract's "differs in any way" rule, including
+    # sub-microjoule substitutions and non-numeric provenance changes.
+    if dict(derived_allowance) != dict(allowance):
+        raise MintError(
+            "report whole-window drift allowance differs from "
+            "authenticated source re-derivation"
+        )
+
     regime, scientific_hash, backend = _source_regime(members)
     return AuthenticatedComponent(
         evidence_root_id=paths.evidence_root_id,
@@ -1099,7 +1166,7 @@ def _authenticate_component(
         spec_sha256=_sha256(spec_raw),
         order_manifest=order,
         order_manifest_sha256=_sha256(order_raw),
-        campaign_log_sha256=_sha256(campaign_raw),
+        campaign_log_sha256=campaign_log_sha256,
         cell=cell,
         spec_cell=spec_cell,
         members=members,
@@ -1241,6 +1308,20 @@ def pre_registration_gate(
         allowance, A10_DRIFT_ALLOWANCE_J, rel_tol=0.0, abs_tol=1e-12
     ):
         raise MintError("pre-registration gate: a10 drift allowance mismatch")
+    comparative_allowance = _finite(
+        comparative.whole_window_drift_allowance.get("allowance_j"),
+        "window-C comparative whole-window allowance",
+        nonnegative=True,
+    )
+    if not math.isclose(
+        comparative_allowance,
+        WINDOW_C_DRIFT_ALLOWANCE_J,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise MintError(
+            "pre-registration gate: window-C drift allowance mismatch"
+        )
     operative = max(
         _finite(
             absolute.cell["floor"].get("drift_widened_guarded_floor_j"),

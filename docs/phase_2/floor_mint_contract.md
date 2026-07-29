@@ -120,11 +120,25 @@ source_class becomes NON-DEFAULTING. (Closes review C2-residual too.)
   0cf07a5cdc3847e67ba9be9dc50ffda43b7d00ef10d03485faf36c2693418fa6
   (47 members); memberships 30/37 and 40/47; abs n==10, cmp
   n_blocks==10; C is A==B null; a10 allowance 0.652271753365838 within
-  1e-12; formatted operative floor exactly "3.592138" at six decimals;
-  diagnostic floors carry published_claim_floor: false; width arrays
-  exactly equal the reports. Post-construction: re-assert headline vs
-  floor_gate_j; validate_floor_artifact(artifact) == []; exclusive
-  output creation (no overwrite).
+  1e-12; window-C comparative allowance 0.5812720449734456 within
+  1e-12; formatted operative floor exactly "7.377086" at six decimals.
+  Composed operative floor: absolute component 3.592138 J, comparative
+  component 7.377086 J, composed gate = max(absolute, comparative) =
+  7.377086 J (rule 8 composition; NEVER summed). **SUPERSESSION NOTE:**
+  the previous "3.592138" pin was the ABSOLUTE COMPONENT IN ISOLATION,
+  from D-079 clause 5's canonical operative floors recorded before
+  window C's comparative floor had been extracted. Under W3 rule 8 the
+  cell gate is the max, so those two clauses as previously written were
+  jointly unsatisfiable. Amended per Ed's ratification 2026-07-29; both
+  components remain published and LABELLED. The re-pinned literal
+  "7.377086" is INDEPENDENTLY LEAD-VERIFIED, recomputed bit-exact from
+  primary corpus bytes independently of the extraction pipeline; it MUST
+  remain a hard six-decimal literal, never parameterized from or derived
+  from any extraction report inside the mint path. Diagnostic floors
+  carry published_claim_floor: false; width arrays exactly equal the
+  reports. Post-construction: re-assert headline vs floor_gate_j;
+  validate_floor_artifact(artifact) == []; exclusive output creation
+  (no overwrite).
 - Single-count prose statement renders FROM the artifact's canonical
   single_count_discipline object (sidecar convenience only).
 - Manifest id pins (lead-verified): p2-015-02_phase_absolute-order-v1,

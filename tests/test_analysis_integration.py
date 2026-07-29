@@ -1664,21 +1664,33 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(missing_root_binding.bound_cell_ids)
 
-        unknown_root_binding = bind_floor_artifact_evidence(
+        surplus_root_binding = bind_floor_artifact_evidence(
             exact_floor,
             floor_path,
             {**evidence_roots, "unexpected": analysis_root},
             strict_validator=validate_bundle,
         )
-        self.assertIn(
-            "unknown_evidence_root_mapping: 'unexpected'",
-            unknown_root_binding.global_problems,
+        self.assertFalse(
+            any(
+                problem.startswith("unknown_evidence_root_mapping:")
+                for problem in surplus_root_binding.global_problems
+            ),
+            surplus_root_binding.global_problems,
         )
-        self.assertIn(
+        self.assertNotIn(
             "unknown_evidence_root_mapping",
-            floor_binding_reason_codes(unknown_root_binding),
+            floor_binding_reason_codes(surplus_root_binding),
         )
-        self.assertFalse(unknown_root_binding.bound_cell_ids)
+        self.assertEqual(
+            surplus_root_binding.bound_cell_ids,
+            (
+                frozenset(
+                    cell["cell_id"] for cell in exact_floor["cells"]
+                )
+                if production_identity
+                else frozenset()
+            ),
+        )
 
         wrong_root = floor_dir / "wrong-evidence-root"
         wrong_root.mkdir()

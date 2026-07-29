@@ -33,6 +33,11 @@ PLAN_SOURCE = (
     / "p2_015_floors"
     / "calibration_plan.json"
 )
+ABSOLUTE_OPERATIVE_FLOOR_J = 3.5921376919210335
+COMPARATIVE_OPERATIVE_FLOOR_J = 7.377085735735073
+COMPARATIVE_ATTRIBUTION_FLOOR_J = (
+    COMPARATIVE_OPERATIVE_FLOOR_J - mint.WINDOW_C_DRIFT_ALLOWANCE_J
+)
 
 
 def load_json(path: Path) -> dict:
@@ -145,11 +150,10 @@ def authenticated_components() -> tuple[
     )
     window_c_spec_cell = window_c_spec["cells"][0]
 
-    # With nine zeros and this final point, the n=10 absolute guarded floor is
-    # exactly 2.939866246634162 J; adding the pinned allowance gives 3.592138.
+    # Derive the synthetic member from the independently pinned absolute
+    # component, never from the cross-window operative-gate headline.
     absolute_last = (
-        float(mint.EXPECTED_OPERATIVE_FLOOR_TEXT)
-        - mint.A10_DRIFT_ALLOWANCE_J
+        ABSOLUTE_OPERATIVE_FLOOR_J - mint.A10_DRIFT_ALLOWANCE_J
     ) / 0.9
     absolute_members = tuple(
         member(
@@ -163,30 +167,30 @@ def authenticated_components() -> tuple[
         for block in window_c_spec_cell["blocks"]
         for position in ("A1", "B1", "B2", "A2")
     ]
-    comparative_members = tuple(member(bundle_id, 0.0) for bundle_id in comparative_ids)
+    comparative_members = tuple(
+        member(bundle_id, 0.0) for bundle_id in comparative_ids
+    )
 
     abs_allowance = allowance(
         mint.A10_DRIFT_ALLOWANCE_J,
         mint.A10_EVALUATION_BASIS_SHA256,
     )
     cmp_allowance = allowance(
-        0.2,
+        mint.WINDOW_C_DRIFT_ALLOWANCE_J,
         mint.WINDOW_C_EVALUATION_BASIS_SHA256,
     )
     absolute_cell = {
         "floor": report_floor(
             n=10,
             widths=[0.0] * 10,
-            drift_widened_guarded_floor_j=float(
-                mint.EXPECTED_OPERATIVE_FLOOR_TEXT
-            ),
+            drift_widened_guarded_floor_j=ABSOLUTE_OPERATIVE_FLOOR_J,
         )
     }
     comparative_cell = {
         "floor": report_floor(
             n=10,
-            widths=[0.1] * 10,
-            drift_widened_guarded_floor_j=0.46919615703584565,
+            widths=[COMPARATIVE_ATTRIBUTION_FLOOR_J, *([0.0] * 9)],
+            drift_widened_guarded_floor_j=COMPARATIVE_OPERATIVE_FLOOR_J,
         ),
         "point_floor_diagnostic": {
             "label": "repeatability_diagnostic",
@@ -241,7 +245,10 @@ def authenticated_components() -> tuple[
         cell=comparative_cell,
         spec_cell=window_c_spec_cell,
         members=comparative_members,
-        widths_j=(0.1,) * 10,
+        widths_j=(
+            COMPARATIVE_ATTRIBUTION_FLOOR_J,
+            *([0.0] * 9),
+        ),
         whole_window_evaluation_basis_sha256=(
             mint.WINDOW_C_EVALUATION_BASIS_SHA256
         ),
@@ -296,6 +303,21 @@ class PreRegistrationGateTests(unittest.TestCase):
             self.comparative.consumption_semantics_id,
             MINTED_CONSUMPTION_SEMANTICS_ID,
         )
+
+    def test_window_c_comparative_allowance_pin_rejects_off_pin_value(self) -> None:
+        substituted_allowance = copy.deepcopy(
+            self.comparative.whole_window_drift_allowance
+        )
+        substituted_allowance["allowance_j"] += 1e-7
+        with self.assertRaisesRegex(
+            mint.MintError, "window-C drift allowance mismatch"
+        ):
+            self.gate(
+                comparative=replace(
+                    self.comparative,
+                    whole_window_drift_allowance=substituted_allowance,
+                )
+            )
 
     def test_swapped_component_bases_fail_before_any_builder_call(self) -> None:
         swapped_absolute = replace(
@@ -372,6 +394,27 @@ class AuthenticationTests(unittest.TestCase):
             if bundle.is_dir() and (bundle / "summary_metrics.json").is_file()
         }
         return summaries, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+
+    @staticmethod
+    def _synthetic_allowance_derivation(
+        _root: Path,
+        _member_ids: set[str],
+        *,
+        evaluation_basis_sha256: str,
+        **_kwargs: object,
+    ) -> mock.Mock:
+        value = (
+            mint.A10_DRIFT_ALLOWANCE_J
+            if evaluation_basis_sha256
+            == mint.A10_EVALUATION_BASIS_SHA256
+            else mint.WINDOW_C_DRIFT_ALLOWANCE_J
+        )
+        return mock.Mock(
+            status="allowances",
+            allowances={
+                "gross_energy": allowance(value, evaluation_basis_sha256)
+            },
+        )
 
     def _a10_tree(self, tmp: str) -> mint.ComponentPaths:
         root = Path(tmp) / "a10"
@@ -521,6 +564,169 @@ class AuthenticationTests(unittest.TestCase):
             expected_kind="absolute",
         )
 
+    def _window_c_tree(self, tmp: str) -> mint.ComponentPaths:
+        root = Path(tmp) / "window-c"
+        root.mkdir()
+        spec = load_json(CONFIG_ROOT / "window_c_extraction_spec.json")
+        spec_path = Path(tmp) / "window-c-spec.json"
+        spec_path.write_text(json.dumps(spec), encoding="utf-8")
+        cell_spec = spec["cells"][0]
+        member_rows = []
+        for block in cell_spec["blocks"]:
+            for sequence_index, position in enumerate(
+                ("A1", "B1", "B2", "A2"), start=1
+            ):
+                bundle_id = block["members"][position]
+                bundle = root / bundle_id
+                bundle.mkdir()
+                config = {
+                    "run_id": bundle_id,
+                    "run_metadata": {
+                        "tags": [
+                            f"calibration-plan-sha256={mint.PLAN_SHA256}",
+                            f"calibration-abba-block-id={block['block_id']}",
+                            f"calibration-abba-label={position[0]}",
+                            (
+                                "calibration-abba-sequence-index="
+                                f"{sequence_index}"
+                            ),
+                        ]
+                    },
+                    "hardware_target": {
+                        "telemetry_backend": "powermetrics"
+                    },
+                }
+                metric_value = float(len(member_rows))
+                summary = {
+                    "status": "succeeded",
+                    "phase_energy_j": {"decode": metric_value},
+                    "energy_anchor_shift_envelopes": {
+                        "/phase_energy_j/decode": {
+                            "point_j": metric_value,
+                            "lower_j": metric_value - 0.01,
+                            "upper_j": metric_value + 0.01,
+                            "max_abs_delta_j": 0.01,
+                        }
+                    },
+                    "energy_bound_terms_j": {
+                        "E_interpolation_joint_edge_bound_j": 0.0
+                    },
+                    "window_evidence_precheck": {
+                        "phase": {
+                            "decode": {
+                                "windows": [
+                                    {
+                                        "window_duration_s": 1.0,
+                                        "observed_window_p95_sample_gap_s": 0.1,
+                                        "observed_bracketing_max_sample_gap_s": 0.2,
+                                        "cadence_ratio": 1.5,
+                                        "clock_anchor_bound_s": 0.01,
+                                        "interpolation_joint_edge_bound_j": 0.02,
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+                (bundle / "config.json").write_text(
+                    json.dumps(config), encoding="utf-8"
+                )
+                (bundle / "metadata.json").write_text(
+                    "{}", encoding="utf-8"
+                )
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary), encoding="utf-8"
+                )
+                member_rows.append(
+                    {
+                        "bundle_id": bundle_id,
+                        "bundle_sha256": complete_bundle_sha256(bundle),
+                        "config_sha256": hashlib.sha256(
+                            (bundle / "config.json").read_bytes()
+                        ).hexdigest(),
+                        "metric_value_j": metric_value,
+                        "anchor_shift_bound_j": 0.01,
+                        "block_id": block["block_id"],
+                        "position": position,
+                        "excluded": False,
+                        "reasons": [],
+                    }
+                )
+        component_allowance = allowance(
+            mint.WINDOW_C_DRIFT_ALLOWANCE_J,
+            mint.WINDOW_C_EVALUATION_BASIS_SHA256,
+        )
+        report = {
+            "schema_version": mint.EXTRACTION_SCHEMA_VERSION,
+            "spec_schema_version": mint.EXTRACTION_SPEC_SCHEMA_VERSION,
+            "runs_root": str(root),
+            "consumption_semantics_id": (
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            ),
+            "spec_membership_refusals": [],
+            "idle_admission_refusals": [],
+            "cells": [
+                {
+                    "cell_id": mint.WINDOW_C_CELL_ID,
+                    "kind": "comparative",
+                    "metric": mint.METRIC,
+                    "window_class": mint.WINDOW_CLASS,
+                    "extractable": True,
+                    "refusal_reasons": [],
+                    "floor": {
+                        "n": 10,
+                        "admissible_half_widths_j": [0.02] * 10,
+                        "whole_window_drift_allowance_provenance": (
+                            component_allowance
+                        ),
+                    },
+                    "whole_window_drift_allowance": component_allowance,
+                    "members": member_rows,
+                }
+            ],
+        }
+        report_path = Path(tmp) / "window-c-report.json"
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        all_spec_ids = mint._spec_member_ids(spec)
+        order = {
+            "manifest_id": mint.WINDOW_C_ORDER_MANIFEST_ID,
+            "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
+            "calibration_plan_sha256": mint.PLAN_SHA256,
+            "executed_order": [
+                {"run_id": bundle_id} for bundle_id in all_spec_ids
+            ],
+        }
+        order_path = Path(tmp) / "window-c-order.json"
+        order_path.write_text(json.dumps(order), encoding="utf-8")
+        basis_members = [
+            *all_spec_ids,
+            *(f"neg8-reference-{index}" for index in range(7)),
+        ]
+        (root / "campaign_log.jsonl").write_text(
+            json.dumps(
+                {
+                    "evaluation_basis": {
+                        "sha256": mint.WINDOW_C_EVALUATION_BASIS_SHA256,
+                        "member_occurrences": [
+                            {"bundle_id": bundle_id}
+                            for bundle_id in basis_members
+                        ],
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return mint.ComponentPaths(
+            evidence_root_id="window_c",
+            evidence_root=root,
+            report_path=report_path,
+            spec_path=spec_path,
+            order_manifest_path=order_path,
+            calibration_cell_id=mint.WINDOW_C_CELL_ID,
+            expected_kind="comparative",
+        )
+
     def test_authenticated_replay_does_not_import_prefill_refusal(
         self,
     ) -> None:
@@ -623,6 +829,18 @@ class AuthenticationTests(unittest.TestCase):
         ).parameters["target_bundle_ids"]
         self.assertIs(parameter.default, inspect.Parameter.empty)
 
+    def test_allowance_derivation_default_is_real_and_production_is_unstubbed(
+        self,
+    ) -> None:
+        parameter = inspect.signature(
+            mint._authenticate_component
+        ).parameters["allowance_deriver"]
+        self.assertIs(parameter.default, mint.whole_window_drift_allowances)
+        self.assertNotIn(
+            "allowance_deriver=",
+            inspect.getsource(mint.mint_floor_artifact),
+        )
+
     def test_report_spec_and_source_bytes_authenticate_before_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = self._a10_tree(tmp)
@@ -642,6 +860,7 @@ class AuthenticationTests(unittest.TestCase):
                     expected_basis_sha256=mint.A10_EVALUATION_BASIS_SHA256,
                     strict_validator=lambda _path, _strict: (),
                     consumption_authenticator=self._synthetic_consumption,
+                    allowance_deriver=self._synthetic_allowance_derivation,
                 )
         self.assertEqual(component.evaluation_basis_member_count, 37)
         self.assertEqual(len(component.members), 10)
@@ -676,7 +895,147 @@ class AuthenticationTests(unittest.TestCase):
                     expected_basis_sha256=mint.A10_EVALUATION_BASIS_SHA256,
                     strict_validator=lambda _path, _strict: (),
                     consumption_authenticator=self._synthetic_consumption,
+                    allowance_deriver=self._synthetic_allowance_derivation,
                 )
+
+    def test_allowance_must_be_derivable_and_contain_metric_family(
+        self,
+    ) -> None:
+        cases = (
+            (
+                mock.Mock(status="absent", allowances={}),
+                "not derivable from authenticated campaign evidence",
+            ),
+            (
+                mock.Mock(status="allowances", allowances={}),
+                "missing claim family 'gross_energy'",
+            ),
+        )
+        for derived_result, message in cases:
+            with self.subTest(message=message):
+                with tempfile.TemporaryDirectory() as tmp:
+                    paths = self._a10_tree(tmp)
+                    with (
+                        mock.patch.object(
+                            mint,
+                            "_derive_stack_identity",
+                            return_value=stack_identity(),
+                        ),
+                        mock.patch.object(
+                            mint,
+                            "scientific_config_identity",
+                            return_value={"synthetic": "same"},
+                        ),
+                        self.assertRaisesRegex(mint.MintError, message),
+                    ):
+                        mint._authenticate_component(
+                            paths,
+                            expected_cell_id=mint.A10_CELL_ID,
+                            expected_basis_sha256=(
+                                mint.A10_EVALUATION_BASIS_SHA256
+                            ),
+                            strict_validator=lambda _path, _strict: (),
+                            consumption_authenticator=(
+                                self._synthetic_consumption
+                            ),
+                            allowance_deriver=(
+                                lambda *_args, **_kwargs: derived_result
+                            ),
+                        )
+
+    def test_allowance_rederivation_reasserts_campaign_log_custody(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = self._a10_tree(tmp)
+
+            def mutate_campaign_log(
+                root: Path, *_args: object, **_kwargs: object
+            ) -> mock.Mock:
+                campaign_log = root / "campaign_log.jsonl"
+                campaign_log.write_text(
+                    campaign_log.read_text(encoding="utf-8") + "\n",
+                    encoding="utf-8",
+                )
+                return self._synthetic_allowance_derivation(
+                    root,
+                    set(),
+                    evaluation_basis_sha256=(
+                        mint.A10_EVALUATION_BASIS_SHA256
+                    ),
+                )
+
+            with (
+                mock.patch.object(
+                    mint, "_derive_stack_identity", return_value=stack_identity()
+                ),
+                mock.patch.object(
+                    mint,
+                    "scientific_config_identity",
+                    return_value={"synthetic": "same"},
+                ),
+                self.assertRaisesRegex(
+                    mint.MintError,
+                    "campaign log changed during whole-window allowance",
+                ),
+            ):
+                mint._authenticate_component(
+                    paths,
+                    expected_cell_id=mint.A10_CELL_ID,
+                    expected_basis_sha256=mint.A10_EVALUATION_BASIS_SHA256,
+                    strict_validator=lambda _path, _strict: (),
+                    consumption_authenticator=self._synthetic_consumption,
+                    allowance_deriver=mutate_campaign_log,
+                )
+
+    def test_substituted_comparative_allowance_is_rejected(self) -> None:
+        for substitution_j in (1.0, 1e-7):
+            with self.subTest(substitution_j=substitution_j):
+                with tempfile.TemporaryDirectory() as tmp:
+                    paths = self._window_c_tree(tmp)
+                    report = load_json(paths.report_path)
+                    cell = report["cells"][0]
+                    substituted = copy.deepcopy(
+                        cell["whole_window_drift_allowance"]
+                    )
+                    substituted["allowance_j"] += substitution_j
+                    cell["whole_window_drift_allowance"] = substituted
+                    cell["floor"][
+                        "whole_window_drift_allowance_provenance"
+                    ] = substituted
+                    paths.report_path.write_text(
+                        json.dumps(report), encoding="utf-8"
+                    )
+                    with (
+                        mock.patch.object(
+                            mint,
+                            "_derive_stack_identity",
+                            return_value=stack_identity(),
+                        ),
+                        mock.patch.object(
+                            mint,
+                            "scientific_config_identity",
+                            return_value={"synthetic": "same"},
+                        ),
+                        self.assertRaisesRegex(
+                            mint.MintError,
+                            "differs from authenticated source",
+                        ),
+                    ):
+                        mint._authenticate_component(
+                            paths,
+                            expected_cell_id=mint.WINDOW_C_CELL_ID,
+                            expected_basis_sha256=(
+                                mint.WINDOW_C_EVALUATION_BASIS_SHA256
+                            ),
+                            strict_validator=lambda _path, _strict: (),
+                            consumption_authenticator=(
+                                self._synthetic_consumption
+                            ),
+                            allowance_deriver=(
+                                self._synthetic_allowance_derivation
+                            ),
+                        )
 
     def test_comparative_source_order_tags_are_evidence_derived(self) -> None:
         source = member(
@@ -729,10 +1088,13 @@ class ConstructionTests(unittest.TestCase):
         self.assertEqual(artifact["calibration_scope"], "production_window")
         self.assertEqual(artifact["source_class"], "prospective")
         self.assertEqual(len(artifact["cells"]), 1)
-        self.assertEqual(artifact["cells"][0]["cell_id"], mint.CELL_ID)
+        cell = artifact["cells"][0]
+        self.assertEqual(cell["cell_id"], mint.CELL_ID)
+        self.assertEqual(format(cell["floor_abs_j"], ".6f"), "3.592138")
+        self.assertEqual(format(cell["floor_cmp_j"], ".6f"), "7.377086")
         self.assertEqual(
-            format(artifact["cells"][0]["floor_gate_j"], ".6f"),
-            mint.EXPECTED_OPERATIVE_FLOOR_TEXT,
+            format(cell["floor_gate_j"], ".6f"),
+            "7.377086",
         )
         group = artifact["transport_groups"][0]
         self.assertEqual(group["transport_group_id"], mint.TRANSPORT_GROUP_ID)
@@ -742,7 +1104,7 @@ class ConstructionTests(unittest.TestCase):
             [
                 {
                     "condition_family_id": mint.CONDITION_FAMILY_ID,
-                    "condition_family_definition": artifact["cells"][0]["key"][
+                    "condition_family_definition": cell["key"][
                         "condition_family_definition"
                     ],
                     "condition_family_sha256": mint.CONDITION_FAMILY_SHA256,
@@ -750,7 +1112,7 @@ class ConstructionTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            group["composed_floor_gate_j"], artifact["cells"][0]["floor_gate_j"]
+            group["composed_floor_gate_j"], cell["floor_gate_j"]
         )
 
     def test_single_count_statement_renders_from_canonical_object(self) -> None:
@@ -870,13 +1232,17 @@ class BinderTests(unittest.TestCase):
             ("comparative", "window_c"),
         ):
             rows = mint._record_rows(component_name, cell)
-            member_half_width = 0.0 if component_name == "absolute" else 0.05
-            for row in rows:
+            for index, row in enumerate(rows):
+                half_width_j = (
+                    COMPARATIVE_ATTRIBUTION_FLOOR_J / 2.0
+                    if component_name == "comparative" and index < 4
+                    else 0.0
+                )
                 self._install_bundle(
                     roots[root_id],
                     row,
                     stack=stack,
-                    half_width_j=member_half_width,
+                    half_width_j=half_width_j,
                 )
             provenance = cell["provenance"][component_name]
             provenance["bundle_sha256s"] = [

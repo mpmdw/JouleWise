@@ -788,19 +788,20 @@ def _normalize_evidence_roots(
 ) -> tuple[dict[str, Path], tuple[str, ...]]:
     declared_root_ids = _component_evidence_root_ids(artifact)
     if isinstance(evidence_roots, Mapping):
-        normalized = {
+        supplied_roots = {
             str(root_id): Path(root)
             for root_id, root in evidence_roots.items()
         }
-        supplied_root_ids = frozenset(normalized)
+        supplied_root_ids = frozenset(supplied_roots)
+        normalized = {
+            root_id: supplied_roots[root_id]
+            for root_id in declared_root_ids
+            if root_id in supplied_roots
+        }
         problems = [
             *(
                 f"missing_evidence_root_mapping: {root_id!r}"
                 for root_id in sorted(declared_root_ids - supplied_root_ids)
-            ),
-            *(
-                f"unknown_evidence_root_mapping: {root_id!r}"
-                for root_id in sorted(supplied_root_ids - declared_root_ids)
             ),
         ]
         return normalized, tuple(problems)
