@@ -28,6 +28,7 @@ from joulewise.analysis_engine.inputs import (
     FloorRequest,
     MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
+    bind_floor_artifact_evidence,
     campaign_cooldown_evidence,
     floor_binding_reason_codes,
     floor_request_for_evidence,
@@ -1266,6 +1267,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 {
                     "schema_version": "joulewise.detection_floor_calibration_plan.v1",
                     "plan_id": "floor-exact-cli-plan",
+                    "calibration_scope": "window_a",
                     "condition_family_ids": condition_ids,
                     "comparative_member_labels": ["A", "B", "B", "A"],
                 },
@@ -1488,7 +1490,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     ],
                 )
             )
-        order_path = floor_dir / "order_manifest.json"
+        order_path = calibration_root / "order_manifest.json"
         order_path.write_text(
             json.dumps(
                 {
@@ -1594,6 +1596,58 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(exact_floor), [])
         floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
+        missing_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {"a10": calibration_root},
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "missing_evidence_root_mapping: 'window_c'",
+            missing_root_binding.global_problems,
+        )
+        self.assertFalse(missing_root_binding.bound_cell_ids)
+
+        wrong_root = floor_dir / "wrong-evidence-root"
+        wrong_root.mkdir()
+        wrong_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {
+                "a10": wrong_root,
+                "window_c": calibration_root,
+            },
+            strict_validator=validate_bundle,
+        )
+        self.assertTrue(
+            any(
+                problem.startswith("component_evidence_root_disagreement:")
+                for problem in wrong_root_binding.global_problems
+            )
+        )
+        self.assertFalse(wrong_root_binding.bound_cell_ids)
+
+        leaked_path_artifact = json.loads(json.dumps(exact_floor))
+        leaked_path_artifact["provenance"]["calibration_plan"][
+            "relative_path"
+        ] = str(calibration_plan_path.resolve())
+        leaked_path_binding = bind_floor_artifact_evidence(
+            leaked_path_artifact,
+            floor_path,
+            {
+                "a10": calibration_root,
+                "window_c": calibration_root,
+            },
+            strict_validator=validate_bundle,
+        )
+        self.assertTrue(
+            any(
+                problem.startswith("artifact_absolute_path_leakage:")
+                for problem in leaked_path_binding.global_problems
+            )
+        )
+        self.assertFalse(leaked_path_binding.bound_cell_ids)
+
         output = self.root / f"exact-cli-claim-verdicts{scenario_suffix}.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
             code = main(
