@@ -72,6 +72,7 @@ from joulewise.analysis_engine.inputs import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     FloorEstimate,
     MAX_EXACT_ADMISSIBLE_CORNER_N,
@@ -79,6 +80,7 @@ from joulewise.detection_floor import (
     absolute_false_effect_floor,
     admissible_set_uncertainty_dominates_point_floor,
     attribution_single_count_discipline,
+    canonical_domain_sha256,
     comparative_false_effect_floor,
     complete_bundle_sha256,
     validate_floor_metric_window_class,
@@ -101,6 +103,7 @@ from joulewise.environment_admission import (
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
     "EXTRACTION_SPEC_SCHEMA_VERSION",
+    "CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION",
     "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
     "ANCHOR_FALLBACK_MEMBER_REFUSAL",
     "CELL_REFUSAL_CODES",
@@ -114,6 +117,8 @@ __all__ = [
     "governed_cell_metric",
     "anchor_fallback_member_unusable",
     "reader_throughput_tokens_s",
+    "validate_condition_family_definition",
+    "validate_extraction_spec",
     "extract_absolute_cell",
     "extract_comparative_cell",
     "extract_cells",
@@ -121,6 +126,9 @@ __all__ = [
 
 EXTRACTION_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
 EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
+CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION = (
+    "joulewise.condition_family_definition.v1"
+)
 
 # The only implemented cap-hit disposition.  A governed drift-term retention
 # path exists on paper (docs/phase_2/detection_floor.md) but has no governed
@@ -218,6 +226,419 @@ def governed_cell_metric(metric: object, window_class: object) -> tuple[str, str
         return validate_floor_metric_window_class(metric, window_class)
     except ValueError as exc:
         raise FloorExtractionError(str(exc)) from exc
+
+
+_CONDITION_FAMILY_DEFINITION_KEYS = {
+    "schema_version",
+    "condition_family_id",
+    "workload_profile",
+    "measurement_target",
+    "comparison_policy",
+    "abba_alias_relation",
+}
+_CONDITION_FAMILY_WORKLOAD_KEYS = {
+    "name",
+    "prompt_tokens",
+    "output_tokens",
+    "repetitions",
+    "warmup_runs",
+}
+_CONDITION_FAMILY_TARGET_KEYS = {"metric", "window_class"}
+_CONDITION_FAMILY_BINDING_KEYS = {
+    "condition_family_id",
+    "condition_family_definition",
+    "condition_family_sha256",
+}
+
+
+def _exact_mapping_keys(
+    value: object,
+    expected: set[str],
+    where: str,
+    errors: list[str],
+) -> bool:
+    if not isinstance(value, Mapping):
+        errors.append(f"{where}: must be an object")
+        return False
+    unknown = set(value) - expected
+    missing = expected - set(value)
+    for key in sorted(unknown):
+        errors.append(f"{where}: unrecognized key {key!r}")
+    for key in sorted(missing):
+        errors.append(f"{where}: missing key {key!r}")
+    return not unknown and not missing
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _validate_condition_family_definition(
+    value: object,
+    *,
+    where: str,
+    errors: list[str],
+    expected_condition_family_id: str | None = None,
+    expected_metric: str | None = None,
+    expected_window_class: str | None = None,
+) -> None:
+    if not _exact_mapping_keys(
+        value,
+        _CONDITION_FAMILY_DEFINITION_KEYS,
+        where,
+        errors,
+    ):
+        return
+    assert isinstance(value, Mapping)
+    if value["schema_version"] != CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION:
+        errors.append(
+            f"{where}.schema_version: must be "
+            f"{CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION!r}"
+        )
+    family_id = value["condition_family_id"]
+    if not isinstance(family_id, str) or not family_id:
+        errors.append(f"{where}.condition_family_id: must be a nonempty string")
+    elif (
+        expected_condition_family_id is not None
+        and family_id != expected_condition_family_id
+    ):
+        errors.append(
+            f"{where}.condition_family_id: must equal cell "
+            f"condition_family_id {expected_condition_family_id!r}"
+        )
+
+    workload = value["workload_profile"]
+    if _exact_mapping_keys(
+        workload,
+        _CONDITION_FAMILY_WORKLOAD_KEYS,
+        f"{where}.workload_profile",
+        errors,
+    ):
+        assert isinstance(workload, Mapping)
+        if not isinstance(workload["name"], str) or not workload["name"]:
+            errors.append(
+                f"{where}.workload_profile.name: must be a nonempty string"
+            )
+        for key in (
+            "prompt_tokens",
+            "output_tokens",
+            "repetitions",
+            "warmup_runs",
+        ):
+            number = workload[key]
+            if (
+                not isinstance(number, int)
+                or isinstance(number, bool)
+                or number < 1
+            ):
+                errors.append(
+                    f"{where}.workload_profile.{key}: "
+                    "must be a positive integer"
+                )
+
+    target = value["measurement_target"]
+    if _exact_mapping_keys(
+        target,
+        _CONDITION_FAMILY_TARGET_KEYS,
+        f"{where}.measurement_target",
+        errors,
+    ):
+        assert isinstance(target, Mapping)
+        metric = target["metric"]
+        window_class = target["window_class"]
+        try:
+            validate_floor_metric_window_class(metric, window_class)
+        except ValueError as exc:
+            errors.append(f"{where}.measurement_target: {exc}")
+        if expected_metric is not None and metric != expected_metric:
+            errors.append(
+                f"{where}.measurement_target.metric: "
+                f"must equal cell metric {expected_metric!r}"
+            )
+        if (
+            expected_window_class is not None
+            and window_class != expected_window_class
+        ):
+            errors.append(
+                f"{where}.measurement_target.window_class: "
+                "must equal cell window_class "
+                f"{expected_window_class!r}"
+            )
+
+    if value["comparison_policy"] != (
+        "same_condition_repeat_and_null_abba_alias"
+    ):
+        errors.append(
+            f"{where}.comparison_policy: must be "
+            "'same_condition_repeat_and_null_abba_alias'"
+        )
+    if value["abba_alias_relation"] != "A_equals_B":
+        errors.append(
+            f"{where}.abba_alias_relation: must be 'A_equals_B'"
+        )
+
+
+def validate_condition_family_definition(value: object) -> list[str]:
+    """Validate a canonical condition-family definition document."""
+
+    errors: list[str] = []
+    _validate_condition_family_definition(
+        value,
+        where="condition_family_definition",
+        errors=errors,
+    )
+    return errors
+
+
+def _validate_spec_condition_family(
+    cell: Mapping[str, Any],
+    *,
+    kind: object,
+    where: str,
+    errors: list[str],
+) -> None:
+    family_id_present = "condition_family_id" in cell
+    bindings_present = "condition_family_definitions" in cell
+    if not family_id_present and not bindings_present:
+        return
+    if family_id_present != bindings_present:
+        errors.append(
+            f"{where}: condition_family_id and "
+            "condition_family_definitions must be present together"
+        )
+        return
+    family_id = cell["condition_family_id"]
+    if not isinstance(family_id, str) or not family_id:
+        errors.append(
+            f"{where}.condition_family_id: must be a nonempty string"
+        )
+        return
+    bindings = cell["condition_family_definitions"]
+    expected_arms = (
+        {"all"}
+        if kind == "absolute"
+        else {"A", "B"}
+        if kind == "comparative"
+        else set()
+    )
+    if not expected_arms or not _exact_mapping_keys(
+        bindings,
+        expected_arms,
+        f"{where}.condition_family_definitions",
+        errors,
+    ):
+        return
+    assert isinstance(bindings, Mapping)
+    hashes: dict[str, str] = {}
+    for arm in sorted(expected_arms):
+        binding_where = f"{where}.condition_family_definitions.{arm}"
+        binding = bindings[arm]
+        if not _exact_mapping_keys(
+            binding,
+            _CONDITION_FAMILY_BINDING_KEYS,
+            binding_where,
+            errors,
+        ):
+            continue
+        assert isinstance(binding, Mapping)
+        if binding["condition_family_id"] != family_id:
+            errors.append(
+                f"{binding_where}.condition_family_id: "
+                "must equal the cell condition_family_id"
+            )
+        definition = binding["condition_family_definition"]
+        _validate_condition_family_definition(
+            definition,
+            where=f"{binding_where}.condition_family_definition",
+            errors=errors,
+            expected_condition_family_id=family_id,
+            expected_metric=(
+                cell.get("metric")
+                if isinstance(cell.get("metric"), str)
+                else None
+            ),
+            expected_window_class=(
+                cell.get("window_class")
+                if isinstance(cell.get("window_class"), str)
+                else None
+            ),
+        )
+        stored_hash = binding["condition_family_sha256"]
+        if not _is_sha256(stored_hash):
+            errors.append(
+                f"{binding_where}.condition_family_sha256: "
+                "must be 64 lowercase hex chars"
+            )
+            continue
+        if isinstance(definition, Mapping):
+            try:
+                expected_hash = canonical_domain_sha256(
+                    CONDITION_FAMILY_DOMAIN,
+                    definition,
+                )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"{binding_where}.condition_family_definition: "
+                    "must be canonical-JSON serializable"
+                )
+            else:
+                if stored_hash != expected_hash:
+                    errors.append(
+                        f"{binding_where}.condition_family_sha256: "
+                        f"does not match recomputed "
+                        f"{CONDITION_FAMILY_DOMAIN} hash"
+                    )
+        hashes[arm] = stored_hash
+    if (
+        kind == "comparative"
+        and set(hashes) == {"A", "B"}
+        and hashes["A"] != hashes["B"]
+    ):
+        errors.append(
+            f"{where}.condition_family_definitions: "
+            "A and B must resolve to the same definition hash"
+        )
+
+
+def validate_extraction_spec(spec: object) -> list[str]:
+    """Validate extraction-spec structure without reading or reducing bundles."""
+
+    errors: list[str] = []
+    if not isinstance(spec, Mapping):
+        return ["extraction spec must be an object"]
+    if spec.get("schema_version") != EXTRACTION_SPEC_SCHEMA_VERSION:
+        errors.append(
+            "extraction spec schema_version must be "
+            f"{EXTRACTION_SPEC_SCHEMA_VERSION!r}"
+        )
+    cells = spec.get("cells")
+    if not isinstance(cells, list) or not cells:
+        errors.append("extraction spec requires a nonempty cells array")
+        return errors
+    seen_cell_ids: set[str] = set()
+    for index, cell in enumerate(cells):
+        where = f"extraction spec cells[{index}]"
+        if not isinstance(cell, Mapping):
+            errors.append(f"{where}: must be an object")
+            continue
+        cell_id = cell.get("cell_id")
+        if (
+            not isinstance(cell_id, str)
+            or not cell_id
+            or cell_id in seen_cell_ids
+        ):
+            errors.append(f"{where}.cell_id: must be a unique nonempty string")
+        else:
+            seen_cell_ids.add(cell_id)
+        try:
+            validate_floor_metric_window_class(
+                cell.get("metric"),
+                cell.get("window_class"),
+            )
+        except ValueError as exc:
+            errors.append(f"{where}: {exc}")
+        kind = cell.get("kind")
+        if kind == "absolute":
+            members = cell.get("members")
+            if not isinstance(members, list) or not members:
+                errors.append(f"{where}.members: must be a nonempty array")
+            else:
+                slots: list[object] = []
+                bundle_ids: list[object] = []
+                for member_index, member in enumerate(members):
+                    member_where = (
+                        f"{where}.members[{member_index}]"
+                    )
+                    if not isinstance(member, Mapping):
+                        errors.append(f"{member_where}: must be an object")
+                        continue
+                    slot = member.get("slot")
+                    bundle_id = member.get("bundle_id")
+                    if not isinstance(slot, str) or not slot:
+                        errors.append(
+                            f"{member_where}.slot: "
+                            "must be a nonempty string"
+                        )
+                    else:
+                        slots.append(slot)
+                    if not isinstance(bundle_id, str) or not bundle_id:
+                        errors.append(
+                            f"{member_where}.bundle_id: "
+                            "must be a nonempty string"
+                        )
+                    else:
+                        bundle_ids.append(bundle_id)
+                if len(set(slots)) != len(slots):
+                    errors.append(f"{where}.members: slots must be unique")
+                if len(set(bundle_ids)) != len(bundle_ids):
+                    errors.append(
+                        f"{where}.members: bundle_ids must be unique"
+                    )
+        elif kind == "comparative":
+            blocks = cell.get("blocks")
+            if not isinstance(blocks, list) or not blocks:
+                errors.append(f"{where}.blocks: must be a nonempty array")
+            else:
+                block_ids: list[object] = []
+                bundle_ids: list[object] = []
+                for block_index, block in enumerate(blocks):
+                    block_where = f"{where}.blocks[{block_index}]"
+                    if not isinstance(block, Mapping):
+                        errors.append(f"{block_where}: must be an object")
+                        continue
+                    block_id = block.get("block_id")
+                    if not isinstance(block_id, str) or not block_id:
+                        errors.append(
+                            f"{block_where}.block_id: "
+                            "must be a nonempty string"
+                        )
+                    else:
+                        block_ids.append(block_id)
+                    members = block.get("members")
+                    if (
+                        not isinstance(members, Mapping)
+                        or set(members) != set(_ABBA_POSITIONS)
+                    ):
+                        errors.append(
+                            f"{block_where}.members: must contain exactly "
+                            "A1/B1/B2/A2"
+                        )
+                        continue
+                    for position in _ABBA_POSITIONS:
+                        bundle_id = members[position]
+                        if (
+                            not isinstance(bundle_id, str)
+                            or not bundle_id
+                        ):
+                            errors.append(
+                                f"{block_where}.members.{position}: "
+                                "must be a nonempty string"
+                            )
+                        else:
+                            bundle_ids.append(bundle_id)
+                if len(set(block_ids)) != len(block_ids):
+                    errors.append(
+                        f"{where}.blocks: block_ids must be unique"
+                    )
+                if len(set(bundle_ids)) != len(bundle_ids):
+                    errors.append(
+                        f"{where}.blocks: bundle_ids must be unique"
+                    )
+        else:
+            errors.append(
+                f"{where}.kind: must be 'absolute' or 'comparative'"
+            )
+        _validate_spec_condition_family(
+            cell,
+            kind=kind,
+            where=where,
+            errors=errors,
+        )
+    return errors
 
 
 def reader_throughput_tokens_s(summary: Mapping[str, Any] | None) -> float | None:
@@ -1151,15 +1572,12 @@ def extract_cells(
     """Extract every cell in a spec document into one fail-closed report."""
 
     validator = strict_validator or _default_strict_validator
-    if not isinstance(spec, Mapping) or spec.get("schema_version") != (
-        EXTRACTION_SPEC_SCHEMA_VERSION
-    ):
-        raise FloorExtractionError(
-            f"extraction spec schema_version must be {EXTRACTION_SPEC_SCHEMA_VERSION!r}"
-        )
+    spec_errors = validate_extraction_spec(spec)
+    if spec_errors:
+        raise FloorExtractionError(spec_errors[0])
+    assert isinstance(spec, Mapping)
     cells = spec.get("cells")
-    if not isinstance(cells, list) or not cells:
-        raise FloorExtractionError("extraction spec requires a nonempty cells array")
+    assert isinstance(cells, list) and cells
 
     runs_root = Path(runs_root)
     cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
