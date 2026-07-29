@@ -32,8 +32,14 @@ GO/NO-GO: **GO** on identity, magistrate-adjudicated from primary
 evidence. In-scope test modules 184 OK; final canonical rerun at
 `1d83d68` was in flight at checkpoint — UNVERIFIED, re-verify first.
 
-NEXT (in order): (1) lead-verify the canonical suite on `impl/mint-tool`
-@ `1d83d68`; (2) full-tier adversarial review of `git diff
+NEXT (in order): (1) close the two remaining suite errors on
+`impl/mint-tool` @ `1d83d68` — lead-verified tail `Ran 2241 tests,
+FAILED (errors=2, skipped=21)`: both in
+`tests/test_analysis_integration.py:1468`
+(`_exercise_cli_distinct_calibration_binding` builds v1-shaped
+`provenance["order_manifest"]`; needs the v2 component-scoped provenance
+shape — test-only but STRUCTURAL, not mechanical; then green suite);
+(2) full-tier adversarial review of `git diff
 main...impl/mint-tool` (two accepted strict-direction interpretation
 calls are settled, see the run report); fix rounds with delta re-audits;
 (3) lead-reserved live gate — governed extraction for a10

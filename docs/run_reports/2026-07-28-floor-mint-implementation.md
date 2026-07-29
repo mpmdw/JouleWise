@@ -72,10 +72,16 @@ call). Handoff below is exact.
   at `5befb3e` was `Ran 2241 tests, FAILED (errors=5, skipped=21)` — all
   5 were TypeErrors at out-of-scope stale fixture call sites hit by the
   ratified non-defaulting signatures; fixture repair `1d83d68`
-  (magistrate-granted scope, mechanical kwargs only) addresses them; the
-  post-repair canonical rerun was IN FLIGHT at checkpoint (log will be at
-  the session scratchpad `suite-final` path; MUST be re-verified
-  lead-side next session — treat as unverified until then).
+  (magistrate-granted scope, mechanical kwargs only) closed three; the
+  post-repair rerun completed during wrap-up, lead-read tail:
+  `Ran 2241 tests, FAILED (errors=2, skipped=21)` — both survivors at
+  `tests/test_analysis_integration.py:1468`, where
+  `_exercise_cli_distinct_calibration_binding` builds v1-shaped
+  `provenance["order_manifest"]` against the ratified v2
+  component-scoped provenance. Test-only but structural (needs the v2
+  shape, not a kwarg); deliberately left for the next session's first
+  item rather than opened as a fix round against Ed's wrap-up call.
+  Log: session scratchpad `suite-final2.log`.
 - Suite timing profile (lead-run, venv pytest): 2182 passed / 727 s;
   top-10 tests ≈ 45% of wall time.
 
