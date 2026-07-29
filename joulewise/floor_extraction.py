@@ -86,6 +86,7 @@ from joulewise.detection_floor import (
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -185,6 +186,18 @@ _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
 
 class FloorExtractionError(ValueError):
     """Invalid extraction process input: no report row is produced."""
+
+
+def _ingested_consumption_semantics_id(
+    consumption_session: AuthenticatedConsumptionSession,
+) -> str | None:
+    """Normalize authenticated legacy absence only at report ingestion."""
+
+    if consumption_session.ready:
+        return MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+    if not consumption_session.refusal_reasons:
+        return MINTED_CONSUMPTION_SEMANTICS_ID
+    return None
 
 
 def governed_cell_metric(metric: object, window_class: object) -> tuple[str, str]:
@@ -1317,10 +1330,8 @@ def extract_cells(
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
         "runs_root": str(runs_root),
         "manifest_id": manifest_id,
-        "consumption_semantics_id": (
-            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
-            if consumption_session.ready
-            else None
+        "consumption_semantics_id": _ingested_consumption_semantics_id(
+            consumption_session
         ),
         "consumption_provenance": (
             {

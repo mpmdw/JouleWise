@@ -39,6 +39,7 @@ from joulewise.floor_extraction import (
     LEGACY_THROUGHPUT_FIELD,
     READER_THROUGHPUT_FIELD,
     _evaluate_member,
+    _ingested_consumption_semantics_id,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
@@ -50,6 +51,8 @@ from joulewise.cli import validate_bundle
 from scripts.extract_detection_floors import main as extract_main
 from joulewise.whole_window import (
     IDLE_ADMISSION_CORE_SCHEMA,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_POINT_DRIFT_ESTIMAND,
     WHOLE_WINDOW_SCHEMA,
     WholeWindowDriftAllowanceResult,
@@ -2043,6 +2046,25 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_legacy_semantics_absence_normalizes_only_at_ingestion(self) -> None:
+        legacy = mock.Mock(ready=False, refusal_reasons=())
+        self.assertEqual(
+            _ingested_consumption_semantics_id(legacy),
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+        )
+
+        authenticated = mock.Mock(ready=True, refusal_reasons=())
+        self.assertEqual(
+            _ingested_consumption_semantics_id(authenticated),
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        )
+
+        refused = mock.Mock(
+            ready=False,
+            refusal_reasons=("whole_window_verdict_provenance_invalid",),
+        )
+        self.assertIsNone(_ingested_consumption_semantics_id(refused))
+
     def test_shared_catalog_accepts_exactly_governed_extraction_pairs(self) -> None:
         governed_pairs = (
             ("gross_energy_j", "request"),
