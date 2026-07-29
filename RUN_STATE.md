@@ -554,10 +554,10 @@ current restart instructions. Current state is the C-028 block above.
   pointer in each dated bullet (verified by running the parser directly
   on the pristine HEAD file — same failure). The affected surface for the
   prune itself, `tests.test_corpus_strict_validation`, is 3/3 OK
-  post-prune. NEEDS A RULING: either the parser learns the Ed-adopted
-  pointer-retirement convention (accept `docs/process_traces/` pointers),
-  or Session History bullets must carry run-report pointers — site
-  contract, advisor-facing, not decided unilaterally here.
+  post-prune. RESOLVED by `cb867f3` (Ed-authored): the parser accepts
+  `docs/process_traces/` Session History pointers per the
+  pointer-retirement convention; `tests.test_build_site_parsers` 21/21 OK
+  on that head, clearing both errors.
 - **Merged main `7337b33` (2026-07-27, current):** `FLOOR-LABEL-01`
   merged at `3055315` under the D-072 gate shape (independent Opus
   contract lens returning "comparative coverage COMPLETE" plus a fresh
