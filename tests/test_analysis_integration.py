@@ -441,6 +441,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         floor_artifact = build_floor_artifact(
             artifact_id="analysis-attribution-floor",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=make_artifact()["provenance"],
             cells=cells,
             transport_groups=[group],
@@ -728,6 +729,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         artifact = build_floor_artifact(
             artifact_id="production-transport",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=make_artifact()["provenance"],
             cells=[source],
             transport_groups=[group],
@@ -1353,9 +1355,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             absolute = build_absolute_record(
                 absolute_false_effect_floor(
-                    [row["metric_value_j"] for row in observations]
+                    [row["metric_value_j"] for row in observations],
+                    admissible_half_widths_j=[0.0] * len(observations),
                 ),
                 observations,
+                consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
             blocks = []
@@ -1383,8 +1387,12 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     }
                 )
             comparative = build_comparative_record(
-                comparative_false_effect_floor([block["delta_j"] for block in blocks]),
+                comparative_false_effect_floor(
+                    [block["delta_j"] for block in blocks],
+                    admissible_half_widths_j=[0.0] * len(blocks),
+                ),
                 blocks,
+                consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
             cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)

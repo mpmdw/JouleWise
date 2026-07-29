@@ -1611,7 +1611,9 @@ class InputSeamTests(unittest.TestCase):
         artifact = make_artifact([cell])
         artifact["calibration_scope"] = "window_a"
         widened = cell["comparative"]["corner_widened_guarded_floor_j"]
-        point = comparative_false_effect_floor(deltas).guarded_floor_j
+        point = comparative_false_effect_floor(
+            deltas, admissible_half_widths_j=[0.0] * len(deltas)
+        ).guarded_floor_j
         self.assertGreater(widened, point)
 
         # The nested widened record is authoritative at the consumption seam;
