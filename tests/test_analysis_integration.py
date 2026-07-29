@@ -1252,13 +1252,18 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 if entry["role"] == "condition"
             }
         )
-        # Calibration and consumer bundles share only the immutable runs root;
-        # every calibration run ID below is distinct from every manifest
-        # consumer run ID.
-        calibration_root = self.root / (
-            f"independent-consumer-and-calibration-runs{scenario_suffix}"
+        analysis_root = self.root / (
+            f"independent-analysis-corpus{scenario_suffix}"
         )
-        shutil.copytree(self.runs_root, calibration_root)
+        shutil.copytree(self.runs_root, analysis_root)
+        evidence_roots = {
+            "a10": self.root / f"independent-a10-evidence{scenario_suffix}",
+            "window_c": (
+                self.root / f"independent-window-c-evidence{scenario_suffix}"
+            ),
+        }
+        for evidence_root in evidence_roots.values():
+            evidence_root.mkdir()
         floor_dir = self.root / f"independent-floor{scenario_suffix}"
         floor_dir.mkdir(exist_ok=True)
         calibration_plan_path = floor_dir / "calibration_plan.json"
@@ -1282,8 +1287,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
         ).hexdigest()
         cells = []
         groups = []
-        order_rows = []
-        campaign_rows = []
+        order_rows = {"a10": [], "window_c": []}
+        campaign_rows = {"a10": [], "window_c": []}
+        calibration_roots_by_id = {}
         all_bound_hashes = []
         for condition_id in condition_ids:
             entries = sorted(
@@ -1304,6 +1310,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ):
                 for index in range(25):
                     run_id = f"cal-{condition_id}-{index:02d}"
+                    root_id = "a10" if index < 5 else "window_c"
+                    evidence_root = evidence_roots[root_id]
+                    calibration_roots_by_id[run_id] = evidence_root
                     calibration_config = json.loads(json.dumps(source_config))
                     calibration_config["run_id"] = run_id
                     tags = calibration_config["run_metadata"]["tags"]
@@ -1328,19 +1337,31 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     )
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                         code = main(
-                            ["run", str(config_path), "--runs-dir", str(calibration_root)]
+                            [
+                                "run",
+                                str(config_path),
+                                "--runs-dir",
+                                str(evidence_root),
+                            ]
                         )
                     self.assertEqual(code, 0)
                     calibration_ids.append(run_id)
-                    order_rows.append(
-                        {"index": len(order_rows) + 1, "config": config_path.name, "run_id": run_id}
+                    order_rows[root_id].append(
+                        {
+                            "index": len(order_rows[root_id]) + 1,
+                            "config": config_path.name,
+                            "run_id": run_id,
+                        }
                     )
-                    campaign_rows.append(
-                        {"run_index": len(campaign_rows) + 1, "run_id": run_id}
+                    campaign_rows[root_id].append(
+                        {
+                            "run_index": len(campaign_rows[root_id]) + 1,
+                            "run_id": run_id,
+                        }
                     )
 
             def calibration_record(run_id):
-                bundle = calibration_root / run_id
+                bundle = calibration_roots_by_id[run_id] / run_id
                 summary = json.loads((bundle / "summary_metrics.json").read_text(encoding="utf-8"))
                 bundle_hash = complete_bundle_sha256(bundle)
                 all_bound_hashes.append(bundle_hash)
@@ -1399,7 +1420,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
-            first_bundle = calibration_root / calibration_ids[0]
+            first_bundle = calibration_roots_by_id[
+                calibration_ids[0]
+            ] / calibration_ids[0]
             stack = floor_stack_identity(
                 json.loads((first_bundle / "config.json").read_text(encoding="utf-8")),
                 json.loads((first_bundle / "metadata.json").read_text(encoding="utf-8")),
@@ -1429,7 +1452,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         "calibration_cell_id": f"floor-{condition_id}-abs",
                         "evidence_root_id": "a10",
                         "order_manifest": {
-                            "manifest_id": "floor-exact-cli-order",
+                            "manifest_id": "floor-exact-a10-order",
                             "sha256": "0" * 64,
                         },
                         "campaign_log": {"sha256": "0" * 64},
@@ -1449,7 +1472,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         "calibration_cell_id": f"floor-{condition_id}-cmp",
                         "evidence_root_id": "window_c",
                         "order_manifest": {
-                            "manifest_id": "floor-exact-cli-order",
+                            "manifest_id": "floor-exact-window-c-order",
                             "sha256": "0" * 64,
                         },
                         "campaign_log": {"sha256": "0" * 64},
@@ -1490,34 +1513,38 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     ],
                 )
             )
-        order_path = calibration_root / "order_manifest.json"
-        order_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "joulewise.order_manifest.v1",
-                    "manifest_id": "floor-exact-cli-order",
-                    "executed_order": order_rows,
-                },
-                indent=2,
-                sort_keys=True,
+        root_descriptor_hashes = {}
+        for root_id, evidence_root in evidence_roots.items():
+            order_path = evidence_root / "order_manifest.json"
+            order_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.order_manifest.v1",
+                        "manifest_id": f"floor-exact-{root_id.replace('_', '-')}-order",
+                        "executed_order": order_rows[root_id],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            + "\n",
-            encoding="utf-8",
-        )
-        campaign_path = calibration_root / "campaign_log.jsonl"
-        whole_window_lines = [
-            line
-            for line in campaign_path.read_text(encoding="utf-8").splitlines()
-            if json.loads(line).get("record_type")
-            == "idle_admission_whole_window_verdict"
-        ]
-        campaign_path.write_text(
-            "".join(line + "\n" for line in whole_window_lines)
-            + "".join(
-                json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows
-            ),
-            encoding="utf-8",
-        )
+            campaign_path = evidence_root / "campaign_log.jsonl"
+            campaign_path.write_text(
+                "".join(
+                    json.dumps(row, sort_keys=True) + "\n"
+                    for row in campaign_rows[root_id]
+                ),
+                encoding="utf-8",
+            )
+            root_descriptor_hashes[root_id] = {
+                "order_manifest": hashlib.sha256(
+                    order_path.read_bytes()
+                ).hexdigest(),
+                "campaign_log": hashlib.sha256(
+                    campaign_path.read_bytes()
+                ).hexdigest(),
+            }
         extraction_spec_path = floor_dir / "extraction_spec.json"
         extraction_spec_path.write_text(
             json.dumps(
@@ -1552,9 +1579,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        descriptor_hashes = {
-            "order_manifest": hashlib.sha256(order_path.read_bytes()).hexdigest(),
-            "campaign_log": hashlib.sha256(campaign_path.read_bytes()).hexdigest(),
+        common_descriptor_hashes = {
             "extraction_report": hashlib.sha256(
                 extraction_report_path.read_bytes()
             ).hexdigest(),
@@ -1565,6 +1590,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         for cell in cells:
             for component in ("absolute", "comparative"):
                 component_provenance = cell["provenance"][component]
+                root_id = component_provenance["evidence_root_id"]
+                descriptor_hashes = {
+                    **root_descriptor_hashes[root_id],
+                    **common_descriptor_hashes,
+                }
                 for descriptor_name, descriptor_sha256 in descriptor_hashes.items():
                     component_provenance[descriptor_name][
                         "sha256"
@@ -1596,10 +1626,36 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(exact_floor), [])
         floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
+        bare_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            analysis_root,
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            bare_root_binding.global_problems,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            floor_binding_reason_codes(bare_root_binding),
+        )
+        self.assertFalse(bare_root_binding.bound_cell_ids)
+        bare_loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            floor_binding_reason_codes(bare_loaded.floor_binding),
+        )
+
         missing_root_binding = bind_floor_artifact_evidence(
             exact_floor,
             floor_path,
-            {"a10": calibration_root},
+            {"a10": evidence_roots["a10"]},
             strict_validator=validate_bundle,
         )
         self.assertIn(
@@ -1608,6 +1664,22 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(missing_root_binding.bound_cell_ids)
 
+        unknown_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {**evidence_roots, "unexpected": analysis_root},
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "unknown_evidence_root_mapping: 'unexpected'",
+            unknown_root_binding.global_problems,
+        )
+        self.assertIn(
+            "unknown_evidence_root_mapping",
+            floor_binding_reason_codes(unknown_root_binding),
+        )
+        self.assertFalse(unknown_root_binding.bound_cell_ids)
+
         wrong_root = floor_dir / "wrong-evidence-root"
         wrong_root.mkdir()
         wrong_root_binding = bind_floor_artifact_evidence(
@@ -1615,7 +1687,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             floor_path,
             {
                 "a10": wrong_root,
-                "window_c": calibration_root,
+                "window_c": evidence_roots["window_c"],
             },
             strict_validator=validate_bundle,
         )
@@ -1634,10 +1706,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         leaked_path_binding = bind_floor_artifact_evidence(
             leaked_path_artifact,
             floor_path,
-            {
-                "a10": calibration_root,
-                "window_c": calibration_root,
-            },
+            evidence_roots,
             strict_validator=validate_bundle,
         )
         self.assertTrue(
@@ -1648,6 +1717,49 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertFalse(leaked_path_binding.bound_cell_ids)
 
+        loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+            evidence_roots=evidence_roots,
+        )
+        self.assertFalse(
+            {
+                "evidence_root_mapping_required",
+                "missing_evidence_root_mapping",
+                "unknown_evidence_root_mapping",
+            }
+            & set(floor_binding_reason_codes(loaded.floor_binding))
+        )
+        if production_identity:
+            self.assertFalse(loaded.floor_binding.global_problems)
+            self.assertEqual(
+                loaded.floor_binding.bound_cell_ids,
+                frozenset(cell["cell_id"] for cell in exact_floor["cells"]),
+            )
+        self.assertEqual(len(loaded.registered), 30)
+        self.assertFalse(
+            any(
+                evidence.bundle_id.startswith("cal-")
+                for evidence in (
+                    *loaded.registered.values(),
+                    *loaded.extra_audits,
+                )
+            )
+        )
+        missing_loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+            evidence_roots={"a10": evidence_roots["a10"]},
+        )
+        self.assertIn(
+            "missing_evidence_root_mapping: 'window_c'",
+            missing_loaded.floor_binding.global_problems,
+        )
+
         output = self.root / f"exact-cli-claim-verdicts{scenario_suffix}.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
             code = main(
@@ -1656,7 +1768,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "--analysis-manifest",
                     str(self.manifest_path),
                     "--runs-root",
-                    str(calibration_root),
+                    str(analysis_root),
+                    "--evidence-root",
+                    f"a10={evidence_roots['a10']}",
+                    "--evidence-root",
+                    f"window_c={evidence_roots['window_c']}",
                     "--floor-artifact",
                     str(floor_path),
                     "--output",
@@ -1665,6 +1781,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         self.assertEqual(code, 0, stderr.getvalue())
         artifact = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(len(artifact["bundle_audit"]), 30)
+        self.assertFalse(
+            any(
+                row["bundle_id"].startswith("cal-")
+                for row in artifact["bundle_audit"]
+            )
+        )
         gross = [
             contrast
             for contrast in artifact["contrasts"]
@@ -1781,9 +1904,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             return load_analysis_inputs(
                 self.manifest_path,
-                calibration_root,
+                analysis_root,
                 candidate_path,
                 strict_validator=validate_bundle,
+                evidence_roots=evidence_roots,
             ).floor_binding
 
         relabeled = json.loads(json.dumps(exact_floor))
@@ -1816,9 +1940,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         relabeled_result = analyze_claims(
             self.manifest_path,
-            calibration_root,
+            analysis_root,
             floor_dir / "floor-relabeled-abba.json",
             strict_validator=validate_bundle,
+            evidence_roots=evidence_roots,
         )
         self.assertTrue(
             any(
@@ -1934,7 +2059,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "--analysis-manifest",
                     str(self.manifest_path),
                     "--runs-root",
-                    str(calibration_root),
+                    str(analysis_root),
+                    "--evidence-root",
+                    f"a10={evidence_roots['a10']}",
+                    "--evidence-root",
+                    f"window_c={evidence_roots['window_c']}",
                     "--floor-artifact",
                     str(fabricated_path),
                     "--output",
@@ -1985,6 +2114,59 @@ class AnalysisIntegrationTests(unittest.TestCase):
             self._exercise_cli_distinct_calibration_binding(
                 production_identity=True,
             )
+
+    def test_cli_evidence_root_parser_rejects_malformed_and_duplicate_ids(self):
+        base = [
+            "analyze-claims",
+            "--analysis-manifest",
+            str(self.manifest_path),
+            "--runs-root",
+            str(self.runs_root),
+            "--floor-artifact",
+            str(self.floor_path),
+            "--output",
+            str(self.root / "parser-must-not-run.json"),
+        ]
+        cases = (
+            (["--evidence-root", "a10"], "expected ID=PATH"),
+            (["--evidence-root", f"={self.runs_root}"], "ID must be nonempty"),
+            (["--evidence-root", "a10="], "PATH must be nonempty"),
+            (
+                [
+                    "--evidence-root",
+                    f"a10={self.runs_root}",
+                    "--evidence-root",
+                    f"a10={self.runs_root}",
+                ],
+                "duplicate evidence-root ID",
+            ),
+        )
+        for evidence_args, expected in cases:
+            with self.subTest(evidence_args=evidence_args):
+                stderr = io.StringIO()
+                with (
+                    redirect_stderr(stderr),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    main([*base, *evidence_args])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn(expected, stderr.getvalue())
+
+    def test_claim_output_cannot_be_written_under_floor_evidence_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence_root = Path(tmp)
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "output must be outside floor evidence roots",
+            ):
+                analyze_claims(
+                    self.manifest_path,
+                    self.runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                    evidence_roots={"a10": evidence_root},
+                    output_path=evidence_root / "claim-verdicts.json",
+                )
 
     def test_cli_writes_artifact_and_invalid_input_writes_nothing(self):
         output = self.root / "cli-claim-verdicts.json"

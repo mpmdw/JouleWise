@@ -227,7 +227,10 @@ _FLOOR_BINDING_REASON_CODES = frozenset(
         "calibration_abba_block_mismatch",
         "calibration_abba_label_mismatch",
         "calibration_abba_member_order_mismatch",
+        "evidence_root_mapping_required",
         "idle_drift_guard_provenance_mismatch",
+        "missing_evidence_root_mapping",
+        "unknown_evidence_root_mapping",
     }
 )
 
@@ -782,20 +785,37 @@ def _component_evidence_root_ids(
 def _normalize_evidence_roots(
     artifact: Mapping[str, Any],
     evidence_roots: Mapping[str, Path] | Path,
-) -> dict[str, Path]:
+) -> tuple[dict[str, Path], tuple[str, ...]]:
+    declared_root_ids = _component_evidence_root_ids(artifact)
     if isinstance(evidence_roots, Mapping):
-        return {
+        normalized = {
             str(root_id): Path(root)
             for root_id, root in evidence_roots.items()
         }
+        supplied_root_ids = frozenset(normalized)
+        problems = [
+            *(
+                f"missing_evidence_root_mapping: {root_id!r}"
+                for root_id in sorted(declared_root_ids - supplied_root_ids)
+            ),
+            *(
+                f"unknown_evidence_root_mapping: {root_id!r}"
+                for root_id in sorted(supplied_root_ids - declared_root_ids)
+            ),
+        ]
+        return normalized, tuple(problems)
     # Existing analysis callers carry one physical calibration root. Preserve
-    # that entry point by explicitly assigning the one root to each v2
-    # component id declared by the already-validated artifact.
+    # that entry point only for artifacts naming at most one distinct evidence
+    # root. A multi-root artifact cannot be safely projected onto one Path:
+    # callers must supply the exact ID -> Path mapping.
     root = Path(evidence_roots)
-    return {
-        root_id: root
-        for root_id in _component_evidence_root_ids(artifact)
-    }
+    normalized = {root_id: root for root_id in declared_root_ids}
+    problems = (
+        ("evidence_root_mapping_required",)
+        if len(declared_root_ids) > 1
+        else ()
+    )
+    return normalized, problems
 
 
 def _campaign_order_binding_problems(
@@ -993,14 +1013,17 @@ def bind_floor_artifact_evidence(
     """Bind v2 component values to their named strict evidence roots."""
 
     floor_path = Path(floor_path)
-    normalized_roots = _normalize_evidence_roots(artifact, evidence_roots)
-    global_problems = list(
-        _campaign_order_binding_problems(
+    normalized_roots, root_mapping_problems = _normalize_evidence_roots(
+        artifact, evidence_roots
+    )
+    global_problems = [
+        *root_mapping_problems,
+        *_campaign_order_binding_problems(
             artifact,
             floor_path,
             normalized_roots,
-        )
-    )
+        ),
+    ]
     bound_ids: set[str] = set()
     identities: dict[str, str] = {}
     stack_hashes: dict[str, str] = {}
@@ -2090,14 +2113,23 @@ def load_analysis_inputs(
     floor_artifact_path: Path,
     *,
     strict_validator: StrictValidator,
+    evidence_roots: Mapping[str, Path] | None = None,
 ) -> LoadedAnalysisInputs:
+    """Load analysis-corpus inputs and independently bind floor evidence.
+
+    ``runs_root`` is always the analysis-corpus root. When ``evidence_roots``
+    is absent it also supplies the legacy bare-Path floor-binding input; an
+    artifact declaring multiple distinct evidence-root IDs then refuses with
+    ``evidence_root_mapping_required``.
+    """
+
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
     floor_binding = bind_floor_artifact_evidence(
         floor_artifact,
         Path(floor_artifact_path),
-        runs_root,
+        evidence_roots if evidence_roots is not None else runs_root,
         strict_validator=strict_validator,
     )
     cleanup_records = _campaign_claim_records(
