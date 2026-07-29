@@ -436,6 +436,30 @@ def _sole_attribution_limit(
     )
 
 
+def _point_floor_diagnostic_estimate(
+    estimate: FloorEstimate,
+) -> FloorEstimate:
+    """Derive the non-operative repeatability diagnostic without fake widths."""
+
+    unguarded = max(
+        estimate.max_abs_deviation_j,
+        estimate.prediction_component_j,
+    )
+    guarded = (
+        estimate.guard_factor * unguarded
+        if estimate.guard_factor is not None
+        else None
+    )
+    return replace(
+        estimate,
+        unguarded_floor_j=unguarded,
+        guarded_floor_j=guarded,
+        admissible_half_widths_j=(),
+        corner_widened_unguarded_floor_j=None,
+        corner_widened_guarded_floor_j=None,
+    )
+
+
 def _read_summary(
     path: Path,
 ) -> tuple[Mapping[str, Any] | None, str | None, str | None]:
@@ -883,6 +907,7 @@ def extract_absolute_cell(
         admitted.append(member)
 
     floor: FloorEstimate | None = None
+    point_floor: FloorEstimate | None = None
     anchor_max: float | None = None
     if not refusals:
         if len(admitted) < 2:
@@ -897,7 +922,6 @@ def extract_absolute_cell(
             anchor_max = max(anchor_values) if anchor_values else None
             values = [member.value_j for member in admitted]  # type: ignore[list-item]
             widths = [member.anchor_shift_bound_j for member in admitted]
-            point_floor = absolute_false_effect_floor(values)
             if (
                 len(values) > MAX_EXACT_ADMISSIBLE_CORNER_N
                 and any(width > 0.0 for width in widths)  # type: ignore[operator]
@@ -913,6 +937,7 @@ def extract_absolute_cell(
             if floor is not None and (
                 admissible_set_uncertainty_dominates_point_floor(floor)
             ):
+                point_floor = _point_floor_diagnostic_estimate(floor)
                 refusals.append(
                     CELL_LABELLED_CONDITION_CODES[0]
                 )
@@ -1055,6 +1080,7 @@ def extract_comparative_cell(
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
+    point_floor: FloorEstimate | None = None
     anchor_max: float | None = None
     if not refusals:
         if len(block_deltas) < 2:
@@ -1067,7 +1093,6 @@ def extract_comparative_cell(
                 if member.anchor_shift_bound_j is not None
             ]
             anchor_max = max(anchor_values) if anchor_values else None
-            point_floor = comparative_false_effect_floor(block_deltas)
             if (
                 len(block_deltas) > MAX_EXACT_ADMISSIBLE_CORNER_N
                 and any(width > 0.0 for width in block_half_widths)
@@ -1083,6 +1108,7 @@ def extract_comparative_cell(
             if floor is not None and (
                 admissible_set_uncertainty_dominates_point_floor(floor)
             ):
+                point_floor = _point_floor_diagnostic_estimate(floor)
                 refusals.append(
                     CELL_LABELLED_CONDITION_CODES[0]
                 )

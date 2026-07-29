@@ -10,6 +10,7 @@ import hashlib
 import math
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -361,7 +362,10 @@ class TestSmallSampleGuardFactor(unittest.TestCase):
 
 class TestAbsoluteFloor(unittest.TestCase):
     def test_fixture_a_every_intermediate_value(self):
-        est = absolute_false_effect_floor(FIXTURE_A_ENERGIES)
+        est = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_A_ENERGIES),
+        )
         self.assertEqual(est.n, 5)
         self.assertTrue(close(est.mean_j, 12.0))
         self.assertEqual(est.deviations_j, FIXTURE_A_RESIDUALS)
@@ -376,7 +380,10 @@ class TestAbsoluteFloor(unittest.TestCase):
     def test_c027_worked_example(self):
         # C-027: energies [10,10,10,10,20] -> residuals [-2,-2,-2,-2,8],
         # s_r = sqrt(20), unguarded floor ~= 13.60 J.
-        est = absolute_false_effect_floor([10, 10, 10, 10, 20])
+        est = absolute_false_effect_floor(
+            [10, 10, 10, 10, 20],
+            admissible_half_widths_j=[0.0] * 5,
+        )
         self.assertEqual(list(est.deviations_j), [-2, -2, -2, -2, 8])
         self.assertTrue(close(est.sample_stddev_j, math.sqrt(20)))
         self.assertAlmostEqual(est.unguarded_floor_j, 13.60, places=2)
@@ -387,7 +394,10 @@ class TestAbsoluteFloor(unittest.TestCase):
         # component (~7.29). Applying g inside the max would give 8;
         # the spec's after-max rule gives g(9)*8.
         energies = [18.0] + [9.0] * 8
-        est = absolute_false_effect_floor(energies)
+        est = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.0] * len(energies),
+        )
         self.assertEqual(est.n, 9)
         self.assertTrue(close(est.max_abs_deviation_j, 8.0))
         self.assertLess(est.prediction_component_j, 8.0)
@@ -415,7 +425,10 @@ class TestAbsoluteFloor(unittest.TestCase):
         # instead maximizes the Student-t prediction term, so the COMPLETE
         # guarded floor must rise to 5.2008 J.
         energies = [101.0, 99.0, 100.0, 100.0, 100.0]
-        point = absolute_false_effect_floor(energies)
+        point = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.0] * len(energies),
+        )
         widened = absolute_false_effect_floor(
             energies,
             admissible_half_widths_j=[0.5] * 5,
@@ -432,20 +445,35 @@ class TestAbsoluteFloor(unittest.TestCase):
 
 
     def test_below_five_is_smoke_only(self):
-        est = absolute_false_effect_floor([10.0, 12.0, 11.0])
+        est = absolute_false_effect_floor(
+            [10.0, 12.0, 11.0],
+            admissible_half_widths_j=[0.0] * 3,
+        )
         self.assertIsNone(est.guard_factor)
         self.assertIsNone(est.guarded_floor_j)
         self.assertGreater(est.unguarded_floor_j, 0.0)
 
     def test_invalid_inputs_rejected(self):
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0, float("nan"), 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, float("nan"), 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0, float("inf"), 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, float("inf"), 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(TypeError):
-            absolute_false_effect_floor([10.0, True, 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, True, 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0])
+            absolute_false_effect_floor(
+                [10.0],
+                admissible_half_widths_j=[0.0],
+            )
 
 
 class TestAbbaDelta(unittest.TestCase):
@@ -471,7 +499,10 @@ class TestAbbaDelta(unittest.TestCase):
 
 class TestComparativeFloor(unittest.TestCase):
     def test_fixture_b_every_intermediate_value(self):
-        est = comparative_false_effect_floor(FIXTURE_B_DELTAS)
+        est = comparative_false_effect_floor(
+            FIXTURE_B_DELTAS,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_B_DELTAS),
+        )
         self.assertEqual(est.n, 5)
         self.assertTrue(close(est.mean_j, 0.0))
         self.assertTrue(close(est.sample_stddev_j, FIXTURE_B_STDDEV))
@@ -497,7 +528,10 @@ class TestComparativeFloor(unittest.TestCase):
         # pattern: point deltas [1,-1,0,0,0] have a 3.2254 J guarded floor,
         # while +/-0.5 J delta widths put the full corner maximum at 5.4468 J.
         deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
-        point = comparative_false_effect_floor(deltas)
+        point = comparative_false_effect_floor(
+            deltas,
+            admissible_half_widths_j=[0.0] * len(deltas),
+        )
         widened = comparative_false_effect_floor(
             deltas,
             admissible_half_widths_j=[0.5] * 5,
@@ -509,7 +543,10 @@ class TestComparativeFloor(unittest.TestCase):
         negated = [-d for d in FIXTURE_B_DELTAS]
         self.assertTrue(
             close(
-                comparative_false_effect_floor(negated).guarded_floor_j,
+                comparative_false_effect_floor(
+                    negated,
+                    admissible_half_widths_j=[0.0] * len(negated),
+                ).guarded_floor_j,
                 FIXTURE_B_GUARDED,
             )
         )
@@ -519,11 +556,190 @@ class TestComparativeFloor(unittest.TestCase):
         # implementation that centers deltas first would reproduce the
         # fixture-B prediction; the spec requires abs(mean) to be added.
         shifted = [d + 1.0 for d in FIXTURE_B_DELTAS]
-        est = comparative_false_effect_floor(shifted)
+        est = comparative_false_effect_floor(
+            shifted,
+            admissible_half_widths_j=[0.0] * len(shifted),
+        )
         self.assertTrue(close(est.mean_j, 1.0))
         self.assertTrue(close(est.sample_stddev_j, FIXTURE_B_STDDEV))
         self.assertTrue(close(est.prediction_component_j, 1.0 + FIXTURE_B_PREDICTION))
         self.assertGreater(est.prediction_component_j, FIXTURE_B_PREDICTION)
+
+
+class TestWidthClosure(unittest.TestCase):
+    @staticmethod
+    def _build_absolute(estimate):
+        return build_absolute_record(
+            estimate,
+            [{} for _ in range(estimate.n)],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+
+    @staticmethod
+    def _build_comparative(estimate):
+        return build_comparative_record(
+            estimate,
+            [{} for _ in range(estimate.n)],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+
+    def test_estimator_widths_are_required_and_never_defaulted(self):
+        constructors = (
+            (absolute_false_effect_floor, FIXTURE_A_ENERGIES),
+            (comparative_false_effect_floor, FIXTURE_B_DELTAS),
+        )
+        for constructor, values in constructors:
+            with self.subTest(constructor=constructor.__name__, case="omitted"):
+                with self.assertRaises(TypeError):
+                    constructor(values)
+            with self.subTest(constructor=constructor.__name__, case="none"):
+                with self.assertRaisesRegex(ValueError, "half-widths are required"):
+                    constructor(values, admissible_half_widths_j=None)
+            with self.subTest(constructor=constructor.__name__, case="empty"):
+                with self.assertRaises(ValueError):
+                    constructor(values, admissible_half_widths_j=[])
+            with self.subTest(
+                constructor=constructor.__name__,
+                case="wrong_length",
+            ):
+                with self.assertRaisesRegex(ValueError, "count must match"):
+                    constructor(
+                        values,
+                        admissible_half_widths_j=[0.0] * (len(values) - 1),
+                    )
+
+    def test_builders_reject_missing_empty_or_wrong_length_widths(self):
+        absolute = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_A_ENERGIES),
+        )
+        comparative = comparative_false_effect_floor(
+            FIXTURE_B_DELTAS,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_B_DELTAS),
+        )
+        cases = (
+            (
+                self._build_absolute,
+                replace(absolute, admissible_half_widths_j=()),
+                "nonempty authenticated",
+            ),
+            (
+                self._build_absolute,
+                replace(
+                    absolute,
+                    admissible_half_widths_j=(
+                        absolute.admissible_half_widths_j[:-1]
+                    ),
+                ),
+                "count must equal",
+            ),
+            (
+                self._build_comparative,
+                replace(comparative, admissible_half_widths_j=()),
+                "nonempty authenticated",
+            ),
+            (
+                self._build_comparative,
+                replace(
+                    comparative,
+                    admissible_half_widths_j=(
+                        comparative.admissible_half_widths_j[:-1]
+                    ),
+                ),
+                "count must equal",
+            ),
+        )
+        for builder, estimate, expected in cases:
+            with self.subTest(builder=builder.__name__, expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    builder(estimate)
+
+    def test_dead_gate_accepts_only_valid_guarded_and_smoke_pairings(self):
+        guarded = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.1] * len(FIXTURE_A_ENERGIES),
+        )
+        guarded_record = self._build_absolute(guarded)
+        self.assertEqual(
+            guarded_record["corner_widened_guarded_floor_j"],
+            guarded.guard_factor
+            * guarded_record["corner_widened_unguarded_floor_j"],
+        )
+
+        smoke = absolute_false_effect_floor(
+            [10.0, 11.0, 12.0],
+            admissible_half_widths_j=[0.1] * 3,
+        )
+        smoke_record = self._build_absolute(smoke)
+        self.assertIsNotNone(
+            smoke_record["corner_widened_unguarded_floor_j"]
+        )
+        self.assertIsNone(smoke_record["corner_widened_guarded_floor_j"])
+
+        invalid_guarded = {
+            "missing_corner_unguarded": replace(
+                guarded,
+                corner_widened_unguarded_floor_j=None,
+            ),
+            "missing_corner_guarded": replace(
+                guarded,
+                corner_widened_guarded_floor_j=None,
+            ),
+            "corner_product_mismatch": replace(
+                guarded,
+                corner_widened_guarded_floor_j=(
+                    guarded.corner_widened_guarded_floor_j + 1.0
+                ),
+            ),
+            "missing_guard_factor": replace(guarded, guard_factor=None),
+            "missing_guarded_floor": replace(guarded, guarded_floor_j=None),
+            "guarded_product_mismatch": replace(
+                guarded,
+                guarded_floor_j=guarded.guarded_floor_j + 1.0,
+            ),
+            "guarded_disguised_as_smoke": replace(
+                guarded,
+                guard_factor=None,
+                guarded_floor_j=None,
+                corner_widened_guarded_floor_j=None,
+            ),
+        }
+        for case, estimate in invalid_guarded.items():
+            with self.subTest(estimate="guarded", case=case):
+                with self.assertRaises(ValueError):
+                    self._build_absolute(estimate)
+
+        invalid_smoke = {
+            "missing_corner_unguarded": replace(
+                smoke,
+                corner_widened_unguarded_floor_j=None,
+            ),
+            "corner_guarded_present": replace(
+                smoke,
+                corner_widened_guarded_floor_j=(
+                    smoke.corner_widened_unguarded_floor_j
+                ),
+            ),
+            "guard_factor_present": replace(smoke, guard_factor=1.0),
+            "guarded_floor_present": replace(
+                smoke,
+                guarded_floor_j=smoke.unguarded_floor_j,
+            ),
+            "smoke_disguised_as_guarded": replace(
+                smoke,
+                guard_factor=1.0,
+                guarded_floor_j=smoke.unguarded_floor_j,
+                corner_widened_guarded_floor_j=(
+                    smoke.corner_widened_unguarded_floor_j
+                ),
+            ),
+        }
+        for case, estimate in invalid_smoke.items():
+            with self.subTest(estimate="smoke", case=case):
+                with self.assertRaises(ValueError):
+                    self._build_absolute(estimate)
 
 
 def make_regime(
@@ -570,8 +786,8 @@ def make_cell(
     regime=None,
     condition="cf-1",
     metric="gross_energy_j",
-    absolute_half_widths=None,
-    comparative_half_widths=None,
+    absolute_half_widths=(0.0,) * len(FIXTURE_A_ENERGIES),
+    comparative_half_widths=(0.0,) * len(FIXTURE_B_DELTAS),
     whole_window_drift_allowance=None,
     absolute_whole_window_drift_allowance=None,
     comparative_whole_window_drift_allowance=None,
@@ -1120,6 +1336,17 @@ class TestArtifactEmitValidate(unittest.TestCase):
         artifact = make_artifact()
         del artifact["source_class"]
         self.assert_invalid(artifact, "missing key 'source_class'")
+
+    def test_build_floor_artifact_requires_source_class(self):
+        artifact = make_artifact()
+        with self.assertRaises(TypeError):
+            build_floor_artifact(
+                artifact_id=artifact["artifact_id"],
+                calibration_scope=artifact["calibration_scope"],
+                provenance=artifact["provenance"],
+                cells=artifact["cells"],
+                transport_groups=artifact["transport_groups"],
+            )
 
     def test_provenance_precondition_pins_are_structurally_validated(self):
         mutations = (
@@ -1743,7 +1970,10 @@ class TestArtifactEmitValidate(unittest.TestCase):
                     self.assert_invalid(missing, f"missing key {field!r}")
 
     def test_basis_passing_extraction_refuses_absent_allowances(self):
-        floor = absolute_false_effect_floor([1.0, 1.1])
+        floor = absolute_false_effect_floor(
+            [1.0, 1.1],
+            admissible_half_widths_j=[0.0, 0.0],
+        )
         report = CellReport(
             cell_id="basis-cell",
             kind="absolute",

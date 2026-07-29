@@ -393,7 +393,7 @@ def _admissible_widths(
     widths_j: Sequence[float] | None, *, expected_n: int
 ) -> list[float]:
     if widths_j is None:
-        return [0.0] * expected_n
+        raise ValueError("admissible-set half-widths are required")
     widths = _clean_values(widths_j, "admissible-set half-widths")
     if len(widths) != expected_n:
         raise ValueError("admissible-set half-width count must match point estimates")
@@ -587,7 +587,7 @@ def _corner_maximized_unguarded_floor(
 def absolute_false_effect_floor(
     values_j: Sequence[float],
     *,
-    admissible_half_widths_j: Sequence[float] | None = None,
+    admissible_half_widths_j: Sequence[float],
 ) -> FloorEstimate:
     """D-054 absolute floor, widened by member admissible-set uncertainty."""
     values = _clean_values(values_j, "energies")
@@ -620,7 +620,7 @@ def absolute_false_effect_floor(
 def comparative_false_effect_floor(
     block_deltas_j: Sequence[float],
     *,
-    admissible_half_widths_j: Sequence[float] | None = None,
+    admissible_half_widths_j: Sequence[float],
 ) -> FloorEstimate:
     """D-054 comparative false-effect floor over ABBA block deltas.
 
@@ -716,6 +716,103 @@ def _add_whole_window_drift_allowance(
     }
 
 
+def _strict_builder_floor_fields(
+    estimate: FloorEstimate,
+) -> tuple[tuple[float, ...], float, float | None]:
+    widths = estimate.admissible_half_widths_j
+    if not widths:
+        raise ValueError(
+            "floor estimate requires nonempty authenticated admissible-set widths"
+        )
+    if len(widths) != estimate.n:
+        raise ValueError(
+            "floor estimate admissible-set width count must equal estimate n"
+        )
+    validated_widths = tuple(
+        _admissible_widths(widths, expected_n=estimate.n)
+    )
+
+    corner_unguarded = estimate.corner_widened_unguarded_floor_j
+    corner_guarded = estimate.corner_widened_guarded_floor_j
+    if (
+        isinstance(estimate.unguarded_floor_j, bool)
+        or not isinstance(estimate.unguarded_floor_j, int | float)
+        or not math.isfinite(float(estimate.unguarded_floor_j))
+        or float(estimate.unguarded_floor_j) < 0.0
+    ):
+        raise ValueError(
+            "floor estimate requires a finite nonnegative unguarded floor"
+        )
+    unguarded_floor = float(estimate.unguarded_floor_j)
+    if (
+        isinstance(corner_unguarded, bool)
+        or not isinstance(corner_unguarded, int | float)
+        or not math.isfinite(float(corner_unguarded))
+        or float(corner_unguarded) < 0.0
+    ):
+        raise ValueError(
+            "floor estimate requires a finite nonnegative "
+            "corner-widened unguarded floor"
+        )
+    corner_unguarded = float(corner_unguarded)
+
+    has_guard_factor = estimate.guard_factor is not None
+    has_guarded_floor = estimate.guarded_floor_j is not None
+    guarded_estimate = estimate.n >= GUARD_MINIMUM_N
+    if guarded_estimate and not (has_guard_factor and has_guarded_floor):
+        raise ValueError(
+            "guarded floor estimate requires guard_factor and guarded_floor_j"
+        )
+    if not guarded_estimate and (has_guard_factor or has_guarded_floor):
+        raise ValueError(
+            "smoke floor estimate requires null guard_factor and guarded_floor_j"
+        )
+    if not guarded_estimate:
+        if corner_guarded is not None:
+            raise ValueError(
+                "smoke floor estimate requires a null corner-widened guarded floor"
+            )
+        return validated_widths, corner_unguarded, None
+
+    guard_factor = estimate.guard_factor
+    guarded_floor = estimate.guarded_floor_j
+    if (
+        isinstance(guard_factor, bool)
+        or not isinstance(guard_factor, int | float)
+        or not math.isfinite(float(guard_factor))
+        or float(guard_factor) < 1.0
+        or isinstance(guarded_floor, bool)
+        or not isinstance(guarded_floor, int | float)
+        or not math.isfinite(float(guarded_floor))
+        or float(guarded_floor) < 0.0
+    ):
+        raise ValueError(
+            "guarded floor estimate requires finite nonnegative guarded fields"
+        )
+    if (
+        isinstance(corner_guarded, bool)
+        or not isinstance(corner_guarded, int | float)
+        or not math.isfinite(float(corner_guarded))
+        or float(corner_guarded) < 0.0
+    ):
+        raise ValueError(
+            "guarded floor estimate requires both corner-widened fields"
+        )
+    guard_factor = float(guard_factor)
+    guarded_floor = float(guarded_floor)
+    corner_guarded = float(corner_guarded)
+    if guarded_floor != guard_factor * unguarded_floor:
+        raise ValueError(
+            "guarded floor must equal guard_factor times unguarded floor"
+        )
+    if corner_guarded != guard_factor * corner_unguarded:
+        raise ValueError(
+            "corner-widened guarded floor must equal guard_factor times "
+            "corner-widened unguarded floor"
+        )
+    return validated_widths, corner_unguarded, corner_guarded
+
+
 def build_absolute_record(
     estimate: FloorEstimate,
     bundle_observations: Sequence[Mapping],
@@ -727,20 +824,8 @@ def build_absolute_record(
         raise ValueError("absolute record requires an absolute FloorEstimate")
     if len(bundle_observations) != estimate.n:
         raise ValueError("bundle_observations length must equal n")
-    widths = (
-        estimate.admissible_half_widths_j
-        if estimate.admissible_half_widths_j
-        else (0.0,) * estimate.n
-    )
-    widened_unguarded = (
-        estimate.corner_widened_unguarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.unguarded_floor_j
-    )
-    widened_guarded = (
-        estimate.corner_widened_guarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.guarded_floor_j
+    widths, widened_unguarded, widened_guarded = (
+        _strict_builder_floor_fields(estimate)
     )
     record = {
         "n": estimate.n,
@@ -779,20 +864,8 @@ def build_comparative_record(
         raise ValueError("comparative record requires a comparative FloorEstimate")
     if len(blocks) != estimate.n:
         raise ValueError("blocks length must equal n_blocks")
-    widths = (
-        estimate.admissible_half_widths_j
-        if estimate.admissible_half_widths_j
-        else (0.0,) * estimate.n
-    )
-    widened_unguarded = (
-        estimate.corner_widened_unguarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.unguarded_floor_j
-    )
-    widened_guarded = (
-        estimate.corner_widened_guarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.guarded_floor_j
+    widths, widened_unguarded, widened_guarded = (
+        _strict_builder_floor_fields(estimate)
     )
     record = {
         "n_blocks": estimate.n,
@@ -1071,7 +1144,7 @@ def build_floor_artifact(
     provenance: Mapping,
     cells: Sequence[Mapping],
     transport_groups: Sequence[Mapping],
-    source_class: str = "synthetic",
+    source_class: str,
     idle_drift_guard: Optional[Mapping] = None,
 ) -> dict:
     if idle_drift_guard is None:
