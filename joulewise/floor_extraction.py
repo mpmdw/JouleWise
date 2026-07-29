@@ -347,6 +347,15 @@ class CellReport:
                 "unguarded_floor_j": self.floor.unguarded_floor_j,
                 "guard_factor": self.floor.guard_factor,
                 "guarded_floor_j": self.floor.guarded_floor_j,
+                "admissible_half_widths_j": list(
+                    self.floor.admissible_half_widths_j
+                ),
+                "corner_widened_unguarded_floor_j": (
+                    self.floor.corner_widened_unguarded_floor_j
+                ),
+                "corner_widened_guarded_floor_j": (
+                    self.floor.corner_widened_guarded_floor_j
+                ),
                 "smoke_only": self.floor.guarded_floor_j is None,
             }
             if allowance is not None:

@@ -1516,6 +1516,75 @@ class AbsoluteCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.Test
         )
         self.assertEqual(report.anchor_shift_bound_max_j, 0.01)
 
+    def test_n5_row_serializes_independently_derived_guarded_corner_floor(self) -> None:
+        """E4 regression: the n>=5 claim-bearing serialization path must carry a
+        NON-NULL ``corner_widened_guarded_floor_j`` equal to an independently
+        derived value — a serializer hard-coded to emit null (or the unguarded
+        number) for that key must fail here.
+
+        Analytic derivation (independent of the implementation; no value below
+        was copied from program output):
+
+          Admitted values (cap-hit slot excluded): [40.1, 39.9, 40.3, 40.0, 39.7]
+          mean = 40.0, residuals r = [0.1, -0.1, 0.3, 0.0, -0.3]
+          Anchor half-widths w_i = 0.01 each (make_summary anchor_bound).
+
+          Corner maximization of the complete D-054 floor over the interval box
+          x_i +/- 0.01: with dev-mean zero, s'^2 = (sum a_i^2 - (sum a_i)^2/5)/4
+          for a_i = r_i + c_i*0.01, maximized by the sign-matched corner
+          c = (+,-,+,+/-,-) (the zero-residual member's sign is immaterial):
+          corner residuals r' = [0.108, -0.112, 0.308, 0.008, -0.312]
+          sum r'^2 = 0.21648  =>  s'^2 = 0.21648/4 = 0.05412
+          prediction' = t_95(df=4) * s' * sqrt(1 + 1/5)
+                      = 2.776 * sqrt(0.05412 * 1.2) = 2.776 * sqrt(0.064944)
+                      = 0.7074389684941  (> max|r'| = 0.312)
+          Competing terms it must dominate (and does):
+            point prediction  2.776 * sqrt(0.05 * 1.2) = 0.6799783525966
+            linear residual corner max 0.3 + 0.016 = 0.316
+          => corner_widened_unguarded_floor_j = 0.7074389684941
+          Guard: g(5) = sqrt((10-1)/(5-1)) = 1.5 (frozen small-sample guard)
+          => corner_widened_guarded_floor_j = 1.5 * 2.776 * sqrt(0.064944)
+                                            = 1.0611584527412
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root, members = self._build_corpus(tmp)
+            report = extract_absolute_cell(
+                cell_id="DF-RQ-GROSS-LONG-PROMPT",
+                metric="gross_energy_j",
+                window_class="request",
+                members=members,
+                runs_root=runs_root,
+                cooldowns=campaign_cooldown_evidence(runs_root),
+            )
+        self.assertTrue(report.extractable)
+        assert report.floor is not None
+        self.assertEqual(report.floor.n, 5)
+        row = report.as_row()
+        floor_row = row["floor"]
+        self.assertEqual(floor_row["n"], 5)
+        self.assertFalse(floor_row["smoke_only"])
+        self.assertEqual(floor_row["admissible_half_widths_j"], [0.01] * 5)
+        self.assertEqual(floor_row["guard_factor"], 1.5)
+        # Pinned literals from the derivation above — NOT read back from the
+        # serializer. A null (or unguarded-valued) guarded corner fails both.
+        self.assertIsNotNone(floor_row["corner_widened_guarded_floor_j"])
+        self.assertAlmostEqual(
+            floor_row["corner_widened_unguarded_floor_j"],
+            0.7074389684941027,
+            delta=1e-9,
+        )
+        self.assertAlmostEqual(
+            floor_row["corner_widened_guarded_floor_j"],
+            1.0611584527411542,
+            delta=1e-9,
+        )
+        # The guarded corner is strictly ABOVE the unguarded corner (g=1.5),
+        # so emitting the unguarded value under the guarded key also fails.
+        self.assertGreater(
+            floor_row["corner_widened_guarded_floor_j"],
+            floor_row["corner_widened_unguarded_floor_j"],
+        )
+
     def test_member_report_carries_complete_operative_envelope_and_discharge(self) -> None:
         class FakeConsumptionSession:
             ready = True
@@ -1891,6 +1960,18 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         self.assertIsNone(report.floor.guard_factor)
         assert report.point_floor_diagnostic is not None
         row = report.as_row()
+        self.assertEqual(
+            row["floor"]["admissible_half_widths_j"],
+            [0.02, 0.02],
+        )
+        self.assertEqual(
+            row["floor"]["corner_widened_unguarded_floor_j"],
+            report.floor.corner_widened_unguarded_floor_j,
+        )
+        self.assertEqual(
+            row["floor"]["corner_widened_guarded_floor_j"],
+            report.floor.corner_widened_guarded_floor_j,
+        )
         self.assertEqual(row["floor_source"], ATTRIBUTION_FLOOR_SOURCE)
         self.assertEqual(row["floor_limit_class"], ATTRIBUTION_LIMIT_CLASS)
         self.assertEqual(
