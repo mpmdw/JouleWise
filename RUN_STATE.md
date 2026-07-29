@@ -10,40 +10,42 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-28. **Main is at `7337b33`.** `FLOOR-LABEL-01` is
-MERGED (merge commit `3055315`), implementing Ed-ratified D-078 clause
-11: attribution-limited floors are now a LABELLED CLAIM PATH — publish
-the corner-widened floor with `floor_source` and `floor_limit_class`,
-keep the point floor as a repeatability diagnostic that is never the
-published claim floor, and carry a machine-readable single-count
-statement into every publishing artifact. Suite 2194 OK on merged main,
-lead-verified. D-079 (calibration acceptance v2) and D-080 (standing
-fresh-eyes sweep) are recorded in `docs/decision_log.md`. Main also
-carries three new operator tools — `scripts/quiet_window_clock.sh`,
-`scripts/prewindow_check.sh`, `scripts/window_status.sh` — and
-`WINDOW_STATUS.md`, a live phone-readable status file published only
-between runs, never while a window is in flight.
+Last updated: 2026-07-28 (late, mint-implementation session). **Main is
+at the PR #87 merge `058c918` plus this session's bookkeeping.** The
+pre-mint schema hardening is MERGED (PR #87, full D-072 gate, zero
+surviving blockers, CI green). The site-parser red that had held main CI
+down since `32e510a` is FIXED under Ed-ratified D-081 (`cb867f3`).
+`FLOOR-LABEL-01` remains merged at `3055315` (D-078 cl.11 labelled claim
+path). D-079/D-080/D-081/D-082 are in `docs/decision_log.md`.
 
-**Measurement is no longer the blocker; the mint is.** Windows C
-(decode comparative) and D (absolute) both PASSED their whole-window
-verdicts — C is the first comparative window in project history to pass
-— and a9/a10 remain PASSED. What stands between the project and its
-first published floor is that **the mint has never been built**:
-`build_floor_cell` / `build_floor_artifact` / `build_absolute_record` /
-`build_comparative_record` in `joulewise/detection_floor.py` have ZERO
-non-test call sites, and `scripts/extract_detection_floors.py` writes an
-extraction report and stops.
+**The mint is BUILT but not yet run.** Branch `impl/mint-tool` (pushed,
+UNMERGED, UNREVIEWED) carries the complete 7-stage implementation of the
+ratified mint contract (`docs/phase_2/floor_mint_contract.md` on that
+branch; D-082): schema v2 with component-scoped cross-window cells,
+shared nine-entry metric catalog, non-defaulting widths/source_class,
+basis-pinned subset consumption (30-vs-37 RESOLVED — the 7 extras are
+the neg8 references that source the 0.652272 J allowance), authored
+a10/window-C extraction specs + condition-family definition, and
+`scripts/mint_floor_artifact.py` with the pre-registration gate embedded
+(operative decode floor "3.592138" hard-checked in-tool). Pairing
+GO/NO-GO: **GO** on identity, magistrate-adjudicated from primary
+evidence. In-scope test modules 184 OK; final canonical rerun at
+`1d83d68` was in flight at checkpoint — UNVERIFIED, re-verify first.
 
-NEXT: build the floor mint and mint the first published floor. In order —
-land the pre-mint schema hardening on branch `impl/floor-mint` @
-`617060a` (pushed, suite 2198 OK, NOT yet merged); verify the a10-absolute
-/ window-C-decode-comparative pairing (a GO/NO-GO, not a task); adopt the
-one general production `calibration_scope` name per D-079 clause 4
-(proposed literal `production_window`); resolve the 30-vs-37 member
-authentication mismatch; then write `scripts/mint_floor_artifact.py`,
-pre-register expected values from verdict-stage numbers, and mint. Detail
-and blockers are in "Current Project Status" below. Window B
-re-collection follows, under the D-079 pre-flight screen.
+NEXT (in order): (1) lead-verify the canonical suite on `impl/mint-tool`
+@ `1d83d68`; (2) full-tier adversarial review of `git diff
+main...impl/mint-tool` (two accepted strict-direction interpretation
+calls are settled, see the run report); fix rounds with delta re-audits;
+(3) lead-reserved live gate — governed extraction for a10
+(`--evaluation-basis-sha256 79c6e8b9…e053e`, ~20 min) and window C
+(`0cf07a5c…8fa6`), then run the mint; pre-registration gate must pass
+as-embedded and `validate_floor_artifact == []`; (4) PR + D-072 gate +
+merge; (5) kernel refresh (STALE: stamped 2026-07-25, FLOOR-LABEL still
+READY, no mint rows). Window B re-collection follows, under the D-079
+pre-flight screen (still unimplemented). Full handoff:
+`docs/run_reports/2026-07-28-floor-mint-implementation.md`. New queue
+item TEST-SPEED-01 (suite consolidate/redesign, ~3-4 min recoverable,
+zero deletions clear D-061; PR-fast/full split is Ed's call).
 
 Prior head (historical, superseded by the block above): main was at
 `c3e2647` on 2026-07-25 — PR #79's D-078 instrument repair merged on
@@ -389,6 +391,13 @@ standing fresh-eyes sweep is the first exercise of that list.
 4. `FLOOR-WORKLOAD-SIZING-01` — resizing floors resizes the science, so
    it is a pre-registration change and therefore Ed's call.
 5. Window B's disposition.
+6. (2026-07-28 late) Multi-session coordination: a concurrent session
+   force-rewrote main history (no content lost this time, but the mode
+   can silently drop peer commits). Whether to adopt a
+   no-force-push/branch-only convention is Ed's call.
+7. (2026-07-28 late) TEST-SPEED-01's structural lever — a PR-fast/full
+   CI split — is a CI-contract change and Ed's call; the
+   consolidate/redesign work (~3-4 min, no deletions) needs no ruling.
 
 Records: `docs/process_traces/RESUME-2026-07-28.md` (freshest session
 record, superseded as a pointer), `RESUME-2026-07-27.md`,
@@ -449,6 +458,10 @@ work-selection authority. Use the generated region above for selection.
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-28 (late) mint-implementation session: PR #87 hardening merged;
+  mint tool built on `impl/mint-tool` (unmerged, review owed); parser
+  fix D-081; pairing GO + 30-vs-37 resolved; suite-pruning consult
+  (TEST-SPEED-01): `docs/run_reports/2026-07-28-floor-mint-implementation.md`
 - 2026-07-28 iCloud archive + verified selective prune of all runs
   corpora (61 GB freed; keep-list intact; strict corpus gate green):
   `docs/run_reports/2026-07-28-icloud-archive-prune.md`
@@ -757,7 +770,17 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- (2026-07-27) `main` and `origin/main` are at `7337b33`. Branch
+- (2026-07-28 late) `main` and `origin/main` are at this session's
+  bookkeeping commit atop the PR #87 merge `058c918`. Branch
+  `impl/mint-tool` (pushed, UNMERGED) holds the 9-commit mint series
+  `2a0ecbc..697f741` in worktree
+  `/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/minttool`;
+  canonical suite at its head `1d83d68` is UNVERIFIED (rerun was in
+  flight at checkpoint). Branch `impl/floor-mint` is merged via PR #87
+  and may be deleted. NOTE: a concurrent session force-rewrote main
+  history this evening (content preserved; see run report Anomalies) —
+  verify `git log` freshness before building on a cached head.
+- (2026-07-27, historical) `main` and `origin/main` were at `7337b33`. Branch
   `impl/floor-mint` @ `617060a` is pushed and NOT merged; it carries the
   pre-mint floor schema hardening. Window C (+bound) and a10 (+bound)
   remain FULLY resident in the working tree (mint #1 inputs); windows B/D

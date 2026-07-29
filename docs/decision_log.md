@@ -103,6 +103,8 @@ be re-derived by a future agent gets an entry here.
 | D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted; operative under Ed's direction through the full repair arc (close-out cap explicitly Ed-ratified 2026-07-22; original-text ratification rides PR #79 review) |
 | D-079 | Calibration acceptance v2: derived bracket screen plus budget, a pre-flight calibration screen with cause-removal retry, one general production scope name, and publishing the decode floor now | accepted (Ed-ratified 2026-07-27) |
 | D-080 | Standing fresh-eyes sweep: a periodic, non-reactive outside review on one cadence unit, a rotating second lens, and a mechanically generated packet | accepted (magistrate-ratified 2026-07-27) |
+| D-081 | Session History pointers: build_site parser accepts docs/process_traces/ alongside docs/run_reports/, fail-closed otherwise | accepted (Ed-ratified 2026-07-28) |
+| D-082 | Floor-mint execution semantics: basis-pinned subset consumption (Option A), component-scoped cross-window artifact schema v2, production_window scope, prospective source_class, non-defaulting widths | accepted (magistrate-adjudicated 2026-07-28, executing D-078 cl.11 / D-079 cl.4-5) |
 
 ---
 
@@ -5033,3 +5035,56 @@ produces no plan-changing catch across one full phase, which returns the whole
 mechanism to the magistrate; or the mechanical packet's sections stop being
 generable from manifests and logs, which would make the packet composed and
 void clause 3's guarantee.
+
+## D-081: Session History pointer convention — parser learns the pointer-retirement form
+
+- Date: 2026-07-28
+- Status: accepted (Ed-ratified, async question in-session)
+- Applies to: `scripts/build_site.py`, `tests/test_build_site_parsers.py`, `RUN_STATE.md` Session History
+
+Commit `32e510a` retired the dated RESUME docs and re-pointed some Session
+History bullets at `docs/process_traces/`, which broke the site parser's
+hard requirement of a backticked `docs/run_reports/...md` pointer in every
+dated bullet (main CI red from `32e510a` to `cb867f3`). Ed ruled: the
+parser learns the convention — both roots accepted, identical downstream
+rendering, any other (or missing) pointer stays a hard fail-closed parse
+error naming both roots. Options rejected: re-pointing bullets at
+run-report stubs (ritual files); merging over a documented red (violates
+the D-072 letter). Landed as `cb867f3` (byte-identical re-parent of the
+reviewed `5e4b73f`).
+
+## D-082: Floor-mint execution semantics — basis-pinned consumption and the cross-window v2 artifact
+
+- Date: 2026-07-28
+- Status: accepted (magistrate-adjudicated after Sol xhigh design consult; executes Ed-ratified D-078 clause 11 and D-079 clauses 4–5)
+- Applies to: `joulewise/detection_floor.py`, `joulewise/floor_extraction.py`, `scripts/extract_detection_floors.py`, `scripts/mint_floor_artifact.py`, `configs/floor_mint/`
+- ONE home for full detail: `docs/phase_2/floor_mint_contract.md` (rides branch `impl/mint-tool`); evidence: S2/S3 packets in `docs/run_reports/2026-07-28-floor-mint-implementation.md`
+
+Clauses, compact (contract owns the detail):
+
+1. **Consumption is basis-pinned subset (Option A).** Extraction accepts an
+   explicit `evaluation_basis_sha256`; the verdict's authenticated basis
+   (a10: 37 members) governs custody while the spec-selected members
+   (30) supply the floor cells. The 30-vs-37 gap is the seven neg8
+   window-reference bundles that source the 0.652272 J allowance — a
+   designed two-population system, not a defect. Authoring a 37-member
+   spec (outcome-distorting) and treating the gap as a defect were both
+   rejected.
+2. **Cross-window cells are component-scoped (schema v2).** Absolute and
+   comparative components each carry their own window basis, consumption
+   semantics id, and drift allowance; cross-component equality of those
+   three is relaxed; within-component consistency and all shared cell
+   identity invariants are not. Cell gate composes by max, never by
+   summing allowances; single-count discipline unchanged.
+3. `calibration_scope` gains one general literal `production_window`
+   (D-079 cl.4); the frozen plan's historical `window_a` declaration is
+   carried in provenance and deliberately NOT required to equal the
+   artifact scope.
+4. `source_class` for mint #1 is `prospective` and the builder argument
+   is non-defaulting; estimator width arguments are non-defaulting and
+   zero widths must come from the governed report (closes review finding
+   C1, "unauthenticated zero widths").
+
+Revisit when: a prefill comparative window exists (window B
+re-collection), or a second mint requires semantics not covered by the
+enum `{d078_minted_envelopes_v1, d078_authenticated_max_bracket_rederivation_v1}`.
