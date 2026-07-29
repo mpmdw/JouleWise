@@ -102,14 +102,57 @@ class BuildSiteParserTests(unittest.TestCase):
 
 - 2026-07-08 latest session title:
   `docs/run_reports/latest.md`
-- 2026-07-07 older session title:
-  `docs/run_reports/older.md`
+- 2026-07-07 process trace title:
+  `docs/process_traces/older.md`
 - Older: see directory.
 """
         sessions = build_site.parse_session_history(md)
-        self.assertEqual("docs/run_reports/latest.md", sessions[0].report)
-        self.assert_fail_closed(build_site.parse_session_history, md.replace("`docs/run_reports/latest.md`", "docs/run_reports/latest.md"))
+        self.assertEqual(
+            [
+                build_site.SessionPointer(
+                    "2026-07-08",
+                    "latest session title",
+                    "docs/run_reports/latest.md",
+                ),
+                build_site.SessionPointer(
+                    "2026-07-07",
+                    "process trace title",
+                    "docs/process_traces/older.md",
+                ),
+            ],
+            sessions,
+        )
+        expected_pointer_error = re.escape(
+            "docs/run_reports/...md or docs/process_traces/...md"
+        )
+        with self.assertRaisesRegex(build_site.SiteBuildError, expected_pointer_error):
+            build_site.parse_session_history(
+                md.replace(
+                    "`docs/run_reports/latest.md`",
+                    "docs/run_reports/latest.md",
+                )
+            )
+        with self.assertRaisesRegex(build_site.SiteBuildError, expected_pointer_error):
+            build_site.parse_session_history(
+                md.replace(
+                    "`docs/run_reports/latest.md`",
+                    "`docs/reviews/latest.md`",
+                )
+            )
         self.assertEqual("docs/run_reports/latest.md", build_site.latest_report_source_from_sessions(sessions))
+        process_trace = sessions[1]
+        self.assertEqual(
+            process_trace.report,
+            build_site.latest_report_source_from_sessions([process_trace]),
+        )
+        self.assertEqual(
+            "../process_traces/older.md",
+            build_site.report_href(process_trace.report),
+        )
+        self.assertEqual(
+            "latest_run_report.html",
+            build_site.report_href(process_trace.report, process_trace.report),
+        )
 
     def test_parse_current_queue(self):
         md = """# Queue

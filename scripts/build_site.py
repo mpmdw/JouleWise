@@ -614,10 +614,18 @@ def parse_session_history(md: str, source: str = "RUN_STATE.md") -> list[Session
             continue
         header = re.match(r"(?s)^(\d{4}-\d{2}-\d{2}(?:/\d{2})?)\s+(.+?):", entry)
         if not header:
-            fail("Session History", source, "dated session bullet with backticked docs/run_reports/...md pointer")
-        pointer = re.search(r"`(docs/run_reports/[^`]+\.md)`", entry)
+            fail(
+                "Session History",
+                source,
+                "dated session bullet with backticked docs/run_reports/...md or docs/process_traces/...md pointer",
+            )
+        pointer = re.search(r"`(docs/(?:run_reports|process_traces)/[^`]+\.md)`", entry)
         if not pointer:
-            fail("Session History", source, "backticked docs/run_reports/...md pointer in each dated entry")
+            fail(
+                "Session History",
+                source,
+                "backticked docs/run_reports/...md or docs/process_traces/...md pointer in each dated entry",
+            )
         title = re.sub(r"\s+", " ", header.group(2)).strip()
         sessions.append(SessionPointer(header.group(1), title, pointer.group(1)))
     if not sessions:
@@ -627,10 +635,18 @@ def parse_session_history(md: str, source: str = "RUN_STATE.md") -> list[Session
 
 def latest_report_source_from_sessions(sessions: list[SessionPointer], source: str = "RUN_STATE.md") -> str:
     if not sessions:
-        fail("latest run report", source, "first Session History entry with docs/run_reports/...md pointer")
+        fail(
+            "latest run report",
+            source,
+            "first Session History entry with docs/run_reports/...md or docs/process_traces/...md pointer",
+        )
     report = sessions[0].report
-    if not re.fullmatch(r"docs/run_reports/[^`]+\.md", report):
-        fail("latest run report", source, "first Session History entry with docs/run_reports/...md pointer")
+    if not re.fullmatch(r"docs/(?:run_reports|process_traces)/[^`]+\.md", report):
+        fail(
+            "latest run report",
+            source,
+            "first Session History entry with docs/run_reports/...md or docs/process_traces/...md pointer",
+        )
     return report
 
 
@@ -1476,6 +1492,8 @@ def report_href(path: str, latest_report_source: str | None = None) -> str:
         return "latest_run_report.html"
     if path.startswith("docs/run_reports/"):
         return "../run_reports/" + filename
+    if path.startswith("docs/process_traces/"):
+        return "../process_traces/" + filename
     return "../" + path
 
 
