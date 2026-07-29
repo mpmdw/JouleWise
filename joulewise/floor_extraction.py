@@ -1144,6 +1144,7 @@ def extract_cells(
     spec: Mapping[str, Any],
     *,
     manifest_id: str | None = None,
+    evaluation_basis_sha256: str | None = None,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
 ) -> dict[str, Any]:
@@ -1166,10 +1167,12 @@ def extract_cells(
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         referenced_bundle_ids,
+        evaluation_basis_sha256=evaluation_basis_sha256,
     )
     whole_window_refusals = _whole_window_extraction_refusals(
         runs_root,
         referenced_bundle_ids,
+        evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
     )
     member_consumption_session = (
@@ -1234,6 +1237,7 @@ def extract_cells(
         whole_window_allowance_result = whole_window_drift_allowances(
             runs_root,
             referenced_bundle_ids,
+            evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_session=consumption_session,
         )
     whole_window_allowances = (
@@ -1409,6 +1413,7 @@ def _whole_window_extraction_refusals(
     runs_root: Path,
     referenced_bundle_ids: set[str],
     *,
+    evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[str, ...]:
     """Consume a hash-bound verdict that covers every referenced bundle."""
@@ -1416,6 +1421,7 @@ def _whole_window_extraction_refusals(
     return whole_window_refusal_reasons(
         runs_root,
         referenced_bundle_ids,
+        evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
     )
 
