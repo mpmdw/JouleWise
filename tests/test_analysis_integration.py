@@ -53,6 +53,7 @@ from joulewise.detection_floor import (
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
+    build_floor_cell,
     build_transport_group,
     canonical_domain_sha256,
     comparative_false_effect_floor,
@@ -65,6 +66,7 @@ from tests.test_detection_floor import (
     condition_family,
     make_artifact,
     make_cell,
+    make_regime,
     whole_window_allowance,
 )
 
@@ -1395,26 +1397,76 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
-            cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)
             first_bundle = calibration_root / calibration_ids[0]
             stack = floor_stack_identity(
                 json.loads((first_bundle / "config.json").read_text(encoding="utf-8")),
                 json.loads((first_bundle / "metadata.json").read_text(encoding="utf-8")),
             )
             self.assertIsNotNone(stack)
-            cell["key"].update(backend="mock", metric="gross_energy_j", window_class="request")
-            cell["absolute"] = absolute
-            cell["comparative"] = comparative
-            cell["floor_abs_j"] = absolute["guarded_floor_j"]
-            cell["floor_cmp_j"] = comparative["guarded_floor_j"]
-            cell["floor_gate_j"] = max(cell["floor_abs_j"], cell["floor_cmp_j"])
-            cell["source_regime"]["stack_identity"] = stack
-            cell["source_regime"]["stack_identity_sha256"] = canonical_domain_sha256(
-                STACK_IDENTITY_DOMAIN, stack
+            component_regime = make_regime(stack_identity=stack)
+            cell = build_floor_cell(
+                cell_id=f"floor-{condition_id}",
+                key={
+                    "backend": "mock",
+                    "metric": "gross_energy_j",
+                    "window_class": "request",
+                    **condition_family(condition_id),
+                },
+                eligibility={
+                    "use_role": "primary_claim_gate",
+                    "minimum_claim_n": 5,
+                    "status": "claim_ready",
+                    "claim_usable": True,
+                    "reason_codes": [],
+                },
+                absolute=absolute,
+                comparative=comparative,
+                transport_group_id=f"tg-{condition_id}",
+                provenance={
+                    "absolute": {
+                        "calibration_cell_id": f"floor-{condition_id}-abs",
+                        "evidence_root_id": "a10",
+                        "order_manifest": {
+                            "manifest_id": "floor-exact-cli-order",
+                            "sha256": "0" * 64,
+                        },
+                        "campaign_log": {"sha256": "0" * 64},
+                        "extraction_report": {"sha256": "0" * 64},
+                        "extraction_spec": {"sha256": "0" * 64},
+                        "bundle_ids": [
+                            observation["bundle_id"]
+                            for observation in observations
+                        ],
+                        "bundle_sha256s": [
+                            observation["bundle_sha256"]
+                            for observation in observations
+                        ],
+                        "source_regime": component_regime,
+                    },
+                    "comparative": {
+                        "calibration_cell_id": f"floor-{condition_id}-cmp",
+                        "evidence_root_id": "window_c",
+                        "order_manifest": {
+                            "manifest_id": "floor-exact-cli-order",
+                            "sha256": "0" * 64,
+                        },
+                        "campaign_log": {"sha256": "0" * 64},
+                        "extraction_report": {"sha256": "0" * 64},
+                        "extraction_spec": {"sha256": "0" * 64},
+                        "bundle_ids": [
+                            member["bundle_id"]
+                            for block in blocks
+                            for member in block["members"]
+                        ],
+                        "bundle_sha256s": [
+                            member["bundle_sha256"]
+                            for block in blocks
+                            for member in block["members"]
+                        ],
+                        "source_regime": component_regime,
+                    },
+                },
             )
-            cell["transport_group_id"] = f"tg-{condition_id}"
-            cell["provenance"]["bundle_ids"] = [row["bundle_id"] for row in observations]
-            cell["provenance"]["bundle_sha256s"] = [row["bundle_sha256"] for row in observations]
             cells.append(cell)
             groups.append(
                 build_transport_group(
@@ -1439,7 +1491,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         order_path = floor_dir / "order_manifest.json"
         order_path.write_text(
             json.dumps(
-                {"schema_version": "joulewise.order_manifest.v1", "executed_order": order_rows},
+                {
+                    "schema_version": "joulewise.order_manifest.v1",
+                    "manifest_id": "floor-exact-cli-order",
+                    "executed_order": order_rows,
+                },
                 indent=2,
                 sort_keys=True,
             )
@@ -1460,16 +1516,68 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        extraction_spec_path = floor_dir / "extraction_spec.json"
+        extraction_spec_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.floor_extraction_spec.fixture.v1",
+                    "condition_family_ids": condition_ids,
+                    "absolute_n": 5,
+                    "comparative_n_blocks": 5,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        extraction_report_path = floor_dir / "extraction_report.json"
+        extraction_report_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.floor_extraction_report.fixture.v1",
+                    "cell_ids": [cell["cell_id"] for cell in cells],
+                    "bundle_ids": [
+                        bundle_id
+                        for cell in cells
+                        for component in ("absolute", "comparative")
+                        for bundle_id in cell["provenance"][component]["bundle_ids"]
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        descriptor_hashes = {
+            "order_manifest": hashlib.sha256(order_path.read_bytes()).hexdigest(),
+            "campaign_log": hashlib.sha256(campaign_path.read_bytes()).hexdigest(),
+            "extraction_report": hashlib.sha256(
+                extraction_report_path.read_bytes()
+            ).hexdigest(),
+            "extraction_spec": hashlib.sha256(
+                extraction_spec_path.read_bytes()
+            ).hexdigest(),
+        }
+        for cell in cells:
+            for component in ("absolute", "comparative"):
+                component_provenance = cell["provenance"][component]
+                for descriptor_name, descriptor_sha256 in descriptor_hashes.items():
+                    component_provenance[descriptor_name][
+                        "sha256"
+                    ] = descriptor_sha256
         provenance = make_artifact()["provenance"]
         provenance["calibration_plan"] = {
             "plan_id": "floor-exact-cli-plan",
+            "declared_calibration_scope": "window_a",
+            "relative_path": "calibration_plan.json",
             "sha256": calibration_plan_sha256,
         }
-        provenance["order_manifest"]["sha256"] = hashlib.sha256(order_path.read_bytes()).hexdigest()
-        provenance["campaign_log"]["sha256"] = hashlib.sha256(campaign_path.read_bytes()).hexdigest()
         exact_floor = build_floor_artifact(
             artifact_id="floor-exact-cli",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=provenance,
             cells=cells,
             transport_groups=groups,
@@ -1565,14 +1673,31 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
             changed_cell["comparative"] = build_comparative_record(
                 comparative_false_effect_floor(
-                    [block["delta_j"] for block in changed_blocks]
+                    [block["delta_j"] for block in changed_blocks],
+                    admissible_half_widths_j=[0.0] * len(changed_blocks),
                 ),
                 changed_blocks,
+                consumption_semantics_id=changed_cell["comparative"][
+                    "consumption_semantics_id"
+                ],
                 whole_window_drift_allowance=changed_cell["comparative"][
                     "whole_window_drift_allowance"
                 ],
             )
-            changed_cell["floor_cmp_j"] = changed_cell["comparative"]["guarded_floor_j"]
+            comparative_provenance = changed_cell["provenance"]["comparative"]
+            comparative_provenance["bundle_ids"] = [
+                member["bundle_id"]
+                for block in changed_blocks
+                for member in block["members"]
+            ]
+            comparative_provenance["bundle_sha256s"] = [
+                member["bundle_sha256"]
+                for block in changed_blocks
+                for member in block["members"]
+            ]
+            changed_cell["floor_cmp_j"] = changed_cell["comparative"][
+                "drift_widened_guarded_floor_j"
+            ]
             changed_cell["floor_gate_j"] = max(
                 changed_cell["floor_abs_j"], changed_cell["floor_cmp_j"]
             )
@@ -1706,14 +1831,20 @@ class AnalysisIntegrationTests(unittest.TestCase):
             observation["metric_value_j"] += 1.0
         fabricated_cell["absolute"] = build_absolute_record(
             absolute_false_effect_floor(
-                [observation["metric_value_j"] for observation in fake_observations]
+                [observation["metric_value_j"] for observation in fake_observations],
+                admissible_half_widths_j=[0.0] * len(fake_observations),
             ),
             fake_observations,
+            consumption_semantics_id=fabricated_cell["absolute"][
+                "consumption_semantics_id"
+            ],
             whole_window_drift_allowance=fabricated_cell["absolute"][
                 "whole_window_drift_allowance"
             ],
         )
-        fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"]["guarded_floor_j"]
+        fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"][
+            "drift_widened_guarded_floor_j"
+        ]
         fabricated_cell["floor_gate_j"] = max(
             fabricated_cell["floor_abs_j"], fabricated_cell["floor_cmp_j"]
         )
