@@ -345,7 +345,7 @@ extraction report and stops. Established blockers:
 
 **EXECUTED 2026-07-28 (Ed-authorized 2026-07-27: iCloud-only acceptable,
 delete after verified upload — resolving both open disk questions).**
-Disk now has **86 GB free** (was 33 GB). The selective-prune plan was
+Disk now has **115 GB free** (was 33 GB; ~61 GB freed by the repo prune described below, the rest by unrelated local housekeeping). The selective-prune plan was
 generalized to every runs corpus: all 27 corpora are archived in
 `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/` with a
 per-corpus `MANIFEST.sha256`. Verification before any deletion: APFS-clone
@@ -765,7 +765,7 @@ current restart instructions. Current state is the C-028 block above.
   (traces archived + verified in iCloud, see "Disk" above), and custody
   material lives OUTSIDE the repo at `~/JouleWise-window-custody/` — an
   agent searching only the repo will wrongly report quarantined evidence
-  missing. Disk has 86 GB free; a window writes ~6 GB. The next quiet-window operator must start
+  missing. Disk has 115 GB free; a window writes ~6 GB. The next quiet-window operator must start
   from a separate clean, merged-main measurement checkout per
   `docs/phase_2/window_runbook.md`.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
