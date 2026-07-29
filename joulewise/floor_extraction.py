@@ -1068,8 +1068,14 @@ def _evaluate_member(
 
         consumption_failed = False
         if consumption_session is not None:
-            if not consumption_session.ready:
+            if consumption_session.refusal_reasons:
                 reasons.extend(consumption_session.refusal_reasons)
+                consumption_failed = True
+            elif not consumption_session.ready:
+                # A supplied current-consumption session must be prepared.
+                # Local refusals never take this arm: they preserve readiness
+                # and are selected below by the exact requested metric.
+                reasons.append("whole_window_verdict_provenance_invalid")
                 consumption_failed = True
             else:
                 operative_summary = consumption_session.summary_for(bundle_id)

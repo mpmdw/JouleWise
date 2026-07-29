@@ -84,6 +84,7 @@ A10_CELL_ID = "df-ph-decode-absolute"
 WINDOW_C_CELL_ID = "df-cmp-abba-ph-decode"
 METRIC = "phase_energy_j.decode"
 WINDOW_CLASS = "phase"
+TARGET_PRECHECK_PATH = ("phase", "decode")
 CALIBRATION_SCOPE = "production_window"
 PLAN_DECLARED_SCOPE = "window_a"
 SOURCE_CLASS = "prospective"
@@ -96,7 +97,7 @@ _SEMANTICS_IDS = {
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
 StrictValidator = Callable[[Path, bool], Sequence[str]]
 ConsumptionAuthenticator = Callable[
-    [Path, set[str], str],
+    ...,
     tuple[Mapping[str, Mapping[str, Any]], str],
 ]
 
@@ -496,6 +497,8 @@ def _authenticated_consumption_summaries(
     runs_root: Path,
     referenced_bundle_ids: set[str],
     evaluation_basis_sha256: str,
+    *,
+    target_bundle_ids: set[str] | None = None,
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -515,6 +518,15 @@ def _authenticated_consumption_summaries(
             "authenticated whole-window consumption refused: " + reasons[0]
         )
     if session.ready:
+        for bundle_id in sorted(target_bundle_ids or set()):
+            target_reasons = session.path_refusal_reasons.get(
+                bundle_id, {}
+            ).get(TARGET_PRECHECK_PATH, ())
+            if target_reasons:
+                raise MintError(
+                    f"{bundle_id}: authenticated target metric refused: "
+                    f"{target_reasons[0]}"
+                )
         summaries = {
             bundle_id: summary
             for bundle_id in referenced_bundle_ids
@@ -1012,10 +1024,16 @@ def _authenticate_component(
     report_members, widths = _report_members(cell, spec_cell, paths.expected_kind)
     _verify_report_widths(cell, widths)
     spec_ids = _spec_member_ids(spec)
+    target_ids = {
+        row.get("bundle_id")
+        for row in report_members
+        if isinstance(row.get("bundle_id"), str)
+    }
     operative_summaries, actual_semantics = consumption_authenticator(
         paths.evidence_root,
         set(spec_ids),
         expected_basis_sha256,
+        target_bundle_ids=target_ids,
     )
     semantics = report.get("consumption_semantics_id")
     if semantics not in _SEMANTICS_IDS or semantics != actual_semantics:
@@ -1023,11 +1041,6 @@ def _authenticate_component(
             "extraction report consumption_semantics_id differs from "
             "authenticated source consumption"
         )
-    target_ids = {
-        row.get("bundle_id")
-        for row in report_members
-        if isinstance(row.get("bundle_id"), str)
-    }
     if not target_ids.issubset(operative_summaries):
         raise MintError("authenticated consumption omitted target report members")
     members = tuple(
@@ -1603,6 +1616,10 @@ def bind_floor_artifact_evidence(
                             for row in record_rows
                         },
                         basis_sha256,
+                        target_bundle_ids={
+                            str(row["bundle_id"])
+                            for row in record_rows
+                        },
                     )
                 )
                 if actual_semantics != semantics:

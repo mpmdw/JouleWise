@@ -360,7 +360,10 @@ class PreRegistrationGateTests(unittest.TestCase):
 class AuthenticationTests(unittest.TestCase):
     @staticmethod
     def _synthetic_consumption(
-        root: Path, _member_ids: set[str], _basis_sha256: str
+        root: Path,
+        _member_ids: set[str],
+        _basis_sha256: str,
+        **_kwargs: object,
     ) -> tuple[dict[str, dict], str]:
         summaries = {
             bundle.name: load_json(bundle / "summary_metrics.json")
@@ -516,6 +519,100 @@ class AuthenticationTests(unittest.TestCase):
             calibration_cell_id=mint.A10_CELL_ID,
             expected_kind="absolute",
         )
+
+    def test_authenticated_replay_does_not_import_prefill_refusal(
+        self,
+    ) -> None:
+        class LocalRefusalSession:
+            ready = True
+            refusal_reasons: tuple[str, ...] = ()
+            path_refusal_reasons = {
+                "member": {
+                    ("phase", "prefill"): (
+                        "clock_bound_exceeds_quarter_window",
+                    )
+                }
+            }
+
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            @staticmethod
+            def summary_for(_bundle_id: str) -> dict:
+                return {
+                    "status": "succeeded",
+                    "phase_energy_j": {"decode": 10.0},
+                }
+
+        with (
+            mock.patch.object(
+                mint,
+                "AuthenticatedConsumptionSession",
+                LocalRefusalSession,
+            ),
+            mock.patch.object(
+                mint, "whole_window_refusal_reasons", return_value=()
+            ),
+        ):
+            summaries, semantics = (
+                mint._authenticated_consumption_summaries(
+                    Path("/unused"),
+                    {"member"},
+                    "a" * 64,
+                    target_bundle_ids={"member"},
+                )
+            )
+
+        self.assertEqual(set(summaries), {"member"})
+        self.assertEqual(
+            semantics, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        )
+
+    def test_authenticated_replay_rejects_widened_target_refusal(
+        self,
+    ) -> None:
+        class LocalRefusalSession:
+            ready = True
+            refusal_reasons: tuple[str, ...] = ()
+            path_refusal_reasons = {
+                "member": {
+                    ("phase", "decode"): (
+                        "clock_bound_exceeds_quarter_window",
+                    )
+                }
+            }
+
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            @staticmethod
+            def summary_for(_bundle_id: str) -> dict:
+                return {
+                    "status": "succeeded",
+                    "phase_energy_j": {"decode": 10.0},
+                }
+
+        with (
+            mock.patch.object(
+                mint,
+                "AuthenticatedConsumptionSession",
+                LocalRefusalSession,
+            ),
+            mock.patch.object(
+                mint, "whole_window_refusal_reasons", return_value=()
+            ),
+            self.assertRaisesRegex(
+                mint.MintError,
+                "authenticated target metric refused: "
+                "clock_bound_exceeds_quarter_window",
+            ),
+        ):
+            mint._authenticated_consumption_summaries(
+                Path("/unused"),
+                {"member"},
+                "a" * 64,
+                target_bundle_ids={"member"},
+            )
 
     def test_report_spec_and_source_bytes_authenticate_before_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -685,7 +782,10 @@ class ConstructionTests(unittest.TestCase):
 class BinderTests(unittest.TestCase):
     @staticmethod
     def _synthetic_consumption(
-        root: Path, member_ids: set[str], basis_sha256: str
+        root: Path,
+        member_ids: set[str],
+        basis_sha256: str,
+        **_kwargs: object,
     ) -> tuple[dict[str, dict], str]:
         summaries = {
             bundle_id: load_json(root / bundle_id / "summary_metrics.json")

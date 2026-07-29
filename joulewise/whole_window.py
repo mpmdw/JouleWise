@@ -109,7 +109,16 @@ class WholeWindowDriftAllowanceResult:
 _REDERIVATION_LEAF_REASONS = frozenset(
     {
         "post_window_trace_tail_shorter_than_anchor_bound",
+        "nonpositive_window_duration",
+        "insufficient_in_window_samples",
+        "cadence_ratio_unrecorded",
+        "cadence_ratio_below_threshold",
+        "clock_bound_unrecorded",
         "clock_bound_exceeds_quarter_window",
+        "interpolation_bound_unrecorded",
+        "drift_term_unknown",
+        "idle_baseline_unrecorded",
+        "cooldown_cap_hit",
         "anchor_energy_envelope_exceeds_quarter_metric",
         "anchor_energy_envelope_unrecorded",
         "clock_anchor_unresolved",
@@ -121,40 +130,170 @@ _REDERIVATION_LEAF_REASONS = frozenset(
     }
 )
 
+_METRIC_LOCAL_PRECHECK_REASONS = frozenset(
+    {
+        "nonpositive_window_duration",
+        "insufficient_in_window_samples",
+        "cadence_ratio_unrecorded",
+        "cadence_ratio_below_threshold",
+        "clock_bound_unrecorded",
+        "clock_bound_exceeds_quarter_window",
+        "interpolation_bound_unrecorded",
+        "drift_term_unknown",
+        "idle_baseline_unrecorded",
+        "cooldown_cap_hit",
+        "anchor_energy_envelope_exceeds_quarter_metric",
+    }
+)
+_ADDRESSABLE_PRECHECK_ROOTS = frozenset(
+    {"gross_request", "idle_subtracted_request"}
+)
+_ADDRESSABLE_PRECHECK_GROUPS = frozenset(
+    {"phase", "item", "block", "level"}
+)
+_GOVERNED_PHASE_PRECHECK_CHILDREN = frozenset(
+    {
+        "tokenize",
+        "setup",
+        "prefill",
+        "decode",
+        "serialize",
+        "transfer",
+        "deserialize",
+    }
+)
+_PRECHECK_GROUP_METRIC_FIELDS = {
+    "phase": "phase_energy_j",
+    "item": "suite_item_energy_j",
+    "block": "suite_block_energy_j",
+    "level": "suite_level_energy_j",
+}
 
-def _nested_rederivation_leaf_occurrences(
+
+def _nested_precheck_refusal_occurrences(
     value: object,
     *,
     path: tuple[str, ...] = (),
-) -> set[tuple[tuple[str, ...], str]]:
-    """Locate leaf refusals so only widening-introduced failures discharge."""
+) -> tuple[set[tuple[tuple[str, ...], str]], bool]:
+    """Locate every refusal occurrence and flag malformed reason containers."""
 
     reasons: set[tuple[tuple[str, ...], str]] = set()
+    malformed = False
     if isinstance(value, Mapping):
-        raw = value.get("reasons")
-        if isinstance(raw, list):
-            reasons.update(
-                (path, reason)
-                for reason in raw
-                if isinstance(reason, str)
-                and reason in _REDERIVATION_LEAF_REASONS
-            )
+        if "reasons" in value:
+            raw = value.get("reasons")
+            if not isinstance(raw, list) or any(
+                not isinstance(reason, str) for reason in raw
+            ):
+                malformed = True
+            else:
+                reasons.update((path, reason) for reason in raw)
         for key, child in value.items():
-            reasons.update(
-                _nested_rederivation_leaf_occurrences(
+            child_reasons, child_malformed = (
+                _nested_precheck_refusal_occurrences(
                     child,
                     path=(*path, str(key)),
                 )
             )
+            reasons.update(child_reasons)
+            malformed = malformed or child_malformed
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         for index, child in enumerate(value):
-            reasons.update(
-                _nested_rederivation_leaf_occurrences(
+            child_reasons, child_malformed = (
+                _nested_precheck_refusal_occurrences(
                     child,
                     path=(*path, str(index)),
                 )
             )
-    return reasons
+            reasons.update(child_reasons)
+            malformed = malformed or child_malformed
+    return reasons, malformed
+
+
+def _normalize_precheck_refusal_path(
+    path: tuple[str, ...],
+    *,
+    recognized_paths: set[tuple[str, ...]],
+) -> tuple[str, ...] | None:
+    """Normalize one governed precheck occurrence to its addressable child."""
+
+    canonical: tuple[str, ...] | None = None
+    if len(path) >= 1 and path[0] in _ADDRESSABLE_PRECHECK_ROOTS:
+        canonical = (path[0],)
+    elif (
+        len(path) >= 2
+        and path[0] in _ADDRESSABLE_PRECHECK_GROUPS
+        and path[1]
+    ):
+        canonical = path[:2]
+    if canonical is None or canonical not in recognized_paths:
+        return None
+    suffix = path[len(canonical) :]
+    if not suffix:
+        return canonical
+    if (
+        len(suffix) == 2
+        and suffix[0] == "windows"
+        and suffix[1].isdigit()
+    ):
+        return canonical
+    return None
+
+
+def _recognized_precheck_paths(
+    summary: Mapping[str, Any],
+) -> set[tuple[str, ...]]:
+    """Return only metric children the governed consumers can address."""
+
+    recognized = {
+        (root,) for root in _ADDRESSABLE_PRECHECK_ROOTS
+    }
+    recognized.update(
+        ("phase", child)
+        for child in _GOVERNED_PHASE_PRECHECK_CHILDREN
+    )
+    for group, field in _PRECHECK_GROUP_METRIC_FIELDS.items():
+        values = summary.get(field)
+        if not isinstance(values, Mapping):
+            continue
+        recognized.update(
+            (group, child)
+            for child in values
+            if isinstance(child, str) and child
+        )
+    return recognized
+
+
+def _classify_precheck_refusals(
+    summary: Mapping[str, Any],
+) -> tuple[set[str], dict[tuple[str, ...], tuple[str, ...]]]:
+    """Split operative precheck refusals with a closed local allowlist."""
+
+    prechecks = summary.get("window_evidence_precheck")
+    if not isinstance(prechecks, Mapping):
+        return {"whole_window_verdict_provenance_invalid"}, {}
+    occurrences, malformed = _nested_precheck_refusal_occurrences(prechecks)
+    global_reasons: set[str] = set()
+    local: dict[tuple[str, ...], set[str]] = {}
+    if malformed:
+        global_reasons.add("whole_window_verdict_provenance_invalid")
+    recognized_paths = _recognized_precheck_paths(summary)
+    for path, reason in occurrences:
+        normalized = _normalize_precheck_refusal_path(
+            path,
+            recognized_paths=recognized_paths,
+        )
+        if (
+            reason not in _METRIC_LOCAL_PRECHECK_REASONS
+            or normalized is None
+        ):
+            global_reasons.add(reason)
+            continue
+        local.setdefault(normalized, set()).add(reason)
+    return global_reasons, {
+        path: tuple(sorted(reasons))
+        for path, reasons in sorted(local.items())
+    }
 
 
 def _complete_envelope_record(value: object) -> dict[str, Any] | None:
@@ -224,6 +363,10 @@ class AuthenticatedConsumptionSession:
         self.calibration_bracket: Mapping[str, Any] | None = None
         self.operative_fiducial_bound_s: float | None = None
         self.refusal_reasons: tuple[str, ...] = ()
+        self.path_refusal_reasons: dict[
+            str,
+            dict[tuple[str, ...], tuple[str, ...]],
+        ] = {}
         self._prepared = False
         self._preparation_identity: tuple[tuple[str, str], ...] | None = None
         self._summaries: dict[str, Mapping[str, Any]] = {}
@@ -236,6 +379,20 @@ class AuthenticatedConsumptionSession:
     @property
     def ready(self) -> bool:
         return self._prepared and not self.refusal_reasons
+
+    def _fail_global(self, reasons: set[str] | tuple[str, ...]) -> None:
+        """Clear every authenticated cache when any global refusal exists."""
+
+        self._summaries.clear()
+        self._provenance.clear()
+        self.path_refusal_reasons.clear()
+        self._row_validation_results.clear()
+        self.refusal_reasons = tuple(
+            sorted(
+                set(reasons)
+                or {"whole_window_verdict_provenance_invalid"}
+            )
+        )
 
     def _prepare(
         self,
@@ -251,11 +408,9 @@ class AuthenticatedConsumptionSession:
         )
         if self._prepared:
             if identity != self._preparation_identity:
-                self.refusal_reasons = tuple(
-                    sorted(
-                        set(self.refusal_reasons)
-                        | {"whole_window_verdict_provenance_invalid"}
-                    )
+                self._fail_global(
+                    set(self.refusal_reasons)
+                    | {"whole_window_verdict_provenance_invalid"}
                 )
             return
         self._prepared = True
@@ -265,8 +420,8 @@ class AuthenticatedConsumptionSession:
             not self.referenced_bundle_ids.issubset(bundle_paths)
             or not bundle_paths
         ):
-            self.refusal_reasons = (
-                "whole_window_verdict_provenance_invalid",
+            self._fail_global(
+                {"whole_window_verdict_provenance_invalid"}
             )
             return
 
@@ -286,7 +441,7 @@ class AuthenticatedConsumptionSession:
         ):
             if not reasons:
                 reasons.add("instrument_calibration_invalid")
-            self.refusal_reasons = tuple(sorted(reasons))
+            self._fail_global(reasons)
             return
         operative_bound = float(raw_bound)
         self.operative_fiducial_bound_s = operative_bound
@@ -366,9 +521,13 @@ class AuthenticatedConsumptionSession:
             )
 
         if reasons:
-            self.refusal_reasons = tuple(sorted(reasons))
+            self._fail_global(reasons)
             return
 
+        path_refusals: dict[
+            str,
+            dict[tuple[str, ...], tuple[str, ...]],
+        ] = {}
         for (
             bundle_id,
             path,
@@ -396,31 +555,18 @@ class AuthenticatedConsumptionSession:
                 ):
                     reasons.add("instrument_calibration_invalid")
                     continue
-                operative_leaf_occurrences = (
-                    _nested_rederivation_leaf_occurrences(
-                        operative_summary.get("window_evidence_precheck")
-                        if isinstance(operative_summary, Mapping)
-                        else None
-                    )
-                )
-                stored_leaf_occurrences = (
-                    _nested_rederivation_leaf_occurrences(
-                        stored_summary.get("window_evidence_precheck")
-                    )
-                )
-                leaf_reasons = {
-                    reason
-                    for _path, reason in (
-                        operative_leaf_occurrences
-                        - stored_leaf_occurrences
-                    )
-                }
-                if leaf_reasons:
-                    reasons.update(leaf_reasons)
-                    continue
                 if operative_summary.get("status") != "succeeded":
                     reasons.add("instrument_calibration_invalid")
                     continue
+
+            global_refusals, local_refusals = (
+                _classify_precheck_refusals(operative_summary)
+            )
+            reasons.update(global_refusals)
+            if global_refusals:
+                continue
+            if local_refusals:
+                path_refusals[bundle_id] = local_refusals
 
             minted_envelopes = stored_summary.get(
                 "energy_anchor_shift_envelopes"
@@ -490,12 +636,11 @@ class AuthenticatedConsumptionSession:
             bundle_id not in self._summaries
             for bundle_id, *_rest in pending
         ):
-            self._summaries.clear()
-            self._provenance.clear()
-            self.refusal_reasons = tuple(
-                sorted(reasons or {"instrument_calibration_invalid"})
+            self._fail_global(
+                reasons or {"instrument_calibration_invalid"}
             )
             return
+        self.path_refusal_reasons = path_refusals
         self.refusal_reasons = ()
 
     def summary_for(self, bundle_id: str) -> Mapping[str, Any] | None:
