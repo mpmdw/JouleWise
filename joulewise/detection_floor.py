@@ -6,7 +6,7 @@ Implements the accepted P2-039 operational spec
 - the absolute and comparative D-054 false-effect floors with the frozen
   small-sample guard factor;
 - the exact ABBA block delta ``(B1 + B2 - A1 - A2) / 2``;
-- emit/validate for the versioned ``joulewise.detection_floor_artifact.v1``
+- emit/validate for the versioned ``joulewise.detection_floor_artifact.v2``
   calculation records; and
 - the pure conservative regime-transport refusal rule
   (``same_stack_componentwise_worst_case.v1``).
@@ -64,7 +64,7 @@ __all__ = [
     "complete_bundle_sha256",
 ]
 
-SCHEMA_VERSION = "joulewise.detection_floor_artifact.v1"
+SCHEMA_VERSION = "joulewise.detection_floor_artifact.v2"
 METHOD_ID = "d054_false_effect_guard.v1"
 GUARD_RULE_ID = "residual_df_ratio_to_n10.v1"
 TRANSPORT_RULE_ID = "same_stack_componentwise_worst_case.v1"
@@ -595,7 +595,7 @@ def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Artifact emit (joulewise.detection_floor_artifact.v1)
+# Artifact emit (joulewise.detection_floor_artifact.v2)
 # ---------------------------------------------------------------------------
 
 
@@ -2244,7 +2244,7 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
 
 
 def validate_floor_artifact(value: Mapping) -> list:
-    """Validate a ``joulewise.detection_floor_artifact.v1`` document.
+    """Validate a ``joulewise.detection_floor_artifact.v2`` document.
 
     Returns a list of error strings; an empty list means valid. Recomputes
     every residual, delta, mean, stddev, prediction, unguarded/guarded floor,

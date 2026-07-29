@@ -682,10 +682,25 @@ def make_artifact(cells=None):
 class TestArtifactEmitValidate(unittest.TestCase):
     def test_valid_artifact_passes_and_round_trips(self):
         artifact = make_artifact()
+        self.assertEqual(
+            artifact["schema_version"],
+            "joulewise.detection_floor_artifact.v2",
+        )
         self.assertEqual(validate_floor_artifact(artifact), [])
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_v1_schema_version_is_rejected_without_migration(self):
+        artifact = make_artifact()
+        artifact["schema_version"] = "joulewise.detection_floor_artifact.v1"
+        self.assertEqual(
+            validate_floor_artifact(artifact),
+            [
+                "artifact: schema_version must be "
+                "'joulewise.detection_floor_artifact.v2'"
+            ],
+        )
 
     def test_source_class_is_closed_data_vocabulary(self):
         for source_class in ("prospective", "retrospective", "synthetic"):
@@ -1630,7 +1645,7 @@ class TestTransportRule(unittest.TestCase):
             },
         )
         self.assertEqual(TRANSPORT_RULE_ID, "same_stack_componentwise_worst_case.v1")
-        self.assertEqual(SCHEMA_VERSION, "joulewise.detection_floor_artifact.v1")
+        self.assertEqual(SCHEMA_VERSION, "joulewise.detection_floor_artifact.v2")
 
 
 if __name__ == "__main__":
