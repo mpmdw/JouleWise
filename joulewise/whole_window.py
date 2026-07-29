@@ -143,6 +143,7 @@ _METRIC_LOCAL_PRECHECK_REASONS = frozenset(
         "idle_baseline_unrecorded",
         "cooldown_cap_hit",
         "anchor_energy_envelope_exceeds_quarter_metric",
+        "anchor_energy_envelope_unrecorded",
     }
 )
 _ADDRESSABLE_PRECHECK_ROOTS = frozenset(

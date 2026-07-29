@@ -11,6 +11,7 @@ so a hand-simplified or drifted fixture fails immediately.
 from __future__ import annotations
 
 import base64
+import copy
 import gzip
 import hashlib
 import io
@@ -2049,6 +2050,83 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         self.assertTrue(report.extractable)
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 3.0 - 1e-12)
+
+    def test_block_delta_refuses_consumed_member_with_incomplete_envelope(
+        self,
+    ) -> None:
+        class ConsumedSummaries:
+            ready = True
+            refusal_reasons: tuple[str, ...] = ()
+
+            def __init__(self, summaries: dict[str, dict]) -> None:
+                self.summaries = summaries
+
+            def summary_for(self, bundle_id: str) -> dict:
+                return self.summaries[bundle_id]
+
+            @staticmethod
+            def provenance_for(_bundle_id: str) -> dict:
+                return {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            blocks: list[dict] = []
+            summaries: dict[str, dict] = {}
+            cooldowns: dict[str, dict] = {}
+            for block_index in range(2):
+                members: dict[str, str] = {}
+                for position_index, position in enumerate(
+                    ("A1", "B1", "B2", "A2")
+                ):
+                    bundle_id = (
+                        f"consumed-b{block_index}-{position.lower()}"
+                    )
+                    summary = make_summary(
+                        40.0 + block_index + position_index * 0.1
+                    )
+                    write_bundle(runs_root, bundle_id, summary)
+                    summaries[bundle_id] = copy.deepcopy(summary)
+                    cooldowns[bundle_id] = {
+                        "verified": True,
+                        "result": "recovered",
+                    }
+                    members[position] = bundle_id
+                blocks.append(
+                    {
+                        "block_id": f"b{block_index}",
+                        "members": members,
+                    }
+                )
+            culprit = blocks[0]["members"]["B2"]
+            del summaries[culprit]["energy_anchor_shift_envelopes"][
+                "/gross_energy_j"
+            ]["upper_j"]
+            report = extract_comparative_cell(
+                cell_id="CONSUMED-INCOMPLETE-ENVELOPE",
+                metric="gross_energy_j",
+                window_class="request",
+                blocks=blocks,
+                runs_root=runs_root,
+                cooldowns=cooldowns,
+                consumption_session=ConsumedSummaries(summaries),
+            )
+
+        self.assertFalse(report.extractable)
+        self.assertIsNone(report.floor)
+        self.assertEqual(report.n_admitted, 0)
+        self.assertIn(
+            "anchor_energy_envelope_unrecorded",
+            report.refusal_reasons,
+        )
+        culprit_member = next(
+            member
+            for member in report.members
+            if member.bundle_id == culprit
+        )
+        self.assertIn(
+            "anchor_energy_envelope_unrecorded",
+            culprit_member.reasons,
+        )
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):

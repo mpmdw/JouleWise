@@ -15,6 +15,7 @@ from joulewise.whole_window import AuthenticatedConsumptionSession
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
+UNRECORDED_ENVELOPE = "anchor_energy_envelope_unrecorded"
 SENTINEL_J = 987_654_321.125
 
 
@@ -59,7 +60,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
         *,
         bound_s: float,
         half_width_j: float,
-        prefill_reasons: tuple[str, ...] = (),
+        tokenize_reasons: tuple[str, ...] = (),
     ) -> dict:
         def gate(reasons: tuple[str, ...]) -> dict:
             return {
@@ -83,7 +84,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 "telemetry_source": "powermetrics",
             },
             "phase_energy_j": {
-                "prefill": SENTINEL_J,
+                "tokenize": SENTINEL_J,
                 "decode": decode_j,
             },
             "energy_bound_terms_j": {
@@ -91,7 +92,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 "E_drift_bound_j": 0.0,
             },
             "energy_anchor_shift_envelopes": {
-                "/phase_energy_j/prefill": cls._envelope(
+                "/phase_energy_j/tokenize": cls._envelope(
                     SENTINEL_J, bound_s, half_width_j
                 ),
                 "/phase_energy_j/decode": cls._envelope(
@@ -100,7 +101,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
             },
             "window_evidence_precheck": {
                 "phase": {
-                    "prefill": gate(prefill_reasons),
+                    "tokenize": gate(tokenize_reasons),
                     "decode": gate(()),
                 }
             },
@@ -110,6 +111,8 @@ class TwoScopeRefusalTests(unittest.TestCase):
         self,
         root: Path,
         widened_by_bundle: dict[str, dict],
+        *,
+        include_minted_envelopes: bool = True,
     ) -> AuthenticatedConsumptionSession:
         bundle_paths: dict[str, Path] = {}
         for index, (bundle_id, widened) in enumerate(
@@ -122,6 +125,8 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 bound_s=0.02,
                 half_width_j=0.1,
             )
+            if not include_minted_envelopes:
+                del minted["energy_anchor_shift_envelopes"]
             (bundle / "summary_metrics.json").write_text(
                 json.dumps(minted, sort_keys=True) + "\n",
                 encoding="utf-8",
@@ -172,150 +177,173 @@ class TwoScopeRefusalTests(unittest.TestCase):
             )
         return session
 
-    def test_local_prefill_crossing_preserves_decode_and_cannot_leak(
+    def test_local_microphase_refusals_preserve_decode_and_cannot_leak(
         self,
     ) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            bundle_ids = [f"member-{index}" for index in range(5)]
-            widened = {
-                bundle_id: self._summary(
-                    10.0 + index * 0.01,
-                    bound_s=0.03,
-                    half_width_j=0.2,
-                    prefill_reasons=(LOCAL_CROSSING,),
-                )
-                for index, bundle_id in enumerate(bundle_ids)
-            }
-            session = self._prepare_session(root, widened)
-            cooldowns = {
-                bundle_id: {"verified": True, "result": "recovered"}
-                for bundle_id in bundle_ids
-            }
-            members = [
-                {"slot": bundle_id, "bundle_id": bundle_id}
-                for bundle_id in bundle_ids
-            ]
-            decode = extract_absolute_cell(
-                cell_id="decode",
-                metric="phase_energy_j.decode",
-                window_class="phase",
-                members=members,
-                runs_root=root,
-                cooldowns=cooldowns,
-                strict_validator=lambda _path, _strict: (),
-                consumption_session=session,
-            )
-            prefill = extract_absolute_cell(
-                cell_id="prefill",
-                metric="phase_energy_j.prefill",
-                window_class="phase",
-                members=members,
-                runs_root=root,
-                cooldowns=cooldowns,
-                strict_validator=lambda _path, _strict: (),
-                consumption_session=session,
-            )
-
-            class DecodeOnlySession:
-                ready = True
-                refusal_reasons: tuple[str, ...] = ()
-
-                def summary_for(
-                    self, bundle_id: str
-                ) -> dict:
-                    summary = copy.deepcopy(
-                        session.summary_for(bundle_id)
+        for local_reason in (LOCAL_CROSSING, UNRECORDED_ENVELOPE):
+            with self.subTest(local_reason=local_reason):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    bundle_ids = [
+                        f"member-{index}" for index in range(5)
+                    ]
+                    widened = {
+                        bundle_id: self._summary(
+                            10.0 + index * 0.01,
+                            bound_s=0.03,
+                            half_width_j=0.2,
+                            tokenize_reasons=(local_reason,),
+                        )
+                        for index, bundle_id in enumerate(bundle_ids)
+                    }
+                    session = self._prepare_session(root, widened)
+                    cooldowns = {
+                        bundle_id: {
+                            "verified": True,
+                            "result": "recovered",
+                        }
+                        for bundle_id in bundle_ids
+                    }
+                    members = [
+                        {"slot": bundle_id, "bundle_id": bundle_id}
+                        for bundle_id in bundle_ids
+                    ]
+                    decode = extract_absolute_cell(
+                        cell_id="decode",
+                        metric="phase_energy_j.decode",
+                        window_class="phase",
+                        members=members,
+                        runs_root=root,
+                        cooldowns=cooldowns,
+                        strict_validator=lambda _path, _strict: (),
+                        consumption_session=session,
                     )
-                    del summary["phase_energy_j"]["prefill"]
-                    del summary["window_evidence_precheck"]["phase"][
-                        "prefill"
-                    ]
-                    del summary["energy_anchor_shift_envelopes"][
-                        "/phase_energy_j/prefill"
-                    ]
-                    return summary
+                    tokenize = extract_absolute_cell(
+                        cell_id="tokenize",
+                        metric="phase_energy_j.tokenize",
+                        window_class="phase",
+                        members=members,
+                        runs_root=root,
+                        cooldowns=cooldowns,
+                        strict_validator=lambda _path, _strict: (),
+                        consumption_session=session,
+                    )
 
-                def provenance_for(self, bundle_id: str) -> dict:
-                    return dict(session.provenance_for(bundle_id) or {})
+                    class DecodeOnlySession:
+                        ready = True
+                        refusal_reasons: tuple[str, ...] = ()
 
-            baseline = extract_absolute_cell(
-                cell_id="decode",
-                metric="phase_energy_j.decode",
-                window_class="phase",
-                members=members,
-                runs_root=root,
-                cooldowns=cooldowns,
-                strict_validator=lambda _path, _strict: (),
-                consumption_session=DecodeOnlySession(),
-            )
+                        def summary_for(
+                            self, bundle_id: str
+                        ) -> dict:
+                            summary = copy.deepcopy(
+                                session.summary_for(bundle_id)
+                            )
+                            del summary["phase_energy_j"]["tokenize"]
+                            del summary[
+                                "window_evidence_precheck"
+                            ]["phase"]["tokenize"]
+                            del summary[
+                                "energy_anchor_shift_envelopes"
+                            ]["/phase_energy_j/tokenize"]
+                            return summary
 
-        self.assertTrue(session.ready, session.refusal_reasons)
-        self.assertEqual(session.refusal_reasons, ())
-        self.assertEqual(
-            {
-                bundle_id: reasons[("phase", "prefill")]
-                for bundle_id, reasons in (
-                    session.path_refusal_reasons.items()
+                        def provenance_for(
+                            self, bundle_id: str
+                        ) -> dict:
+                            return dict(
+                                session.provenance_for(bundle_id) or {}
+                            )
+
+                    baseline = extract_absolute_cell(
+                        cell_id="decode",
+                        metric="phase_energy_j.decode",
+                        window_class="phase",
+                        members=members,
+                        runs_root=root,
+                        cooldowns=cooldowns,
+                        strict_validator=lambda _path, _strict: (),
+                        consumption_session=DecodeOnlySession(),
+                    )
+
+                self.assertTrue(
+                    session.ready, session.refusal_reasons
                 )
-            },
-            {
-                bundle_id: (LOCAL_CROSSING,)
-                for bundle_id in bundle_ids
-            },
-        )
-        self.assertTrue(decode.extractable, decode.refusal_reasons)
-        self.assertFalse(prefill.extractable)
-        self.assertIn(LOCAL_CROSSING, prefill.refusal_reasons)
-        self.assertTrue(baseline.extractable, baseline.refusal_reasons)
-        assert decode.floor is not None
-        assert baseline.floor is not None
-        decode_floor_bytes = json.dumps(
-            decode.as_row()["floor"],
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        baseline_floor_bytes = json.dumps(
-            baseline.as_row()["floor"],
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        self.assertEqual(decode_floor_bytes, baseline_floor_bytes)
-        decode_floor_inputs = {
-            "values_j": [
-                member.value_j for member in decode.members
-            ],
-            "anchor_shift_bounds_j": [
-                member.anchor_shift_bound_j
-                for member in decode.members
-            ],
-            "operative_anchor_envelopes": [
-                member.operative_anchor_envelope
-                for member in decode.members
-            ],
-        }
-        baseline_floor_inputs = {
-            "values_j": [
-                member.value_j for member in baseline.members
-            ],
-            "anchor_shift_bounds_j": [
-                member.anchor_shift_bound_j
-                for member in baseline.members
-            ],
-            "operative_anchor_envelopes": [
-                member.operative_anchor_envelope
-                for member in baseline.members
-            ],
-        }
-        self.assertEqual(decode_floor_inputs, baseline_floor_inputs)
-        self.assertNotIn(
-            str(SENTINEL_J),
-            json.dumps(
-                decode_floor_inputs,
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
-        )
+                self.assertEqual(session.refusal_reasons, ())
+                self.assertEqual(
+                    {
+                        bundle_id: reasons[("phase", "tokenize")]
+                        for bundle_id, reasons in (
+                            session.path_refusal_reasons.items()
+                        )
+                    },
+                    {
+                        bundle_id: (local_reason,)
+                        for bundle_id in bundle_ids
+                    },
+                )
+                self.assertTrue(
+                    decode.extractable, decode.refusal_reasons
+                )
+                self.assertFalse(tokenize.extractable)
+                self.assertIn(
+                    local_reason, tokenize.refusal_reasons
+                )
+                self.assertTrue(
+                    baseline.extractable, baseline.refusal_reasons
+                )
+                assert decode.floor is not None
+                assert baseline.floor is not None
+                decode_floor_bytes = json.dumps(
+                    decode.as_row()["floor"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                baseline_floor_bytes = json.dumps(
+                    baseline.as_row()["floor"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                self.assertEqual(
+                    decode_floor_bytes, baseline_floor_bytes
+                )
+                decode_floor_inputs = {
+                    "values_j": [
+                        member.value_j for member in decode.members
+                    ],
+                    "anchor_shift_bounds_j": [
+                        member.anchor_shift_bound_j
+                        for member in decode.members
+                    ],
+                    "operative_anchor_envelopes": [
+                        member.operative_anchor_envelope
+                        for member in decode.members
+                    ],
+                }
+                baseline_floor_inputs = {
+                    "values_j": [
+                        member.value_j for member in baseline.members
+                    ],
+                    "anchor_shift_bounds_j": [
+                        member.anchor_shift_bound_j
+                        for member in baseline.members
+                    ],
+                    "operative_anchor_envelopes": [
+                        member.operative_anchor_envelope
+                        for member in baseline.members
+                    ],
+                }
+                self.assertEqual(
+                    decode_floor_inputs, baseline_floor_inputs
+                )
+                self.assertNotIn(
+                    str(SENTINEL_J),
+                    json.dumps(
+                        decode_floor_inputs,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                )
 
     def test_universal_reason_clears_all_authenticated_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -325,7 +353,7 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 bound_s=0.03,
                 half_width_j=0.2,
             )
-            for child in ("prefill", "decode"):
+            for child in ("tokenize", "decode"):
                 gate = widened["window_evidence_precheck"]["phase"][
                     child
                 ]
@@ -405,7 +433,31 @@ class TwoScopeRefusalTests(unittest.TestCase):
         self.assertEqual(session._summaries, {})
         self.assertEqual(session._provenance, {})
 
-    def test_unrecorded_anchor_envelope_reason_remains_global(
+    def test_pre_anchor_summary_without_envelope_map_refuses_globally(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            widened = self._summary(
+                10.0,
+                bound_s=0.03,
+                half_width_j=0.2,
+            )
+            session = self._prepare_session(
+                root,
+                {"member": widened},
+                include_minted_envelopes=False,
+            )
+
+        self.assertFalse(session.ready)
+        self.assertEqual(
+            session.refusal_reasons, (UNRECORDED_ENVELOPE,)
+        )
+        self.assertEqual(session.path_refusal_reasons, {})
+        self.assertEqual(session._summaries, {})
+        self.assertEqual(session._provenance, {})
+
+    def test_unrecorded_anchor_envelope_reason_is_local_and_child_refuses(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -419,19 +471,70 @@ class TwoScopeRefusalTests(unittest.TestCase):
                 "decode"
             ]
             decode["eligible"] = False
-            decode["reasons"] = [
-                "anchor_energy_envelope_unrecorded"
-            ]
+            decode["reasons"] = [UNRECORDED_ENVELOPE]
+            session = self._prepare_session(
+                root, {"member": widened}
+            )
+            report = extract_absolute_cell(
+                cell_id="decode",
+                metric="phase_energy_j.decode",
+                window_class="phase",
+                members=[
+                    {"slot": "decode-member", "bundle_id": "member"}
+                ],
+                runs_root=root,
+                cooldowns={
+                    "member": {
+                        "verified": True,
+                        "result": "recovered",
+                    }
+                },
+                strict_validator=lambda _path, _strict: (),
+                consumption_session=session,
+            )
+
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(session.refusal_reasons, ())
+        self.assertEqual(
+            session.path_refusal_reasons,
+            {"member": {("phase", "decode"): (UNRECORDED_ENVELOPE,)}},
+        )
+        self.assertFalse(report.extractable)
+        self.assertIsNone(report.floor)
+        self.assertEqual(report.n_admitted, 0)
+        self.assertIn(UNRECORDED_ENVELOPE, report.refusal_reasons)
+        self.assertEqual(len(report.members), 1)
+        self.assertIn(
+            UNRECORDED_ENVELOPE, report.members[0].reasons
+        )
+
+    def test_unrecorded_anchor_envelope_at_unknown_path_refuses_globally(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            widened = self._summary(
+                10.0,
+                bound_s=0.03,
+                half_width_j=0.2,
+            )
+            widened["window_evidence_precheck"]["phase"][
+                "unrecognized_child"
+            ] = {
+                "eligible": False,
+                "reasons": [UNRECORDED_ENVELOPE],
+            }
             session = self._prepare_session(
                 root, {"member": widened}
             )
 
         self.assertFalse(session.ready)
         self.assertEqual(
-            session.refusal_reasons,
-            ("anchor_energy_envelope_unrecorded",),
+            session.refusal_reasons, (UNRECORDED_ENVELOPE,)
         )
         self.assertEqual(session.path_refusal_reasons, {})
+        self.assertEqual(session._summaries, {})
+        self.assertEqual(session._provenance, {})
 
 
 if __name__ == "__main__":

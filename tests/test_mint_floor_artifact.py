@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import tempfile
 import unittest
@@ -568,7 +569,7 @@ class AuthenticationTests(unittest.TestCase):
             semantics, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         )
 
-    def test_authenticated_replay_rejects_widened_target_refusal(
+    def test_authenticated_replay_rejects_unrecorded_target_envelope(
         self,
     ) -> None:
         class LocalRefusalSession:
@@ -577,7 +578,7 @@ class AuthenticationTests(unittest.TestCase):
             path_refusal_reasons = {
                 "member": {
                     ("phase", "decode"): (
-                        "clock_bound_exceeds_quarter_window",
+                        "anchor_energy_envelope_unrecorded",
                     )
                 }
             }
@@ -604,7 +605,7 @@ class AuthenticationTests(unittest.TestCase):
             self.assertRaisesRegex(
                 mint.MintError,
                 "authenticated target metric refused: "
-                "clock_bound_exceeds_quarter_window",
+                "anchor_energy_envelope_unrecorded",
             ),
         ):
             mint._authenticated_consumption_summaries(
@@ -613,6 +614,14 @@ class AuthenticationTests(unittest.TestCase):
                 "a" * 64,
                 target_bundle_ids={"member"},
             )
+
+    def test_authenticated_replay_requires_target_bundle_ids(
+        self,
+    ) -> None:
+        parameter = inspect.signature(
+            mint._authenticated_consumption_summaries
+        ).parameters["target_bundle_ids"]
+        self.assertIs(parameter.default, inspect.Parameter.empty)
 
     def test_report_spec_and_source_bytes_authenticate_before_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

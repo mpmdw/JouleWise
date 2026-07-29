@@ -498,7 +498,7 @@ def _authenticated_consumption_summaries(
     referenced_bundle_ids: set[str],
     evaluation_basis_sha256: str,
     *,
-    target_bundle_ids: set[str] | None = None,
+    target_bundle_ids: set[str],
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -518,7 +518,7 @@ def _authenticated_consumption_summaries(
             "authenticated whole-window consumption refused: " + reasons[0]
         )
     if session.ready:
-        for bundle_id in sorted(target_bundle_ids or set()):
+        for bundle_id in sorted(target_bundle_ids):
             target_reasons = session.path_refusal_reasons.get(
                 bundle_id, {}
             ).get(TARGET_PRECHECK_PATH, ())
