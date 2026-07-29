@@ -238,7 +238,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-25). Latest report: [SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next](docs/run_reports/2026-07-24-screen-budget-gauntlet.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-29). Latest report: [SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next](docs/run_reports/2026-07-24-screen-budget-gauntlet.md).
 
 ### [ED-EXTERNAL]
 

@@ -1022,6 +1022,45 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
+    "MODULARITY-01": {
+      "acceptance": {
+        "evidence": [
+          "Campaign generator is a parameterized function over a campaign-spec artifact (model, N, size profiles, block pattern, suite ref, run-ID prefix); a model swap touches one spec file and MODEL_TAG/PLAN_ID/run-ID prefixes derive from it with no parallel literal edits",
+          "Analysis-side closed sets (condition pairs, calibration scopes, phase-metric list) are declared in hash-bound registry artifacts and validated against those declarations, replacing the code-side literals at analysis_manifest.py:29-30,542-549 and detection_floor.py:87,89-95",
+          "Recorded-but-deferred residue dispositioned or re-queued: powermetrics references outside the adapter boundary, external-dataset ingestion, chat-template/thinking-mode seam, ABBA arity welded into three sites"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MODULARITY-01/acceptance",
+          "label": "MODULARITY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the campaign-authoring modularity gap: campaign-spec-driven generation and registry-declared closed sets make every experiment axis swappable by config, per Ed's modularity directive."
+      },
+      "authority": {
+        "label": "2026-07-29 modularity survey (Ed directive + per-axis grades)",
+        "path": "docs/run_reports/2026-07-29-modularity-survey.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 provenance amendment + D-079 operative-floor pins (hard literals are lead-verified, never parameterized)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Modularity applies to the harness, never to frozen claim pins: ratified hard literals (six-decimal pre-registration floor pins, lead-verified digests) stay anti-modular on purpose and must not be parameterized."
+        }
+      ],
+      "flags": [],
+      "goal": "Close the campaign-authoring modularity gap surveyed 2026-07-29: parameterize the campaign generator over a campaign-spec artifact and replace code-side literal assertions (analysis-manifest condition pairs, calibration scopes, phase-metric list) with registry-declared hash-validated sets.",
+      "id": "MODULARITY-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 49,
+      "status": "queued",
+      "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
+      "stop_card": null
+    },
     "P1-001": {
       "acceptance": {
         "evidence": [
@@ -2390,6 +2429,46 @@
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
+    "STACK-ID-BIND-01": {
+      "acceptance": {
+        "evidence": [
+          "floor_stack_identity derives identity for directory-shaped (file_set/folded_sha256) model artifacts — the only shape MLX produces — instead of returning None; absent/malformed BOTH sha fields still fail closed",
+          "Claim-side derivation aligned field-by-field with the mint-side _derive_stack_identity (sha fallback, path-independent tokenizer identifier, runtime-version fallbacks): parity regression asserts bit-identical identity dicts for the same bundle",
+          "End-to-end regression: claim binding binds a cell whose source_regime stack hash was mint-derived from a folded_sha256 bundle; directory-shaped fixture added (existing fixtures cover only the single-file sha256 shape)",
+          "Lead re-verifies claim binding against a real a10 production bundle after the fix lands"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/STACK-ID-BIND-01/acceptance",
+          "label": "STACK-ID-BIND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Repair the claim-side stack-identity shape mismatch so model identity reaches claim-side floor binding for real bundles: claim binder must accept folded_sha256 file_set artifacts and reproduce the mint-side identity bit-for-bit."
+      },
+      "authority": {
+        "label": "2026-07-29 modularity survey (defect CONFIRMED by lead repro against the real a10 bundle)",
+        "path": "docs/run_reports/2026-07-29-modularity-survey.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-07-29 modularity survey defect section",
+            "path": "docs/run_reports/2026-07-29-modularity-survey.md"
+          },
+          "rule": "Must close BEFORE post-window claim consumption (the binder currently refuses every real cell with stack identity is unavailable); do not conflate with the refuted B1 finding (device.boundary placeholders)."
+        }
+      ],
+      "flags": [],
+      "goal": "Fix floor_stack_identity reading only artifact_identity.sha256 while MLX emits folded_sha256 for file_set artifacts, which makes claim-side floor binding refuse every real production bundle; align the claim-side derivation with the mint-side derivation and add parity plus end-to-end regressions.",
+      "id": "STACK-ID-BIND-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 50,
+      "status": "partial",
+      "status_note": "CONFIRMED 2026-07-29 by lead repro (real a10 bundle: artifact_identity has folded_sha256 only; floor_stack_identity -> None; binding refuses all cells). Repair ordered in-flight as FIX-7 on impl/mint-tool under the live fix round's delta re-audit; row closes on lead re-verification against a real bundle.",
+      "stop_card": null
+    },
     "TOOL-01": {
       "acceptance": {
         "evidence": [
@@ -2435,5 +2514,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-25"
+  "updated": "2026-07-29"
 }
