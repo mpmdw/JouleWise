@@ -32,6 +32,7 @@ from joulewise.aggregate import student_t_critical_95
 
 __all__ = [
     "SCHEMA_VERSION",
+    "FLOOR_METRIC_CATALOG",
     "METHOD_ID",
     "GUARD_RULE_ID",
     "TRANSPORT_RULE_ID",
@@ -62,6 +63,7 @@ __all__ = [
     "transport_refusal_reasons",
     "canonical_domain_sha256",
     "complete_bundle_sha256",
+    "validate_floor_metric_window_class",
 ]
 
 SCHEMA_VERSION = "joulewise.detection_floor_artifact.v2"
@@ -85,13 +87,16 @@ _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
 _CALIBRATION_SCOPES = ("window_a", "window_b_revalidation", "smoke")
-_WINDOW_CLASSES = ("request", "phase", "item", "level", "session")
-_METRICS = (
+FLOOR_METRIC_CATALOG = (
     "gross_energy_j",
     "energy_request_j",
     "idle_subtracted_energy_j",
+    "phase_energy_j.tokenize",
     "phase_energy_j.prefill",
     "phase_energy_j.decode",
+    "phase_energy_j.serialize",
+    "phase_energy_j.transfer",
+    "phase_energy_j.deserialize",
 )
 # DATA FOR A FUTURE GATE, NOT ENFORCEMENT: source_class records how the
 # artifact's source evidence was obtained, but it does not make that evidence
@@ -160,6 +165,40 @@ TRANSPORT_REASON_CODES = (
     "consumer_term_unknown",
     "transport_group_incomplete",
 )
+
+
+def validate_floor_metric_window_class(
+    metric: object,
+    window_class: object,
+) -> tuple[str, str]:
+    """Return a governed floor metric/window pair or raise ``ValueError``."""
+
+    if not isinstance(metric, str) or not metric:
+        raise ValueError("cell metric must be a nonempty string")
+    window_classes = ("request", "phase")
+    if window_class not in window_classes:
+        raise ValueError(
+            f"cell window_class must be one of {window_classes}, "
+            f"got {window_class!r}"
+        )
+    if metric not in FLOOR_METRIC_CATALOG:
+        raise ValueError(
+            f"invalid metric {metric!r}: not in FLOOR_METRIC_CATALOG"
+        )
+    expected_window_class = (
+        "phase" if metric.startswith("phase_energy_j.") else "request"
+    )
+    if window_class != expected_window_class:
+        if expected_window_class == "phase":
+            raise ValueError(
+                f"phase metric {metric!r} requires window_class 'phase', "
+                f"got {window_class!r}"
+            )
+        raise ValueError(
+            "phase cells extract only catalogued phase_energy_j metrics, "
+            f"got {metric!r}"
+        )
+    return metric, str(window_class)
 
 
 def attribution_single_count_discipline() -> dict[str, object]:
@@ -1877,10 +1916,13 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
     ):
         return
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
-        if cell["key"]["window_class"] not in _WINDOW_CLASSES:
-            errors.append(f"{where}.key: invalid window_class")
-        if cell["key"]["metric"] not in _METRICS:
-            errors.append(f"{where}.key: invalid metric")
+        try:
+            validate_floor_metric_window_class(
+                cell["key"]["metric"],
+                cell["key"]["window_class"],
+            )
+        except ValueError as exc:
+            errors.append(f"{where}.key: {exc}")
         _validate_condition_family(
             {
                 key: cell["key"][key]

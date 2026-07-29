@@ -72,6 +72,7 @@ from joulewise.analysis_engine.inputs import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    FLOOR_METRIC_CATALOG,
     FloorEstimate,
     MAX_EXACT_ADMISSIBLE_CORNER_N,
     abba_delta,
@@ -80,6 +81,7 @@ from joulewise.detection_floor import (
     attribution_single_count_discipline,
     comparative_false_effect_floor,
     complete_bundle_sha256,
+    validate_floor_metric_window_class,
 )
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
@@ -178,7 +180,6 @@ CELL_LABELLED_CONDITION_CODES = (
 )
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
-_WINDOW_CLASSES = ("request", "phase")
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
 
 
@@ -189,37 +190,21 @@ class FloorExtractionError(ValueError):
 def governed_cell_metric(metric: object, window_class: object) -> tuple[str, str]:
     """Validate a cell's metric/window pairing before touching evidence.
 
-    Fails loudly (T0.6, audit P1.4): phase cells extract ONLY
-    ``phase_energy_j.<target>``; a phase cell naming whole-request gross (or
-    any request metric naming a phase path) is a process error, as is the
-    legacy ``throughput_tokens_s`` field in any position.
+    Fails loudly (T0.6, audit P1.4): only exact
+    :data:`FLOOR_METRIC_CATALOG` pairs are governed; a phase cell naming a
+    request metric (or a request cell naming a phase metric) is a process
+    error, as is the legacy ``throughput_tokens_s`` field in any position.
     """
 
-    if not isinstance(metric, str) or not metric:
-        raise FloorExtractionError("cell metric must be a nonempty string")
-    if window_class not in _WINDOW_CLASSES:
-        raise FloorExtractionError(
-            f"cell window_class must be one of {_WINDOW_CLASSES}, got {window_class!r}"
-        )
     if metric == LEGACY_THROUGHPUT_FIELD:
         raise FloorExtractionError(
             "throughput_tokens_s is the legacy N/(t_last-t_first) convention; "
             f"reader-facing throughput must select {READER_THROUGHPUT_FIELD}"
         )
-    is_phase_path = metric.startswith("phase_energy_j.")
-    if window_class == "phase" and not is_phase_path:
-        raise FloorExtractionError(
-            f"phase cells extract only phase_energy_j.<target>, got {metric!r}"
-        )
-    if window_class != "phase" and is_phase_path:
-        raise FloorExtractionError(
-            f"phase metric {metric!r} requires window_class 'phase', got {window_class!r}"
-        )
-    if not is_phase_path and metric not in {"gross_energy_j"} | _IDLE_SUBTRACTED_METRICS:
-        raise FloorExtractionError(
-            f"metric {metric!r} is not a governed floor-extraction metric"
-        )
-    return metric, str(window_class)
+    try:
+        return validate_floor_metric_window_class(metric, window_class)
+    except ValueError as exc:
+        raise FloorExtractionError(str(exc)) from exc
 
 
 def reader_throughput_tokens_s(summary: Mapping[str, Any] | None) -> float | None:

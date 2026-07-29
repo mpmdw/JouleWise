@@ -28,6 +28,7 @@ from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    FLOOR_METRIC_CATALOG,
     attribution_single_count_discipline,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
@@ -2042,6 +2043,45 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_shared_catalog_accepts_exactly_governed_extraction_pairs(self) -> None:
+        governed_pairs = (
+            ("gross_energy_j", "request"),
+            ("energy_request_j", "request"),
+            ("idle_subtracted_energy_j", "request"),
+            ("phase_energy_j.tokenize", "phase"),
+            ("phase_energy_j.prefill", "phase"),
+            ("phase_energy_j.decode", "phase"),
+            ("phase_energy_j.serialize", "phase"),
+            ("phase_energy_j.transfer", "phase"),
+            ("phase_energy_j.deserialize", "phase"),
+        )
+        self.assertEqual(
+            FLOOR_METRIC_CATALOG,
+            tuple(metric for metric, _ in governed_pairs),
+        )
+        for metric, window_class in governed_pairs:
+            with self.subTest(metric=metric):
+                self.assertEqual(
+                    governed_cell_metric(metric, window_class),
+                    (metric, window_class),
+                )
+
+    def test_excluded_and_arbitrary_metrics_fail_catalog_validation(self) -> None:
+        for metric, window_class in (
+            ("split_total_energy_j", "request"),
+            ("phase_energy_j.idle", "phase"),
+            ("phase_energy_j.warmup", "phase"),
+            ("phase_energy_j.cleanup", "phase"),
+            ("phase_energy_j.failure", "phase"),
+            ("phase_energy_j.arbitrary_suffix", "phase"),
+        ):
+            with self.subTest(metric=metric):
+                with self.assertRaisesRegex(
+                    FloorExtractionError,
+                    "not in FLOOR_METRIC_CATALOG",
+                ):
+                    governed_cell_metric(metric, window_class)
+
     def test_phase_cell_reading_whole_request_gross_fails_loudly(self) -> None:
         with self.assertRaisesRegex(FloorExtractionError, "phase_energy_j"):
             governed_cell_metric("gross_energy_j", "phase")

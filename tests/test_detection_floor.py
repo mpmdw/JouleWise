@@ -17,6 +17,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     CONDITION_FAMILY_DOMAIN,
+    FLOOR_METRIC_CATALOG,
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
     SCHEMA_VERSION,
@@ -47,7 +48,10 @@ from joulewise.floor_extraction import (
     extract_absolute_cell,
     extract_cells,
 )
-from joulewise.whole_window import WholeWindowDriftAllowanceResult
+from joulewise.whole_window import (
+    WholeWindowDriftAllowanceResult,
+    neg8_claim_family_for_metric,
+)
 
 TOL = 1e-12
 HEX_A = "a" * 64
@@ -680,6 +684,52 @@ def make_artifact(cells=None):
 
 
 class TestArtifactEmitValidate(unittest.TestCase):
+    def test_floor_metric_catalog_is_exact_and_governs_artifact_cells(self):
+        expected_pairs = (
+            ("gross_energy_j", "request"),
+            ("energy_request_j", "request"),
+            ("idle_subtracted_energy_j", "request"),
+            ("phase_energy_j.tokenize", "phase"),
+            ("phase_energy_j.prefill", "phase"),
+            ("phase_energy_j.decode", "phase"),
+            ("phase_energy_j.serialize", "phase"),
+            ("phase_energy_j.transfer", "phase"),
+            ("phase_energy_j.deserialize", "phase"),
+        )
+        self.assertEqual(
+            FLOOR_METRIC_CATALOG,
+            tuple(metric for metric, _ in expected_pairs),
+        )
+
+        for metric, window_class in expected_pairs:
+            with self.subTest(metric=metric):
+                artifact = make_artifact()
+                artifact["cells"][0]["key"]["metric"] = metric
+                artifact["cells"][0]["key"]["window_class"] = window_class
+                artifact["transport_groups"][0]["metric"] = metric
+                artifact["transport_groups"][0]["window_class"] = window_class
+                for component in ("absolute", "comparative"):
+                    artifact["cells"][0][component][
+                        "whole_window_drift_allowance"
+                    ]["claim_family"] = neg8_claim_family_for_metric(metric)
+                self.assertEqual(validate_floor_artifact(artifact), [])
+
+    def test_excluded_metrics_are_rejected_by_artifact_validator(self):
+        for metric, window_class in (
+            ("split_total_energy_j", "request"),
+            ("phase_energy_j.idle", "phase"),
+            ("phase_energy_j.warmup", "phase"),
+            ("phase_energy_j.cleanup", "phase"),
+            ("phase_energy_j.failure", "phase"),
+        ):
+            with self.subTest(metric=metric):
+                artifact = make_artifact()
+                artifact["cells"][0]["key"]["metric"] = metric
+                artifact["cells"][0]["key"]["window_class"] = window_class
+                artifact["transport_groups"][0]["metric"] = metric
+                artifact["transport_groups"][0]["window_class"] = window_class
+                self.assert_invalid(artifact, "not in FLOOR_METRIC_CATALOG")
+
     def test_valid_artifact_passes_and_round_trips(self):
         artifact = make_artifact()
         self.assertEqual(
