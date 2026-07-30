@@ -414,6 +414,15 @@ def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
     return value, hashlib.sha256(raw).hexdigest()
 
 
+def _path_independent_stack_identifier(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", value):
+        name = PurePosixPath(value.replace("\\", "/")).name
+        return name or None
+    return value
+
+
 def floor_stack_identity(
     raw_config: Mapping[str, Any] | None,
     metadata: Mapping[str, Any] | None,
@@ -422,7 +431,7 @@ def floor_stack_identity(
 
     if not isinstance(raw_config, Mapping) or not isinstance(metadata, Mapping):
         return None
-    typed = _typed_config(raw_config)
+    hardware = raw_config.get("hardware_target")
     workload = metadata.get("workload_provenance")
     adapters = metadata.get("adapters")
     runtime = adapters.get("runtime") if isinstance(adapters, Mapping) else None
@@ -433,27 +442,26 @@ def floor_stack_identity(
     tokenizer = workload.get("tokenizer") if isinstance(workload, Mapping) else None
     sampler = workload.get("sampler") if isinstance(workload, Mapping) else None
     output_policy = workload.get("output_policy") if isinstance(workload, Mapping) else None
-    hardware = typed.get("hardware_target") if isinstance(typed, Mapping) else None
     device = metadata.get("device")
     quantization = metadata.get("quantization")
     if not all(
         isinstance(value, Mapping)
         for value in (
-            typed,
+            hardware,
             workload,
             runtime,
             telemetry,
             prepare,
             artifact,
             tokenizer,
+            sampler,
             output_policy,
-            hardware,
             device,
             quantization,
         )
     ):
         return None
-    artifact_sha = artifact.get("sha256")
+    artifact_sha = artifact.get("sha256") or artifact.get("folded_sha256")
     telemetry_name = telemetry.get("name")
     if (
         not isinstance(artifact_sha, str)
@@ -461,6 +469,20 @@ def floor_stack_identity(
         or not isinstance(telemetry_name, str)
         or not telemetry_name
     ):
+        return None
+    tokenizer_identifier = _path_independent_stack_identifier(
+        tokenizer.get("identifier")
+    )
+    if tokenizer_identifier is None:
+        return None
+    tokenizer_identity = dict(tokenizer)
+    tokenizer_identity["identifier"] = tokenizer_identifier
+    runtime_version = (
+        prepare.get("version")
+        or prepare.get("mlx_version")
+        or prepare.get("mlx_lm_version")
+    )
+    if not isinstance(runtime_version, str) or not runtime_version:
         return None
     return {
         "hardware_unit": {
@@ -472,14 +494,14 @@ def floor_stack_identity(
         "runtime_version": {
             "name": runtime.get("name"),
             "adapter": prepare.get("adapter"),
-            "version": prepare.get("version"),
+            "version": runtime_version,
         },
         "kernel_library": str(prepare.get("kernel_library") or "unavailable"),
         "model_artifact_sha256": artifact_sha,
         "quantization": dict(quantization),
-        "tokenizer_identity": dict(tokenizer),
+        "tokenizer_identity": tokenizer_identity,
         "sampler_output_policy": {
-            "sampler": dict(sampler) if isinstance(sampler, Mapping) else {"kind": "unavailable"},
+            "sampler": dict(sampler),
             "output_policy": {
                 key: output_policy.get(key)
                 for key in ("name", "requested_tokens", "stop_condition")
@@ -1666,7 +1688,7 @@ def realized_scientific_identity(
     ):
         return None
     assert isinstance(artifact, Mapping)
-    artifact_sha = artifact.get("sha256")
+    artifact_sha = artifact.get("sha256") or artifact.get("folded_sha256")
     if (
         artifact.get("status") != "ok"
         or not isinstance(artifact_sha, str)

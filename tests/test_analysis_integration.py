@@ -34,6 +34,7 @@ from joulewise.analysis_engine.inputs import (
     floor_request_for_evidence,
     floor_stack_identity,
     load_analysis_inputs,
+    realized_scientific_identity,
     window_evidence_precheck,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
@@ -92,6 +93,20 @@ PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
     summary_backend_class="powermetrics",
     triangle_agrees=True,
 )
+
+
+def install_explicit_mock_sampler(bundle: Path) -> None:
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["workload_provenance"]["sampler"] = {
+        "api": "mock_runtime.generate",
+        "kind": "deterministic_mock",
+        "pinned": True,
+    }
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def install_passing_analysis_whole_window(
@@ -241,6 +256,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     code = main(["run", str(config), "--runs-dir", str(cls.runs_root)])
                 if code != 0:
                     raise AssertionError(f"mock run failed for {config.name}: {code}")
+                run_id = json.loads(config.read_text(encoding="utf-8"))["run_id"]
+                install_explicit_mock_sampler(cls.runs_root / run_id)
         cls.floor_path.write_text(
             json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
         )
@@ -1345,6 +1362,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                             ]
                         )
                     self.assertEqual(code, 0)
+                    install_explicit_mock_sampler(evidence_root / run_id)
                     calibration_ids.append(run_id)
                     order_rows[root_id].append(
                         {
@@ -2898,6 +2916,28 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(audit["strict_status"], "valid")
         self.assertEqual(audit["inclusion_status"], "excluded")
         self.assertIn("config_hash_mismatch", audit["base_reason_codes"])
+
+    def test_realized_identity_accepts_directory_shaped_model_artifact(self):
+        fixture = Path("tests/fixtures/d078_r01")
+        raw_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        metadata = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        self.assertEqual(artifact["kind"], "file_set")
+        self.assertNotIn("sha256", artifact)
+
+        identity = realized_scientific_identity(raw_config, metadata)
+
+        self.assertIsNotNone(identity)
+        self.assertEqual(
+            identity["model_artifact"]["sha256"],
+            artifact["folded_sha256"],
+        )
 
     def test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis(self):
         runs = self.root / "topup-runs"

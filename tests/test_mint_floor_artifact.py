@@ -17,6 +17,7 @@ from joulewise.detection_floor import (
     complete_bundle_sha256,
     validate_floor_artifact,
 )
+from joulewise.analysis_engine.inputs import floor_stack_identity
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -73,6 +74,157 @@ def stack_identity() -> dict:
         "measurement_boundary_label": "phase-decode",
         "telemetry_backend": "powermetrics",
     }
+
+
+class StackIdentityParityTests(unittest.TestCase):
+    @staticmethod
+    def _mlx_file_set_evidence() -> tuple[dict, dict]:
+        fixture = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
+        return (
+            load_json(fixture / "config.json"),
+            load_json(fixture / "metadata.json"),
+        )
+
+    def test_claim_derives_directory_shaped_model_artifact_identity(self) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        self.assertEqual(artifact["kind"], "file_set")
+        self.assertNotIn("sha256", artifact)
+
+        identity = floor_stack_identity(raw_config, metadata)
+
+        self.assertIsNotNone(identity)
+        self.assertEqual(
+            identity["model_artifact_sha256"],
+            artifact["folded_sha256"],
+        )
+
+    def test_mint_and_claim_stack_identity_are_bit_identical_for_mlx_file_set(
+        self,
+    ) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        tokenizer_identifier = metadata["workload_provenance"]["tokenizer"][
+            "identifier"
+        ]
+        prepare = metadata["adapters"]["runtime"]["prepare_metadata"]
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        self.assertTrue(tokenizer_identifier.startswith("/"))
+        self.assertNotIn("sha256", artifact)
+        self.assertNotIn("version", prepare)
+        self.assertIn("mlx_version", prepare)
+
+        minted = mint._derive_stack_identity(raw_config, metadata)
+        claimed = floor_stack_identity(raw_config, metadata)
+
+        self.assertEqual(claimed, minted)
+        self.assertEqual(
+            canonical_domain_sha256(STACK_IDENTITY_DOMAIN, claimed),
+            canonical_domain_sha256(STACK_IDENTITY_DOMAIN, minted),
+        )
+        self.assertEqual(
+            claimed["tokenizer_identity"]["identifier"],
+            "Qwen2.5-1.5B-Instruct-4bit",
+        )
+        self.assertEqual(claimed["runtime_version"]["version"], "0.31.2")
+        self.assertEqual(
+            claimed["model_artifact_sha256"],
+            artifact["folded_sha256"],
+        )
+
+    def test_folded_digest_acceptance_preserves_fail_closed_negatives(
+        self,
+    ) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        self.assertIsNotNone(floor_stack_identity(raw_config, metadata))
+
+        missing = copy.deepcopy(metadata)
+        missing_artifact = missing["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        missing_artifact.pop("sha256", None)
+        missing_artifact.pop("folded_sha256", None)
+        malformed = copy.deepcopy(metadata)
+        malformed_artifact = malformed["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        malformed_artifact.pop("sha256", None)
+        malformed_artifact["folded_sha256"] = "A" * 64
+
+        for label, candidate in (
+            ("missing", missing),
+            ("malformed", malformed),
+        ):
+            with self.subTest(label=label):
+                self.assertIsNone(
+                    floor_stack_identity(raw_config, candidate)
+                )
+
+    def test_sampler_is_required_on_both_mint_and_claim_sides(self) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        metadata = copy.deepcopy(metadata)
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        artifact["sha256"] = artifact.pop("folded_sha256")
+        tokenizer = metadata["workload_provenance"]["tokenizer"]
+        tokenizer["identifier"] = "Qwen2.5-1.5B-Instruct-4bit"
+        prepare = metadata["adapters"]["runtime"]["prepare_metadata"]
+        prepare["version"] = prepare["mlx_version"]
+        metadata["workload_provenance"].pop("sampler")
+
+        with self.assertRaisesRegex(
+            mint.MintError,
+            "source stack identity fields are unavailable",
+        ):
+            mint._derive_stack_identity(raw_config, metadata)
+        self.assertIsNone(floor_stack_identity(raw_config, metadata))
+
+    def test_required_stack_fields_remain_fail_closed(self) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        cases = {}
+
+        empty_telemetry = copy.deepcopy(metadata)
+        empty_telemetry["adapters"]["telemetry"]["name"] = ""
+        cases["empty_telemetry"] = empty_telemetry
+
+        unusable_runtime = copy.deepcopy(metadata)
+        prepare = unusable_runtime["adapters"]["runtime"]["prepare_metadata"]
+        prepare.pop("version", None)
+        prepare.pop("mlx_version", None)
+        prepare.pop("mlx_lm_version", None)
+        cases["unusable_runtime"] = unusable_runtime
+
+        empty_tokenizer = copy.deepcopy(metadata)
+        empty_tokenizer["workload_provenance"]["tokenizer"]["identifier"] = ""
+        cases["empty_tokenizer"] = empty_tokenizer
+
+        for label, candidate in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(mint.MintError):
+                    mint._derive_stack_identity(raw_config, candidate)
+                self.assertIsNone(
+                    floor_stack_identity(raw_config, candidate)
+                )
+
+    def test_windows_tokenizer_path_normalizes_like_mint(self) -> None:
+        raw_config, metadata = self._mlx_file_set_evidence()
+        metadata = copy.deepcopy(metadata)
+        metadata["workload_provenance"]["tokenizer"]["identifier"] = (
+            r"C:\models\Qwen2.5-1.5B-Instruct-4bit"
+        )
+
+        minted = mint._derive_stack_identity(raw_config, metadata)
+        claimed = floor_stack_identity(raw_config, metadata)
+
+        self.assertEqual(claimed, minted)
+        self.assertEqual(
+            claimed["tokenizer_identity"]["identifier"],
+            "Qwen2.5-1.5B-Instruct-4bit",
+        )
 
 
 def source_regime() -> dict:
