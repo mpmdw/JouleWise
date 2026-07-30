@@ -10,15 +10,16 @@ are provided for anyone who wants the full evidence trail.
   `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
   the current verification result. This page deliberately does not duplicate
   volatile commit, pull-request, queue, or test-count facts.
-- Repository state: `main` contains the repaired measurement
-  instrument (D-078 phase 0) and the audited screening and
-  uncertainty-budget rules (D-078 clause 10; council C-033).
-  The repaired-instrument collection has 229 members across four bracketed
-  windows, a5-a8. Those windows are useful diagnostic evidence that the
-  instrument works, but they are not claim-bearing and do not yet publish a
-  floor. The next step is one clean prospective quiet-machine collection
-  following `docs/phase_2/window_runbook.md`; if it passes, it will produce
-  the first claim-grade floors before the a8 re-verdict and Splitwise sizing.
+- Repository state: `main` contains the repaired measurement instrument
+  (D-078 phase 0), the audited screening and uncertainty-budget rules
+  (D-078 clause 10; council C-033), and — as of 2026-07-30 — the
+  project's **first published floor artifact**: the 1.5B model's decode
+  detection floor, 7.38 J, minted from two passed measurement windows
+  with its acceptance thresholds frozen before the data existed and its
+  validator run clean. A second instrument calibration (the 7B model,
+  floor 14.0 J) passed overnight on 2026-07-29 and awaits its own mint.
+  The pre-registered head-to-head model comparison is the next
+  measurement session, pending sign-off.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -30,13 +31,17 @@ are provided for anyone who wants the full evidence trail.
 
 ## Current Repository View — 30-second read
 
-**The repaired instrument has completed its first collection era, but the
-first claim-grade floor is still ahead.** The D-078 phase-0 repair fixed the timing and
-calibration path on 2026-07-22. Four bracketed windows then collected 229
-strict members (a5-a8). They are retained as non-claim-bearing diagnostic,
-instrument-proving evidence: they showed that the repaired path works and
-exposed the remaining drift-screen problem, but they are not a published
-floor set.
+**The first claim-grade floor is published.** The D-078 phase-0 repair
+fixed the timing and calibration path on 2026-07-22; the drift-screen
+rules merged on 2026-07-25; the first fully clean measurement windows
+passed on 2026-07-25/26, and on 2026-07-30 the project minted its first
+floor artifact from them: the 1.5B model's decode detection floor,
+**7.38 J** — the smallest energy effect this instrument can honestly
+claim to see for that workload. A second calibration window (the 7B
+model, floor **14.0 J**) passed overnight on 2026-07-29, surviving two
+live contamination events that the admission gates caught and recovered
+from per the written playbook. The earlier a5-a8 windows (229 members)
+remain non-claim-bearing, instrument-proving evidence.
 
 That problem is now resolved in the merged SCREEN+BUDGET rules (D-078 clause 10). Gross and
 idle-subtracted energy are screened separately; each passing window keeps a

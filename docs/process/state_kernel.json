@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next",
-    "path": "docs/run_reports/2026-07-24-screen-budget-gauntlet.md"
+    "label": "Mint #1 merged via PR #88 under the D-088 conditioned license; cooldown-join contract ratified for its own gauntlet",
+    "path": "docs/run_reports/2026-07-30-mint-merge-coldgate.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -613,6 +613,52 @@
       "status": "shelved",
       "stop_card": null
     },
+    "COOLDOWN-JOIN-GAUNTLET-01": {
+      "acceptance": {
+        "evidence": [
+          "C1 lands as a first, independently auditable commit",
+          "The counting domain (C2 writer existing-outcome bit and/or declaration-order discriminator) is decided by a bounded pre-decision consult, with C3 authorship parity and C4/C5 fail-closed",
+          "Resolves the 7B window including its two supersessions and both mint corpora cleanly, refuses the QA-10A and QA-10B fixtures, delta re-audit clean"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COOLDOWN-JOIN-GAUNTLET-01/acceptance",
+          "label": "COOLDOWN-JOIN-GAUNTLET-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The cold-gate-ratified join contract C1 through C5 lands and lifts the D-088 standing conditions on claim consumption and minting."
+      },
+      "authority": {
+        "label": "D-088 ratified join contract C1-C5 (cold-gate ruling + Opus refutation, 2026-07-30)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-088 escalation ruling: no FIX-11",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"
+        },
+        {
+          "authority": {
+            "label": "D-088 standing conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"
+        }
+      ],
+      "flags": [],
+      "goal": "Run the cooldown-join refusal contract through its own gauntlet, landing C1 result-map completeness, the C2 counting domain, C3 supersession authorship parity, C4 fail-closed legacy-corpus classification from campaign_log.jsonl, and C5 fail-closed unparseable manifests, with both blocker-shaped fixtures and the QA-10C comment correction.",
+      "id": "COOLDOWN-JOIN-GAUNTLET-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 9,
+      "status": "queued",
+      "status_note": "Minted 2026-07-30 from the cold-gate escalation; owns closure of QA-10A and QA-10B and gates MINT-GENERALIZE-01.",
+      "stop_card": null
+    },
     "CUSTODY-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -950,47 +996,6 @@
       "status_note": "Minted 2026-07-25. Quantified same day on a5 decode ABBA (10 complete blocks): implemented worst-case-sum half-width gives a 6.46 J comparative floor; a common-mode proxy gives 2.13 J, a 3x improvement — material, but still above that cell's 0.60 J point floor, so it does not by itself restore extraction under the current gate. Value is in tightening the labelled floor, not in avoiding the label. Fiducial share of the composed bound measured at 80-87%.",
       "stop_card": null
     },
-    "FLOOR-LABEL-01": {
-      "acceptance": {
-        "evidence": [
-          "D-078 amendment ratified by Ed BEFORE any code softening (closed-registry channel)",
-          "Extraction emits a labelled claim-path floor with floor_source naming the dominant uncertainty term",
-          "Point (repeatability) floor preserved and reported separately as a diagnostic",
-          "Single-count discipline recorded: effective clearable effect = floor + claim-side bound; neither may be optimized away",
-          "a10 phase cells extract as labelled attribution-limited floors"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FLOOR-LABEL-01/acceptance",
-          "label": "FLOOR-LABEL-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Attribution-limited floors become claimable and labelled, so instrument-limited windows publish an honest floor instead of refusing."
-      },
-      "authority": {
-        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-078 clause 11 (Ed-ratified 2026-07-25)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Every artifact publishing an attribution-limited floor must state the single-count discipline explicitly: effective clearable effect = floor + claim-side bound (~5 J for phase contrasts); neither term may later be removed as an apparent double count."
-        }
-      ],
-      "flags": [],
-      "goal": "Convert admissible_set_uncertainty_dominates_point_floor from hard refusal to a labelled claim path (floor_source names the dominant term; point floor retained as repeatability diagnostic), after Ed ratifies the D-078 amendment.",
-      "id": "FLOOR-LABEL-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 45,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25; ratification gate discharged by Ed same day (D-078 clause 11). UNBLOCKED 2026-07-26: CAL-REBRACKET-01 merged (PR #86, 7b12f20), so the widened envelopes that feed the labelled floor are now produced by the governed consumption path. Implements floor_source labelling, retains the point floor as the repeatability diagnostic, and carries the single-count statement into every publishing artifact.",
-      "stop_card": null
-    },
     "FLOOR-WORKLOAD-SIZING-01": {
       "acceptance": {
         "evidence": [
@@ -1020,6 +1025,94 @@
       "rank": 46,
       "status": "queued",
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
+      "stop_card": null
+    },
+    "MANIFEST-CONTRAST-01": {
+      "acceptance": {
+        "evidence": [
+          "A cross-model decode contrast manifest validates end-to-end, with the Slice-2M-frozen assumptions replaced or parameterized rather than bypassed",
+          "A bounded pre-decision cross-model consult is run and recorded before implementation"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MANIFEST-CONTRAST-01/acceptance",
+          "label": "MANIFEST-CONTRAST-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A Qwen2.5 1.5B-vs-7B decode contrast manifest validates end-to-end through the validator analyze_claims actually uses."
+      },
+      "authority": {
+        "label": "splitwise_decode_v1 campaign doc section 2 Blocker B (MANIFEST-CONTRAST schema work)",
+        "path": "docs/phase_2/splitwise_decode_campaign.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "splitwise_decode_v1 campaign doc section 2 Blocker B",
+            "path": "docs/phase_2/splitwise_decode_campaign.md"
+          },
+          "rule": "Design-bearing and contract-adjacent: run the bounded pre-decision consult first and decide the versioning story instead of widening the v1 validator in place"
+        }
+      ],
+      "flags": [],
+      "goal": "Unfreeze the analysis-manifest path that gates every contrast claim: analyze_claims validates unconditionally with the AP-2 v1 validator frozen to the Slice-2M speculation design (prefix-stripped block ids, a fixed six-hypothesis Holm object, fixed estimator and side), and the equally frozen v2 sibling is not the validator it uses.",
+      "id": "MANIFEST-CONTRAST-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 11,
+      "status": "queued",
+      "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
+      "stop_card": null
+    },
+    "MINT-GENERALIZE-01": {
+      "acceptance": {
+        "evidence": [
+          "A 7B decode-floor artifact mints from qwen25_7b_decode_floor_v1 evidence with its own hard six-decimal operative-floor literal supplied per plan, never derived inside the mint path",
+          "The pre-registration gate passes as-embedded and validate_floor_artifact returns no findings",
+          "Mint #1 re-mints byte-identical from the same inputs"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MINT-GENERALIZE-01/acceptance",
+          "label": "MINT-GENERALIZE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A generalized mint sibling takes the mint-1 hard pins per plan so a second floor artifact can be minted without weakening the pre-registration gate."
+      },
+      "authority": {
+        "label": "splitwise_decode_v1 campaign doc section 2 Blocker A (mint pins); D-082, D-084, D-085 Q6",
+        "path": "docs/phase_2/splitwise_decode_campaign.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "note": "D-088 forbids any mint from a duplicate-bearing corpus until the join gauntlet closes; this includes the 7B mint.",
+          "required": "the cooldown-join gauntlet closes first, per the D-088 no-mint-from-duplicate-bearing-corpus condition",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-082 and D-084 operative-floor pins",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Generalize the plumbing, never the pins: six-decimal floor literals and lead-verified digests stay supplied per plan and hard-checked in-tool"
+        }
+      ],
+      "flags": [],
+      "goal": "Generalize the mint beyond the mint-1 pair: scripts/mint_floor_artifact.py is hard-pinned to the p2_015, a10, and window-C evidence (cell id, plan sha, both order-manifest ids, the two member counts, the expected operative-floor text), so build a sibling taking those pins per plan and carrying the 7B mint's remaining scope.",
+      "id": "MINT-GENERALIZE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 12,
+      "status": "blocked",
+      "status_note": "Minted 2026-07-30; BLOCKED on COOLDOWN-JOIN-GAUNTLET-01 by the D-088 no-mint condition. The 7B mint's remaining scope details (D-085 Q6) ride this row.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -2429,44 +2522,140 @@
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
-    "STACK-ID-BIND-01": {
+    "QA-10A-JOIN-OMISSION": {
       "acceptance": {
         "evidence": [
-          "floor_stack_identity derives identity for directory-shaped (file_set/folded_sha256) model artifacts — the only shape MLX produces — instead of returning None; absent/malformed BOTH sha fields still fail closed",
-          "Claim-side derivation aligned field-by-field with the mint-side _derive_stack_identity (sha fallback, path-independent tokenizer identifier, runtime-version fallbacks): parity regression asserts bit-identical identity dicts for the same bundle",
-          "End-to-end regression: claim binding binds a cell whose source_regime stack hash was mint-derived from a folded_sha256 bundle; directory-shaped fixture added (existing fixtures cover only the single-file sha256 shape)",
-          "Lead re-verifies claim binding against a real a10 production bundle after the fix lands"
+          "Returned result-map keyset equals candidates union tallied declared ids, and every unlicensed declared id carries the exact unknown or unverified refusal payload",
+          "A QA-10A-shaped zero-candidate fixture refuses instead of resolving"
         ],
         "pointer": {
-          "json_pointer": "/tasks/STACK-ID-BIND-01/acceptance",
-          "label": "STACK-ID-BIND-01 acceptance",
+          "json_pointer": "/tasks/QA-10A-JOIN-OMISSION/acceptance",
+          "label": "QA-10A-JOIN-OMISSION acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Repair the claim-side stack-identity shape mismatch so model identity reaches claim-side floor binding for real bundles: claim binder must accept folded_sha256 file_set artifacts and reproduce the mint-side identity bit-for-bit."
+        "summary": "The join can no longer silently omit a declared duplicate whose candidate rows are all malformed."
       },
       "authority": {
-        "label": "2026-07-29 modularity survey (defect CONFIRMED by lead repro against the real a10 bundle)",
-        "path": "docs/run_reports/2026-07-29-modularity-survey.md"
+        "label": "D-088 cooldown-join escalation ruling (cold gate + Opus contract refuter, 2026-07-30)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "note": "Cold-gate ruling assigns closure to contract C1 (result-map completeness), owned by the join gauntlet.",
+          "required": "the join gauntlet lands contract C1 result-map completeness",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-088 blocker registration (not merge-gating)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Registered blocker: do not downgrade severity or close by re-scoping; closure runs only through the ratified join contract"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the cooldown-join result-map omission: declared-duplicate bundle ids whose candidate rows are all malformed yield zero candidates and vanish from the returned map, whose keyset is all that floor_extraction completeness inspects, so the omission escapes the no-outlier-deletion check.",
+      "id": "QA-10A-JOIN-OMISSION",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 5,
+      "status": "queued",
+      "status_note": "FIX-10 delta re-audit finding, registered 2026-07-30: blocker against the join contract, NOT merge-gating; shape absent from all three claim-bearing corpora. Closes as contract C1 inside the join gauntlet.",
+      "stop_card": null
+    },
+    "QA-10B-EXISTING-RETRY": {
+      "acceptance": {
+        "evidence": [
+          "The gauntlet's counting domain makes the retried-existing case visible to the declared tally, with C3 authorship parity holding",
+          "A QA-10B-shaped fixture refuses instead of resolving through the one-row fast path"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QA-10B-EXISTING-RETRY/acceptance",
+          "label": "QA-10B-EXISTING-RETRY acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A retried pre-existing failure can no longer be laundered into a fast-path resolution whose repair record cannot be authored."
+      },
+      "authority": {
+        "label": "D-088 cooldown-join escalation ruling (cold gate + Opus contract refuter, 2026-07-30)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "note": "Closure requires the gauntlet's counting-domain design decision (C2) plus C3 authorship parity; no standalone fix was licensed.",
+          "required": "the join gauntlet decides its counting domain (C2) and lands authorship parity (C3)",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-088 registration plus recorded refuter dissent",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Registered blocker with recorded dissent (the Opus refuter argued should-fix: the laundered outcome is correct attribution and the loss is a custody receipt); the dissent is not a downgrade"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the cooldown-join existing-retry launder: complete-but-failed pre-existing bundles are recorded as execution existing and retried as invoked, so the invoked-only declared tally sees count 1 and licenses the fast path while the supersession writer, scanning invoked rows only, cannot author the required repair record.",
+      "id": "QA-10B-EXISTING-RETRY",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 8,
+      "status": "queued",
+      "status_note": "FIX-10 delta re-audit finding, registered 2026-07-30: blocker against the join contract, NOT merge-gating; shape verified ABSENT from all three claim-bearing corpora by three independent bench scans.",
+      "stop_card": null
+    },
+    "SUPERSESSION-DUP-REFUSAL-01": {
+      "acceptance": {
+        "evidence": [
+          "The write-time refusal ruling is recorded in the decision log before any implementation",
+          "A regression asserts that a second recorder invocation for the same member refuses"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SUPERSESSION-DUP-REFUSAL-01/acceptance",
+          "label": "SUPERSESSION-DUP-REFUSAL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A repeat recorder invocation for the same member refuses instead of appending a duplicate record."
+      },
+      "authority": {
+        "label": "D-086 supersession-aware cooldown-evidence join (recorder duplicate-append defect)",
+        "path": "docs/decision_log.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "2026-07-29 modularity survey defect section",
-            "path": "docs/run_reports/2026-07-29-modularity-survey.md"
+            "label": "D-086 operator mitigation",
+            "path": "docs/decision_log.md"
           },
-          "rule": "Must close BEFORE post-window claim consumption (the binder currently refuses every real cell with stack identity is unavailable); do not conflate with the refuted B1 finding (device.boundary placeholders)."
+          "rule": "Until the refusal lands, run the supersession recorder exactly once per member"
         }
       ],
       "flags": [],
-      "goal": "Fix floor_stack_identity reading only artifact_identity.sha256 while MLX emits folded_sha256 for file_set artifacts, which makes claim-side floor binding refuse every real production bundle; align the claim-side derivation with the mint-side derivation and add parity plus end-to-end regressions.",
-      "id": "STACK-ID-BIND-01",
+      "goal": "Rule on and then implement write-time refusal in the supersession recorder, which today appends silent duplicate records when run more than once for a member and voids campaign membership downstream; the ruling is the first half of the deliverable.",
+      "id": "SUPERSESSION-DUP-REFUSAL-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 50,
-      "status": "partial",
-      "status_note": "CONFIRMED 2026-07-29 by lead repro (real a10 bundle: artifact_identity has folded_sha256 only; floor_stack_identity -> None; binding refuses all cells). Repair ordered in-flight as FIX-7 on impl/mint-tool under the live fix round's delta re-audit; row closes on lead re-verification against a real bundle.",
+      "rank": 10,
+      "status": "queued",
+      "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
     },
     "TOOL-01": {
@@ -2514,5 +2703,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-29"
+  "updated": "2026-07-30"
 }

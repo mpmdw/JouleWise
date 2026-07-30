@@ -4850,7 +4850,11 @@ therefore the derived limit, unchanged.
    be labelled: the attribution-width floor is a diagnostic; the operative
    floor is the claim gate. Neither replaces D-078 clause 11's single-count
    discipline — the effective clearable effect remains the operative floor
-   plus the claim-side bound.
+   plus the claim-side bound. *(AMENDED by D-084, 2026-07-29: at mint the
+   operative decode pin was re-set to the composed cell gate 7.377086 J;
+   the 3.592138 J figure here is that cell's absolute component in
+   isolation. See D-084 for the composition rule — gate = max, never
+   summed.)*
 
    *Options considered.* (a) Hold everything until a prefill comparative
    window exists — rejected: it makes the project's first claim-grade number

@@ -10,29 +10,49 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-28 (late, mint-implementation session). **Main is
-at the PR #87 merge `058c918` plus this session's bookkeeping.** The
-pre-mint schema hardening is MERGED (PR #87, full D-072 gate, zero
-surviving blockers, CI green). The site-parser red that had held main CI
-down since `32e510a` is FIXED under Ed-ratified D-081 (`cb867f3`).
-`FLOOR-LABEL-01` remains merged at `3055315` (D-078 cl.11 labelled claim
-path). D-079/D-080/D-081/D-082 are in `docs/decision_log.md`.
+Last updated: 2026-07-30 (mint-merge session). **Main is at the PR #88
+merge `da83337`: mint #1 is MAINLINE.** The full mint arc (FIX-1..10
+gauntlet, ratified mint contract, campaign configs, and the
+`df-ph-decode-floor-mint1` artifact — absolute 3.592138 / comparative
+7.377086 / operative gate 7.377086 J, validator clean lead-run) merged at
+the audited head `16c7af0` under the D-088 conditioned license (cold gate
++ Opus contract refuter, unanimous). The 7B floor window
+`window_7bfloor_20260729` is claim-bearing (verdict PASSED, floors
+absolute 6.294380135190098 / comparative 13.998036715259254; the
+absolute cell's member mean is 192.38623252628366 J over n=10 — the
+comparative cell has its own, much smaller mean, so always name the cell
+when quoting this). D-083..D-088 are in `docs/decision_log.md`.
 
-**The mint is BUILT but not yet run.** Branch `impl/mint-tool` (pushed,
-UNMERGED, UNREVIEWED) carries the complete 7-stage implementation of the
-ratified mint contract (`docs/phase_2/floor_mint_contract.md` on that
-branch; D-082): schema v2 with component-scoped cross-window cells,
-shared nine-entry metric catalog, non-defaulting widths/source_class,
-basis-pinned subset consumption (30-vs-37 RESOLVED — the 7 extras are
-the neg8 references that source the 0.652272 J allowance), authored
-a10/window-C extraction specs + condition-family definition, and
-`scripts/mint_floor_artifact.py` with the pre-registration gate embedded
-(operative decode floor "3.592138" hard-checked in-tool). Pairing
-GO/NO-GO: **GO** on identity, magistrate-adjudicated from primary
-evidence. In-scope test modules 184 OK; final canonical rerun at
-`1d83d68` was in flight at checkpoint — UNVERIFIED, re-verify first.
+**Standing conditions from D-088 (bind until COOLDOWN-JOIN-GAUNTLET-01
+closes):** any claim consumption through the cooldown join carries a
+recorded three-check bench scan (no unlicensed declared duplicates, no
+zero-candidate declarations, no failed/incomplete-existing encounters);
+no mint from a duplicate-bearing corpus (this includes any future 7B
+mint). QA-10A/QA-10B remain registered blockers against the join
+contract — re-scoped, corpus-unreachable today, not downgraded.
+Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-07-30 ~11:00 PT session-handoff checkpoint; resume EXACTLY here)
+## CURRENT STATE (2026-07-30 afternoon; the resume script below is EXECUTED except where struck)
+
+Steps 2, 3, and 5 of the resume script below are DONE (audit harvested →
+FAIL → FIX-10 → escalation → cold gate → D-088 → PR #88 merged
+`da83337`; bookkeeping batch on main as `e1e0aec`+`d8b5d54`). Step 1
+(network-time confirmation) remains UNVERIFIED — Ed: run
+`sudo systemsetup -getusingnetworktime`, must be On, before any window.
+Step 4 (tonight's window per D-085 Q1: `qwen25_7b_decode_floor_v1`
+already EXECUTED 07-29; the contrast window `splitwise_decode_v1` is the
+one still pending) awaits Ed authorization + AC + settled machine;
+frozen-plan + pre-reg ratification by the magistrate happens FIRST when
+Ed green-lights. Step 6 (advisor answers → queue reorder) lands on Ed's
+return from the ~14:30 meeting; the hardened brief is
+`docs/advisor_briefs/2026-07-30-advisor-brief.md`. The kernel refresh is
+DONE in the working tree (intake rows folded, STACK-ID-BIND-01 and
+FLOOR-LABEL-01 retired to the completed table, `latest_report`
+repointed); remaining bookkeeping owed: the consistency sweep's deferred
+flags (`PROJECT_STATUS.md` advisor refresh, `WINDOW_STATUS.md` staleness)
+and the skill-usage log.
+
+## EXECUTED RESUME SCRIPT (2026-07-30 ~11:00 PT handoff checkpoint; historical)
 
 Roles: successor session is FABLE, MAGISTRATE (rule 11 topology). Ed has
 an ADVISOR MEETING (Rivoire) ~5h from checkpoint; brief at
@@ -107,7 +127,8 @@ RESUME (in order):
 Standing constraints intact: gates never waived; quiet-lock during
 measurement; magistrate operates windows solo; lead never delegates
 final verification; plain language on advisor surfaces.
-\nHistorical NEXT (superseded by the block above): (1) close the two
+
+Historical NEXT (superseded by the block above): (1) close the two
 remaining suite errors on `impl/mint-tool` @ `1d83d68` — DONE via
 FIX rounds 81193f5/c698711/FIX-5;
 (2) full-tier adversarial review of `git diff
@@ -224,7 +245,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-29). Latest report: [SCREEN+BUDGET rules ratified, adversarially verified, and merged via PR #85; prospective quiet-window collection is next](docs/run_reports/2026-07-24-screen-budget-gauntlet.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-30). Latest report: [Mint #1 merged via PR #88 under the D-088 conditioned license; cooldown-join contract ratified for its own gauntlet](docs/run_reports/2026-07-30-mint-merge-coldgate.md).
 
 ### [ED-EXTERNAL]
 
@@ -355,8 +376,10 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**Mint era open (2026-07-27): main `7337b33`. The data exists and passes;
-the code path that turns it into a published floor does not exist yet.**
+**Mint era OPEN AND FIRST MINT LANDED (2026-07-30): main `da83337`. The
+data exists and passes, and the code path that turns it into a published
+floor now exists and has been exercised — `df-ph-decode-floor-mint1` is
+mainline.**
 
 ### The central measurement fact (read before any measurement decision)
 
@@ -378,6 +401,7 @@ eliminated.
 | **B** (`04_phase_prefill_abba`) | 40 prefill ABBA members, 59/59 collected clean | **FAILED** | `instrument_calibration_mismatch`, bracket drift 11.581436 ms; preserved, not claim-bearing |
 | **C** (`05_phase_decode_abba`) | 40 decode ABBA members, 59/59 collected | **PASSED** | bracket drift 1.279 ms; first comparative window in project history to pass |
 | **D** (absolute) | 30 claim members, 49/49 collected | **PASSED** | bracket drift 0.484 ms, tightest of the campaign |
+| **7B floor** (`window_7bfloor_20260729`) | Qwen2.5 7B decode floor, collected 2026-07-29 | **PASSED** | CLAIM-BEARING; governed extraction clean (`all_cells_extractable` true). Floors: absolute 6.294380135190098 J, comparative 13.998036715259254 J; absolute-cell member mean 192.38623252628366 J (n=10). NOT yet minted — `MINT-GENERALIZE-01` is blocked by the D-088 no-mint-from-duplicate-bearing-corpus condition, so these figures live only in prose plus the out-of-repo custody extraction |
 
 Window B's cause is established and is NOT a clock problem: a GPU DVFM
 power ramp that the rectangular-pulse fiducial estimator aliases into an
@@ -387,12 +411,28 @@ detects it in the ~4-minute pre-calibration, with cause-removal (never
 outcome-selection) retry semantics.
 
 **Corrected floor figures — the old ones must not be repeated.** a10's
-canonical operative floors are **3.823787 J prefill / 3.592138 J
-decode**, INCLUDING the 0.652272 J whole-window drift allowance. The
-3.17 / 2.94 J numbers circulated earlier are the attribution-width floors
-BEFORE the allowance and are diagnostics only (D-079 clause 5).
+**absolute** floors are **3.823787 J prefill / 3.592138 J decode**,
+INCLUDING the 0.652272 J whole-window drift allowance. The 3.17 / 2.94 J
+numbers circulated earlier are the attribution-width floors BEFORE the
+allowance and are diagnostics only (D-079 clause 5).
 
-### The critical path: build the mint
+**AMENDED BY D-084 (2026-07-29): `3.592138` is the ABSOLUTE COMPONENT IN
+ISOLATION, not the operative decode floor.** Mint #1's cell composes
+a10's absolute 3.592138 J with window C's comparative 7.377086 J, and
+under W3 rule 8 the cell gate is the **max, never the sum** — so the
+canonical **operative decode floor is 7.377086 J**, and that is the hard
+six-decimal literal pinned in `scripts/mint_floor_artifact.py`. D-079
+clause 5's "3.592138" pin predates window C's comparative extraction and
+is superseded for the operative figure; both components remain published
+and LABELLED per D-078 clause 11.
+
+### The critical path: build the mint (HISTORICAL — CLOSED 2026-07-30)
+
+All four blockers below are closed and this section is retained as
+chronology only: `scripts/mint_floor_artifact.py` is the non-test call
+site (1), the 30-vs-37 basis question RESOLVED (2), `production_window`
+is in `_CALIBRATION_SCOPES` (3), and `impl/floor-mint` merged via PR #87
+(4). Mint #1 merged via PR #88 at `da83337`.
 
 `build_floor_cell` / `build_floor_artifact` / `build_absolute_record` /
 `build_comparative_record` in `joulewise/detection_floor.py` have zero
@@ -413,7 +453,8 @@ extraction report and stops. Established blockers:
    `_CALIBRATION_SCOPES` is `("window_a", "window_b_revalidation",
    "smoke")`. D-079 clause 4 adopts one general production name; proposed
    literal `production_window`.
-4. **Pre-mint schema hardening is written but unmerged:** branch
+4. **Pre-mint schema hardening was then written but unmerged** (it
+   merged via PR #87; the branch is on main): branch
    `impl/floor-mint` @ `617060a` (pushed) makes the extraction report
    export the admissible half-widths it already computes, and moves
    `_WIDENED_FLOOR_KEYS` from optional into the required key sets so
@@ -476,8 +517,9 @@ standing fresh-eyes sweep is the first exercise of that list.
    CI split — is a CI-contract change and Ed's call; the
    consolidate/redesign work (~3-4 min, no deletions) needs no ruling.
 
-Records: `docs/process_traces/RESUME-2026-07-28.md` (freshest session
-record, superseded as a pointer), `RESUME-2026-07-27.md`,
+Records: `docs/run_reports/2026-07-30-mint-merge-coldgate.md` (freshest
+session record), `docs/process_traces/RESUME-2026-07-28.md` (superseded
+as a pointer), `RESUME-2026-07-27.md`,
 `RESUME-2026-07-26.md`, `docs/process_traces/2026-07-26-prereg-clock-mitigation.md`,
 `docs/run_reports/2026-07-23-window-a-collection-arc.md`, and
 `docs/run_reports/2026-07-24-screen-budget-gauntlet.md`.
@@ -533,8 +575,18 @@ work-selection authority. Use the generated region above for selection.
 ## Session History (pointers only — run reports own the narrative)
 
 Parenthetical states below are historical at each report's head; they are not
-current restart instructions. Current state is the C-028 block above.
+current restart instructions. Current state is the CURRENT STATE block at
+the top of this file.
 
+- 2026-07-30 audit harvest → FIX-10 → escalation → cold gate (D-088) →
+  PR #88 merge `da83337` (mint #1 mainline) + advisor-brief hardening:
+  `docs/run_reports/2026-07-30-mint-merge-coldgate.md`
+- 2026-07-30 D-080 fresh-eyes sweep memos (techniques, mechanisms,
+  CV paths): `docs/run_reports/2026-07-30-sweep-techniques.md`,
+  `2026-07-30-sweep-mechanisms.md`, `2026-07-30-sweep-cv-paths.md`
+- 2026-07-29 modularity survey (MODULARITY-01 intake; STACK-ID-BIND-01
+  claim-binding defect CONFIRMED):
+  `docs/run_reports/2026-07-29-modularity-survey.md`
 - 2026-07-28 (late) mint-implementation session: PR #87 hardening merged;
   mint tool built on `impl/mint-tool` (unmerged, review owed); parser
   fix D-081; pairing GO + 30-vs-37 resolved; suite-pruning consult
@@ -635,6 +687,15 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
+- **Merged main `da83337` (2026-07-30, current): canonical `Ran 2280
+  tests`, `OK (skipped=12)`, lead-run post-merge.** Branch head
+  `16c7af0` pre-merge: lead-run `2280 OK (skipped=21)` (worktree
+  convention); Sol-side `2280 OK (skipped=24)` (delegated sandbox). CI
+  green on merge ref `ff0dda5` (build, installed-wheel, release-chain,
+  test 3.11 + 3.14; two earlier red runs were stale-merge-ref artifacts,
+  see the session report). Mint #1 `validate_floor_artifact == []`
+  lead-run. Fail-open-shape corpus scans clean ×3 (magistrate, cold
+  instance, refuter) across a10, window C, and the 7B window.
 - **Post-prune suite on `7337b33` + docs edits (2026-07-28, lead-run):**
   `Ran 2194 tests`, `FAILED (errors=2, skipped=12)`. The two errors are
   `test_build_site_parsers` Lakebed-budget tests and are **pre-existing
@@ -648,12 +709,13 @@ current restart instructions. Current state is the C-028 block above.
   `docs/process_traces/` Session History pointers per the
   pointer-retirement convention; `tests.test_build_site_parsers` 21/21 OK
   on that head, clearing both errors.
-- **Merged main `7337b33` (2026-07-27, current):** `FLOOR-LABEL-01`
+- **Merged main `7337b33` (2026-07-27, historical):** `FLOOR-LABEL-01`
   merged at `3055315` under the D-072 gate shape (independent Opus
   contract lens returning "comparative coverage COMPLETE" plus a fresh
   Sol xhigh audit, fix rounds each delta-re-audited, five independently
   audited correctness fixes); lead-verified suite **2194 OK** on merged
-  main. Branch `impl/floor-mint` @ `617060a` (pushed, unmerged) records
+  main. Branch `impl/floor-mint` @ `617060a` (unmerged at that date;
+  merged via PR #87 on 2026-07-28) records
   suite **2198 OK (skipped=24)** from that 2194 baseline plus four
   regressions. Window C's bracket drift (1.279 ms) and window D's
   (0.484 ms) reproduce from the stored `instrument_evidence.json`
@@ -697,10 +759,14 @@ current restart instructions. Current state is the C-028 block above.
 - Prior head `main@cc3afc3`: canonical `Ran 1220 tests`, `OK (skipped=10)`;
   retained corpus strict gate 6/6; PR #59 pre-merge lead replay was
   `Ran 1224 tests`, `OK (skipped=12)`.
-- Count convention for C-028 records: ordinary worktree replays report
-  `skipped=12`, final main reports `skipped=10`, and restricted managed
-  sandboxes may report `skipped=13` when their environment-gated probe is
-  unavailable. Preserve those environment labels when citing a tail.
+- Count convention for C-028 records (SUPERSEDED — historical, applies
+  only to the 2026-07-11-era tails above): ordinary worktree replays
+  report `skipped=12`, final main reports `skipped=10`, and restricted
+  managed sandboxes may report `skipped=13` when their environment-gated
+  probe is unavailable. The CURRENT convention is the triple at the top
+  of this section: main `skipped=12`, worktree `skipped=21`, delegated
+  Sol sandbox `skipped=24`. Preserve those environment labels when citing
+  a tail.
 
 ### Historical verification archive (exact at the recorded heads)
 
@@ -847,9 +913,22 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- (2026-07-28 late) `main` and `origin/main` are at this session's
-  bookkeeping commit atop the PR #87 merge `058c918`. Branch
-  `impl/mint-tool` (pushed, UNMERGED) holds the 9-commit mint series
+- (2026-07-30, CURRENT) `main` and `origin/main` are both at the PR #88
+  merge `da83337`. Branch `impl/mint-tool` is MERGED (verified
+  `git merge-base --is-ancestor impl/mint-tool main`), as are
+  `impl/floor-mint` and `impl/floor-label-clean`; all three may be
+  deleted. Their scratchpad worktrees are still registered (`minttool` @
+  `16c7af0` plus ~11 review/pin worktrees at `f63a334`/`697f741` under
+  the `9c166892…` session dir, and prunable entries under `ad48bfae…`
+  and `d714f367…`) — `git worktree prune` plus explicit removal is owed
+  as housekeeping. Working tree carries the uncommitted bookkeeping batch
+  (`RUN_STATE.md`, `TASK_QUEUE.md`, `docs/process/state_kernel.json`,
+  `tests/test_gen_state.py`) plus the untracked
+  `docs/run_reports/2026-07-30-mint-merge-coldgate.md` and the untracked
+  private `CLAUDE.local.md` (never commit the latter).
+- (2026-07-28 late, historical) `main` and `origin/main` were at that
+  session's bookkeeping commit atop the PR #87 merge `058c918`. Branch
+  `impl/mint-tool` (pushed, then UNMERGED) held the 9-commit mint series
   `2a0ecbc..697f741` in worktree
   `/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/minttool`;
   canonical suite at its head `1d83d68` is UNVERIFIED (rerun was in
@@ -870,14 +949,18 @@ current restart instructions. Current state is the C-028 block above.
   `docs/phase_2/window_runbook.md`.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
-  (`python3 scripts/gen_state.py --check` exits 0), but the kernel's own
-  content is stale as of 2026-07-27: it is stamped `updated: 2026-07-25`,
-  its `latest_report` still points at
-  `docs/run_reports/2026-07-24-screen-budget-gauntlet.md`, `FLOOR-LABEL-01`
-  is still `READY` though it merged at `3055315`, and no row exists for
-  the floor-mint work. Fixing that means editing the kernel and then
-  running `python3 scripts/gen_state.py` — never hand-editing the
-  generated regions.
+  (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
+  content was refreshed on 2026-07-30: stamped `updated: 2026-07-30`,
+  `latest_report` points at
+  `docs/run_reports/2026-07-30-mint-merge-coldgate.md`, the completed
+  `FLOOR-LABEL-01` and `STACK-ID-BIND-01` rows are retired to
+  `TASK_QUEUE.md`'s completed table, and the post-mint intake
+  (`COOLDOWN-JOIN-GAUNTLET-01`, `MINT-GENERALIZE-01`,
+  `MANIFEST-CONTRAST-01`, `SUPERSESSION-DUP-REFUSAL-01`,
+  `QA-10A-JOIN-OMISSION`, `QA-10B-EXISTING-RETRY`) is folded in. Any
+  further change means editing the kernel and then running
+  `python3 scripts/gen_state.py` — never hand-editing the generated
+  regions.
 - (2026-07-25, historical) `main` and `origin/main` were at `c3e2647`,
   the PR #85 merge; PR #79's repair and PR #85's SCREEN+BUDGET
   implementation both landed with green final PR-head CI.

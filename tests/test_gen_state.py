@@ -34,11 +34,17 @@ EXPECTED_IDS = {
     "FLOOR-BIND-01",
     # C-033 screen+budget gauntlet deferrals (2026-07-25)
     "CUSTODY-HARDEN-01",
-    # 2026-07-25 attribution-limit adjudication
-    "FLOOR-LABEL-01", "FLOOR-WORKLOAD-SIZING-01",
+    # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
+    # 2026-07-27 at 3055315 and left the live kernel)
+    "FLOOR-WORKLOAD-SIZING-01",
     "FLOOR-COMMONMODE-01", "PHASE-SHARE-ESTIMAND-01",
-    # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling)
-    "MODULARITY-01", "STACK-ID-BIND-01",
+    # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling).
+    # STACK-ID-BIND-01 completed 2026-07-30 in PR #88 (da83337).
+    "MODULARITY-01",
+    # 2026-07-30 cold-gate intake fold (D-088; PR #88 merge session)
+    "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
+    "QA-10B-EXISTING-RETRY", "MINT-GENERALIZE-01",
+    "MANIFEST-CONTRAST-01", "SUPERSESSION-DUP-REFUSAL-01",
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
@@ -50,7 +56,8 @@ EXPECTED_IDS = {
 }
 
 TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
-                "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP"}
+                "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP",
+                "FLOOR-LABEL-01", "STACK-ID-BIND-01"}
 
 
 def load_kernel():
@@ -175,9 +182,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_53(self):
+    def test_exact_live_id_set_57(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 53)
+        self.assertEqual(len(self.tasks), 57)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
