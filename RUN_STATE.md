@@ -32,96 +32,82 @@ GO/NO-GO: **GO** on identity, magistrate-adjudicated from primary
 evidence. In-scope test modules 184 OK; final canonical rerun at
 `1d83d68` was in flight at checkpoint — UNVERIFIED, re-verify first.
 
-## ACTIVE RESUME SCRIPT (2026-07-29 harness-update checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-07-30 ~11:00 PT session-handoff checkpoint; resume EXACTLY here)
 
-Ed's live directive: 24-HOUR SPLITWISE GOAL — decode-phase claim(s)
-(Qwen2.5 1.5B vs 7B) for his professor, quiet window authorized (AC
-power connected), window timing delegated to the lead. Gates are never
-waived for the deadline.
+Roles: successor session is FABLE, MAGISTRATE (rule 11 topology). Ed has
+an ADVISOR MEETING (Rivoire) ~5h from checkpoint; brief at
+/private/tmp/claude-501/-Users-edr-code-JouleWise/abec37a6-31cd-4c56-a8a8-9448acaf12be/scratchpad/advisor-brief-2026-07-30.md
+— her answers to its four questions REORDER the queue (acceptance bar,
+write-up scope, wall meter, claim priorities).
 
-Ed-ratified THIS SESSION (record at next bookkeeping as D-083/D-084):
-- Published operative decode floor for mint #1 = the CELL GATE
-  **7.377086 J** (comparative-dominant), both components labelled
-  (absolute 3.592138 / comparative 7.377086); pre-registration literal
-  amends to the gate value as a HARD six-decimal literal (never
-  parameterized — that conditional bounds finding B4).
-- Cold-gate ruling adopted: refusal-scope spec
-  (`docs/phase_2/refusal_scope_spec.md`, on branch) ratified;
-  anchor_energy_envelope_unrecorded metric-local at recognized paths.
-
-State: branch `impl/mint-tool` @ `f63a334` (pushed; 16 commits; every
-post-base fix commit delta-audited CLEAN: 81193f5, c698711→FIX-5,
-7168130, b08a1ec, f63a334). Canonical suite at f63a334: `Ran 2255
-tests, OK (skipped=21)` uncontended, lead-verified. MINT INPUTS BANKED
-(final-head governed extractions, lead-run, values stable across 3 code
-revisions):
-`/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/a10_extraction_report_final.json`
-(prefill 3.823787 / decode 3.592138, short-prefill honest refusal) and
-`.../window_c_extraction_report_final.json` (comparative 7.377086, all
-cells extractable). Comparative floor independently recomputed
-bit-exact; attribution-limited (width 6.31 J via 4-member Σ|c_i|w_i
-composition — verified matches ratified estimator; scatter 0.63 J).
-That scratchpad dir persists on disk — the successor session references
-it by ABSOLUTE path (its own scratchpad will differ).
+STATE (all pushed): branch impl/mint-tool @ 969a4d6 carries the FIX-6..9
+series, campaign configs (splitwise_decode_v1 contrast +
+qwen25_7b_decode_floor_v1), the campaign doc, and MINT #1 artifact
+f188562 (df-ph-decode-floor-mint1.json at branch root, validator clean,
+gate 7.377086). Main checkout back on main. WINDOW
+window_7bfloor_20260729 COMPLETE and CLAIM-BEARING: verdict PASSED
+(basis 3ff9128b…f1173), backup ok, governed extraction clean
+(all_cells_extractable true) — 7B floors: absolute 6.294380135190098 /
+comparative 13.998036715259254; member mean 192.38623252628366 J; close-out at
+/Users/edr/JouleWise-window-custody/window_7bfloor_20260729/close-out.md.
+Session ledger (ALL rulings: B3, Q1-Q9 ratifications, FIX-9 shape, cold
+gates ×3, staged mint cmd):
+/private/tmp/claude-501/-Users-edr-code-JouleWise/abec37a6-31cd-4c56-a8a8-9448acaf12be/scratchpad/magistrate-rulings-2026-07-29.md
+(+ sweep memos sweep-{techniques,mechanisms,cv-paths}-2026-07-30.md and
+related-work-sweep raw in the same dir — commit to docs/run_reports/ at
+bookkeeping).
 
 RESUME (in order):
-1. Read the COMPLETE final gauntlet packet:
-   `/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/packet/PACKET-FINAL.md`
-   (self-contained; 7 findings + W1; §9 names one superseded Sol
-   refuter to harvest from disk as corroboration-only — never let its
-   stale premise reopen B4; §8 records the director's
-   fabrication-retraction, read artifacts not prose). Adjudicated
-   state: B1 REFUTED (collector-side nit registered); B2 should-fix
-   PRE-EXISTING (queue row); B3 SPLIT — REFERRED TO MAGISTRATE
-   (adjudicate from packet: Sol's D-078 cl.11 vs Opus's D-082 cl.2
-   framing — check whether they address different objects); B4
-   should-fix under the hard-literal conditional — CLOSE ANYWAY by
-   authenticating the comparative allowance against window C's verdict
-   basis; the conditional's independence requirement is ALREADY MET
-   (the 7.377086 literal was recomputed bit-exact from primary corpus
-   bytes, independent of the extraction pipeline — the formal
-   verification report's lead-side leg; its Sol leg was still pending
-   at checkpoint); B5 resolved by Ed ratification, BINDING repair
-   order: B4 fix → contract amendment (pin BOTH allowances + composed
-   floor; supersession note on the 3.592138 clause) → re-pin literal
-   "7.377086"; S1 should-fix (fix in the same round); S2 nit; W1
-   closed (MATCH, ABBA-inversion explained on record).
-2. Fix round per that order on `impl/mint-tool` (Sol xhigh, one commit)
-   + delta re-audit → lead suite → mint run
-   (`scripts/mint_floor_artifact.py` over the banked reports; validate
-   == []; exclusive output) → PR → D-072 gate → merge. Note
-   docs/phase_2/floor_mint_contract.md amendment rides the fix commit.
-3. Splitwise campaign (checkpoint commit `3a73b03` on the branch:
-   `docs/phase_2/splitwise_decode_campaign.md`, WIP-marked, NOT a frozen
-   plan): evidence base + duration arithmetic DONE (~2.9 h window at
-   n_blocks=10 incl. 20% margin — fits; 7B per-member ~120-130 s
-   estimated, unmeasured). STEP 0 FOR THE SUCCESSOR:
-   start the 7B download immediately —
-   `mlx-community/Qwen2.5-7B-Instruct-4bit` (~4.3 GB), exact pinned
-   command in the checkpoint doc; CHECK DISK first (doc cites ~13 GB
-   free via WINDOW_STATUS — possibly stale, verify); download must
-   complete BEFORE the quiet window (network during collection =
-   contamination). No Sol run was in flight — nothing to harvest.
-   Outstanding deliverables listed in the doc (generator, 7B profile,
-   order manifest, frozen plan, pre-reg sheet vs 7.377086 + claim-side
-   bound, operator checklist delta, validator runs). Magistrate
-   ratifies the frozen plan + pre-reg sheet before the window.
-4. QUIET WINDOW (evening target): full agent quiet-lock first
-   (no-agent rule absolute); runbook `docs/phase_2/window_runbook.md`
-   incl. §5B pre-flight screen (threshold 0.033558756679900 s — already
-   encoded in the runbook chain, no new code needed); Splitwise decode
-   ABBA collection (~40 members + references + neg8 bound in-window).
-5. Post-window (agents OK): verdict → governed extraction → analysis
-   engine claims (floor gate 7.377086 + claim-side bound) →
-   plain-language advisor brief (professor-facing rule).
-6. Bookkeeping owed: D-083/D-084 entries; council-log C-039 addendum;
-   process-trace fold from
-   `.../9c166892-.../scratchpad/trace-2026-07-28-mint.md`; consistency
-   sweep; DRIFT.md; kernel refresh; queue rows TEST-SPEED-01 +
-   TEST-ISOLATION (shared custody dir) + E1/E2 registrations + collector
-   device.boundary nit.
+1. VERIFY Ed restored network time (`sudo systemsetup -getusingnetworktime`
+   via Ed → must be On) — instructed this morning, NOT confirmed.
+2. Harvest the FIX-9+FIX-8 delta re-audit: a Sol xhigh read-only session
+   over f188562^..969a4d6 was RUNNING at handoff (launched via a codex
+   subagent; its out-file path unknown to this checkpoint). Look for
+   fresh codex out-files/processes; if not recoverable in minutes,
+   RELAUNCH the audit fresh (brief: ruled-shape compliance of the
+   supersession-aware cooldown join; fail-closed edges; stubbed-reader
+   test honesty; one-reader drift risk vs run_campaign private copy; no
+   scope creep; mint-artifact data commit consistency). Consume verdict.
+3. Merge train: on clean audit → PR for impl/mint-tool (base main; the
+   series is FIX-1..9 + contract + campaigns + mint #1), D-072 full gate
+   shape, merge. STACK-ID-BIND-01 (A50) closes on the real-bundle
+   re-verify already done at 7f2c108+ — record it.
+4. TONIGHT (if machine settled + AC + Ed authorizes): contrast window
+   splitwise_decode_v1 (~2.6h) per campaign doc on the branch. Magistrate
+   ratifies frozen plan + pre-reg FIRST (drafts in the doc; family ids
+   ratified Q2-Q8, see ledger). Machine moved since last window → §5A
+   (Ed, admin), fresh runs roots, new plan root
+   (/Users/edr/JouleWise-window-plans/ template window_7bfloor_20260729 —
+   REUSE the runbook-§6 chain extraction procedure incl. §5B screen;
+   remember: --evaluation-basis-sha256 on extraction, --hash-bundles,
+   absolute --runs-dir, supersession recorder appends silent dupes (run
+   ONCE per member). XProtect/TM idle-daemon risk: provoke idle
+   daemons pre-window; third-failure-closes rule was cold-gate-ratified
+   precedent. Post-window: verdict → extraction → claims (exact
+   evidence-root mappings, NO surplus) → the contrast claim needs
+   MANIFEST-CONTRAST schema work (Blocker B, campaign doc §2) — claims
+   ride AFTER that lands; collection tonight is still correct (evidence
+   ages fine, pre-reg is in the plan).
+5. BOOKKEEPING BATCH owed (one commit set to main): decision-log
+   D-083.. (from ledger: B3 ruling; 7.377086 ratification recorded
+   earlier; Q1-Q9; FIX-9 shape; cold-gate consults; third-failure rule),
+   council-log C-039 addendum (gauntlet + cold gates + audit layers),
+   queue rows: MINT-GENERALIZE-01, MANIFEST-CONTRAST-01,
+   SUPERSESSION-DUP-REFUSAL-01 (recorder footgun), POWERMETRICS-AUDIT-01
+   (counter-mechanics, citable), TOOL --runs-dir absolute-contract doc
+   note, F2 mock-sampler, B2 SHA-pin, S2 exact-set, refusal-vocab
+   ratification, MDE-adoption + min-window-rule + battery-crosscheck
+   (from techniques sweep top-10), full-PDF reads of TokenPowerBench +
+   2605.11999 pre-submission; WINDOW_STATUS stale disk line; kernel
+   refresh + gen_state; sweep memos → docs/run_reports/; consistency
+   sweep; skill-usage log.
+6. Advisor meeting output: capture her four answers as the acceptance
+   spec (P1-008/E1 row closes), reorder claim queue per Q4 answer.
 
-Historical NEXT (superseded by the block above): (1) close the two
+Standing constraints intact: gates never waived; quiet-lock during
+measurement; magistrate operates windows solo; lead never delegates
+final verification; plain language on advisor surfaces.
+\nHistorical NEXT (superseded by the block above): (1) close the two
 remaining suite errors on `impl/mint-tool` @ `1d83d68` — DONE via
 FIX rounds 81193f5/c698711/FIX-5;
 (2) full-tier adversarial review of `git diff
