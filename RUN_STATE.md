@@ -37,8 +37,10 @@ Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 Steps 2, 3, and 5 of the resume script below are DONE (audit harvested →
 FAIL → FIX-10 → escalation → cold gate → D-088 → PR #88 merged
 `da83337`; bookkeeping batch on main as `e1e0aec`+`d8b5d54`). Step 1
-(network-time confirmation) remains UNVERIFIED — Ed: run
-`sudo systemsetup -getusingnetworktime`, must be On, before any window.
+CLEARED: Ed confirmed network time is **On** (2026-07-30, pre-meeting).
+The advisor brief is also LIVE as a private shareable web page (URL in
+the external-artifacts-index memory; canonical copy stays
+`docs/advisor_briefs/2026-07-30-advisor-brief.md`).
 Step 4 (tonight's window per D-085 Q1: `qwen25_7b_decode_floor_v1`
 already EXECUTED 07-29; the contrast window `splitwise_decode_v1` is the
 one still pending) awaits Ed authorization + AC + settled machine;
