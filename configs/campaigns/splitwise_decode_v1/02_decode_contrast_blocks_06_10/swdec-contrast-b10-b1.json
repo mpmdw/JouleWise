@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "run_id": "swdec-contrast-b10-b1",
+  "model": {
+    "name": "Qwen2.5-7B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "splitwise_decode_v1 cross-model decode contrast on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "df_ph_decode",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 512
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "splitwise-decode-v1",
+      "production-window",
+      "comparative-contrast",
+      "df-condition=sw-decode-b-qwen25-7b",
+      "calibration-plan-sha256=7b563724be38254bf0769bca5818e9bcd70f76288e79650b55c3e051bf636b04",
+      "rep10",
+      "calibration-abba-block-id=sw-decode-contrast-b10",
+      "calibration-abba-label=B",
+      "calibration-abba-sequence-index=2"
+    ]
+  }
+}

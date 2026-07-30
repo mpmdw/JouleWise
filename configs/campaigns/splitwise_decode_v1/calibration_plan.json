@@ -1,0 +1,456 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+  "calibration_scope": "production_window",
+  "freeze_status": "frozen_before_measurement",
+  "fixed_n": 10,
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "arms": {
+      "A": {
+        "condition_family_id": "sw-decode-a-qwen25-1p5b",
+        "condition_family_sha256": "c13a3ebf5461ed9a442a8e67555f70301848d56a55ab766570d46ca067934f12",
+        "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+        "model_family": "qwen2.5",
+        "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "weight_format": "mlx",
+        "model_tag": "qwen25-1p5b-mlx"
+      },
+      "B": {
+        "condition_family_id": "sw-decode-b-qwen25-7b",
+        "condition_family_sha256": "5149a8552600341883439a73fa135caa0e6ba292544c7c6fe2e69674318df4e3",
+        "model_name": "Qwen2.5-7B-Instruct-4bit",
+        "model_family": "qwen2.5",
+        "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "weight_format": "mlx",
+        "model_tag": "qwen25-7b-mlx"
+      }
+    },
+    "note": "The single-model model_name/model_revision/model_source keys used by p2_015_floors are deliberately replaced by arms because this campaign spans two model stacks."
+  },
+  "replacement_rule": {
+    "policy": "technical_invalid_same_slot_only",
+    "predeclared_before_data": true,
+    "outcome_dependent_top_up": "forbidden_and_demotes_contrast_to_exploratory"
+  },
+  "cells": [
+    {
+      "cell_id": "sw-decode-contrast-1p5b-vs-7b",
+      "kind": "comparative_contrast",
+      "null_alias": false,
+      "df_rows": [],
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_ids": [
+        "sw-decode-a-qwen25-1p5b",
+        "sw-decode-b-qwen25-7b"
+      ],
+      "difference_orientation": "condition_b_minus_condition_a",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "sw-decode-contrast-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "sw-decode-contrast-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "swdec-contrast-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "swdec-contrast-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "swdec-contrast-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "swdec-contrast-b10-a2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "execution_modes": {
+    "production_contrast_window": {
+      "selected_for_this_frozen_plan": true,
+      "ordered_subcampaign_ids": [
+        "01_decode_contrast_blocks_01_05",
+        "02_decode_contrast_blocks_06_10"
+      ],
+      "planned_bundles": 40
+    }
+  },
+  "references": {
+    "window_references": {
+      "source": "configs/campaigns/window_references/",
+      "member_layout": "3+1+3",
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    },
+    "in_window_bound_corpus": {
+      "source": "configs/campaigns/neg8_reference_corpus/",
+      "planned_n_bundles": 12,
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    }
+  },
+  "runs_dir": "runs/splitwise_decode_v1",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs/splitwise_decode_v1/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "binding": "operator passes --campaign-policy; no campaign artifact declares it"
+  }
+}
