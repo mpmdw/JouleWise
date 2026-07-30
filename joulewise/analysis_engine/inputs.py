@@ -1439,6 +1439,7 @@ def _campaign_cooldown_evidence(
     # Each candidate is paired with its manifest-position identity so a
     # duplicate can be matched against an operator supersession record below.
     candidates: dict[str, list[tuple[tuple[str, int, int], Mapping[str, Any]]]] = {}
+    declared_occurrence_counts: dict[str, int] = {}
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -1500,6 +1501,12 @@ def _campaign_cooldown_evidence(
                 continue
             member_run_id = member.get("run_id")
             bundle_ids = member.get("bundle_ids")
+            if isinstance(bundle_ids, list):
+                for bundle_id in bundle_ids:
+                    if isinstance(bundle_id, str) and bundle_id:
+                        declared_occurrence_counts[bundle_id] = (
+                            declared_occurrence_counts.get(bundle_id, 0) + 1
+                        )
             if (
                 not isinstance(member_run_id, str)
                 or not member_run_id
@@ -1573,13 +1580,18 @@ def _campaign_cooldown_evidence(
     supersessions = validated_supersession_entries(runs_root)
     resolved: dict[str, Mapping[str, Any]] = {}
     for bundle_id, rows in candidates.items():
-        # Candidate occurrence count is evidence: two member records for one
-        # bundle are ambiguous even when their bytes normalize identically.
-        # Canonical-set collapse used to launder byte-identical duplicates.
+        # Declared occurrence count is evidence: duplicate declarations remain
+        # ambiguous even when a malformed physical row was dropped or the
+        # surviving bytes normalize identically.
         # The single licensed exception is an operator supersession artifact
         # that names EXACTLY the observed occurrences; it selects which
         # occurrence's evidence governs and licenses nothing wider.
-        if len(rows) == 1:
+        # A malformed physical row may have been dropped while candidates
+        # were built, so only the declarations can license this fast path.
+        if (
+            len(rows) == 1
+            and declared_occurrence_counts.get(bundle_id) == 1
+        ):
             resolved[bundle_id] = rows[0][1]
             continue
         selected = supersession_selected_occurrence_identity(
