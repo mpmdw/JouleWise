@@ -136,6 +136,12 @@ reduction needed on current arithmetic.
 4. Operator checklist delta vs runbook (two-model load pattern, disk
    preflight, 7B runtime estimate is unmeasured — consider one non-claim
    dry-run timing probe OUTSIDE the window to firm it up before freezing).
+   **EVIDENCE-ROOT MAPPING — standing operator requirement:** pass EXACT
+   `--evidence-root ID=PATH` mappings, one per artifact-declared evidence
+   root and no surplus entries, on every claim run. This holds regardless
+   of FIX-8's status; surplus entries have twice been a refusal source
+   (binder exact-cover, then output-separation), and an exact mapping is
+   the shape both binders and the separation check agree on.
 5. Validation: `.venv/bin/python -m joulewise doctor --campaign --json <all
    new configs>`; `scripts/run_campaign.py <stage> --dry-run` per stage;
    `git diff --check` clean.
