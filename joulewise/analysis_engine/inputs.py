@@ -804,6 +804,33 @@ def _component_evidence_root_ids(
     )
 
 
+def declared_evidence_roots(
+    floor_artifact_path: Path,
+    evidence_roots: Mapping[str, Path] | None,
+) -> Mapping[str, Path] | None:
+    """Restrict supplied roots to artifact-declared IDs, failing closed on read."""
+
+    if evidence_roots is None:
+        return None
+    try:
+        raw = Path(floor_artifact_path).read_bytes()
+        artifact = json.loads(raw.decode("utf-8"))
+        if not isinstance(artifact, Mapping) or validate_floor_artifact(artifact):
+            return evidence_roots
+        declared_root_ids = _component_evidence_root_ids(artifact)
+    except Exception:
+        # This pre-authentication read only narrows separation inputs. Preserve
+        # the full, stricter mapping on every failure; authenticated loading
+        # immediately follows and remains the authority for refusal details.
+        return evidence_roots
+    return {
+        normalized_root_id: Path(root)
+        for root_id, root in evidence_roots.items()
+        for normalized_root_id in (str(root_id),)
+        if normalized_root_id in declared_root_ids
+    }
+
+
 def _normalize_evidence_roots(
     artifact: Mapping[str, Any],
     evidence_roots: Mapping[str, Path] | Path,
@@ -3256,6 +3283,7 @@ __all__ = [
     "bind_floor_artifact_evidence",
     "BundleEvidence",
     "cleanup_claim_evidence_flags",
+    "declared_evidence_roots",
     "FloorRequest",
     "FloorResolution",
     "FloorEvidenceBinding",

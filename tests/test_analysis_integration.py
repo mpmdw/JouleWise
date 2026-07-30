@@ -30,6 +30,7 @@ from joulewise.analysis_engine.inputs import (
     _campaign_cooldown_evidence,
     bind_floor_artifact_evidence,
     campaign_cooldown_evidence,
+    declared_evidence_roots,
     floor_binding_reason_codes,
     floor_request_for_evidence,
     floor_stack_identity,
@@ -2197,6 +2198,194 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     evidence_roots={"a10": evidence_root},
                     output_path=evidence_root / "claim-verdicts.json",
                 )
+
+    def test_declared_evidence_roots_filters_valid_artifacts_and_fails_closed_on_read(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            supplied = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+                "unexpected": root / "unexpected",
+            }
+            self.assertEqual(
+                declared_evidence_roots(self.floor_path, supplied),
+                {
+                    "a10": supplied["a10"],
+                    "window_c": supplied["window_c"],
+                },
+            )
+            self.assertIsNone(declared_evidence_roots(self.floor_path, None))
+
+            missing = root / "missing.json"
+            self.assertIs(declared_evidence_roots(missing, supplied), supplied)
+
+            with mock.patch.object(
+                Path,
+                "read_bytes",
+                side_effect=PermissionError("fixture unreadable"),
+            ):
+                self.assertIs(
+                    declared_evidence_roots(self.floor_path, supplied),
+                    supplied,
+                )
+
+            invalid_utf8 = root / "invalid-utf8.json"
+            invalid_utf8.write_bytes(b"\xff")
+            self.assertIs(
+                declared_evidence_roots(invalid_utf8, supplied),
+                supplied,
+            )
+
+            invalid_json = root / "invalid-json.json"
+            invalid_json.write_text("{\n", encoding="utf-8")
+            self.assertIs(
+                declared_evidence_roots(invalid_json, supplied),
+                supplied,
+            )
+
+            unusable = root / "unusable.json"
+            unusable.write_text("[]\n", encoding="utf-8")
+            self.assertIs(
+                declared_evidence_roots(unusable, supplied),
+                supplied,
+            )
+
+    def test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declared_roots = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+            }
+            for declared_root in declared_roots.values():
+                declared_root.mkdir()
+
+            exact_output = root / "exact-claim-verdicts.json"
+            analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+                evidence_roots=declared_roots,
+                output_path=exact_output,
+            )
+            self.assertTrue(exact_output.is_file())
+
+            declared_target = root / "declared-target"
+            declared_target.mkdir()
+            declared_symlink = root / "declared-symlink"
+            declared_symlink.symlink_to(declared_target, target_is_directory=True)
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "path_resolution_refused: symlink input",
+            ):
+                analyze_claims(
+                    self.manifest_path,
+                    self.runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                    evidence_roots={
+                        **declared_roots,
+                        "a10": declared_symlink,
+                    },
+                    output_path=root / "declared-symlink-must-not-write.json",
+                )
+
+            surplus_target = root / "surplus-target"
+            surplus_target.mkdir()
+            surplus_symlink = root / "surplus-symlink"
+            surplus_symlink.symlink_to(surplus_target, target_is_directory=True)
+            surplus_output = root / "surplus-symlink-claim-verdicts.json"
+            analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+                evidence_roots={
+                    **declared_roots,
+                    "unexpected": surplus_symlink,
+                },
+                output_path=surplus_output,
+            )
+            self.assertTrue(surplus_output.is_file())
+
+    def test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declared_roots = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+            }
+            for declared_root in declared_roots.values():
+                declared_root.mkdir()
+            evidence_args = [
+                "--evidence-root",
+                f"a10={declared_roots['a10']}",
+                "--evidence-root",
+                f"window_c={declared_roots['window_c']}",
+            ]
+            base = [
+                "analyze-claims",
+                "--analysis-manifest",
+                str(self.manifest_path),
+                "--runs-root",
+                str(self.runs_root),
+                "--floor-artifact",
+                str(self.floor_path),
+            ]
+
+            exact_output = root / "exact-cli-claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exact_code = main(
+                    [*base, *evidence_args, "--output", str(exact_output)]
+                )
+            self.assertEqual(exact_code, 0)
+            self.assertTrue(exact_output.is_file())
+
+            absent_output = root / "absent-cli-claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                absent_code = main([*base, "--output", str(absent_output)])
+            self.assertEqual(absent_code, 0)
+            self.assertTrue(absent_output.is_file())
+
+            declared_output = declared_roots["a10"] / "must-not-write.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                declared_code = main(
+                    [*base, *evidence_args, "--output", str(declared_output)]
+                )
+            self.assertEqual(declared_code, 2)
+            self.assertFalse(declared_output.exists())
+
+            absent_refused_output = self.runs_root / "must-not-write-without-roots.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                absent_refused_code = main(
+                    [*base, "--output", str(absent_refused_output)]
+                )
+            self.assertEqual(absent_refused_code, 2)
+            self.assertFalse(absent_refused_output.exists())
+
+            surplus_root = root / "surplus"
+            surplus_root.mkdir()
+            surplus_output = surplus_root / "claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                surplus_code = main(
+                    [
+                        *base,
+                        *evidence_args,
+                        "--evidence-root",
+                        f"unexpected={surplus_root}",
+                        "--output",
+                        str(surplus_output),
+                    ]
+                )
+            self.assertEqual(surplus_code, 0)
+            self.assertTrue(surplus_output.is_file())
 
     def test_cli_writes_artifact_and_invalid_input_writes_nothing(self):
         output = self.root / "cli-claim-verdicts.json"

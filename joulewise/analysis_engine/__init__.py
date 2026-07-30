@@ -27,6 +27,7 @@ from .estimators import (
 from .inputs import (
     AnalysisInputError,
     BundleEvidence,
+    declared_evidence_roots,
     FloorEvidenceBinding,
     FloorRequest,
     FloorResolution,
@@ -1208,7 +1209,10 @@ def analyze_claims(
             Path(analysis_manifest_path),
             Path(runs_root),
             Path(floor_artifact_path),
-            evidence_roots,
+            declared_evidence_roots(
+                Path(floor_artifact_path),
+                evidence_roots,
+            ),
         )
 
     inputs = load_analysis_inputs(
