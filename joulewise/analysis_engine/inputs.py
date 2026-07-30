@@ -38,6 +38,8 @@ from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
+    supersession_selected_occurrence_identity,
+    validated_supersession_entries,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
@@ -1434,7 +1436,9 @@ def _campaign_cooldown_evidence(
     manifest_dir = runs_root / "campaign_manifests"
     if not manifest_dir.is_dir():
         return {}
-    candidates: dict[str, list[Mapping[str, Any]]] = {}
+    # Each candidate is paired with its manifest-position identity so a
+    # duplicate can be matched against an operator supersession record below.
+    candidates: dict[str, list[tuple[tuple[str, int, int], Mapping[str, Any]]]] = {}
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -1490,7 +1494,8 @@ def _campaign_cooldown_evidence(
                 "raw_artifact": dict(raw_artifact) if raw_artifact is not None else None,
             }
 
-        for member in raw["members"]:
+        manifest_rel = f"campaign_manifests/{path.name}"
+        for member_index, member in enumerate(raw["members"]):
             if not isinstance(member, Mapping) or member.get("execution") != "invoked":
                 continue
             member_run_id = member.get("run_id")
@@ -1525,7 +1530,16 @@ def _campaign_cooldown_evidence(
                         following_run_id=bundle_id,
                         id_matches_member=id_matches_member,
                     )
-                    candidates.setdefault(bundle_id, []).append(normalized)
+                    # A bundle id repeated inside one member gets a position
+                    # no valid supersession record can name, so it refuses.
+                    bundle_index = (
+                        bundle_ids.index(bundle_id)
+                        if bundle_ids.count(bundle_id) == 1
+                        else -1
+                    )
+                    candidates.setdefault(bundle_id, []).append(
+                        ((manifest_rel, member_index, bundle_index), normalized)
+                    )
                 continue
 
             # Single-repetition rows and provenance written before the
@@ -1546,16 +1560,34 @@ def _campaign_cooldown_evidence(
                 following_run_id=member_run_id,
                 id_matches_member=ids_match_member,
             )
-            for bundle_id in bundle_ids:
-                candidates.setdefault(bundle_id, []).append(normalized)
+            for bundle_index, bundle_id in enumerate(bundle_ids):
+                # A bundle id repeated inside one member gets a position no
+                # valid supersession record can name, so it refuses.
+                position = (
+                    bundle_index if bundle_ids.count(bundle_id) == 1 else -1
+                )
+                candidates.setdefault(bundle_id, []).append(
+                    ((manifest_rel, member_index, position), normalized)
+                )
 
+    supersessions = validated_supersession_entries(runs_root)
     resolved: dict[str, Mapping[str, Any]] = {}
     for bundle_id, rows in candidates.items():
         # Candidate occurrence count is evidence: two member records for one
         # bundle are ambiguous even when their bytes normalize identically.
         # Canonical-set collapse used to launder byte-identical duplicates.
+        # The single licensed exception is an operator supersession artifact
+        # that names EXACTLY the observed occurrences; it selects which
+        # occurrence's evidence governs and licenses nothing wider.
         if len(rows) == 1:
-            resolved[bundle_id] = rows[0]
+            resolved[bundle_id] = rows[0][1]
+            continue
+        selected = supersession_selected_occurrence_identity(
+            supersessions, bundle_id, [identity for identity, _ in rows]
+        )
+        selected_rows = [row for identity, row in rows if identity == selected]
+        if selected is not None and len(selected_rows) == 1:
+            resolved[bundle_id] = selected_rows[0]
         else:
             resolved[bundle_id] = {
                 "result": "unknown",

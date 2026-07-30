@@ -874,6 +874,7 @@ Then run governed extraction:
   --runs-root "$RUNS_ROOT" \
   --spec "$WINDOW_PLAN_ROOT/extraction_spec.json" \
   --out "$CUSTODY_ROOT/detection-floor-extraction.json" \
+  --evaluation-basis-sha256 "$WHOLE_WINDOW_BASIS_SHA256" \
   --hash-bundles
 ```
 

@@ -2058,6 +2058,118 @@ def validate_occurrence_supersession_entry(
     return True
 
 
+def occurrence_descriptor_identity(
+    value: Any,
+) -> tuple[str, int, int] | None:
+    """Reduce one occurrence descriptor to its manifest-position identity.
+
+    The triple is the only thing two joins can compare without re-reading
+    manifests: the runs-root-relative source manifest path plus the member
+    and bundle indices inside it.  Anything malformed returns ``None`` so
+    callers fail closed rather than matching on a partial identity.
+    """
+
+    if not isinstance(value, Mapping):
+        return None
+    source = value.get("source_manifest")
+    path = source.get("path") if isinstance(source, Mapping) else None
+    member_index = value.get("member_index")
+    bundle_index = value.get("bundle_index")
+    if (
+        not isinstance(path, str)
+        or not path
+        or isinstance(member_index, bool)
+        or not isinstance(member_index, int)
+        or member_index < 0
+        or isinstance(bundle_index, bool)
+        or not isinstance(bundle_index, int)
+        or bundle_index < 0
+    ):
+        return None
+    return (path, member_index, bundle_index)
+
+
+def validated_supersession_entries(
+    runs_root: Path, log_path: Path | None = None
+) -> list[dict[str, Any]]:
+    """Read campaign-log supersession artifacts that validate RIGHT NOW.
+
+    Every entry is re-checked against current bytes by
+    :func:`validate_occurrence_supersession_entry`; a record that no longer
+    matches its manifests, its canonical present bundle, or its quarantined
+    copy is not returned at all.  This is the ONE reader; joins that need
+    operator-authorized occurrence resolution call it instead of parsing the
+    log themselves.
+    """
+
+    path = (
+        Path(log_path)
+        if log_path is not None
+        else Path(runs_root) / "campaign_log.jsonl"
+    )
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(value, dict)
+            and value.get("record_type") == "campaign_occurrence_supersession"
+            and validate_occurrence_supersession_entry(value, runs_root)
+        ):
+            entries.append(value)
+    return entries
+
+
+def supersession_selected_occurrence_identity(
+    entries: Sequence[Mapping[str, Any]],
+    bundle_id: str,
+    observed: Sequence[tuple[str, int, int]],
+) -> tuple[str, int, int] | None:
+    """Name the selected occurrence when a record covers EXACTLY what was seen.
+
+    Duplicate occurrence records are ambiguous evidence by default, and that
+    default is what stops outlier laundering.  The single licensed exception
+    is an explicit operator supersession artifact -- hash-bound, reason-
+    bearing, and naming the quarantined copy -- and it licenses nothing wider
+    than the duplicates it actually names.  The record must therefore account
+    for every observed occurrence and name no occurrence that was not
+    observed; a partial record, an extra record, two competing records, or a
+    repeated observed identity all return ``None`` and leave the caller's
+    existing refusal in place.
+    """
+
+    observed_key = sorted(observed)
+    if len(observed_key) < 2 or len(set(observed_key)) != len(observed_key):
+        return None
+    matches: list[tuple[str, int, int]] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping) or entry.get("bundle_id") != bundle_id:
+            continue
+        selected = occurrence_descriptor_identity(entry.get("selected_occurrence"))
+        superseded_values = entry.get("superseded_occurrences")
+        if selected is None or not isinstance(superseded_values, list):
+            continue
+        superseded = [
+            occurrence_descriptor_identity(value) for value in superseded_values
+        ]
+        if any(value is None for value in superseded):
+            continue
+        named = sorted([selected, *(value for value in superseded if value)])
+        if len(set(named)) == len(named) and named == observed_key:
+            matches.append(selected)
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
 def _evidence_map(path: Path) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     if not path.is_dir():

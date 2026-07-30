@@ -3301,3 +3301,138 @@ class AnalysisIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SupersessionAwareCooldownJoinTests(unittest.TestCase):
+    """FIX-9 regressions: duplicate occurrences resolve ONLY via a valid
+    operator supersession record naming exactly the observed occurrences."""
+
+    @staticmethod
+    def _manifest(tmp: Path, name: str, session: str, bundle_id: str) -> None:
+        campaign_dir = tmp / "campaign_manifests"
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": None,
+            "session_id": session,
+            "first_physical_run_id": bundle_id,
+            "members": [
+                {
+                    "execution": "invoked",
+                    "run_id": bundle_id,
+                    "bundle_ids": [bundle_id],
+                    "preceding_campaign_cooldown": {
+                        "result": "first_run_exempt",
+                        "session_id": session,
+                        "following_run_id": bundle_id,
+                    },
+                }
+            ],
+        }
+        (campaign_dir / name).write_text(json.dumps(manifest), encoding="utf-8")
+
+    def _duplicated_root(self) -> Path:
+        tmp = Path(tempfile.mkdtemp(prefix="fix9-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self._manifest(tmp, "campaign-a.json", "session-a", "dup-bundle")
+        self._manifest(tmp, "campaign-b.json", "session-b", "dup-bundle")
+        return tmp
+
+    def test_duplicate_without_supersession_still_refuses(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        resolved = _campaign_cooldown_evidence(self._duplicated_root(), None)
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_valid_supersession_resolves_selected_occurrence(self):
+        from joulewise.analysis_engine import inputs as inputs_module
+
+        entry = {
+            "bundle_id": "dup-bundle",
+            "selected_occurrence": {
+                "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {
+                        "path": "campaign_manifests/campaign-a.json"
+                    },
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        with unittest.mock.patch.object(
+            inputs_module, "validated_supersession_entries", return_value=[entry]
+        ):
+            resolved = inputs_module._campaign_cooldown_evidence(
+                self._duplicated_root(), None
+            )
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["manifest"], "campaign_manifests/campaign-b.json")
+        self.assertEqual(row["session_id"], "session-b")
+
+    def test_supersession_naming_mismatched_occurrences_refuses(self):
+        from joulewise.analysis_engine import inputs as inputs_module
+
+        entry = {
+            "bundle_id": "dup-bundle",
+            "selected_occurrence": {
+                "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {
+                        "path": "campaign_manifests/campaign-OTHER.json"
+                    },
+                    "member_index": 3,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        with unittest.mock.patch.object(
+            inputs_module, "validated_supersession_entries", return_value=[entry]
+        ):
+            resolved = inputs_module._campaign_cooldown_evidence(
+                self._duplicated_root(), None
+            )
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+
+    def test_matcher_partial_extra_and_repeated_identities_refuse(self):
+        from joulewise.whole_window import (
+            supersession_selected_occurrence_identity as match,
+        )
+
+        a = ("campaign_manifests/a.json", 0, 0)
+        b = ("campaign_manifests/b.json", 0, 0)
+        c = ("campaign_manifests/c.json", 0, 0)
+        entry = {
+            "bundle_id": "x",
+            "selected_occurrence": {
+                "source_manifest": {"path": b[0]},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {"path": a[0]},
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        self.assertEqual(match([entry], "x", [a, b]), b)
+        self.assertIsNone(match([entry], "x", [a, b, c]))
+        self.assertIsNone(match([entry], "x", [a]))
+        self.assertIsNone(match([entry], "x", [a, a]))
+        self.assertIsNone(match([entry], "wrong-id", [a, b]))
+        self.assertIsNone(match([entry, dict(entry)], "x", [a, b]))
