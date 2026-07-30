@@ -5088,3 +5088,369 @@ Clauses, compact (contract owns the detail):
 Revisit when: a prefill comparative window exists (window B
 re-collection), or a second mint requires semantics not covered by the
 enum `{d078_minted_envelopes_v1, d078_authenticated_max_bracket_rederivation_v1}`.
+
+## D-083: The additive effective-clearable-effect expression is a disclosure obligation, not an acceptance threshold
+
+- Date: 2026-07-29
+- Status: accepted (magistrate-adjudicated from primary text on a referred
+  Sol-vs-Opus split; review finding B3 → NOT-A-DEFECT; no code change)
+- Applies to: `joulewise/analysis_engine/claims.py`, every artifact or prose
+  surface that publishes an attribution-limited floor
+- Supersedes nothing; clarifies the enforcement semantics of D-078 clause 11
+
+`effective_clearable_effect = floor_j + claim_side_bound_j` is a statement
+the project owes its readers, **not** a gate a claim must clear. The
+**two-gate structure** in `claims.py:324-363` — the floor gate containing the
+anchor term, and each claim's decision interval separately consuming the
+member's `E_clock_anchor_shift_bound_j` — is the **ratified design**.
+
+Grounds (primary text read directly this session, not packet-trusted):
+
+1. **D-078 clause 11's own words.** It introduces the additive expression as a
+   *consequence* of the two-object design it has just ratified: "These are
+   different objects … and both are legitimate, but the **consequence** is
+   that the effective clearable effect is FLOOR + CLAIM-SIDE BOUND … Every
+   artifact publishing an attribution-limited floor must **state this
+   explicitly** so that neither term is later removed as an apparent double
+   count." The operative verb is *state*. Science requires the disclosure;
+   the code already enforces it (`claims.py:274-304`, exact-equality
+   validation else `floor_artifact_invalid`).
+2. **D-079 clause 5.** "The attribution-width floor is a diagnostic; the
+   **operative floor is the claim gate**." The gate is the floor — not floor
+   plus bound.
+3. **The referral question — do the two citations address different objects?
+   YES, explicitly.** D-082 clause 2 / contract rule 8 ("NEVER sum
+   allowances") governs FLOOR-SIDE component composition (absolute vs
+   comparative allowances *inside* the gate). D-078 clause 11's claim-side
+   bound is consumed by the claim's decision interval — a different object,
+   per clause 11's own words. The D-082 citation is therefore **orthogonal**
+   to B3 and neither compels nor forbids the reading; the D-078-internal
+   consequence/disclosure reading is decisive on its own and D-079 clause 5
+   corroborates it.
+4. **Consistency.** An additive *acceptance* gate would require its own
+   ratification — it would sit in tension with D-082 clause 2's direction of
+   travel as merged.
+
+**Dissent preserved (Sol, xhigh review lens):** that the ratified text makes
+the sum the operative bar ("not the floor alone"), worked through an executed
+example (a claim of 8.63 J admitted against floor 3.59 plus a comparable
+claim-side bound). The magistrate finds the ratified text does not support it:
+that phrase is the same sentence's honest description of what a claim must in
+practice clear across BOTH gates jointly, and does not convert the disclosure
+into a single summed gate. `claims.py` was untouched by the mint series, so
+the disposition carries no merge impact either way.
+
+The practical phrasing already circulating in project notes — "effective bar
+= floor + claim-side ≈ 5 J for phase contrasts" — **stays**, as the correct
+description of what a claim must clear across both gates jointly. This entry
+governs the *enforcement* semantics only.
+
+Revisit when: someone proposes a single summed acceptance gate (which would
+need its own ratification), or a floor artifact is published without the
+clause-11 disclosure.
+
+## D-084: Operative decode-floor pin re-set to the composed cell gate 7.377086 J
+
+- Date: 2026-07-29
+- Status: accepted (Ed-ratified; independently lead-verified bit-exact from
+  primary corpus bytes)
+- Applies to: `scripts/mint_floor_artifact.py`
+  (`EXPECTED_OPERATIVE_FLOOR_TEXT`), `docs/phase_2/floor_mint_contract.md`,
+  `docs/phase_2/detection_floor.md`, every surface quoting the operative
+  decode floor
+- Amends: D-079 clause 5's canonical operative decode floor "3.592138"
+
+Mint #1's cell composes two components: **absolute 3.592138 J** (a10) and
+**comparative 7.377086 J** (window C). Under W3 rule 8 the cell gate is the
+**max**, never the sum, so the composed operative floor is **7.377086 J**.
+
+The previous "3.592138" pin was the **absolute component in isolation**,
+recorded by D-079 clause 5 before window C's comparative floor had been
+extracted. Once both components existed, D-079 clause 5 and the rule-8
+composition as previously written were **jointly unsatisfiable**. Ed ratified
+the amendment on 2026-07-29; both components remain published and LABELLED
+(D-078 clause 11), and the diagnostic attribution-width floors continue to
+carry `published_claim_floor: false`.
+
+Binding on the tool: the re-pinned literal `"7.377086"` **must remain a hard
+six-decimal literal** in the pre-registration gate — never parameterized
+from, or derived from, any extraction report inside the mint path. It was
+recomputed bit-exact from primary corpus bytes independently of the
+extraction pipeline before being pinned.
+
+Executed: mint #1 `df-ph-decode-floor-mint1.json` landed at `f188562` on
+`impl/mint-tool` with the gate asserted as-embedded and
+`validate_floor_artifact(artifact) == []`.
+
+Revisit when: a second mint's cell composes components whose max is a
+different value — the literal is per-artifact and a generalized mint
+(`MINT-GENERALIZE-01`) must carry the pin per plan, not per tool.
+
+## D-085: splitwise_decode_v1 / qwen25_7b_decode_floor_v1 pre-registration ratifications (Q1–Q9)
+
+- Date: 2026-07-29
+- Status: accepted (magistrate ruling on a lieutenant-assembled, code-verified
+  packet — the required pre-decision cross-model consult; Ed directive: "don't
+  stop until verified sound claims")
+- Applies to: `configs/campaigns/splitwise_decode_v1/`,
+  `configs/campaigns/qwen25_7b_decode_floor_v1/`,
+  `docs/phase_2/splitwise_decode_campaign.md` (§2/§10 at `27ffc91`, the ONE
+  home for the blocker analysis)
+
+1. **Q1 — floor-first (option O1). `qwen25_7b_decode_floor_v1` runs first.**
+   It is the only option whose evidence has a fully specified consumption
+   route, and it is a prerequisite of every other path: the contrast
+   evidence is unclaimable without a 7B floor REGARDLESS of later desk work
+   (§2 Blocker A — floor transport is stack-bound through
+   `model_artifact_sha256`, so the 7B arm resolves no floor under any
+   naming). The contrast window follows as window 2. A back-to-back contrast
+   collection the same night stayed LIVE as an option to be decided at
+   window-1 close on fresh pre-flight, timing, and thermal state — not
+   pre-committed.
+   **HONESTY ITEM, recorded for Ed:** *no* option yielded a gated
+   model-vs-model claim by the next morning. The ratified stack-binding
+   design makes the checkpoint's 24-hour contrast framing structurally
+   unachievable; both blockers are the design working correctly, not a
+   defect. The verified package is mint #1 (1.5B decode floor, labelled) +
+   7B floor extraction (second instrument) + pre-registered contrast +
+   methodology claims; the **gated** contrast lands only after window 2 plus
+   `MINT-GENERALIZE-01` and `MANIFEST-CONTRAST-01`.
+2. **Q2 — family ids RATIFIED:** `df-ph-decode-qwen25-7b` (floor);
+   `sw-decode-a-qwen25-1p5b` / `sw-decode-b-qwen25-7b` (contrast).
+3. **Q3 — RATIFIED:** `kind: "comparative_contrast"` with `null_alias false`,
+   distinct from `comparative_abba`. Labelling a genuine contrast with the
+   null-alias kind would be the actual sin.
+4. **Q4 — RATIFIED:** the two-arm `stack_scope.arms` shape.
+5. **Q5 — FIXED A/B/B/A for all blocks.** Validated vocabulary;
+   `detection_floor` hard-requires it for calibration plans, which this one
+   is; within-block linear cancellation is the load-bearing property.
+6. **Q6 — RATIFIED:** `production_window` scope on both plans — truthful for
+   a production-window calibration. The future 7B mint's remaining scope
+   details ride `MINT-GENERALIZE-01`.
+7. **Q7 — REFUSED**, adopting the lieutenant's grounds and recorded here as
+   **considered-and-refused**: labelling new production members
+   "p2-015 window-a floor-calibration" in order to satisfy a hash is
+   provenance mislabelling, and it does not rescue the contrast anyway.
+8. **Q8 — CONFIRMED:** `abba_alias_relation` describes the family's own
+   floor-calibration behavior; for the 7B null-ABBA it is literally true
+   (A == B on 7B).
+9. **Q9 — acknowledged:** the post-window bookkeeping batch (this entry and
+   its siblings, the queue intake rows, and the WINDOW_STATUS disk
+   correction).
+
+**Window operation:** the magistrate operates measurement windows **directly
+and solo** — no lieutenant session during measurement. The quiet-lock covers
+all agent sessions, grandchild notification misroute is a known risk a solo
+operator avoids, and interaction is at stage boundaries only with zero tool
+calls during stages.
+
+Executed (window `window_7bfloor_20260729`, 2026-07-29/30): verdict **PASSED**
+on authenticated basis
+`3ff9128b170136c57eea1376e954d32736d82d319d0d82bd1b64a78e616f1173`, backup ok,
+governed extraction clean (`all_cells_extractable: true`). 7B decode floors:
+absolute **6.294380135190098** J, comparative **13.998036715259254** J; member
+mean **192.38623252628366** J. Close-out:
+`~/JouleWise-window-custody/window_7bfloor_20260729/close-out.md`.
+
+Revisit when: the contrast window's frozen plan is ratified (it inherits Q2–Q6
+unless amended), or a third arm is added to `stack_scope.arms`.
+
+## D-086: Supersession-aware cooldown-evidence join (FIX-9)
+
+- Date: 2026-07-30
+- Status: accepted (magistrate ruling on a lieutenant-diagnosed extraction
+  refusal; implemented as FIX-9 at `969a4d6` on `impl/mint-tool`)
+- Applies to: `joulewise/analysis_engine/inputs.py`
+  (`_campaign_cooldown_evidence`, ~`:1552-1566`), its regressions, and
+  `docs/phase_2/window_runbook.md` §11
+
+Post-window governed extraction refused for two independent reasons:
+
+1. **Invocation defect.** The extraction call omitted
+   `--evaluation-basis-sha256`, so the tool did exact-set matching instead of
+   governed-subset matching against the verdict's authenticated basis
+   (`3ff9128b170136c57eea1376e954d32736d82d319d0d82bd1b64a78e616f1173`). The
+   runbook §11 command carries the **same omission** — the doc fix is
+   approved and rides FIX-9. Root cause is the invocation and its
+   documentation, not the engine.
+2. **Design gap.** The cooldown-evidence join is **supersession-blind**.
+   Replaced slots (`b03-b2`, `b09-b2`) appear in two manifests, so the join
+   returned "unknown/unverified" — fatal for the comparative cell — even
+   though the supersession itself is a ratified, validated custody record.
+
+**RULED:** extend consumption of **validated supersession entries** to the
+cooldown join. Resolve to the **selected occurrence ONLY when a valid entry
+names exactly the observed duplicates**; every other duplicate shape keeps
+refusing. This is the same already-ratified custody decision applied at
+another hop, and the anti-laundering properties are preserved intact — the
+entry must be hash-bound, operator-authored, and carry the required
+quarantine-naming record.
+
+Landed as FIX-9 on `impl/mint-tool` with resolve / refuse / mismatch-refuse
+regressions plus the runbook §11 command fix. **Delta re-audit is owed before
+merge** (it ran and returned blocker QA-1 — see the C-039 addendum and the
+queue intake batch).
+
+Also queued from the same diagnosis, both needing their own rulings:
+`SUPERSESSION-DUP-REFUSAL-01` (the recorder appends silent duplicate records,
+which voids membership downstream — needs a write-time refusal ruling) and
+the `--runs-dir`-must-be-absolute tool contract doc note.
+
+Revisit when: a duplicate shape appears that a valid entry names only
+partially, or the recorder gains write-time refusal (which changes what the
+join can assume about its inputs).
+
+## D-087: Cold-gate exercise record — F1, and the third-failure-closes precedent
+
+- Date: 2026-07-29
+- Status: accepted (rule-11 cold-gate exercised; magistrate synthesis of a
+  cold Fable instance paired with an Opus contract-lens refuter)
+- Applies to: the rule-11 orchestration topology (`CLAUDE.local.md`, hard
+  rule 11), `joulewise/analysis_engine/__init__.py` and its test file
+- Deliberation record: `docs/council_log.md` C-039 addendum
+
+**The mechanism ran as designed.** Rule 11 requires a **cold Fable instance**
+(fresh session, no loop context) ruling on a **mechanically-assembled**
+packet, **paired with an Opus contract-lens refuter** for cross-model
+diversity. The pairing was exercised **three times** across this arc; F1 —
+the second S1 fix round, i.e. whether to issue FIX-8 or queue-and-merge — is
+the ruling recorded in full here.
+
+**Cold-instance verdict: MODIFY — FIX-8 approved**, with queue-and-merge
+rejected as primary and retained ONLY as the named fallback if FIX-8 plus its
+delta re-audit could not complete before the claim window. Four conditions,
+binding on the order:
+
+- **C1** — the consumer enumeration is **AUDITED, not trusted**: the delta
+  re-audit independently re-derives the enumeration (CLI intake
+  `cli.py:1905` → artifact emission) and diffs it against the implementer's;
+  any consumer in the auditor's list missing from the implementer's is a
+  FIX-8 failure.
+- **C2** — phase order is a **magistrate ruling, not the implementer's
+  choice**. The cold instance verified that `_validate_output_separation`
+  (`__init__.py:85`, called at `:1206`) runs BEFORE inputs load, so the
+  filtered mapping does not exist there; the fix therefore requires either an
+  early declared-roots read or a phase reorder — design-bearing either way.
+- **C3** — **the escalation trigger ARMS NOW**: if FIX-8's delta re-audit
+  finds another raw-mapping consumer of the same signature, the standing
+  same-signature trigger has FIRED — no FIX-9 on that defect, the next spend
+  is a consult, and the merge question returns to a cold gate.
+- **C4** — sweep findings outside `WRITE_SCOPE` go through `NEEDS_SCOPE`;
+  scope stays exactly `{analysis_engine/__init__.py, its test file}`.
+
+Deadline weight was ruled **zero on gate content**, legitimate only on
+disposition selection.
+
+**Magistrate synthesis (both verdicts consumed):** FIX-8 issues with C1, C3,
+and C4 intact and **C2 resolved by the magistrate** (as C2 itself required)
+in favour of the Opus refuter's **M3 — filter in place, preserve call
+order**: the evidence-roots leg of separation validation consumes a
+declared-filtered mapping produced by ONE exported helper owned by
+`inputs.py` (the M1 scope grant), with **no reorder**, because a reorder
+would alter refusal precedence and that is deferred
+vocabulary-ratification territory. **The magistrate's own earlier two-phase
+reorder proposal is WITHDRAWN.** **M2 adopted:** the Opus-verified closed
+consumer list (`cli.py:1870-1891` builder; `__init__.py:1211` separation =
+the sole defect; `__init__.py:1219` load path already filtering at
+`_normalize_evidence_roots:807`; `artifact.py` zero occurrences) becomes a
+verified **precondition**, plus hunk-by-hunk reconciliation of FIX-6 against
+`f63a334`; the C1 audit independently re-derives both. **M4 adopted:** the
+operator checklist mandates exact evidence-root mappings regardless of FIX-8.
+
+**Packet correction on the record.** The magistrate's own packet wrongly
+stated that `__init__.py` was in no granted `WRITE_SCOPE`; `f63a334` (FIX-5)
+touched it and introduced the two-site surplus policy, and F1 is the
+un-reverted half of that. Also on record, from the Opus refuter: **F1 is
+narrower than packeted** — refusal requires a surplus entry AND (symlink OR
+output-containment) — with no soundness exposure either way. FIX-8's commit
+message was required to correct FIX-6's false "surplus evidence root binds"
+assertion.
+
+**Precedent ratified:** the **third-failure-closes rule** — when a window
+stage fails a third time on the same cause, the window closes rather than
+retrying — is adopted as cold-gate precedent and binds future window
+operation.
+
+Sibling dispositions from the same gate, magistrate authority, no trigger:
+**F2 QUEUED** (mock runtime should emit truthful sampler provenance; mitigated
+because mock bundles are already refused at claim binding by
+`MOCK_TELEMETRY_CLAIM_REFUSAL`, and integration tests currently rewrite
+metadata to inject a sampler — a test-honesty item). **F3 recorded as a nit**
+(broad `except` → provenance refusal; non-atomic campaign-log snapshot check;
+both fail-closed). **Audit-F1 QUEUED** (TOCTOU between the pre-check and the
+authenticated artifact read; requires concurrent mutation of a frozen input;
+different signature).
+
+Revisit when: a cold-gate verdict is overruled (which requires written
+magistrate dissent that Ed sees), or the pairing's catch record over further
+exercises justifies changing the mechanism.
+
+## D-088: Cooldown-join escalation — no FIX-11; ratified join contract; conditioned merge license (cold gate + refuter synthesis)
+
+Date: 2026-07-30. Authority: magistrate synthesis of a mandatory rule-11 cold
+gate (fresh Fable instance, no loop context) paired with an Opus contract-lens
+refuter; packet mechanically assembled
+(`coldgate-packet-fix11.md`, session scratchpad; ruling and refutation files
+preserved alongside it).
+
+Trigger record: two consecutive fix rounds on the duplicate-occurrence
+cooldown-join refusal contract failed their delta re-audits (FIX-9 → QA-1;
+FIX-10 → QA-10A/QA-10B). The standing same-signature escalation trigger and
+the "second fix round on the same defect" cold-gate trigger both fired; the
+next spend was this consult, not a FIX-11.
+
+Clauses:
+
+1. **No FIX-11 on `impl/mint-tool`.** Both cold instance and refuter
+   independently established the structural cause: manifests record no
+   clean/failed outcome on `execution="existing"` member rows, so the benign
+   cumulative re-listing shape and the failed-existing→invoked-retry
+   laundering shape are indistinguishable in the declaration multiset; no
+   counting rule over current manifest data can refuse one without refusing
+   the other (46 spurious refusals in the 7B window, with no authorable
+   supersession repair). Any FIX-11 formulation over the same data would fail
+   with the same signature.
+2. **Join hardening moves to its own gauntlet** (COOLDOWN-JOIN-GAUNTLET-01)
+   under the cold-gate-ratified contract: C1 result-map completeness (owned by
+   the join; keyset = candidates ∪ tallied declared ids; unlicensed declared
+   ids receive the exact unknown/unverified refusal payload; lands first as an
+   independently auditable commit); C3 supersession authorship parity (no
+   refusable shape the writer can produce may lack a licensed repair path); C4
+   legacy-corpus classification via `campaign_log.jsonl`, fail-closed; C5
+   fail-closed handling of unparseable/schema-invalid manifest files. The
+   counting domain (cold gate's C2 writer outcome recording vs the refuter's
+   verified declaration-order discriminator — all 46 benign 7B duplicates are
+   invoked-then-existing, both genuine ambiguities invoked-twice, zero
+   existing-before-invoked) is a design decision for the gauntlet with a
+   bounded pre-decision consult (rule 2); the two candidates may compose
+   (writer bit prospective, order/log classification for legacy).
+3. **Merge license (unanimous across both verdicts):** `impl/mint-tool` may
+   merge at the audited head `16c7af0` subject to: (a) QA-10A/B/C/D registered
+   before merge (done in the staged intake batch); (b) no further join commits
+   on the branch — any new commit voids the audited-head status; (c) until the
+   gauntlet closes, any claim consumption through the join carries a recorded
+   bench scan showing no declared-duplicate id lacking a validated
+   supersession, no declared id with zero surviving candidates, and no
+   failed/incomplete-existing encounter in the campaign log. All three
+   claim-bearing corpora pass that scan as of 2026-07-30 (three independent
+   scans: magistrate bench, cold instance, refuter). No mint from a
+   duplicate-bearing corpus (e.g. a future 7B mint) until the gauntlet lands.
+4. **Severity synthesis:** QA-10A and QA-10B remain BLOCKERS in the registry
+   against the join contract — re-scoped out of this branch's merge gate as
+   pre-existing, corpus-unreachable defects, not downgraded. The refuter's
+   down-tier dissent on QA-10B (correct attribution; the loss is a custody
+   receipt) is recorded in the queue row.
+5. **Completeness ownership (unanimous):** the join owns result-map
+   completeness; `floor_extraction`'s map-iteration completeness check stays
+   unchanged per its ratified ONE-join-model invariant (two manifest readers
+   is the divergence surface the FIX-9 audit's Q4 existed to police).
+6. **On the record, against the magistrate:** the refuter established that
+   FIX-10 was CONFORMANT with ruling R2 ("all invoked members") — for QA-10B
+   the ruling, not the implementation, was the defect. The corrected lesson:
+   a ruling that pins a counting domain must be checked against the writer's
+   emission contract and the real corpora before implementation is ordered.
+   R1's default-refusal principle survives intact.
+
+Revisit when: the gauntlet's design phase selects the counting domain (record
+the choice here), or any bench scan under clause 3(c) fails — which voids the
+claim-consumption license and returns the merge question to a cold gate.

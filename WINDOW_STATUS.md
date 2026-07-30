@@ -13,7 +13,7 @@ Two things when you are back: plug in to AC, and decide whether to archive the s
 
 ## Detail
 
-Windows C and D collected and passed. Window B needs re-collection under the new pre-flight screen. Disk is at 13 GB free -- needs attention before the next window.
+Windows C and D collected and passed. Window B needs re-collection under the new pre-flight screen. Disk is at **117 GiB free** (rechecked 2026-07-29); the "13 GB free" figure previously shown here was stale and is corrected -- disk is no longer a blocker for the next window.
 
 ## How to read this
 

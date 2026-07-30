@@ -1515,7 +1515,7 @@ before delegation-boundary changes.
 | C-033 | 2026-07-14 | AXI intake council (Ed-directed via `docs/axi-handoff.md` + Ed's batched §5 answers this session): short recorded Sol high read-only coherence review of drafted D-066..D-070 (outcomes Ed-directed, not re-decided; consult ran over the audited CLI path because the MCP server is unavailable in this headless session; prompt/response tracked at `docs/process_traces/2026-07-14-c033-axi-consult/`) | Sol verdict DISCUSSION: outcomes authorized, Ed's four D-067 amendments honored; 6 coherence corrections identified and ALL lead-accepted before commit: explicit supersession of the D-058 token-normalization Primary Metric clause (contract text assigned to S-A, keeping S-0 docs-only), dual-basis-capture bundle-state definition (successful idle-eligible request-level; nullable semantics preserved), D-032 gross-only phase semantics named, deploy convention re-attributed C-012→C-013, registry source homes corrected (C5-* bank vs C-023-*/RQ-* registry per D-055), `request_id` pinned to `events.jsonl` `metadata.request_id` with new-version-only reducer dispatch, D-064 duplicate/mismatched index rows cleaned; remaining deploy-instruction surfaces routed to WO-031 + S-0 |
 | C-037 | 2026-07-17 | Window-A execution + wrap arc (Ed: floors-first overnight -> advisor deadline -> site rebuild -> exploratory breadth; full records: the two 2026-07-16/17 run reports, the ONE homes): four-failure shakedown story (stale-bundle reuse, wallpaper idle contamination caught by sentinel, 34.6ms trace-boundary bracket via two live-bundle triages, stale-lock exit-0 wart) -> canonical PASS; 248-line/222-bundle floor campaign verified by 8-agent ultracode extraction; advisor brief + README-first site + Learn guide (Ed deployed); exploratory 9-bundle block; DSpark/DFlash feasibility confirmed; D-071..D-075 recorded | PRs #72-#75 merged under D-072 standing authority; delta re-audits caught blockers twice more (10th datum incl. lead-pinned formula defect); fold-in round's refusal caught a forced-report placeholder trace; scope enforcement caught the lead's own stray file (adjudicated benign); floors: request 0.527/0.052 J, phase 1.477/0.786 J, ABBA comparative w/ flagged tail drift; exploratory gross suite: OLMoE ~229 J vs Qwen3-4B ~362.8 J vs 122B ~1072 J (exploratory-labeled) |
 | C-036 | 2026-07-16 | Resumption + no-hardware batch (Ed: audits in a workflow + "handle the merge yourself if all is well... get the project ready for my quiet mac"; full record `docs/run_reports/2026-07-16-resumption-nohw-batch.md`, the ONE home): ultracode readiness workflow (4 Sol-high audits + severity-tiered refuters) BEFORE work selection; then 4 streams (SPLIT-AP xhigh contract tier, SITE-02 high standard, AXI-SB xhigh spike, AXI-SD Fable web-verification); every fix round delta-re-audited; three self-merges under Ed's in-session delegation, each with the full D-031-amended gate | PRs #67 (`7593259`, AXI-SA + CI portability fix after the audit caught red CI), #68 (`2778ed2`, SITE-02 — D2 step verified EXECUTED in the CI log), #69 (`9db4546`, SPLIT-AP freeze) merged; integration review 0 cross-stream defects, merged main 1630 OK; kernel closures 51→48 IDs; AXI-SB live probes (lead-run, B∈{2,4}) → verdict `supported`, Mac C5-2.2 leg mint staged on `impl/axi-sb` (effective on its merge); delta re-audit caught a LEAD-pinned predictor defect (8th fix-rounds-inject-defects datum, first lead-authored); AXI-SD memo: OLMo pair d_active 0.0016 + 8GB-fit may moot Option A's premise, Qwen3 pair confirmed-fails G10 (17.17 GB) |
-| C-039 | 2026-07-28 | Mint-implementation session (Ed: resume per RUN_STATE, then "merge on green + start the mint consult"; magistrate topology; full record `docs/run_reports/2026-07-28-floor-mint-implementation.md`, the ONE home): PR #87 gauntlet (2 Sol xhigh lenses + 5 Sol high refuters + 1 Opus contract refuter, lieutenant-directed), E4 fix + CLEAN delta re-audit, D-081 parser ruling (Ed, async question), Sol xhigh mint design consult (3 DISAGREEs sustained -> D-082), 7-stage xhigh implementation, suite-pruning consult (0 removals clear D-061) | PR #87 MERGED `058c918`; `impl/mint-tool` pushed unmerged (review owed); C1 SPLIT (Sol nit vs Opus should-fix) magistrate-synthesized to should-fix, closed via ratified Q4; 5 broken-wake incidents -> tracked-poll pattern folded to codex-delegation; lieutenant self-flagged 2 retracted fabricated verdict narrations (mechanism removed); concurrent-session force-push anomaly flagged to Ed |
+| C-039 | 2026-07-28 | Mint-implementation session (Ed: resume per RUN_STATE, then "merge on green + start the mint consult"; magistrate topology; full record `docs/run_reports/2026-07-28-floor-mint-implementation.md`, the ONE home): PR #87 gauntlet (2 Sol xhigh lenses + 5 Sol high refuters + 1 Opus contract refuter, lieutenant-directed), E4 fix + CLEAN delta re-audit, D-081 parser ruling (Ed, async question), Sol xhigh mint design consult (3 DISAGREEs sustained -> D-082), 7-stage xhigh implementation, suite-pruning consult (0 removals clear D-061) | PR #87 MERGED `058c918`; `impl/mint-tool` pushed unmerged (review owed); C1 SPLIT (Sol nit vs Opus should-fix) magistrate-synthesized to should-fix, closed via ratified Q4; 5 broken-wake incidents -> tracked-poll pattern folded to codex-delegation; lieutenant self-flagged 2 retracted fabricated verdict narrations (mechanism removed); concurrent-session force-push anomaly flagged to Ed; **ADDENDUM at the end of this file** records the 2026-07-29/30 continuation (FIX-6..9 gauntlet, three cold gates with paired Opus contract-lens refuters, mint #1, the 7B floor window; rulings D-083..D-087) |
 
 ---
 
@@ -2104,3 +2104,145 @@ window-B calibration stamps (see above). No window-C quarantine
 directory was located under the repository root; only
 `runs_window_a5_quarantine/` exists from an earlier arc, so the custody
 location for the two window-C attempts is **not verified here**.
+
+---
+
+## C-039 addendum: the FIX-6..9 gauntlet, three cold gates, and the 7B floor window (2026-07-29/30)
+
+Continuation of the C-039 index row above, covering the arc that carried
+`impl/mint-tool` from `f63a334` to `969a4d6` plus mint #1 and the
+`window_7bfloor_20260729` collection. Rulings from this arc are D-083..D-087;
+the session ledger is the magistrate's own record. Topology: **magistrate**
+(Fable, Ed's direct) adjudicating and operating the window solo,
+**lieutenant** (Opus 5) directing the Sol pipelines and assembling packets,
+**Sol** implementing and auditing, plus the rule-11 **cold gate** (fresh
+Fable instance + Opus contract-lens refuter).
+
+### Layers run
+
+| Layer | Instances | Shape |
+|---|---|---|
+| Sol implementation (enforced `WRITE_SCOPE`) | 4 | FIX-6 `ea20a82`, FIX-7 `7f2c108`, FIX-8 `a14740d`, FIX-9 `969a4d6` |
+| Independent audit / delta re-audit | 3+ | FIX-6 delta audit; FIX-8 audit; FIX-9+FIX-8 delta re-audit over `f188562^..969a4d6` |
+| Cold gate (cold Fable + paired Opus contract-lens refuter) | 3 | F1 recorded in full (D-087); the pairing is the mechanism, not decoration |
+| Magistrate bench verification | continuous | primary-text reads, bit-exact floor recomputation, QA-1 confirmation |
+| Modularity survey (Explore agent) | 1 | produced the STACK-ID-BIND-01 lead |
+
+### Unique catches, by layer
+
+- **FIX-9 delta re-audit — blocker QA-1, the arc's decisive catch.**
+  Overall verdict **FAIL** (Q1 FAIL, Q2 FAIL, Q3 PASS-WITH-CONCERN, Q4/Q5/Q6
+  PASS). QA-1: *"a partial `physical_members` list can launder a
+  within-member duplicate into one candidate."* A member declaring
+  `bundle_ids: ["x", "x"]` with only one usable `physical_members` row for
+  `x` yields a single candidate with identity `(manifest, member_index, -1)`;
+  the one-row fast path then accepts its cooldown evidence **without ever
+  invoking the supersession matcher**. The `-1` guard prevents a *valid*
+  record from matching but does **not** guarantee refusal — a fail-open
+  declared-occurrence laundering edge, and a violation of the magistrate's
+  default ambiguity-refusal rule. **Magistrate bench-confirmed 2026-07-30.**
+  This is the eleventh-plus datum for "fix rounds introduce defects": the
+  ruled shape (D-086) was implemented correctly at the hop it named, and the
+  defect lives at the *input-shape* boundary the ruling did not reach.
+  Also QA-2 (should-fix): no repository fixture composes the real
+  supersession validator/reader with the cooldown join — the FIX-9
+  regressions stub the reader, which is adequate for join/matcher behavior
+  and **insufficient as custody-path closure**.
+- **FIX-9 delta re-audit — independent corroboration of the mint.** Q6
+  verified the artifact is valid JSON, that its cell and transport-group
+  values agree exactly, and that they round to the W6 pins **3.592138**,
+  **7.377086**, **7.377086**, with the external statement carrying the same
+  formula, roles, source, and no-double-count rule. Independent of the
+  magistrate's own bit-exact recomputation (D-084).
+- **Cold gate F1 — caught a defect in the magistrate's own packet.** The
+  packet asserted `__init__.py` was in no granted `WRITE_SCOPE`; `f63a334`
+  (FIX-5) had touched it and introduced the two-site surplus policy, making
+  F1 the un-reverted half. The cold layer's value here was **against the
+  magistrate**, which is precisely the disposition rule 11 exists to check.
+- **Cold gate F1 — C2, the phase-order verification.** The cold instance
+  verified from code that `_validate_output_separation` (`__init__.py:85`,
+  called at `:1206`) runs **before** inputs load, so the filtered mapping
+  does not exist at that point — converting "just filter it" into a
+  design-bearing choice and forcing it up to the magistrate rather than
+  leaving it to the implementer.
+- **Paired Opus contract-lens refuter — narrowed the finding and supplied
+  the adopted design.** F1 is **narrower than packeted** (refusal requires a
+  surplus entry AND (symlink OR output-containment); no soundness exposure
+  either way), and the refuter's **M3 — filter in place, preserve call
+  order** beat the magistrate's own two-phase reorder proposal, which was
+  **withdrawn**. M2's Opus-verified closed consumer list became a verified
+  precondition. Second recorded instance this arc of a paired refuter
+  out-designing the adjudicator.
+- **Modularity survey (Explore agent) — STACK-ID-BIND-01.** Flagged that
+  `analysis_engine/inputs.py:453` reads `artifact.get("sha256")` while
+  `mlx_runtime.py:1064-1072` emits `folded_sha256` for directory
+  (`file_set`) models — the only shape MLX produces — so
+  `floor_stack_identity` returns `None` for real bundles while fixtures use
+  the single-file shape and never catch it. CONFIRMED and fixed as FIX-7.
+  A survey-shaped layer producing a real claim-side soundness defect.
+- **Magistrate bench, B3 referral.** A Sol-vs-Opus **split** on the additive
+  effective-clearable-effect reading was **synthesized from primary text, not
+  majority-voted**, and resolved NOT-A-DEFECT with the Sol dissent preserved
+  (D-083). B1 (device.boundary placeholders) was refuted; the referral
+  question — whether the two citations address different objects — was
+  answered YES from the clauses' own words.
+- **Layer that produced nothing:** the B4 pending-refuter harvest closed
+  **empty**. `ref/B4_sol.status` still read RUNNING from the pre-restart
+  harness, `ref/B4_sol.md` was never written, and the background job had died
+  with the old harness. Pre-assessed superseded / corroboration-only, so the
+  disposition was unchanged — but it is recorded here as a **zero-catch
+  layer instance** and as a second datum for the standing lesson that a
+  background job which cannot wake its parent is a job that did not run.
+
+### Window operation
+
+`window_7bfloor_20260729` was operated by the magistrate **solo** (D-085):
+quiet-lock covers all agent sessions, and a solo operator avoids the known
+grandchild-notification misroute. Interaction was at stage boundaries only,
+with zero tool calls during stages. The window completed **PASSED** and
+claim-bearing on basis `3ff9128b…f1173`, through **two live contamination
+events** (macOS's malware scanner, then a second, unidentified CPU
+excursion — the operator log records only an hourly-snapshot *hypothesis*
+for it) that the admission gates caught and that the protocol recovered from per its own written
+playbook — the first arc in which the recovery path was exercised rather
+than theorised. The **third-failure-closes** rule was ratified as cold-gate
+precedent during this operation (D-087).
+
+### Process observations
+
+- **The escalation trigger armed and was honoured.** C3 armed the standing
+  same-signature trigger before FIX-8 ran; the arc did not need to fire it
+  for that signature. FIX-9 is a *different* defect at a different hop, not
+  round three on the same one.
+- **The cold-gate mechanism earned its cost this arc**: three exercises, one
+  packet correction against the magistrate, one design substitution adopted
+  over the magistrate's proposal, one code-verified precondition. Retain.
+- **Open at the addendum's writing:** QA-1 is an unclosed blocker on
+  `impl/mint-tool`; the merge train is gated on its disposition. QA-2, F2,
+  F3, and Audit-F1 are registered in the 2026-07-30 queue intake batch.
+
+### Addendum close-out (2026-07-30, later the same day)
+
+The "open at the addendum's writing" state above resolved as follows. FIX-10
+(Sol high, magistrate bench-reviewed, `16c7af0`) closed QA-1 with
+declared-occurrence tallying and the real validator/reader/join fixture;
+its own delta re-audit (Sol xhigh) then **FAILED with two successor
+blockers** (QA-10A map-omission, QA-10B existing-retry laundering) — the
+second consecutive same-signature fix-round failure. The standing escalation
+trigger FIRED and was honoured: no FIX-11 was ordered; a mandatory cold gate
+(fresh Fable + Opus contract-lens refuter, exercise #4 of the pairing) ruled
+and the magistrate synthesized D-088 — join hardening moved to its own
+gauntlet under a ratified contract; the branch merge licensed at the audited
+head with the blockers registered.
+
+Layer catches this round: the **delta re-audit layer** caught both successor
+blockers a green 2280-test suite could not see (the fixtures were all
+hardcoded `invoked`); the **refuter layer** caught that FIX-10 was conformant
+with ruling R2 and the *ruling* was the QA-10B defect (a finding against the
+magistrate, on the record in D-088 cl.6), plus the declaration-order
+discriminator the cold instance's contract had missed; the **cold-gate
+layer** caught the structural cause (the missing existing-outcome bit) that
+both fix-round formulations had danced around, and the QA-10A escape path
+through `floor_extraction`'s map-iteration completeness. Three independent
+corpus scans (magistrate, cold instance, refuter) each verified both blocker
+shapes absent from all claim-bearing evidence.
