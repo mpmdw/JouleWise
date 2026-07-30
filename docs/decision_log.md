@@ -105,6 +105,12 @@ be re-derived by a future agent gets an entry here.
 | D-080 | Standing fresh-eyes sweep: a periodic, non-reactive outside review on one cadence unit, a rotating second lens, and a mechanically generated packet | accepted (magistrate-ratified 2026-07-27) |
 | D-081 | Session History pointers: build_site parser accepts docs/process_traces/ alongside docs/run_reports/, fail-closed otherwise | accepted (Ed-ratified 2026-07-28) |
 | D-082 | Floor-mint execution semantics: basis-pinned subset consumption (Option A), component-scoped cross-window artifact schema v2, production_window scope, prospective source_class, non-defaulting widths | accepted (magistrate-adjudicated 2026-07-28, executing D-078 cl.11 / D-079 cl.4-5) |
+| D-083 | B3 adjudication: the additive effective-clearable-effect expression is a disclosure obligation, not an acceptance threshold; two-gate claims design ratified; B3 not-a-defect | accepted (magistrate-ruled 2026-07-29; Sol dissent preserved) |
+| D-084 | Operative decode-floor pin re-set to the composed cell gate 7.377086 J (absolute 3.592138 / comparative 7.377086 / gate = max, never summed), amending the isolated D-079 cl.5 pin | accepted (Ed-ratified 2026-07-29) |
+| D-085 | splitwise_decode_v1 / qwen25_7b_decode_floor_v1 pre-registration ratifications Q1-Q9: floor-first ordering, family ids, comparative_contrast kind, two-arm stack scope, fixed A/B/B/A, production_window scope, Q7 refused, magistrate operates windows solo | accepted (magistrate-ratified 2026-07-29) |
+| D-086 | Supersession-aware cooldown-evidence join (FIX-9): validated supersession entries extend to the cooldown join; resolve only when a valid entry names exactly the observed duplicates; --evaluation-basis-sha256 invocation/doc root cause | accepted (magistrate-ruled 2026-07-30) |
+| D-087 | Cold-gate exercise record: F1 MODIFY→FIX-8 with C1-C4, M1-M4 synthesis, packet correction on the record, third-failure-closes precedent | accepted (cold-gate + magistrate synthesis 2026-07-29) |
+| D-088 | Cooldown-join escalation: no FIX-11 (missing existing-outcome bit makes counting rules structurally unsound), join contract C1/C3/C4/C5 ratified for its own gauntlet, conditioned merge license for impl/mint-tool at 16c7af0, QA-10B ruling-was-the-defect finding recorded | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-30) |
 
 ---
 
