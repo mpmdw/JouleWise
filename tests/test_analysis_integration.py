@@ -28,11 +28,14 @@ from joulewise.analysis_engine.inputs import (
     FloorRequest,
     MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
+    bind_floor_artifact_evidence,
     campaign_cooldown_evidence,
+    declared_evidence_roots,
     floor_binding_reason_codes,
     floor_request_for_evidence,
     floor_stack_identity,
     load_analysis_inputs,
+    realized_scientific_identity,
     window_evidence_precheck,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
@@ -53,6 +56,7 @@ from joulewise.detection_floor import (
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
+    build_floor_cell,
     build_transport_group,
     canonical_domain_sha256,
     comparative_false_effect_floor,
@@ -65,6 +69,7 @@ from tests.test_detection_floor import (
     condition_family,
     make_artifact,
     make_cell,
+    make_regime,
     whole_window_allowance,
 )
 
@@ -89,6 +94,20 @@ PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
     summary_backend_class="powermetrics",
     triangle_agrees=True,
 )
+
+
+def install_explicit_mock_sampler(bundle: Path) -> None:
+    metadata_path = bundle / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["workload_provenance"]["sampler"] = {
+        "api": "mock_runtime.generate",
+        "kind": "deterministic_mock",
+        "pinned": True,
+    }
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def install_passing_analysis_whole_window(
@@ -238,6 +257,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     code = main(["run", str(config), "--runs-dir", str(cls.runs_root)])
                 if code != 0:
                     raise AssertionError(f"mock run failed for {config.name}: {code}")
+                run_id = json.loads(config.read_text(encoding="utf-8"))["run_id"]
+                install_explicit_mock_sampler(cls.runs_root / run_id)
         cls.floor_path.write_text(
             json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
         )
@@ -441,6 +462,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         floor_artifact = build_floor_artifact(
             artifact_id="analysis-attribution-floor",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=make_artifact()["provenance"],
             cells=cells,
             transport_groups=[group],
@@ -728,6 +750,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         artifact = build_floor_artifact(
             artifact_id="production-transport",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=make_artifact()["provenance"],
             cells=[source],
             transport_groups=[group],
@@ -1247,13 +1270,18 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 if entry["role"] == "condition"
             }
         )
-        # Calibration and consumer bundles share only the immutable runs root;
-        # every calibration run ID below is distinct from every manifest
-        # consumer run ID.
-        calibration_root = self.root / (
-            f"independent-consumer-and-calibration-runs{scenario_suffix}"
+        analysis_root = self.root / (
+            f"independent-analysis-corpus{scenario_suffix}"
         )
-        shutil.copytree(self.runs_root, calibration_root)
+        shutil.copytree(self.runs_root, analysis_root)
+        evidence_roots = {
+            "a10": self.root / f"independent-a10-evidence{scenario_suffix}",
+            "window_c": (
+                self.root / f"independent-window-c-evidence{scenario_suffix}"
+            ),
+        }
+        for evidence_root in evidence_roots.values():
+            evidence_root.mkdir()
         floor_dir = self.root / f"independent-floor{scenario_suffix}"
         floor_dir.mkdir(exist_ok=True)
         calibration_plan_path = floor_dir / "calibration_plan.json"
@@ -1262,6 +1290,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 {
                     "schema_version": "joulewise.detection_floor_calibration_plan.v1",
                     "plan_id": "floor-exact-cli-plan",
+                    "calibration_scope": "window_a",
                     "condition_family_ids": condition_ids,
                     "comparative_member_labels": ["A", "B", "B", "A"],
                 },
@@ -1276,8 +1305,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
         ).hexdigest()
         cells = []
         groups = []
-        order_rows = []
-        campaign_rows = []
+        order_rows = {"a10": [], "window_c": []}
+        campaign_rows = {"a10": [], "window_c": []}
+        calibration_roots_by_id = {}
         all_bound_hashes = []
         for condition_id in condition_ids:
             entries = sorted(
@@ -1298,6 +1328,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
             ):
                 for index in range(25):
                     run_id = f"cal-{condition_id}-{index:02d}"
+                    root_id = "a10" if index < 5 else "window_c"
+                    evidence_root = evidence_roots[root_id]
+                    calibration_roots_by_id[run_id] = evidence_root
                     calibration_config = json.loads(json.dumps(source_config))
                     calibration_config["run_id"] = run_id
                     tags = calibration_config["run_metadata"]["tags"]
@@ -1322,19 +1355,32 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     )
                     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                         code = main(
-                            ["run", str(config_path), "--runs-dir", str(calibration_root)]
+                            [
+                                "run",
+                                str(config_path),
+                                "--runs-dir",
+                                str(evidence_root),
+                            ]
                         )
                     self.assertEqual(code, 0)
+                    install_explicit_mock_sampler(evidence_root / run_id)
                     calibration_ids.append(run_id)
-                    order_rows.append(
-                        {"index": len(order_rows) + 1, "config": config_path.name, "run_id": run_id}
+                    order_rows[root_id].append(
+                        {
+                            "index": len(order_rows[root_id]) + 1,
+                            "config": config_path.name,
+                            "run_id": run_id,
+                        }
                     )
-                    campaign_rows.append(
-                        {"run_index": len(campaign_rows) + 1, "run_id": run_id}
+                    campaign_rows[root_id].append(
+                        {
+                            "run_index": len(campaign_rows[root_id]) + 1,
+                            "run_id": run_id,
+                        }
                     )
 
             def calibration_record(run_id):
-                bundle = calibration_root / run_id
+                bundle = calibration_roots_by_id[run_id] / run_id
                 summary = json.loads((bundle / "summary_metrics.json").read_text(encoding="utf-8"))
                 bundle_hash = complete_bundle_sha256(bundle)
                 all_bound_hashes.append(bundle_hash)
@@ -1353,9 +1399,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             absolute = build_absolute_record(
                 absolute_false_effect_floor(
-                    [row["metric_value_j"] for row in observations]
+                    [row["metric_value_j"] for row in observations],
+                    admissible_half_widths_j=[0.0] * len(observations),
                 ),
                 observations,
+                consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
             blocks = []
@@ -1383,30 +1431,86 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     }
                 )
             comparative = build_comparative_record(
-                comparative_false_effect_floor([block["delta_j"] for block in blocks]),
+                comparative_false_effect_floor(
+                    [block["delta_j"] for block in blocks],
+                    admissible_half_widths_j=[0.0] * len(blocks),
+                ),
                 blocks,
+                consumption_semantics_id="d078_minted_envelopes_v1",
                 whole_window_drift_allowance=drift_allowance,
             )
-            cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)
-            first_bundle = calibration_root / calibration_ids[0]
+            first_bundle = calibration_roots_by_id[
+                calibration_ids[0]
+            ] / calibration_ids[0]
             stack = floor_stack_identity(
                 json.loads((first_bundle / "config.json").read_text(encoding="utf-8")),
                 json.loads((first_bundle / "metadata.json").read_text(encoding="utf-8")),
             )
             self.assertIsNotNone(stack)
-            cell["key"].update(backend="mock", metric="gross_energy_j", window_class="request")
-            cell["absolute"] = absolute
-            cell["comparative"] = comparative
-            cell["floor_abs_j"] = absolute["guarded_floor_j"]
-            cell["floor_cmp_j"] = comparative["guarded_floor_j"]
-            cell["floor_gate_j"] = max(cell["floor_abs_j"], cell["floor_cmp_j"])
-            cell["source_regime"]["stack_identity"] = stack
-            cell["source_regime"]["stack_identity_sha256"] = canonical_domain_sha256(
-                STACK_IDENTITY_DOMAIN, stack
+            component_regime = make_regime(stack_identity=stack)
+            cell = build_floor_cell(
+                cell_id=f"floor-{condition_id}",
+                key={
+                    "backend": "mock",
+                    "metric": "gross_energy_j",
+                    "window_class": "request",
+                    **condition_family(condition_id),
+                },
+                eligibility={
+                    "use_role": "primary_claim_gate",
+                    "minimum_claim_n": 5,
+                    "status": "claim_ready",
+                    "claim_usable": True,
+                    "reason_codes": [],
+                },
+                absolute=absolute,
+                comparative=comparative,
+                transport_group_id=f"tg-{condition_id}",
+                provenance={
+                    "absolute": {
+                        "calibration_cell_id": f"floor-{condition_id}-abs",
+                        "evidence_root_id": "a10",
+                        "order_manifest": {
+                            "manifest_id": "floor-exact-a10-order",
+                            "sha256": "0" * 64,
+                        },
+                        "campaign_log": {"sha256": "0" * 64},
+                        "extraction_report": {"sha256": "0" * 64},
+                        "extraction_spec": {"sha256": "0" * 64},
+                        "bundle_ids": [
+                            observation["bundle_id"]
+                            for observation in observations
+                        ],
+                        "bundle_sha256s": [
+                            observation["bundle_sha256"]
+                            for observation in observations
+                        ],
+                        "source_regime": component_regime,
+                    },
+                    "comparative": {
+                        "calibration_cell_id": f"floor-{condition_id}-cmp",
+                        "evidence_root_id": "window_c",
+                        "order_manifest": {
+                            "manifest_id": "floor-exact-window-c-order",
+                            "sha256": "0" * 64,
+                        },
+                        "campaign_log": {"sha256": "0" * 64},
+                        "extraction_report": {"sha256": "0" * 64},
+                        "extraction_spec": {"sha256": "0" * 64},
+                        "bundle_ids": [
+                            member["bundle_id"]
+                            for block in blocks
+                            for member in block["members"]
+                        ],
+                        "bundle_sha256s": [
+                            member["bundle_sha256"]
+                            for block in blocks
+                            for member in block["members"]
+                        ],
+                        "source_regime": component_regime,
+                    },
+                },
             )
-            cell["transport_group_id"] = f"tg-{condition_id}"
-            cell["provenance"]["bundle_ids"] = [row["bundle_id"] for row in observations]
-            cell["provenance"]["bundle_sha256s"] = [row["bundle_sha256"] for row in observations]
             cells.append(cell)
             groups.append(
                 build_transport_group(
@@ -1428,40 +1532,103 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     ],
                 )
             )
-        order_path = floor_dir / "order_manifest.json"
-        order_path.write_text(
+        root_descriptor_hashes = {}
+        for root_id, evidence_root in evidence_roots.items():
+            order_path = evidence_root / "order_manifest.json"
+            order_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.order_manifest.v1",
+                        "manifest_id": f"floor-exact-{root_id.replace('_', '-')}-order",
+                        "executed_order": order_rows[root_id],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            campaign_path = evidence_root / "campaign_log.jsonl"
+            campaign_path.write_text(
+                "".join(
+                    json.dumps(row, sort_keys=True) + "\n"
+                    for row in campaign_rows[root_id]
+                ),
+                encoding="utf-8",
+            )
+            root_descriptor_hashes[root_id] = {
+                "order_manifest": hashlib.sha256(
+                    order_path.read_bytes()
+                ).hexdigest(),
+                "campaign_log": hashlib.sha256(
+                    campaign_path.read_bytes()
+                ).hexdigest(),
+            }
+        extraction_spec_path = floor_dir / "extraction_spec.json"
+        extraction_spec_path.write_text(
             json.dumps(
-                {"schema_version": "joulewise.order_manifest.v1", "executed_order": order_rows},
+                {
+                    "schema_version": "joulewise.floor_extraction_spec.fixture.v1",
+                    "condition_family_ids": condition_ids,
+                    "absolute_n": 5,
+                    "comparative_n_blocks": 5,
+                },
                 indent=2,
                 sort_keys=True,
             )
             + "\n",
             encoding="utf-8",
         )
-        campaign_path = calibration_root / "campaign_log.jsonl"
-        whole_window_lines = [
-            line
-            for line in campaign_path.read_text(encoding="utf-8").splitlines()
-            if json.loads(line).get("record_type")
-            == "idle_admission_whole_window_verdict"
-        ]
-        campaign_path.write_text(
-            "".join(line + "\n" for line in whole_window_lines)
-            + "".join(
-                json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows
-            ),
+        extraction_report_path = floor_dir / "extraction_report.json"
+        extraction_report_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.floor_extraction_report.fixture.v1",
+                    "cell_ids": [cell["cell_id"] for cell in cells],
+                    "bundle_ids": [
+                        bundle_id
+                        for cell in cells
+                        for component in ("absolute", "comparative")
+                        for bundle_id in cell["provenance"][component]["bundle_ids"]
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
+        common_descriptor_hashes = {
+            "extraction_report": hashlib.sha256(
+                extraction_report_path.read_bytes()
+            ).hexdigest(),
+            "extraction_spec": hashlib.sha256(
+                extraction_spec_path.read_bytes()
+            ).hexdigest(),
+        }
+        for cell in cells:
+            for component in ("absolute", "comparative"):
+                component_provenance = cell["provenance"][component]
+                root_id = component_provenance["evidence_root_id"]
+                descriptor_hashes = {
+                    **root_descriptor_hashes[root_id],
+                    **common_descriptor_hashes,
+                }
+                for descriptor_name, descriptor_sha256 in descriptor_hashes.items():
+                    component_provenance[descriptor_name][
+                        "sha256"
+                    ] = descriptor_sha256
         provenance = make_artifact()["provenance"]
         provenance["calibration_plan"] = {
             "plan_id": "floor-exact-cli-plan",
+            "declared_calibration_scope": "window_a",
+            "relative_path": "calibration_plan.json",
             "sha256": calibration_plan_sha256,
         }
-        provenance["order_manifest"]["sha256"] = hashlib.sha256(order_path.read_bytes()).hexdigest()
-        provenance["campaign_log"]["sha256"] = hashlib.sha256(campaign_path.read_bytes()).hexdigest()
         exact_floor = build_floor_artifact(
             artifact_id="floor-exact-cli",
             calibration_scope="window_a",
+            source_class="synthetic",
             provenance=provenance,
             cells=cells,
             transport_groups=groups,
@@ -1478,6 +1645,152 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(exact_floor), [])
         floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
+        bare_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            analysis_root,
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            bare_root_binding.global_problems,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            floor_binding_reason_codes(bare_root_binding),
+        )
+        self.assertFalse(bare_root_binding.bound_cell_ids)
+        bare_loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "evidence_root_mapping_required",
+            floor_binding_reason_codes(bare_loaded.floor_binding),
+        )
+
+        missing_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {"a10": evidence_roots["a10"]},
+            strict_validator=validate_bundle,
+        )
+        self.assertIn(
+            "missing_evidence_root_mapping: 'window_c'",
+            missing_root_binding.global_problems,
+        )
+        self.assertFalse(missing_root_binding.bound_cell_ids)
+
+        surplus_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {**evidence_roots, "unexpected": analysis_root},
+            strict_validator=validate_bundle,
+        )
+        self.assertFalse(
+            any(
+                problem.startswith("unknown_evidence_root_mapping:")
+                for problem in surplus_root_binding.global_problems
+            ),
+            surplus_root_binding.global_problems,
+        )
+        self.assertNotIn(
+            "unknown_evidence_root_mapping",
+            floor_binding_reason_codes(surplus_root_binding),
+        )
+        self.assertEqual(
+            surplus_root_binding.bound_cell_ids,
+            (
+                frozenset(
+                    cell["cell_id"] for cell in exact_floor["cells"]
+                )
+                if production_identity
+                else frozenset()
+            ),
+        )
+
+        wrong_root = floor_dir / "wrong-evidence-root"
+        wrong_root.mkdir()
+        wrong_root_binding = bind_floor_artifact_evidence(
+            exact_floor,
+            floor_path,
+            {
+                "a10": wrong_root,
+                "window_c": evidence_roots["window_c"],
+            },
+            strict_validator=validate_bundle,
+        )
+        self.assertTrue(
+            any(
+                problem.startswith("component_evidence_root_disagreement:")
+                for problem in wrong_root_binding.global_problems
+            )
+        )
+        self.assertFalse(wrong_root_binding.bound_cell_ids)
+
+        leaked_path_artifact = json.loads(json.dumps(exact_floor))
+        leaked_path_artifact["provenance"]["calibration_plan"][
+            "relative_path"
+        ] = str(calibration_plan_path.resolve())
+        leaked_path_binding = bind_floor_artifact_evidence(
+            leaked_path_artifact,
+            floor_path,
+            evidence_roots,
+            strict_validator=validate_bundle,
+        )
+        self.assertTrue(
+            any(
+                problem.startswith("artifact_absolute_path_leakage:")
+                for problem in leaked_path_binding.global_problems
+            )
+        )
+        self.assertFalse(leaked_path_binding.bound_cell_ids)
+
+        loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+            evidence_roots=evidence_roots,
+        )
+        self.assertFalse(
+            {
+                "evidence_root_mapping_required",
+                "missing_evidence_root_mapping",
+                "unknown_evidence_root_mapping",
+            }
+            & set(floor_binding_reason_codes(loaded.floor_binding))
+        )
+        if production_identity:
+            self.assertFalse(loaded.floor_binding.global_problems)
+            self.assertEqual(
+                loaded.floor_binding.bound_cell_ids,
+                frozenset(cell["cell_id"] for cell in exact_floor["cells"]),
+            )
+        self.assertEqual(len(loaded.registered), 30)
+        self.assertFalse(
+            any(
+                evidence.bundle_id.startswith("cal-")
+                for evidence in (
+                    *loaded.registered.values(),
+                    *loaded.extra_audits,
+                )
+            )
+        )
+        missing_loaded = load_analysis_inputs(
+            self.manifest_path,
+            analysis_root,
+            floor_path,
+            strict_validator=validate_bundle,
+            evidence_roots={"a10": evidence_roots["a10"]},
+        )
+        self.assertIn(
+            "missing_evidence_root_mapping: 'window_c'",
+            missing_loaded.floor_binding.global_problems,
+        )
+
         output = self.root / f"exact-cli-claim-verdicts{scenario_suffix}.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
             code = main(
@@ -1486,7 +1799,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "--analysis-manifest",
                     str(self.manifest_path),
                     "--runs-root",
-                    str(calibration_root),
+                    str(analysis_root),
+                    "--evidence-root",
+                    f"a10={evidence_roots['a10']}",
+                    "--evidence-root",
+                    f"window_c={evidence_roots['window_c']}",
                     "--floor-artifact",
                     str(floor_path),
                     "--output",
@@ -1495,6 +1812,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         self.assertEqual(code, 0, stderr.getvalue())
         artifact = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(len(artifact["bundle_audit"]), 30)
+        self.assertFalse(
+            any(
+                row["bundle_id"].startswith("cal-")
+                for row in artifact["bundle_audit"]
+            )
+        )
         gross = [
             contrast
             for contrast in artifact["contrasts"]
@@ -1557,14 +1881,31 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
             changed_cell["comparative"] = build_comparative_record(
                 comparative_false_effect_floor(
-                    [block["delta_j"] for block in changed_blocks]
+                    [block["delta_j"] for block in changed_blocks],
+                    admissible_half_widths_j=[0.0] * len(changed_blocks),
                 ),
                 changed_blocks,
+                consumption_semantics_id=changed_cell["comparative"][
+                    "consumption_semantics_id"
+                ],
                 whole_window_drift_allowance=changed_cell["comparative"][
                     "whole_window_drift_allowance"
                 ],
             )
-            changed_cell["floor_cmp_j"] = changed_cell["comparative"]["guarded_floor_j"]
+            comparative_provenance = changed_cell["provenance"]["comparative"]
+            comparative_provenance["bundle_ids"] = [
+                member["bundle_id"]
+                for block in changed_blocks
+                for member in block["members"]
+            ]
+            comparative_provenance["bundle_sha256s"] = [
+                member["bundle_sha256"]
+                for block in changed_blocks
+                for member in block["members"]
+            ]
+            changed_cell["floor_cmp_j"] = changed_cell["comparative"][
+                "drift_widened_guarded_floor_j"
+            ]
             changed_cell["floor_gate_j"] = max(
                 changed_cell["floor_abs_j"], changed_cell["floor_cmp_j"]
             )
@@ -1594,9 +1935,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             return load_analysis_inputs(
                 self.manifest_path,
-                calibration_root,
+                analysis_root,
                 candidate_path,
                 strict_validator=validate_bundle,
+                evidence_roots=evidence_roots,
             ).floor_binding
 
         relabeled = json.loads(json.dumps(exact_floor))
@@ -1629,9 +1971,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         relabeled_result = analyze_claims(
             self.manifest_path,
-            calibration_root,
+            analysis_root,
             floor_dir / "floor-relabeled-abba.json",
             strict_validator=validate_bundle,
+            evidence_roots=evidence_roots,
         )
         self.assertTrue(
             any(
@@ -1698,14 +2041,20 @@ class AnalysisIntegrationTests(unittest.TestCase):
             observation["metric_value_j"] += 1.0
         fabricated_cell["absolute"] = build_absolute_record(
             absolute_false_effect_floor(
-                [observation["metric_value_j"] for observation in fake_observations]
+                [observation["metric_value_j"] for observation in fake_observations],
+                admissible_half_widths_j=[0.0] * len(fake_observations),
             ),
             fake_observations,
+            consumption_semantics_id=fabricated_cell["absolute"][
+                "consumption_semantics_id"
+            ],
             whole_window_drift_allowance=fabricated_cell["absolute"][
                 "whole_window_drift_allowance"
             ],
         )
-        fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"]["guarded_floor_j"]
+        fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"][
+            "drift_widened_guarded_floor_j"
+        ]
         fabricated_cell["floor_gate_j"] = max(
             fabricated_cell["floor_abs_j"], fabricated_cell["floor_cmp_j"]
         )
@@ -1741,7 +2090,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "--analysis-manifest",
                     str(self.manifest_path),
                     "--runs-root",
-                    str(calibration_root),
+                    str(analysis_root),
+                    "--evidence-root",
+                    f"a10={evidence_roots['a10']}",
+                    "--evidence-root",
+                    f"window_c={evidence_roots['window_c']}",
                     "--floor-artifact",
                     str(fabricated_path),
                     "--output",
@@ -1792,6 +2145,247 @@ class AnalysisIntegrationTests(unittest.TestCase):
             self._exercise_cli_distinct_calibration_binding(
                 production_identity=True,
             )
+
+    def test_cli_evidence_root_parser_rejects_malformed_and_duplicate_ids(self):
+        base = [
+            "analyze-claims",
+            "--analysis-manifest",
+            str(self.manifest_path),
+            "--runs-root",
+            str(self.runs_root),
+            "--floor-artifact",
+            str(self.floor_path),
+            "--output",
+            str(self.root / "parser-must-not-run.json"),
+        ]
+        cases = (
+            (["--evidence-root", "a10"], "expected ID=PATH"),
+            (["--evidence-root", f"={self.runs_root}"], "ID must be nonempty"),
+            (["--evidence-root", "a10="], "PATH must be nonempty"),
+            (
+                [
+                    "--evidence-root",
+                    f"a10={self.runs_root}",
+                    "--evidence-root",
+                    f"a10={self.runs_root}",
+                ],
+                "duplicate evidence-root ID",
+            ),
+        )
+        for evidence_args, expected in cases:
+            with self.subTest(evidence_args=evidence_args):
+                stderr = io.StringIO()
+                with (
+                    redirect_stderr(stderr),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    main([*base, *evidence_args])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn(expected, stderr.getvalue())
+
+    def test_claim_output_cannot_be_written_under_floor_evidence_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence_root = Path(tmp)
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "output must be outside floor evidence roots",
+            ):
+                analyze_claims(
+                    self.manifest_path,
+                    self.runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                    evidence_roots={"a10": evidence_root},
+                    output_path=evidence_root / "claim-verdicts.json",
+                )
+
+    def test_declared_evidence_roots_filters_valid_artifacts_and_fails_closed_on_read(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            supplied = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+                "unexpected": root / "unexpected",
+            }
+            self.assertEqual(
+                declared_evidence_roots(self.floor_path, supplied),
+                {
+                    "a10": supplied["a10"],
+                    "window_c": supplied["window_c"],
+                },
+            )
+            self.assertIsNone(declared_evidence_roots(self.floor_path, None))
+
+            missing = root / "missing.json"
+            self.assertIs(declared_evidence_roots(missing, supplied), supplied)
+
+            with mock.patch.object(
+                Path,
+                "read_bytes",
+                side_effect=PermissionError("fixture unreadable"),
+            ):
+                self.assertIs(
+                    declared_evidence_roots(self.floor_path, supplied),
+                    supplied,
+                )
+
+            invalid_utf8 = root / "invalid-utf8.json"
+            invalid_utf8.write_bytes(b"\xff")
+            self.assertIs(
+                declared_evidence_roots(invalid_utf8, supplied),
+                supplied,
+            )
+
+            invalid_json = root / "invalid-json.json"
+            invalid_json.write_text("{\n", encoding="utf-8")
+            self.assertIs(
+                declared_evidence_roots(invalid_json, supplied),
+                supplied,
+            )
+
+            unusable = root / "unusable.json"
+            unusable.write_text("[]\n", encoding="utf-8")
+            self.assertIs(
+                declared_evidence_roots(unusable, supplied),
+                supplied,
+            )
+
+    def test_claim_output_separation_preserves_declared_root_and_ignores_surplus_symlink(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declared_roots = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+            }
+            for declared_root in declared_roots.values():
+                declared_root.mkdir()
+
+            exact_output = root / "exact-claim-verdicts.json"
+            analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+                evidence_roots=declared_roots,
+                output_path=exact_output,
+            )
+            self.assertTrue(exact_output.is_file())
+
+            declared_target = root / "declared-target"
+            declared_target.mkdir()
+            declared_symlink = root / "declared-symlink"
+            declared_symlink.symlink_to(declared_target, target_is_directory=True)
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "path_resolution_refused: symlink input",
+            ):
+                analyze_claims(
+                    self.manifest_path,
+                    self.runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                    evidence_roots={
+                        **declared_roots,
+                        "a10": declared_symlink,
+                    },
+                    output_path=root / "declared-symlink-must-not-write.json",
+                )
+
+            surplus_target = root / "surplus-target"
+            surplus_target.mkdir()
+            surplus_symlink = root / "surplus-symlink"
+            surplus_symlink.symlink_to(surplus_target, target_is_directory=True)
+            surplus_output = root / "surplus-symlink-claim-verdicts.json"
+            analyze_claims(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+                evidence_roots={
+                    **declared_roots,
+                    "unexpected": surplus_symlink,
+                },
+                output_path=surplus_output,
+            )
+            self.assertTrue(surplus_output.is_file())
+
+    def test_cli_output_separation_preserves_exact_and_absent_mapping_and_ignores_surplus_containment(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            declared_roots = {
+                "a10": root / "a10",
+                "window_c": root / "window-c",
+            }
+            for declared_root in declared_roots.values():
+                declared_root.mkdir()
+            evidence_args = [
+                "--evidence-root",
+                f"a10={declared_roots['a10']}",
+                "--evidence-root",
+                f"window_c={declared_roots['window_c']}",
+            ]
+            base = [
+                "analyze-claims",
+                "--analysis-manifest",
+                str(self.manifest_path),
+                "--runs-root",
+                str(self.runs_root),
+                "--floor-artifact",
+                str(self.floor_path),
+            ]
+
+            exact_output = root / "exact-cli-claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exact_code = main(
+                    [*base, *evidence_args, "--output", str(exact_output)]
+                )
+            self.assertEqual(exact_code, 0)
+            self.assertTrue(exact_output.is_file())
+
+            absent_output = root / "absent-cli-claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                absent_code = main([*base, "--output", str(absent_output)])
+            self.assertEqual(absent_code, 0)
+            self.assertTrue(absent_output.is_file())
+
+            declared_output = declared_roots["a10"] / "must-not-write.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                declared_code = main(
+                    [*base, *evidence_args, "--output", str(declared_output)]
+                )
+            self.assertEqual(declared_code, 2)
+            self.assertFalse(declared_output.exists())
+
+            absent_refused_output = self.runs_root / "must-not-write-without-roots.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                absent_refused_code = main(
+                    [*base, "--output", str(absent_refused_output)]
+                )
+            self.assertEqual(absent_refused_code, 2)
+            self.assertFalse(absent_refused_output.exists())
+
+            surplus_root = root / "surplus"
+            surplus_root.mkdir()
+            surplus_output = surplus_root / "claim-verdicts.json"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                surplus_code = main(
+                    [
+                        *base,
+                        *evidence_args,
+                        "--evidence-root",
+                        f"unexpected={surplus_root}",
+                        "--output",
+                        str(surplus_output),
+                    ]
+                )
+            self.assertEqual(surplus_code, 0)
+            self.assertTrue(surplus_output.is_file())
 
     def test_cli_writes_artifact_and_invalid_input_writes_nothing(self):
         output = self.root / "cli-claim-verdicts.json"
@@ -2512,6 +3106,28 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(audit["inclusion_status"], "excluded")
         self.assertIn("config_hash_mismatch", audit["base_reason_codes"])
 
+    def test_realized_identity_accepts_directory_shaped_model_artifact(self):
+        fixture = Path("tests/fixtures/d078_r01")
+        raw_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        metadata = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        self.assertEqual(artifact["kind"], "file_set")
+        self.assertNotIn("sha256", artifact)
+
+        identity = realized_scientific_identity(raw_config, metadata)
+
+        self.assertIsNotNone(identity)
+        self.assertEqual(
+            identity["model_artifact"]["sha256"],
+            artifact["folded_sha256"],
+        )
+
     def test_unregistered_matching_topup_demotes_but_preserves_fixed_n_analysis(self):
         runs = self.root / "topup-runs"
         shutil.copytree(self.runs_root, runs)
@@ -2685,3 +3301,333 @@ class AnalysisIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SupersessionAwareCooldownJoinTests(unittest.TestCase):
+    """FIX-9 regressions: duplicate occurrences resolve ONLY via a valid
+    operator supersession record naming exactly the observed occurrences."""
+
+    @staticmethod
+    def _manifest(tmp: Path, name: str, session: str, bundle_id: str) -> None:
+        campaign_dir = tmp / "campaign_manifests"
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": None,
+            "session_id": session,
+            "first_physical_run_id": bundle_id,
+            "members": [
+                {
+                    "execution": "invoked",
+                    "run_id": bundle_id,
+                    "bundle_ids": [bundle_id],
+                    "preceding_campaign_cooldown": {
+                        "result": "first_run_exempt",
+                        "session_id": session,
+                        "following_run_id": bundle_id,
+                    },
+                }
+            ],
+        }
+        (campaign_dir / name).write_text(json.dumps(manifest), encoding="utf-8")
+
+    def _duplicated_root(self) -> Path:
+        tmp = Path(tempfile.mkdtemp(prefix="fix9-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self._manifest(tmp, "campaign-a.json", "session-a", "dup-bundle")
+        self._manifest(tmp, "campaign-b.json", "session-b", "dup-bundle")
+        return tmp
+
+    def _physical_manifest_root(self, members: list[dict]) -> Path:
+        tmp = Path(tempfile.mkdtemp(prefix="fix10-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        campaign_dir = tmp / "campaign_manifests"
+        campaign_dir.mkdir(parents=True)
+        manifest = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": None,
+            "session_id": "physical-session",
+            "first_physical_run_id": "dup-bundle",
+            "members": members,
+        }
+        (campaign_dir / "physical.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+        return tmp
+
+    @staticmethod
+    def _physical_member(
+        bundle_ids: list[str], physical_members: list[dict]
+    ) -> dict:
+        return {
+            "execution": "invoked",
+            "run_id": "dup-bundle",
+            "bundle_ids": bundle_ids,
+            "physical_members": physical_members,
+        }
+
+    @staticmethod
+    def _first_exempt_cooldown() -> dict:
+        return {
+            "result": "first_run_exempt",
+            "session_id": "physical-session",
+            "following_run_id": "dup-bundle",
+        }
+
+    def test_duplicate_without_supersession_still_refuses(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        resolved = _campaign_cooldown_evidence(self._duplicated_root(), None)
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_repeated_declared_bundle_with_malformed_physical_row_refuses(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle", "dup-bundle"],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        },
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": "malformed",
+                        },
+                    ],
+                )
+            ]
+        )
+
+        row = _campaign_cooldown_evidence(root, None)["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_cross_member_duplicate_with_malformed_physical_row_refuses(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle"],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        }
+                    ],
+                ),
+                self._physical_member(
+                    ["dup-bundle"],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": "malformed",
+                        }
+                    ],
+                ),
+            ]
+        )
+
+        row = _campaign_cooldown_evidence(root, None)["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_single_declared_occurrence_keeps_physical_and_legacy_resolution(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        physical_root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle"],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        }
+                    ],
+                )
+            ]
+        )
+        physical = _campaign_cooldown_evidence(physical_root, None)["dup-bundle"]
+        self.assertEqual(physical["result"], "first_run_exempt")
+        self.assertTrue(physical["verified"])
+        self.assertEqual(physical["manifest"], "campaign_manifests/physical.json")
+
+        legacy_root = Path(tempfile.mkdtemp(prefix="fix10-legacy-"))
+        self.addCleanup(shutil.rmtree, legacy_root, ignore_errors=True)
+        self._manifest(
+            legacy_root, "legacy.json", "legacy-session", "single-bundle"
+        )
+        legacy = _campaign_cooldown_evidence(legacy_root, None)["single-bundle"]
+        self.assertEqual(legacy["result"], "first_run_exempt")
+        self.assertTrue(legacy["verified"])
+        self.assertEqual(legacy["manifest"], "campaign_manifests/legacy.json")
+
+    def test_valid_supersession_resolves_selected_occurrence(self):
+        from joulewise.analysis_engine import inputs as inputs_module
+
+        entry = {
+            "bundle_id": "dup-bundle",
+            "selected_occurrence": {
+                "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {
+                        "path": "campaign_manifests/campaign-a.json"
+                    },
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        with unittest.mock.patch.object(
+            inputs_module, "validated_supersession_entries", return_value=[entry]
+        ):
+            resolved = inputs_module._campaign_cooldown_evidence(
+                self._duplicated_root(), None
+            )
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["manifest"], "campaign_manifests/campaign-b.json")
+        self.assertEqual(row["session_id"], "session-b")
+
+    def test_validated_log_supersession_selects_governing_cooldown_row(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import (
+            OCCURRENCE_SUPERSESSION_SCHEMA,
+            supersession_entry_sha256,
+            validate_occurrence_supersession_entry,
+            validated_supersession_entries,
+        )
+
+        root = self._duplicated_root()
+        bundle_id = "dup-bundle"
+        canonical = root / bundle_id
+        canonical.mkdir()
+        quarantine = Path(tempfile.mkdtemp(prefix="fix10-quarantine-"))
+        self.addCleanup(shutil.rmtree, quarantine, ignore_errors=True)
+        custody_hashes = {}
+        for name, payload in (
+            ("config.json", {"run_id": bundle_id}),
+            ("metadata.json", {"status": "failed"}),
+            ("summary_metrics.json", {"status": "failed"}),
+        ):
+            raw = (json.dumps(payload, sort_keys=True) + "\n").encode()
+            (canonical / name).write_bytes(raw)
+            (quarantine / name).write_bytes(raw)
+            custody_hashes[name] = hashlib.sha256(raw).hexdigest()
+
+        def occurrence(manifest_name: str) -> dict:
+            path = root / "campaign_manifests" / manifest_name
+            return {
+                "bundle_id": bundle_id,
+                "source_manifest": {
+                    "path": f"campaign_manifests/{manifest_name}",
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                },
+                "member_index": 0,
+                "bundle_index": 0,
+            }
+
+        entry = {
+            "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+            "record_type": "campaign_occurrence_supersession",
+            "runs_root": str(root.resolve()),
+            "bundle_id": bundle_id,
+            "reason": "failed occurrence quarantined before retry",
+            "selected_occurrence": occurrence("campaign-b.json"),
+            "superseded_occurrences": [occurrence("campaign-a.json")],
+            "quarantine": {
+                "path": str(quarantine.resolve()),
+                "config_sha256": custody_hashes["config.json"],
+                "metadata_sha256": custody_hashes["metadata.json"],
+                "summary_sha256": custody_hashes["summary_metrics.json"],
+            },
+        }
+        entry["entry_sha256"] = supersession_entry_sha256(entry)
+        self.assertTrue(validate_occurrence_supersession_entry(entry, root))
+        (root / "campaign_log.jsonl").write_text(
+            json.dumps(entry, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        self.assertEqual(validated_supersession_entries(root), [entry])
+
+        row = _campaign_cooldown_evidence(root, None)[bundle_id]
+        self.assertEqual(row["manifest"], "campaign_manifests/campaign-b.json")
+        self.assertEqual(row["session_id"], "session-b")
+        self.assertTrue(row["verified"])
+
+    def test_supersession_naming_mismatched_occurrences_refuses(self):
+        from joulewise.analysis_engine import inputs as inputs_module
+
+        entry = {
+            "bundle_id": "dup-bundle",
+            "selected_occurrence": {
+                "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {
+                        "path": "campaign_manifests/campaign-OTHER.json"
+                    },
+                    "member_index": 3,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        with unittest.mock.patch.object(
+            inputs_module, "validated_supersession_entries", return_value=[entry]
+        ):
+            resolved = inputs_module._campaign_cooldown_evidence(
+                self._duplicated_root(), None
+            )
+        row = resolved["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+
+    def test_matcher_partial_extra_and_repeated_identities_refuse(self):
+        from joulewise.whole_window import (
+            supersession_selected_occurrence_identity as match,
+        )
+
+        a = ("campaign_manifests/a.json", 0, 0)
+        b = ("campaign_manifests/b.json", 0, 0)
+        c = ("campaign_manifests/c.json", 0, 0)
+        entry = {
+            "bundle_id": "x",
+            "selected_occurrence": {
+                "source_manifest": {"path": b[0]},
+                "member_index": 0,
+                "bundle_index": 0,
+            },
+            "superseded_occurrences": [
+                {
+                    "source_manifest": {"path": a[0]},
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            ],
+        }
+        self.assertEqual(match([entry], "x", [a, b]), b)
+        self.assertIsNone(match([entry], "x", [a, b, c]))
+        self.assertIsNone(match([entry], "x", [a]))
+        self.assertIsNone(match([entry], "x", [a, a]))
+        self.assertIsNone(match([entry], "wrong-id", [a, b]))
+        self.assertIsNone(match([entry, dict(entry)], "x", [a, b]))

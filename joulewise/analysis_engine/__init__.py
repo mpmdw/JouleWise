@@ -27,6 +27,7 @@ from .estimators import (
 from .inputs import (
     AnalysisInputError,
     BundleEvidence,
+    declared_evidence_roots,
     FloorEvidenceBinding,
     FloorRequest,
     FloorResolution,
@@ -87,9 +88,13 @@ def _validate_output_separation(
     analysis_manifest_path: Path,
     runs_root: Path,
     floor_artifact_path: Path,
+    evidence_roots: Mapping[str, Path] | None = None,
 ) -> None:
     """Keep the pure derivation output outside every immutable input lane."""
 
+    floor_evidence_paths = tuple(
+        Path(root) for root in (evidence_roots or {}).values()
+    )
     try:
         if any(
             Path(value).is_symlink()
@@ -98,6 +103,7 @@ def _validate_output_separation(
                 analysis_manifest_path,
                 runs_root,
                 floor_artifact_path,
+                *floor_evidence_paths,
             )
         ):
             raise AnalysisInputError(
@@ -107,6 +113,7 @@ def _validate_output_separation(
         manifest = Path(analysis_manifest_path).resolve()
         floor = Path(floor_artifact_path).resolve()
         runs = Path(runs_root).resolve()
+        floor_evidence = tuple(path.resolve() for path in floor_evidence_paths)
     except AnalysisInputError:
         raise
     except (OSError, RuntimeError) as exc:
@@ -121,6 +128,14 @@ def _validate_output_separation(
         pass
     else:
         raise AnalysisInputError("claim-verdict output must be outside the runs root")
+    for evidence_root in floor_evidence:
+        try:
+            output.relative_to(evidence_root)
+        except ValueError:
+            continue
+        raise AnalysisInputError(
+            "claim-verdict output must be outside floor evidence roots"
+        )
     try:
         output.relative_to(manifest.parent)
     except ValueError:
@@ -1174,6 +1189,7 @@ def analyze_claims(
     floor_artifact_path: Path,
     *,
     strict_validator: Any,
+    evidence_roots: Mapping[str, Path] | None = None,
     output_path: Path | None = None,
     legacy_l1_mechanics: bool = False,
     legacy_allowlist: frozenset[tuple[str, str]] | None = None,
@@ -1193,6 +1209,10 @@ def analyze_claims(
             Path(analysis_manifest_path),
             Path(runs_root),
             Path(floor_artifact_path),
+            declared_evidence_roots(
+                Path(floor_artifact_path),
+                evidence_roots,
+            ),
         )
 
     inputs = load_analysis_inputs(
@@ -1200,6 +1220,7 @@ def analyze_claims(
         Path(runs_root),
         Path(floor_artifact_path),
         strict_validator=strict_validator,
+        evidence_roots=evidence_roots,
     )
     evidence_class = "legacy_l1" if legacy_l1_mechanics else "current"
     if legacy_l1_mechanics:

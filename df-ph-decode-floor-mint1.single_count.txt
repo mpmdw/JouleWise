@@ -1,0 +1,1 @@
+effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count. Formula: floor_j + claim_side_bound_j; floor role: calibration_false_effect_bound; claim-side role: claim_measurement_uncertainty_bound; claim-side source: E_clock_anchor_shift_bound_j.

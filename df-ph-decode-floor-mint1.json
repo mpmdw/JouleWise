@@ -1,0 +1,1320 @@
+{
+  "artifact_id": "df-ph-decode-floor-mint1",
+  "calibration_scope": "production_window",
+  "cells": [
+    {
+      "absolute": {
+        "admissible_half_widths_j": [
+          0.9627021948031071,
+          1.141446012117889,
+          1.1018830653143965,
+          1.0709742590341165,
+          0.9548244738852958,
+          1.102375178053805,
+          1.032680313992742,
+          1.0610025526473166,
+          0.7804463742301309,
+          0.752885085937173
+        ],
+        "bundle_observations": [
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r01",
+            "bundle_sha256": "195b495930c4cdd532cfdd4773260ba3de73e585c7a3a9e55bac179e3b984195",
+            "config_sha256": "30ad35d1806e722a1399db61f9c521c4436abf339064f4f383e8fc6e1e50a242",
+            "metric_value_j": 50.04031113792181
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r02",
+            "bundle_sha256": "a71d5519ecbf8a1659cbdca66d0d80b34e0350a9746ef5637e84e76771e5eea3",
+            "config_sha256": "dc92d80887994bb2fb1b0fbe2d9b8542f4bbeaddb1e9c7bb9f121156bc023853",
+            "metric_value_j": 50.50223358549714
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r03",
+            "bundle_sha256": "c285172881235ef1ed0e29731c412706604e8cd182182981a5ed44cc2df986bf",
+            "config_sha256": "c95f0bd5681943a95b9c4e836835fb21c0dc174196b559e4209e7d326ec6fb17",
+            "metric_value_j": 50.073644140934945
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r04",
+            "bundle_sha256": "e35798402f4af613c21e7bd5069875a4194b6672c3c3ab1c3073fff3ec05b17d",
+            "config_sha256": "7bf2fa4751f783aa14e9329ee4784c17717e93f90038ac5141f3ca79d0aefaac",
+            "metric_value_j": 50.24058664264679
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r05",
+            "bundle_sha256": "b2b10d7dc7c70820ffa7be4cd6e5c7d99bfb723c24ecc8aa143b92b28a18cca2",
+            "config_sha256": "143124cce4c20eddf6f8728c215487a8b60ae1f51513295c60b0ef11786cdbf0",
+            "metric_value_j": 49.95902949146986
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r06",
+            "bundle_sha256": "ec172522b7ba17c83008f32994e0c727cad2bc857aee4b6a18b4c6ac4ed14446",
+            "config_sha256": "425a6945fa53488e2a13e83cc3e3db61662064e1769d4764bd8a957d32e1f6f7",
+            "metric_value_j": 50.23981594277382
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r07",
+            "bundle_sha256": "2863fa61af00fb8e23c68bd6848c9eb7f630d21827aefa4ba9af9b09a05537c9",
+            "config_sha256": "f64885e7585c7f84b148bc3b21d8c4616cd71614d4d23f22f0e87f1c574fceb1",
+            "metric_value_j": 50.3939544540286
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r08",
+            "bundle_sha256": "153af6c4d94ba5f9e67f23cf4151703b27d430717dc3d9b773258f7ffdd40593",
+            "config_sha256": "92eb21d07a9cdd5c186b92d7b178b26c352529d75e94743964ea0f3a6c11dcdc",
+            "metric_value_j": 50.565226149442196
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r09",
+            "bundle_sha256": "1a7a291dd1b789f95faf8c873a459fd4d8bb6b26257f8866726151f6c156cb96",
+            "config_sha256": "994dbdc5089086e20866b0421d89f26a02bd70eeb890fdc6f8ac37790f78803f",
+            "metric_value_j": 50.42638695742131
+          },
+          {
+            "bundle_id": "p2015-df-ph-decode-abs-r10",
+            "bundle_sha256": "1624fc548379c427d047187df164fa297bec2080062f28bb809a2dba80c94a00",
+            "config_sha256": "9d0e03740068d3588b32e6643ecf685786e041966d259f2ecb6f57edf872df5a",
+            "metric_value_j": 50.12722606134367
+          }
+        ],
+        "consumption_semantics_id": "d078_authenticated_max_bracket_rederivation_v1",
+        "corner_widened_guarded_floor_j": 2.9398659385551955,
+        "corner_widened_unguarded_floor_j": 2.9398659385551955,
+        "drift_widened_guarded_floor_j": 3.5921376919210335,
+        "drift_widened_unguarded_floor_j": 3.5921376919210335,
+        "floor_limit_class": "attribution_limited",
+        "floor_source": "E_clock_anchor_shift_bound_j",
+        "guard_factor": 1.0,
+        "guarded_floor_j": 2.9398659385551955,
+        "max_abs_residual_j": 0.30838469309418315,
+        "mean_j": 50.25684145634801,
+        "n": 10,
+        "point_floor_diagnostic": {
+          "guard_factor": 1.0,
+          "guarded_floor_j": 0.49344826888709603,
+          "label": "repeatability_diagnostic",
+          "published_claim_floor": false,
+          "unguarded_floor_j": 0.49344826888709603
+        },
+        "prediction_component_j": 0.49344826888709603,
+        "residuals_j": [
+          -0.21653031842620152,
+          0.24539212914912412,
+          -0.18319731541306794,
+          -0.016254813701223725,
+          -0.2978119648781501,
+          -0.017025513574196793,
+          0.13711299768058893,
+          0.30838469309418315,
+          0.16954550107329425,
+          -0.12961539500434327
+        ],
+        "sample_stddev_j": 0.20799490013786287,
+        "single_count_discipline": {
+          "apparent_double_count_removal_forbidden": true,
+          "both_terms_required": true,
+          "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+          "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+          "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+          "floor_role": "calibration_false_effect_bound",
+          "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+          "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+        },
+        "t_critical": 2.262,
+        "unguarded_floor_j": 2.9398659385551955,
+        "whole_window_drift_allowance": {
+          "allowance_j": 0.652271753365838,
+          "claim_family": "gross_energy",
+          "derived_repeatability_bound_j": 0.652271753365838,
+          "observed_trajectory_excursion_j": 0.50937514301976,
+          "provenance": {
+            "bound_derivation_sha256": "a13227f19f99dd12803f44a78f79e097f94c3eaa0a79772b8ac1ac92cd5db795",
+            "derived_component": "derived_repeatability_bound_j",
+            "observed_component": "trajectory_excursion_max_j"
+          },
+          "whole_window_evaluation_basis_sha256": "79c6e8b9211f18a5ad8937f155230a9090706bf1dfc8c3ed767deb53074e053e"
+        },
+        "whole_window_evaluation_basis_sha256": "79c6e8b9211f18a5ad8937f155230a9090706bf1dfc8c3ed767deb53074e053e"
+      },
+      "cell_id": "df-ph-decode-floor",
+      "comparative": {
+        "admissible_half_widths_j": [
+          2.3124203354010042,
+          2.3135531938787466,
+          2.3751708640516433,
+          2.4388357179001297,
+          2.2951730360395572,
+          2.413791157340839,
+          2.447002501791104,
+          2.402935703374837,
+          2.3492217516040483,
+          2.0627968478259575
+        ],
+        "block_deltas_j": [
+          0.3777714774717076,
+          0.4656968055385384,
+          -0.11283951989889118,
+          -0.03194797557711837,
+          -0.36165949276196585,
+          -0.019266184652209972,
+          0.02912045118332074,
+          0.13018348158907145,
+          -0.027828169193984564,
+          -0.2875441388831099
+        ],
+        "blocks": [
+          {
+            "block_id": "df-cmp-abba-ph-decode-b01",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": 0.3777714774717076,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a1",
+                "bundle_sha256": "0a22a02caa28f0c75bc460339dd420604638cf5f7aa17a0ca2e4fd1c8afbb9ae",
+                "config_sha256": "af5558c80031116e0305dbbc2125ce234bde625aa171abeabae80ad1d0f0efb7",
+                "metric_value_j": 50.48177867824316,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b1",
+                "bundle_sha256": "b25522da721b5a7deb6060fa1ed4ce22c174bcefa6d47617a76bfb90b23f4755",
+                "config_sha256": "58d272f5c1ff3b6df1a97999a748df128dd1d3142ffe9dd8973c736f7a470f1b",
+                "metric_value_j": 50.98830514431047,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b2",
+                "bundle_sha256": "584b8d1b73e7f5a5d8fe4b1e6b0f5e3a6382bb84a57c5cd6015eda31a26c31e5",
+                "config_sha256": "3dfc6ad36513b576e7b0e975aa4049ff95c2e5a1d65faa411a8cdbc0b35dc8a9",
+                "metric_value_j": 50.66421382961249,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a2",
+                "bundle_sha256": "2d1c88636ad93b0727cb01d8d4c70253fc5318ce3033b9d11e2bc0e4d8a68733",
+                "config_sha256": "1e87592aa5fb41e3e1acdd8c1de9d394bc8fa6e6385f1470177d2f2b0fb436ae",
+                "metric_value_j": 50.41519734073639,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b02",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": 0.4656968055385384,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a1",
+                "bundle_sha256": "f39fcdfe56370dc2ed33f53c6901ebcfda3362193f5f0f865d8b366c0a3eb80d",
+                "config_sha256": "ab130069ee8d50e5b51921f61997e3d4bfb6a73dbaf5259a1921e49a87c0fc8b",
+                "metric_value_j": 50.17750993825912,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b1",
+                "bundle_sha256": "f29039135ac92d31ea88c277682ff79aae0474ac741c2a18d2a1930f71be620b",
+                "config_sha256": "90f0edaffa19f9f8b69fa2e0cdefa53074ce18a19c01af8c186c2e57d823f295",
+                "metric_value_j": 50.40991583376765,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b2",
+                "bundle_sha256": "b200324cffed9a1db87323a5961d28dbdc593e743d623423b6862e5f643f5273",
+                "config_sha256": "f54707bd54d795bc278b7b62fc29eff263ce8ae4ab973e871e5fb353f36ddd7e",
+                "metric_value_j": 50.811675974345206,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a2",
+                "bundle_sha256": "8a9216a68466a432fe65e7ff9d48664d1c1e8b297b9a011cbe4f462e291220b4",
+                "config_sha256": "b5f2a556d2c13994a39040f0d0d21e9564a1ae0647221302ddd0c1897da136cf",
+                "metric_value_j": 50.112688258776664,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b03",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.11283951989889118,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-a1",
+                "bundle_sha256": "b27c6af7109a5734079ad311df84f812680daa957e2b5121de46372fe6871bf3",
+                "config_sha256": "fa933e65f8c477ac5b72d1192d4611d6b30c31a1336bb417d64734bf3d091e0d",
+                "metric_value_j": 50.38084019438744,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-b1",
+                "bundle_sha256": "ec6fda56898612837eb76d658c9057ab0e08e26689e44b1dea1a296dd17674b2",
+                "config_sha256": "f1010b67d28a7e82ee4463f774811c7f13d69d8c078284dc9cfe115dd017b5b4",
+                "metric_value_j": 50.410850104002954,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-b2",
+                "bundle_sha256": "8eaba1d3b0069dd913aafabff74f6d2b6dfab066a0b30e8f4f68322a84973903",
+                "config_sha256": "63fa1a91d4b1d88a9f15301697c48516d9a7ea60823783437e3b30d67afa6c49",
+                "metric_value_j": 50.05159953967571,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-a2",
+                "bundle_sha256": "59aade4961b9e59f1696f88f263204f3739cb7d81adc754cc3380a0133f92691",
+                "config_sha256": "e9c415fc99e83b1591d31ee6394987e4edd0c81c7ad30286f7d79f3b2e145965",
+                "metric_value_j": 50.30728848908901,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b04",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.03194797557711837,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-a1",
+                "bundle_sha256": "2ecceeb9237077c2f3a6577c9d7bce24d3deeb926df1e15f1b389bad0db02147",
+                "config_sha256": "1001f88352479fff41f12f372b6d0146670c94bb4308bed53cac79fc6b145cb8",
+                "metric_value_j": 50.215085228421685,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-b1",
+                "bundle_sha256": "48a8bb2a6f23c6531eae6f8d99c043e0500379aff9427956fee1b74de75694ff",
+                "config_sha256": "391f3bed7a3a4ba0c76dd20304dca5ad1d434e2fb722244ecd2dfccad78c8926",
+                "metric_value_j": 50.32182880868912,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-b2",
+                "bundle_sha256": "eb05f32d37b1c8e8969f097a0ff112ea95e7ca9c1110e03127b7538267414449",
+                "config_sha256": "b10cad40b3c76ee639ee915ec16b3d5f15016bc28a4a47555c9558398ba18778",
+                "metric_value_j": 50.35856351327896,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-a2",
+                "bundle_sha256": "769d1d1378e3603fe40013fadeda35504eca0c235f773106233323fba5a61163",
+                "config_sha256": "8f5104faa1c8c0a71e386bced1a9e6713b363d114b59739763a20b3c5857c1f6",
+                "metric_value_j": 50.52920304470062,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b05",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.36165949276196585,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-a1",
+                "bundle_sha256": "9d67992e7cdd70a86bbbf82ca6a9b587d42779c14a28f72256900331d9f8fece",
+                "config_sha256": "5c4954615b0a555b5ab96ac7480701a176f2ca6c91e1aaff7b71afb77e9be7c1",
+                "metric_value_j": 50.43333373380899,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-b1",
+                "bundle_sha256": "5c7a8a6ce946d88fdd5ea0124bafa1ffad8c289308d5e9b600d2f95e280bb025",
+                "config_sha256": "532bf5d21710b8a6f549d4c880812396d9efa95d952652b82e0240610d02142e",
+                "metric_value_j": 50.25175654177428,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-b2",
+                "bundle_sha256": "39054c62e30e8362a0ef473fb674aed5d1c87df7c630d0f4daadfd296874439e",
+                "config_sha256": "15b988642e9f3cd28965864b4fd68bb678a7cbd29f3138fcdb769409ced13f4a",
+                "metric_value_j": 50.4644203924346,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-a2",
+                "bundle_sha256": "0eb6a006b4afc1cc031a3786a0cc1180686cdb78cb9375788370a3bfd86e8060",
+                "config_sha256": "b4d118a5e1729bc8096821f8b001d80fb4f89392f47d074985c486d264c012bb",
+                "metric_value_j": 51.00616218592381,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b06",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.019266184652209972,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-a1",
+                "bundle_sha256": "5135406fa3ba08b4df498cfbe12a463607a829db546a13d273e7b97fdb1aab50",
+                "config_sha256": "40356586d3d90e2c8e2f4268cdb1b451fa36f95ceb48aac012b253ce709e04f6",
+                "metric_value_j": 50.45366377061844,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-b1",
+                "bundle_sha256": "edbaba1c823c33bbc51164f96947a590ab0f4d96569ca221669942500d4ff2cc",
+                "config_sha256": "eccc54e677b39b821e51751e815cef490eb3209ed36719c809c2b81d8aae4d1c",
+                "metric_value_j": 50.25125766688347,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-b2",
+                "bundle_sha256": "e7ee36928bac0e65b8004f8f7b7fae0babe3ac706171b26b8dd92015a1f87058",
+                "config_sha256": "7aeeb4f54e9f03b176ab77aead1476d9464b5aeeca7571469845c1fc828f6557",
+                "metric_value_j": 50.50957755208898,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-a2",
+                "bundle_sha256": "b65b79bb3f7d7a6c570d882abc6b75bef14c1c56223bfb062f6b40c708a4ad8e",
+                "config_sha256": "c6c0390436d12ea81139a1a4a65591876f1db80b1ea0720aef4bba5d579d2d49",
+                "metric_value_j": 50.345703817658425,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b07",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": 0.02912045118332074,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-a1",
+                "bundle_sha256": "32c53e61cdbb8f507eed269af1eeeef69f4105fba8c9d9d2f43f06f8ba9acaf9",
+                "config_sha256": "c8f29e79f1edb9f1e0eb5624a10503b0bc3d691bea66a4855c9cfc856b1b5e2f",
+                "metric_value_j": 50.2058866039443,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-b1",
+                "bundle_sha256": "cac899e4c3fa84eec27f5fc26e0c105f25abc6948190821552f3a89f317fd681",
+                "config_sha256": "68b5f09e247a2cc744f80f3e0c423502a9a78b23cb96760deaa24f7a62ceb836",
+                "metric_value_j": 50.37580999731541,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-b2",
+                "bundle_sha256": "ed743899e603951287cce29814371c4949b452a36b65550992535a3e3ffeef3e",
+                "config_sha256": "06f55f3c52f12298a3587fb2cbf3addb8b34df9f51502c3b6a5efc67d0909048",
+                "metric_value_j": 50.0154183428359,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-a2",
+                "bundle_sha256": "e339de0c0f2e5b464e73e2423e94ad6a4fa72c2abca68cebeb2d97f3af893109",
+                "config_sha256": "8e97012db69dd75cd9eaff1ae4d360ba70c9d997489742cf4ff00b5dd7e2e97f",
+                "metric_value_j": 50.12710083384037,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b08",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": 0.13018348158907145,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-a1",
+                "bundle_sha256": "0a76e5fbcffdccb44ebc22b8d9d86e259b49d2c529ec89bcc0a24c6f22994899",
+                "config_sha256": "9c9f921220eafdb328635da7abfd5c4f07061533cf365a881a5e49a32043b5c7",
+                "metric_value_j": 50.588617132568835,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-b1",
+                "bundle_sha256": "589b17f6a10c6275407367f7f90bea8ced63dabb70850798e0808626924168fe",
+                "config_sha256": "3c48747452cf616d2679060b8090979d8f6d314e3403ab7f876b01777c2934aa",
+                "metric_value_j": 50.336730480612275,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-b2",
+                "bundle_sha256": "6a090490fd08e646bc39c4eaa112fffcdf87e0d5f03599af10595512957997f4",
+                "config_sha256": "02b362e9004e68a2c5fcbcb27845d76a713bea1ee57c74e79c5039490c2fb88d",
+                "metric_value_j": 50.70514498372173,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-a2",
+                "bundle_sha256": "fb12d40f5a418462a268587fa9ad8e9bbbef5e32e47132f112e2f3f9d540c5e1",
+                "config_sha256": "e6f1cb39ff3d833f29270cec2c2d1e49fc902cb295b3aa12c31c6c5750a73d52",
+                "metric_value_j": 50.19289136858702,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b09",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.027828169193984564,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-a1",
+                "bundle_sha256": "377f6a786c341eef39d6836cb2d12921ab4a05d434c5a241f5c581d8f4d4a2ee",
+                "config_sha256": "eaf8d6ffe8d0a3ae992dd6ab709cbb1e5b3a16e2a050ba9e770ea84aa2f6008a",
+                "metric_value_j": 50.3487413021183,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-b1",
+                "bundle_sha256": "acd77e1d5a8a5bc82493315b772fa616a3cf5c579fda5586e04902fdda388459",
+                "config_sha256": "65c1509ac1dc0f4d2031ed9760af3e9c0861a1a05a8e326be4c0205322dfe03d",
+                "metric_value_j": 50.17569163807392,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-b2",
+                "bundle_sha256": "8bc66888f356e9e123d356db3dd1f538e71dada51037f953b8f3055e901447f4",
+                "config_sha256": "967665e2b455a1b4c6db6dee307d2efd751e27129d4d5cfaac9a86e46605485f",
+                "metric_value_j": 50.499067626529694,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-a2",
+                "bundle_sha256": "dc1e56aa1d27fc6ac0bb5d7a80b7881e635a5050e7ffc9536b62c75dd22cee5a",
+                "config_sha256": "afd8c1d6c0fbf2a6e259b1baa79c788d559b3e07b58cd015421a5a52f5fc7e40",
+                "metric_value_j": 50.38167430087328,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          },
+          {
+            "block_id": "df-cmp-abba-ph-decode-b10",
+            "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+            "delta_j": -0.2875441388831099,
+            "executed_labels": [
+              "A",
+              "B",
+              "B",
+              "A"
+            ],
+            "members": [
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-a1",
+                "bundle_sha256": "6cdd0c795befd568798a4ef4538bf6db1ccd930f240de873a77ab36263927561",
+                "config_sha256": "0ed4d90cab5a6e1ba2a8cb346173f79a984964c4dba1cfc0168c2e552458c226",
+                "metric_value_j": 50.42802478900718,
+                "plan_label": "A",
+                "plan_sequence_index": 1,
+                "position": "A1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-b1",
+                "bundle_sha256": "b446e7a59d38287578918f273a1fa512f89f8da1ca4e8304f1f83d7af27dc568",
+                "config_sha256": "b8a6349179a081fe3e86703eb5d05463c42a4f64d37740a6068a72560250b436",
+                "metric_value_j": 50.11175831825972,
+                "plan_label": "B",
+                "plan_sequence_index": 2,
+                "position": "B1"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-b2",
+                "bundle_sha256": "d88ffadb420cf59aa20a7efc7615a1d7817f91814b0754756b0bc65e51cd57bf",
+                "config_sha256": "1ba0164b55f43180ecc8e80d8372071ca46c29119681b842d2a8089322529e5d",
+                "metric_value_j": 50.321049510126116,
+                "plan_label": "B",
+                "plan_sequence_index": 3,
+                "position": "B2"
+              },
+              {
+                "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-a2",
+                "bundle_sha256": "ffacb0680cf37794804f7af1f5e0bd39fab26160bf134a0cf63525c293155f13",
+                "config_sha256": "ecbc61cdb4ab24aa69c63f2bd357610728d5ed4a4944392010d02704fc64c2a2",
+                "metric_value_j": 50.57987131714487,
+                "plan_label": "A",
+                "plan_sequence_index": 4,
+                "position": "A2"
+              }
+            ]
+          }
+        ],
+        "consumption_semantics_id": "d078_authenticated_max_bracket_rederivation_v1",
+        "corner_widened_guarded_floor_j": 6.795813690761627,
+        "corner_widened_unguarded_floor_j": 6.795813690761627,
+        "drift_widened_guarded_floor_j": 7.377085735735073,
+        "drift_widened_unguarded_floor_j": 7.377085735735073,
+        "floor_limit_class": "attribution_limited",
+        "floor_source": "E_clock_anchor_shift_bound_j",
+        "guard_factor": 1.0,
+        "guarded_floor_j": 6.795813690761627,
+        "max_abs_delta_j": 0.4656968055385384,
+        "mean_delta_j": 0.016168673481535834,
+        "n_blocks": 10,
+        "point_floor_diagnostic": {
+          "guard_factor": 1.0,
+          "guarded_floor_j": 0.6303242282254147,
+          "label": "repeatability_diagnostic",
+          "published_claim_floor": false,
+          "unguarded_floor_j": 0.6303242282254147
+        },
+        "prediction_component_j": 0.6303242282254147,
+        "sample_stddev_j": 0.25887460009976204,
+        "single_count_discipline": {
+          "apparent_double_count_removal_forbidden": true,
+          "both_terms_required": true,
+          "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+          "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+          "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+          "floor_role": "calibration_false_effect_bound",
+          "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+          "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+        },
+        "t_critical": 2.262,
+        "unguarded_floor_j": 6.795813690761627,
+        "whole_window_drift_allowance": {
+          "allowance_j": 0.5812720449734456,
+          "claim_family": "gross_energy",
+          "derived_repeatability_bound_j": 0.5812720449734456,
+          "observed_trajectory_excursion_j": 0.11743226784110306,
+          "provenance": {
+            "bound_derivation_sha256": "1b0563abbba8d99c17fc9447a93e156c83d10fe208a3dbefa67348d4c08312b7",
+            "derived_component": "derived_repeatability_bound_j",
+            "observed_component": "trajectory_excursion_max_j"
+          },
+          "whole_window_evaluation_basis_sha256": "0cf07a5cdc3847e67ba9be9dc50ffda43b7d00ef10d03485faf36c2693418fa6"
+        },
+        "whole_window_evaluation_basis_sha256": "0cf07a5cdc3847e67ba9be9dc50ffda43b7d00ef10d03485faf36c2693418fa6"
+      },
+      "eligibility": {
+        "claim_usable": true,
+        "minimum_claim_n": 10,
+        "reason_codes": [],
+        "status": "claim_ready",
+        "use_role": "primary_claim_gate"
+      },
+      "floor_abs_j": 3.5921376919210335,
+      "floor_cmp_j": 7.377085735735073,
+      "floor_gate_j": 7.377085735735073,
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "key": {
+        "backend": "powermetrics",
+        "condition_family_definition": {
+          "abba_alias_relation": "A_equals_B",
+          "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+          "condition_family_id": "df-ph-decode",
+          "measurement_target": {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase"
+          },
+          "schema_version": "joulewise.condition_family_definition.v1",
+          "workload_profile": {
+            "name": "df_ph_decode",
+            "output_tokens": 512,
+            "prompt_tokens": 128,
+            "repetitions": 1,
+            "warmup_runs": 1
+          }
+        },
+        "condition_family_id": "df-ph-decode",
+        "condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
+        "metric": "phase_energy_j.decode",
+        "window_class": "phase"
+      },
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guard_factor": 1.0,
+          "guarded_floor_j": 0.49344826888709603,
+          "label": "repeatability_diagnostic",
+          "published_claim_floor": false,
+          "unguarded_floor_j": 0.49344826888709603
+        },
+        "comparative": {
+          "guard_factor": 1.0,
+          "guarded_floor_j": 0.6303242282254147,
+          "label": "repeatability_diagnostic",
+          "published_claim_floor": false,
+          "unguarded_floor_j": 0.6303242282254147
+        }
+      },
+      "provenance": {
+        "absolute": {
+          "bundle_ids": [
+            "p2015-df-ph-decode-abs-r01",
+            "p2015-df-ph-decode-abs-r02",
+            "p2015-df-ph-decode-abs-r03",
+            "p2015-df-ph-decode-abs-r04",
+            "p2015-df-ph-decode-abs-r05",
+            "p2015-df-ph-decode-abs-r06",
+            "p2015-df-ph-decode-abs-r07",
+            "p2015-df-ph-decode-abs-r08",
+            "p2015-df-ph-decode-abs-r09",
+            "p2015-df-ph-decode-abs-r10"
+          ],
+          "bundle_sha256s": [
+            "195b495930c4cdd532cfdd4773260ba3de73e585c7a3a9e55bac179e3b984195",
+            "a71d5519ecbf8a1659cbdca66d0d80b34e0350a9746ef5637e84e76771e5eea3",
+            "c285172881235ef1ed0e29731c412706604e8cd182182981a5ed44cc2df986bf",
+            "e35798402f4af613c21e7bd5069875a4194b6672c3c3ab1c3073fff3ec05b17d",
+            "b2b10d7dc7c70820ffa7be4cd6e5c7d99bfb723c24ecc8aa143b92b28a18cca2",
+            "ec172522b7ba17c83008f32994e0c727cad2bc857aee4b6a18b4c6ac4ed14446",
+            "2863fa61af00fb8e23c68bd6848c9eb7f630d21827aefa4ba9af9b09a05537c9",
+            "153af6c4d94ba5f9e67f23cf4151703b27d430717dc3d9b773258f7ffdd40593",
+            "1a7a291dd1b789f95faf8c873a459fd4d8bb6b26257f8866726151f6c156cb96",
+            "1624fc548379c427d047187df164fa297bec2080062f28bb809a2dba80c94a00"
+          ],
+          "calibration_cell_id": "df-ph-decode-absolute",
+          "campaign_log": {
+            "sha256": "7c9c090866a91533027e59763c08c6d8e4bfad7f71eb884488bc9f2c625a8e13"
+          },
+          "evidence_root_id": "a10",
+          "extraction_report": {
+            "sha256": "77dbcd9d4f898d2acd96a1b70213f011f4da69a1c74843b67506b3cac8ba41d8"
+          },
+          "extraction_spec": {
+            "sha256": "9f4c5fb44543ece88d6eadd767ee7dfcee1ff16a12ff57810c963e1907fa1aa9"
+          },
+          "order_manifest": {
+            "manifest_id": "p2-015-02_phase_absolute-order-v1",
+            "sha256": "163e329cd795635e48643c2d55e5851950ecc9fe18c631ede585850e53e760ee"
+          },
+          "source_regime": {
+            "stack_identity": {
+              "batching_concurrency_policy": "single-request sequential",
+              "hardware_unit": {
+                "config_id": "macbook_m3_max",
+                "device": "macbook_m3_max",
+                "machine": "arm64"
+              },
+              "kernel_library": "unavailable",
+              "measurement_boundary_label": {
+                "boundary": "Apple SoC CPU + GPU + ANE package power",
+                "rails": [
+                  "cpu_power",
+                  "gpu_power",
+                  "ane_power"
+                ]
+              },
+              "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+              "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+              "quantization": {
+                "bits": 4,
+                "group_size": null,
+                "name": "int4"
+              },
+              "runtime_version": {
+                "adapter": "mlx_runtime",
+                "name": "mlx",
+                "version": "0.31.2"
+              },
+              "sampler_output_policy": {
+                "output_policy": {
+                  "name": "fixed_budget_exact",
+                  "requested_tokens": 512,
+                  "stop_condition": "requested_tokens_emitted"
+                },
+                "sampler": {
+                  "api": "mlx_lm.sample_utils.make_sampler",
+                  "kind": "greedy",
+                  "parameter": "temp",
+                  "pinned": true,
+                  "temperature": 0.0
+                }
+              },
+              "telemetry_backend": "powermetrics",
+              "tokenizer_identity": {
+                "backend": "mlx",
+                "class": "TokenizerWrapper",
+                "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+                "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+                "vocab_size": 151643
+              }
+            },
+            "stack_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08",
+            "stress_observed": {
+              "bound_terms": {
+                "clock_anchor_bound_s": {
+                  "applicability": "required",
+                  "maximum": 0.028761317581377926
+                },
+                "idle_drift_bound_j": {
+                  "applicability": "not_applicable",
+                  "maximum": null
+                },
+                "interpolation_bound_j": {
+                  "applicability": "required",
+                  "maximum": 0.0
+                }
+              },
+              "bracketing_sample_gap_s_max": 0.11374306678771973,
+              "cadence_ratio_min": 16.93714102378601,
+              "mean_power_w_max": 26.245751061842853,
+              "mean_power_w_min": 25.85987597485477,
+              "p95_sample_gap_s_max": 0.1136484146118164,
+              "window_duration_s_max": 1.9382319450378418,
+              "window_duration_s_min": 1.9250330924987793
+            }
+          }
+        },
+        "comparative": {
+          "bundle_ids": [
+            "p2015-df-cmp-abba-ph-decode-b01-a1",
+            "p2015-df-cmp-abba-ph-decode-b01-b1",
+            "p2015-df-cmp-abba-ph-decode-b01-b2",
+            "p2015-df-cmp-abba-ph-decode-b01-a2",
+            "p2015-df-cmp-abba-ph-decode-b02-a1",
+            "p2015-df-cmp-abba-ph-decode-b02-b1",
+            "p2015-df-cmp-abba-ph-decode-b02-b2",
+            "p2015-df-cmp-abba-ph-decode-b02-a2",
+            "p2015-df-cmp-abba-ph-decode-b03-a1",
+            "p2015-df-cmp-abba-ph-decode-b03-b1",
+            "p2015-df-cmp-abba-ph-decode-b03-b2",
+            "p2015-df-cmp-abba-ph-decode-b03-a2",
+            "p2015-df-cmp-abba-ph-decode-b04-a1",
+            "p2015-df-cmp-abba-ph-decode-b04-b1",
+            "p2015-df-cmp-abba-ph-decode-b04-b2",
+            "p2015-df-cmp-abba-ph-decode-b04-a2",
+            "p2015-df-cmp-abba-ph-decode-b05-a1",
+            "p2015-df-cmp-abba-ph-decode-b05-b1",
+            "p2015-df-cmp-abba-ph-decode-b05-b2",
+            "p2015-df-cmp-abba-ph-decode-b05-a2",
+            "p2015-df-cmp-abba-ph-decode-b06-a1",
+            "p2015-df-cmp-abba-ph-decode-b06-b1",
+            "p2015-df-cmp-abba-ph-decode-b06-b2",
+            "p2015-df-cmp-abba-ph-decode-b06-a2",
+            "p2015-df-cmp-abba-ph-decode-b07-a1",
+            "p2015-df-cmp-abba-ph-decode-b07-b1",
+            "p2015-df-cmp-abba-ph-decode-b07-b2",
+            "p2015-df-cmp-abba-ph-decode-b07-a2",
+            "p2015-df-cmp-abba-ph-decode-b08-a1",
+            "p2015-df-cmp-abba-ph-decode-b08-b1",
+            "p2015-df-cmp-abba-ph-decode-b08-b2",
+            "p2015-df-cmp-abba-ph-decode-b08-a2",
+            "p2015-df-cmp-abba-ph-decode-b09-a1",
+            "p2015-df-cmp-abba-ph-decode-b09-b1",
+            "p2015-df-cmp-abba-ph-decode-b09-b2",
+            "p2015-df-cmp-abba-ph-decode-b09-a2",
+            "p2015-df-cmp-abba-ph-decode-b10-a1",
+            "p2015-df-cmp-abba-ph-decode-b10-b1",
+            "p2015-df-cmp-abba-ph-decode-b10-b2",
+            "p2015-df-cmp-abba-ph-decode-b10-a2"
+          ],
+          "bundle_sha256s": [
+            "0a22a02caa28f0c75bc460339dd420604638cf5f7aa17a0ca2e4fd1c8afbb9ae",
+            "b25522da721b5a7deb6060fa1ed4ce22c174bcefa6d47617a76bfb90b23f4755",
+            "584b8d1b73e7f5a5d8fe4b1e6b0f5e3a6382bb84a57c5cd6015eda31a26c31e5",
+            "2d1c88636ad93b0727cb01d8d4c70253fc5318ce3033b9d11e2bc0e4d8a68733",
+            "f39fcdfe56370dc2ed33f53c6901ebcfda3362193f5f0f865d8b366c0a3eb80d",
+            "f29039135ac92d31ea88c277682ff79aae0474ac741c2a18d2a1930f71be620b",
+            "b200324cffed9a1db87323a5961d28dbdc593e743d623423b6862e5f643f5273",
+            "8a9216a68466a432fe65e7ff9d48664d1c1e8b297b9a011cbe4f462e291220b4",
+            "b27c6af7109a5734079ad311df84f812680daa957e2b5121de46372fe6871bf3",
+            "ec6fda56898612837eb76d658c9057ab0e08e26689e44b1dea1a296dd17674b2",
+            "8eaba1d3b0069dd913aafabff74f6d2b6dfab066a0b30e8f4f68322a84973903",
+            "59aade4961b9e59f1696f88f263204f3739cb7d81adc754cc3380a0133f92691",
+            "2ecceeb9237077c2f3a6577c9d7bce24d3deeb926df1e15f1b389bad0db02147",
+            "48a8bb2a6f23c6531eae6f8d99c043e0500379aff9427956fee1b74de75694ff",
+            "eb05f32d37b1c8e8969f097a0ff112ea95e7ca9c1110e03127b7538267414449",
+            "769d1d1378e3603fe40013fadeda35504eca0c235f773106233323fba5a61163",
+            "9d67992e7cdd70a86bbbf82ca6a9b587d42779c14a28f72256900331d9f8fece",
+            "5c7a8a6ce946d88fdd5ea0124bafa1ffad8c289308d5e9b600d2f95e280bb025",
+            "39054c62e30e8362a0ef473fb674aed5d1c87df7c630d0f4daadfd296874439e",
+            "0eb6a006b4afc1cc031a3786a0cc1180686cdb78cb9375788370a3bfd86e8060",
+            "5135406fa3ba08b4df498cfbe12a463607a829db546a13d273e7b97fdb1aab50",
+            "edbaba1c823c33bbc51164f96947a590ab0f4d96569ca221669942500d4ff2cc",
+            "e7ee36928bac0e65b8004f8f7b7fae0babe3ac706171b26b8dd92015a1f87058",
+            "b65b79bb3f7d7a6c570d882abc6b75bef14c1c56223bfb062f6b40c708a4ad8e",
+            "32c53e61cdbb8f507eed269af1eeeef69f4105fba8c9d9d2f43f06f8ba9acaf9",
+            "cac899e4c3fa84eec27f5fc26e0c105f25abc6948190821552f3a89f317fd681",
+            "ed743899e603951287cce29814371c4949b452a36b65550992535a3e3ffeef3e",
+            "e339de0c0f2e5b464e73e2423e94ad6a4fa72c2abca68cebeb2d97f3af893109",
+            "0a76e5fbcffdccb44ebc22b8d9d86e259b49d2c529ec89bcc0a24c6f22994899",
+            "589b17f6a10c6275407367f7f90bea8ced63dabb70850798e0808626924168fe",
+            "6a090490fd08e646bc39c4eaa112fffcdf87e0d5f03599af10595512957997f4",
+            "fb12d40f5a418462a268587fa9ad8e9bbbef5e32e47132f112e2f3f9d540c5e1",
+            "377f6a786c341eef39d6836cb2d12921ab4a05d434c5a241f5c581d8f4d4a2ee",
+            "acd77e1d5a8a5bc82493315b772fa616a3cf5c579fda5586e04902fdda388459",
+            "8bc66888f356e9e123d356db3dd1f538e71dada51037f953b8f3055e901447f4",
+            "dc1e56aa1d27fc6ac0bb5d7a80b7881e635a5050e7ffc9536b62c75dd22cee5a",
+            "6cdd0c795befd568798a4ef4538bf6db1ccd930f240de873a77ab36263927561",
+            "b446e7a59d38287578918f273a1fa512f89f8da1ca4e8304f1f83d7af27dc568",
+            "d88ffadb420cf59aa20a7efc7615a1d7817f91814b0754756b0bc65e51cd57bf",
+            "ffacb0680cf37794804f7af1f5e0bd39fab26160bf134a0cf63525c293155f13"
+          ],
+          "calibration_cell_id": "df-cmp-abba-ph-decode",
+          "campaign_log": {
+            "sha256": "cc121110de573c14405143ae1c51fd50d723d737cb37db6d5268e510204a552f"
+          },
+          "evidence_root_id": "window_c",
+          "extraction_report": {
+            "sha256": "94791d72b2c25293fa254d5b054c1d662c042b43eee29ba0593e03c2e9e46917"
+          },
+          "extraction_spec": {
+            "sha256": "10f064b5ece507ae0631a817c065f266987c20e2d0d7fcbbf1e8e1b7d566493f"
+          },
+          "order_manifest": {
+            "manifest_id": "p2-015-05_phase_decode_abba-order-v1",
+            "sha256": "8bdf85287fc74565349c4510a18ee2e6cda0fb05c2f107985c6c042b6250f6b0"
+          },
+          "source_regime": {
+            "stack_identity": {
+              "batching_concurrency_policy": "single-request sequential",
+              "hardware_unit": {
+                "config_id": "macbook_m3_max",
+                "device": "macbook_m3_max",
+                "machine": "arm64"
+              },
+              "kernel_library": "unavailable",
+              "measurement_boundary_label": {
+                "boundary": "Apple SoC CPU + GPU + ANE package power",
+                "rails": [
+                  "cpu_power",
+                  "gpu_power",
+                  "ane_power"
+                ]
+              },
+              "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+              "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+              "quantization": {
+                "bits": 4,
+                "group_size": null,
+                "name": "int4"
+              },
+              "runtime_version": {
+                "adapter": "mlx_runtime",
+                "name": "mlx",
+                "version": "0.31.2"
+              },
+              "sampler_output_policy": {
+                "output_policy": {
+                  "name": "fixed_budget_exact",
+                  "requested_tokens": 512,
+                  "stop_condition": "requested_tokens_emitted"
+                },
+                "sampler": {
+                  "api": "mlx_lm.sample_utils.make_sampler",
+                  "kind": "greedy",
+                  "parameter": "temp",
+                  "pinned": true,
+                  "temperature": 0.0
+                }
+              },
+              "telemetry_backend": "powermetrics",
+              "tokenizer_identity": {
+                "backend": "mlx",
+                "class": "TokenizerWrapper",
+                "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+                "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+                "vocab_size": 151643
+              }
+            },
+            "stack_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08",
+            "stress_observed": {
+              "bound_terms": {
+                "clock_anchor_bound_s": {
+                  "applicability": "required",
+                  "maximum": 0.036572288873579356
+                },
+                "idle_drift_bound_j": {
+                  "applicability": "not_applicable",
+                  "maximum": null
+                },
+                "interpolation_bound_j": {
+                  "applicability": "required",
+                  "maximum": 0.0
+                }
+              },
+              "bracketing_sample_gap_s_max": 0.11459779739379883,
+              "cadence_ratio_min": 16.32534310201378,
+              "mean_power_w_max": 26.374752533273853,
+              "mean_power_w_min": 25.900488775669626,
+              "p95_sample_gap_s_max": 0.11806201934814453,
+              "window_duration_s_max": 1.9425268173217773,
+              "window_duration_s_min": 1.9270238876342773
+            }
+          }
+        }
+      },
+      "single_count_discipline": {
+        "apparent_double_count_removal_forbidden": true,
+        "both_terms_required": true,
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+      },
+      "source_regime": {
+        "stack_identity": {
+          "batching_concurrency_policy": "single-request sequential",
+          "hardware_unit": {
+            "config_id": "macbook_m3_max",
+            "device": "macbook_m3_max",
+            "machine": "arm64"
+          },
+          "kernel_library": "unavailable",
+          "measurement_boundary_label": {
+            "boundary": "Apple SoC CPU + GPU + ANE package power",
+            "rails": [
+              "cpu_power",
+              "gpu_power",
+              "ane_power"
+            ]
+          },
+          "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+          "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+          "quantization": {
+            "bits": 4,
+            "group_size": null,
+            "name": "int4"
+          },
+          "runtime_version": {
+            "adapter": "mlx_runtime",
+            "name": "mlx",
+            "version": "0.31.2"
+          },
+          "sampler_output_policy": {
+            "output_policy": {
+              "name": "fixed_budget_exact",
+              "requested_tokens": 512,
+              "stop_condition": "requested_tokens_emitted"
+            },
+            "sampler": {
+              "api": "mlx_lm.sample_utils.make_sampler",
+              "kind": "greedy",
+              "parameter": "temp",
+              "pinned": true,
+              "temperature": 0.0
+            }
+          },
+          "telemetry_backend": "powermetrics",
+          "tokenizer_identity": {
+            "backend": "mlx",
+            "class": "TokenizerWrapper",
+            "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+            "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "vocab_size": 151643
+          }
+        },
+        "stack_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08",
+        "stress_observed": {
+          "bound_terms": {
+            "clock_anchor_bound_s": {
+              "applicability": "required",
+              "maximum": 0.036572288873579356
+            },
+            "idle_drift_bound_j": {
+              "applicability": "not_applicable",
+              "maximum": null
+            },
+            "interpolation_bound_j": {
+              "applicability": "required",
+              "maximum": 0.0
+            }
+          },
+          "bracketing_sample_gap_s_max": 0.11459779739379883,
+          "cadence_ratio_min": 16.32534310201378,
+          "mean_power_w_max": 26.374752533273853,
+          "mean_power_w_min": 25.85987597485477,
+          "p95_sample_gap_s_max": 0.11806201934814453,
+          "window_duration_s_max": 1.9425268173217773,
+          "window_duration_s_min": 1.9250330924987793
+        }
+      },
+      "transport_group_id": "tg-df-ph-decode-production-v1"
+    }
+  ],
+  "idle_drift_guard": {
+    "artifact_sha256": null,
+    "bundle_sha256": [],
+    "calibration_status": "pending_calibration",
+    "cell_id": null,
+    "guard_w": null,
+    "method": "p2_015_prediction_guard_v1",
+    "n_bundles": 0
+  },
+  "method": {
+    "abba_delta_formula": "(B1+B2-A1-A2)/2",
+    "absolute_formula": "max(max_abs_residual_j,t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "comparative_formula": "max(max_abs_delta_j,abs(mean_delta_j)+t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "method_id": "d054_false_effect_guard.v1",
+    "small_sample_guard": {
+      "formula": "max(1,sqrt((10-1)/(n-1)))",
+      "frozen_before_calibration": true,
+      "maximum_guarded_n_exclusive": 10,
+      "minimum_n": 5,
+      "reference_n": 10,
+      "rule_id": "residual_df_ratio_to_n10.v1"
+    },
+    "t_critical_source": "joulewise.aggregate.student_t_critical_95.v1",
+    "t_quantile": 0.975
+  },
+  "provenance": {
+    "calibration_plan": {
+      "declared_calibration_scope": "window_a",
+      "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
+      "relative_path": "configs/campaigns/p2_015_floors/calibration_plan.json",
+      "sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab"
+    },
+    "implementation": {
+      "project_commit": "3de370ec8cd8ac16ae65b2c999375928cbb1564e",
+      "project_tree_state": "clean",
+      "python_package": "joulewise"
+    },
+    "mint_tool_version": "joulewise.floor_mint.v1"
+  },
+  "schema_version": "joulewise.detection_floor_artifact.v2",
+  "source_class": "prospective",
+  "transport_groups": [
+    {
+      "allowed_consumer_condition_families": [
+        {
+          "condition_family_definition": {
+            "abba_alias_relation": "A_equals_B",
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "condition_family_id": "df-ph-decode",
+            "measurement_target": {
+              "metric": "phase_energy_j.decode",
+              "window_class": "phase"
+            },
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "output_tokens": 512,
+              "prompt_tokens": 128,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "condition_family_id": "df-ph-decode",
+          "condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe"
+        }
+      ],
+      "backend": "powermetrics",
+      "composed_floor_abs_j": 3.5921376919210335,
+      "composed_floor_cmp_j": 7.377085735735073,
+      "composed_floor_gate_j": 7.377085735735073,
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "metric": "phase_energy_j.decode",
+      "point_floor_diagnostics": {
+        "df-ph-decode-floor": {
+          "absolute": {
+            "guard_factor": 1.0,
+            "guarded_floor_j": 0.49344826888709603,
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": false,
+            "unguarded_floor_j": 0.49344826888709603
+          },
+          "comparative": {
+            "guard_factor": 1.0,
+            "guarded_floor_j": 0.6303242282254147,
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": false,
+            "unguarded_floor_j": 0.6303242282254147
+          }
+        }
+      },
+      "rule_id": "same_stack_componentwise_worst_case.v1",
+      "single_count_discipline": {
+        "apparent_double_count_removal_forbidden": true,
+        "both_terms_required": true,
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+      },
+      "source_cell_ids": [
+        "df-ph-decode-floor"
+      ],
+      "stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.31.2"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+          "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "vocab_size": 151643
+        }
+      },
+      "stack_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08",
+      "stress_envelope": {
+        "bound_term_maxima": {
+          "clock_anchor_bound_s": 0.036572288873579356,
+          "idle_drift_bound_j": null,
+          "interpolation_bound_j": 0.0
+        },
+        "bracketing_sample_gap_s_max": 0.11459779739379883,
+        "cadence_ratio_min": 16.32534310201378,
+        "mean_power_w_max": 26.374752533273853,
+        "mean_power_w_min": 25.85987597485477,
+        "p95_sample_gap_s_max": 0.11806201934814453,
+        "window_duration_s_max": 1.9425268173217773,
+        "window_duration_s_min": 1.9250330924987793
+      },
+      "transport_group_id": "tg-df-ph-decode-production-v1",
+      "window_class": "phase"
+    }
+  ]
+}

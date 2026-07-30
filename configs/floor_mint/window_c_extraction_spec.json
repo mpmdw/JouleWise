@@ -1,0 +1,148 @@
+{
+  "schema_version": "joulewise.detection_floor_extraction_spec.v1",
+  "cells": [
+    {
+      "cell_id": "df-cmp-abba-ph-decode",
+      "kind": "comparative",
+      "metric": "phase_energy_j.decode",
+      "window_class": "phase",
+      "condition_family_id": "df-ph-decode",
+      "condition_family_definitions": {
+        "A": {
+          "condition_family_id": "df-ph-decode",
+          "condition_family_definition": {
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "condition_family_id": "df-ph-decode",
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "prompt_tokens": 128,
+              "output_tokens": 512,
+              "repetitions": 1,
+              "warmup_runs": 1
+            },
+            "measurement_target": {
+              "metric": "phase_energy_j.decode",
+              "window_class": "phase"
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B"
+          },
+          "condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe"
+        },
+        "B": {
+          "condition_family_id": "df-ph-decode",
+          "condition_family_definition": {
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "condition_family_id": "df-ph-decode",
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "prompt_tokens": 128,
+              "output_tokens": 512,
+              "repetitions": 1,
+              "warmup_runs": 1
+            },
+            "measurement_target": {
+              "metric": "phase_energy_j.decode",
+              "window_class": "phase"
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B"
+          },
+          "condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe"
+        }
+      },
+      "blocks": [
+        {
+          "block_id": "df-cmp-abba-ph-decode-b01",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b01-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b01-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b01-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b01-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b02",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b02-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b02-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b02-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b02-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b03",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b03-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b03-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b03-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b03-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b04",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b04-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b04-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b04-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b04-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b05",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b05-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b05-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b05-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b05-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b06",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b06-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b06-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b06-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b06-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b07",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b07-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b07-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b07-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b07-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b08",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b08-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b08-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b08-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b08-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b09",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b09-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b09-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b09-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b09-a2"
+          }
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b10",
+          "members": {
+            "A1": "p2015-df-cmp-abba-ph-decode-b10-a1",
+            "B1": "p2015-df-cmp-abba-ph-decode-b10-b1",
+            "B2": "p2015-df-cmp-abba-ph-decode-b10-b2",
+            "A2": "p2015-df-cmp-abba-ph-decode-b10-a2"
+          }
+        }
+      ]
+    }
+  ]
+}

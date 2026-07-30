@@ -60,14 +60,18 @@ from joulewise.analysis_engine.sensitivity import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    STACK_IDENTITY_DOMAIN,
     attribution_single_count_discipline,
+    canonical_domain_sha256,
     comparative_false_effect_floor,
 )
+from scripts import mint_floor_artifact as mint
 from joulewise.whole_window import CustodyTelemetryIdentity
 from tests.test_detection_floor import (
     make_artifact,
     make_cell,
     make_consumer,
+    make_regime,
     whole_window_allowance,
 )
 
@@ -499,6 +503,197 @@ class SensitivityTests(unittest.TestCase):
 
 
 class InputSeamTests(unittest.TestCase):
+    def _bind_mlx_file_set_floor(
+        self,
+        observed_metadata: dict,
+    ):
+        fixture = Path("tests/fixtures/d078_r01")
+        raw_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        mint_metadata = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        stack = mint._derive_stack_identity(raw_config, mint_metadata)
+        artifact = make_artifact(
+            [make_cell(regime=make_regime(stack_identity=stack))]
+        )
+        records: dict[str, tuple[dict, dict]] = {}
+        cell = artifact["cells"][0]
+        for record in cell["absolute"]["bundle_observations"]:
+            records[record["bundle_id"]] = (
+                record,
+                {
+                    "plan_sha256": HEX,
+                    "block_id": None,
+                    "label": None,
+                    "sequence_index": None,
+                },
+            )
+        for block in cell["comparative"]["blocks"]:
+            for record in block["members"]:
+                records[record["bundle_id"]] = (
+                    record,
+                    {
+                        "plan_sha256": HEX,
+                        "block_id": block["block_id"],
+                        "label": record["plan_label"],
+                        "sequence_index": record["plan_sequence_index"],
+                    },
+                )
+
+        class FakeReader:
+            def __init__(self, path):
+                self.path = Path(path)
+
+            def raw_summary(self):
+                record, _ = records[self.path.name]
+                return {
+                    "status": "succeeded",
+                    "measurement_quality": {
+                        "telemetry_source": "powermetrics"
+                    },
+                    "energy_uncertainty_status": "bounded",
+                    "gross_energy_j": record["metric_value_j"],
+                }
+
+            def raw_metadata(self):
+                return observed_metadata
+
+            def raw_config(self):
+                _, order_tags = records[self.path.name]
+                return {**raw_config, "_order_tags": order_tags}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(
+                "joulewise.analysis_engine.inputs._campaign_order_binding_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._source_provenance_admission_problems",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.BundleReader",
+                FakeReader,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.complete_bundle_sha256",
+                return_value="a" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._sha256_file",
+                return_value="b" * 64,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.scientific_config_identity",
+                return_value={"identity": "test"},
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs._calibration_order_tags",
+                side_effect=lambda config: config["_order_tags"],
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.anchor_fallback_member_unusable",
+                return_value=False,
+            ),
+            patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=CustodyTelemetryIdentity(
+                    custody_bound_config=True,
+                    config_backend_class="powermetrics",
+                    metadata_backend_class="powermetrics",
+                    summary_backend_class="powermetrics",
+                    triangle_agrees=True,
+                ),
+            ),
+        ):
+            binding = bind_floor_artifact_evidence(
+                artifact,
+                Path(tmp) / "floor.json",
+                {
+                    "a10": Path(tmp) / "a10",
+                    "window_c": Path(tmp) / "window_c",
+                },
+                strict_validator=lambda path, strict: [],
+            )
+        return binding
+
+    def test_mint_derived_folded_artifact_stack_binds_end_to_end(self):
+        fixture = Path("tests/fixtures/d078_r01")
+        metadata = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        expected_stack = mint._derive_stack_identity(
+            json.loads(
+                (fixture / "config.json").read_text(encoding="utf-8")
+            ),
+            metadata,
+        )
+        expected_hash = canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN,
+            expected_stack,
+        )
+
+        binding = self._bind_mlx_file_set_floor(metadata)
+
+        self.assertIn("cell-1", binding.bound_cell_ids)
+        self.assertEqual(
+            binding.cell_stack_identity_sha256["cell-1"],
+            expected_hash,
+        )
+        self.assertFalse(
+            any(
+                "stack identity is unavailable" in problem
+                for problem in binding.problems_by_cell["cell-1"]
+            )
+        )
+
+    def test_folded_artifact_binding_keeps_missing_and_malformed_fail_closed(
+        self,
+    ):
+        fixture = Path("tests/fixtures/d078_r01")
+        valid = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        missing = copy.deepcopy(valid)
+        missing_artifact = missing["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        missing_artifact.pop("sha256", None)
+        missing_artifact.pop("folded_sha256", None)
+        malformed = copy.deepcopy(valid)
+        malformed_artifact = malformed["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        malformed_artifact.pop("sha256", None)
+        malformed_artifact["folded_sha256"] = "not-a-sha256"
+
+        for label, metadata, should_bind in (
+            ("valid", valid, True),
+            ("missing", missing, False),
+            ("malformed", malformed, False),
+        ):
+            with self.subTest(label=label):
+                binding = self._bind_mlx_file_set_floor(metadata)
+                if should_bind:
+                    self.assertIn("cell-1", binding.bound_cell_ids)
+                    self.assertFalse(
+                        any(
+                            "stack identity is unavailable" in problem
+                            for problem in binding.problems_by_cell["cell-1"]
+                        )
+                    )
+                else:
+                    self.assertNotIn("cell-1", binding.bound_cell_ids)
+                    self.assertTrue(
+                        any(
+                            "stack identity is unavailable" in problem
+                            for problem in binding.problems_by_cell["cell-1"]
+                        )
+                    )
+
     def test_label_disagreement_is_strict_invalid_at_claim_binding(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)
@@ -1611,7 +1806,9 @@ class InputSeamTests(unittest.TestCase):
         artifact = make_artifact([cell])
         artifact["calibration_scope"] = "window_a"
         widened = cell["comparative"]["corner_widened_guarded_floor_j"]
-        point = comparative_false_effect_floor(deltas).guarded_floor_j
+        point = comparative_false_effect_floor(
+            deltas, admissible_half_widths_j=[0.0] * len(deltas)
+        ).guarded_floor_j
         self.assertGreater(widened, point)
 
         # The nested widened record is authoritative at the consumption seam;

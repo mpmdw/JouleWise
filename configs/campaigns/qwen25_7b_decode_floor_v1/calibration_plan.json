@@ -1,0 +1,463 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "plan_id": "qwen25-7b-decode-floor-v1-m3max",
+  "calibration_scope": "production_window",
+  "freeze_status": "frozen_before_measurement",
+  "fixed_n": 10,
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "model_name": "Qwen2.5-7B-Instruct-4bit",
+    "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+    "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "condition_family_id": "df-ph-decode-qwen25-7b",
+    "condition_family_sha256": "a20018d57f06d69ffcc14e1e9365ab0121b73804ec480f9b08302384bd583843"
+  },
+  "replacement_rule": {
+    "policy": "technical_invalid_same_slot_only",
+    "predeclared_before_data": true,
+    "outcome_dependent_top_up": "forbidden_and_demotes_contrast_to_exploratory"
+  },
+  "cells": [
+    {
+      "cell_id": "df-ph-decode-qwen25-7b-absolute",
+      "df_rows": [
+        "DF-PH-DECODE"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "df-ph-decode-qwen25-7b",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "sw7bfloor-df-ph-decode-abs-r01",
+        "sw7bfloor-df-ph-decode-abs-r02",
+        "sw7bfloor-df-ph-decode-abs-r03",
+        "sw7bfloor-df-ph-decode-abs-r04",
+        "sw7bfloor-df-ph-decode-abs-r05",
+        "sw7bfloor-df-ph-decode-abs-r06",
+        "sw7bfloor-df-ph-decode-abs-r07",
+        "sw7bfloor-df-ph-decode-abs-r08",
+        "sw7bfloor-df-ph-decode-abs-r09",
+        "sw7bfloor-df-ph-decode-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-ph-decode-qwen25-7b",
+      "df_rows": [
+        "DF-CMP-ABBA-PH"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "df-ph-decode-qwen25-7b",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-qwen25-7b-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "execution_modes": {
+    "production_decode_floor_window": {
+      "selected_for_this_frozen_plan": true,
+      "ordered_subcampaign_ids": [
+        "01_phase_decode_absolute",
+        "02_phase_decode_abba_blocks_01_05",
+        "03_phase_decode_abba_blocks_06_10"
+      ],
+      "planned_bundles": 50
+    }
+  },
+  "references": {
+    "window_references": {
+      "source": "configs/campaigns/window_references/",
+      "member_layout": "3+1+3",
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    },
+    "in_window_bound_corpus": {
+      "source": "configs/campaigns/neg8_reference_corpus/",
+      "planned_n_bundles": 12,
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    }
+  },
+  "runs_dir": "runs/qwen25_7b_decode_floor_v1",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs/qwen25_7b_decode_floor_v1/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "binding": "operator passes --campaign-policy; no campaign artifact declares it"
+  }
+}

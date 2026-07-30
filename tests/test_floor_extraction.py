@@ -11,6 +11,7 @@ so a hand-simplified or drifted fixture fails immediately.
 from __future__ import annotations
 
 import base64
+import copy
 import gzip
 import hashlib
 import io
@@ -28,27 +29,37 @@ from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    CONDITION_FAMILY_DOMAIN,
+    FLOOR_METRIC_CATALOG,
     attribution_single_count_discipline,
+    canonical_domain_sha256,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
 from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION,
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
     LEGACY_THROUGHPUT_FIELD,
     READER_THROUGHPUT_FIELD,
     _evaluate_member,
+    _ingested_consumption_semantics_id,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
     governed_cell_metric,
     reader_throughput_tokens_s,
+    validate_condition_family_definition,
+    validate_extraction_spec,
 )
 from joulewise.analysis_engine.inputs import MOCK_TELEMETRY_CLAIM_REFUSAL
 from joulewise.cli import validate_bundle
 from scripts.extract_detection_floors import main as extract_main
 from joulewise.whole_window import (
+    AuthenticatedConsumptionSession,
     IDLE_ADMISSION_CORE_SCHEMA,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_POINT_DRIFT_ESTIMAND,
     WHOLE_WINDOW_SCHEMA,
     WholeWindowDriftAllowanceResult,
@@ -2040,8 +2051,143 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
         assert report.floor is not None
         self.assertGreaterEqual(report.floor.unguarded_floor_j, 3.0 - 1e-12)
 
+    def test_block_delta_refuses_consumed_member_with_incomplete_envelope(
+        self,
+    ) -> None:
+        class ConsumedSummaries:
+            ready = True
+            refusal_reasons: tuple[str, ...] = ()
+
+            def __init__(self, summaries: dict[str, dict]) -> None:
+                self.summaries = summaries
+
+            def summary_for(self, bundle_id: str) -> dict:
+                return self.summaries[bundle_id]
+
+            @staticmethod
+            def provenance_for(_bundle_id: str) -> dict:
+                return {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            blocks: list[dict] = []
+            summaries: dict[str, dict] = {}
+            cooldowns: dict[str, dict] = {}
+            for block_index in range(2):
+                members: dict[str, str] = {}
+                for position_index, position in enumerate(
+                    ("A1", "B1", "B2", "A2")
+                ):
+                    bundle_id = (
+                        f"consumed-b{block_index}-{position.lower()}"
+                    )
+                    summary = make_summary(
+                        40.0 + block_index + position_index * 0.1
+                    )
+                    write_bundle(runs_root, bundle_id, summary)
+                    summaries[bundle_id] = copy.deepcopy(summary)
+                    cooldowns[bundle_id] = {
+                        "verified": True,
+                        "result": "recovered",
+                    }
+                    members[position] = bundle_id
+                blocks.append(
+                    {
+                        "block_id": f"b{block_index}",
+                        "members": members,
+                    }
+                )
+            culprit = blocks[0]["members"]["B2"]
+            del summaries[culprit]["energy_anchor_shift_envelopes"][
+                "/gross_energy_j"
+            ]["upper_j"]
+            report = extract_comparative_cell(
+                cell_id="CONSUMED-INCOMPLETE-ENVELOPE",
+                metric="gross_energy_j",
+                window_class="request",
+                blocks=blocks,
+                runs_root=runs_root,
+                cooldowns=cooldowns,
+                consumption_session=ConsumedSummaries(summaries),
+            )
+
+        self.assertFalse(report.extractable)
+        self.assertIsNone(report.floor)
+        self.assertEqual(report.n_admitted, 0)
+        self.assertIn(
+            "anchor_energy_envelope_unrecorded",
+            report.refusal_reasons,
+        )
+        culprit_member = next(
+            member
+            for member in report.members
+            if member.bundle_id == culprit
+        )
+        self.assertIn(
+            "anchor_energy_envelope_unrecorded",
+            culprit_member.reasons,
+        )
+
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_legacy_semantics_absence_normalizes_only_at_ingestion(self) -> None:
+        legacy = mock.Mock(ready=False, refusal_reasons=())
+        self.assertEqual(
+            _ingested_consumption_semantics_id(legacy),
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+        )
+
+        authenticated = mock.Mock(ready=True, refusal_reasons=())
+        self.assertEqual(
+            _ingested_consumption_semantics_id(authenticated),
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        )
+
+        refused = mock.Mock(
+            ready=False,
+            refusal_reasons=("whole_window_verdict_provenance_invalid",),
+        )
+        self.assertIsNone(_ingested_consumption_semantics_id(refused))
+
+    def test_shared_catalog_accepts_exactly_governed_extraction_pairs(self) -> None:
+        governed_pairs = (
+            ("gross_energy_j", "request"),
+            ("energy_request_j", "request"),
+            ("idle_subtracted_energy_j", "request"),
+            ("phase_energy_j.tokenize", "phase"),
+            ("phase_energy_j.prefill", "phase"),
+            ("phase_energy_j.decode", "phase"),
+            ("phase_energy_j.serialize", "phase"),
+            ("phase_energy_j.transfer", "phase"),
+            ("phase_energy_j.deserialize", "phase"),
+        )
+        self.assertEqual(
+            FLOOR_METRIC_CATALOG,
+            tuple(metric for metric, _ in governed_pairs),
+        )
+        for metric, window_class in governed_pairs:
+            with self.subTest(metric=metric):
+                self.assertEqual(
+                    governed_cell_metric(metric, window_class),
+                    (metric, window_class),
+                )
+
+    def test_excluded_and_arbitrary_metrics_fail_catalog_validation(self) -> None:
+        for metric, window_class in (
+            ("split_total_energy_j", "request"),
+            ("phase_energy_j.idle", "phase"),
+            ("phase_energy_j.warmup", "phase"),
+            ("phase_energy_j.cleanup", "phase"),
+            ("phase_energy_j.failure", "phase"),
+            ("phase_energy_j.arbitrary_suffix", "phase"),
+        ):
+            with self.subTest(metric=metric):
+                with self.assertRaisesRegex(
+                    FloorExtractionError,
+                    "not in FLOOR_METRIC_CATALOG",
+                ):
+                    governed_cell_metric(metric, window_class)
+
     def test_phase_cell_reading_whole_request_gross_fails_loudly(self) -> None:
         with self.assertRaisesRegex(FloorExtractionError, "phase_energy_j"):
             governed_cell_metric("gross_energy_j", "phase")
@@ -2103,7 +2249,434 @@ class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             )
 
 
+class FloorMintSpecValidationTests(unittest.TestCase):
+    CONFIG_ROOT = Path("configs/floor_mint")
+
+    def _load(self, name: str) -> dict:
+        return json.loads(
+            (self.CONFIG_ROOT / name).read_text(encoding="utf-8")
+        )
+
+    def test_definition_and_specs_round_trip_through_validators(self) -> None:
+        definition = self._load("condition_family_df_ph_decode.json")
+        self.assertEqual(
+            definition["schema_version"],
+            CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION,
+        )
+        self.assertEqual(validate_condition_family_definition(definition), [])
+        expected_hash = canonical_domain_sha256(
+            CONDITION_FAMILY_DOMAIN,
+            definition,
+        )
+        for spec_name in (
+            "a10_extraction_spec.json",
+            "window_c_extraction_spec.json",
+        ):
+            with self.subTest(spec_name=spec_name):
+                spec = self._load(spec_name)
+                self.assertEqual(
+                    spec["schema_version"],
+                    EXTRACTION_SPEC_SCHEMA_VERSION,
+                )
+                self.assertEqual(validate_extraction_spec(spec), [])
+                decode_cell = next(
+                    cell
+                    for cell in spec["cells"]
+                    if cell["metric"] == "phase_energy_j.decode"
+                )
+                self.assertEqual(
+                    decode_cell["condition_family_id"],
+                    definition["condition_family_id"],
+                )
+                for binding in decode_cell[
+                    "condition_family_definitions"
+                ].values():
+                    self.assertEqual(
+                        binding["condition_family_definition"],
+                        definition,
+                    )
+                    self.assertEqual(
+                        binding["condition_family_sha256"],
+                        expected_hash,
+                    )
+
+    def test_definition_identity_and_target_must_match_cell_key(self) -> None:
+        base = self._load("window_c_extraction_spec.json")
+        cases = (
+            (
+                ("condition_family_id",),
+                "different-family",
+                "must equal cell condition_family_id",
+            ),
+            (
+                ("measurement_target", "metric"),
+                "phase_energy_j.prefill",
+                "must equal cell metric",
+            ),
+            (
+                ("measurement_target", "window_class"),
+                "request",
+                "must equal cell window_class",
+            ),
+        )
+        for path, value, expected in cases:
+            with self.subTest(path=path):
+                spec = json.loads(json.dumps(base))
+                binding = spec["cells"][0][
+                    "condition_family_definitions"
+                ]["A"]
+                target = binding["condition_family_definition"]
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                binding["condition_family_sha256"] = canonical_domain_sha256(
+                    CONDITION_FAMILY_DOMAIN,
+                    binding["condition_family_definition"],
+                )
+                errors = validate_extraction_spec(spec)
+                self.assertTrue(
+                    any(expected in error for error in errors),
+                    errors,
+                )
+
+    def test_ab_definition_divergence_is_rejected(self) -> None:
+        spec = self._load("window_c_extraction_spec.json")
+        binding_b = spec["cells"][0][
+            "condition_family_definitions"
+        ]["B"]
+        binding_b["condition_family_definition"]["workload_profile"][
+            "output_tokens"
+        ] = 513
+        binding_b["condition_family_sha256"] = canonical_domain_sha256(
+            CONDITION_FAMILY_DOMAIN,
+            binding_b["condition_family_definition"],
+        )
+        self.assertIn(
+            "extraction spec cells[0].condition_family_definitions: "
+            "A and B must resolve to the same definition hash",
+            validate_extraction_spec(spec),
+        )
+        with self.assertRaisesRegex(
+            FloorExtractionError,
+            "A and B must resolve to the same definition hash",
+        ):
+            extract_cells(Path("."), spec)
+
+    def test_specs_match_pinned_order_manifests_and_membership_shape(
+        self,
+    ) -> None:
+        a10_spec = self._load("a10_extraction_spec.json")
+        window_c_spec = self._load("window_c_extraction_spec.json")
+        a10_order = json.loads(
+            Path(
+                "configs/campaigns/p2_015_floors/"
+                "02_phase_absolute/order_manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        window_c_order = json.loads(
+            Path(
+                "configs/campaigns/p2_015_floors/"
+                "05_phase_decode_abba/order_manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            a10_order["manifest_id"],
+            "p2-015-02_phase_absolute-order-v1",
+        )
+        self.assertEqual(
+            window_c_order["manifest_id"],
+            "p2-015-05_phase_decode_abba-order-v1",
+        )
+
+        workloads = {
+            "df-ph-prefill-absolute": "df-ph-prefill",
+            "df-ph-decode-absolute": "df-ph-decode",
+            "df-ph-short-prefill-absolute": "df-ph-short-prefill",
+        }
+        a10_ids: list[str] = []
+        for cell in a10_spec["cells"]:
+            member_ids = [
+                member["bundle_id"] for member in cell["members"]
+            ]
+            expected_ids = [
+                row["run_id"]
+                for row in a10_order["executed_order"]
+                if row["workload"] == workloads[cell["cell_id"]]
+            ]
+            self.assertEqual(member_ids, expected_ids)
+            self.assertEqual(len(member_ids), 10)
+            a10_ids.extend(member_ids)
+        self.assertEqual(len(a10_spec["cells"]), 3)
+        self.assertEqual(len(a10_ids), 30)
+
+        comparative = window_c_spec["cells"][0]
+        self.assertEqual(len(comparative["blocks"]), 10)
+        window_c_ids = [
+            block["members"][position]
+            for block in comparative["blocks"]
+            for position in ("A1", "B1", "B2", "A2")
+        ]
+        self.assertEqual(
+            window_c_ids,
+            [
+                row["run_id"]
+                for row in window_c_order["executed_order"]
+            ],
+        )
+        self.assertEqual(len(window_c_ids), 40)
+        self.assertTrue(set(a10_ids).isdisjoint(window_c_ids))
+
+    def test_membership_shape_rejects_duplicate_and_incomplete_abba(
+        self,
+    ) -> None:
+        a10_spec = self._load("a10_extraction_spec.json")
+        a10_spec["cells"][0]["members"].append(
+            dict(a10_spec["cells"][0]["members"][0])
+        )
+        self.assertTrue(
+            any(
+                "bundle_ids must be unique" in error
+                for error in validate_extraction_spec(a10_spec)
+            )
+        )
+
+        window_c_spec = self._load("window_c_extraction_spec.json")
+        del window_c_spec["cells"][0]["blocks"][0]["members"]["B2"]
+        self.assertTrue(
+            any(
+                "must contain exactly A1/B1/B2/A2" in error
+                for error in validate_extraction_spec(window_c_spec)
+            )
+        )
+
+
+class EvaluationBasisPlumbingTests(
+    _PermissiveStrictValidatorMixin, unittest.TestCase
+):
+    def test_explicit_basis_reaches_both_consumers_and_allowance_records(
+        self,
+    ) -> None:
+        from joulewise import whole_window as whole_module
+
+        basis_sha256 = "e" * 64
+
+        def refusal_consumer(
+            runs_root,
+            referenced_bundle_ids,
+            *,
+            evaluation_basis_sha256=None,
+            consumption_session=None,
+        ):
+            self.assertEqual(evaluation_basis_sha256, basis_sha256)
+            self.assertEqual(
+                consumption_session.evaluation_basis_sha256,
+                basis_sha256,
+            )
+            self.assertEqual(
+                consumption_session.referenced_bundle_ids,
+                frozenset(referenced_bundle_ids),
+            )
+            return ()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            bundle_ids = ["basis-r01", "basis-r02"]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for index, bundle_id in enumerate(bundle_ids):
+                write_bundle(
+                    runs_root,
+                    bundle_id,
+                    make_summary(40.0 + 0.1 * index),
+                )
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-BASIS",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": bundle_id, "bundle_id": bundle_id}
+                            for bundle_id in bundle_ids
+                        ],
+                    }
+                ],
+            }
+            claim_families = {
+                family: {
+                    "drift_allowance_j": 0.25,
+                    "trajectory_excursion_max_j": 0.2,
+                    "derived_repeatability_bound_j": 0.1,
+                    "provenance": {},
+                }
+                for family in ("gross_energy", "idle_subtracted_energy")
+            }
+            drift_allowances = {
+                family: {
+                    "claim_family": family,
+                    "allowance_j": row["drift_allowance_j"],
+                    "observed_trajectory_excursion_j": row[
+                        "trajectory_excursion_max_j"
+                    ],
+                    "derived_repeatability_bound_j": row[
+                        "derived_repeatability_bound_j"
+                    ],
+                    "provenance": row["provenance"],
+                }
+                for family, row in claim_families.items()
+            }
+            whole_window_row = {
+                "record_type": "idle_admission_whole_window_verdict",
+                "bundle_ids": [*bundle_ids, "basis-extra"],
+                "evaluation_basis": {
+                    "sha256": basis_sha256,
+                    "member_occurrences": [
+                        {"bundle_id": bundle_id}
+                        for bundle_id in (*bundle_ids, "basis-extra")
+                    ],
+                },
+                "idle_admission_core": {
+                    "neg8_bracket": {
+                        "claim_families": claim_families,
+                        "drift_allowances": drift_allowances,
+                    }
+                },
+            }
+            (runs_root / "campaign_log.jsonl").write_text(
+                json.dumps(whole_window_row) + "\n",
+                encoding="utf-8",
+            )
+            with (
+                mock.patch(
+                    "joulewise.floor_extraction._whole_window_extraction_refusals",
+                    side_effect=refusal_consumer,
+                ),
+                mock.patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    return_value=(),
+                ) as allowance_refusals,
+                mock.patch(
+                    "joulewise.whole_window._validate_row",
+                    return_value=(True, ()),
+                ),
+                mock.patch(
+                    "joulewise.floor_extraction.whole_window_drift_allowances",
+                    wraps=whole_module.whole_window_drift_allowances,
+                ) as allowance_consumer,
+            ):
+                report = extract_cells(
+                    runs_root,
+                    spec,
+                    evaluation_basis_sha256=basis_sha256,
+                )
+
+        self.assertEqual(
+            allowance_consumer.call_args.kwargs["evaluation_basis_sha256"],
+            basis_sha256,
+        )
+        self.assertEqual(
+            allowance_consumer.call_args.kwargs[
+                "consumption_session"
+            ].evaluation_basis_sha256,
+            basis_sha256,
+        )
+        self.assertEqual(
+            allowance_refusals.call_args.kwargs[
+                "evaluation_basis_sha256"
+            ],
+            basis_sha256,
+        )
+        self.assertEqual(
+            report["whole_window_drift_allowances"]["gross_energy"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+            basis_sha256,
+        )
+        self.assertEqual(
+            report["cells"][0]["whole_window_drift_allowance"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+            basis_sha256,
+        )
+
+    def test_partial_basis_threading_refuses_session_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            session = AuthenticatedConsumptionSession(
+                root,
+                {"basis-r01"},
+                evaluation_basis_sha256="e" * 64,
+            )
+            reasons = whole_window_refusal_reasons(
+                root,
+                {"basis-r01"},
+                consumption_session=session,
+            )
+        self.assertEqual(
+            reasons,
+            ("whole_window_verdict_provenance_invalid",),
+        )
+
+
 class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
+    def test_evaluation_basis_flag_reaches_extract_cells(self) -> None:
+        basis_sha256 = "e" * 64
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp) / "runs"
+            runs_root.mkdir()
+            bundle_ids = ["cli-basis-r01", "cli-basis-r02"]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for index, bundle_id in enumerate(bundle_ids):
+                write_bundle(
+                    runs_root,
+                    bundle_id,
+                    make_summary(40.0 + 0.1 * index),
+                )
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-BASIS",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": bundle_id, "bundle_id": bundle_id}
+                            for bundle_id in bundle_ids
+                        ],
+                    }
+                ],
+            }
+            spec_path = Path(tmp) / "spec.json"
+            spec_path.write_text(json.dumps(spec), encoding="utf-8")
+            out_path = Path(tmp) / "report.json"
+            with (
+                mock.patch(
+                    "scripts.extract_detection_floors.extract_cells",
+                    wraps=extract_cells,
+                ) as extraction,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                code = extract_main(
+                    [
+                        "--runs-root",
+                        str(runs_root),
+                        "--spec",
+                        str(spec_path),
+                        "--out",
+                        str(out_path),
+                        "--evaluation-basis-sha256",
+                        basis_sha256,
+                    ]
+                )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            extraction.call_args.kwargs["evaluation_basis_sha256"],
+            basis_sha256,
+        )
+
     def test_floor_consumer_accepts_the_reducer_mint_envelope_method(self) -> None:
         from joulewise import floor_extraction as floor_module
         from joulewise.reduce import ANCHOR_SHIFT_METHOD

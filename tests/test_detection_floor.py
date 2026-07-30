@@ -10,6 +10,7 @@ import hashlib
 import math
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     CONDITION_FAMILY_DOMAIN,
+    FLOOR_METRIC_CATALOG,
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
     SCHEMA_VERSION,
@@ -47,15 +49,27 @@ from joulewise.floor_extraction import (
     extract_absolute_cell,
     extract_cells,
 )
-from joulewise.whole_window import WholeWindowDriftAllowanceResult
+from joulewise.whole_window import (
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+    WholeWindowDriftAllowanceResult,
+    neg8_claim_family_for_metric,
+)
 
 TOL = 1e-12
 HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
+HEX_D = "d" * 64
 
 
-def whole_window_allowance(value=0.4, observed=0.3, derived=0.4):
+def whole_window_allowance(
+    value=0.4,
+    observed=0.3,
+    derived=0.4,
+    *,
+    basis_sha256=HEX_C,
+):
     return {
         "claim_family": "gross_energy",
         "allowance_j": value,
@@ -66,7 +80,7 @@ def whole_window_allowance(value=0.4, observed=0.3, derived=0.4):
             "observed_component": "trajectory_excursion_max_j",
             "derived_component": "derived_repeatability_bound_j",
         },
-        "whole_window_evaluation_basis_sha256": HEX_C,
+        "whole_window_evaluation_basis_sha256": basis_sha256,
     }
 
 
@@ -348,7 +362,10 @@ class TestSmallSampleGuardFactor(unittest.TestCase):
 
 class TestAbsoluteFloor(unittest.TestCase):
     def test_fixture_a_every_intermediate_value(self):
-        est = absolute_false_effect_floor(FIXTURE_A_ENERGIES)
+        est = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_A_ENERGIES),
+        )
         self.assertEqual(est.n, 5)
         self.assertTrue(close(est.mean_j, 12.0))
         self.assertEqual(est.deviations_j, FIXTURE_A_RESIDUALS)
@@ -363,7 +380,10 @@ class TestAbsoluteFloor(unittest.TestCase):
     def test_c027_worked_example(self):
         # C-027: energies [10,10,10,10,20] -> residuals [-2,-2,-2,-2,8],
         # s_r = sqrt(20), unguarded floor ~= 13.60 J.
-        est = absolute_false_effect_floor([10, 10, 10, 10, 20])
+        est = absolute_false_effect_floor(
+            [10, 10, 10, 10, 20],
+            admissible_half_widths_j=[0.0] * 5,
+        )
         self.assertEqual(list(est.deviations_j), [-2, -2, -2, -2, 8])
         self.assertTrue(close(est.sample_stddev_j, math.sqrt(20)))
         self.assertAlmostEqual(est.unguarded_floor_j, 13.60, places=2)
@@ -374,7 +394,10 @@ class TestAbsoluteFloor(unittest.TestCase):
         # component (~7.29). Applying g inside the max would give 8;
         # the spec's after-max rule gives g(9)*8.
         energies = [18.0] + [9.0] * 8
-        est = absolute_false_effect_floor(energies)
+        est = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.0] * len(energies),
+        )
         self.assertEqual(est.n, 9)
         self.assertTrue(close(est.max_abs_deviation_j, 8.0))
         self.assertLess(est.prediction_component_j, 8.0)
@@ -402,7 +425,10 @@ class TestAbsoluteFloor(unittest.TestCase):
         # instead maximizes the Student-t prediction term, so the COMPLETE
         # guarded floor must rise to 5.2008 J.
         energies = [101.0, 99.0, 100.0, 100.0, 100.0]
-        point = absolute_false_effect_floor(energies)
+        point = absolute_false_effect_floor(
+            energies,
+            admissible_half_widths_j=[0.0] * len(energies),
+        )
         widened = absolute_false_effect_floor(
             energies,
             admissible_half_widths_j=[0.5] * 5,
@@ -419,20 +445,35 @@ class TestAbsoluteFloor(unittest.TestCase):
 
 
     def test_below_five_is_smoke_only(self):
-        est = absolute_false_effect_floor([10.0, 12.0, 11.0])
+        est = absolute_false_effect_floor(
+            [10.0, 12.0, 11.0],
+            admissible_half_widths_j=[0.0] * 3,
+        )
         self.assertIsNone(est.guard_factor)
         self.assertIsNone(est.guarded_floor_j)
         self.assertGreater(est.unguarded_floor_j, 0.0)
 
     def test_invalid_inputs_rejected(self):
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0, float("nan"), 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, float("nan"), 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0, float("inf"), 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, float("inf"), 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(TypeError):
-            absolute_false_effect_floor([10.0, True, 11.0, 12.0, 13.0])
+            absolute_false_effect_floor(
+                [10.0, True, 11.0, 12.0, 13.0],
+                admissible_half_widths_j=[0.0] * 5,
+            )
         with self.assertRaises(ValueError):
-            absolute_false_effect_floor([10.0])
+            absolute_false_effect_floor(
+                [10.0],
+                admissible_half_widths_j=[0.0],
+            )
 
 
 class TestAbbaDelta(unittest.TestCase):
@@ -458,7 +499,10 @@ class TestAbbaDelta(unittest.TestCase):
 
 class TestComparativeFloor(unittest.TestCase):
     def test_fixture_b_every_intermediate_value(self):
-        est = comparative_false_effect_floor(FIXTURE_B_DELTAS)
+        est = comparative_false_effect_floor(
+            FIXTURE_B_DELTAS,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_B_DELTAS),
+        )
         self.assertEqual(est.n, 5)
         self.assertTrue(close(est.mean_j, 0.0))
         self.assertTrue(close(est.sample_stddev_j, FIXTURE_B_STDDEV))
@@ -484,7 +528,10 @@ class TestComparativeFloor(unittest.TestCase):
         # pattern: point deltas [1,-1,0,0,0] have a 3.2254 J guarded floor,
         # while +/-0.5 J delta widths put the full corner maximum at 5.4468 J.
         deltas = [1.0, -1.0, 0.0, 0.0, 0.0]
-        point = comparative_false_effect_floor(deltas)
+        point = comparative_false_effect_floor(
+            deltas,
+            admissible_half_widths_j=[0.0] * len(deltas),
+        )
         widened = comparative_false_effect_floor(
             deltas,
             admissible_half_widths_j=[0.5] * 5,
@@ -496,7 +543,10 @@ class TestComparativeFloor(unittest.TestCase):
         negated = [-d for d in FIXTURE_B_DELTAS]
         self.assertTrue(
             close(
-                comparative_false_effect_floor(negated).guarded_floor_j,
+                comparative_false_effect_floor(
+                    negated,
+                    admissible_half_widths_j=[0.0] * len(negated),
+                ).guarded_floor_j,
                 FIXTURE_B_GUARDED,
             )
         )
@@ -506,11 +556,190 @@ class TestComparativeFloor(unittest.TestCase):
         # implementation that centers deltas first would reproduce the
         # fixture-B prediction; the spec requires abs(mean) to be added.
         shifted = [d + 1.0 for d in FIXTURE_B_DELTAS]
-        est = comparative_false_effect_floor(shifted)
+        est = comparative_false_effect_floor(
+            shifted,
+            admissible_half_widths_j=[0.0] * len(shifted),
+        )
         self.assertTrue(close(est.mean_j, 1.0))
         self.assertTrue(close(est.sample_stddev_j, FIXTURE_B_STDDEV))
         self.assertTrue(close(est.prediction_component_j, 1.0 + FIXTURE_B_PREDICTION))
         self.assertGreater(est.prediction_component_j, FIXTURE_B_PREDICTION)
+
+
+class TestWidthClosure(unittest.TestCase):
+    @staticmethod
+    def _build_absolute(estimate):
+        return build_absolute_record(
+            estimate,
+            [{} for _ in range(estimate.n)],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+
+    @staticmethod
+    def _build_comparative(estimate):
+        return build_comparative_record(
+            estimate,
+            [{} for _ in range(estimate.n)],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+
+    def test_estimator_widths_are_required_and_never_defaulted(self):
+        constructors = (
+            (absolute_false_effect_floor, FIXTURE_A_ENERGIES),
+            (comparative_false_effect_floor, FIXTURE_B_DELTAS),
+        )
+        for constructor, values in constructors:
+            with self.subTest(constructor=constructor.__name__, case="omitted"):
+                with self.assertRaises(TypeError):
+                    constructor(values)
+            with self.subTest(constructor=constructor.__name__, case="none"):
+                with self.assertRaisesRegex(ValueError, "half-widths are required"):
+                    constructor(values, admissible_half_widths_j=None)
+            with self.subTest(constructor=constructor.__name__, case="empty"):
+                with self.assertRaises(ValueError):
+                    constructor(values, admissible_half_widths_j=[])
+            with self.subTest(
+                constructor=constructor.__name__,
+                case="wrong_length",
+            ):
+                with self.assertRaisesRegex(ValueError, "count must match"):
+                    constructor(
+                        values,
+                        admissible_half_widths_j=[0.0] * (len(values) - 1),
+                    )
+
+    def test_builders_reject_missing_empty_or_wrong_length_widths(self):
+        absolute = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_A_ENERGIES),
+        )
+        comparative = comparative_false_effect_floor(
+            FIXTURE_B_DELTAS,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_B_DELTAS),
+        )
+        cases = (
+            (
+                self._build_absolute,
+                replace(absolute, admissible_half_widths_j=()),
+                "nonempty authenticated",
+            ),
+            (
+                self._build_absolute,
+                replace(
+                    absolute,
+                    admissible_half_widths_j=(
+                        absolute.admissible_half_widths_j[:-1]
+                    ),
+                ),
+                "count must equal",
+            ),
+            (
+                self._build_comparative,
+                replace(comparative, admissible_half_widths_j=()),
+                "nonempty authenticated",
+            ),
+            (
+                self._build_comparative,
+                replace(
+                    comparative,
+                    admissible_half_widths_j=(
+                        comparative.admissible_half_widths_j[:-1]
+                    ),
+                ),
+                "count must equal",
+            ),
+        )
+        for builder, estimate, expected in cases:
+            with self.subTest(builder=builder.__name__, expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    builder(estimate)
+
+    def test_dead_gate_accepts_only_valid_guarded_and_smoke_pairings(self):
+        guarded = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.1] * len(FIXTURE_A_ENERGIES),
+        )
+        guarded_record = self._build_absolute(guarded)
+        self.assertEqual(
+            guarded_record["corner_widened_guarded_floor_j"],
+            guarded.guard_factor
+            * guarded_record["corner_widened_unguarded_floor_j"],
+        )
+
+        smoke = absolute_false_effect_floor(
+            [10.0, 11.0, 12.0],
+            admissible_half_widths_j=[0.1] * 3,
+        )
+        smoke_record = self._build_absolute(smoke)
+        self.assertIsNotNone(
+            smoke_record["corner_widened_unguarded_floor_j"]
+        )
+        self.assertIsNone(smoke_record["corner_widened_guarded_floor_j"])
+
+        invalid_guarded = {
+            "missing_corner_unguarded": replace(
+                guarded,
+                corner_widened_unguarded_floor_j=None,
+            ),
+            "missing_corner_guarded": replace(
+                guarded,
+                corner_widened_guarded_floor_j=None,
+            ),
+            "corner_product_mismatch": replace(
+                guarded,
+                corner_widened_guarded_floor_j=(
+                    guarded.corner_widened_guarded_floor_j + 1.0
+                ),
+            ),
+            "missing_guard_factor": replace(guarded, guard_factor=None),
+            "missing_guarded_floor": replace(guarded, guarded_floor_j=None),
+            "guarded_product_mismatch": replace(
+                guarded,
+                guarded_floor_j=guarded.guarded_floor_j + 1.0,
+            ),
+            "guarded_disguised_as_smoke": replace(
+                guarded,
+                guard_factor=None,
+                guarded_floor_j=None,
+                corner_widened_guarded_floor_j=None,
+            ),
+        }
+        for case, estimate in invalid_guarded.items():
+            with self.subTest(estimate="guarded", case=case):
+                with self.assertRaises(ValueError):
+                    self._build_absolute(estimate)
+
+        invalid_smoke = {
+            "missing_corner_unguarded": replace(
+                smoke,
+                corner_widened_unguarded_floor_j=None,
+            ),
+            "corner_guarded_present": replace(
+                smoke,
+                corner_widened_guarded_floor_j=(
+                    smoke.corner_widened_unguarded_floor_j
+                ),
+            ),
+            "guard_factor_present": replace(smoke, guard_factor=1.0),
+            "guarded_floor_present": replace(
+                smoke,
+                guarded_floor_j=smoke.unguarded_floor_j,
+            ),
+            "smoke_disguised_as_guarded": replace(
+                smoke,
+                guard_factor=1.0,
+                guarded_floor_j=smoke.unguarded_floor_j,
+                corner_widened_guarded_floor_j=(
+                    smoke.corner_widened_unguarded_floor_j
+                ),
+            ),
+        }
+        for case, estimate in invalid_smoke.items():
+            with self.subTest(estimate="smoke", case=case):
+                with self.assertRaises(ValueError):
+                    self._build_absolute(estimate)
 
 
 def make_regime(
@@ -557,11 +786,21 @@ def make_cell(
     regime=None,
     condition="cf-1",
     metric="gross_energy_j",
-    absolute_half_widths=None,
-    comparative_half_widths=None,
+    absolute_half_widths=(0.0,) * len(FIXTURE_A_ENERGIES),
+    comparative_half_widths=(0.0,) * len(FIXTURE_B_DELTAS),
     whole_window_drift_allowance=None,
+    absolute_whole_window_drift_allowance=None,
+    comparative_whole_window_drift_allowance=None,
+    absolute_consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+    comparative_consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+    absolute_regime=None,
+    comparative_regime=None,
 ):
-    if whole_window_drift_allowance is None:
+    if (
+        whole_window_drift_allowance is None
+        and absolute_whole_window_drift_allowance is None
+        and comparative_whole_window_drift_allowance is None
+    ):
         # Claim-ready fixtures must carry the clause-9 current allowance
         # group. The smallest positive float preserves the historical fixture
         # floor values while still exercising the complete governed wire.
@@ -570,6 +809,25 @@ def make_cell(
             observed=0.0,
             derived=5e-324,
         )
+    absolute_allowance = (
+        absolute_whole_window_drift_allowance
+        if absolute_whole_window_drift_allowance is not None
+        else whole_window_drift_allowance
+    )
+    comparative_allowance = (
+        comparative_whole_window_drift_allowance
+        if comparative_whole_window_drift_allowance is not None
+        else whole_window_drift_allowance
+    )
+    if absolute_allowance is None or comparative_allowance is None:
+        raise ValueError("test cells require both component allowances")
+    shared_regime = regime if regime is not None else make_regime()
+    absolute_source_regime = (
+        absolute_regime if absolute_regime is not None else shared_regime
+    )
+    comparative_source_regime = (
+        comparative_regime if comparative_regime is not None else shared_regime
+    )
     energies = FIXTURE_A_ENERGIES if energies is None else energies
     deltas = FIXTURE_B_DELTAS if deltas is None else deltas
     abs_est = absolute_false_effect_floor(
@@ -625,20 +883,55 @@ def make_cell(
         absolute=build_absolute_record(
             abs_est,
             observations,
-            whole_window_drift_allowance=whole_window_drift_allowance,
+            consumption_semantics_id=absolute_consumption_semantics_id,
+            whole_window_drift_allowance=absolute_allowance,
         ),
         comparative=build_comparative_record(
             cmp_est,
             blocks,
-            whole_window_drift_allowance=whole_window_drift_allowance,
+            consumption_semantics_id=comparative_consumption_semantics_id,
+            whole_window_drift_allowance=comparative_allowance,
         ),
-        source_regime=regime if regime is not None else make_regime(),
         transport_group_id="tg-1",
         provenance={
-            "absolute_calibration_cell_id": f"{cell_id}-abs",
-            "comparative_calibration_cell_id": f"{cell_id}-cmp",
-            "bundle_ids": [obs["bundle_id"] for obs in observations],
-            "bundle_sha256s": [HEX_A] * len(observations),
+            "absolute": {
+                "calibration_cell_id": f"{cell_id}-abs",
+                "evidence_root_id": "a10",
+                "order_manifest": {
+                    "manifest_id": f"{cell_id}-abs-order",
+                    "sha256": HEX_A,
+                },
+                "campaign_log": {"sha256": HEX_B},
+                "extraction_report": {"sha256": HEX_C},
+                "extraction_spec": {"sha256": HEX_D},
+                "bundle_ids": [obs["bundle_id"] for obs in observations],
+                "bundle_sha256s": [
+                    obs["bundle_sha256"] for obs in observations
+                ],
+                "source_regime": absolute_source_regime,
+            },
+            "comparative": {
+                "calibration_cell_id": f"{cell_id}-cmp",
+                "evidence_root_id": "window_c",
+                "order_manifest": {
+                    "manifest_id": f"{cell_id}-cmp-order",
+                    "sha256": HEX_B,
+                },
+                "campaign_log": {"sha256": HEX_C},
+                "extraction_report": {"sha256": HEX_D},
+                "extraction_spec": {"sha256": HEX_A},
+                "bundle_ids": [
+                    member["bundle_id"]
+                    for block in blocks
+                    for member in block["members"]
+                ],
+                "bundle_sha256s": [
+                    member["bundle_sha256"]
+                    for block in blocks
+                    for member in block["members"]
+                ],
+                "source_regime": comparative_source_regime,
+            },
         },
     )
 
@@ -662,11 +955,12 @@ def make_artifact(cells=None):
         calibration_scope="smoke",
         source_class="synthetic",
         provenance={
-            "calibration_plan": {"plan_id": "plan-1", "sha256": HEX_A},
-            "order_manifest": {"manifest_id": "manifest-1", "sha256": HEX_A},
-            "campaign_log": {"sha256": HEX_A},
-            "extraction_report_sha256": HEX_B,
-            "extraction_spec_sha256": HEX_C,
+            "calibration_plan": {
+                "plan_id": "plan-1",
+                "declared_calibration_scope": "window_a",
+                "relative_path": "configs/calibration-plan.json",
+                "sha256": HEX_A,
+            },
             "mint_tool_version": "joulewise.floor_mint.v1",
             "implementation": {
                 "project_commit": "0" * 40,
@@ -679,13 +973,355 @@ def make_artifact(cells=None):
     )
 
 
+def make_cross_window_cell(**overrides):
+    arguments = {
+        "absolute_whole_window_drift_allowance": whole_window_allowance(
+            value=0.4,
+            observed=0.3,
+            derived=0.4,
+            basis_sha256=HEX_C,
+        ),
+        "comparative_whole_window_drift_allowance": whole_window_allowance(
+            value=0.6,
+            observed=0.2,
+            derived=0.6,
+            basis_sha256=HEX_D,
+        ),
+        "absolute_consumption_semantics_id": (
+            MINTED_CONSUMPTION_SEMANTICS_ID
+        ),
+        "comparative_consumption_semantics_id": (
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        ),
+    }
+    arguments.update(overrides)
+    return make_cell(**arguments)
+
+
 class TestArtifactEmitValidate(unittest.TestCase):
+    def test_floor_metric_catalog_is_exact_and_governs_artifact_cells(self):
+        expected_pairs = (
+            ("gross_energy_j", "request"),
+            ("energy_request_j", "request"),
+            ("idle_subtracted_energy_j", "request"),
+            ("phase_energy_j.tokenize", "phase"),
+            ("phase_energy_j.prefill", "phase"),
+            ("phase_energy_j.decode", "phase"),
+            ("phase_energy_j.serialize", "phase"),
+            ("phase_energy_j.transfer", "phase"),
+            ("phase_energy_j.deserialize", "phase"),
+        )
+        self.assertEqual(
+            FLOOR_METRIC_CATALOG,
+            tuple(metric for metric, _ in expected_pairs),
+        )
+
+        for metric, window_class in expected_pairs:
+            with self.subTest(metric=metric):
+                artifact = make_artifact()
+                artifact["cells"][0]["key"]["metric"] = metric
+                artifact["cells"][0]["key"]["window_class"] = window_class
+                artifact["transport_groups"][0]["metric"] = metric
+                artifact["transport_groups"][0]["window_class"] = window_class
+                for component in ("absolute", "comparative"):
+                    artifact["cells"][0][component][
+                        "whole_window_drift_allowance"
+                    ]["claim_family"] = neg8_claim_family_for_metric(metric)
+                self.assertEqual(validate_floor_artifact(artifact), [])
+
+    def test_excluded_metrics_are_rejected_by_artifact_validator(self):
+        for metric, window_class in (
+            ("split_total_energy_j", "request"),
+            ("phase_energy_j.idle", "phase"),
+            ("phase_energy_j.warmup", "phase"),
+            ("phase_energy_j.cleanup", "phase"),
+            ("phase_energy_j.failure", "phase"),
+        ):
+            with self.subTest(metric=metric):
+                artifact = make_artifact()
+                artifact["cells"][0]["key"]["metric"] = metric
+                artifact["cells"][0]["key"]["window_class"] = window_class
+                artifact["transport_groups"][0]["metric"] = metric
+                artifact["transport_groups"][0]["window_class"] = window_class
+                self.assert_invalid(artifact, "not in FLOOR_METRIC_CATALOG")
+
     def test_valid_artifact_passes_and_round_trips(self):
         artifact = make_artifact()
+        self.assertEqual(
+            artifact["schema_version"],
+            "joulewise.detection_floor_artifact.v2",
+        )
         self.assertEqual(validate_floor_artifact(artifact), [])
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_cross_window_component_bases_and_semantics_are_independent(self):
+        artifact = make_artifact([make_cross_window_cell()])
+        absolute = artifact["cells"][0]["absolute"]
+        comparative = artifact["cells"][0]["comparative"]
+
+        self.assertNotEqual(
+            absolute["whole_window_evaluation_basis_sha256"],
+            comparative["whole_window_evaluation_basis_sha256"],
+        )
+        self.assertNotEqual(
+            absolute["consumption_semantics_id"],
+            comparative["consumption_semantics_id"],
+        )
+        self.assertNotEqual(
+            absolute["whole_window_drift_allowance"],
+            comparative["whole_window_drift_allowance"],
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        swapped = json.loads(json.dumps(artifact))
+        (
+            swapped["cells"][0]["absolute"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+            swapped["cells"][0]["comparative"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+        ) = (
+            swapped["cells"][0]["comparative"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+            swapped["cells"][0]["absolute"][
+                "whole_window_evaluation_basis_sha256"
+            ],
+        )
+        self.assert_invalid(swapped, "does not match record basis")
+
+    def test_v2_rejects_missing_or_unknown_consumption_semantics(self):
+        missing = make_artifact([make_cross_window_cell()])
+        del missing["cells"][0]["absolute"]["consumption_semantics_id"]
+        self.assert_invalid(missing, "missing key 'consumption_semantics_id'")
+
+        unknown = make_artifact([make_cross_window_cell()])
+        unknown["cells"][0]["comparative"][
+            "consumption_semantics_id"
+        ] = "unknown_semantics"
+        self.assert_invalid(
+            unknown,
+            "unknown whole-window consumption semantics",
+        )
+
+    def test_copied_component_allowance_cannot_bypass_recomputation(self):
+        artifact = make_artifact([make_cross_window_cell()])
+        absolute = artifact["cells"][0]["absolute"]
+        comparative = artifact["cells"][0]["comparative"]
+        copied = json.loads(json.dumps(absolute["whole_window_drift_allowance"]))
+        copied["whole_window_evaluation_basis_sha256"] = comparative[
+            "whole_window_evaluation_basis_sha256"
+        ]
+        comparative["whole_window_drift_allowance"] = copied
+
+        self.assert_invalid(
+            artifact,
+            "drift_widened_guarded_floor_j must equal",
+        )
+
+    def test_artifact_and_plan_calibration_scopes_are_not_equated(self):
+        artifact = make_artifact([make_cross_window_cell()])
+        artifact["calibration_scope"] = "production_window"
+        self.assertEqual(
+            artifact["provenance"]["calibration_plan"][
+                "declared_calibration_scope"
+            ],
+            "window_a",
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+    def test_floor_gate_is_max_of_component_drift_floors_never_sum(self):
+        artifact = make_artifact([make_cross_window_cell()])
+        cell = artifact["cells"][0]
+        absolute = cell["absolute"]
+        comparative = cell["comparative"]
+        expected = max(
+            absolute["drift_widened_guarded_floor_j"],
+            comparative["drift_widened_guarded_floor_j"],
+        )
+        summed_allowances = (
+            max(
+                absolute["corner_widened_guarded_floor_j"],
+                comparative["corner_widened_guarded_floor_j"],
+            )
+            + absolute["whole_window_drift_allowance"]["allowance_j"]
+            + comparative["whole_window_drift_allowance"]["allowance_j"]
+        )
+        self.assertTrue(close(cell["floor_gate_j"], expected))
+        self.assertFalse(close(cell["floor_gate_j"], summed_allowances))
+        self.assertNotIn(
+            "whole_window_drift_allowance",
+            artifact["transport_groups"][0],
+        )
+
+        cell["floor_gate_j"] = summed_allowances
+        artifact["transport_groups"][0][
+            "composed_floor_gate_j"
+        ] = summed_allowances
+        self.assert_invalid(
+            artifact,
+            "floor_gate_j must equal max(floor_abs_j, floor_cmp_j)",
+        )
+
+    def test_component_provenance_is_positional_and_disjoint(self):
+        reordered = make_artifact([make_cross_window_cell()])
+        comparative_provenance = reordered["cells"][0]["provenance"][
+            "comparative"
+        ]
+        comparative_provenance["bundle_ids"][0:2] = reversed(
+            comparative_provenance["bundle_ids"][0:2]
+        )
+        self.assert_invalid(
+            reordered,
+            "bundle_ids: must positionally equal component members",
+        )
+
+        wrong_hash = make_artifact([make_cross_window_cell()])
+        wrong_hash["cells"][0]["provenance"]["absolute"][
+            "bundle_sha256s"
+        ][0] = HEX_B
+        self.assert_invalid(
+            wrong_hash,
+            "bundle_sha256s: must positionally equal component members",
+        )
+
+        overlapping = make_artifact([make_cross_window_cell()])
+        cell = overlapping["cells"][0]
+        absolute_bundle_id = cell["absolute"]["bundle_observations"][0][
+            "bundle_id"
+        ]
+        cell["comparative"]["blocks"][0]["members"][0][
+            "bundle_id"
+        ] = absolute_bundle_id
+        cell["provenance"]["comparative"]["bundle_ids"][
+            0
+        ] = absolute_bundle_id
+        self.assert_invalid(
+            overlapping,
+            "absolute and comparative bundle members must be disjoint",
+        )
+
+    def test_component_regimes_compose_conservatively_and_fail_closed(self):
+        absolute_regime = make_regime(
+            power=(5.0, 8.0),
+            duration=(1.0, 3.0),
+            p95_gap=0.2,
+            bracket_gap=0.3,
+            cadence=2.5,
+            clock=("required", 0.001),
+            interp=("not_applicable", None),
+        )
+        comparative_regime = make_regime(
+            power=(6.0, 10.0),
+            duration=(2.0, 4.0),
+            p95_gap=0.4,
+            bracket_gap=0.5,
+            cadence=1.5,
+            clock=("required", 0.002),
+            interp=("required", 1.5),
+        )
+        artifact = make_artifact(
+            [
+                make_cross_window_cell(
+                    absolute_regime=absolute_regime,
+                    comparative_regime=comparative_regime,
+                )
+            ]
+        )
+        observed = artifact["cells"][0]["source_regime"]["stress_observed"]
+        self.assertEqual(observed["mean_power_w_min"], 5.0)
+        self.assertEqual(observed["mean_power_w_max"], 10.0)
+        self.assertEqual(observed["window_duration_s_min"], 1.0)
+        self.assertEqual(observed["window_duration_s_max"], 4.0)
+        self.assertEqual(observed["p95_sample_gap_s_max"], 0.4)
+        self.assertEqual(observed["bracketing_sample_gap_s_max"], 0.5)
+        self.assertEqual(observed["cadence_ratio_min"], 1.5)
+        self.assertEqual(
+            observed["bound_terms"]["clock_anchor_bound_s"],
+            {"applicability": "required", "maximum": 0.002},
+        )
+        self.assertEqual(
+            observed["bound_terms"]["interpolation_bound_j"],
+            {"applicability": "required", "maximum": 1.5},
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+        unknown_cell = make_cross_window_cell(
+            absolute_regime=absolute_regime,
+            comparative_regime=make_regime(
+                drift=("unknown", None),
+            ),
+        )
+        self.assertEqual(
+            unknown_cell["source_regime"]["stress_observed"]["bound_terms"][
+                "idle_drift_bound_j"
+            ],
+            {"applicability": "unknown", "maximum": None},
+        )
+        unknown_cell["eligibility"].update(
+            {
+                "use_role": "smoke_only",
+                "status": "smoke_only",
+                "claim_usable": False,
+            }
+        )
+        self.assertEqual(
+            validate_floor_artifact(make_artifact([unknown_cell])),
+            [],
+        )
+
+        mismatched_stack = json.loads(json.dumps(artifact))
+        component_regime = mismatched_stack["cells"][0]["provenance"][
+            "comparative"
+        ]["source_regime"]
+        component_regime["stack_identity"][
+            "runtime_version"
+        ] = "different-runtime"
+        component_regime["stack_identity_sha256"] = canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN,
+            component_regime["stack_identity"],
+        )
+        self.assert_invalid(
+            mismatched_stack,
+            "stack identity must match the cell",
+        )
+
+    def test_claim_ready_requires_both_component_records_and_provenance(self):
+        missing_provenance = make_artifact([make_cross_window_cell()])
+        missing_provenance["cells"][0]["provenance"]["comparative"] = None
+        self.assert_invalid(
+            missing_provenance,
+            "required for the component record",
+        )
+        self.assert_invalid(
+            missing_provenance,
+            "claim_ready requires component-scoped provenance for both components",
+        )
+
+        artifact = make_artifact([make_cross_window_cell()])
+        cell = artifact["cells"][0]
+        cell["comparative"] = None
+        cell["provenance"]["comparative"] = None
+        cell["floor_cmp_j"] = None
+        cell["floor_gate_j"] = None
+        self.assert_invalid(
+            artifact,
+            "claim_ready requires both absolute and comparative components",
+        )
+
+    def test_v1_schema_version_is_rejected_without_migration(self):
+        artifact = make_artifact()
+        artifact["schema_version"] = "joulewise.detection_floor_artifact.v1"
+        self.assertEqual(
+            validate_floor_artifact(artifact),
+            [
+                "artifact: schema_version must be "
+                "'joulewise.detection_floor_artifact.v2'"
+            ],
+        )
 
     def test_source_class_is_closed_data_vocabulary(self):
         for source_class in ("prospective", "retrospective", "synthetic"):
@@ -701,72 +1337,121 @@ class TestArtifactEmitValidate(unittest.TestCase):
         del artifact["source_class"]
         self.assert_invalid(artifact, "missing key 'source_class'")
 
+    def test_build_floor_artifact_requires_source_class(self):
+        artifact = make_artifact()
+        with self.assertRaises(TypeError):
+            build_floor_artifact(
+                artifact_id=artifact["artifact_id"],
+                calibration_scope=artifact["calibration_scope"],
+                provenance=artifact["provenance"],
+                cells=artifact["cells"],
+                transport_groups=artifact["transport_groups"],
+            )
+
     def test_provenance_precondition_pins_are_structurally_validated(self):
         mutations = (
             (
-                lambda provenance: provenance["calibration_plan"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "calibration_plan"
+                ].__setitem__(
                     "plan_id", ""
                 ),
                 "calibration_plan.plan_id: must be a nonempty string",
             ),
             (
-                lambda provenance: provenance["calibration_plan"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "calibration_plan"
+                ].__setitem__(
                     "sha256", "short"
                 ),
                 "calibration_plan.sha256: must be 64 lowercase hex chars",
             ),
             (
-                lambda provenance: provenance["order_manifest"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "calibration_plan"
+                ].__setitem__(
+                    "declared_calibration_scope", "unknown"
+                ),
+                "declared_calibration_scope: must be a recognized calibration scope",
+            ),
+            (
+                lambda artifact: artifact["provenance"][
+                    "calibration_plan"
+                ].__setitem__(
+                    "relative_path", ""
+                ),
+                "calibration_plan.relative_path: must be a nonempty string",
+            ),
+            (
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"][
+                    "order_manifest"
+                ].__setitem__(
                     "manifest_id", ""
                 ),
                 "order_manifest.manifest_id: must be a nonempty string",
             ),
             (
-                lambda provenance: provenance["order_manifest"].__setitem__(
-                    "sha256", HEX_A.upper()
-                ),
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"][
+                    "order_manifest"
+                ].__setitem__("sha256", HEX_A.upper()),
                 "order_manifest.sha256: must be 64 lowercase hex chars",
             ),
             (
-                lambda provenance: provenance["campaign_log"].__setitem__(
-                    "sha256", "short"
-                ),
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"][
+                    "campaign_log"
+                ].__setitem__("sha256", "short"),
                 "campaign_log.sha256: must be 64 lowercase hex chars",
             ),
             (
-                lambda provenance: provenance.pop("extraction_report_sha256"),
-                "missing key 'extraction_report_sha256'",
-            ),
-            (
-                lambda provenance: provenance.__setitem__(
-                    "extraction_report_sha256", HEX_A.upper()
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"].pop(
+                    "extraction_report"
                 ),
-                "extraction_report_sha256: must be 64 lowercase hex chars",
+                "missing key 'extraction_report'",
             ),
             (
-                lambda provenance: provenance.__setitem__(
-                    "extraction_spec_sha256", "short"
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"][
+                    "extraction_report"
+                ].__setitem__("sha256", HEX_A.upper()),
+                "extraction_report.sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"][
+                    "extraction_spec"
+                ].__setitem__("sha256", "short"),
+                "extraction_spec.sha256: must be 64 lowercase hex chars",
+            ),
+            (
+                lambda artifact: artifact["cells"][0]["provenance"]["absolute"].__setitem__(
+                    "evidence_root_id", "other"
                 ),
-                "extraction_spec_sha256: must be 64 lowercase hex chars",
+                "evidence_root_id: must be one of",
             ),
             (
-                lambda provenance: provenance.__setitem__("mint_tool_version", " "),
+                lambda artifact: artifact["provenance"].__setitem__(
+                    "mint_tool_version", " "
+                ),
                 "mint_tool_version: must be a nonempty string",
             ),
             (
-                lambda provenance: provenance["implementation"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "implementation"
+                ].__setitem__(
                     "project_commit", "0" * 39
                 ),
                 "project_commit: must be 40 lowercase hex chars",
             ),
             (
-                lambda provenance: provenance["implementation"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "implementation"
+                ].__setitem__(
                     "project_tree_state", "unknown"
                 ),
                 "project_tree_state: must be 'clean' or 'dirty'",
             ),
             (
-                lambda provenance: provenance["implementation"].__setitem__(
+                lambda artifact: artifact["provenance"][
+                    "implementation"
+                ].__setitem__(
                     "python_package", "other"
                 ),
                 "python_package: must be 'joulewise'",
@@ -775,7 +1460,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
         for mutate, expected in mutations:
             with self.subTest(expected=expected):
                 artifact = make_artifact()
-                mutate(artifact["provenance"])
+                mutate(artifact)
                 self.assert_invalid(artifact, expected)
 
     def test_canonical_metric_vocabulary_rejects_unresolvable_typo(self):
@@ -891,7 +1576,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
         ).encode("utf-8")
         self.assertEqual(
             hashlib.sha256(rendered).hexdigest(),
-            "9a57d1c6b7efa1806358249791f6723f5fb90255ef6efecf7c3554a743e14710",
+            "17f4ed63add651e7010d4df09c429e371e6c08d943ef5ea829d6d6123fdb9d51",
         )
 
     def test_comparative_widened_floor_round_trips_and_rejects_tampering(self):
@@ -1091,7 +1776,9 @@ class TestArtifactEmitValidate(unittest.TestCase):
 
     def test_claim_ready_rejects_duplicate_source_bundles(self):
         artifact = make_artifact()
-        bundle_ids = artifact["cells"][0]["provenance"]["bundle_ids"]
+        bundle_ids = artifact["cells"][0]["provenance"]["absolute"][
+            "bundle_ids"
+        ]
         bundle_ids[1] = bundle_ids[0]
         self.assert_invalid(artifact, "source bundle_ids must be unique")
 
@@ -1269,103 +1956,24 @@ class TestArtifactEmitValidate(unittest.TestCase):
             malformed_errors,
         )
 
-        asymmetric_basis = json.loads(json.dumps(malformed_basis))
-        asymmetric_basis["cells"][0]["comparative"][
-            "whole_window_evaluation_basis_sha256"
-        ] = HEX_C
-        self.assert_invalid(
-            asymmetric_basis,
-            "absolute and comparative whole-window evaluation bases disagree",
-        )
-
-        omitted = json.loads(json.dumps(artifact))
-        omitted_cell = omitted["cells"][0]
-        for record_name in ("absolute", "comparative"):
-            for field in (
-                "whole_window_drift_allowance",
-                "drift_widened_unguarded_floor_j",
-                "drift_widened_guarded_floor_j",
-            ):
-                omitted_cell[record_name].pop(field)
-        omitted_cell["floor_abs_j"] = omitted_cell["absolute"][
-            "corner_widened_guarded_floor_j"
-        ]
-        omitted_cell["floor_cmp_j"] = omitted_cell["comparative"][
-            "corner_widened_guarded_floor_j"
-        ]
-        omitted_cell["floor_gate_j"] = max(
-            omitted_cell["floor_abs_j"], omitted_cell["floor_cmp_j"]
-        )
-        group = omitted["transport_groups"][0]
-        group["composed_floor_abs_j"] = omitted_cell["floor_abs_j"]
-        group["composed_floor_cmp_j"] = omitted_cell["floor_cmp_j"]
-        group["composed_floor_gate_j"] = omitted_cell["floor_gate_j"]
-        self.assert_invalid(
-            omitted,
-            "whole-window basis requires the complete drift-widened field group",
-        )
-
-        full_strip = json.loads(json.dumps(artifact))
-        full_strip_cell = full_strip["cells"][0]
         for record_name in ("absolute", "comparative"):
             for field in (
                 "whole_window_evaluation_basis_sha256",
+                "consumption_semantics_id",
                 "whole_window_drift_allowance",
                 "drift_widened_unguarded_floor_j",
                 "drift_widened_guarded_floor_j",
             ):
-                full_strip_cell[record_name].pop(field)
-        full_strip_cell["floor_abs_j"] = full_strip_cell["absolute"][
-            "corner_widened_guarded_floor_j"
-        ]
-        full_strip_cell["floor_cmp_j"] = full_strip_cell["comparative"][
-            "corner_widened_guarded_floor_j"
-        ]
-        full_strip_cell["floor_gate_j"] = max(
-            full_strip_cell["floor_abs_j"], full_strip_cell["floor_cmp_j"]
-        )
-        full_strip_group = full_strip["transport_groups"][0]
-        full_strip_group["composed_floor_abs_j"] = full_strip_cell["floor_abs_j"]
-        full_strip_group["composed_floor_cmp_j"] = full_strip_cell["floor_cmp_j"]
-        full_strip_group["composed_floor_gate_j"] = full_strip_cell["floor_gate_j"]
-        self.assert_invalid(
-            full_strip,
-            "claim_ready primary_claim_gate requires a whole-window basis",
-        )
-
-        comparative_strip = json.loads(json.dumps(artifact))
-        comparative_strip_cell = comparative_strip["cells"][0]
-        for field in (
-            "whole_window_evaluation_basis_sha256",
-            "whole_window_drift_allowance",
-            "drift_widened_unguarded_floor_j",
-            "drift_widened_guarded_floor_j",
-        ):
-            comparative_strip_cell["comparative"].pop(field)
-        comparative_strip_cell["floor_cmp_j"] = comparative_strip_cell[
-            "comparative"
-        ]["corner_widened_guarded_floor_j"]
-        comparative_strip_cell["floor_gate_j"] = max(
-            comparative_strip_cell["floor_abs_j"],
-            comparative_strip_cell["floor_cmp_j"],
-        )
-        comparative_strip_group = comparative_strip["transport_groups"][0]
-        comparative_strip_group["composed_floor_abs_j"] = (
-            comparative_strip_cell["floor_abs_j"]
-        )
-        comparative_strip_group["composed_floor_cmp_j"] = (
-            comparative_strip_cell["floor_cmp_j"]
-        )
-        comparative_strip_group["composed_floor_gate_j"] = (
-            comparative_strip_cell["floor_gate_j"]
-        )
-        self.assert_invalid(
-            comparative_strip,
-            "whole-window drift groups must be symmetric and complete",
-        )
+                with self.subTest(record=record_name, field=field):
+                    missing = json.loads(json.dumps(artifact))
+                    del missing["cells"][0][record_name][field]
+                    self.assert_invalid(missing, f"missing key {field!r}")
 
     def test_basis_passing_extraction_refuses_absent_allowances(self):
-        floor = absolute_false_effect_floor([1.0, 1.1])
+        floor = absolute_false_effect_floor(
+            [1.0, 1.1],
+            admissible_half_widths_j=[0.0, 0.0],
+        )
         report = CellReport(
             cell_id="basis-cell",
             kind="absolute",
@@ -1630,7 +2238,7 @@ class TestTransportRule(unittest.TestCase):
             },
         )
         self.assertEqual(TRANSPORT_RULE_ID, "same_stack_componentwise_worst_case.v1")
-        self.assertEqual(SCHEMA_VERSION, "joulewise.detection_floor_artifact.v1")
+        self.assertEqual(SCHEMA_VERSION, "joulewise.detection_floor_artifact.v2")
 
 
 if __name__ == "__main__":

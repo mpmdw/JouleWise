@@ -1863,6 +1863,33 @@ def _cmd_output_identity_report(args: argparse.Namespace) -> int:
 # P2-037 deterministic contrast/claim derivation.
 
 
+class _EvidenceRootAction(argparse.Action):
+    """Collect one exact floor-evidence ``ID=PATH`` mapping."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str,
+        option_string: str | None = None,
+    ) -> None:
+        del parser, option_string
+        if "=" not in values:
+            raise argparse.ArgumentError(self, "expected ID=PATH")
+        root_id, path_text = (part.strip() for part in values.split("=", 1))
+        if not root_id:
+            raise argparse.ArgumentError(self, "evidence-root ID must be nonempty")
+        if not path_text:
+            raise argparse.ArgumentError(self, "evidence-root PATH must be nonempty")
+        mapping = dict(getattr(namespace, self.dest, None) or {})
+        if root_id in mapping:
+            raise argparse.ArgumentError(
+                self, f"duplicate evidence-root ID {root_id!r}"
+            )
+        mapping[root_id] = Path(path_text)
+        setattr(namespace, self.dest, mapping)
+
+
 def _cmd_analyze_claims(args: argparse.Namespace) -> int:
     # Lazy import avoids a cycle: the engine receives this module's shared
     # strict validator by injection rather than importing/duplicating it.
@@ -1875,6 +1902,7 @@ def _cmd_analyze_claims(args: argparse.Namespace) -> int:
             Path(args.runs_root),
             Path(args.floor_artifact),
             strict_validator=validate_bundle,
+            evidence_roots=args.evidence_roots,
             output_path=Path(args.output),
             legacy_l1_mechanics=args.legacy_l1_mechanics,
             legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
@@ -2150,7 +2178,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--analysis-manifest", required=True, help="frozen analysis_manifest.json path"
     )
     analyze.add_argument(
-        "--runs-root", required=True, help="directory containing registered run bundles"
+        "--runs-root",
+        required=True,
+        help="analysis-corpus root containing registered run bundles",
+    )
+    analyze.add_argument(
+        "--evidence-root",
+        dest="evidence_roots",
+        action=_EvidenceRootAction,
+        default=None,
+        metavar="ID=PATH",
+        help=(
+            "floor-evidence root mapping; repeat once for each declared "
+            "evidence_root_id (may be used alongside --runs-root)"
+        ),
     )
     analyze.add_argument(
         "--floor-artifact", required=True, help="validated P2-039 floor artifact JSON"

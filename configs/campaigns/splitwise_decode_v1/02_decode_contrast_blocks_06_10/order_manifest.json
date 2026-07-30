@@ -1,0 +1,230 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "splitwise-decode-v1-02_decode_contrast_blocks_06_10-order-v1",
+  "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+  "calibration_plan_sha256": "7b563724be38254bf0769bca5818e9bcd70f76288e79650b55c3e051bf636b04",
+  "ordering_note": "Fixed contiguous A/B/B/A blocks 6-10 of the cross-model decode contrast.",
+  "planned_n_bundles": 20,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "swdec-contrast-b06-a1.json",
+      "run_id": "swdec-contrast-b06-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 6,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 6,
+      "position_in_block": 1
+    },
+    {
+      "index": 2,
+      "config": "swdec-contrast-b06-b1.json",
+      "run_id": "swdec-contrast-b06-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 6,
+      "position_in_block": 2
+    },
+    {
+      "index": 3,
+      "config": "swdec-contrast-b06-b2.json",
+      "run_id": "swdec-contrast-b06-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 6,
+      "position_in_block": 3
+    },
+    {
+      "index": 4,
+      "config": "swdec-contrast-b06-a2.json",
+      "run_id": "swdec-contrast-b06-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 6,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 6,
+      "position_in_block": 4
+    },
+    {
+      "index": 5,
+      "config": "swdec-contrast-b07-a1.json",
+      "run_id": "swdec-contrast-b07-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 7,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 7,
+      "position_in_block": 1
+    },
+    {
+      "index": 6,
+      "config": "swdec-contrast-b07-b1.json",
+      "run_id": "swdec-contrast-b07-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 7,
+      "position_in_block": 2
+    },
+    {
+      "index": 7,
+      "config": "swdec-contrast-b07-b2.json",
+      "run_id": "swdec-contrast-b07-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 7,
+      "position_in_block": 3
+    },
+    {
+      "index": 8,
+      "config": "swdec-contrast-b07-a2.json",
+      "run_id": "swdec-contrast-b07-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 7,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 7,
+      "position_in_block": 4
+    },
+    {
+      "index": 9,
+      "config": "swdec-contrast-b08-a1.json",
+      "run_id": "swdec-contrast-b08-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 8,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 8,
+      "position_in_block": 1
+    },
+    {
+      "index": 10,
+      "config": "swdec-contrast-b08-b1.json",
+      "run_id": "swdec-contrast-b08-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 8,
+      "position_in_block": 2
+    },
+    {
+      "index": 11,
+      "config": "swdec-contrast-b08-b2.json",
+      "run_id": "swdec-contrast-b08-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 8,
+      "position_in_block": 3
+    },
+    {
+      "index": 12,
+      "config": "swdec-contrast-b08-a2.json",
+      "run_id": "swdec-contrast-b08-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 8,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 8,
+      "position_in_block": 4
+    },
+    {
+      "index": 13,
+      "config": "swdec-contrast-b09-a1.json",
+      "run_id": "swdec-contrast-b09-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 9,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 9,
+      "position_in_block": 1
+    },
+    {
+      "index": 14,
+      "config": "swdec-contrast-b09-b1.json",
+      "run_id": "swdec-contrast-b09-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 9,
+      "position_in_block": 2
+    },
+    {
+      "index": 15,
+      "config": "swdec-contrast-b09-b2.json",
+      "run_id": "swdec-contrast-b09-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 9,
+      "position_in_block": 3
+    },
+    {
+      "index": 16,
+      "config": "swdec-contrast-b09-a2.json",
+      "run_id": "swdec-contrast-b09-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 9,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 9,
+      "position_in_block": 4
+    },
+    {
+      "index": 17,
+      "config": "swdec-contrast-b10-a1.json",
+      "run_id": "swdec-contrast-b10-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 10,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 10,
+      "position_in_block": 1
+    },
+    {
+      "index": 18,
+      "config": "swdec-contrast-b10-b1.json",
+      "run_id": "swdec-contrast-b10-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 10,
+      "position_in_block": 2
+    },
+    {
+      "index": 19,
+      "config": "swdec-contrast-b10-b2.json",
+      "run_id": "swdec-contrast-b10-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "sw-decode-b-qwen25-7b",
+      "role": "comparative_contrast_member",
+      "block_index": 10,
+      "position_in_block": 3
+    },
+    {
+      "index": 20,
+      "config": "swdec-contrast-b10-a2.json",
+      "run_id": "swdec-contrast-b10-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 10,
+      "workload": "sw-decode-a-qwen25-1p5b",
+      "role": "comparative_contrast_member",
+      "block_index": 10,
+      "position_in_block": 4
+    }
+  ]
+}

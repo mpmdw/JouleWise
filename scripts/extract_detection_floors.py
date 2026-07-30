@@ -69,6 +69,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--evaluation-basis-sha256",
+        default=None,
+        help=(
+            "sha256 of the authenticated whole-window evaluation basis that "
+            "governs this extraction subset"
+        ),
+    )
+    parser.add_argument(
         "--hash-bundles",
         action="store_true",
         help="record complete-bundle and config sha256 pins per member",
@@ -103,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             args.runs_root,
             spec,
             manifest_id=args.manifest_id,
+            evaluation_basis_sha256=args.evaluation_basis_sha256,
             hash_bundles=args.hash_bundles,
         )
     except FloorExtractionError as exc:

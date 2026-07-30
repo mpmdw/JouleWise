@@ -1,0 +1,230 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "qwen25-7b-decode-floor-v1-03_phase_decode_abba_blocks_06_10-order-v1",
+  "plan_id": "qwen25-7b-decode-floor-v1-m3max",
+  "calibration_plan_sha256": "62f7ab3b981ea81f280ee770e932858025b74758bb3dfa5b684bffcbe6a3b388",
+  "ordering_note": "Fixed contiguous same-condition A/B/B/A decode blocks 6-10.",
+  "planned_n_bundles": 20,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b06-a1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-a1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 6,
+      "position_in_block": 1
+    },
+    {
+      "index": 2,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b06-b1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 6,
+      "position_in_block": 2
+    },
+    {
+      "index": 3,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b06-b2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 6,
+      "position_in_block": 3
+    },
+    {
+      "index": 4,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b06-a2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b06-a2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 6,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 6,
+      "position_in_block": 4
+    },
+    {
+      "index": 5,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b07-a1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-a1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 7,
+      "position_in_block": 1
+    },
+    {
+      "index": 6,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b07-b1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 7,
+      "position_in_block": 2
+    },
+    {
+      "index": 7,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b07-b2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 7,
+      "position_in_block": 3
+    },
+    {
+      "index": 8,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b07-a2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b07-a2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 7,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 7,
+      "position_in_block": 4
+    },
+    {
+      "index": 9,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b08-a1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-a1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 8,
+      "position_in_block": 1
+    },
+    {
+      "index": 10,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b08-b1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 8,
+      "position_in_block": 2
+    },
+    {
+      "index": 11,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b08-b2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 8,
+      "position_in_block": 3
+    },
+    {
+      "index": 12,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b08-a2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b08-a2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 8,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 8,
+      "position_in_block": 4
+    },
+    {
+      "index": 13,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b09-a1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-a1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 9,
+      "position_in_block": 1
+    },
+    {
+      "index": 14,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b09-b1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 9,
+      "position_in_block": 2
+    },
+    {
+      "index": 15,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b09-b2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 9,
+      "position_in_block": 3
+    },
+    {
+      "index": 16,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b09-a2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b09-a2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 9,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 9,
+      "position_in_block": 4
+    },
+    {
+      "index": 17,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b10-a1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-a1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 10,
+      "position_in_block": 1
+    },
+    {
+      "index": 18,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b10-b1.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 10,
+      "position_in_block": 2
+    },
+    {
+      "index": 19,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b10-b2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 10,
+      "position_in_block": 3
+    },
+    {
+      "index": 20,
+      "config": "sw7bfloor-df-cmp-abba-ph-decode-b10-a2.json",
+      "run_id": "sw7bfloor-df-cmp-abba-ph-decode-b10-a2",
+      "model_tag": "qwen25-7b-mlx",
+      "rep": 10,
+      "workload": "df-ph-decode-qwen25-7b",
+      "role": "comparative_abba_member",
+      "block_index": 10,
+      "position_in_block": 4
+    }
+  ]
+}

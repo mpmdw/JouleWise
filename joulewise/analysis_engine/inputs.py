@@ -38,6 +38,8 @@ from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
+    supersession_selected_occurrence_identity,
+    validated_supersession_entries,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
@@ -227,7 +229,10 @@ _FLOOR_BINDING_REASON_CODES = frozenset(
         "calibration_abba_block_mismatch",
         "calibration_abba_label_mismatch",
         "calibration_abba_member_order_mismatch",
+        "evidence_root_mapping_required",
         "idle_drift_guard_provenance_mismatch",
+        "missing_evidence_root_mapping",
+        "unknown_evidence_root_mapping",
     }
 )
 
@@ -411,6 +416,15 @@ def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
     return value, hashlib.sha256(raw).hexdigest()
 
 
+def _path_independent_stack_identifier(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", value):
+        name = PurePosixPath(value.replace("\\", "/")).name
+        return name or None
+    return value
+
+
 def floor_stack_identity(
     raw_config: Mapping[str, Any] | None,
     metadata: Mapping[str, Any] | None,
@@ -419,7 +433,7 @@ def floor_stack_identity(
 
     if not isinstance(raw_config, Mapping) or not isinstance(metadata, Mapping):
         return None
-    typed = _typed_config(raw_config)
+    hardware = raw_config.get("hardware_target")
     workload = metadata.get("workload_provenance")
     adapters = metadata.get("adapters")
     runtime = adapters.get("runtime") if isinstance(adapters, Mapping) else None
@@ -430,27 +444,26 @@ def floor_stack_identity(
     tokenizer = workload.get("tokenizer") if isinstance(workload, Mapping) else None
     sampler = workload.get("sampler") if isinstance(workload, Mapping) else None
     output_policy = workload.get("output_policy") if isinstance(workload, Mapping) else None
-    hardware = typed.get("hardware_target") if isinstance(typed, Mapping) else None
     device = metadata.get("device")
     quantization = metadata.get("quantization")
     if not all(
         isinstance(value, Mapping)
         for value in (
-            typed,
+            hardware,
             workload,
             runtime,
             telemetry,
             prepare,
             artifact,
             tokenizer,
+            sampler,
             output_policy,
-            hardware,
             device,
             quantization,
         )
     ):
         return None
-    artifact_sha = artifact.get("sha256")
+    artifact_sha = artifact.get("sha256") or artifact.get("folded_sha256")
     telemetry_name = telemetry.get("name")
     if (
         not isinstance(artifact_sha, str)
@@ -458,6 +471,20 @@ def floor_stack_identity(
         or not isinstance(telemetry_name, str)
         or not telemetry_name
     ):
+        return None
+    tokenizer_identifier = _path_independent_stack_identifier(
+        tokenizer.get("identifier")
+    )
+    if tokenizer_identifier is None:
+        return None
+    tokenizer_identity = dict(tokenizer)
+    tokenizer_identity["identifier"] = tokenizer_identifier
+    runtime_version = (
+        prepare.get("version")
+        or prepare.get("mlx_version")
+        or prepare.get("mlx_lm_version")
+    )
+    if not isinstance(runtime_version, str) or not runtime_version:
         return None
     return {
         "hardware_unit": {
@@ -469,14 +496,14 @@ def floor_stack_identity(
         "runtime_version": {
             "name": runtime.get("name"),
             "adapter": prepare.get("adapter"),
-            "version": prepare.get("version"),
+            "version": runtime_version,
         },
         "kernel_library": str(prepare.get("kernel_library") or "unavailable"),
         "model_artifact_sha256": artifact_sha,
         "quantization": dict(quantization),
-        "tokenizer_identity": dict(tokenizer),
+        "tokenizer_identity": tokenizer_identity,
         "sampler_output_policy": {
-            "sampler": dict(sampler) if isinstance(sampler, Mapping) else {"kind": "unavailable"},
+            "sampler": dict(sampler),
             "output_policy": {
                 key: output_policy.get(key)
                 for key in ("name", "requested_tokens", "stop_condition")
@@ -621,26 +648,6 @@ def _consumer_stress_for_evidence(
     }
 
 
-def _ordered_floor_source_sequences(cell: Mapping[str, Any]) -> list[tuple[str, ...]]:
-    sequences: list[tuple[str, ...]] = []
-    absolute = cell.get("absolute")
-    observations = absolute.get("bundle_observations") if isinstance(absolute, Mapping) else None
-    if isinstance(observations, list):
-        sequences.append(
-            tuple(str(row.get("bundle_id", "")) for row in observations if isinstance(row, Mapping))
-        )
-    comparative = cell.get("comparative")
-    blocks = comparative.get("blocks") if isinstance(comparative, Mapping) else None
-    if isinstance(blocks, list):
-        for block in blocks:
-            members = block.get("members") if isinstance(block, Mapping) else None
-            if isinstance(members, list):
-                sequences.append(
-                    tuple(str(row.get("bundle_id", "")) for row in members if isinstance(row, Mapping))
-                )
-    return sequences
-
-
 _CALIBRATION_PLAN_TAG = "calibration-plan-sha256="
 _CALIBRATION_BLOCK_TAG = "calibration-abba-block-id="
 _CALIBRATION_LABEL_TAG = "calibration-abba-label="
@@ -651,6 +658,7 @@ _CALIBRATION_COLLECTION_TAG_PREFIXES = (
     _CALIBRATION_LABEL_TAG,
     _CALIBRATION_SEQUENCE_TAG,
 )
+_WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 
 def _calibration_order_tags(raw_config: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -700,103 +708,381 @@ def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
     return result
 
 
+def _safe_relative_posix(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a nonempty safe-relative POSIX path")
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or "\\" in value
+        or value != path.as_posix()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or _WINDOWS_ABSOLUTE_RE.match(value)
+    ):
+        raise ValueError(f"{label} must be a safe-relative POSIX path")
+    return value
+
+
+def _assert_floor_artifact_path_independent(
+    value: object,
+    label: str = "artifact",
+) -> None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            child_label = f"{label}.{key}"
+            if key == "relative_path":
+                _safe_relative_posix(child, child_label)
+            _assert_floor_artifact_path_independent(child, child_label)
+        return
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _assert_floor_artifact_path_independent(
+                child,
+                f"{label}[{index}]",
+            )
+        return
+    if isinstance(value, str) and (
+        value.startswith("/") or _WINDOWS_ABSOLUTE_RE.match(value)
+    ):
+        raise ValueError(f"{label}: absolute paths may not be persisted")
+
+
+def _component_order_sequences(
+    cell: Mapping[str, Any],
+    component_name: str,
+) -> list[tuple[str, ...]]:
+    if component_name == "absolute":
+        absolute = cell.get("absolute")
+        observations = (
+            absolute.get("bundle_observations")
+            if isinstance(absolute, Mapping)
+            else None
+        )
+        if not isinstance(observations, list):
+            return []
+        return [
+            tuple(
+                str(row.get("bundle_id", ""))
+                for row in observations
+                if isinstance(row, Mapping)
+            )
+        ]
+    comparative = cell.get("comparative")
+    blocks = (
+        comparative.get("blocks")
+        if isinstance(comparative, Mapping)
+        else None
+    )
+    if not isinstance(blocks, list):
+        return []
+    sequences = []
+    for block in blocks:
+        members = block.get("members") if isinstance(block, Mapping) else None
+        if isinstance(members, list):
+            sequences.append(
+                tuple(
+                    str(row.get("bundle_id", ""))
+                    for row in members
+                    if isinstance(row, Mapping)
+                )
+            )
+    return sequences
+
+
+def _component_evidence_root_ids(
+    artifact: Mapping[str, Any],
+) -> frozenset[str]:
+    return frozenset(
+        root_id
+        for cell in artifact.get("cells", [])
+        if isinstance(cell, Mapping)
+        for component_name in ("absolute", "comparative")
+        for provenance in (cell.get("provenance"),)
+        if isinstance(provenance, Mapping)
+        for component in (provenance.get(component_name),)
+        if isinstance(component, Mapping)
+        for root_id in (component.get("evidence_root_id"),)
+        if isinstance(root_id, str) and root_id
+    )
+
+
+def declared_evidence_roots(
+    floor_artifact_path: Path,
+    evidence_roots: Mapping[str, Path] | None,
+) -> Mapping[str, Path] | None:
+    """Restrict supplied roots to artifact-declared IDs, failing closed on read."""
+
+    if evidence_roots is None:
+        return None
+    try:
+        raw = Path(floor_artifact_path).read_bytes()
+        artifact = json.loads(raw.decode("utf-8"))
+        if not isinstance(artifact, Mapping) or validate_floor_artifact(artifact):
+            return evidence_roots
+        declared_root_ids = _component_evidence_root_ids(artifact)
+    except Exception:
+        # This pre-authentication read only narrows separation inputs. Preserve
+        # the full, stricter mapping on every failure; authenticated loading
+        # immediately follows and remains the authority for refusal details.
+        return evidence_roots
+    return {
+        normalized_root_id: Path(root)
+        for root_id, root in evidence_roots.items()
+        for normalized_root_id in (str(root_id),)
+        if normalized_root_id in declared_root_ids
+    }
+
+
+def _normalize_evidence_roots(
+    artifact: Mapping[str, Any],
+    evidence_roots: Mapping[str, Path] | Path,
+) -> tuple[dict[str, Path], tuple[str, ...]]:
+    declared_root_ids = _component_evidence_root_ids(artifact)
+    if isinstance(evidence_roots, Mapping):
+        supplied_roots = {
+            str(root_id): Path(root)
+            for root_id, root in evidence_roots.items()
+        }
+        supplied_root_ids = frozenset(supplied_roots)
+        normalized = {
+            root_id: supplied_roots[root_id]
+            for root_id in declared_root_ids
+            if root_id in supplied_roots
+        }
+        problems = [
+            *(
+                f"missing_evidence_root_mapping: {root_id!r}"
+                for root_id in sorted(declared_root_ids - supplied_root_ids)
+            ),
+        ]
+        return normalized, tuple(problems)
+    # Existing analysis callers carry one physical calibration root. Preserve
+    # that entry point only for artifacts naming at most one distinct evidence
+    # root. A multi-root artifact cannot be safely projected onto one Path:
+    # callers must supply the exact ID -> Path mapping.
+    root = Path(evidence_roots)
+    normalized = {root_id: root for root_id in declared_root_ids}
+    problems = (
+        ("evidence_root_mapping_required",)
+        if len(declared_root_ids) > 1
+        else ()
+    )
+    return normalized, problems
+
+
 def _campaign_order_binding_problems(
     artifact: Mapping[str, Any],
     floor_path: Path,
-    runs_root: Path,
+    evidence_roots: Mapping[str, Path],
 ) -> tuple[str, ...]:
-    provenance = artifact.get("provenance")
-    order_pin = provenance.get("order_manifest") if isinstance(provenance, Mapping) else None
-    campaign_pin = provenance.get("campaign_log") if isinstance(provenance, Mapping) else None
+    """Authenticate v2 plan and component-scoped order/campaign evidence."""
+
     problems: list[str] = []
+    try:
+        _assert_floor_artifact_path_independent(artifact)
+    except ValueError as exc:
+        return (f"artifact_absolute_path_leakage: {exc}",)
+
+    provenance = artifact.get("provenance")
     plan_pin = provenance.get("calibration_plan") if isinstance(provenance, Mapping) else None
     if isinstance(plan_pin, Mapping):
-        plan_path = floor_path.parent / "calibration_plan.json"
         try:
-            plan_raw = plan_path.read_bytes()
-        except OSError as exc:
-            problems.append(f"calibration_plan_bytes_unreadable: {exc}")
+            relative_plan = _safe_relative_posix(
+                plan_pin.get("relative_path"),
+                "artifact.provenance.calibration_plan.relative_path",
+            )
+            plan_root = floor_path.parent.resolve()
+            plan_path = (plan_root / relative_plan).resolve()
+            plan_path.relative_to(plan_root)
+        except (OSError, RuntimeError, ValueError) as exc:
+            problems.append(f"calibration_plan_path_invalid: {exc}")
         else:
-            if hashlib.sha256(plan_raw).hexdigest() != plan_pin.get("sha256"):
-                problems.append("calibration_plan_bytes_hash_mismatch")
+            try:
+                plan_raw = plan_path.read_bytes()
+            except OSError as exc:
+                problems.append(f"calibration_plan_bytes_unreadable: {exc}")
+            else:
+                if hashlib.sha256(plan_raw).hexdigest() != plan_pin.get("sha256"):
+                    problems.append("calibration_plan_bytes_hash_mismatch")
+                try:
+                    plan = json.loads(plan_raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    problems.append("calibration_plan_bytes_invalid")
+                else:
+                    if (
+                        not isinstance(plan, Mapping)
+                        or plan.get("plan_id") != plan_pin.get("plan_id")
+                        or plan.get("calibration_scope")
+                        != plan_pin.get("declared_calibration_scope")
+                    ):
+                        problems.append(
+                            "calibration_plan_declared_provenance_mismatch"
+                        )
     else:
         problems.append("calibration_plan_provenance_missing")
-    evidence: list[tuple[str, Path, Mapping[str, Any], bool]] = []
-    if isinstance(order_pin, Mapping):
-        evidence.append(("order_manifest", floor_path.parent / "order_manifest.json", order_pin, False))
-    else:
-        problems.append("order_manifest provenance is missing")
-    if isinstance(campaign_pin, Mapping):
-        evidence.append(("campaign_log", runs_root / "campaign_log.jsonl", campaign_pin, True))
-    else:
-        problems.append("campaign_log provenance is missing")
 
-    sequences = [
-        sequence
-        for cell in artifact.get("cells", [])
-        if isinstance(cell, Mapping)
-        for sequence in _ordered_floor_source_sequences(cell)
-        if sequence
-    ]
-    for label, path, pin, is_log in evidence:
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:
-            problems.append(f"{label} cannot be read: {exc}")
+    for cell_index, cell in enumerate(artifact.get("cells", [])):
+        if not isinstance(cell, Mapping):
             continue
-        if hashlib.sha256(raw).hexdigest() != pin.get("sha256"):
-            problems.append(f"{label} sha256 does not match the floor artifact")
+        cell_provenance = cell.get("provenance")
+        if not isinstance(cell_provenance, Mapping):
             continue
-        try:
-            if is_log:
-                parsed: object = [
-                    json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()
-                ]
-            else:
-                parsed = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            problems.append(f"{label} is not valid UTF-8 JSON evidence: {exc}")
-            continue
-        members = _order_member_ids(parsed, campaign_log=is_log)
-        if members is None:
-            problems.append(f"{label} does not contain an executed member order")
-            continue
-        positions: dict[str, list[int]] = {}
-        for index, bundle_id in enumerate(members):
-            positions.setdefault(bundle_id, []).append(index)
-        for sequence in sequences:
-            if any(len(positions.get(bundle_id, ())) != 1 for bundle_id in sequence):
-                problems.append(f"{label} does not bind every calibration bundle exactly once")
-                break
-            ordered = [positions[bundle_id][0] for bundle_id in sequence]
-            if ordered != sorted(ordered):
-                problems.append(f"{label} disagrees with frozen calibration member order")
-                break
-            if len(sequence) == 4 and ordered != list(range(ordered[0], ordered[0] + 4)):
-                problems.append(f"{label} does not preserve a contiguous A/B/B/A block")
-                break
-    return tuple(problems)
+        for component_name in ("absolute", "comparative"):
+            component = cell_provenance.get(component_name)
+            if not isinstance(component, Mapping):
+                continue
+            where = f"cells[{cell_index}].provenance.{component_name}"
+            root_id = component.get("evidence_root_id")
+            root_value = (
+                evidence_roots.get(root_id)
+                if isinstance(root_id, str)
+                else None
+            )
+            if root_value is None:
+                problems.append(
+                    f"missing_evidence_root_mapping: {root_id!r}"
+                )
+                continue
+            root = Path(root_value)
+            evidence = (
+                (
+                    "order_manifest",
+                    root / "order_manifest.json",
+                    component.get("order_manifest"),
+                    False,
+                ),
+                (
+                    "campaign_log",
+                    root / "campaign_log.jsonl",
+                    component.get("campaign_log"),
+                    True,
+                ),
+            )
+            sequences = [
+                sequence
+                for sequence in _component_order_sequences(
+                    cell,
+                    component_name,
+                )
+                if sequence
+            ]
+            for label, path, pin, is_log in evidence:
+                if not isinstance(pin, Mapping):
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.{label} "
+                        "provenance is missing"
+                    )
+                    continue
+                try:
+                    raw = path.read_bytes()
+                except OSError as exc:
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.{label} "
+                        f"cannot be read beneath {root_id!r}: {exc}"
+                    )
+                    continue
+                if hashlib.sha256(raw).hexdigest() != pin.get("sha256"):
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.{label} "
+                        f"sha256 mismatch beneath {root_id!r}"
+                    )
+                    continue
+                try:
+                    if is_log:
+                        parsed: object = [
+                            json.loads(line)
+                            for line in raw.decode("utf-8").splitlines()
+                            if line.strip()
+                        ]
+                    else:
+                        parsed = json.loads(raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.{label} "
+                        f"is not valid UTF-8 JSON evidence: {exc}"
+                    )
+                    continue
+                if (
+                    not is_log
+                    and (
+                        not isinstance(parsed, Mapping)
+                        or parsed.get("manifest_id") != pin.get("manifest_id")
+                    )
+                ):
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}."
+                        "order_manifest id mismatch"
+                    )
+                    continue
+                members = _order_member_ids(parsed, campaign_log=is_log)
+                if members is None:
+                    problems.append(
+                        f"component_evidence_root_disagreement: {where}.{label} "
+                        "does not contain an executed member order"
+                    )
+                    continue
+                positions: dict[str, list[int]] = {}
+                for index, bundle_id in enumerate(members):
+                    positions.setdefault(bundle_id, []).append(index)
+                for sequence in sequences:
+                    if any(
+                        len(positions.get(bundle_id, ())) != 1
+                        for bundle_id in sequence
+                    ):
+                        problems.append(
+                            f"component_evidence_root_disagreement: {where}."
+                            f"{label} does not bind every calibration bundle "
+                            "exactly once"
+                        )
+                        break
+                    ordered = [positions[bundle_id][0] for bundle_id in sequence]
+                    if ordered != sorted(ordered):
+                        problems.append(
+                            f"component_evidence_root_disagreement: {where}."
+                            f"{label} disagrees with frozen calibration member "
+                            "order"
+                        )
+                        break
+                    if len(sequence) == 4 and ordered != list(
+                        range(ordered[0], ordered[0] + 4)
+                    ):
+                        problems.append(
+                            f"component_evidence_root_disagreement: {where}."
+                            f"{label} does not preserve a contiguous A/B/B/A "
+                            "block"
+                        )
+                        break
+    return tuple(dict.fromkeys(problems))
 
 
 def bind_floor_artifact_evidence(
     artifact: Mapping[str, Any],
     floor_path: Path,
-    runs_root: Path,
+    evidence_roots: Mapping[str, Path] | Path,
     *,
     strict_validator: StrictValidator,
 ) -> FloorEvidenceBinding:
-    """Bind stored calibration values to strict bundle bytes and order logs."""
+    """Bind v2 component values to their named strict evidence roots."""
 
     floor_path = Path(floor_path)
-    runs_root = Path(runs_root)
-    global_problems = list(_campaign_order_binding_problems(artifact, floor_path, runs_root))
+    normalized_roots, root_mapping_problems = _normalize_evidence_roots(
+        artifact, evidence_roots
+    )
+    global_problems = [
+        *root_mapping_problems,
+        *_campaign_order_binding_problems(
+            artifact,
+            floor_path,
+            normalized_roots,
+        ),
+    ]
     bound_ids: set[str] = set()
     identities: dict[str, str] = {}
     stack_hashes: dict[str, str] = {}
     bound_hashes: set[str] = set()
     problems_by_cell: dict[str, tuple[str, ...]] = {}
     cache: dict[
-        tuple[str, str],
+        tuple[str, str, str],
         tuple[
             str,
             str,
@@ -833,28 +1119,73 @@ def bind_floor_artifact_evidence(
             cell_problems.append(
                 f"phase metric {metric_name!r} bound to non-phase window_class {cell_window_class!r}"
             )
-        records: list[tuple[Mapping[str, Any], str | None]] = []
+        records: list[
+            tuple[Mapping[str, Any], str | None, Path]
+        ] = []
+        cell_provenance = cell.get("provenance")
         absolute = cell.get("absolute")
-        if isinstance(absolute, Mapping) and isinstance(absolute.get("bundle_observations"), list):
+        absolute_provenance = (
+            cell_provenance.get("absolute")
+            if isinstance(cell_provenance, Mapping)
+            else None
+        )
+        absolute_root_id = (
+            absolute_provenance.get("evidence_root_id")
+            if isinstance(absolute_provenance, Mapping)
+            else None
+        )
+        absolute_root = (
+            normalized_roots.get(absolute_root_id)
+            if isinstance(absolute_root_id, str)
+            else None
+        )
+        if (
+            isinstance(absolute, Mapping)
+            and isinstance(absolute.get("bundle_observations"), list)
+            and absolute_root is not None
+        ):
             records.extend(
-                (row, None)
+                (row, None, absolute_root)
                 for row in absolute["bundle_observations"]
                 if isinstance(row, Mapping)
             )
         comparative = cell.get("comparative")
-        if isinstance(comparative, Mapping) and isinstance(comparative.get("blocks"), list):
+        comparative_provenance = (
+            cell_provenance.get("comparative")
+            if isinstance(cell_provenance, Mapping)
+            else None
+        )
+        comparative_root_id = (
+            comparative_provenance.get("evidence_root_id")
+            if isinstance(comparative_provenance, Mapping)
+            else None
+        )
+        comparative_root = (
+            normalized_roots.get(comparative_root_id)
+            if isinstance(comparative_root_id, str)
+            else None
+        )
+        if (
+            isinstance(comparative, Mapping)
+            and isinstance(comparative.get("blocks"), list)
+            and comparative_root is not None
+        ):
             for block in comparative["blocks"]:
                 members = block.get("members") if isinstance(block, Mapping) else None
                 if isinstance(members, list):
                     records.extend(
-                        (row, str(block.get("block_id", "")))
+                        (
+                            row,
+                            str(block.get("block_id", "")),
+                            comparative_root,
+                        )
                         for row in members
                         if isinstance(row, Mapping)
                     )
         observed_identity_hashes: set[str] = set()
         observed_stack_hashes: set[str] = set()
         cell_hashes: set[str] = set()
-        for record, expected_block_id in records:
+        for record, expected_block_id, evidence_root in records:
             bundle_id = record.get("bundle_id")
             if (
                 not isinstance(bundle_id, str)
@@ -864,9 +1195,13 @@ def bind_floor_artifact_evidence(
             ):
                 cell_problems.append("calibration bundle_id is not a safe basename")
                 continue
-            cache_key = (bundle_id, str(metric_name))
+            cache_key = (
+                str(evidence_root.resolve()),
+                bundle_id,
+                str(metric_name),
+            )
             if cache_key not in cache:
-                path = runs_root / bundle_id
+                path = evidence_root / bundle_id
                 local_problems: list[str] = []
                 try:
                     strict = tuple(strict_validator(path, True))
@@ -1101,7 +1436,10 @@ def _campaign_cooldown_evidence(
     manifest_dir = runs_root / "campaign_manifests"
     if not manifest_dir.is_dir():
         return {}
-    candidates: dict[str, list[Mapping[str, Any]]] = {}
+    # Each candidate is paired with its manifest-position identity so a
+    # duplicate can be matched against an operator supersession record below.
+    candidates: dict[str, list[tuple[tuple[str, int, int], Mapping[str, Any]]]] = {}
+    declared_occurrence_counts: dict[str, int] = {}
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -1157,11 +1495,18 @@ def _campaign_cooldown_evidence(
                 "raw_artifact": dict(raw_artifact) if raw_artifact is not None else None,
             }
 
-        for member in raw["members"]:
+        manifest_rel = f"campaign_manifests/{path.name}"
+        for member_index, member in enumerate(raw["members"]):
             if not isinstance(member, Mapping) or member.get("execution") != "invoked":
                 continue
             member_run_id = member.get("run_id")
             bundle_ids = member.get("bundle_ids")
+            if isinstance(bundle_ids, list):
+                for bundle_id in bundle_ids:
+                    if isinstance(bundle_id, str) and bundle_id:
+                        declared_occurrence_counts[bundle_id] = (
+                            declared_occurrence_counts.get(bundle_id, 0) + 1
+                        )
             if (
                 not isinstance(member_run_id, str)
                 or not member_run_id
@@ -1192,7 +1537,16 @@ def _campaign_cooldown_evidence(
                         following_run_id=bundle_id,
                         id_matches_member=id_matches_member,
                     )
-                    candidates.setdefault(bundle_id, []).append(normalized)
+                    # A bundle id repeated inside one member gets a position
+                    # no valid supersession record can name, so it refuses.
+                    bundle_index = (
+                        bundle_ids.index(bundle_id)
+                        if bundle_ids.count(bundle_id) == 1
+                        else -1
+                    )
+                    candidates.setdefault(bundle_id, []).append(
+                        ((manifest_rel, member_index, bundle_index), normalized)
+                    )
                 continue
 
             # Single-repetition rows and provenance written before the
@@ -1213,16 +1567,39 @@ def _campaign_cooldown_evidence(
                 following_run_id=member_run_id,
                 id_matches_member=ids_match_member,
             )
-            for bundle_id in bundle_ids:
-                candidates.setdefault(bundle_id, []).append(normalized)
+            for bundle_index, bundle_id in enumerate(bundle_ids):
+                # A bundle id repeated inside one member gets a position no
+                # valid supersession record can name, so it refuses.
+                position = (
+                    bundle_index if bundle_ids.count(bundle_id) == 1 else -1
+                )
+                candidates.setdefault(bundle_id, []).append(
+                    ((manifest_rel, member_index, position), normalized)
+                )
 
+    supersessions = validated_supersession_entries(runs_root)
     resolved: dict[str, Mapping[str, Any]] = {}
     for bundle_id, rows in candidates.items():
-        # Candidate occurrence count is evidence: two member records for one
-        # bundle are ambiguous even when their bytes normalize identically.
-        # Canonical-set collapse used to launder byte-identical duplicates.
-        if len(rows) == 1:
-            resolved[bundle_id] = rows[0]
+        # Declared occurrence count is evidence: duplicate declarations remain
+        # ambiguous even when a malformed physical row was dropped or the
+        # surviving bytes normalize identically.
+        # The single licensed exception is an operator supersession artifact
+        # that names EXACTLY the observed occurrences; it selects which
+        # occurrence's evidence governs and licenses nothing wider.
+        # A malformed physical row may have been dropped while candidates
+        # were built, so only the declarations can license this fast path.
+        if (
+            len(rows) == 1
+            and declared_occurrence_counts.get(bundle_id) == 1
+        ):
+            resolved[bundle_id] = rows[0][1]
+            continue
+        selected = supersession_selected_occurrence_identity(
+            supersessions, bundle_id, [identity for identity, _ in rows]
+        )
+        selected_rows = [row for identity, row in rows if identity == selected]
+        if selected is not None and len(selected_rows) == 1:
+            resolved[bundle_id] = selected_rows[0]
         else:
             resolved[bundle_id] = {
                 "result": "unknown",
@@ -1382,7 +1759,7 @@ def realized_scientific_identity(
     ):
         return None
     assert isinstance(artifact, Mapping)
-    artifact_sha = artifact.get("sha256")
+    artifact_sha = artifact.get("sha256") or artifact.get("folded_sha256")
     if (
         artifact.get("status") != "ok"
         or not isinstance(artifact_sha, str)
@@ -1830,14 +2207,23 @@ def load_analysis_inputs(
     floor_artifact_path: Path,
     *,
     strict_validator: StrictValidator,
+    evidence_roots: Mapping[str, Path] | None = None,
 ) -> LoadedAnalysisInputs:
+    """Load analysis-corpus inputs and independently bind floor evidence.
+
+    ``runs_root`` is always the analysis-corpus root. When ``evidence_roots``
+    is absent it also supplies the legacy bare-Path floor-binding input; an
+    artifact declaring multiple distinct evidence-root IDs then refuses with
+    ``evidence_root_mapping_required``.
+    """
+
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
     floor_binding = bind_floor_artifact_evidence(
         floor_artifact,
         Path(floor_artifact_path),
-        runs_root,
+        evidence_roots if evidence_roots is not None else runs_root,
         strict_validator=strict_validator,
     )
     cleanup_records = _campaign_claim_records(
@@ -2941,6 +3327,7 @@ __all__ = [
     "bind_floor_artifact_evidence",
     "BundleEvidence",
     "cleanup_claim_evidence_flags",
+    "declared_evidence_roots",
     "FloorRequest",
     "FloorResolution",
     "FloorEvidenceBinding",

@@ -6,7 +6,7 @@ Implements the accepted P2-039 operational spec
 - the absolute and comparative D-054 false-effect floors with the frozen
   small-sample guard factor;
 - the exact ABBA block delta ``(B1 + B2 - A1 - A2) / 2``;
-- emit/validate for the versioned ``joulewise.detection_floor_artifact.v1``
+- emit/validate for the versioned ``joulewise.detection_floor_artifact.v2``
   calculation records; and
 - the pure conservative regime-transport refusal rule
   (``same_stack_componentwise_worst_case.v1``).
@@ -29,9 +29,14 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.whole_window import (
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
+    "FLOOR_METRIC_CATALOG",
     "METHOD_ID",
     "GUARD_RULE_ID",
     "TRANSPORT_RULE_ID",
@@ -62,9 +67,10 @@ __all__ = [
     "transport_refusal_reasons",
     "canonical_domain_sha256",
     "complete_bundle_sha256",
+    "validate_floor_metric_window_class",
 ]
 
-SCHEMA_VERSION = "joulewise.detection_floor_artifact.v1"
+SCHEMA_VERSION = "joulewise.detection_floor_artifact.v2"
 METHOD_ID = "d054_false_effect_guard.v1"
 GUARD_RULE_ID = "residual_df_ratio_to_n10.v1"
 TRANSPORT_RULE_ID = "same_stack_componentwise_worst_case.v1"
@@ -84,14 +90,27 @@ SINGLE_COUNT_DISCIPLINE_ID = "attribution_floor_plus_claim_side_bound.v1"
 _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
-_CALIBRATION_SCOPES = ("window_a", "window_b_revalidation", "smoke")
-_WINDOW_CLASSES = ("request", "phase", "item", "level", "session")
-_METRICS = (
+_CALIBRATION_SCOPES = (
+    "window_a",
+    "window_b_revalidation",
+    "production_window",
+    "smoke",
+)
+_CONSUMPTION_SEMANTICS_IDS = {
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+}
+_EVIDENCE_ROOT_IDS = {"a10", "window_c"}
+FLOOR_METRIC_CATALOG = (
     "gross_energy_j",
     "energy_request_j",
     "idle_subtracted_energy_j",
+    "phase_energy_j.tokenize",
     "phase_energy_j.prefill",
     "phase_energy_j.decode",
+    "phase_energy_j.serialize",
+    "phase_energy_j.transfer",
+    "phase_energy_j.deserialize",
 )
 # DATA FOR A FUTURE GATE, NOT ENFORCEMENT: source_class records how the
 # artifact's source evidence was obtained, but it does not make that evidence
@@ -160,6 +179,40 @@ TRANSPORT_REASON_CODES = (
     "consumer_term_unknown",
     "transport_group_incomplete",
 )
+
+
+def validate_floor_metric_window_class(
+    metric: object,
+    window_class: object,
+) -> tuple[str, str]:
+    """Return a governed floor metric/window pair or raise ``ValueError``."""
+
+    if not isinstance(metric, str) or not metric:
+        raise ValueError("cell metric must be a nonempty string")
+    window_classes = ("request", "phase")
+    if window_class not in window_classes:
+        raise ValueError(
+            f"cell window_class must be one of {window_classes}, "
+            f"got {window_class!r}"
+        )
+    if metric not in FLOOR_METRIC_CATALOG:
+        raise ValueError(
+            f"invalid metric {metric!r}: not in FLOOR_METRIC_CATALOG"
+        )
+    expected_window_class = (
+        "phase" if metric.startswith("phase_energy_j.") else "request"
+    )
+    if window_class != expected_window_class:
+        if expected_window_class == "phase":
+            raise ValueError(
+                f"phase metric {metric!r} requires window_class 'phase', "
+                f"got {window_class!r}"
+            )
+        raise ValueError(
+            "phase cells extract only catalogued phase_energy_j metrics, "
+            f"got {metric!r}"
+        )
+    return metric, str(window_class)
 
 
 def attribution_single_count_discipline() -> dict[str, object]:
@@ -340,7 +393,7 @@ def _admissible_widths(
     widths_j: Sequence[float] | None, *, expected_n: int
 ) -> list[float]:
     if widths_j is None:
-        return [0.0] * expected_n
+        raise ValueError("admissible-set half-widths are required")
     widths = _clean_values(widths_j, "admissible-set half-widths")
     if len(widths) != expected_n:
         raise ValueError("admissible-set half-width count must match point estimates")
@@ -534,7 +587,7 @@ def _corner_maximized_unguarded_floor(
 def absolute_false_effect_floor(
     values_j: Sequence[float],
     *,
-    admissible_half_widths_j: Sequence[float] | None = None,
+    admissible_half_widths_j: Sequence[float],
 ) -> FloorEstimate:
     """D-054 absolute floor, widened by member admissible-set uncertainty."""
     values = _clean_values(values_j, "energies")
@@ -567,7 +620,7 @@ def absolute_false_effect_floor(
 def comparative_false_effect_floor(
     block_deltas_j: Sequence[float],
     *,
-    admissible_half_widths_j: Sequence[float] | None = None,
+    admissible_half_widths_j: Sequence[float],
 ) -> FloorEstimate:
     """D-054 comparative false-effect floor over ABBA block deltas.
 
@@ -595,7 +648,7 @@ def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Artifact emit (joulewise.detection_floor_artifact.v1)
+# Artifact emit (joulewise.detection_floor_artifact.v2)
 # ---------------------------------------------------------------------------
 
 
@@ -623,10 +676,14 @@ def _add_whole_window_drift_allowance(
     *,
     base_unguarded_j: float,
     base_guarded_j: float | None,
-    whole_window_drift_allowance: Mapping | None,
+    consumption_semantics_id: str,
+    whole_window_drift_allowance: Mapping,
 ) -> dict:
-    if whole_window_drift_allowance is None:
-        return record
+    if consumption_semantics_id not in _CONSUMPTION_SEMANTICS_IDS:
+        raise ValueError(
+            f"unknown whole-window consumption semantics: "
+            f"{consumption_semantics_id!r}"
+        )
     allowance = whole_window_drift_allowance.get("allowance_j")
     if (
         isinstance(allowance, bool)
@@ -650,6 +707,7 @@ def _add_whole_window_drift_allowance(
     return {
         **record,
         "whole_window_evaluation_basis_sha256": basis_sha256,
+        "consumption_semantics_id": consumption_semantics_id,
         "whole_window_drift_allowance": dict(whole_window_drift_allowance),
         "drift_widened_unguarded_floor_j": base_unguarded_j + allowance,
         "drift_widened_guarded_floor_j": (
@@ -658,30 +716,116 @@ def _add_whole_window_drift_allowance(
     }
 
 
+def _strict_builder_floor_fields(
+    estimate: FloorEstimate,
+) -> tuple[tuple[float, ...], float, float | None]:
+    widths = estimate.admissible_half_widths_j
+    if not widths:
+        raise ValueError(
+            "floor estimate requires nonempty authenticated admissible-set widths"
+        )
+    if len(widths) != estimate.n:
+        raise ValueError(
+            "floor estimate admissible-set width count must equal estimate n"
+        )
+    validated_widths = tuple(
+        _admissible_widths(widths, expected_n=estimate.n)
+    )
+
+    corner_unguarded = estimate.corner_widened_unguarded_floor_j
+    corner_guarded = estimate.corner_widened_guarded_floor_j
+    if (
+        isinstance(estimate.unguarded_floor_j, bool)
+        or not isinstance(estimate.unguarded_floor_j, int | float)
+        or not math.isfinite(float(estimate.unguarded_floor_j))
+        or float(estimate.unguarded_floor_j) < 0.0
+    ):
+        raise ValueError(
+            "floor estimate requires a finite nonnegative unguarded floor"
+        )
+    unguarded_floor = float(estimate.unguarded_floor_j)
+    if (
+        isinstance(corner_unguarded, bool)
+        or not isinstance(corner_unguarded, int | float)
+        or not math.isfinite(float(corner_unguarded))
+        or float(corner_unguarded) < 0.0
+    ):
+        raise ValueError(
+            "floor estimate requires a finite nonnegative "
+            "corner-widened unguarded floor"
+        )
+    corner_unguarded = float(corner_unguarded)
+
+    has_guard_factor = estimate.guard_factor is not None
+    has_guarded_floor = estimate.guarded_floor_j is not None
+    guarded_estimate = estimate.n >= GUARD_MINIMUM_N
+    if guarded_estimate and not (has_guard_factor and has_guarded_floor):
+        raise ValueError(
+            "guarded floor estimate requires guard_factor and guarded_floor_j"
+        )
+    if not guarded_estimate and (has_guard_factor or has_guarded_floor):
+        raise ValueError(
+            "smoke floor estimate requires null guard_factor and guarded_floor_j"
+        )
+    if not guarded_estimate:
+        if corner_guarded is not None:
+            raise ValueError(
+                "smoke floor estimate requires a null corner-widened guarded floor"
+            )
+        return validated_widths, corner_unguarded, None
+
+    guard_factor = estimate.guard_factor
+    guarded_floor = estimate.guarded_floor_j
+    if (
+        isinstance(guard_factor, bool)
+        or not isinstance(guard_factor, int | float)
+        or not math.isfinite(float(guard_factor))
+        or float(guard_factor) < 1.0
+        or isinstance(guarded_floor, bool)
+        or not isinstance(guarded_floor, int | float)
+        or not math.isfinite(float(guarded_floor))
+        or float(guarded_floor) < 0.0
+    ):
+        raise ValueError(
+            "guarded floor estimate requires finite nonnegative guarded fields"
+        )
+    if (
+        isinstance(corner_guarded, bool)
+        or not isinstance(corner_guarded, int | float)
+        or not math.isfinite(float(corner_guarded))
+        or float(corner_guarded) < 0.0
+    ):
+        raise ValueError(
+            "guarded floor estimate requires both corner-widened fields"
+        )
+    guard_factor = float(guard_factor)
+    guarded_floor = float(guarded_floor)
+    corner_guarded = float(corner_guarded)
+    if guarded_floor != guard_factor * unguarded_floor:
+        raise ValueError(
+            "guarded floor must equal guard_factor times unguarded floor"
+        )
+    if corner_guarded != guard_factor * corner_unguarded:
+        raise ValueError(
+            "corner-widened guarded floor must equal guard_factor times "
+            "corner-widened unguarded floor"
+        )
+    return validated_widths, corner_unguarded, corner_guarded
+
+
 def build_absolute_record(
     estimate: FloorEstimate,
     bundle_observations: Sequence[Mapping],
     *,
-    whole_window_drift_allowance: Mapping | None = None,
+    consumption_semantics_id: str,
+    whole_window_drift_allowance: Mapping,
 ) -> dict:
     if estimate.kind != "absolute":
         raise ValueError("absolute record requires an absolute FloorEstimate")
     if len(bundle_observations) != estimate.n:
         raise ValueError("bundle_observations length must equal n")
-    widths = (
-        estimate.admissible_half_widths_j
-        if estimate.admissible_half_widths_j
-        else (0.0,) * estimate.n
-    )
-    widened_unguarded = (
-        estimate.corner_widened_unguarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.unguarded_floor_j
-    )
-    widened_guarded = (
-        estimate.corner_widened_guarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.guarded_floor_j
+    widths, widened_unguarded, widened_guarded = (
+        _strict_builder_floor_fields(estimate)
     )
     record = {
         "n": estimate.n,
@@ -704,6 +848,7 @@ def build_absolute_record(
         record,
         base_unguarded_j=widened_unguarded,
         base_guarded_j=widened_guarded,
+        consumption_semantics_id=consumption_semantics_id,
         whole_window_drift_allowance=whole_window_drift_allowance,
     )
 
@@ -712,26 +857,15 @@ def build_comparative_record(
     estimate: FloorEstimate,
     blocks: Sequence[Mapping],
     *,
-    whole_window_drift_allowance: Mapping | None = None,
+    consumption_semantics_id: str,
+    whole_window_drift_allowance: Mapping,
 ) -> dict:
     if estimate.kind != "comparative":
         raise ValueError("comparative record requires a comparative FloorEstimate")
     if len(blocks) != estimate.n:
         raise ValueError("blocks length must equal n_blocks")
-    widths = (
-        estimate.admissible_half_widths_j
-        if estimate.admissible_half_widths_j
-        else (0.0,) * estimate.n
-    )
-    widened_unguarded = (
-        estimate.corner_widened_unguarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.unguarded_floor_j
-    )
-    widened_guarded = (
-        estimate.corner_widened_guarded_floor_j
-        if estimate.corner_widened_unguarded_floor_j is not None
-        else estimate.guarded_floor_j
+    widths, widened_unguarded, widened_guarded = (
+        _strict_builder_floor_fields(estimate)
     )
     record = {
         "n_blocks": estimate.n,
@@ -754,8 +888,71 @@ def build_comparative_record(
         record,
         base_unguarded_j=widened_unguarded,
         base_guarded_j=widened_guarded,
+        consumption_semantics_id=consumption_semantics_id,
         whole_window_drift_allowance=whole_window_drift_allowance,
     )
+
+
+def _normalized_source_regime(source_regime: Mapping) -> dict:
+    if not isinstance(source_regime, Mapping):
+        raise ValueError("component provenance requires source_regime")
+    record = copy.deepcopy(dict(source_regime))
+    stack_identity = record.get("stack_identity")
+    if not isinstance(stack_identity, Mapping):
+        raise ValueError("component source_regime requires stack_identity")
+    record["stack_identity_sha256"] = canonical_domain_sha256(
+        STACK_IDENTITY_DOMAIN,
+        stack_identity,
+    )
+    if not isinstance(record.get("stress_observed"), Mapping):
+        raise ValueError("component source_regime requires stress_observed")
+    return record
+
+
+def _compose_bound_term_entries(entries: Sequence[Mapping]) -> dict:
+    if any(entry.get("applicability") == "unknown" for entry in entries):
+        return {"applicability": "unknown", "maximum": None}
+    required = [
+        entry.get("maximum")
+        for entry in entries
+        if entry.get("applicability") == "required"
+    ]
+    if required:
+        return {"applicability": "required", "maximum": max(required)}
+    return {"applicability": "not_applicable", "maximum": None}
+
+
+def _compose_component_source_regimes(
+    source_regimes: Sequence[Mapping],
+) -> dict:
+    if not source_regimes:
+        raise ValueError("floor cell requires at least one component source_regime")
+    regimes = [_normalized_source_regime(value) for value in source_regimes]
+    stack_hash = regimes[0]["stack_identity_sha256"]
+    if any(regime["stack_identity_sha256"] != stack_hash for regime in regimes[1:]):
+        raise ValueError("component source_regime stack identities must match")
+    observations = [regime["stress_observed"] for regime in regimes]
+    stress_observed = {
+        field: min(observed[field] for observed in observations)
+        for field in _ENVELOPE_MIN_FIELDS
+    }
+    stress_observed.update(
+        {
+            field: max(observed[field] for observed in observations)
+            for field in _ENVELOPE_MAX_FIELDS
+        }
+    )
+    stress_observed["bound_terms"] = {
+        term: _compose_bound_term_entries(
+            [observed["bound_terms"][term] for observed in observations]
+        )
+        for term in _BOUND_TERMS
+    }
+    return {
+        "stack_identity": copy.deepcopy(regimes[0]["stack_identity"]),
+        "stack_identity_sha256": stack_hash,
+        "stress_observed": stress_observed,
+    }
 
 
 def build_floor_cell(
@@ -765,7 +962,6 @@ def build_floor_cell(
     eligibility: Mapping,
     absolute: Optional[Mapping],
     comparative: Optional[Mapping],
-    source_regime: Mapping,
     transport_group_id: str,
     provenance: Mapping,
 ) -> dict:
@@ -775,31 +971,38 @@ def build_floor_cell(
         key_record["condition_family_sha256"] = canonical_domain_sha256(
             CONDITION_FAMILY_DOMAIN, definition
         )
-    regime_record = dict(source_regime)
-    stack_identity = regime_record.get("stack_identity")
-    if isinstance(stack_identity, Mapping):
-        regime_record["stack_identity_sha256"] = canonical_domain_sha256(
-            STACK_IDENTITY_DOMAIN, stack_identity
+    provenance_record = copy.deepcopy(dict(provenance))
+    component_regimes = []
+    for component_name, component_record in (
+        ("absolute", absolute),
+        ("comparative", comparative),
+    ):
+        component_provenance = provenance_record.get(component_name)
+        if component_record is None:
+            if component_provenance is not None:
+                raise ValueError(
+                    f"{component_name} provenance requires a component record"
+                )
+            continue
+        if not isinstance(component_provenance, Mapping):
+            raise ValueError(
+                f"{component_name} record requires component provenance"
+            )
+        normalized_regime = _normalized_source_regime(
+            component_provenance.get("source_regime")
         )
+        component_provenance = dict(component_provenance)
+        component_provenance["source_regime"] = normalized_regime
+        provenance_record[component_name] = component_provenance
+        component_regimes.append(normalized_regime)
+    regime_record = _compose_component_source_regimes(component_regimes)
     floor_abs = (
-        absolute.get(
-            "drift_widened_guarded_floor_j",
-            absolute.get(
-                "corner_widened_guarded_floor_j",
-                absolute.get("guarded_floor_j"),
-            ),
-        )
+        absolute.get("drift_widened_guarded_floor_j")
         if absolute is not None
         else None
     )
     floor_cmp = (
-        comparative.get(
-            "drift_widened_guarded_floor_j",
-            comparative.get(
-                "corner_widened_guarded_floor_j",
-                comparative.get("guarded_floor_j"),
-            ),
-        )
+        comparative.get("drift_widened_guarded_floor_j")
         if comparative is not None
         else None
     )
@@ -818,7 +1021,7 @@ def build_floor_cell(
         "comparative": dict(comparative) if comparative is not None else None,
         "source_regime": regime_record,
         "transport_group_id": transport_group_id,
-        "provenance": dict(provenance),
+        "provenance": provenance_record,
     }
     limited_records = [
         value
@@ -941,7 +1144,7 @@ def build_floor_artifact(
     provenance: Mapping,
     cells: Sequence[Mapping],
     transport_groups: Sequence[Mapping],
-    source_class: str = "synthetic",
+    source_class: str,
     idle_drift_guard: Optional[Mapping] = None,
 ) -> dict:
     if idle_drift_guard is None:
@@ -1029,6 +1232,15 @@ _WIDENED_FLOOR_KEYS = {
     "corner_widened_unguarded_floor_j",
     "corner_widened_guarded_floor_j",
 }
+_DRIFT_WIDENED_FLOOR_KEYS = {
+    "whole_window_drift_allowance",
+    "drift_widened_unguarded_floor_j",
+    "drift_widened_guarded_floor_j",
+}
+_COMPONENT_WINDOW_KEYS = {
+    "whole_window_evaluation_basis_sha256",
+    "consumption_semantics_id",
+} | _DRIFT_WIDENED_FLOOR_KEYS
 _ABS_KEYS = {
     "n",
     "mean_j",
@@ -1041,7 +1253,7 @@ _ABS_KEYS = {
     "guard_factor",
     "guarded_floor_j",
     "bundle_observations",
-} | _WIDENED_FLOOR_KEYS
+} | _WIDENED_FLOOR_KEYS | _COMPONENT_WINDOW_KEYS
 _CMP_KEYS = {
     "n_blocks",
     "mean_delta_j",
@@ -1054,12 +1266,7 @@ _CMP_KEYS = {
     "guard_factor",
     "guarded_floor_j",
     "blocks",
-} | _WIDENED_FLOOR_KEYS
-_DRIFT_WIDENED_FLOOR_KEYS = {
-    "whole_window_drift_allowance",
-    "drift_widened_unguarded_floor_j",
-    "drift_widened_guarded_floor_j",
-}
+} | _WIDENED_FLOOR_KEYS | _COMPONENT_WINDOW_KEYS
 _ATTRIBUTION_LIMIT_RECORD_KEYS = {
     "floor_source",
     "floor_limit_class",
@@ -1079,7 +1286,6 @@ _POINT_FLOOR_DIAGNOSTIC_KEYS = {
     "guard_factor",
     "guarded_floor_j",
 }
-_WHOLE_WINDOW_BASIS_KEYS = {"whole_window_evaluation_basis_sha256"}
 _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS = {
     "claim_family",
     "allowance_j",
@@ -1112,26 +1318,34 @@ _MEMBER_KEYS = {
 }
 _PROVENANCE_KEYS = {
     "calibration_plan",
-    "order_manifest",
-    "campaign_log",
-    "extraction_report_sha256",
-    "extraction_spec_sha256",
     "mint_tool_version",
     "implementation",
 }
-_CALIBRATION_PLAN_KEYS = {"plan_id", "sha256"}
+_CALIBRATION_PLAN_KEYS = {
+    "plan_id",
+    "declared_calibration_scope",
+    "relative_path",
+    "sha256",
+}
 _ORDER_MANIFEST_KEYS = {"manifest_id", "sha256"}
 _CAMPAIGN_LOG_KEYS = {"sha256"}
+_HASH_PIN_KEYS = {"sha256"}
 _IMPLEMENTATION_KEYS = {
     "project_commit",
     "project_tree_state",
     "python_package",
 }
-_CELL_PROVENANCE_KEYS = {
-    "absolute_calibration_cell_id",
-    "comparative_calibration_cell_id",
+_CELL_PROVENANCE_KEYS = {"absolute", "comparative"}
+_COMPONENT_PROVENANCE_KEYS = {
+    "calibration_cell_id",
+    "evidence_root_id",
+    "order_manifest",
+    "campaign_log",
+    "extraction_report",
+    "extraction_spec",
     "bundle_ids",
     "bundle_sha256s",
+    "source_regime",
 }
 _GROUP_KEYS = {
     "transport_group_id",
@@ -1326,40 +1540,21 @@ def _validate_provenance(provenance, where, errors) -> str | None:
             )
         else:
             calibration_plan_sha256 = calibration_plan["sha256"]
-
-    order_manifest = provenance["order_manifest"]
-    if _check_keys(
-        order_manifest,
-        _ORDER_MANIFEST_KEYS,
-        f"{where}.order_manifest",
-        errors,
-    ):
-        if (
-            not isinstance(order_manifest["manifest_id"], str)
-            or not order_manifest["manifest_id"].strip()
+        if calibration_plan["declared_calibration_scope"] not in (
+            _CALIBRATION_SCOPES
         ):
             errors.append(
-                f"{where}.order_manifest.manifest_id: must be a nonempty string"
+                f"{where}.calibration_plan.declared_calibration_scope: "
+                "must be a recognized calibration scope"
             )
-        if not _is_hex(order_manifest["sha256"]):
+        if (
+            not isinstance(calibration_plan["relative_path"], str)
+            or not calibration_plan["relative_path"].strip()
+        ):
             errors.append(
-                f"{where}.order_manifest.sha256: must be 64 lowercase hex chars"
+                f"{where}.calibration_plan.relative_path: "
+                "must be a nonempty string"
             )
-
-    campaign_log = provenance["campaign_log"]
-    if _check_keys(
-        campaign_log,
-        _CAMPAIGN_LOG_KEYS,
-        f"{where}.campaign_log",
-        errors,
-    ) and not _is_hex(campaign_log["sha256"]):
-        errors.append(
-            f"{where}.campaign_log.sha256: must be 64 lowercase hex chars"
-        )
-
-    for key in ("extraction_report_sha256", "extraction_spec_sha256"):
-        if not _is_hex(provenance[key]):
-            errors.append(f"{where}.{key}: must be 64 lowercase hex chars")
     if (
         not isinstance(provenance["mint_tool_version"], str)
         or not provenance["mint_tool_version"].strip()
@@ -1452,106 +1647,97 @@ def _validate_estimate_math(
         where,
         errors,
     )
-    present_drift_keys = set(record) & _DRIFT_WIDENED_FLOOR_KEYS
-    basis_present = "whole_window_evaluation_basis_sha256" in record
     basis_sha256 = record.get("whole_window_evaluation_basis_sha256")
-    if basis_present and not _is_hex(basis_sha256):
+    if not _is_hex(basis_sha256):
         errors.append(
             f"{where}.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
         )
-    if basis_present and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
+    semantics_id = record.get("consumption_semantics_id")
+    if semantics_id not in _CONSUMPTION_SEMANTICS_IDS:
         errors.append(
-            f"{where}: whole-window basis requires the complete drift-widened field group"
+            f"{where}.consumption_semantics_id: unknown whole-window "
+            "consumption semantics"
         )
-    if present_drift_keys and not basis_present:
-        errors.append(
-            f"{where}: whole-window drift-widened fields require an evaluation basis"
-        )
-    if present_drift_keys and present_drift_keys != _DRIFT_WIDENED_FLOOR_KEYS:
-        errors.append(
-            f"{where}: whole-window drift-widened fields must be present together"
-        )
-    elif present_drift_keys:
-        allowance_record = record.get("whole_window_drift_allowance")
-        allowance: float | None = None
+    allowance_record = record.get("whole_window_drift_allowance")
+    allowance: float | None = None
+    if _check_keys(
+        allowance_record,
+        _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS,
+        f"{where}.whole_window_drift_allowance",
+        errors,
+    ):
+        claim_family = allowance_record["claim_family"]
+        if claim_family not in {"gross_energy", "idle_subtracted_energy"}:
+            errors.append(
+                f"{where}.whole_window_drift_allowance.claim_family: invalid family"
+            )
+        observed = allowance_record["observed_trajectory_excursion_j"]
+        derived = allowance_record["derived_repeatability_bound_j"]
+        stored_allowance = allowance_record["allowance_j"]
+        if any(
+            not _is_number(value) or value < 0.0
+            for value in (observed, derived)
+        ) or not _is_number(stored_allowance) or stored_allowance <= 0.0:
+            errors.append(
+                f"{where}.whole_window_drift_allowance: numeric components must be finite, nonnegative, and allowance_j > 0"
+            )
+        elif not _close(stored_allowance, max(observed, derived)):
+            errors.append(
+                f"{where}.whole_window_drift_allowance.allowance_j: must equal max(observed, derived)"
+            )
+        else:
+            allowance = float(stored_allowance)
+        if not _is_hex(
+            allowance_record["whole_window_evaluation_basis_sha256"]
+        ):
+            errors.append(
+                f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+            )
+        elif allowance_record[
+            "whole_window_evaluation_basis_sha256"
+        ] != basis_sha256:
+            errors.append(
+                f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: does not match record basis"
+            )
+        provenance = allowance_record["provenance"]
         if _check_keys(
-            allowance_record,
-            _WHOLE_WINDOW_DRIFT_ALLOWANCE_KEYS,
-            f"{where}.whole_window_drift_allowance",
+            provenance,
+            _WHOLE_WINDOW_DRIFT_PROVENANCE_KEYS,
+            f"{where}.whole_window_drift_allowance.provenance",
             errors,
         ):
-            claim_family = allowance_record["claim_family"]
-            if claim_family not in {"gross_energy", "idle_subtracted_energy"}:
+            if not _is_hex(provenance["bound_derivation_sha256"]):
                 errors.append(
-                    f"{where}.whole_window_drift_allowance.claim_family: invalid family"
+                    f"{where}.whole_window_drift_allowance.provenance.bound_derivation_sha256: must be 64 lowercase hex chars"
                 )
-            observed = allowance_record["observed_trajectory_excursion_j"]
-            derived = allowance_record["derived_repeatability_bound_j"]
-            stored_allowance = allowance_record["allowance_j"]
-            if any(
-                not _is_number(value) or value < 0.0
-                for value in (observed, derived)
-            ) or not _is_number(stored_allowance) or stored_allowance <= 0.0:
-                errors.append(
-                    f"{where}.whole_window_drift_allowance: numeric components must be finite, nonnegative, and allowance_j > 0"
-                )
-            elif not _close(stored_allowance, max(observed, derived)):
-                errors.append(
-                    f"{where}.whole_window_drift_allowance.allowance_j: must equal max(observed, derived)"
-                )
-            else:
-                allowance = float(stored_allowance)
-            if not _is_hex(
-                allowance_record["whole_window_evaluation_basis_sha256"]
+            if provenance["observed_component"] != (
+                "trajectory_excursion_max_j"
+            ) or provenance["derived_component"] != (
+                "derived_repeatability_bound_j"
             ):
                 errors.append(
-                    f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: must be 64 lowercase hex chars"
+                    f"{where}.whole_window_drift_allowance.provenance: component names are invalid"
                 )
-            elif allowance_record[
-                "whole_window_evaluation_basis_sha256"
-            ] != basis_sha256:
-                errors.append(
-                    f"{where}.whole_window_drift_allowance.whole_window_evaluation_basis_sha256: does not match record basis"
-                )
-            provenance = allowance_record["provenance"]
-            if _check_keys(
-                provenance,
-                _WHOLE_WINDOW_DRIFT_PROVENANCE_KEYS,
-                f"{where}.whole_window_drift_allowance.provenance",
-                errors,
-            ):
-                if not _is_hex(provenance["bound_derivation_sha256"]):
-                    errors.append(
-                        f"{where}.whole_window_drift_allowance.provenance.bound_derivation_sha256: must be 64 lowercase hex chars"
-                    )
-                if provenance["observed_component"] != (
-                    "trajectory_excursion_max_j"
-                ) or provenance["derived_component"] != (
-                    "derived_repeatability_bound_j"
-                ):
-                    errors.append(
-                        f"{where}.whole_window_drift_allowance.provenance: component names are invalid"
-                    )
-        if allowance is not None:
-            if not _close(
-                record.get("drift_widened_unguarded_floor_j"),
-                widened_unguarded + allowance,
-            ):
-                errors.append(
-                    f"{where}: drift_widened_unguarded_floor_j must equal corner-widened floor plus allowance"
-                )
-            expected_drift_guarded = (
-                widened_guarded + allowance
-                if widened_guarded is not None
-                else None
+    if allowance is not None:
+        if not _close(
+            record.get("drift_widened_unguarded_floor_j"),
+            widened_unguarded + allowance,
+        ):
+            errors.append(
+                f"{where}: drift_widened_unguarded_floor_j must equal corner-widened floor plus allowance"
             )
-            if not _close(
-                record.get("drift_widened_guarded_floor_j"),
-                expected_drift_guarded,
-            ):
-                errors.append(
-                    f"{where}: drift_widened_guarded_floor_j must equal corner-widened guarded floor plus allowance"
-                )
+        expected_drift_guarded = (
+            widened_guarded + allowance
+            if widened_guarded is not None
+            else None
+        )
+        if not _close(
+            record.get("drift_widened_guarded_floor_j"),
+            expected_drift_guarded,
+        ):
+            errors.append(
+                f"{where}: drift_widened_guarded_floor_j must equal corner-widened guarded floor plus allowance"
+            )
     stddev_key = "sample_stddev_j"
     checks = [
         (stddev_key, est.sample_stddev_j),
@@ -1663,24 +1849,166 @@ def _validate_bound_terms(terms, where, errors) -> None:
             errors.append(f"{where}.{term}: maximum must be null when {applicability}")
 
 
-def _validate_stress_observed(observed, where, errors) -> None:
+def _validate_stress_observed(observed, where, errors) -> bool:
+    error_count = len(errors)
     allowed = set(_ENVELOPE_FIELDS) | {"bound_terms"}
     if not _check_keys(observed, allowed, where, errors):
-        return
+        return False
     for field in _ENVELOPE_FIELDS:
         value = observed[field]
         if not _is_number(value) or value < 0:
             errors.append(f"{where}.{field}: must be a finite nonnegative number")
     _validate_bound_terms(observed["bound_terms"], where, errors)
+    return len(errors) == error_count
+
+
+def _validate_source_regime(regime, where, errors) -> bool:
+    if not _check_keys(
+        regime,
+        {"stack_identity", "stack_identity_sha256", "stress_observed"},
+        where,
+        errors,
+    ):
+        return False
+    stack_valid = _validate_hashed_object(
+        regime["stack_identity"],
+        object_keys=_STACK_IDENTITY_KEYS,
+        stored_hash=regime["stack_identity_sha256"],
+        hash_name="stack_identity_sha256",
+        domain=STACK_IDENTITY_DOMAIN,
+        where=f"{where}.stack_identity",
+        errors=errors,
+    )
+    stress_valid = _validate_stress_observed(
+        regime["stress_observed"],
+        f"{where}.stress_observed",
+        errors,
+    )
+    return stack_valid and stress_valid
+
+
+def _component_bundle_rows(component_name: str, record: Mapping) -> list[Mapping]:
+    if component_name == "absolute":
+        observations = record.get("bundle_observations")
+        return list(observations) if isinstance(observations, list) else []
+    rows = []
+    blocks = record.get("blocks")
+    if not isinstance(blocks, list):
+        return rows
+    for block in blocks:
+        members = block.get("members") if isinstance(block, Mapping) else None
+        if isinstance(members, list):
+            rows.extend(member for member in members if isinstance(member, Mapping))
+    return rows
+
+
+def _validate_component_provenance(
+    component_name: str,
+    provenance,
+    record: Mapping,
+    where: str,
+    errors,
+) -> tuple[Mapping | None, set[str]]:
+    if not _check_keys(
+        provenance,
+        _COMPONENT_PROVENANCE_KEYS,
+        where,
+        errors,
+    ):
+        return None, set()
+    if (
+        not isinstance(provenance["calibration_cell_id"], str)
+        or not provenance["calibration_cell_id"].strip()
+    ):
+        errors.append(f"{where}.calibration_cell_id: must be a nonempty string")
+    if provenance["evidence_root_id"] not in _EVIDENCE_ROOT_IDS:
+        errors.append(
+            f"{where}.evidence_root_id: must be one of "
+            f"{sorted(_EVIDENCE_ROOT_IDS)}"
+        )
+    order_manifest = provenance["order_manifest"]
+    if _check_keys(
+        order_manifest,
+        _ORDER_MANIFEST_KEYS,
+        f"{where}.order_manifest",
+        errors,
+    ):
+        if (
+            not isinstance(order_manifest["manifest_id"], str)
+            or not order_manifest["manifest_id"].strip()
+        ):
+            errors.append(
+                f"{where}.order_manifest.manifest_id: "
+                "must be a nonempty string"
+            )
+        if not _is_hex(order_manifest["sha256"]):
+            errors.append(
+                f"{where}.order_manifest.sha256: "
+                "must be 64 lowercase hex chars"
+            )
+    for descriptor_name, descriptor_keys in (
+        ("campaign_log", _CAMPAIGN_LOG_KEYS),
+        ("extraction_report", _HASH_PIN_KEYS),
+        ("extraction_spec", _HASH_PIN_KEYS),
+    ):
+        descriptor = provenance[descriptor_name]
+        if _check_keys(
+            descriptor,
+            descriptor_keys,
+            f"{where}.{descriptor_name}",
+            errors,
+        ) and not _is_hex(descriptor["sha256"]):
+            errors.append(
+                f"{where}.{descriptor_name}.sha256: "
+                "must be 64 lowercase hex chars"
+            )
+    bundle_ids = provenance["bundle_ids"]
+    bundle_hashes = provenance["bundle_sha256s"]
+    if not isinstance(bundle_ids, list) or not isinstance(bundle_hashes, list):
+        errors.append(f"{where}: bundle_ids and bundle_sha256s must be arrays")
+        bundle_ids = []
+        bundle_hashes = []
+    else:
+        if len(bundle_ids) != len(bundle_hashes):
+            errors.append(
+                f"{where}: bundle_ids and bundle_sha256s lengths disagree"
+            )
+        if _has_duplicates(bundle_ids):
+            errors.append(f"{where}: source bundle_ids must be unique")
+        if any(not isinstance(value, str) or not value for value in bundle_ids):
+            errors.append(f"{where}: bundle_ids must be nonempty strings")
+        if any(not _is_hex(value) for value in bundle_hashes):
+            errors.append(
+                f"{where}: bundle_sha256s must be 64 lowercase hex chars"
+            )
+    component_rows = _component_bundle_rows(component_name, record)
+    expected_ids = [row.get("bundle_id") for row in component_rows]
+    expected_hashes = [row.get("bundle_sha256") for row in component_rows]
+    if bundle_ids != expected_ids:
+        errors.append(
+            f"{where}.bundle_ids: must positionally equal component members"
+        )
+    if bundle_hashes != expected_hashes:
+        errors.append(
+            f"{where}.bundle_sha256s: must positionally equal component members"
+        )
+    regime = provenance["source_regime"]
+    regime_valid = _validate_source_regime(
+        regime,
+        f"{where}.source_regime",
+        errors,
+    )
+    return (
+        regime if regime_valid else None,
+        {value for value in bundle_ids if isinstance(value, str)},
+    )
 
 
 def _validate_absolute(record, where, errors) -> None:
     if not _check_keys_with_optional(
         record,
         _ABS_KEYS,
-        _DRIFT_WIDENED_FLOOR_KEYS
-        | _WHOLE_WINDOW_BASIS_KEYS
-        | _ATTRIBUTION_LIMIT_RECORD_KEYS,
+        _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
         errors,
     ):
@@ -1753,9 +2081,7 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
-        _DRIFT_WIDENED_FLOOR_KEYS
-        | _WHOLE_WINDOW_BASIS_KEYS
-        | _ATTRIBUTION_LIMIT_RECORD_KEYS,
+        _ATTRIBUTION_LIMIT_RECORD_KEYS,
         where,
         errors,
     ):
@@ -1877,10 +2203,13 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
     ):
         return
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
-        if cell["key"]["window_class"] not in _WINDOW_CLASSES:
-            errors.append(f"{where}.key: invalid window_class")
-        if cell["key"]["metric"] not in _METRICS:
-            errors.append(f"{where}.key: invalid metric")
+        try:
+            validate_floor_metric_window_class(
+                cell["key"]["metric"],
+                cell["key"]["window_class"],
+            )
+        except ValueError as exc:
+            errors.append(f"{where}.key: {exc}")
         _validate_condition_family(
             {
                 key: cell["key"][key]
@@ -1973,18 +2302,8 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
         errors.append(
             f"{where}: attribution-limit cell metadata is forbidden without a labelled component"
         )
-    grouped_records = [
-        record
-        for record in present_records
-        if "whole_window_evaluation_basis_sha256" in record
-        or bool(set(record) & _DRIFT_WIDENED_FLOOR_KEYS)
-    ]
-    allowance_records = [
-        record.get("whole_window_drift_allowance")
-        for record in present_records
-        if "whole_window_drift_allowance" in record
-    ]
-    for allowance_record in allowance_records:
+    for record in present_records:
+        allowance_record = record.get("whole_window_drift_allowance")
         if (
             isinstance(allowance_record, Mapping)
             and allowance_record.get("claim_family") != expected_claim_family
@@ -1992,57 +2311,14 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
             errors.append(
                 f"{where}: whole-window drift allowance claim_family does not match metric"
             )
-    if grouped_records:
-        complete_group = all(
-            "whole_window_evaluation_basis_sha256" in record
-            and set(record) & _DRIFT_WIDENED_FLOOR_KEYS
-            == _DRIFT_WIDENED_FLOOR_KEYS
-            for record in present_records
-        )
-        if (
-            len(grouped_records) != len(present_records)
-            or len(allowance_records) != len(present_records)
-            or not complete_group
-        ):
-            errors.append(
-                f"{where}: absolute and comparative whole-window drift groups must be symmetric and complete"
-            )
-        else:
-            basis_values = [
-                record.get("whole_window_evaluation_basis_sha256")
-                for record in present_records
-            ]
-            if any(value != basis_values[0] for value in basis_values[1:]):
-                errors.append(
-                    f"{where}: absolute and comparative whole-window evaluation bases disagree"
-                )
-            if any(
-                allowance_record != allowance_records[0]
-                for allowance_record in allowance_records[1:]
-            ):
-                errors.append(
-                    f"{where}: absolute and comparative whole-window drift allowances disagree"
-                )
 
     expected_abs = (
-        absolute.get(
-            "drift_widened_guarded_floor_j",
-            absolute.get(
-                "corner_widened_guarded_floor_j",
-                absolute.get("guarded_floor_j"),
-            ),
-        )
+        absolute.get("drift_widened_guarded_floor_j")
         if isinstance(absolute, Mapping)
         else None
     )
     expected_cmp = (
-        comparative.get(
-            "drift_widened_guarded_floor_j",
-            comparative.get(
-                "corner_widened_guarded_floor_j",
-                comparative.get("guarded_floor_j"),
-            ),
-        )
+        comparative.get("drift_widened_guarded_floor_j")
         if isinstance(comparative, Mapping)
         else None
     )
@@ -2061,60 +2337,121 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
         errors.append(f"{where}: floor_gate_j must be null when either component is null")
 
     regime = cell["source_regime"]
-    if _check_keys(
+    regime_valid = _validate_source_regime(
         regime,
-        {"stack_identity", "stack_identity_sha256", "stress_observed"},
         f"{where}.source_regime",
         errors,
-    ):
-        stack = regime["stack_identity"]
-        _validate_hashed_object(
-            stack,
-            object_keys=_STACK_IDENTITY_KEYS,
-            stored_hash=regime["stack_identity_sha256"],
-            hash_name="stack_identity_sha256",
-            domain=STACK_IDENTITY_DOMAIN,
-            where=f"{where}.source_regime.stack_identity",
-            errors=errors,
-        )
-        _validate_stress_observed(regime["stress_observed"], f"{where}.source_regime.stress_observed", errors)
+    )
 
     if not isinstance(cell["transport_group_id"], str) or not cell["transport_group_id"]:
         errors.append(f"{where}: transport_group_id must be a nonempty string")
 
     provenance = cell["provenance"]
+    component_regimes: dict[str, Mapping] = {}
+    component_bundle_ids: dict[str, set[str]] = {}
     if _check_keys(provenance, _CELL_PROVENANCE_KEYS, f"{where}.provenance", errors):
-        bundle_ids = provenance["bundle_ids"]
-        bundle_hashes = provenance["bundle_sha256s"]
-        if not isinstance(bundle_ids, list) or not isinstance(bundle_hashes, list):
-            errors.append(f"{where}.provenance: bundle_ids and bundle_sha256s must be arrays")
-        else:
-            if len(bundle_ids) != len(bundle_hashes):
-                errors.append(f"{where}.provenance: bundle_ids and bundle_sha256s lengths disagree")
-            if _has_duplicates(bundle_ids):
-                errors.append(f"{where}.provenance: source bundle_ids must be unique")
-            if any(not isinstance(value, str) or not value for value in bundle_ids):
-                errors.append(f"{where}.provenance: bundle_ids must be nonempty strings")
-            if any(not _is_hex(value) for value in bundle_hashes):
-                errors.append(f"{where}.provenance: bundle_sha256s must be 64 lowercase hex chars")
+        for component_name, component_record in (
+            ("absolute", absolute),
+            ("comparative", comparative),
+        ):
+            component_provenance = provenance[component_name]
+            component_where = f"{where}.provenance.{component_name}"
+            if component_record is None:
+                if component_provenance is not None:
+                    errors.append(
+                        f"{component_where}: forbidden without a component record"
+                    )
+                continue
+            if not isinstance(component_provenance, Mapping):
+                errors.append(
+                    f"{component_where}: required for the component record"
+                )
+                continue
+            source_regime, bundle_ids = (
+                _validate_component_provenance(
+                    component_name,
+                    component_provenance,
+                    component_record,
+                    component_where,
+                    errors,
+                )
+            )
+            if source_regime is not None:
+                component_regimes[component_name] = source_regime
+            component_bundle_ids[component_name] = bundle_ids
+    if (
+        "absolute" in component_bundle_ids
+        and "comparative" in component_bundle_ids
+        and component_bundle_ids["absolute"]
+        & component_bundle_ids["comparative"]
+    ):
+        errors.append(
+            f"{where}.provenance: absolute and comparative bundle members "
+            "must be disjoint"
+        )
+    if regime_valid and component_regimes:
+        cell_stack_hash = regime["stack_identity_sha256"]
+        for component_name, component_regime in component_regimes.items():
+            if component_regime["stack_identity_sha256"] != cell_stack_hash:
+                errors.append(
+                    f"{where}.provenance.{component_name}.source_regime: "
+                    "stack identity must match the cell"
+                )
+        if len(component_regimes) == len(present_records):
+            try:
+                expected_regime = _compose_component_source_regimes(
+                    [
+                        component_regimes[name]
+                        for name in ("absolute", "comparative")
+                        if name in component_regimes
+                    ]
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                errors.append(
+                    f"{where}.source_regime: component composition failed: {exc}"
+                )
+            else:
+                expected_stress = expected_regime["stress_observed"]
+                actual_stress = regime["stress_observed"]
+                for field in _ENVELOPE_FIELDS:
+                    if not _close(actual_stress[field], expected_stress[field]):
+                        errors.append(
+                            f"{where}.source_regime.stress_observed.{field}: "
+                            "does not match componentwise composition"
+                        )
+                for term in _BOUND_TERMS:
+                    actual_term = actual_stress["bound_terms"][term]
+                    expected_term = expected_stress["bound_terms"][term]
+                    if (
+                        actual_term["applicability"]
+                        != expected_term["applicability"]
+                        or not _close(
+                            actual_term["maximum"],
+                            expected_term["maximum"],
+                        )
+                    ):
+                        errors.append(
+                            f"{where}.source_regime.stress_observed.bound_terms."
+                            f"{term}: does not match fail-closed component "
+                            "composition"
+                        )
 
     if eligibility_valid and cell["eligibility"]["status"] == "claim_ready":
         eligibility = cell["eligibility"]
         if eligibility["use_role"] != "primary_claim_gate":
             errors.append(f"{where}.eligibility: claim_ready requires primary_claim_gate use_role")
-        if eligibility["use_role"] == "primary_claim_gate" and (
-            len(grouped_records) != len(present_records)
-            or len(allowance_records) != len(present_records)
-            or not present_records
-            or any(
-                "whole_window_evaluation_basis_sha256" not in record
-                or set(record) & _DRIFT_WIDENED_FLOOR_KEYS
-                != _DRIFT_WIDENED_FLOOR_KEYS
-                for record in present_records
-            )
+        if not isinstance(absolute, Mapping) or not isinstance(
+            comparative,
+            Mapping,
         ):
             errors.append(
-                f"{where}.eligibility: claim_ready primary_claim_gate requires a whole-window basis and complete drift-widened field group"
+                f"{where}.eligibility: claim_ready requires both absolute "
+                "and comparative components"
+            )
+        if set(component_regimes) != {"absolute", "comparative"}:
+            errors.append(
+                f"{where}.eligibility: claim_ready requires component-scoped "
+                "provenance for both components"
             )
         minimum_n = eligibility["minimum_claim_n"]
         if isinstance(minimum_n, int) and not isinstance(minimum_n, bool):
@@ -2244,7 +2581,7 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
 
 
 def validate_floor_artifact(value: Mapping) -> list:
-    """Validate a ``joulewise.detection_floor_artifact.v1`` document.
+    """Validate a ``joulewise.detection_floor_artifact.v2`` document.
 
     Returns a list of error strings; an empty list means valid. Recomputes
     every residual, delta, mean, stddev, prediction, unguarded/guarded floor,

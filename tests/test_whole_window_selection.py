@@ -1790,6 +1790,102 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             "d" * 64,
         )
 
+    def test_session_retains_widening_introduced_metric_local_refusal(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            widened = self._summary(40.0, 0.03, 0.2)
+            for summary, bound_s, half_width in (
+                (minted, 0.02, 0.1),
+                (widened, 0.03, 0.2),
+            ):
+                summary["phase_energy_j"]["decode"] = 10.0
+                summary["energy_anchor_shift_envelopes"][
+                    "/phase_energy_j/decode"
+                ] = {
+                    "method": (
+                        "common_trace_shift_plus_independent_edge_corners_v3"
+                    ),
+                    "anchor_bound_s": bound_s,
+                    "point_j": 10.0,
+                    "lower_j": 10.0 - half_width,
+                    "upper_j": 10.0 + half_width,
+                    "max_abs_delta_j": half_width,
+                }
+                summary["window_evidence_precheck"]["phase"]["decode"] = {
+                    "eligible": True,
+                    "reasons": [],
+                }
+            widened["window_evidence_precheck"]["phase"]["prefill"] = {
+                "eligible": False,
+                "reasons": ["clock_bound_exceeds_quarter_window"],
+                "windows": [
+                    {
+                        "eligible": False,
+                        "reasons": [
+                            "clock_bound_exceeds_quarter_window"
+                        ],
+                    }
+                ],
+            }
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(self._bracket(0.03), ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=widened,
+                ),
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+        self.assertTrue(session.ready, session.refusal_reasons)
+        self.assertEqual(session.refusal_reasons, ())
+        self.assertEqual(
+            session.path_refusal_reasons,
+            {
+                "member": {
+                    ("phase", "prefill"): (
+                        "clock_bound_exceeds_quarter_window",
+                    )
+                }
+            },
+        )
+        self.assertIs(session.summary_for("member"), widened)
+        self.assertIsNotNone(session.provenance_for("member"))
+
     def test_session_skips_rederivation_for_undominated_member(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
