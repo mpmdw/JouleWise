@@ -1483,8 +1483,8 @@ def _legacy_existing_outcome(
     manifest_name: str,
     member: Mapping[str, Any],
     log_rows: Sequence[Mapping[str, Any]],
-) -> str | None:
-    """Bind one v1 existing row exactly and uniquely to its campaign log row."""
+) -> tuple[str, int] | None:
+    """Bind one v1 existing row to its exact outcome and log-row identity."""
 
     run_id = member.get("run_id")
     config = member.get("config")
@@ -1499,8 +1499,8 @@ def _legacy_existing_outcome(
         or any(not isinstance(bundle_id, str) or not bundle_id for bundle_id in bundle_ids)
     ):
         return None
-    candidates: list[Mapping[str, Any]] = []
-    for row in log_rows:
+    candidates: list[tuple[int, Mapping[str, Any]]] = []
+    for row_index, row in enumerate(log_rows):
         if not _campaign_log_manifest_matches(
             row.get("campaign_provenance_manifest"), manifest_name
         ):
@@ -1512,10 +1512,10 @@ def _legacy_existing_outcome(
             or Path(log_config).name != config
         ):
             continue
-        candidates.append(row)
+        candidates.append((row_index, row))
     if len(candidates) != 1:
         return None
-    candidate = candidates[0]
+    row_index, candidate = candidates[0]
     members = candidate.get("members")
     if not isinstance(members, list):
         return None
@@ -1532,18 +1532,49 @@ def _legacy_existing_outcome(
         return None
     status = candidate.get("status")
     if status == "skipped" and set(classifications) == {"usable"}:
-        return "usable"
+        return "usable", row_index
     if (
         status == "waived"
         and "waived" in classifications
         and set(classifications) <= {"usable", "waived"}
     ):
-        return "waived"
+        return "waived", row_index
     if status == "failed":
-        return "failed"
+        return "failed", row_index
     if status == "incomplete_existing":
-        return "incomplete"
+        return "incomplete", row_index
     return None
+
+
+def _campaign_manifest_member_shape_valid(
+    member: object, schema_version: object
+) -> bool:
+    """Validate the member invariants that make a catalog manifest readable."""
+
+    if not isinstance(member, Mapping):
+        return False
+    execution = member.get("execution")
+    bundle_ids = member.get("bundle_ids")
+    if (
+        not isinstance(execution, str)
+        or execution not in {"invoked", "existing", "blocked_before_invoke"}
+        or not isinstance(member.get("run_id"), str)
+        or not member["run_id"]
+        or not isinstance(bundle_ids, list)
+        or not bundle_ids
+        or any(
+            not isinstance(bundle_id, str) or not bundle_id
+            for bundle_id in bundle_ids
+        )
+    ):
+        return False
+    if execution != "existing":
+        return "outcome" not in member
+    if schema_version == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+        outcome = member.get("outcome")
+        return isinstance(outcome, str) and outcome in CAMPAIGN_EXISTING_OUTCOMES
+    config = member.get("config")
+    return "outcome" not in member and isinstance(config, str) and bool(config)
 
 
 def campaign_cooldown_evidence(
@@ -1605,10 +1636,18 @@ def _campaign_cooldown_evidence(
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return {}
+        if not isinstance(raw, Mapping):
+            return {}
+        schema_version = raw.get("schema_version")
         if (
-            not isinstance(raw, Mapping)
-            or raw.get("schema_version") not in CAMPAIGN_PROVENANCE_SCHEMAS
+            not isinstance(schema_version, str)
+            or schema_version not in CAMPAIGN_PROVENANCE_SCHEMAS
             or not isinstance(raw.get("members"), list)
+        ):
+            return {}
+        if any(
+            not _campaign_manifest_member_shape_valid(member, schema_version)
+            for member in raw["members"]
         ):
             return {}
         catalog.append((path, raw))
@@ -1624,50 +1663,34 @@ def _campaign_cooldown_evidence(
     declaration_events: dict[
         str, list[tuple[str, tuple[str, int, int]]]
     ] = {}
+    consumed_legacy_log_rows: set[int] = set()
     for path, raw in catalog:
         selected = raw.get("analysis_manifest_id") == manifest_id
         manifest_rel = f"campaign_manifests/{path.name}"
         for member_index, member in enumerate(raw["members"]):
-            if not isinstance(member, Mapping):
-                if selected:
-                    return {}
-                continue
-            execution = member.get("execution")
             if not selected:
                 continue
-            if execution not in {"invoked", "existing", "blocked_before_invoke"}:
-                return {}
+            assert isinstance(member, Mapping)
+            execution = member.get("execution")
             bundle_ids = member.get("bundle_ids")
-            if (
-                not isinstance(member.get("run_id"), str)
-                or not member["run_id"]
-                or not isinstance(bundle_ids, list)
-                or not bundle_ids
-                or any(
-                    not isinstance(bundle_id, str) or not bundle_id
-                    for bundle_id in bundle_ids
-                )
-            ):
-                return {}
-            if "outcome" in member and execution != "existing":
-                return {}
+            assert isinstance(bundle_ids, list)
             if execution == "blocked_before_invoke":
                 continue
-            if execution == "existing":
-                if "outcome" in member:
-                    outcome = member.get("outcome")
-                    if outcome not in CAMPAIGN_EXISTING_OUTCOMES:
-                        return {}
-                else:
-                    if raw.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
-                        return {}
-                    outcome = _legacy_existing_outcome(
-                        manifest_name=path.name,
-                        member=member,
-                        log_rows=log_rows,
-                    )
-                    if outcome is None:
-                        return {}
+            if (
+                execution == "existing"
+                and raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2
+            ):
+                binding = _legacy_existing_outcome(
+                    manifest_name=path.name,
+                    member=member,
+                    log_rows=log_rows,
+                )
+                if binding is None:
+                    return {}
+                _, log_row_index = binding
+                if log_row_index in consumed_legacy_log_rows:
+                    return {}
+                consumed_legacy_log_rows.add(log_row_index)
             for bundle_index, bundle_id in enumerate(bundle_ids):
                 declaration_events.setdefault(bundle_id, []).append(
                     (
