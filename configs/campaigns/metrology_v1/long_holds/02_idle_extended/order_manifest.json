@@ -1,0 +1,46 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "metrology-v1-long-holds-02_idle_extended-order-v1",
+  "plan_id": "metrology-v1-long-holds-m3max",
+  "calibration_plan_sha256": "c2db1e49ac4925c93b72f9107e4b90346ab0754ddacb6042be96a6970ded0e2e",
+  "ordering_note": "One fixed member each at 120, 300, and 600 idle seconds.",
+  "planned_n_bundles": 3,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "mtidle-i0120-r01.json",
+      "run_id": "mtidle-i0120-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0120",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 1,
+      "position_in_block": 1,
+      "idle_seconds": 120.0
+    },
+    {
+      "index": 2,
+      "config": "mtidle-i0300-r01.json",
+      "run_id": "mtidle-i0300-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0300",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 2,
+      "position_in_block": 1,
+      "idle_seconds": 300.0
+    },
+    {
+      "index": 3,
+      "config": "mtidle-i0600-r01.json",
+      "run_id": "mtidle-i0600-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0600",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 3,
+      "position_in_block": 1,
+      "idle_seconds": 600.0
+    }
+  ]
+}

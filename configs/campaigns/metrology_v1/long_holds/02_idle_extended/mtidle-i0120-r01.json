@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1",
+  "run_id": "mtidle-i0120-r01",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Sustained-load drift and extended-idle settle characterization on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "mt_idle_extended",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 128
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 120.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "metrology-v1",
+      "long-holds",
+      "production-window",
+      "instrument-characterization",
+      "df-condition=mt-q15-decode-p0128-o0128-idle0120",
+      "calibration-plan-sha256=c2db1e49ac4925c93b72f9107e4b90346ab0754ddacb6042be96a6970ded0e2e",
+      "rep1",
+      "extended-idle-seconds=120"
+    ]
+  }
+}

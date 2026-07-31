@@ -1,0 +1,203 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "plan_id": "metrology-v1-linearity-ramp-m3max",
+  "calibration_scope": "production_window",
+  "freeze_status": "draft_pending_magistrate_ratification",
+  "draft_note": "The magistrate ratifies this draft before any production window.",
+  "fixed_n": 8,
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+    "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "condition_families": [
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0128",
+        "condition_family_sha256": "eec17ac336e270e556158638d8c720b669412f9bbffa453ebbe5d5d4a1110d62"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0256",
+        "condition_family_sha256": "f1590ef7099780219aba4578dbf56cb963269c87f5ebc2bde28b5b05452d8ae3"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0512",
+        "condition_family_sha256": "6974fbf58bcce32b757631fb8536750788a13d371731354d8873abbfc23fd54d"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o1024",
+        "condition_family_sha256": "d57bfcd616d61e7a30f1fc9c08d9006c6f9457df45671952d4f53d2313f42abb"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o2048",
+        "condition_family_sha256": "a5b3b5682e21aa71052cd7e5d899f4d7635c36531a2912822532f1c4fffd65ad"
+      }
+    ]
+  },
+  "replacement_rule": {
+    "policy": "technical_invalid_same_slot_only",
+    "predeclared_before_data": true,
+    "outcome_dependent_top_up": "forbidden_and_demotes_contrast_to_exploratory"
+  },
+  "cells": [
+    {
+      "cell_id": "metrology-linearity-o0128",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 8,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0128",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtlin-o0128-r01",
+        "mtlin-o0128-r02",
+        "mtlin-o0128-r03",
+        "mtlin-o0128-r04",
+        "mtlin-o0128-r05",
+        "mtlin-o0128-r06",
+        "mtlin-o0128-r07",
+        "mtlin-o0128-r08"
+      ]
+    },
+    {
+      "cell_id": "metrology-linearity-o0256",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 8,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0256",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtlin-o0256-r01",
+        "mtlin-o0256-r02",
+        "mtlin-o0256-r03",
+        "mtlin-o0256-r04",
+        "mtlin-o0256-r05",
+        "mtlin-o0256-r06",
+        "mtlin-o0256-r07",
+        "mtlin-o0256-r08"
+      ]
+    },
+    {
+      "cell_id": "metrology-linearity-o0512",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 8,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0512",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtlin-o0512-r01",
+        "mtlin-o0512-r02",
+        "mtlin-o0512-r03",
+        "mtlin-o0512-r04",
+        "mtlin-o0512-r05",
+        "mtlin-o0512-r06",
+        "mtlin-o0512-r07",
+        "mtlin-o0512-r08"
+      ]
+    },
+    {
+      "cell_id": "metrology-linearity-o1024",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 8,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o1024",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtlin-o1024-r01",
+        "mtlin-o1024-r02",
+        "mtlin-o1024-r03",
+        "mtlin-o1024-r04",
+        "mtlin-o1024-r05",
+        "mtlin-o1024-r06",
+        "mtlin-o1024-r07",
+        "mtlin-o1024-r08"
+      ]
+    },
+    {
+      "cell_id": "metrology-linearity-o2048",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 8,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o2048",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtlin-o2048-r01",
+        "mtlin-o2048-r02",
+        "mtlin-o2048-r03",
+        "mtlin-o2048-r04",
+        "mtlin-o2048-r05",
+        "mtlin-o2048-r06",
+        "mtlin-o2048-r07",
+        "mtlin-o2048-r08"
+      ]
+    }
+  ],
+  "execution_modes": {
+    "production_metrology_window": {
+      "selected_for_this_frozen_plan": true,
+      "ordered_subcampaign_ids": [
+        "01_ramp"
+      ],
+      "planned_bundles": 40
+    }
+  },
+  "references": {
+    "window_references": {
+      "source": "configs/campaigns/window_references/",
+      "member_layout": "3+1+3",
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    },
+    "in_window_bound_corpus": {
+      "source": "configs/campaigns/neg8_reference_corpus/",
+      "planned_n_bundles": 12,
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    }
+  },
+  "runs_dir": "runs/metrology_v1/linearity_ramp",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs/metrology_v1/linearity_ramp/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "binding": "operator passes --campaign-policy; no campaign artifact declares it"
+  }
+}

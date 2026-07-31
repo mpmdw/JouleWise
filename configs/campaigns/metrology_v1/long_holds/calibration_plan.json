@@ -1,0 +1,156 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "plan_id": "metrology-v1-long-holds-m3max",
+  "calibration_scope": "production_window",
+  "freeze_status": "draft_pending_magistrate_ratification",
+  "draft_note": "The magistrate ratifies this draft before any production window.",
+  "fixed_n": 3,
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+    "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "warmup_seconds": 5.0,
+      "idle_seconds_by_condition_family": {
+        "mt-q15-decode-p0128-o4096": 30.0,
+        "mt-q15-decode-p0128-o0128-idle0120": 120.0,
+        "mt-q15-decode-p0128-o0128-idle0300": 300.0,
+        "mt-q15-decode-p0128-o0128-idle0600": 600.0
+      }
+    },
+    "condition_families": [
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0128-idle0120",
+        "condition_family_sha256": "e2e3670670547c0f6ddf7857ab612cd897bd10e0214ed6d79f1d185250795a17"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0128-idle0300",
+        "condition_family_sha256": "5f05f3b5d0060dc9f054e5219e47eec1b9a6c9f36a65b9a44420365a2c5890b8"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o0128-idle0600",
+        "condition_family_sha256": "5a22f0e9a356eb0a84d3e5debb0c2659a0f3cccf47c75b41d06e37ab4d42f431"
+      },
+      {
+        "condition_family_id": "mt-q15-decode-p0128-o4096",
+        "condition_family_sha256": "b3ded631d0be157a5ff8d7d53f71bb7f06ebe35ebef345787dfbefe7fbba5154"
+      }
+    ]
+  },
+  "replacement_rule": {
+    "policy": "technical_invalid_same_slot_only",
+    "predeclared_before_data": true,
+    "outcome_dependent_top_up": "forbidden_and_demotes_contrast_to_exploratory"
+  },
+  "cells": [
+    {
+      "cell_id": "metrology-long-hold-decode-o4096",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 3,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o4096",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mthold-o4096-r01",
+        "mthold-o4096-r02",
+        "mthold-o4096-r03"
+      ]
+    },
+    {
+      "cell_id": "metrology-extended-idle-i0120",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 1,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0128-idle0120",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtidle-i0120-r01"
+      ]
+    },
+    {
+      "cell_id": "metrology-extended-idle-i0300",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 1,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0128-idle0300",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtidle-i0300-r01"
+      ]
+    },
+    {
+      "cell_id": "metrology-extended-idle-i0600",
+      "df_rows": [],
+      "kind": "absolute",
+      "use_role": "staleness_sentinel",
+      "minimum_claim_n": 1,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "mt-q15-decode-p0128-o0128-idle0600",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "mtidle-i0600-r01"
+      ]
+    }
+  ],
+  "execution_modes": {
+    "production_metrology_window": {
+      "selected_for_this_frozen_plan": true,
+      "ordered_subcampaign_ids": [
+        "01_holds",
+        "02_idle_extended"
+      ],
+      "planned_bundles": 6
+    }
+  },
+  "references": {
+    "window_references": {
+      "source": "configs/campaigns/window_references/",
+      "member_layout": "3+1+3",
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    },
+    "in_window_bound_corpus": {
+      "source": "configs/campaigns/neg8_reference_corpus/",
+      "planned_n_bundles": 12,
+      "condition_family_id": "df-rq-mid",
+      "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+      "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "integration": "supplied_by_window_chain_not_science_stage"
+    }
+  },
+  "runs_dir": "runs/metrology_v1/long_holds",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs/metrology_v1/long_holds/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "binding": "operator passes --campaign-policy; no campaign artifact declares it"
+  }
+}

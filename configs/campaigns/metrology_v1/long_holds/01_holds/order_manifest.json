@@ -1,0 +1,46 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "metrology-v1-long-holds-01_holds-order-v1",
+  "plan_id": "metrology-v1-long-holds-m3max",
+  "calibration_plan_sha256": "c2db1e49ac4925c93b72f9107e4b90346ab0754ddacb6042be96a6970ded0e2e",
+  "ordering_note": "Three fixed sustained decode repeats at 4096 output tokens.",
+  "planned_n_bundles": 3,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "mthold-o4096-r01.json",
+      "run_id": "mthold-o4096-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 1,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    },
+    {
+      "index": 2,
+      "config": "mthold-o4096-r02.json",
+      "run_id": "mthold-o4096-r02",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 2,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    },
+    {
+      "index": 3,
+      "config": "mthold-o4096-r03.json",
+      "run_id": "mthold-o4096-r03",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 3,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    }
+  ]
+}
