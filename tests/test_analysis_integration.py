@@ -3524,7 +3524,7 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
-    def test_v2_invoked_then_existing_aliases_accept_every_closed_outcome(self):
+    def test_d097_v2_invoked_then_existing_refuses_for_every_outcome(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
         for outcome in ("usable", "failed", "incomplete", "waived"):
@@ -3548,13 +3548,8 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                     schema_version="joulewise.campaign_provenance.v2",
                 )
 
-                row = _campaign_cooldown_evidence(root, None)["bundle"]
-
-                self.assertEqual(row["result"], "first_run_exempt")
-                self.assertTrue(row["verified"])
-                self.assertEqual(
-                    row["manifest"], "campaign_manifests/00-invoked.json"
-                )
+                # D-097: v2 is deferred until writer-minted discrimination exists.
+                self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
     def test_v1_existing_outcome_cannot_bypass_missing_log_binding(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -3573,7 +3568,31 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
 
         self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
-    def test_bare_existing_occurrences_refuse_without_cooldown_invocation(self):
+    def test_d097_relabelled_v1_outcome_manifest_refuses_at_catalog_gate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-b1-relabel-probe-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "00-invoked.json", "invoked-session", "bundle")
+        existing_path = self._manifest(
+            root,
+            "01-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+        )
+        self._install_legacy_existing_binding(root, "01-existing.json")
+
+        relabelled = json.loads(existing_path.read_text(encoding="utf-8"))
+        relabelled["schema_version"] = "joulewise.campaign_provenance.v2"
+        relabelled["members"][0]["outcome"] = "usable"
+        existing_path.write_text(json.dumps(relabelled), encoding="utf-8")
+        (root / "campaign_log.jsonl").unlink()
+
+        # D-097 release condition 2: a label-only v2 must fail at catalog intake.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_d097_bare_v2_existing_refuses_at_catalog_gate(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
         root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-e-only-"))
@@ -3588,18 +3607,10 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             schema_version="joulewise.campaign_provenance.v2",
         )
 
-        self.assertEqual(
-            _campaign_cooldown_evidence(root, None)["bundle"],
-            {
-                "result": "unknown",
-                "verified": False,
-                "session_id": None,
-                "manifest": None,
-                "raw_artifact": None,
-            },
-        )
+        # D-097: v2 is uniformly malformed before commit 3's writer exists.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
-    def test_failed_existing_then_retry_requires_exact_supersession(self):
+    def test_d097_v2_failed_existing_then_retry_refuses_at_catalog_gate(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
         root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-e-i-"))
@@ -3630,13 +3641,10 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             schema_version="joulewise.campaign_provenance.v2",
         )
 
-        row = _campaign_cooldown_evidence(root, None)["bundle"]
+        # D-097: no v2 truth-table shape is consumable in the interim state.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
-        self.assertEqual(row["result"], "unknown")
-        self.assertFalse(row["verified"])
-        self.assertIsNone(row["manifest"])
-
-    def test_leading_existing_representative_can_be_superseded_by_retry(self):
+    def test_d097_v2_superseded_retry_still_refuses_at_catalog_gate(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
         from joulewise.whole_window import (
             validate_occurrence_supersession_entry,
@@ -3679,10 +3687,8 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
 
         self.assertTrue(validate_occurrence_supersession_entry(entry, root))
         self.assertEqual(validated_supersession_entries(root), [entry])
-        row = _campaign_cooldown_evidence(root, None)["bundle"]
-        self.assertEqual(row["result"], "first_run_exempt")
-        self.assertTrue(row["verified"])
-        self.assertEqual(row["manifest"], "campaign_manifests/02-invoked.json")
+        # D-097: a valid supersession cannot license a deferred v2 manifest.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
     def test_legacy_existing_aliases_bind_every_closed_log_outcome(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -3809,6 +3815,7 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             schema_version="joulewise.campaign_provenance.v2",
         )
 
+        # D-097: all v2 outcomes refuse, including values outside the old enum.
         self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
     def test_result_map_keyset_unions_candidates_and_declared_ids(self):

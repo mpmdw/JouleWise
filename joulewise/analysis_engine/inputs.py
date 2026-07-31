@@ -52,13 +52,7 @@ from joulewise.cooldown import cooldown_disposition_from_raw
 
 StrictValidator = Callable[[Path, bool], list[str]]
 CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
-CAMPAIGN_PROVENANCE_SCHEMA_V2 = "joulewise.campaign_provenance.v2"
-CAMPAIGN_PROVENANCE_SCHEMAS = frozenset(
-    {CAMPAIGN_PROVENANCE_SCHEMA, CAMPAIGN_PROVENANCE_SCHEMA_V2}
-)
-CAMPAIGN_EXISTING_OUTCOMES = frozenset(
-    {"usable", "failed", "incomplete", "waived"}
-)
+CAMPAIGN_PROVENANCE_SCHEMAS = frozenset({CAMPAIGN_PROVENANCE_SCHEMA})
 GOVERNED_IDLE_VARIANCE_METHOD_V1 = "newey_west_bartlett_10s_iid_floor_v1"
 GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
     "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
@@ -1546,9 +1540,7 @@ def _legacy_existing_outcome(
     return None
 
 
-def _campaign_manifest_member_shape_valid(
-    member: object, schema_version: object
-) -> bool:
+def _campaign_manifest_member_shape_valid(member: object) -> bool:
     """Validate the member invariants that make a catalog manifest readable."""
 
     if not isinstance(member, Mapping):
@@ -1566,15 +1558,13 @@ def _campaign_manifest_member_shape_valid(
             not isinstance(bundle_id, str) or not bundle_id
             for bundle_id in bundle_ids
         )
+        or "outcome" in member
     ):
         return False
     if execution != "existing":
-        return "outcome" not in member
-    if schema_version == CAMPAIGN_PROVENANCE_SCHEMA_V2:
-        outcome = member.get("outcome")
-        return isinstance(outcome, str) and outcome in CAMPAIGN_EXISTING_OUTCOMES
+        return True
     config = member.get("config")
-    return "outcome" not in member and isinstance(config, str) and bool(config)
+    return isinstance(config, str) and bool(config)
 
 
 def campaign_cooldown_evidence(
@@ -1646,7 +1636,7 @@ def _campaign_cooldown_evidence(
         ):
             return {}
         if any(
-            not _campaign_manifest_member_shape_valid(member, schema_version)
+            not _campaign_manifest_member_shape_valid(member)
             for member in raw["members"]
         ):
             return {}
@@ -1676,10 +1666,7 @@ def _campaign_cooldown_evidence(
             assert isinstance(bundle_ids, list)
             if execution == "blocked_before_invoke":
                 continue
-            if (
-                execution == "existing"
-                and raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2
-            ):
+            if execution == "existing":
                 binding = _legacy_existing_outcome(
                     manifest_name=path.name,
                     member=member,
