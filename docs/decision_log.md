@@ -119,6 +119,7 @@ be re-derived by a future agent gets an entry here.
 | D-094 | Gauntlet counting domain: COMPOSED design adopted (prospective writer outcome enum + fail-closed legacy log binding; truth table preserves the struck cell; DA-1 closes at the raw reader boundary); D-088 benign-count corrected 46→44; three-commit landing order C1-first | accepted (D-088 cl.2 mandated consult + magistrate 2026-07-31) |
 | D-095 | MANIFEST-CONTRAST design: analysis-manifest v3 (new module + dispatcher, v1/v2 byte-frozen), governed ABBA block derivation, folded_sha256 arm binding, Holm m=1 two-sided positive-direction, cross_stack_armwise_max.v1 floor rule; claim chain = gauntlet → v3 → multi-cell mint → claim | accepted (rule-2 consult + magistrate 2026-07-31; implementation queued behind the gauntlet) |
 | D-096 | Metrology v1 plan vocabulary ratified (staleness_sentinel, plan-only field shapes, recorded fallbacks); four window-A plans FROZEN before measurement; F2 --k hardening is a standing pre-replacement condition | accepted (magistrate ratification pass 2026-07-31) |
+| D-097 | B1 cold-gate synthesis: v2 outcome consumption deferred to gauntlet commit 3 (writer-minted authenticated discriminator required); interim v2-label and outcome-field refusal everywhere (reader accepted set == writer emitted set); merge train held on four release conditions | accepted (unanimous cold gate + refuter, magistrate synthesis 2026-07-31) |
 
 ---
 
@@ -5901,3 +5902,56 @@ packing (ramp + additivity + null o0512 + holds Part A).
 
 Revisit when: a plan validator or manifest consumer is introduced (must be
 written against the shapes ratified here), or the F2 hardening lands.
+
+## D-097: B1 cold-gate synthesis — v2 outcome consumption DEFERRED to commit 3; interim v2/outcome refusal everywhere
+
+- Date: 2026-07-31
+- Status: accepted (mandatory rule-11 cold gate after B1's second consecutive
+  failed formulation; cold Fable instance + Opus contract-lens refuter
+  CONVERGED on deferral; magistrate synthesis adopts the refuter's stricter
+  variant)
+- Applies to: `impl/cooldown-gauntlet`, D-094's commit-3 contract
+
+Trigger: B1 (outcome-enum consumption discrimination) failed two
+formulations — commit-2 trusted a closed outcome on any existing row; the
+fix round discriminated v2 by self-asserted `schema_version`, and the
+re-audit demonstrated a one-file relabel of a real 7B v1 manifest bypassing
+the mandatory legacy log binding while still resolving 57/57. Per the
+standing trigger the next spend was this gate, not a third round.
+
+Ruling (unanimous across both instances): **no third in-manifest
+formulation exists** — with no writer emitting the enum, every in-manifest
+marker is self-asserted; authenticated discrimination requires
+writer-minted evidence and therefore belongs to commit 3, which must land
+writer emission, a writer-external authenticated discriminator (e.g. a
+writer-emitted campaign-log attestation binding manifest identity to a
+content hash, structurally parallel to the v1 log binding), reader
+re-acceptance, and the v2 truth-table row as ONE composed, audited change,
+with the relabel probe as a permanent regression.
+
+Adopted interim state (the refuter's O3 variant — strictly fail-closed):
+strike commit-2's v2 outcome-consumption clauses AND remove v2 from the
+join's accepted schema set, so a v2-labelled manifest refuses at the
+catalog gate and an `outcome` field on ANY member refuses — the reader's
+accepted set exactly equals the writer's emitted set (v1 only). Grounds:
+no legitimate writer can produce either today (verified: run_campaign.py
+emits only v1; its own resume/policy scanners skip non-v1; zero v2
+manifests across all 29 corpora), so presence is uniform malformation.
+
+Merge-train release conditions (cold instance, binding): (1) the deferral
+commit lands on the branch; (2) a regression proves the relabel probe
+REFUSES; (3) fresh delta re-audit passes and the full suite is green at
+the new head, lead-verified; (4) both real-corpus mappings hash-identical
+(57/57, 47/47). B2/B3/DA-1 remain independently verified closed.
+
+Commit-3 riders, on the record (refuter findings): (i) the legacy binding
+currently authenticates but DISCARDS the classified status — a v1 existing
+row bound to a failed/incomplete log row is representative-equivalent to
+usable; D-094's refusal text survives, but commit 3 must decide whether
+classification beyond authentication is consumed; (ii) the v1 log binding
+is anti-MALFORMATION, not anti-tamper — coordinated manifest+log rewrite
+defeats it; the tamper layer is source-manifest hashing in the verdict
+path, and claims about B1 severity are recorded on malformation grounds.
+
+Revisit when: commit 3 is designed (its consult must consume this entry),
+or any release condition fails.
