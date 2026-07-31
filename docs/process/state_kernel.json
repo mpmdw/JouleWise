@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Mint #1 merged via PR #88 under the D-088 conditioned license; cooldown-join contract ratified for its own gauntlet",
-    "path": "docs/run_reports/2026-07-30-mint-merge-coldgate.md"
+    "label": "Contrast window collected and PASSED (47 bundles, XProtect recovery per playbook); D5-J merged via PR #89 under the D-093 cold-gate synthesis",
+    "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -618,7 +618,8 @@
         "evidence": [
           "C1 lands as a first, independently auditable commit",
           "The counting domain (C2 writer existing-outcome bit and/or declaration-order discriminator) is decided by a bounded pre-decision consult, with C3 authorship parity and C4/C5 fail-closed",
-          "Resolves the 7B window including its two supersessions and both mint corpora cleanly, refuses the QA-10A and QA-10B fixtures, delta re-audit clean"
+          "Resolves the 7B window including its two supersessions and both mint corpora cleanly, refuses the QA-10A and QA-10B fixtures, delta re-audit clean",
+          "DA-1 (COOLDOWN-JOIN-DA1-01) closed at the validator/reader boundary with a V4-driver-derived regression (D-093)"
         ],
         "pointer": {
           "json_pointer": "/tasks/COOLDOWN-JOIN-GAUNTLET-01/acceptance",
@@ -2703,5 +2704,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-30"
+  "updated": "2026-07-31"
 }

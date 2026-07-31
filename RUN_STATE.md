@@ -10,8 +10,16 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-30 (mint-merge session). **Main is at the PR #88
-merge `da83337`: mint #1 is MAINLINE.** The full mint arc (FIX-1..10
+Last updated: 2026-07-31 (contrast-window + D5-J merge session). **Main
+is at the PR #89 merge `7ee680c`: the contrast window is COLLECTED AND
+PASSED, and D5-J (the structural cooldown-join redesign) is MAINLINE
+under the D-093 cold-gate synthesis.** Post-merge canonical suite
+lead-run on main: `Ran 2286 tests`, `OK (skipped=12)`. See the CURRENT
+STATE block below; the mint-era summary that follows remains accurate
+for the mint arc itself.
+
+**Main is at the PR #88
+merge `da83337` (historical for this paragraph): mint #1 is MAINLINE.** The full mint arc (FIX-1..10
 gauntlet, ratified mint contract, campaign configs, and the
 `df-ph-decode-floor-mint1` artifact — absolute 3.592138 / comparative
 7.377086 / operative gate 7.377086 J, validator clean lead-run) merged at
@@ -32,7 +40,64 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-07-30 19:15 PT pre-window checkpoint; resume EXACTLY here)
+## CURRENT STATE (2026-07-31 close-out; the resume script below is FULLY EXECUTED)
+
+The 2026-07-30 19:15 resume script executed overnight, steps 1-6 and 8
+complete, step 7 (metrology authoring) in flight at close-out:
+
+1. **Contrast window `window_contrast_20260730`: COLLECTED, verdict
+   PASSED.** 47 bundles (start/mid/end references + 40 ABBA science
+   members, zero science failures), bracket drift 1.281 ms vs the
+   10.818 ms screen, adapter continuity stable, backups verified.
+   Recovery arc: start-triplet r1 failed CPU admission twice (XProtect
+   Remediator sweep, directly observed at 941 CPU ms/s; round-1 TM
+   attribution corrected on evidence); escalation trigger honored with a
+   bounded Sol consult; round 3 ran clean end-to-end; supersession
+   recorded ONCE (both failed occurrences superseded). Close-out:
+   `~/JouleWise-window-custody/window_contrast_20260730/close-out.md`;
+   report: `docs/run_reports/2026-07-31-contrast-window-collection.md`.
+   Per-block contrast DIAGNOSTIC (prose, ungated): 7B−1.5B decode
+   146.730349 J mean, σ 0.241 J, n=10 blocks. The gated claim rides
+   MANIFEST-CONTRAST-01.
+2. **D5-J MERGED via PR #89** (`aca78f8` + comment-only correction
+   `707f76e`): the delta audit FAILED (blocker DA-1: malformed
+   supersession records silently dropped pre-ambiguity — PRE-EXISTING on
+   main, byte-identical filter; should-fix DA-2: commit-message test
+   overcount), which per D-089's revisit clause went to a cold gate
+   (fresh Fable + Opus refuter, split verdict) and the **D-093
+   magistrate synthesis**: no behavior-changing fix round (DA-1 closes
+   in the gauntlet at the validator/reader boundary — COOLDOWN-JOIN-DA1-01,
+   intake table), merge at the corrected head, raw-vs-validated
+   supersession-record scan added to EVERY claim consumption (initial:
+   0-divergence across all four claim-bearing corpora).
+3. **Bookkeeping landed** (`49c1876`, `0d0bd0b`): D-089..D-093,
+   C-039 addendum II, paper outline archived, window run report,
+   WINDOW_STATUS + PROJECT_STATUS refreshed (metrology framing, plain
+   language), kernel latest_report/date refreshed.
+4. **Metrology campaign suite** (paper claims C1-C5): spec ratified
+   (lieutenant-authored, magistrate-ratified this session); Sol xhigh
+   generation running at close-out on branch `impl/metrology-campaigns`
+   (worktree minttool) — five campaigns (linearity_ramp, null_ladder,
+   additivity_shapes, micro_delta k=64 draft-pending-slope, long_holds),
+   plans emitted `draft_pending_magistrate_ratification`. If dead on
+   resume: relaunch from the spec at scratchpad `metrology-suite-spec.md`
+   (old session dir) + prompt `mt_prompt2.md` (current session dir).
+5. NEXT (in order): harvest/commit the metrology generation (lead
+   review, PR, D-072 gate); ratify the metrology window-A frozen plans;
+   run metrology window A (~2.8 h: ramp + additivity + null o0512 +
+   holds) next quiet night; MANIFEST-CONTRAST-01 desk work to unlock the
+   contrast claim; QUEUE-RECONCILE-01 (P2-015 retirement + 7 stale
+   dependents + DA-1 kernel promotion — roadmap page is AT its 30 kB
+   shard budget, net additions need compensating retirement or a split).
+6. **Ed owes**: network-time restore (`sudo systemsetup
+   -setusingnetworktime on` — still OFF from §5A), wall-meter purchase
+   (D-092, non-blocking).
+
+Standing D-093 condition (adds to the D-088 block above): every claim
+consumption through the cooldown join records the raw-vs-validated
+supersession-record scan; any divergence refuses consumption.
+
+## EXECUTED RESUME SCRIPT (2026-07-30 19:15 PT pre-window checkpoint; historical — fully executed, see CURRENT STATE)
 
 Successor is FABLE, MAGISTRATE. THE CRITICAL PATH IS TONIGHT'S CONTRAST
 WINDOW — launch it before anything else. The capstone PIVOTED today
@@ -325,7 +390,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-30). Latest report: [Mint #1 merged via PR #88 under the D-088 conditioned license; cooldown-join contract ratified for its own gauntlet](docs/run_reports/2026-07-30-mint-merge-coldgate.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-31). Latest report: [Contrast window collected and PASSED (47 bundles, XProtect recovery per playbook); D5-J merged via PR #89 under the D-093 cold-gate synthesis](docs/run_reports/2026-07-31-contrast-window-collection.md).
 
 ### [ED-EXTERNAL]
 

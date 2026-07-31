@@ -18,8 +18,14 @@ are provided for anyone who wants the full evidence trail.
   with its acceptance thresholds frozen before the data existed and its
   validator run clean. A second instrument calibration (the 7B model,
   floor 14.0 J) passed overnight on 2026-07-29 and awaits its own mint.
-  The pre-registered head-to-head model comparison is the next
-  measurement session, pending sign-off.
+  The pre-registered head-to-head model comparison **collected and
+  passed overnight on 2026-07-30→31** (40 paired measurements, every
+  quality gate green); its headline consumption awaits one piece of
+  bookkeeping machinery, so the number is quoted below as a preliminary
+  observation, not yet a gated claim. As of 2026-07-30 the project's
+  framing is **metrology-centric** (advisor-ratified): the measurement
+  instrument itself is the product, and model comparisons serve as
+  demonstration studies of what it can resolve.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -42,6 +48,21 @@ model, floor **14.0 J**) passed overnight on 2026-07-29, surviving two
 live contamination events that the admission gates caught and recovered
 from per the written playbook. The earlier a5-a8 windows (229 members)
 remain non-claim-bearing, instrument-proving evidence.
+
+**The head-to-head comparison ran on 2026-07-30→31 and passed every
+gate.** Comparing the small (1.5B) and large (7B) model decoding the
+same text, the large model used **about 147 J more energy per response**
+— and the run-to-run scatter of that difference across ten paired blocks
+was only about **0.24 J**, roughly six hundred times smaller than the
+effect. Against the instrument's published floors (7.4 J and 14.0 J)
+this is exactly the demonstration the metrology framing calls for: a
+real effect the instrument resolves with enormous margin, measured under
+frozen, pre-registered rules. (Preliminary observation from the raw
+per-run summaries; it becomes a formal claim once the comparison's
+bookkeeping schema lands.) The same overnight session survived two
+background-process intrusions — macOS's own malware scanner — which the
+admission gates refused on the spot and the written recovery playbook
+turned into a completed window with zero lost science measurements.
 
 That problem is now resolved in the merged SCREEN+BUDGET rules (D-078 clause 10). Gross and
 idle-subtracted energy are screened separately; each passing window keeps a
