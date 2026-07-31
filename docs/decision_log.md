@@ -117,6 +117,7 @@ be re-derived by a future agent gets an entry here.
 | D-092 | Wall meter ratified for the paper (claim C8) with no hardware yet — operate without until purchased; P1-003 answered: buy per the SPEC/Khan/CCGRID references in the advisor brief | accepted (Rivoire-answered, relayed by Ed 2026-07-30) |
 | D-093 | DA-1 cold-gate synthesis: no behavior-changing fix round (DA-1 closes in the gauntlet at the validator/reader boundary), merge at the comment-corrected head `707f76e`, DA-1 registered into gauntlet C5, raw-vs-validated bench scan added to every claim consumption | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-31) |
 | D-094 | Gauntlet counting domain: COMPOSED design adopted (prospective writer outcome enum + fail-closed legacy log binding; truth table preserves the struck cell; DA-1 closes at the raw reader boundary); D-088 benign-count corrected 46→44; three-commit landing order C1-first | accepted (D-088 cl.2 mandated consult + magistrate 2026-07-31) |
+| D-095 | MANIFEST-CONTRAST design: analysis-manifest v3 (new module + dispatcher, v1/v2 byte-frozen), governed ABBA block derivation, folded_sha256 arm binding, Holm m=1 two-sided positive-direction, cross_stack_armwise_max.v1 floor rule; claim chain = gauntlet → v3 → multi-cell mint → claim | accepted (rule-2 consult + magistrate 2026-07-31; implementation queued behind the gauntlet) |
 
 ---
 
@@ -5799,3 +5800,63 @@ one exists.
 
 Revisit when: any falsifier fires (returns to a cold gate), or the writer
 enum meets a real outcome outside the closed set.
+
+## D-095: MANIFEST-CONTRAST design — analysis-manifest v3 with cross-stack armwise-max floor gating
+
+- Date: 2026-07-31
+- Status: accepted (rule-2 pre-decision consult — Sol xhigh — magistrate-adopted;
+  implementation NOT yet ordered: queued behind COOLDOWN-JOIN-GAUNTLET-01,
+  which shares its write surface)
+- Applies to: `MANIFEST-CONTRAST-01`, `MINT-GENERALIZE-01`, the
+  splitwise_decode_v1 gated contrast claim
+
+Adopted design: mint `joulewise.analysis_manifest.v3` in a NEW module with a
+schema dispatcher in the manifest load path; the v1 validator and every
+Slice-2M constant stay byte-untouched (frozen-corpus doctrine), v2 stays the
+AP-SPEC sibling. Rejected: amending v1 (violates frozen corpora); a parallel
+contrast document type (duplicates identity/replacement/floor/claim plumbing
+and weakens the single consumption boundary).
+
+v3 freezes: `comparative_contrast` / `null_alias false` / n=10 / orientation
+`condition_b_minus_condition_a`; plan SHA + both stage-order SHAs + the
+authenticated PASSED verdict basis `1e08e8ef…d147`; a governed derivation
+rule mapping `swdec-contrast-bNN-{a1,b1,b2,a2}` to blocks with exact cover
+and contiguous NN; two arm records carrying ratified family hash + realized
+stack identity admitting the real MLX `{kind:"file_set", folded_sha256}`
+shape (the STACK-ID-BIND-01 lesson); estimator
+`abba_block_arm_mean_difference_t_v1` (Di = (B1+B2)/2 − (A1+A2)/2, paired-t
+machinery, conservative deterministic-bound averaging, never inferred ABBA
+cancellation); Holm α=.05 m=1; two-sided with `hypothesized_direction:
+positive` — a significant NEGATIVE result must not satisfy the registered
+claim; equivalence/mde null (not pre-registered).
+
+Floor gating: NEW named claim-level rule `cross_stack_armwise_max.v1` —
+resolve each arm's floor independently on its exact stack (each cell already
+max(abs, comparative) per D-084), claim clears BOTH arm gates, i.e.
+max(F_A, F_B), never the sum; claim-side anchor bounds stay separately
+consumed with D-078 cl.11 disclosure. **Consequence on the record:** mint #1
+alone cannot authorize arm A (its cells are df-ph-* families, not
+sw-decode-*), so the claim needs ONE new multi-cell floor artifact with
+independently stack-scoped 1.5B and 7B cells and the sw-decode-* families
+predeclared; mint #1 stays byte-identical. That mint is D-088-blocked until
+the gauntlet lands (7B corpus is duplicate-bearing).
+
+**The honest dependency chain, ratified:** COOLDOWN-JOIN-GAUNTLET (D-094
+commits) → v3 consumer → generalized multi-cell mint → arm floor bindings →
+analyze_claims. The D-093 raw-vs-validated scan hooks at the ONE
+supersession reader boundary, scans the contrast root and every declared
+floor-evidence root before estimation, records {raw_count, validated_count}
+in the claim artifact, and refuses on divergence. Physical roots bind by
+authenticated basis, never by directory label.
+
+Write surface (for the future implementation order): new
+analysis_manifest_v3 module; analysis_engine inputs/__init__/claims/
+artifact; cli; the splitwise manifest generator + generated manifest; four
+test files. Rough size 1.8-2.6k lines. Delta-audit checklist recorded in
+the consult memo (v1 byte-identity, position single-consumption, refusal
+edges, folded_sha256 parity, m=1 mechanics, negative-direction refusal,
+armwise-max never sum, cl.11 survival, D-093 refusal precedence).
+
+Revisit when: the gauntlet lands (implementation may then be ordered), or
+any element above fails ratification review at the implementation delta
+audit.
