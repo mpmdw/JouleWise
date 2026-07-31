@@ -116,6 +116,7 @@ be re-derived by a future agent gets an entry here.
 | D-091 | Metrology pivot: the capstone is metrology-centric — the measurement instrument is the product; the paper leads with metrology claims (linearity, additivity, floors, drift governance) and the model contrasts become demonstration studies | accepted (Ed/Rivoire-ratified 2026-07-30) |
 | D-092 | Wall meter ratified for the paper (claim C8) with no hardware yet — operate without until purchased; P1-003 answered: buy per the SPEC/Khan/CCGRID references in the advisor brief | accepted (Rivoire-answered, relayed by Ed 2026-07-30) |
 | D-093 | DA-1 cold-gate synthesis: no behavior-changing fix round (DA-1 closes in the gauntlet at the validator/reader boundary), merge at the comment-corrected head `707f76e`, DA-1 registered into gauntlet C5, raw-vs-validated bench scan added to every claim consumption | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-31) |
+| D-094 | Gauntlet counting domain: COMPOSED design adopted (prospective writer outcome enum + fail-closed legacy log binding; truth table preserves the struck cell; DA-1 closes at the raw reader boundary); D-088 benign-count corrected 46→44; three-commit landing order C1-first | accepted (D-088 cl.2 mandated consult + magistrate 2026-07-31) |
 
 ---
 
@@ -5467,7 +5468,9 @@ Clauses:
    R1's default-refusal principle survives intact.
 
 Revisit when: the gauntlet's design phase selects the counting domain (record
-the choice here), or any bench scan under clause 3(c) fails — which voids the
+the choice here — RECORDED 2026-07-31: D-094 adopts the composed design and
+corrects this entry's "46 benign" count to 44 benign + 2 genuine), or any
+bench scan under clause 3(c) fails — which voids the
 claim-consumption license and returns the merge question to a cold gate.
 
 ## D-089: D5-J — declaration-first, join-owned occurrence ledger; the liberalization cell struck; no interim merge
@@ -5740,3 +5743,59 @@ to the join reopens the fix-now question.
 
 Revisit when: the gauntlet's DA-1 closure lands (record its audit here), or
 any clause-4 scan diverges.
+
+## D-094: Gauntlet counting domain — composed design adopted (writer outcome enum + fail-closed legacy log binding)
+
+- Date: 2026-07-31
+- Status: accepted (D-088 cl.2's mandated bounded pre-decision consult — Sol
+  xhigh, corpus ground truth verified record-by-record — magistrate-adopted)
+- Applies to: `COOLDOWN-JOIN-GAUNTLET-01` (C1-C5 + the D-093 DA-1 closure),
+  `scripts/run_campaign.py` manifest writer, the cooldown join and
+  supersession reader
+
+Adopted: the **composed** counting domain, exactly the composition D-088
+cl.2 anticipated. Prospective manifests record a closed per-`existing`-row
+outcome enum (`usable|failed|incomplete|waived`); legacy v1 rows classify
+via an exact, unique manifest/member/bundle binding to `campaign_log.jsonl`,
+with missing/inconsistent/ambiguous/unparseable bindings failing closed.
+Declaration order defines physical-occurrence segments; the outcome
+bit/log classification authenticates each `existing` alias. Truth table as
+consulted (accept `I E*` single-occurrence; multi-`I` shapes require one
+exact supersession selecting a verified `I`; bare `E+` refuses — no
+cooldown-bearing invocation; unknown classification or invalid manifest
+refuses the join; a recognizable invalid same-bundle supersession record
+participates in ambiguity so valid+malformed REFUSES — closing DA-1 at the
+raw reader boundary, the D-093-required shape). D5-J's struck-cell
+principle is preserved: missing/malformed evidence never becomes
+selectable. Rejected: writer-bit-only (discards sound legacy evidence;
+cannot distinguish repeated aliases from replacements without order);
+order-only (perpetuates a heuristic + external-log dependency forever).
+
+**Correction to D-088's trigger record, on the record:** the consult's
+record-by-record classification of the 7B corpus finds **44 benign
+duplicate ids** (24 `invoked→existing`, 20 `invoked→existing→existing`)
+plus **2 genuine** (`invoked→invoked`, `invoked→invoked→existing`), not
+"46 benign"; all 65 `existing` rows bind one-to-one to succeeded
+strict-valid `skipped` log rows; the contrast corpus adds one genuine
+`invoked→invoked→invoked` id. Zero existing-before-invoked anywhere; all
+three genuine cases carry exact supersessions. D-088's structural holding
+is unaffected.
+
+Landing order (each commit independently audited; C1 first per D-088
+cl.2): (1) C1 audit commit — keyset = candidate emissions ∪ normalized
+occurrence ids, exact unknown/unverified refusal payload, WRITE_SCOPE
+{analysis_engine/inputs.py, tests/test_analysis_integration.py};
+(2) reader/domain commit closing DA-1 — v1 log classification, v2 outcome
+consumption, C4/C5 failures, full truth table, V4 valid+malformed refusal,
+WRITE_SCOPE + whole_window.py; (3) writer/C3 commit — outcome emission +
+recorder normalized-representative consumption, WRITE_SCOPE
+{scripts/run_campaign.py, tests/test_run_campaign.py}. Falsifiers: any
+writer-producible valid multi-occurrence shape lacking a repair; any
+accepted unclassified `existing`; any valid+invalid supersession
+acceptance; failure to preserve 57/57 and 47/47 real-corpus resolution
+while refusing the QA-10A/QA-10B fixtures. Residual risk recorded: no real
+corpus exercises legacy existing-before-invoked; fixture-validated until
+one exists.
+
+Revisit when: any falsifier fires (returns to a cold gate), or the writer
+enum meets a real outcome outside the closed set.
