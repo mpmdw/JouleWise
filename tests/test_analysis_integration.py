@@ -3304,16 +3304,29 @@ if __name__ == "__main__":
 
 
 class SupersessionAwareCooldownJoinTests(unittest.TestCase):
-    """FIX-9 regressions: duplicate occurrences resolve ONLY via a valid
-    operator supersession record naming exactly the observed occurrences."""
+    """Declaration-first cooldown-join and supersession regressions."""
 
     @staticmethod
-    def _manifest(tmp: Path, name: str, session: str, bundle_id: str) -> None:
+    def _manifest(
+        tmp: Path,
+        name: str,
+        session: str,
+        bundle_id: str,
+        *,
+        analysis_manifest_id: str | None = None,
+        cooldown: object | None = None,
+    ) -> Path:
         campaign_dir = tmp / "campaign_manifests"
         campaign_dir.mkdir(parents=True, exist_ok=True)
+        if cooldown is None:
+            cooldown = {
+                "result": "first_run_exempt",
+                "session_id": session,
+                "following_run_id": bundle_id,
+            }
         manifest = {
             "schema_version": "joulewise.campaign_provenance.v1",
-            "analysis_manifest_id": None,
+            "analysis_manifest_id": analysis_manifest_id,
             "session_id": session,
             "first_physical_run_id": bundle_id,
             "members": [
@@ -3321,15 +3334,84 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                     "execution": "invoked",
                     "run_id": bundle_id,
                     "bundle_ids": [bundle_id],
-                    "preceding_campaign_cooldown": {
-                        "result": "first_run_exempt",
-                        "session_id": session,
-                        "following_run_id": bundle_id,
-                    },
+                    "preceding_campaign_cooldown": cooldown,
                 }
             ],
         }
-        (campaign_dir / name).write_text(json.dumps(manifest), encoding="utf-8")
+        path = campaign_dir / name
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        return path
+
+    def _install_real_supersession(
+        self,
+        root: Path,
+        bundle_id: str,
+        *,
+        selected_manifest: str | tuple[str, int],
+        superseded_manifests: list[str | tuple[str, int]],
+    ) -> dict:
+        from joulewise.whole_window import (
+            OCCURRENCE_SUPERSESSION_SCHEMA,
+            supersession_entry_sha256,
+        )
+
+        canonical = root / bundle_id
+        canonical.mkdir()
+        quarantine = Path(tempfile.mkdtemp(prefix="d5j-quarantine-"))
+        self.addCleanup(shutil.rmtree, quarantine, ignore_errors=True)
+        custody_hashes = {}
+        for name, payload in (
+            ("config.json", {"run_id": bundle_id}),
+            ("metadata.json", {"status": "failed"}),
+            ("summary_metrics.json", {"status": "failed"}),
+        ):
+            raw = (json.dumps(payload, sort_keys=True) + "\n").encode()
+            (canonical / name).write_bytes(raw)
+            (quarantine / name).write_bytes(raw)
+            custody_hashes[name] = hashlib.sha256(raw).hexdigest()
+
+        def occurrence(manifest_ref: str | tuple[str, int]) -> dict:
+            manifest_name, bundle_index = (
+                (manifest_ref, 0)
+                if isinstance(manifest_ref, str)
+                else manifest_ref
+            )
+            path = root / "campaign_manifests" / manifest_name
+            return {
+                "bundle_id": bundle_id,
+                "source_manifest": {
+                    "path": f"campaign_manifests/{manifest_name}",
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                },
+                "member_index": 0,
+                "bundle_index": bundle_index,
+            }
+
+        entry = {
+            "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+            "record_type": "campaign_occurrence_supersession",
+            "runs_root": str(root.resolve()),
+            "bundle_id": bundle_id,
+            "reason": "failed occurrence quarantined before retry",
+            "selected_occurrence": occurrence(selected_manifest),
+            "superseded_occurrences": [
+                occurrence(name) for name in superseded_manifests
+            ],
+            "quarantine": {
+                "path": str(quarantine.resolve()),
+                "config_sha256": custody_hashes["config.json"],
+                "metadata_sha256": custody_hashes["metadata.json"],
+                "summary_sha256": custody_hashes["summary_metrics.json"],
+            },
+        }
+        entry["entry_sha256"] = supersession_entry_sha256(entry)
+        log_path = root / "campaign_log.jsonl"
+        prior = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+        log_path.write_text(
+            prior + json.dumps(entry, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return entry
 
     def _duplicated_root(self) -> Path:
         tmp = Path(tempfile.mkdtemp(prefix="fix9-"))
@@ -3411,6 +3493,102 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
+    def test_b1_partial_supersession_cannot_launder_malformed_declaration(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import (
+            validate_occurrence_supersession_entry,
+            validated_supersession_entries,
+        )
+
+        root = Path(tempfile.mkdtemp(prefix="d5j-b1-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "campaign-a.json", "session-a", "dup-bundle")
+        self._manifest(root, "campaign-b.json", "session-b", "dup-bundle")
+        self._manifest(
+            root,
+            "campaign-c.json",
+            "session-c",
+            "dup-bundle",
+            cooldown="malformed",
+        )
+        entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
+        )
+
+        self.assertTrue(validate_occurrence_supersession_entry(entry, root))
+        self.assertEqual(validated_supersession_entries(root), [entry])
+        row = _campaign_cooldown_evidence(root, None)["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_other_catalog_declaration_does_not_create_duplicate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="d5j-b2-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "selected.json",
+            "selected-session",
+            "dup-bundle",
+            analysis_manifest_id="selected",
+        )
+        self._manifest(
+            root,
+            "filtered-sibling.json",
+            "filtered-session",
+            "dup-bundle",
+            analysis_manifest_id="other",
+        )
+
+        row = _campaign_cooldown_evidence(root, "selected")["dup-bundle"]
+        self.assertEqual(row["result"], "first_run_exempt")
+        self.assertTrue(row["verified"])
+        self.assertEqual(row["manifest"], "campaign_manifests/selected.json")
+
+    def test_b2_wrong_schema_duplicate_or_unreadable_catalog_refuses_join(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        for label, sibling in (
+            ("unreadable", b"{ this is not json"),
+            (
+                "wrong-schema",
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.campaign_provenance.v999",
+                        "analysis_manifest_id": "selected",
+                        "members": [
+                            {
+                                "execution": "invoked",
+                                "run_id": "solo-bundle",
+                                "bundle_ids": ["solo-bundle"],
+                                "preceding_campaign_cooldown": "malformed",
+                            }
+                        ],
+                    }
+                ).encode(),
+            ),
+        ):
+            with self.subTest(label=label):
+                root = Path(tempfile.mkdtemp(prefix=f"d5j-catalog-{label}-"))
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                self._manifest(
+                    root,
+                    "selected.json",
+                    "selected-session",
+                    "solo-bundle",
+                    analysis_manifest_id="selected",
+                )
+                (root / "campaign_manifests" / "sibling.json").write_bytes(sibling)
+                self.assertEqual(
+                    _campaign_cooldown_evidence(root, "selected"),
+                    {},
+                )
+
     def test_cross_member_duplicate_with_malformed_physical_row_refuses(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
@@ -3443,6 +3621,44 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(row["result"], "unknown")
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
+
+    def test_repeated_declarations_use_true_positions_for_supersession(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import validated_supersession_entries
+
+        root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle", "dup-bundle"],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        },
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        },
+                    ],
+                )
+            ]
+        )
+        entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest=("physical.json", 0),
+            superseded_manifests=[("physical.json", 1)],
+        )
+
+        self.assertEqual(validated_supersession_entries(root), [entry])
+        row = _campaign_cooldown_evidence(root, None)["dup-bundle"]
+        self.assertEqual(row["result"], "first_run_exempt")
+        self.assertTrue(row["verified"])
+        self.assertEqual(row["manifest"], "campaign_manifests/physical.json")
 
     def test_single_declared_occurrence_keeps_physical_and_legacy_resolution(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -3510,67 +3726,99 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
     def test_validated_log_supersession_selects_governing_cooldown_row(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
         from joulewise.whole_window import (
-            OCCURRENCE_SUPERSESSION_SCHEMA,
-            supersession_entry_sha256,
             validate_occurrence_supersession_entry,
             validated_supersession_entries,
         )
 
         root = self._duplicated_root()
         bundle_id = "dup-bundle"
-        canonical = root / bundle_id
-        canonical.mkdir()
-        quarantine = Path(tempfile.mkdtemp(prefix="fix10-quarantine-"))
-        self.addCleanup(shutil.rmtree, quarantine, ignore_errors=True)
-        custody_hashes = {}
-        for name, payload in (
-            ("config.json", {"run_id": bundle_id}),
-            ("metadata.json", {"status": "failed"}),
-            ("summary_metrics.json", {"status": "failed"}),
-        ):
-            raw = (json.dumps(payload, sort_keys=True) + "\n").encode()
-            (canonical / name).write_bytes(raw)
-            (quarantine / name).write_bytes(raw)
-            custody_hashes[name] = hashlib.sha256(raw).hexdigest()
-
-        def occurrence(manifest_name: str) -> dict:
-            path = root / "campaign_manifests" / manifest_name
-            return {
-                "bundle_id": bundle_id,
-                "source_manifest": {
-                    "path": f"campaign_manifests/{manifest_name}",
-                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                },
-                "member_index": 0,
-                "bundle_index": 0,
-            }
-
-        entry = {
-            "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
-            "record_type": "campaign_occurrence_supersession",
-            "runs_root": str(root.resolve()),
-            "bundle_id": bundle_id,
-            "reason": "failed occurrence quarantined before retry",
-            "selected_occurrence": occurrence("campaign-b.json"),
-            "superseded_occurrences": [occurrence("campaign-a.json")],
-            "quarantine": {
-                "path": str(quarantine.resolve()),
-                "config_sha256": custody_hashes["config.json"],
-                "metadata_sha256": custody_hashes["metadata.json"],
-                "summary_sha256": custody_hashes["summary_metrics.json"],
-            },
-        }
-        entry["entry_sha256"] = supersession_entry_sha256(entry)
-        self.assertTrue(validate_occurrence_supersession_entry(entry, root))
-        (root / "campaign_log.jsonl").write_text(
-            json.dumps(entry, sort_keys=True) + "\n", encoding="utf-8"
+        entry = self._install_real_supersession(
+            root,
+            bundle_id,
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
         )
+        self.assertTrue(validate_occurrence_supersession_entry(entry, root))
         self.assertEqual(validated_supersession_entries(root), [entry])
 
         row = _campaign_cooldown_evidence(root, None)[bundle_id]
         self.assertEqual(row["manifest"], "campaign_manifests/campaign-b.json")
         self.assertEqual(row["session_id"], "session-b")
         self.assertTrue(row["verified"])
+
+    def test_exact_supersession_cannot_license_emission_subset(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import validated_supersession_entries
+
+        root = Path(tempfile.mkdtemp(prefix="d5j-struck-cell-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "selected.json",
+            "selected-session",
+            "dup-bundle",
+            analysis_manifest_id="selected",
+        )
+        self._manifest(
+            root,
+            "filtered.json",
+            "filtered-session",
+            "dup-bundle",
+            analysis_manifest_id="selected",
+            cooldown="malformed",
+        )
+        entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="selected.json",
+            superseded_manifests=["filtered.json"],
+        )
+
+        self.assertEqual(validated_supersession_entries(root), [entry])
+        row = _campaign_cooldown_evidence(root, "selected")["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_57_member_fixture_preserves_two_consumed_supersessions(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import validated_supersession_entries
+
+        root = Path(tempfile.mkdtemp(prefix="d5j-real-shape-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        bundle_ids = [f"member-{index:02d}" for index in range(57)]
+        duplicate_ids = (bundle_ids[11], bundle_ids[43])
+        original_names = {}
+        for index, bundle_id in enumerate(bundle_ids):
+            name = f"campaign-{index:02d}.json"
+            original_names[bundle_id] = name
+            self._manifest(
+                root,
+                name,
+                f"session-{index:02d}",
+                bundle_id,
+            )
+        for index, bundle_id in enumerate(duplicate_ids):
+            retry_name = f"retry-{index}.json"
+            self._manifest(
+                root,
+                retry_name,
+                f"retry-session-{index}",
+                bundle_id,
+            )
+            self._install_real_supersession(
+                root,
+                bundle_id,
+                selected_manifest=retry_name,
+                superseded_manifests=[original_names[bundle_id]],
+            )
+
+        self.assertEqual(len(validated_supersession_entries(root)), 2)
+        joined = _campaign_cooldown_evidence(root, None)
+        self.assertEqual(len(joined), 57)
+        self.assertTrue(all(row["verified"] for row in joined.values()))
+        self.assertEqual(joined[duplicate_ids[0]]["session_id"], "retry-session-0")
+        self.assertEqual(joined[duplicate_ids[1]]["session_id"], "retry-session-1")
 
     def test_supersession_naming_mismatched_occurrences_refuses(self):
         from joulewise.analysis_engine import inputs as inputs_module

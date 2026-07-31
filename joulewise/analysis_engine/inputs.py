@@ -1431,26 +1431,56 @@ def campaign_cooldown_evidence(
 def _campaign_cooldown_evidence(
     runs_root: Path, manifest_id: str | None
 ) -> dict[str, Mapping[str, Any]]:
-    """Recover only independently verified per-member campaign provenance."""
+    """Recover only independently verified per-member campaign provenance.
+
+    This join owns the occurrence ledger.  ``declarations`` contains every
+    invoked ``bundle_ids`` position in the complete catalog selected by
+    ``manifest_id``; ``emissions`` contains cooldown rows emitted by those same
+    manifests.  A bundle resolves only when both ledgers contain exactly the
+    same occurrences.  Duplicate declarations additionally require one exact
+    supersession record selecting an emitted occurrence.
+    """
 
     manifest_dir = runs_root / "campaign_manifests"
     if not manifest_dir.is_dir():
         return {}
-    # Each candidate is paired with its manifest-position identity so a
-    # duplicate can be matched against an operator supersession record below.
-    candidates: dict[str, list[tuple[tuple[str, int, int], Mapping[str, Any]]]] = {}
-    declared_occurrence_counts: dict[str, int] = {}
+    catalog: list[tuple[Path, Mapping[str, Any]]] = []
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            continue
+            return {}
         if (
             not isinstance(raw, Mapping)
             or raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA
-            or raw.get("analysis_manifest_id") != manifest_id
             or not isinstance(raw.get("members"), list)
         ):
+            return {}
+        catalog.append((path, raw))
+
+    declarations: dict[str, list[tuple[str, int, int]]] = {}
+    for path, raw in catalog:
+        if raw.get("analysis_manifest_id") != manifest_id:
+            continue
+        manifest_rel = f"campaign_manifests/{path.name}"
+        for member_index, member in enumerate(raw["members"]):
+            if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                continue
+            bundle_ids = member.get("bundle_ids")
+            if not isinstance(bundle_ids, list):
+                continue
+            for bundle_index, bundle_id in enumerate(bundle_ids):
+                if isinstance(bundle_id, str) and bundle_id:
+                    declarations.setdefault(bundle_id, []).append(
+                        (manifest_rel, member_index, bundle_index)
+                    )
+
+    emissions: dict[
+        str, list[tuple[tuple[str, int, int], Mapping[str, Any]]]
+    ] = {}
+    emission_overflow: set[str] = set()
+    for path, raw in catalog:
+        if raw.get("analysis_manifest_id") != manifest_id:
             continue
         session_id = raw.get("session_id")
         first_run_id = raw.get("first_physical_run_id")
@@ -1501,12 +1531,6 @@ def _campaign_cooldown_evidence(
                 continue
             member_run_id = member.get("run_id")
             bundle_ids = member.get("bundle_ids")
-            if isinstance(bundle_ids, list):
-                for bundle_id in bundle_ids:
-                    if isinstance(bundle_id, str) and bundle_id:
-                        declared_occurrence_counts[bundle_id] = (
-                            declared_occurrence_counts.get(bundle_id, 0) + 1
-                        )
             if (
                 not isinstance(member_run_id, str)
                 or not member_run_id
@@ -1517,16 +1541,27 @@ def _campaign_cooldown_evidence(
                 continue
             physical_members = member.get("physical_members")
             if isinstance(physical_members, list):
+                declared_positions: dict[str, list[int]] = {}
+                for bundle_index, bundle_id in enumerate(bundle_ids):
+                    declared_positions.setdefault(bundle_id, []).append(bundle_index)
+                emitted_counts: dict[str, int] = {}
                 for physical in physical_members:
                     if not isinstance(physical, Mapping):
                         continue
                     bundle_id = physical.get("bundle_id")
-                    cooldown = physical.get("preceding_campaign_cooldown")
                     if (
                         not isinstance(bundle_id, str)
                         or bundle_id not in bundle_ids
-                        or not isinstance(cooldown, Mapping)
                     ):
+                        continue
+                    occurrence_ordinal = emitted_counts.get(bundle_id, 0)
+                    emitted_counts[bundle_id] = occurrence_ordinal + 1
+                    positions = declared_positions.get(bundle_id, [])
+                    if occurrence_ordinal >= len(positions):
+                        emission_overflow.add(bundle_id)
+                        continue
+                    cooldown = physical.get("preceding_campaign_cooldown")
+                    if not isinstance(cooldown, Mapping):
                         continue
                     id_matches_member = bundle_id == member_run_id or (
                         bundle_id.startswith(f"{member_run_id}__r")
@@ -1537,15 +1572,15 @@ def _campaign_cooldown_evidence(
                         following_run_id=bundle_id,
                         id_matches_member=id_matches_member,
                     )
-                    # A bundle id repeated inside one member gets a position
-                    # no valid supersession record can name, so it refuses.
-                    bundle_index = (
-                        bundle_ids.index(bundle_id)
-                        if bundle_ids.count(bundle_id) == 1
-                        else -1
-                    )
-                    candidates.setdefault(bundle_id, []).append(
-                        ((manifest_rel, member_index, bundle_index), normalized)
+                    emissions.setdefault(bundle_id, []).append(
+                        (
+                            (
+                                manifest_rel,
+                                member_index,
+                                positions[occurrence_ordinal],
+                            ),
+                            normalized,
+                        )
                     )
                 continue
 
@@ -1568,37 +1603,36 @@ def _campaign_cooldown_evidence(
                 id_matches_member=ids_match_member,
             )
             for bundle_index, bundle_id in enumerate(bundle_ids):
-                # A bundle id repeated inside one member gets a position no
-                # valid supersession record can name, so it refuses.
-                position = (
-                    bundle_index if bundle_ids.count(bundle_id) == 1 else -1
-                )
-                candidates.setdefault(bundle_id, []).append(
-                    ((manifest_rel, member_index, position), normalized)
+                emissions.setdefault(bundle_id, []).append(
+                    ((manifest_rel, member_index, bundle_index), normalized)
                 )
 
     supersessions = validated_supersession_entries(runs_root)
     resolved: dict[str, Mapping[str, Any]] = {}
-    for bundle_id, rows in candidates.items():
-        # Declared occurrence count is evidence: duplicate declarations remain
-        # ambiguous even when a malformed physical row was dropped or the
-        # surviving bytes normalize identically.
-        # The single licensed exception is an operator supersession artifact
-        # that names EXACTLY the observed occurrences; it selects which
-        # occurrence's evidence governs and licenses nothing wider.
-        # A malformed physical row may have been dropped while candidates
-        # were built, so only the declarations can license this fast path.
-        if (
-            len(rows) == 1
-            and declared_occurrence_counts.get(bundle_id) == 1
-        ):
+    for bundle_id, declared in declarations.items():
+        rows = emissions.get(bundle_id, [])
+        emitted = [identity for identity, _ in rows]
+        ledgers_match = (
+            bundle_id not in emission_overflow
+            and len(emitted) == len(declared)
+            and sorted(emitted) == sorted(declared)
+        )
+        if len(declared) == 1 and ledgers_match:
             resolved[bundle_id] = rows[0][1]
             continue
+        # This is intentionally strict: even an exact record naming all of D
+        # cannot license a selected-catalog subset E.  Corruption never makes
+        # duplicate acceptance more permissive.
         selected = supersession_selected_occurrence_identity(
-            supersessions, bundle_id, [identity for identity, _ in rows]
+            supersessions, bundle_id, declared
         )
         selected_rows = [row for identity, row in rows if identity == selected]
-        if selected is not None and len(selected_rows) == 1:
+        if (
+            len(declared) >= 2
+            and ledgers_match
+            and selected is not None
+            and len(selected_rows) == 1
+        ):
             resolved[bundle_id] = selected_rows[0]
         else:
             resolved[bundle_id] = {
