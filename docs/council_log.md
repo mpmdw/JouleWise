@@ -2295,7 +2295,9 @@ Real-corpus behaviour is unchanged either way (**57/57, both supersessions
 consumed**) — the blockers are adversarial-shaped and need corrupted custody
 inputs. Implementation is FIX-11 in name, **structural in kind and
 consult-sanctioned**, queued behind the metrology campaign authoring in the
-same worktree.
+same worktree. [RESOLVED 2026-07-31: implemented first (the authoring Sol
+session had died), merged via PR #89 under the D-093 cold-gate synthesis;
+metrology authoring relaunched after the merge on `impl/metrology-campaigns`.]
 
 ### (ii) Contrast-window recovery consult (2026-07-31, live in-window)
 

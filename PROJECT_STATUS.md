@@ -54,7 +54,7 @@ gate.** Comparing the small (1.5B) and large (7B) model decoding the
 same text, the large model used **about 147 J more energy per response**
 — and the run-to-run scatter of that difference across ten paired blocks
 was only about **0.24 J**, roughly six hundred times smaller than the
-effect. Against the instrument's published floors (7.4 J and 14.0 J)
+effect. Against the minted 1.5B floor (7.4 J) and the 7B floor pending its mint (14.0 J)
 this is exactly the demonstration the metrology framing calls for: a
 real effect the instrument resolves with enormous margin, measured under
 frozen, pre-registered rules. (Preliminary observation from the raw
@@ -69,8 +69,10 @@ idle-subtracted energy are screened separately; each passing window keeps a
 nonzero drift allowance in its uncertainty budget; the drift bound expires
 after 24 hours; fallback-clock members cannot support a floor; and mock
 evidence is identified from the bound configuration and barred from claims.
-The next quiet session will mint its bound inside the window and collect
-three start references, one midpoint reference, and three end references.
+This protocol has now run five times — windows C, D, a10, the 7B floor
+window, and the contrast window — each minting its bound inside the
+window and collecting three start references, one midpoint reference,
+and three end references.
 The older 222-bundle floor table below remains visible as a caveated historical
 record, not the current measurement posture.
 
@@ -367,6 +369,11 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
+| 2026-07-31 | Contrast window + D5-J merge (PR #89) | The 1.5B-vs-7B decode comparison window collected and passed every gate (47 bundles, ~147 J difference as a preliminary observation); the cooldown-evidence join redesign merged under a cold-gate ruling; the project's framing was adopted as metrology-centric — the instrument is the product. | `docs/run_reports/2026-07-31-contrast-window-collection.md` |
+| 2026-07-30 | First published floor artifact (PR #88) | Mint #1 landed on main: the 1.5B decode floor **7.377086 J** is now a signed, validated artifact rather than prose, after a ten-round fix gauntlet and a cold-gate escalation ruling. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
+| 2026-07-29 | 7B floor window passed | The second calibration window (Qwen2.5 7B decode) passed its bracket and verdict, surviving two live contamination events; floors absolute 6.294380 J / comparative 13.998037 J, prose-only pending their mint. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
+| 2026-07-25 | SCREEN+BUDGET rules merged (PR #85) | D-078 clause 10 landed: separate gross and idle-subtracted screens, a nonzero drift allowance in every passing window's budget, a 24-hour bound expiry, and mock evidence barred from claims. | `docs/run_reports/2026-07-24-screen-budget-gauntlet.md` |
+| 2026-07-22 | Instrument repair merged (PR #79) | The trace-time-anchor defect that voided claim use of the earlier corpora was repaired and confirmed end to end, reopening the path to claim-bearing measurement. | `docs/run_reports/2026-07-20-p0-instrument-repair.md` |
 | 2026-07-19 | Measurement-soundness audit (Ed-directed) | VERDICT: unsound for claim-bearing use as recorded — trace-time-anchor defect misattributes request/phase energies (all four P0s lead-verified); metric-level prechecks already failed 238/288 request metrics; four cooldown cap hits unjoined; analysis-engine wire incompat. Corpora demoted to instrument evidence; published 07-17 floor table caveated; instrument-repair path defined. | `docs/reviews/2026-07-19-measurement-soundness-audit.md` |
 | 2026-07-19 | Extended clean-provenance re-collection | 266/266 strict-valid bundles with clean SOURCE provenance from clean main (288 total with the completion window); all planned cells except DF-TELEM executed at planned n; one unlock abort quarantined (guard's 4th live catch); Sol recompute audit PASS on arithmetic. See the superseding soundness-audit row above for claim status. | `docs/run_reports/2026-07-19-recal456-extended-window.md` |
 | 2026-07-19 | Suite re-calibration under the guard (preliminary, review-corrected) | 94 strict-valid bundles; suite 147.96 ± 0.39 J clean; provisional comparative floor ≈ 1.13 J (~0.77%, 5/10 blocks); claim-ineligible on provenance pending clean re-run; three-lens review corrected two over-promoted claims. | `docs/run_reports/2026-07-19-d077-recal-window.md` |

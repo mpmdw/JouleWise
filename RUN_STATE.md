@@ -40,7 +40,7 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## CURRENT STATE (2026-07-31 close-out; the resume script below is FULLY EXECUTED)
+## CURRENT STATE (2026-07-31 close-out; resume script below EXECUTED except step 7, in flight)
 
 The 2026-07-30 19:15 resume script executed overnight, steps 1-6 and 8
 complete, step 7 (metrology authoring) in flight at close-out:
@@ -143,8 +143,9 @@ WINDOW (do first, in order):
    include the network-time-restore reminder for Ed). NO floor
    extraction (science window, not calibration): claim consumption is
    blocked on MANIFEST-CONTRAST desk work; the paper's demonstration
-   numbers come from bundle summaries + the two existing floor
-   artifacts (1.5B 7.377086 J / 7B 13.998037 J).
+   numbers come from bundle summaries + the one minted floor artifact
+   (1.5B, 7.377086 J) plus the 7B prose-only floors (13.998037 J,
+   pending MINT-GENERALIZE-01).
 6. OVERNIGHT (agents OK after measurement_complete): implement D5-J —
    the STRUCTURAL cooldown-join redesign (adopted design + the struck
    liberalization cell + implementation sketch ALL in the ledger).
@@ -547,6 +548,7 @@ eliminated.
 | **C** (`05_phase_decode_abba`) | 40 decode ABBA members, 59/59 collected | **PASSED** | bracket drift 1.279 ms; first comparative window in project history to pass |
 | **D** (absolute) | 30 claim members, 49/49 collected | **PASSED** | bracket drift 0.484 ms, tightest of the campaign |
 | **7B floor** (`window_7bfloor_20260729`) | Qwen2.5 7B decode floor, collected 2026-07-29 | **PASSED** | CLAIM-BEARING; governed extraction clean (`all_cells_extractable` true). Floors: absolute 6.294380135190098 J, comparative 13.998036715259254 J; absolute-cell member mean 192.38623252628366 J (n=10). NOT yet minted — `MINT-GENERALIZE-01` is blocked by the D-088 no-mint-from-duplicate-bearing-corpus condition, so these figures live only in prose plus the out-of-repo custody extraction |
+| **contrast** (`window_contrast_20260730`) | 40 contrast ABBA members + 7 references, 47 bundles, 1 supersession | **PASSED** | bracket drift 1.281 ms; contrast diagnostic 146.730349 J σ 0.241 (n=10 blocks) UNGATED — claim rides MANIFEST-CONTRAST-01 |
 
 Window B's cause is established and is NOT a clock problem: a GPU DVFM
 power ramp that the rectangular-pulse fiducial estimator aliases into an
@@ -723,6 +725,11 @@ Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the CURRENT STATE block at
 the top of this file.
 
+- 2026-07-31 contrast-window collection (`window_contrast_20260730`
+  PASSED, 47 bundles) + D5-J merge via PR #89 under the D-093 cold-gate
+  synthesis: `docs/run_reports/2026-07-31-contrast-window-collection.md`
+- 2026-07-30 paper outline v1 archived (metrology-centric framing,
+  D-091): `docs/run_reports/2026-07-30-paper-outline-v1.md`
 - 2026-07-30 audit harvest → FIX-10 → escalation → cold gate (D-088) →
   PR #88 merge `da83337` (mint #1 mainline) + advisor-brief hardening:
   `docs/run_reports/2026-07-30-mint-merge-coldgate.md`
@@ -832,7 +839,11 @@ the top of this file.
 
 ## Current Verification
 
-- **Merged main `da83337` (2026-07-30, current): canonical `Ran 2280
+- **Merged main `7ee680c` (2026-07-31, current): canonical `Ran 2286
+  tests`, `OK (skipped=12)`, lead-run post-merge.** This is the PR #89
+  (D5-J) merge; the close-out commits `49c1876`, `0d0bd0b`, `6ed1625`
+  sit atop it and are docs/kernel only.
+- **Merged main `da83337` (2026-07-30, historical): canonical `Ran 2280
   tests`, `OK (skipped=12)`, lead-run post-merge.** Branch head
   `16c7af0` pre-merge: lead-run `2280 OK (skipped=21)` (worktree
   convention); Sol-side `2280 OK (skipped=24)` (delegated sandbox). CI
@@ -1058,19 +1069,17 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-07-30, CURRENT) `main` and `origin/main` are both at the PR #88
-  merge `da83337`. Branch `impl/mint-tool` is MERGED (verified
-  `git merge-base --is-ancestor impl/mint-tool main`), as are
+- (2026-07-31, CURRENT) `main` and `origin/main` are both at `6ed1625`:
+  the PR #89 merge `7ee680c` (D5-J) plus the close-out commits
+  `49c1876`, `0d0bd0b`, and `6ed1625`. Branch `impl/mint-tool` is MERGED
+  (verified `git merge-base --is-ancestor impl/mint-tool main`), as are
   `impl/floor-mint` and `impl/floor-label-clean`; all three may be
-  deleted. Their scratchpad worktrees are still registered (`minttool` @
-  `16c7af0` plus ~11 review/pin worktrees at `f63a334`/`697f741` under
-  the `9c166892…` session dir, and prunable entries under `ad48bfae…`
-  and `d714f367…`) — `git worktree prune` plus explicit removal is owed
-  as housekeeping. Working tree carries the uncommitted bookkeeping batch
-  (`RUN_STATE.md`, `TASK_QUEUE.md`, `docs/process/state_kernel.json`,
-  `tests/test_gen_state.py`) plus the untracked
-  `docs/run_reports/2026-07-30-mint-merge-coldgate.md` and the untracked
-  private `CLAUDE.local.md` (never commit the latter).
+  deleted. Their scratchpad worktrees are still registered (`minttool`
+  plus ~11 review/pin worktrees under the `9c166892…` session dir, and
+  prunable entries under `ad48bfae…` and `d714f367…`) — `git worktree
+  prune` plus explicit removal is owed as housekeeping. The working tree
+  is clean except for the untracked private `CLAUDE.local.md` (Ed's
+  file; never commit it).
 - (2026-07-28 late, historical) `main` and `origin/main` were at that
   session's bookkeeping commit atop the PR #87 merge `058c918`. Branch
   `impl/mint-tool` (pushed, then UNMERGED) held the 9-commit mint series
@@ -1095,9 +1104,9 @@ the top of this file.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
   (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
-  content was refreshed on 2026-07-30: stamped `updated: 2026-07-30`,
+  content was refreshed on 2026-07-31: stamped `updated: 2026-07-31`,
   `latest_report` points at
-  `docs/run_reports/2026-07-30-mint-merge-coldgate.md`, the completed
+  `docs/run_reports/2026-07-31-contrast-window-collection.md`, the completed
   `FLOOR-LABEL-01` and `STACK-ID-BIND-01` rows are retired to
   `TASK_QUEUE.md`'s completed table, and the post-mint intake
   (`COOLDOWN-JOIN-GAUNTLET-01`, `MINT-GENERALIZE-01`,

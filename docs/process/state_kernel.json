@@ -637,14 +637,7 @@
       "fences": [
         {
           "authority": {
-            "label": "D-088 escalation ruling: no FIX-11",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"
-        },
-        {
-          "authority": {
-            "label": "D-088 standing conditions",
+            "label": "D-088 escalation ruling: no FIX-11; D-088 standing conditions",
             "path": "docs/decision_log.md"
           },
           "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"

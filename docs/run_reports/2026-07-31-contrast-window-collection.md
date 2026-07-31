@@ -34,8 +34,9 @@ under the frozen plan `splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b`
 - **Post:** `20260731T012210-374020b6`, `b_fiducial`
   **0.024850427856341006** s, single attempt, no retries.
 - **Bracket drift 0.0012808736064471304 s** against the derived screen value
-  **0.010818 s** — PASS clean. This is the **third consecutive passing window
-  bracket**, after window C (1.279 ms) and window D (0.484 ms).
+  **0.010818 s** — PASS clean. This is the **fourth consecutive passing window
+  bracket**, after window C (1.279 ms), window D (0.484 ms), and the 7B floor
+  window (3.680 ms).
 
 ## Members
 
@@ -103,9 +104,10 @@ root 13 bundles to iCloud `JouleWise-backup/window_contrast_20260730` (and
 
 This is a **science window, not a calibration window**, so there is no floor
 extraction. The paper's demonstration numbers come from bundle summaries plus
-the **two existing floor artifacts**: the 1.5B operative decode floor
+the **one minted floor artifact (1.5B, 7.377086 J) plus the 7B prose-only
+floors (pending `MINT-GENERALIZE-01`)**: the 1.5B operative decode floor
 **7.377086 J** (mint #1, mainline) and the 7B floors, absolute **6.294380** /
-comparative **13.998037** J (prose-only, pending `MINT-GENERALIZE-01`).
+comparative **13.998037** J.
 
 ## Diagnostics vs gated claims — the distinction that governs this window
 

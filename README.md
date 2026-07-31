@@ -23,9 +23,16 @@ published floors. The SCREEN+BUDGET rules are ratified and merged
 they screen gross and idle-subtracted energy separately, retain a nonzero
 drift allowance for each family, require a fresh 24-hour bound, reject
 fallback-clock members from floor cells, and bar mock evidence from claims.
-The next step is one clean prospective quiet-machine window following
-`docs/phase_2/window_runbook.md`, producing the first claim-grade floors
-before the a8 re-verdict and Splitwise sizing.
+Five prospective quiet-machine windows have since passed under those rules
+(C, D, a10, the 7B floor window, and the contrast window), and on 2026-07-30
+the project published its first floor artifact: the 1.5B model's decode
+detection floor, **7.377086 J**, minted and mainline. The Splitwise
+head-to-head contrast (1.5B vs 7B decode) has been collected and passed
+every gate; its headline number stays a preliminary observation until one
+piece of bookkeeping machinery lands. The a8 re-verdict path is closed. The
+project's framing is now metrology-centric (D-091): the measurement
+instrument itself is the product, and model comparisons are demonstrations
+of what it can resolve.
 
 The post-audit architectural verdicts remain deliberately bounded: AXI-SB is
 `supported` for native static-batch runtime feasibility with request-scoped
@@ -90,16 +97,19 @@ execution and per-round observability only. Their thinking-mode,
 unmatched-output throughput inversion is hypothesis-generating, not energy
 evidence.
 
-Window A remains open and still requires Ed and a quiet Mac. The repaired
-instrument has produced the 229-member a5-a8 diagnostic collection, and the
-merged screening and uncertainty-budget rules (D-078 clause 10) are ready for prospective
-use. The next claim attempt must follow the run-book: mint the drift bound
-inside the quiet window, then collect a start triplet, midpoint reference, and
-end triplet around the science members. A passing window will support the
-first claim-grade floors; only then do the a8 re-verdict and Splitwise sizing
-follow. The earlier 222-bundle floor publication remains a caveated historical
-record. Use the generated state kernel—not this summary—to select the next
-live or agent-lane step.
+Quiet-machine windows still require Ed and a quiet Mac, and each one follows
+the run-book: mint the drift bound inside the window, then collect a start
+triplet, midpoint reference, and end triplet around the science members. That
+protocol has now run five times and passed five times — windows C, D, a10, the
+7B floor window, and the contrast window — under the merged screening and
+uncertainty-budget rules (D-078 clause 10). Their product is the first minted
+floor artifact (1.5B decode, **7.377086 J**, mainline since 2026-07-30) and the
+7B floors, which remain prose-only until their own mint. The Splitwise contrast
+window collected clean and passed its verdict; the gated claim waits on one
+bookkeeping schema. The a8 retrospective path is closed, and the earlier
+222-bundle floor publication remains a caveated historical record. Use the
+generated state kernel—not this summary—to select the next live or agent-lane
+step.
 
 A separate nine-bundle follow-on is now available as an explicitly
 **exploratory, unmatched, no-claim** observation block. All nine bundles are

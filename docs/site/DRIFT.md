@@ -1,6 +1,6 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-30 (REPO AHEAD OF CAPSULE — claim-posture drift).
+Refreshed: 2026-07-31 (REPO AHEAD OF CAPSULE — claim-posture drift).
 The deployed capsule is still `dep_2I04CG6tQ4t0mzY7`, built from main
 `c3e2647` (2026-07-25); no agent has deployed since, and none will
 (D-068). Since that snapshot the repo gained front-facing state that the
@@ -10,22 +10,48 @@ live site does not show:
   LABELLED claim path, not a refusal, and every publishing artifact must
   carry the single-count statement (effective clearable effect = floor +
   claim-side bound).
-- Windows C, D, and a10 PASSED; window B failed on bracket drift and is
-  preserved, not claim-bearing.
+- Windows C, D, a10, the 7B floor window, and the contrast window
+  PASSED; window B failed on bracket drift and is preserved, not
+  claim-bearing.
 - The floor mint exists and has been exercised: PR #86 (CAL-REBRACKET),
   PR #87 (pre-mint schema hardening), and PR #88 (FIX-1..10 gauntlet +
   mint #1 `df-ph-decode-floor-mint1`, merged `da83337` 2026-07-30).
 - A second claim-bearing window, `window_7bfloor_20260729` (Qwen2.5 7B
   decode floor), collected and PASSED on 2026-07-29.
+- (2026-07-31) The Splitwise contrast window `window_contrast_20260730`
+  collected and PASSED — 47 bundles, bracket drift 1.281 ms — with the
+  7B−1.5B decode contrast at 146.730349 J (σ 0.241 J, n=10 blocks) as a
+  DIAGNOSTIC only; the gated claim is UNGATED and blocked on
+  `MANIFEST-CONTRAST-01`.
+- (2026-07-31) D5-J, the structural cooldown-join redesign, merged via
+  PR #89 under the D-093 cold-gate synthesis, which also added the
+  standing raw-vs-validated supersession-record scan to every claim
+  consumption.
+- (2026-07-31) Decisions D-089 through D-093 and C-039 addendum II; the
+  metrology pivot (D-091) is the project's new framing — the measurement
+  instrument itself is the product; the paper outline v1 is archived at
+  `docs/run_reports/2026-07-30-paper-outline-v1.md`.
 - Decisions D-079 through D-088 and council entry C-039 (+ addendum).
 
-**Deploy-relevant caveat: `PROJECT_STATUS.md` has not itself been
-refreshed since 2026-07-24 (`1af9f92`).** Its 30-second read still says
-"the first claim-grade floor is still ahead" and frames the next step as
-one clean prospective collection, which the mint arc has overtaken.
-Refreshing that page is owed BEFORE the next deploy — deploying now would
-publish a status page that understates the project's position rather than
-overstating it. No other action is recommended to an agent; Ed deploys.
+**DISCHARGED 2026-07-31:** the prior refresh's deploy-blocking caveat —
+`PROJECT_STATUS.md` stale since 2026-07-24 (`1af9f92`), still saying "the
+first claim-grade floor is still ahead" — no longer holds. That page was
+refreshed at `6ed1625` and now carries the mint, the passed windows, and
+the metrology framing.
+
+**New deploy-relevant caveat (2026-07-31):** `README.md`, the
+front-facing landing text, still carried the pre-mint posture ("the next
+step is one clean prospective quiet-machine window … first claim-grade
+floors before the a8 re-verdict") until it was refreshed THIS session;
+it is now current (mint #1, five passed windows, contrast collected,
+metrology framing). Likewise, `PROJECT_STATUS.md`'s Update Ledger was 12
+days behind — its newest row was 2026-07-19 — and was brought current
+this session with the 07-22, 07-25, 07-29, 07-30, and 07-31 rows. Both
+surfaces are deploy-ready as of this refresh. No other action is
+recommended to an agent; Ed deploys.
+
+Prior refresh: 2026-07-30 (the mint-era entry; its content is carried
+forward and superseded by the 2026-07-31 entry above).
 
 Prior refresh: 2026-07-25 (the then-CURRENT DEPLOYED BASELINE). Ed redeployed the
 capsule from merged main `c3e2647` (plus the same-day bookkeeping
