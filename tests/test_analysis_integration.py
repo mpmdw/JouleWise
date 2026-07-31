@@ -3465,6 +3465,52 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
+    def test_result_map_keyset_unions_candidates_and_declared_ids(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        declared_only = "declared-with-zero-emissions"
+        root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle", declared_only],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        }
+                    ],
+                )
+            ]
+        )
+
+        joined = _campaign_cooldown_evidence(root, None)
+
+        candidate_ids = {"dup-bundle"}
+        declared_ids = {"dup-bundle", declared_only}
+        self.assertEqual(set(joined), candidate_ids | declared_ids)
+
+    def test_unresolved_declared_id_has_exact_refusal_payload(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = self._physical_manifest_root(
+            [self._physical_member(["dup-bundle"], [])]
+        )
+
+        self.assertEqual(
+            _campaign_cooldown_evidence(root, None),
+            {
+                "dup-bundle": {
+                    "result": "unknown",
+                    "verified": False,
+                    "session_id": None,
+                    "manifest": None,
+                    "raw_artifact": None,
+                }
+            },
+        )
+
     def test_repeated_declared_bundle_with_malformed_physical_row_refuses(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
@@ -3780,14 +3826,16 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
-    def test_57_member_fixture_preserves_two_consumed_supersessions(self):
+    def _assert_real_corpus_shape_resolves(
+        self, member_count: int, duplicate_indices: tuple[int, ...]
+    ) -> None:
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
         from joulewise.whole_window import validated_supersession_entries
 
         root = Path(tempfile.mkdtemp(prefix="d5j-real-shape-"))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        bundle_ids = [f"member-{index:02d}" for index in range(57)]
-        duplicate_ids = (bundle_ids[11], bundle_ids[43])
+        bundle_ids = [f"member-{index:02d}" for index in range(member_count)]
+        duplicate_ids = tuple(bundle_ids[index] for index in duplicate_indices)
         original_names = {}
         for index, bundle_id in enumerate(bundle_ids):
             name = f"campaign-{index:02d}.json"
@@ -3813,12 +3861,22 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                 superseded_manifests=[original_names[bundle_id]],
             )
 
-        self.assertEqual(len(validated_supersession_entries(root)), 2)
+        self.assertEqual(
+            len(validated_supersession_entries(root)), len(duplicate_ids)
+        )
         joined = _campaign_cooldown_evidence(root, None)
-        self.assertEqual(len(joined), 57)
+        self.assertEqual(len(joined), member_count)
         self.assertTrue(all(row["verified"] for row in joined.values()))
-        self.assertEqual(joined[duplicate_ids[0]]["session_id"], "retry-session-0")
-        self.assertEqual(joined[duplicate_ids[1]]["session_id"], "retry-session-1")
+        for index, bundle_id in enumerate(duplicate_ids):
+            self.assertEqual(
+                joined[bundle_id]["session_id"], f"retry-session-{index}"
+            )
+
+    def test_57_member_fixture_preserves_two_consumed_supersessions(self):
+        self._assert_real_corpus_shape_resolves(57, (11, 43))
+
+    def test_47_member_fixture_preserves_one_consumed_supersession(self):
+        self._assert_real_corpus_shape_resolves(47, (23,))
 
     def test_supersession_naming_mismatched_occurrences_refuses(self):
         from joulewise.analysis_engine import inputs as inputs_module

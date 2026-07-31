@@ -1438,7 +1438,9 @@ def _campaign_cooldown_evidence(
     ``manifest_id``; ``emissions`` contains cooldown rows emitted by those same
     manifests.  A bundle resolves only when both ledgers contain exactly the
     same occurrences.  Duplicate declarations additionally require one exact
-    supersession record selecting an emitted occurrence.
+    supersession record selecting an emitted occurrence.  The returned keyset
+    is the union of candidate emission ids and normalized declared ids; every
+    unresolved id receives the complete refusal payload.
     """
 
     manifest_dir = runs_root / "campaign_manifests"
@@ -1609,7 +1611,19 @@ def _campaign_cooldown_evidence(
 
     supersessions = validated_supersession_entries(runs_root)
     resolved: dict[str, Mapping[str, Any]] = {}
-    for bundle_id, declared in declarations.items():
+    result_bundle_ids = list(declarations)
+    result_bundle_ids.extend(
+        bundle_id for bundle_id in emissions if bundle_id not in declarations
+    )
+    refusal_payload = {
+        "result": "unknown",
+        "verified": False,
+        "session_id": None,
+        "manifest": None,
+        "raw_artifact": None,
+    }
+    for bundle_id in result_bundle_ids:
+        declared = declarations.get(bundle_id, [])
         rows = emissions.get(bundle_id, [])
         emitted = [identity for identity, _ in rows]
         ledgers_match = (
@@ -1639,13 +1653,7 @@ def _campaign_cooldown_evidence(
         ):
             resolved[bundle_id] = selected_rows[0]
         else:
-            resolved[bundle_id] = {
-                "result": "unknown",
-                "verified": False,
-                "session_id": None,
-                "manifest": None,
-                "raw_artifact": None,
-            }
+            resolved[bundle_id] = dict(refusal_payload)
     return resolved
 
 
