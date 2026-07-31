@@ -1621,8 +1621,12 @@ def _campaign_cooldown_evidence(
             resolved[bundle_id] = rows[0][1]
             continue
         # This is intentionally strict: even an exact record naming all of D
-        # cannot license a selected-catalog subset E.  Corruption never makes
-        # duplicate acceptance more permissive.
+        # cannot license a selected-catalog subset E.  Boundary (DA-1,
+        # registered): the matcher below sees only records that survived
+        # validated_supersession_entries, which silently drops malformed
+        # ones, so a malformed record alongside a valid exact one does NOT
+        # force refusal here; raw-record visibility is owned by the
+        # cooldown-join gauntlet.
         selected = supersession_selected_occurrence_identity(
             supersessions, bundle_id, declared
         )
