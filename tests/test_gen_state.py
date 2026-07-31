@@ -45,8 +45,9 @@ EXPECTED_IDS = {
     "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
     "QA-10B-EXISTING-RETRY", "MINT-GENERALIZE-01",
     "MANIFEST-CONTRAST-01", "SUPERSESSION-DUP-REFUSAL-01",
-    # 2026-07-31 DA-1 fold (D-093); promoted as P2-015 retired.
-    "COOLDOWN-JOIN-DA1-01",
+    # COOLDOWN-JOIN-DA1-01 was folded in 2026-07-31 (D-093) as P2-015
+    # retired, and closed the same day inside the gauntlet's commit 2
+    # (e749c95, PR #91 67d268a); it left the live kernel at close-out.
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
@@ -59,7 +60,8 @@ EXPECTED_IDS = {
 
 TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
                 "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP",
-                "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015"}
+                "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015",
+                "COOLDOWN-JOIN-DA1-01"}
 
 
 def load_kernel():
@@ -214,9 +216,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_57(self):
+    def test_exact_live_id_set_56(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 57)
+        self.assertEqual(len(self.tasks), 56)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

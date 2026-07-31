@@ -10,13 +10,16 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-31 (contrast-window + D5-J merge session). **Main
-is at the PR #89 merge `7ee680c`: the contrast window is COLLECTED AND
-PASSED, and D5-J (the structural cooldown-join redesign) is MAINLINE
-under the D-093 cold-gate synthesis.** Post-merge canonical suite
-lead-run on main: `Ran 2286 tests`, `OK (skipped=12)`. See the CURRENT
-STATE block below; the mint-era summary that follows remains accurate
-for the mint arc itself.
+Last updated: 2026-07-31 (claims desk session). **Main is at the PR #91
+merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
+(DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
+four window-A plans FROZEN (D-096).** Decisions D-094..D-097 landed in
+the same session; report:
+`docs/run_reports/2026-07-31-claims-desk-session.md`. The prior head
+`7ee680c` (PR #89: contrast window PASSED, D5-J mainline under the D-093
+cold-gate synthesis; post-merge suite `Ran 2286 tests`, `OK
+(skipped=12)`) is historical. See the CURRENT STATE block below; the
+mint-era summary that follows remains accurate for the mint arc itself.
 
 **Main is at the PR #88
 merge `da83337` (historical for this paragraph): mint #1 is MAINLINE.** The full mint arc (FIX-1..10
@@ -40,10 +43,10 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## CURRENT STATE (2026-07-31 close-out; resume script below EXECUTED except step 7, in flight)
+## CURRENT STATE (2026-07-31 claims-desk close-out; resume script below FULLY EXECUTED)
 
-The 2026-07-30 19:15 resume script executed overnight, steps 1-6 and 8
-complete, step 7 (metrology authoring) in flight at close-out:
+The 2026-07-30 19:15 resume script is fully executed; the 2026-07-31 desk
+day then merged two PRs and ratified four decisions:
 
 1. **Contrast window `window_contrast_20260730`: COLLECTED, verdict
    PASSED.** 47 bundles (start/mid/end references + 40 ABBA science
@@ -60,43 +63,77 @@ complete, step 7 (metrology authoring) in flight at close-out:
    146.730349 J mean, σ 0.241 J, n=10 blocks. The gated claim rides
    MANIFEST-CONTRAST-01.
 2. **D5-J MERGED via PR #89** (`aca78f8` + comment-only correction
-   `707f76e`): the delta audit FAILED (blocker DA-1: malformed
-   supersession records silently dropped pre-ambiguity — PRE-EXISTING on
-   main, byte-identical filter; should-fix DA-2: commit-message test
-   overcount), which per D-089's revisit clause went to a cold gate
-   (fresh Fable + Opus refuter, split verdict) and the **D-093
-   magistrate synthesis**: no behavior-changing fix round (DA-1 closes
-   in the gauntlet at the validator/reader boundary — COOLDOWN-JOIN-DA1-01,
-   intake table), merge at the corrected head, raw-vs-validated
-   supersession-record scan added to EVERY claim consumption (initial:
-   0-divergence across all four claim-bearing corpora).
+   `707f76e`) [DONE 2026-07-31]: the delta audit FAILED (blocker DA-1:
+   malformed supersession records silently dropped pre-ambiguity —
+   PRE-EXISTING on main, byte-identical filter; should-fix DA-2:
+   commit-message test overcount), which per D-089's revisit clause went
+   to a cold gate (fresh Fable + Opus refuter, split verdict) and the
+   **D-093 magistrate synthesis**: no behavior-changing fix round (DA-1
+   closes in the gauntlet at the validator/reader boundary), merge at the
+   corrected head, raw-vs-validated supersession-record scan added to
+   EVERY claim consumption (initial: 0-divergence across all four
+   claim-bearing corpora). **DA-1 is now CLOSED** inside the gauntlet's
+   commit 2 (`e749c95`, PR #91) and `COOLDOWN-JOIN-DA1-01` is retired to
+   the `TASK_QUEUE.md` completed table.
 3. **Bookkeeping landed** (`49c1876`, `0d0bd0b`): D-089..D-093,
    C-039 addendum II, paper outline archived, window run report,
    WINDOW_STATUS + PROJECT_STATUS refreshed (metrology framing, plain
    language), kernel latest_report/date refreshed.
-4. **Metrology campaign suite** (paper claims C1-C5): spec ratified
-   (lieutenant-authored, magistrate-ratified this session); Sol xhigh
-   generation running at close-out on branch `impl/metrology-campaigns`
-   (worktree minttool) — five campaigns (linearity_ramp, null_ladder,
+4. **Metrology campaign suite MERGED via PR #90** (`81a484b`) [DONE
+   2026-07-31]: five campaigns (linearity_ramp, null_ladder,
    additivity_shapes, micro_delta k=64 draft-pending-slope, long_holds),
-   plans emitted `draft_pending_magistrate_ratification`. If dead on
-   resume: relaunch from the spec at scratchpad `metrology-suite-spec.md`
-   (old session dir) + prompt `mt_prompt2.md` (current session dir).
-5. NEXT (in order): harvest/commit the metrology generation (lead
-   review, PR, D-072 gate); ratify the metrology window-A frozen plans;
-   run metrology window A (~2.8 h: ramp + additivity + null o0512 +
-   holds) next quiet night; MANIFEST-CONTRAST-01 desk work to unlock the
-   contrast claim; QUEUE-RECONCILE-01 (P2-015 retirement + 7 stale
-   dependents + DA-1 kernel promotion — roadmap page is AT its 30 kB
-   shard budget, net additions need compensating retirement or a split)
-   [DONE 2026-07-31].
-6. **Ed owes**: network-time restore (`sudo systemsetup
+   150 configs across 23 condition families, deterministic
+   regenerate-twice generators. **D-096** (`f010d5a`) ratified the plan
+   vocabulary and FROZE the four window-A plans
+   (`freeze_status: frozen_before_measurement`; micro_delta stays
+   `draft_pending_slope` by design), and lowered the decision-log
+   pagination ceiling 18k→12k so dense entries cannot push a site page
+   past the 30 kB shard budget.
+5. **Cooldown-join gauntlet commits 1-2 MERGED via PR #91** (`67d268a`)
+   [DONE 2026-07-31]: C1 result-map completeness (`75e9f29` + audit
+   response `c0adc93`), the C2 reader/counting domain closing DA-1
+   (`e749c95`), the three-blocker fix (`8880395`), and the D-097 deferral
+   commit (`a9b9d4a`). Four independent read-only Sol xhigh audits; the
+   B1 blocker failed two same-signature formulations and went to the
+   day's **second cold gate** (cold Fable + Opus contract refuter,
+   converged on deferral); **D-097** adopted the refuter's stricter O3
+   variant — the join's accepted schema set is exactly the writer-emitted
+   set (v1 only), so a v2-labelled manifest or an `outcome` field on any
+   member refuses. Final delta re-audit PASS, zero findings.
+   **D-094** ratified the composed counting domain (and corrected D-088's
+   benign-duplicate count 46→44); **D-095** adopted the
+   MANIFEST-CONTRAST v3 design, implementation queued.
+6. NEXT (in order):
+   1. **Metrology window A, tonight** — frozen plans per D-096; needs
+      only Ed's §5A and the launch (~2.8 h: ramp + additivity + null
+      o0512 + holds).
+   2. **Gauntlet commit 3** — writer outcome emission + a
+      writer-external authenticated discriminator + reader re-acceptance
+      + the D-094 v2 truth-table row as ONE composed, audited change
+      (D-097 contract), with the relabel probe as a permanent
+      regression. Its design consult must consume D-097's two riders
+      (status consumption beyond authentication; the anti-malformation
+      vs anti-tamper distinction).
+   3. **MANIFEST-CONTRAST v3 implementation** (D-095) — unblocked
+      file-wise now that PR #91 has landed; ordered behind commit 3 or
+      run in parallel, and **orderable next session**.
+   4. **Multi-cell mint** (`MINT-GENERALIZE-01`) — still D-088-blocked
+      by the no-mint-from-a-duplicate-bearing-corpus condition until the
+      full gauntlet closes.
+   The claim dependency chain ratified in D-095 governs the ordering:
+   gauntlet commit 3 → analysis-manifest v3 → multi-cell mint → the
+   gated contrast claim.
+7. **Ed owes**: network-time restore (`sudo systemsetup
    -setusingnetworktime on` — still OFF from §5A), wall-meter purchase
    (D-092, non-blocking).
 
 Standing D-093 condition (adds to the D-088 block above): every claim
 consumption through the cooldown join records the raw-vs-validated
-supersession-record scan; any divergence refuses consumption.
+supersession-record scan; any divergence refuses consumption. **DA-1
+itself is CLOSED** (gauntlet commit 2, PR #91), but the scans PERSIST
+unchanged until `COOLDOWN-JOIN-GAUNTLET-01` fully closes — commit 3 is
+still outstanding, so neither the D-093 scans nor the D-088 standing
+conditions lift yet.
 
 ## EXECUTED RESUME SCRIPT (2026-07-30 19:15 PT pre-window checkpoint; historical — fully executed, see CURRENT STATE)
 
@@ -392,7 +429,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-31). Latest report: [Contrast window collected and PASSED (47 bundles, XProtect recovery per playbook); D5-J merged via PR #89 under the D-093 cold-gate synthesis](docs/run_reports/2026-07-31-contrast-window-collection.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-31). Latest report: [Gauntlet commits 1-2 merged via PR #91: DA-1 closed under D-097's unanimous cold-gate deferral; metrology suite merged and window-A plans frozen (D-096)](docs/run_reports/2026-07-31-claims-desk-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -726,6 +763,10 @@ Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the CURRENT STATE block at
 the top of this file.
 
+- 2026-07-31 claims desk day (metrology suite merged via PR #90 + D-096
+  window-A freeze; D-094/D-095; cooldown-join gauntlet commits 1-2 merged
+  via PR #91 with DA-1 closed under the D-097 cold-gate deferral):
+  `docs/run_reports/2026-07-31-claims-desk-session.md`
 - 2026-07-31 contrast-window collection (`window_contrast_20260730`
   PASSED, 47 bundles) + D5-J merge via PR #89 under the D-093 cold-gate
   synthesis: `docs/run_reports/2026-07-31-contrast-window-collection.md`
@@ -840,7 +881,13 @@ the top of this file.
 
 ## Current Verification
 
-- **Merged main `7ee680c` (2026-07-31, current): canonical `Ran 2286
+- **Merged main `67d268a` (2026-07-31, current): canonical `Ran 2305
+  tests`, `OK (skipped=12)`, lead-run post-merge.** This is the PR #91
+  (gauntlet commits 1-2, DA-1 closed) merge. Branch verification chain:
+  `2301 OK` at `c0adc93`, `2304 OK` at `8880395`, `2305 OK` at
+  `a9b9d4a` (all lead-run, worktree skip convention 21); CI green on
+  the PR (build, installed-wheel, release-chain, tests 3.11 + 3.14).
+- **Merged main `7ee680c` (2026-07-31, historical): canonical `Ran 2286
   tests`, `OK (skipped=12)`, lead-run post-merge.** This is the PR #89
   (D5-J) merge; the close-out commits `49c1876`, `0d0bd0b`, `6ed1625`
   sit atop it and are docs/kernel only.
@@ -1105,10 +1152,11 @@ the top of this file.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
   (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
-  content was refreshed on 2026-07-31: stamped `updated: 2026-07-31`,
-  `latest_report` points at
-  `docs/run_reports/2026-07-31-contrast-window-collection.md`, the completed
-  `FLOOR-LABEL-01` and `STACK-ID-BIND-01` rows are retired to
+  content was refreshed on 2026-07-31 (claims-desk close-out): stamped
+  `updated: 2026-07-31`, `latest_report` points at
+  `docs/run_reports/2026-07-31-claims-desk-session.md`, the completed
+  `FLOOR-LABEL-01`, `STACK-ID-BIND-01`, `P2-015`, and
+  `COOLDOWN-JOIN-DA1-01` rows are retired to
   `TASK_QUEUE.md`'s completed table, and the post-mint intake
   (`COOLDOWN-JOIN-GAUNTLET-01`, `MINT-GENERALIZE-01`,
   `MANIFEST-CONTRAST-01`, `SUPERSESSION-DUP-REFUSAL-01`,

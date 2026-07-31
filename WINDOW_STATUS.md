@@ -26,8 +26,12 @@ Per-block contrast diagnostic: 146.73 J (σ 0.24 J, n=10 blocks) — prose only;
 the gated claim rides after MANIFEST-CONTRAST desk work. Close-out:
 `~/JouleWise-window-custody/window_contrast_20260730/close-out.md`.
 
+The desk day that followed merged the metrology campaign suite — its four
+window-A plans are now ratified and frozen before measurement, so the windows
+are ready — and closed the DA-1 join defect (PR #91).
+
 The next quiet window is the metrology suite's window A (linearity ramp +
-additivity + null rung + hold, ~2.8 h) once its draft plans are ratified.
+additivity + null rung + hold, ~2.8 h).
 
 ## How to read this
 

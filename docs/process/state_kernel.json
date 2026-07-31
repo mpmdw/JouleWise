@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Contrast window collected and PASSED (47 bundles, XProtect recovery per playbook); D5-J merged via PR #89 under the D-093 cold-gate synthesis",
-    "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+    "label": "Gauntlet commits 1-2 merged via PR #91: DA-1 closed under D-097's unanimous cold-gate deferral; metrology suite merged and window-A plans frozen (D-096)",
+    "path": "docs/run_reports/2026-07-31-claims-desk-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -616,61 +616,14 @@
       "status": "shelved",
       "stop_card": null
     },
-    "COOLDOWN-JOIN-DA1-01": {
-      "acceptance": {
-        "evidence": [
-          "Join owns raw-record visibility at the reader boundary; V4-driver regression (valid + malformed same-bundle REFUSES)",
-          "Fresh audit clean; class recurrence returns to the cold gate"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/COOLDOWN-JOIN-DA1-01/acceptance",
-          "label": "COOLDOWN-JOIN-DA1-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "DA-1 closed end-to-end; interim raw-vs-validated scan guards claim consumption."
-      },
-      "authority": {
-        "label": "D-093 cold-gate synthesis (cold Fable + Opus refuter + magistrate, 2026-07-31)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "the gauntlet supplies the join contract home (C1-C5) this boundary fix lands inside",
-          "scope": "close",
-          "state": "pending",
-          "strength": "advisory",
-          "target": "COOLDOWN-JOIN-GAUNTLET-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-093 clause 1: boundary fix only",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Boundary fix only; a site-local patch is out of contract; recurrence returns to the cold gate."
-        }
-      ],
-      "flags": [],
-      "goal": "Close DA-1: malformed supersession records are dropped pre-ambiguity, so valid+malformed same-bundle resolves; fix at the reader boundary (D-093).",
-      "id": "COOLDOWN-JOIN-DA1-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 13,
-      "status": "queued",
-      "status_note": "Registered 2026-07-31 (D-093; fix-now declined). Corpus-unreachable (scan 0-divergence x4); claim consumption records the scan until closure.",
-      "stop_card": null
-    },
     "COOLDOWN-JOIN-GAUNTLET-01": {
       "acceptance": {
         "evidence": [
-          "C1 lands as a first, independently auditable commit",
-          "The counting domain (C2 writer existing-outcome bit and/or declaration-order discriminator) is decided by a bounded pre-decision consult, with C3 authorship parity and C4/C5 fail-closed",
+          "C1 result-map completeness landed as a first, independently audited commit (75e9f29 + audit response c0adc93; PR #91 67d268a)",
+          "The counting domain is decided by the D-094 bounded pre-decision consult (composed writer outcome enum + fail-closed legacy log binding) and lands with C4/C5 fail-closed; C3 authorship parity rides commit 3",
+          "Commit 3 lands writer outcome emission, a writer-external authenticated discriminator, reader re-acceptance, and the D-094 v2 truth-table row as ONE composed, audited change (D-097), with the relabel probe as a permanent regression",
           "Resolves the 7B window including its two supersessions and both mint corpora cleanly, refuses the QA-10A and QA-10B fixtures, delta re-audit clean",
-          "DA-1 (COOLDOWN-JOIN-DA1-01) closed at the validator/reader boundary with a V4-driver-derived regression (D-093)"
+          "DA-1 (COOLDOWN-JOIN-DA1-01) CLOSED at the validator/reader boundary with a V4-driver-derived regression (D-093), landed in e749c95 and merged in PR #91"
         ],
         "pointer": {
           "json_pointer": "/tasks/COOLDOWN-JOIN-GAUNTLET-01/acceptance",
@@ -692,6 +645,13 @@
             "path": "docs/decision_log.md"
           },
           "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"
+        },
+        {
+          "authority": {
+            "label": "D-097 unanimous cold gate: no in-manifest v2 discrimination",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No in-manifest-only v2 discrimination may be reintroduced; v2 acceptance returns only with the commit-3 writer-external authenticated discriminator, landed and audited as one composed change with the relabel probe as a permanent regression."
         }
       ],
       "flags": [],
@@ -701,7 +661,7 @@
       "priority": "p1_phase_gate",
       "rank": 9,
       "status": "queued",
-      "status_note": "Minted 2026-07-30 from the cold-gate escalation; owns closure of QA-10A and QA-10B and gates MINT-GENERALIZE-01.",
+      "status_note": "Minted 2026-07-30 from the cold-gate escalation; owns closure of QA-10A and QA-10B and gates MINT-GENERALIZE-01. Commits 1-2 of the D-094 landing order LANDED via PR #91 (67d268a): C1 result-map completeness, the C2 reader/counting domain, and DA-1 closed at the raw reader boundary (COOLDOWN-JOIN-DA1-01 retired 2026-07-31). REMAINING: commit 3 under the D-097 composed-commit contract - writer outcome emission + a writer-external authenticated discriminator + reader re-acceptance + the D-094 v2 truth-table row as ONE audited change, with the relabel probe as a permanent regression. The D-088 standing conditions and the D-093 scans stay binding until it lands.",
       "stop_card": null
     },
     "CUSTODY-HARDEN-01": {
