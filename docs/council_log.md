@@ -1515,7 +1515,7 @@ before delegation-boundary changes.
 | C-033 | 2026-07-14 | AXI intake council (Ed-directed via `docs/axi-handoff.md` + Ed's batched §5 answers this session): short recorded Sol high read-only coherence review of drafted D-066..D-070 (outcomes Ed-directed, not re-decided; consult ran over the audited CLI path because the MCP server is unavailable in this headless session; prompt/response tracked at `docs/process_traces/2026-07-14-c033-axi-consult/`) | Sol verdict DISCUSSION: outcomes authorized, Ed's four D-067 amendments honored; 6 coherence corrections identified and ALL lead-accepted before commit: explicit supersession of the D-058 token-normalization Primary Metric clause (contract text assigned to S-A, keeping S-0 docs-only), dual-basis-capture bundle-state definition (successful idle-eligible request-level; nullable semantics preserved), D-032 gross-only phase semantics named, deploy convention re-attributed C-012→C-013, registry source homes corrected (C5-* bank vs C-023-*/RQ-* registry per D-055), `request_id` pinned to `events.jsonl` `metadata.request_id` with new-version-only reducer dispatch, D-064 duplicate/mismatched index rows cleaned; remaining deploy-instruction surfaces routed to WO-031 + S-0 |
 | C-037 | 2026-07-17 | Window-A execution + wrap arc (Ed: floors-first overnight -> advisor deadline -> site rebuild -> exploratory breadth; full records: the two 2026-07-16/17 run reports, the ONE homes): four-failure shakedown story (stale-bundle reuse, wallpaper idle contamination caught by sentinel, 34.6ms trace-boundary bracket via two live-bundle triages, stale-lock exit-0 wart) -> canonical PASS; 248-line/222-bundle floor campaign verified by 8-agent ultracode extraction; advisor brief + README-first site + Learn guide (Ed deployed); exploratory 9-bundle block; DSpark/DFlash feasibility confirmed; D-071..D-075 recorded | PRs #72-#75 merged under D-072 standing authority; delta re-audits caught blockers twice more (10th datum incl. lead-pinned formula defect); fold-in round's refusal caught a forced-report placeholder trace; scope enforcement caught the lead's own stray file (adjudicated benign); floors: request 0.527/0.052 J, phase 1.477/0.786 J, ABBA comparative w/ flagged tail drift; exploratory gross suite: OLMoE ~229 J vs Qwen3-4B ~362.8 J vs 122B ~1072 J (exploratory-labeled) |
 | C-036 | 2026-07-16 | Resumption + no-hardware batch (Ed: audits in a workflow + "handle the merge yourself if all is well... get the project ready for my quiet mac"; full record `docs/run_reports/2026-07-16-resumption-nohw-batch.md`, the ONE home): ultracode readiness workflow (4 Sol-high audits + severity-tiered refuters) BEFORE work selection; then 4 streams (SPLIT-AP xhigh contract tier, SITE-02 high standard, AXI-SB xhigh spike, AXI-SD Fable web-verification); every fix round delta-re-audited; three self-merges under Ed's in-session delegation, each with the full D-031-amended gate | PRs #67 (`7593259`, AXI-SA + CI portability fix after the audit caught red CI), #68 (`2778ed2`, SITE-02 — D2 step verified EXECUTED in the CI log), #69 (`9db4546`, SPLIT-AP freeze) merged; integration review 0 cross-stream defects, merged main 1630 OK; kernel closures 51→48 IDs; AXI-SB live probes (lead-run, B∈{2,4}) → verdict `supported`, Mac C5-2.2 leg mint staged on `impl/axi-sb` (effective on its merge); delta re-audit caught a LEAD-pinned predictor defect (8th fix-rounds-inject-defects datum, first lead-authored); AXI-SD memo: OLMo pair d_active 0.0016 + 8GB-fit may moot Option A's premise, Qwen3 pair confirmed-fails G10 (17.17 GB) |
-| C-039 | 2026-07-28 | Mint-implementation session (Ed: resume per RUN_STATE, then "merge on green + start the mint consult"; magistrate topology; full record `docs/run_reports/2026-07-28-floor-mint-implementation.md`, the ONE home): PR #87 gauntlet (2 Sol xhigh lenses + 5 Sol high refuters + 1 Opus contract refuter, lieutenant-directed), E4 fix + CLEAN delta re-audit, D-081 parser ruling (Ed, async question), Sol xhigh mint design consult (3 DISAGREEs sustained -> D-082), 7-stage xhigh implementation, suite-pruning consult (0 removals clear D-061) | PR #87 MERGED `058c918`; `impl/mint-tool` pushed unmerged (review owed); C1 SPLIT (Sol nit vs Opus should-fix) magistrate-synthesized to should-fix, closed via ratified Q4; 5 broken-wake incidents -> tracked-poll pattern folded to codex-delegation; lieutenant self-flagged 2 retracted fabricated verdict narrations (mechanism removed); concurrent-session force-push anomaly flagged to Ed; **ADDENDUM at the end of this file** records the 2026-07-29/30 continuation (FIX-6..9 gauntlet, three cold gates with paired Opus contract-lens refuters, mint #1, the 7B floor window; rulings D-083..D-088; D-088 recorded in the same-day close-out) |
+| C-039 | 2026-07-28 | Mint-implementation session (Ed: resume per RUN_STATE, then "merge on green + start the mint consult"; magistrate topology; full record `docs/run_reports/2026-07-28-floor-mint-implementation.md`, the ONE home): PR #87 gauntlet (2 Sol xhigh lenses + 5 Sol high refuters + 1 Opus contract refuter, lieutenant-directed), E4 fix + CLEAN delta re-audit, D-081 parser ruling (Ed, async question), Sol xhigh mint design consult (3 DISAGREEs sustained -> D-082), 7-stage xhigh implementation, suite-pruning consult (0 removals clear D-061) | PR #87 MERGED `058c918`; `impl/mint-tool` pushed unmerged (review owed); C1 SPLIT (Sol nit vs Opus should-fix) magistrate-synthesized to should-fix, closed via ratified Q4; 5 broken-wake incidents -> tracked-poll pattern folded to codex-delegation; lieutenant self-flagged 2 retracted fabricated verdict narrations (mechanism removed); concurrent-session force-push anomaly flagged to Ed; **ADDENDUM at the end of this file** records the 2026-07-29/30 continuation (FIX-6..9 gauntlet, three cold gates with paired Opus contract-lens refuters, mint #1, the 7B floor window; rulings D-083..D-088; D-088 recorded in the same-day close-out); **ADDENDUM II** records the 2026-07-30/31 escalation consults (cooldown-join design consult → D5-J/D-089; contrast-window recovery consult, the first trigger firing inside a measurement window) |
 
 ---
 
@@ -2246,3 +2246,104 @@ both fix-round formulations had danced around, and the QA-10A escape path
 through `floor_extraction`'s map-iteration completeness. Three independent
 corpus scans (magistrate, cold instance, refuter) each verified both blocker
 shapes absent from all claim-bearing evidence.
+
+---
+
+## C-039 addendum II: two escalation consults — the cooldown-join design consult and the contrast-window recovery (2026-07-30/31)
+
+Second continuation of the C-039 index row. Both entries here are **consults
+convened because an escalation trigger fired**, not council rounds convened by
+ritual — one on a code defect class, one live inside a measurement window. The
+rulings are D-089 (join) and the window's own §10 continuation record.
+
+### (i) Cooldown-join design consult → D5-J (2026-07-30)
+
+**Trigger.** The FIX-10 independent audit returned FAIL on B1 (coverage
+checked against emissions rather than declarations, so a partial supersession
+launders a declared-but-malformed occurrence) and B2 (filtered sibling
+manifests never contribute declarations) — the **third consecutive round
+leaving a residual of the same signature**. Per hard rule 11 the next spend was
+a **design consult, not a fix round**; the merge train was held pending its
+disposition.
+
+**Layer:** Sol xhigh design consult, thread `019fb5c8…3937`,
+codex-adjudicated with lead replays, question scoped to *where
+declaration-completeness is enforced* (the ONE home).
+
+**Unique catches:**
+
+- **The consult reframed the defect class out of existence rather than
+  patching its third instance.** D5-J moves the matcher contract
+  observed→declared, which kills B1 *structurally*; catalog-completeness gate
+  C answers B2 without a blanket directory-hygiene rule; the `-1` sentinel
+  retires because declarations carry true positions. Three fix rounds had each
+  patched a coverage site; the consult found there should be one owner.
+- **A 23-cell truth table, of which the consult itself flagged one cell as a
+  judgment call** — `(|D| ≥ 2, E ⊂ D, exact record naming all of D,
+  selected ∈ E)` — and offered a collapse alternative rather than deciding it.
+  The magistrate **STRUCK** the cell (uniform malformation ⇒ refuse;
+  near-unreachable in any case; the cost of refusing is the standard
+  repair-or-re-collect path), leaving **exactly two accepting shapes**. A
+  consult that hands its adjudicator the one cell it should not decide alone
+  is the behaviour the pre-decision-consult rule is buying.
+- **Interim-merge answer NO.** The lead's own preference was a conservative
+  interim guard (D1) that would license the merge now; the consult established
+  D1 cannot cover B2, so the structural fix lands pre-merge. Second recorded
+  instance this arc of the consulted layer beating the adjudicator's proposal.
+
+Real-corpus behaviour is unchanged either way (**57/57, both supersessions
+consumed**) — the blockers are adversarial-shaped and need corrupted custody
+inputs. Implementation is FIX-11 in name, **structural in kind and
+consult-sanctioned**, queued behind the metrology campaign authoring in the
+same worktree.
+
+### (ii) Contrast-window recovery consult (2026-07-31, live in-window)
+
+**Trigger.** Two consecutive same-signature failures of the start-triplet r1
+slot on CPU admission (`cpu_busy_ratio_p95` 0.726 against a 0.5 gate), the
+second after a relaunch premised on a **misattributed** cause — the operator
+verified Time Machine was clear but did not verify overall CPU quiet, and the
+true cause (an XProtect Remediator sweep) was still running. The standing
+same-signature trigger fired; per rule 11 the next spend was a consult, not a
+third blind relaunch.
+
+**Layer:** bounded Sol xhigh consult, thread `019fb69a-7692`, convened by the
+solo window operator between stages.
+
+**Unique catches:**
+
+- **The one-invocation supersession contract.** The consult established that
+  the supersession recorder must be run **exactly once, post-window**, naming
+  the selected occurrence and both superseded ones together. The operator's
+  in-flight plan would have recorded per failure — **double-recording, which
+  voids campaign membership downstream** (the recorder's silent
+  duplicate-append defect, `SUPERSESSION-DUP-REFUSAL-01`). This is the catch
+  that saved the window's claim-bearing status: the collection would have
+  passed and the custody record would have been unusable.
+- **The wait criterion: full sweep, not just the observed module.** The
+  operator's instinct was to wait out `XProtectRemediatorPirrit`, the module
+  actually observed at 941 CPU ms/s. The consult's criterion was the **entire
+  remediator sweep** — modules run sequentially, so clearing one says nothing
+  about the next. The sweep ran to 05:31Z; a second, unrelated intruder
+  (`corespotlightd` at 624 CPU ms/s, Spotlight indexing the fresh bundles) was
+  then also waited out, and round 3 launched only after a full-sweep
+  completion, **eight consecutive daemon-quiet minutes past the Time Machine
+  hour boundary**, and a clean final `powermetrics` tasks sample.
+- **Continuation chain-shape verification.** The consult verified the round-3
+  continuation was §10-shaped: it pins the window's original pre-calibration
+  and re-runs the §5B screen, so the recovery does not silently re-baseline
+  the window.
+
+**Outcome:** round 3 ran the entire window **without a single further
+admission event** — 40/40 science members usable, zero science-member
+failures, whole-window verdict PASSED. The supersession was recorded once,
+post-window, per the consult-verified contract. The window used 2 of its 3
+permitted failures, both on one reference slot; the third-failure-closes
+salvage rule (D-087) was never invoked.
+
+**Process note.** This is the first recorded instance of the standing
+escalation trigger firing **inside a measurement window** rather than over a
+code defect, and of a consult being convened at a stage boundary by a solo
+operator under quiet-lock. The cost was one consult against a ~2.6-hour window
+that would otherwise have been re-run on a third guess; the mechanism should be
+retained for window operation, not just for fix rounds.

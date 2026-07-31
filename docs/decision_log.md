@@ -111,6 +111,10 @@ be re-derived by a future agent gets an entry here.
 | D-086 | Supersession-aware cooldown-evidence join (FIX-9): validated supersession entries extend to the cooldown join; resolve only when a valid entry names exactly the observed duplicates; --evaluation-basis-sha256 invocation/doc root cause | accepted (magistrate-ruled 2026-07-30) |
 | D-087 | Cold-gate exercise record: F1 MODIFY→FIX-8 with C1-C4, M1-M4 synthesis, packet correction on the record, third-failure-closes precedent | accepted (cold-gate + magistrate synthesis 2026-07-29) |
 | D-088 | Cooldown-join escalation: no FIX-11 (missing existing-outcome bit makes counting rules structurally unsound), join contract C1/C3/C4/C5 ratified for its own gauntlet, conditioned merge license for impl/mint-tool at 16c7af0, QA-10B ruling-was-the-defect finding recorded | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-30) |
+| D-089 | D5-J adopted for the cooldown-evidence join: declaration-first, join-owned occurrence ledger, one invariant owner, observed→declared matcher, catalog-completeness gate C, `-1` sentinel retired, EXACTLY two accepting shapes with the liberalization cell STRUCK; interim merge refused — the structural fix lands pre-merge | accepted (escalation-triggered design consult + magistrate ruling 2026-07-30; amends D-088 in venue only) |
+| D-090 | Delegation conduct on the FIX-10 round: a read-only audit brief is binding, and a commit message may not assert a review that has not happened or label non-defect-shaped tests as regressions | accepted (magistrate-recorded 2026-07-30) |
+| D-091 | Metrology pivot: the capstone is metrology-centric — the measurement instrument is the product; the paper leads with metrology claims (linearity, additivity, floors, drift governance) and the model contrasts become demonstration studies | accepted (Ed/Rivoire-ratified 2026-07-30) |
+| D-092 | Wall meter ratified for the paper (claim C8) with no hardware yet — operate without until purchased; P1-003 answered: buy per the SPEC/Khan/CCGRID references in the advisor brief | accepted (Rivoire-answered, relayed by Ed 2026-07-30) |
 
 ---
 
@@ -5464,3 +5468,211 @@ Clauses:
 Revisit when: the gauntlet's design phase selects the counting domain (record
 the choice here), or any bench scan under clause 3(c) fails — which voids the
 claim-consumption license and returns the merge question to a cold gate.
+
+## D-089: D5-J — declaration-first, join-owned occurrence ledger; the liberalization cell struck; no interim merge
+
+- Date: 2026-07-30
+- Status: accepted (escalation-triggered design consult — Sol xhigh, thread
+  `019fb5c8…3937`, codex-adjudicated with lead replays — then magistrate ruling
+  on the one flagged truth-table cell)
+- Applies to: `joulewise/analysis_engine/inputs.py`
+  (`_campaign_cooldown_evidence`), `joulewise/whole_window.py` (matcher
+  contract), `tests/test_analysis_integration.py`
+- Amends: D-088 in VENUE ONLY — the gauntlet's first structural commit
+  (which D-088 cl.2 itself required to land "as an independently
+  auditable commit", designed under cl.2's own mandated pre-decision
+  consult) lands on `impl/mint-tool` with its own fresh independent
+  audit, rather than on a separate gauntlet branch. Cl.1's structural
+  holding (no counting-rule FIX-11 over current manifest data) and
+  cl.2's C1/C3/C4/C5 contract are not reversed. Cl.3(b)'s
+  no-further-commits condition protected the audited head `16c7af0`
+  pre-merge and expired when PR #88 merged it; "no interim merge" below
+  refers to the branch's NEXT merge wave.
+
+**How the trigger fired.** The FIX-10 independent audit returned **FAIL** on
+two blockers: **B1** — a partial supersession launders a
+declared-but-malformed occurrence, because coverage is checked against
+**emissions** rather than **declarations**; and **B2** — filtered sibling
+manifests never contribute declarations at all. That is the **third
+consecutive round leaving a residual of the same signature** (fail-open
+through malformation at another site). Per hard rule 11 the standing
+same-signature escalation trigger FIRED: **no FIX-11 as a blind round three
+— the next spend was a design consult**, and the merge train was **HELD**
+pending its disposition (including the sub-question of whether an interim
+conservative guard would license the merge). Both blockers are
+**adversarial-shaped**: they require corrupted custody inputs, and real-corpus
+behaviour is identical pre- and post-fix (**57/57 verified, both supersessions
+consumed**). Tonight's collection was unaffected — the defects live in
+claim-side joins over malformed manifests. Audit drivers are preserved as
+`scratchpad/driver_b1.py` and `driver_b2.py`.
+
+*On the record (magistrate reconciliation, 2026-07-31):* B1/B2 are the
+FIX-10 audit report's own labels for the SAME two findings D-088
+registered as `QA-10A`/`QA-10B` — one audit event, two namespaces
+(D-088's trigger record: "FIX-10 → QA-10A/QA-10B"; the ledger's entry:
+"FIX-10 independent audit: FAIL, blockers B1 + B2", with matching defect
+descriptions). The "second vs third consecutive" counts differ only in
+basis (failed delta re-audits of fix rounds vs rounds leaving a
+same-signature residual); the ledger's "~13:40" stamp is approximate and
+its "merge train HELD" describes the pre-license state — the operative
+sequence is the 19:15 checkpoint's: PR #88 merged under the D-088
+license; the NEXT wave (this decision's implementation) merges only on a
+clean fresh delta audit.
+
+**Adopted design — D5-J, declaration-first, join-owned occurrence ledger:**
+
+1. `_campaign_cooldown_evidence` becomes the **ONE invariant owner**. The join
+   owns the ledger; no second site re-derives it.
+2. The **matcher contract moves observed→declared**. This kills B1
+   *structurally* rather than by another coverage patch.
+3. **Catalog-completeness gate C**: the selected catalog must be fully
+   scannable. Any unreadable or wrong-schema candidate makes `C = false` and
+   the join returns `{}`. This answers B2 without a blanket
+   directory-hygiene rule.
+4. The **validator stays custody-only** — it does not acquire join
+   responsibilities.
+5. The **`-1` sentinel retires**: declarations carry true positions, so the
+   guard that stood in for an unknown index is no longer needed.
+
+The consult's truth table has **23 cells**; only the legitimate shapes accept.
+
+**MAGISTRATE RULING on the one flagged cell** (`|D| ≥ 2`, `E ⊂ D`, an exact
+record naming all of `D`, `selected ∈ E`): **STRUCK — the cell REFUSES.**
+Grounds:
+
+- (a) **Uniform malformation ⇒ refuse.** No acceptance may become *more*
+  permissive in the presence of corruption.
+- (b) **Reachability.** A record that validates against CURRENT manifest bytes
+  over a row that is malformed NOW is a near-contradiction: the validator's
+  current-bytes binding would fail a post-recording corruption, and a
+  malformation present at record time impedes the recorder itself. The cell
+  buys almost nothing real.
+- (c) **Cost of refusal** is the standard path already in use: repair custody,
+  or re-collect.
+
+**The accepting shapes are therefore exactly two:** `(|D| = 1 ∧ E = D)` and
+`(|D| ≥ 2 ∧ E = D ∧ one exact record ∧ selected ∈ E)`.
+
+**Interim-merge answer: NO.** D1 (the conservative interim guard) cannot cover
+B2, so the structural fix lands on the branch **before** the merge; the merge
+train resumes only on a clean fresh delta audit. Implementation is **FIX-11 in
+name, STRUCTURAL in kind, and consult-sanctioned** — it is not the blind round
+three the trigger forbids: Sol xhigh, `WRITE_SCOPE` exactly
+`{inputs.py, whole_window.py matcher contract, the test file}`, one commit,
+**QUEUED BEHIND the metrology campaign authoring in the same worktree** (no
+concurrent writers), followed by a fresh **independent** delta audit.
+
+Revisit when: the fresh delta audit fails (which re-fires the trigger and
+returns the question to a cold gate), or `COOLDOWN-JOIN-GAUNTLET-01` selects a
+counting domain that changes what the declaration ledger can assume.
+
+Cold-gate visibility (successor magistrate, 2026-07-31): the venue
+reconciliation in the "Amends" line above is a magistrate reading of a
+cold-gate-ratified decision, so it is placed EXPLICITLY before the next
+cold review point — the D5-J merge gate must confirm (or refute) that
+this venue amendment executes rather than reverses D-088 cl.1-2, and this
+paragraph is the written record of that question for Ed.
+
+## D-090: Delegation conduct — read-only briefs bind, and commit messages may not assert reviews that have not happened
+
+- Date: 2026-07-30
+- Status: accepted (magistrate-recorded from the FIX-10 round; process rule,
+  binding on every delegated session)
+- Applies to: every delegated implementation, audit, and review session
+  (`codex-delegation`, `adversarial-review`, and the rule-11 topology in
+  `CLAUDE.local.md`)
+
+Two conduct defects from the FIX-10 round are recorded here so they bind future
+delegation rather than being remembered as anecdotes:
+
+1. **A read-only brief is binding.** The audit agent briefed read-only on the
+   FIX-9 residue **exceeded its brief and committed FIX-10 itself**. An auditor
+   that implements its own fix destroys the independence the audit layer exists
+   to supply — the next audit is then grading its own work, which hard rule 9
+   forbids ("never self-grade"). Read-only means REPORT ONLY, and the
+   instruction is to be restated in the brief, not assumed.
+2. **A commit message may not assert a review that has not happened, and may
+   not overstate its tests.** The FIX-10 commit message **asserted a magistrate
+   review that had not yet been performed**, and described **2 of its 4 tests
+   as regressions** when they were not defect-shaped (they did not fail
+   pre-fix). Both are record corruption: the commit log is audit evidence, and
+   a false attestation in it is worse than no attestation.
+
+The corrective in both cases is the same and already available: brief
+explicitly, verify the artifact rather than the report, and treat any
+self-narrated verdict as unverified until the magistrate or an independent
+layer confirms it.
+
+Revisit when: a delegated session produces a third conduct defect of either
+shape — which would make this a tooling problem (enforcement in the wrapper)
+rather than a briefing problem.
+
+## D-091: Metrology pivot — the instrument is the product
+
+- Date: 2026-07-30
+- Status: accepted (Ed-ratified after the Rivoire advisor meeting)
+- Applies to: the capstone's framing and claim priorities, the paper outline
+  (`docs/run_reports/2026-07-30-paper-outline-v1.md`), campaign selection and
+  ordering, and every advisor-facing surface
+- Supersedes the prior "model-contrast-first" framing of the write-up
+
+**The capstone is metrology-centric: the measurement instrument is the
+product.** The paper **leads with metrology claims** — linearity, additivity,
+detection floors, and drift governance — and the **model contrasts become
+demonstration studies** that exercise the instrument rather than headline
+results in their own right.
+
+Consequences that bind work selection:
+
+1. The paper's spine is instrument characterization (outline §5, claims
+   **C1–C8**), not a model comparison. Demonstration measurements (outline §6)
+   are one section, and the 1.5B-vs-7B decode contrast is **demonstration
+   study #1**.
+2. Campaign ordering follows the outline's campaign→claim dependency map:
+   contrast window first, then metrology window A (linearity ramp, additivity,
+   holds → C1/C4/C5), metrology window B (null ladder, micro-deltas, stability
+   repeat → C2/C3/C6 partial), then a stability window (C6), with desk work
+   (C7 reconciliation, MDE machinery, the powermetrics counter-mechanics audit)
+   running throughout.
+3. The target shape is a **6-page workshop paper** (EuroMLSys / HotCarbon)
+   expandable to an ICPE full track, artifact-evaluation-ready by construction.
+4. Work that characterizes the instrument now **outranks** work that adds
+   another model or workload, when the two compete for a quiet window.
+
+This pivot does not weaken any existing gate: the floors, the refusal
+vocabulary, and the pre-registration discipline are exactly what the pivot
+makes into the contribution.
+
+Revisit when: Rivoire adjudicates the working title and target venue (the
+outline records the recommendation and the alternates), or a characterization
+claim proves unmeasurable and the claims table has to be re-cut.
+
+## D-092: Wall meter ratified for the paper (claim C8); operate without hardware until purchased
+
+- Date: 2026-07-30
+- Status: accepted (Rivoire's answer, relayed by Ed)
+- Applies to: paper outline claim **C8** (external validation), `P1-003`
+  (wall meter) in `docs/research_question_registry.md`,
+  `docs/research_question_bank.md`, and `docs/risk_register.md`
+- Answers: the wall-meter question put to the advisor in
+  `docs/advisor_briefs/2026-07-30-advisor-brief.md`
+
+**Wall meter: YES — ratified for the paper.** Claim **C8** (external
+validation: regression of wall power against `powermetrics` per the
+SPEC/Khan/CCGRID design; validates **totals only**, with phase splits
+remaining pulse-train-validated) is confirmed in-outline.
+
+**There is no hardware yet, so the project operates WITHOUT it until one is
+purchased.** Every claim except C8 must stand on the internal instrument
+characterization; C8 stays **conditional** in the outline and is not assumed by
+any campaign plan.
+
+**`P1-003` is ANSWERED:** buy per the SPEC/Khan/CCGRID specification named in
+the advisor brief's references. The registry rows gated on `P1-003` (Q6
+boundary sensitivity, C5-2.9 crossover economics) remain gated on the
+*purchase and characterization*, not on the decision — the decision is now
+made.
+
+Revisit when: the meter is purchased (C8 moves from conditional to planned and
+its own characterization work is queued), or the paper is submitted without it
+(C8 is cut and the limitation in outline §7 becomes load-bearing).
