@@ -1,0 +1,99 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "metrology-v1-long-holds-order-v1",
+  "plan_id": "metrology-v1-long-holds-m3max",
+  "calibration_plan_sha256": "c2db1e49ac4925c93b72f9107e4b90346ab0754ddacb6042be96a6970ded0e2e",
+  "planned_n_bundles": 6,
+  "subcampaign_order": [
+    {
+      "index": 1,
+      "subcampaign_id": "01_holds",
+      "role": "sustained_decode_holds",
+      "optional": false,
+      "planned_n_bundles": 3,
+      "ordering_note": "Three fixed sustained decode repeats at 4096 output tokens."
+    },
+    {
+      "index": 2,
+      "subcampaign_id": "02_idle_extended",
+      "role": "extended_idle_observations",
+      "optional": false,
+      "planned_n_bundles": 3,
+      "ordering_note": "One fixed member each at 120, 300, and 600 idle seconds."
+    }
+  ],
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "01_holds/mthold-o4096-r01.json",
+      "run_id": "mthold-o4096-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 1,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    },
+    {
+      "index": 2,
+      "config": "01_holds/mthold-o4096-r02.json",
+      "run_id": "mthold-o4096-r02",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 2,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    },
+    {
+      "index": 3,
+      "config": "01_holds/mthold-o4096-r03.json",
+      "run_id": "mthold-o4096-r03",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o4096",
+      "role": "absolute_sustained_decode_repeat",
+      "block_index": 3,
+      "position_in_block": 1,
+      "idle_seconds": 30.0
+    },
+    {
+      "index": 4,
+      "config": "02_idle_extended/mtidle-i0120-r01.json",
+      "run_id": "mtidle-i0120-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0120",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 1,
+      "position_in_block": 1,
+      "idle_seconds": 120.0
+    },
+    {
+      "index": 5,
+      "config": "02_idle_extended/mtidle-i0300-r01.json",
+      "run_id": "mtidle-i0300-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0300",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 2,
+      "position_in_block": 1,
+      "idle_seconds": 300.0
+    },
+    {
+      "index": 6,
+      "config": "02_idle_extended/mtidle-i0600-r01.json",
+      "run_id": "mtidle-i0600-r01",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128-idle0600",
+      "role": "absolute_extended_idle_observation",
+      "block_index": 3,
+      "position_in_block": 1,
+      "idle_seconds": 600.0
+    }
+  ]
+}

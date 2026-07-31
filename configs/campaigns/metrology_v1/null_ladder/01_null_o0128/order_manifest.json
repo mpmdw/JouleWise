@@ -1,0 +1,230 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "metrology-v1-null-ladder-01_null_o0128-order-v1",
+  "plan_id": "metrology-v1-null-ladder-m3max",
+  "calibration_plan_sha256": "38b1136af0d11a493ad336032378d897e9b7fc15447fe4e1feb6130e4f2bf04b",
+  "ordering_note": "Five fixed contiguous same-condition A/B/B/A blocks at output_tokens=128.",
+  "planned_n_bundles": 20,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "mtnull-o0128-b01-a1.json",
+      "run_id": "mtnull-o0128-b01-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 1,
+      "position_in_block": 1
+    },
+    {
+      "index": 2,
+      "config": "mtnull-o0128-b01-b1.json",
+      "run_id": "mtnull-o0128-b01-b1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 1,
+      "position_in_block": 2
+    },
+    {
+      "index": 3,
+      "config": "mtnull-o0128-b01-b2.json",
+      "run_id": "mtnull-o0128-b01-b2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 1,
+      "position_in_block": 3
+    },
+    {
+      "index": 4,
+      "config": "mtnull-o0128-b01-a2.json",
+      "run_id": "mtnull-o0128-b01-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 1,
+      "position_in_block": 4
+    },
+    {
+      "index": 5,
+      "config": "mtnull-o0128-b02-a1.json",
+      "run_id": "mtnull-o0128-b02-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 2,
+      "position_in_block": 1
+    },
+    {
+      "index": 6,
+      "config": "mtnull-o0128-b02-b1.json",
+      "run_id": "mtnull-o0128-b02-b1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 2,
+      "position_in_block": 2
+    },
+    {
+      "index": 7,
+      "config": "mtnull-o0128-b02-b2.json",
+      "run_id": "mtnull-o0128-b02-b2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 2,
+      "position_in_block": 3
+    },
+    {
+      "index": 8,
+      "config": "mtnull-o0128-b02-a2.json",
+      "run_id": "mtnull-o0128-b02-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 2,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 2,
+      "position_in_block": 4
+    },
+    {
+      "index": 9,
+      "config": "mtnull-o0128-b03-a1.json",
+      "run_id": "mtnull-o0128-b03-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 3,
+      "position_in_block": 1
+    },
+    {
+      "index": 10,
+      "config": "mtnull-o0128-b03-b1.json",
+      "run_id": "mtnull-o0128-b03-b1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 3,
+      "position_in_block": 2
+    },
+    {
+      "index": 11,
+      "config": "mtnull-o0128-b03-b2.json",
+      "run_id": "mtnull-o0128-b03-b2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 3,
+      "position_in_block": 3
+    },
+    {
+      "index": 12,
+      "config": "mtnull-o0128-b03-a2.json",
+      "run_id": "mtnull-o0128-b03-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 3,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 3,
+      "position_in_block": 4
+    },
+    {
+      "index": 13,
+      "config": "mtnull-o0128-b04-a1.json",
+      "run_id": "mtnull-o0128-b04-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 4,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 4,
+      "position_in_block": 1
+    },
+    {
+      "index": 14,
+      "config": "mtnull-o0128-b04-b1.json",
+      "run_id": "mtnull-o0128-b04-b1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 4,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 4,
+      "position_in_block": 2
+    },
+    {
+      "index": 15,
+      "config": "mtnull-o0128-b04-b2.json",
+      "run_id": "mtnull-o0128-b04-b2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 4,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 4,
+      "position_in_block": 3
+    },
+    {
+      "index": 16,
+      "config": "mtnull-o0128-b04-a2.json",
+      "run_id": "mtnull-o0128-b04-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 4,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 4,
+      "position_in_block": 4
+    },
+    {
+      "index": 17,
+      "config": "mtnull-o0128-b05-a1.json",
+      "run_id": "mtnull-o0128-b05-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 5,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 5,
+      "position_in_block": 1
+    },
+    {
+      "index": 18,
+      "config": "mtnull-o0128-b05-b1.json",
+      "run_id": "mtnull-o0128-b05-b1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 5,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 5,
+      "position_in_block": 2
+    },
+    {
+      "index": 19,
+      "config": "mtnull-o0128-b05-b2.json",
+      "run_id": "mtnull-o0128-b05-b2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 5,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 5,
+      "position_in_block": 3
+    },
+    {
+      "index": 20,
+      "config": "mtnull-o0128-b05-a2.json",
+      "run_id": "mtnull-o0128-b05-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 5,
+      "workload": "mt-q15-decode-p0128-o0128",
+      "role": "comparative_abba_member",
+      "block_index": 5,
+      "position_in_block": 4
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1",
+  "run_id": "mtmd-k0064-b05-b2",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Parameterized micro-delta instrument sensitivity characterization on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "df_ph_decode",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 576
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "metrology-v1",
+      "micro-delta",
+      "production-window",
+      "instrument-characterization",
+      "df-condition=mt-q15-decode-p0128-o0576",
+      "calibration-plan-sha256=f2cc804740025dae08dc71f555bbdb99661623d84a9980d40f89af0c1a981b82",
+      "rep5",
+      "calibration-abba-block-id=mt-mdelta-k0064-b05",
+      "calibration-abba-label=B",
+      "calibration-abba-sequence-index=3",
+      "DRAFT-PENDING-SLOPE"
+    ]
+  }
+}
