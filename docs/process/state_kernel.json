@@ -529,11 +529,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "P2-015 publishes Window-A floors before AXI analysis plans are finalized",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -570,7 +573,7 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 7,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "CI-003": {
@@ -611,6 +614,54 @@
       "priority": "p3_research_expansion",
       "rank": 27,
       "status": "shelved",
+      "stop_card": null
+    },
+    "COOLDOWN-JOIN-DA1-01": {
+      "acceptance": {
+        "evidence": [
+          "Join owns raw-record visibility at the reader boundary; V4-driver regression (valid + malformed same-bundle REFUSES)",
+          "Fresh audit clean; class recurrence returns to the cold gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COOLDOWN-JOIN-DA1-01/acceptance",
+          "label": "COOLDOWN-JOIN-DA1-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "DA-1 closed end-to-end; interim raw-vs-validated scan guards claim consumption."
+      },
+      "authority": {
+        "label": "D-093 cold-gate synthesis (cold Fable + Opus refuter + magistrate, 2026-07-31)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the gauntlet supplies the join contract home (C1-C5) this boundary fix lands inside",
+          "scope": "close",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-093 clause 1: boundary fix only",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Boundary fix only; a site-local patch is out of contract; recurrence returns to the cold gate."
+        }
+      ],
+      "flags": [],
+      "goal": "Close DA-1: malformed supersession records are dropped pre-ambiguity, so valid+malformed same-bundle resolves; fix at the reader boundary (D-093).",
+      "id": "COOLDOWN-JOIN-DA1-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 13,
+      "status": "queued",
+      "status_note": "Registered 2026-07-31 (D-093; fix-now declined). Corpus-unreachable (scan 0-divergence x4); claim consumption records the scan until closure.",
       "stop_card": null
     },
     "COOLDOWN-JOIN-GAUNTLET-01": {
@@ -1453,11 +1504,14 @@
           "target": "P0-003"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "Window-A floors measured first",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -1472,8 +1526,8 @@
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 2,
-      "status": "blocked",
-      "status_note": "Software interpretation gates are satisfied; execution remains blocked until P2-015 Window-A floors complete.",
+      "status": "queued",
+      "status_note": "Software interpretation gates are satisfied; Window-A floors landed 2026-07-31 (mint #1 mainline), so only the campaign remains.",
       "stop_card": null
     },
     "P2-010": {
@@ -1507,11 +1561,14 @@
           "target": "P0-003"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "quiet-window tail available after floors",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -1526,7 +1583,7 @@
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 3,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "Envelope-gate script merged 2026-07-09 (PR #23); only the campaign remains.",
       "stop_card": null
     },
@@ -1582,108 +1639,6 @@
       "rank": 6,
       "status": "blocked",
       "status_note": "Manifests generated + regenerated (PR #26); runner/runtime/validator hash guards merged (PRs #24/#27).",
-      "stop_card": null
-    },
-    "P2-015": {
-      "acceptance": {
-        "evidence": [
-          "Versioned strict-valid calibration bundles",
-          "Per-metric/window-class floor_abs_j + floor_cmp_j",
-          "Calibration manifest hash cited by later reports"
-        ],
-        "pointer": {
-          "label": "Phase 2 exit checklist",
-          "path": "docs/phase_2/phase_2_exit_checklist.md"
-        },
-        "summary": "Reducer-0.5.2/0.6.2 strict-valid calibration bundles; per-metric floor_abs_j and floor_cmp_j; governed idle uncertainty retained; calibration manifest hash cited by later reports."
-      },
-      "authority": {
-        "label": "D-054 + detection floor spec",
-        "path": "docs/phase_2/detection_floor.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "R-016 mitigated: off-machine backup and restore proof",
-            "path": "docs/risk_register.md"
-          },
-          "kind": "task",
-          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
-          "scope": "retain_evidence",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P0-003"
-        },
-        {
-          "evidence": {
-            "label": "P2-015-SMOKE closed 2026-07-17: production-shaped campaign shakedown passed (production_uncertainty_v1, canonical merged-main run pinned in detection_floor.md); extra-sampler overhead layer honestly deferred with DF-TELEM (required only before enabling extra samplers)",
-            "path": "docs/phase_2/detection_floor.md"
-          },
-          "kind": "task",
-          "required": "sampler-overhead smoke + C-019 shakedown recorded",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015-SMOKE"
-        },
-        {
-          "evidence": {
-            "label": "P2-038 live tail closed 2026-07-17: production_uncertainty_v1 PASSED on merged main (runs/window_a_shakedown_final; eligible, empty reasons, strict pre+post, backup 0) after drain v1/v2 fixes PR #72/#74; command+record pinned in docs/phase_2/detection_floor.md",
-            "path": "docs/phase_2/detection_floor.md"
-          },
-          "kind": "task",
-          "required": "production uncertainty evidence path lands",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-038"
-        },
-        {
-          "evidence": {
-            "label": "P2-039 merged floor-artifact fixtures and validator",
-            "path": "tests/test_detection_floor.py"
-          },
-          "kind": "task",
-          "required": "floor calculator artifact lands",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-039"
-        },
-        {
-          "evidence": {
-            "label": "P2-043 merged doctor preflight contract",
-            "path": "docs/contracts/doctor_preflight.md"
-          },
-          "kind": "task",
-          "required": "read-only campaign doctor and acknowledgement gate exist",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-043"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-078 clause 8 (L1) + bracketing ruling",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Claim-bearing collection requires fresh 59-pulse protocol-v3 calibration BRACKETING the window (consumed max(B_pre,B_post)); floor artifacts are claim-licensing only from same-custody-session governed extraction until FLOOR-BIND-01 closes"
-        }
-      ],
-      "flags": [
-        "lead_only",
-        "pre_window_a_gate"
-      ],
-      "goal": "Collect the first claim-grade Window A floors in one clean prospective quiet window per the claim-window run-book: mint the drift bound in-window, then run the start triplet, midpoint reference, and end triplet before the a8 re-verdict and Splitwise sizing.",
-      "id": "P2-015",
-      "lane": "quiet_mac",
-      "priority": "p2_next_slice",
-      "rank": 1,
-      "status": "partial",
-      "status_note": "PR #79 instrument repair and PR #85 SCREEN+BUDGET rules are merged; the start gate is one clean quiet window executed per docs/phase_2/window_runbook.md.",
       "stop_card": null
     },
     "P2-016": {
@@ -1992,11 +1947,14 @@
           "target": "P2-006"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "Window-A floors measured",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -2086,11 +2044,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "P2-015 detection floors measured",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -2111,7 +2072,7 @@
       "lane": "agent",
       "priority": "p3_research_expansion",
       "rank": 0,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "P2-036": {
@@ -2241,11 +2202,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "Window-A floors exist before overhead design is frozen",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         }
@@ -2266,7 +2230,7 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 25,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "P2-047B": {
@@ -2289,11 +2253,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
           "kind": "task",
           "required": "Window-A floors exist",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015"
         },

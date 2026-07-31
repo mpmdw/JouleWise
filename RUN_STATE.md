@@ -88,7 +88,8 @@ complete, step 7 (metrology authoring) in flight at close-out:
    holds) next quiet night; MANIFEST-CONTRAST-01 desk work to unlock the
    contrast claim; QUEUE-RECONCILE-01 (P2-015 retirement + 7 stale
    dependents + DA-1 kernel promotion — roadmap page is AT its 30 kB
-   shard budget, net additions need compensating retirement or a split).
+   shard budget, net additions need compensating retirement or a split)
+   [DONE 2026-07-31].
 6. **Ed owes**: network-time restore (`sudo systemsetup
    -setusingnetworktime on` — still OFF from §5A), wall-meter purchase
    (D-092, non-blocking).
@@ -399,11 +400,11 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- READY — Q1 `P2-015`: Collect the first claim-grade Window A floors in one clean prospective quiet window per the claim-window run-book: mint the drift bound in-window, then run the start triplet, midpoint reference, and end triplet before the a8 re-verdict and Splitwise sizing.
+- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- READY — A3 `FLOOR-BIND-01`: Bind canonical floor/MDE artifacts to governed extraction (CR9-1): authenticate admissible half-widths and complete campaign membership at claim consumption, with substitution/omission regressions.
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
