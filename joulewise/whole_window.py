@@ -1982,7 +1982,7 @@ def _occurrence_descriptor_valid(
     ids = member.get("bundle_ids") if isinstance(member, Mapping) else None
     return bool(
         isinstance(member, Mapping)
-        and member.get("execution") == "invoked"
+        and member.get("execution") in {"invoked", "existing"}
         and isinstance(ids, list)
         and bundle_index < len(ids)
         and ids[bundle_index] == bundle_id
@@ -2089,17 +2089,17 @@ def occurrence_descriptor_identity(
     return (path, member_index, bundle_index)
 
 
-def validated_supersession_entries(
+def supersession_entry_validation_results(
     runs_root: Path, log_path: Path | None = None
-) -> list[dict[str, Any]]:
-    """Read campaign-log supersession artifacts that validate RIGHT NOW.
+) -> tuple[list[dict[str, Any]], list[bool]] | None:
+    """Return recognizable raw supersessions and their current validations.
 
-    Every entry is re-checked against current bytes by
-    :func:`validate_occurrence_supersession_entry`; a record that no longer
-    matches its manifests, its canonical present bundle, or its quarantined
-    copy is not returned at all.  This is the ONE reader; joins that need
-    operator-authorized occurrence resolution call it instead of parsing the
-    log themselves.
+    ``None`` is the global fail-closed result: the log was unreadable, a
+    non-empty line was not JSON/object-shaped, or a supersession-shaped row
+    could not be assigned to a non-empty ``bundle_id``.  A recognizable row
+    with a bundle id remains visible even when its custody validation fails;
+    callers therefore cannot erase ambiguity by filtering malformed records.
+    A missing log is the ordinary no-supersession case.
     """
 
     path = (
@@ -2109,23 +2109,51 @@ def validated_supersession_entries(
     )
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return ([], [])
     except (OSError, UnicodeDecodeError):
-        return []
+        return None
     entries: list[dict[str, Any]] = []
+    validations: list[bool] = []
     for line in lines:
         if not line.strip():
             continue
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
+            return None
+        if not isinstance(value, dict):
+            return None
+        recognizable = (
+            value.get("record_type") == "campaign_occurrence_supersession"
+            or value.get("schema_version") == OCCURRENCE_SUPERSESSION_SCHEMA
+        )
+        if not recognizable:
             continue
-        if (
-            isinstance(value, dict)
-            and value.get("record_type") == "campaign_occurrence_supersession"
-            and validate_occurrence_supersession_entry(value, runs_root)
-        ):
-            entries.append(value)
-    return entries
+        bundle_id = value.get("bundle_id")
+        if not isinstance(bundle_id, str) or not bundle_id:
+            return None
+        entries.append(value)
+        validations.append(validate_occurrence_supersession_entry(value, runs_root))
+    return entries, validations
+
+
+def validated_supersession_entries(
+    runs_root: Path, log_path: Path | None = None
+) -> list[dict[str, Any]]:
+    """Return campaign-log supersessions that validate against current bytes.
+
+    Every entry is re-checked against current bytes by
+    :func:`supersession_entry_validation_results`.  This compatibility view
+    intentionally filters invalid rows; ambiguity-sensitive joins must use
+    that raw-plus-validation reader instead.
+    """
+
+    result = supersession_entry_validation_results(runs_root, log_path)
+    if result is None:
+        return []
+    entries, validations = result
+    return [entry for entry, valid in zip(entries, validations, strict=True) if valid]
 
 
 def supersession_selected_occurrence_identity(
@@ -4652,7 +4680,9 @@ __all__ = [
     "ordinary_present_bundle_paths",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
+    "supersession_entry_validation_results",
     "validate_occurrence_supersession_entry",
+    "validated_supersession_entries",
     "validate_neg8_drift_bound_artifact",
     "whole_window_refusal_reasons",
     "whole_window_drift_allowances",

@@ -159,16 +159,19 @@ def install_passing_analysis_whole_window(
                 "members": [
                     {
                         "execution": "invoked",
+                        "run_id": reference_ids[0],
                         "bundle_ids": [reference_ids[0]],
                         "role": "neg8_daily_reference_start",
                         "sentinel_position": "start",
                     },
                     {
                         "execution": "invoked",
+                        "run_id": f"{source_name}-campaign-members",
                         "bundle_ids": bundle_ids,
                     },
                     {
                         "execution": "invoked",
+                        "run_id": reference_ids[1],
                         "bundle_ids": [reference_ids[1]],
                         "role": "neg8_daily_reference_end",
                         "sentinel_position": "end",
@@ -3315,6 +3318,9 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         *,
         analysis_manifest_id: str | None = None,
         cooldown: object | None = None,
+        execution: str = "invoked",
+        outcome: str | None = None,
+        schema_version: str = "joulewise.campaign_provenance.v1",
     ) -> Path:
         campaign_dir = tmp / "campaign_manifests"
         campaign_dir.mkdir(parents=True, exist_ok=True)
@@ -3325,22 +3331,75 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                 "following_run_id": bundle_id,
             }
         manifest = {
-            "schema_version": "joulewise.campaign_provenance.v1",
+            "schema_version": schema_version,
             "analysis_manifest_id": analysis_manifest_id,
             "session_id": session,
             "first_physical_run_id": bundle_id,
             "members": [
                 {
-                    "execution": "invoked",
+                    "config": f"{bundle_id}.json",
+                    "execution": execution,
                     "run_id": bundle_id,
                     "bundle_ids": [bundle_id],
-                    "preceding_campaign_cooldown": cooldown,
+                    "preceding_campaign_cooldown": (
+                        cooldown if execution == "invoked" else None
+                    ),
                 }
             ],
         }
+        if outcome is not None:
+            manifest["members"][0]["outcome"] = outcome
         path = campaign_dir / name
         path.write_text(json.dumps(manifest), encoding="utf-8")
         return path
+
+    def _install_legacy_existing_binding(
+        self,
+        root: Path,
+        manifest_name: str,
+        *,
+        outcome: str = "usable",
+    ) -> dict:
+        manifest_path = root / "campaign_manifests" / manifest_name
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        member = manifest["members"][0]
+        status = {
+            "usable": "skipped",
+            "failed": "failed",
+            "incomplete": "incomplete_existing",
+            "waived": "waived",
+        }[outcome]
+        classification = (
+            outcome if outcome in {"usable", "failed", "waived"} else "usable"
+        )
+        member_rows = []
+        for bundle_id in member["bundle_ids"]:
+            row = {
+                "bundle_id": bundle_id,
+                "status": "succeeded" if classification == "usable" else "failed",
+                "strict_valid": classification == "usable",
+                "collection_integrity_flags": (
+                    [] if classification == "usable" else ["fixture_failure"]
+                ),
+                "collection_classification": classification,
+            }
+            if classification == "waived":
+                row["waiver"] = {"scope": "fixture_failure"}
+            member_rows.append(row)
+        log_row = {
+            "status": status,
+            "run_id": member["run_id"],
+            "config": str(root / "configs" / member["config"]),
+            "campaign_provenance_manifest": str(manifest_path.resolve()),
+            "members": member_rows,
+        }
+        log_path = root / "campaign_log.jsonl"
+        prior = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+        log_path.write_text(
+            prior + json.dumps(log_row, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return log_row
 
     def _install_real_supersession(
         self,
@@ -3465,6 +3524,346 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
+    def test_d097_v2_invoked_then_existing_refuses_for_every_outcome(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        for outcome in ("usable", "failed", "incomplete", "waived"):
+            with self.subTest(outcome=outcome):
+                root = Path(tempfile.mkdtemp(prefix=f"gauntlet-v2-i-e-{outcome}-"))
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                self._manifest(
+                    root,
+                    "00-invoked.json",
+                    "invoked-session",
+                    "bundle",
+                    schema_version="joulewise.campaign_provenance.v2",
+                )
+                self._manifest(
+                    root,
+                    "01-existing.json",
+                    "existing-session",
+                    "bundle",
+                    execution="existing",
+                    outcome=outcome,
+                    schema_version="joulewise.campaign_provenance.v2",
+                )
+
+                # D-097: v2 is deferred until writer-minted discrimination exists.
+                self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_v1_existing_outcome_cannot_bypass_missing_log_binding(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-b1-v1-outcome-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "00-invoked.json", "invoked-session", "bundle")
+        self._manifest(
+            root,
+            "01-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+            outcome="usable",
+        )
+
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_d097_relabelled_v1_outcome_manifest_refuses_at_catalog_gate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-b1-relabel-probe-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "00-invoked.json", "invoked-session", "bundle")
+        existing_path = self._manifest(
+            root,
+            "01-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+        )
+        self._install_legacy_existing_binding(root, "01-existing.json")
+
+        relabelled = json.loads(existing_path.read_text(encoding="utf-8"))
+        relabelled["schema_version"] = "joulewise.campaign_provenance.v2"
+        relabelled["members"][0]["outcome"] = "usable"
+        existing_path.write_text(json.dumps(relabelled), encoding="utf-8")
+        (root / "campaign_log.jsonl").unlink()
+
+        # D-097 release condition 2: a label-only v2 must fail at catalog intake.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_d097_bare_v2_existing_refuses_at_catalog_gate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-e-only-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "00-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+            outcome="usable",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+
+        # D-097: v2 is uniformly malformed before commit 3's writer exists.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_d097_v2_failed_existing_then_retry_refuses_at_catalog_gate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-e-i-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "00-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+            outcome="failed",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        self._manifest(
+            root,
+            "01-existing.json",
+            "second-existing-session",
+            "bundle",
+            execution="existing",
+            outcome="failed",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        self._manifest(
+            root,
+            "02-invoked.json",
+            "invoked-session",
+            "bundle",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+
+        # D-097: no v2 truth-table shape is consumable in the interim state.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_d097_v2_superseded_retry_still_refuses_at_catalog_gate(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import (
+            validate_occurrence_supersession_entry,
+            validated_supersession_entries,
+        )
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-e-i-repair-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "00-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+            outcome="failed",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        self._manifest(
+            root,
+            "01-existing.json",
+            "second-existing-session",
+            "bundle",
+            execution="existing",
+            outcome="failed",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        self._manifest(
+            root,
+            "02-invoked.json",
+            "invoked-session",
+            "bundle",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        entry = self._install_real_supersession(
+            root,
+            "bundle",
+            selected_manifest="02-invoked.json",
+            superseded_manifests=["00-existing.json"],
+        )
+
+        self.assertTrue(validate_occurrence_supersession_entry(entry, root))
+        self.assertEqual(validated_supersession_entries(root), [entry])
+        # D-097: a valid supersession cannot license a deferred v2 manifest.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_legacy_existing_aliases_bind_every_closed_log_outcome(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        for outcome in ("usable", "failed", "incomplete", "waived"):
+            with self.subTest(outcome=outcome):
+                root = Path(tempfile.mkdtemp(prefix=f"gauntlet-v1-{outcome}-"))
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                self._manifest(
+                    root, "00-invoked.json", "invoked-session", "bundle"
+                )
+                self._manifest(
+                    root,
+                    "01-existing.json",
+                    "existing-session",
+                    "bundle",
+                    execution="existing",
+                )
+                self._install_legacy_existing_binding(
+                    root, "01-existing.json", outcome=outcome
+                )
+
+                row = _campaign_cooldown_evidence(root, None)["bundle"]
+
+                self.assertEqual(row["result"], "first_run_exempt")
+                self.assertTrue(row["verified"])
+                self.assertEqual(
+                    row["manifest"], "campaign_manifests/00-invoked.json"
+                )
+
+    def test_one_legacy_log_row_cannot_authenticate_two_existing_members(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-b2-log-reuse-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        manifest_path = self._manifest(
+            root, "physical.json", "physical-session", "bundle"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        existing = {
+            **manifest["members"][0],
+            "execution": "existing",
+            "preceding_campaign_cooldown": None,
+        }
+        manifest["members"].extend([existing, dict(existing)])
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        self._install_legacy_existing_binding(root, "physical.json")
+
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_legacy_existing_binding_failures_refuse_join_globally(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        for case in (
+            "missing",
+            "inconsistent",
+            "conflicting",
+            "ambiguous",
+            "unparseable",
+        ):
+            with self.subTest(case=case):
+                root = Path(tempfile.mkdtemp(prefix=f"gauntlet-v1-{case}-"))
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                self._manifest(
+                    root,
+                    "00-existing.json",
+                    "existing-session",
+                    "bundle",
+                    execution="existing",
+                )
+                self._manifest(root, "01-invoked.json", "invoked-session", "bundle")
+                if case != "missing":
+                    row = self._install_legacy_existing_binding(
+                        root, "00-existing.json"
+                    )
+                    log_path = root / "campaign_log.jsonl"
+                    if case in {"inconsistent", "conflicting"}:
+                        original = json.loads(json.dumps(row))
+                        row["members"][0]["bundle_id"] = "other-bundle"
+                        log_path.write_text(
+                            (
+                                json.dumps(original, sort_keys=True) + "\n"
+                                if case == "conflicting"
+                                else ""
+                            )
+                            + json.dumps(row, sort_keys=True)
+                            + "\n",
+                            encoding="utf-8",
+                        )
+                    elif case == "ambiguous":
+                        log_path.write_text(
+                            log_path.read_text(encoding="utf-8")
+                            + json.dumps(row, sort_keys=True)
+                            + "\n",
+                            encoding="utf-8",
+                        )
+                    elif case == "unparseable":
+                        log_path.write_text(
+                            log_path.read_text(encoding="utf-8") + "{not-json\n",
+                            encoding="utf-8",
+                        )
+
+                self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_unknown_prospective_existing_outcome_refuses_join_globally(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-v2-unknown-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "00-existing.json",
+            "existing-session",
+            "bundle",
+            execution="existing",
+            outcome="surprising",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+        self._manifest(
+            root,
+            "01-invoked.json",
+            "invoked-session",
+            "bundle",
+            schema_version="joulewise.campaign_provenance.v2",
+        )
+
+        # D-097: all v2 outcomes refuse, including values outside the old enum.
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_result_map_keyset_unions_candidates_and_declared_ids(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        declared_only = "declared-with-zero-emissions"
+        root = self._physical_manifest_root(
+            [
+                self._physical_member(
+                    ["dup-bundle", declared_only],
+                    [
+                        {
+                            "bundle_id": "dup-bundle",
+                            "preceding_campaign_cooldown": (
+                                self._first_exempt_cooldown()
+                            ),
+                        }
+                    ],
+                )
+            ]
+        )
+
+        joined = _campaign_cooldown_evidence(root, None)
+
+        candidate_ids = {"dup-bundle"}
+        declared_ids = {"dup-bundle", declared_only}
+        self.assertEqual(set(joined), candidate_ids | declared_ids)
+
+    def test_unresolved_declared_id_has_exact_refusal_payload(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = self._physical_manifest_root(
+            [self._physical_member(["dup-bundle"], [])]
+        )
+
+        self.assertEqual(
+            _campaign_cooldown_evidence(root, None),
+            {
+                "dup-bundle": {
+                    "result": "unknown",
+                    "verified": False,
+                    "session_id": None,
+                    "manifest": None,
+                    "raw_artifact": None,
+                }
+            },
+        )
+
     def test_repeated_declared_bundle_with_malformed_physical_row_refuses(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
@@ -3588,6 +3987,29 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                     _campaign_cooldown_evidence(root, "selected"),
                     {},
                 )
+
+    def test_nonselected_manifest_with_nonobject_member_refuses_catalog(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-b3-catalog-member-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(
+            root,
+            "selected.json",
+            "selected-session",
+            "bundle",
+            analysis_manifest_id="selected",
+        )
+        sibling = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": "other",
+            "members": [None],
+        }
+        (root / "campaign_manifests" / "sibling.json").write_text(
+            json.dumps(sibling), encoding="utf-8"
+        )
+
+        self.assertEqual(_campaign_cooldown_evidence(root, "selected"), {})
 
     def test_cross_member_duplicate_with_malformed_physical_row_refuses(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -3714,7 +4136,9 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             ],
         }
         with unittest.mock.patch.object(
-            inputs_module, "validated_supersession_entries", return_value=[entry]
+            inputs_module,
+            "supersession_entry_validation_results",
+            return_value=([entry], [True]),
         ):
             resolved = inputs_module._campaign_cooldown_evidence(
                 self._duplicated_root(), None
@@ -3745,6 +4169,69 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(row["manifest"], "campaign_manifests/campaign-b.json")
         self.assertEqual(row["session_id"], "session-b")
         self.assertTrue(row["verified"])
+
+    def test_v4_valid_exact_plus_corrupted_same_bundle_clone_refuses(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import (
+            supersession_entry_validation_results,
+            validated_supersession_entries,
+        )
+
+        root = self._duplicated_root()
+        entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
+        )
+        corrupted_clone = dict(entry)
+        corrupted_clone["entry_sha256"] = "0" * 64
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(corrupted_clone, sort_keys=True) + "\n")
+
+        raw = supersession_entry_validation_results(root)
+        self.assertIsNotNone(raw)
+        assert raw is not None
+        self.assertEqual(raw[0], [entry, corrupted_clone])
+        self.assertEqual(raw[1], [True, False])
+        self.assertEqual(validated_supersession_entries(root), [entry])
+        row = _campaign_cooldown_evidence(root, None)["dup-bundle"]
+        self.assertEqual(row["result"], "unknown")
+        self.assertFalse(row["verified"])
+        self.assertIsNone(row["manifest"])
+
+    def test_invalid_json_supersession_reader_input_refuses_join_globally(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-sup-json-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "campaign.json", "session", "bundle")
+        (root / "campaign_log.jsonl").write_text(
+            "{unidentifiable-json\n", encoding="utf-8"
+        )
+
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+
+    def test_unidentifiable_supersession_record_refuses_join_globally(self):
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import OCCURRENCE_SUPERSESSION_SCHEMA
+
+        root = Path(tempfile.mkdtemp(prefix="gauntlet-sup-unidentifiable-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._manifest(root, "campaign.json", "session", "bundle")
+        (root / "campaign_log.jsonl").write_text(
+            json.dumps(
+                {
+                    "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+                    "record_type": "campaign_occurrence_supersession",
+                    "reason": "bundle identity was lost",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(_campaign_cooldown_evidence(root, None), {})
 
     def test_exact_supersession_cannot_license_emission_subset(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -3780,17 +4267,17 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
 
-    def test_57_member_fixture_preserves_two_consumed_supersessions(self):
+    def _assert_7b_corpus_shape_resolves(self) -> None:
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
         from joulewise.whole_window import validated_supersession_entries
 
         root = Path(tempfile.mkdtemp(prefix="d5j-real-shape-"))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         bundle_ids = [f"member-{index:02d}" for index in range(57)]
-        duplicate_ids = (bundle_ids[11], bundle_ids[43])
-        original_names = {}
+        genuine_indices = (44, 45)
+        original_names: dict[str, str] = {}
         for index, bundle_id in enumerate(bundle_ids):
-            name = f"campaign-{index:02d}.json"
+            name = f"campaign-{index:02d}-0-invoked.json"
             original_names[bundle_id] = name
             self._manifest(
                 root,
@@ -3798,14 +4285,41 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                 f"session-{index:02d}",
                 bundle_id,
             )
-        for index, bundle_id in enumerate(duplicate_ids):
-            retry_name = f"retry-{index}.json"
+            aliases = 1 if index < 24 else 2 if index < 44 else 0
+            for alias_index in range(aliases):
+                alias_name = (
+                    f"campaign-{index:02d}-{alias_index + 1}-existing.json"
+                )
+                self._manifest(
+                    root,
+                    alias_name,
+                    f"existing-{index:02d}-{alias_index}",
+                    bundle_id,
+                    execution="existing",
+                )
+                self._install_legacy_existing_binding(root, alias_name)
+
+        duplicate_ids = tuple(bundle_ids[index] for index in genuine_indices)
+        for retry_index, (member_index, bundle_id) in enumerate(
+            zip(genuine_indices, duplicate_ids, strict=True)
+        ):
+            retry_name = f"campaign-{member_index:02d}-1-invoked.json"
             self._manifest(
                 root,
                 retry_name,
-                f"retry-session-{index}",
+                f"retry-session-{retry_index}",
                 bundle_id,
             )
+            if retry_index == 1:
+                alias_name = f"campaign-{member_index:02d}-2-existing.json"
+                self._manifest(
+                    root,
+                    alias_name,
+                    "retry-existing-session",
+                    bundle_id,
+                    execution="existing",
+                )
+                self._install_legacy_existing_binding(root, alias_name)
             self._install_real_supersession(
                 root,
                 bundle_id,
@@ -3817,8 +4331,54 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         joined = _campaign_cooldown_evidence(root, None)
         self.assertEqual(len(joined), 57)
         self.assertTrue(all(row["verified"] for row in joined.values()))
-        self.assertEqual(joined[duplicate_ids[0]]["session_id"], "retry-session-0")
-        self.assertEqual(joined[duplicate_ids[1]]["session_id"], "retry-session-1")
+        for index, bundle_id in enumerate(duplicate_ids):
+            self.assertEqual(
+                joined[bundle_id]["session_id"], f"retry-session-{index}"
+            )
+
+    def _assert_contrast_corpus_shape_resolves(self) -> None:
+        from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
+        from joulewise.whole_window import validated_supersession_entries
+
+        root = Path(tempfile.mkdtemp(prefix="d5j-contrast-shape-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        bundle_ids = [f"member-{index:02d}" for index in range(47)]
+        target = bundle_ids[23]
+        for index, bundle_id in enumerate(bundle_ids):
+            self._manifest(
+                root,
+                f"campaign-{index:02d}-0-invoked.json",
+                f"session-{index:02d}",
+                bundle_id,
+            )
+        retries = []
+        for retry_index in (1, 2):
+            name = f"campaign-23-{retry_index}-invoked.json"
+            retries.append(name)
+            self._manifest(
+                root,
+                name,
+                f"retry-session-{retry_index}",
+                target,
+            )
+        self._install_real_supersession(
+            root,
+            target,
+            selected_manifest=retries[-1],
+            superseded_manifests=["campaign-23-0-invoked.json", retries[0]],
+        )
+
+        self.assertEqual(len(validated_supersession_entries(root)), 1)
+        joined = _campaign_cooldown_evidence(root, None)
+        self.assertEqual(len(joined), 47)
+        self.assertTrue(all(row["verified"] for row in joined.values()))
+        self.assertEqual(joined[target]["session_id"], "retry-session-2")
+
+    def test_57_member_fixture_preserves_44_aliases_and_two_supersessions(self):
+        self._assert_7b_corpus_shape_resolves()
+
+    def test_47_member_fixture_preserves_one_consumed_supersession(self):
+        self._assert_contrast_corpus_shape_resolves()
 
     def test_supersession_naming_mismatched_occurrences_refuses(self):
         from joulewise.analysis_engine import inputs as inputs_module
@@ -3841,7 +4401,9 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
             ],
         }
         with unittest.mock.patch.object(
-            inputs_module, "validated_supersession_entries", return_value=[entry]
+            inputs_module,
+            "supersession_entry_validation_results",
+            return_value=([entry], [True]),
         ):
             resolved = inputs_module._campaign_cooldown_evidence(
                 self._duplicated_root(), None
@@ -3879,3 +4441,31 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertIsNone(match([entry], "x", [a, a]))
         self.assertIsNone(match([entry], "wrong-id", [a, b]))
         self.assertIsNone(match([entry, dict(entry)], "x", [a, b]))
+
+class CooldownResultKeysetUnitTests(unittest.TestCase):
+    """Direct structural lock for the C1 keyset union (audit finding F1).
+
+    The public join cannot currently produce an emission-only id (emissions
+    are sourced from declared invoked positions), so this exercises the
+    helper directly: the defensive leg must surface an undeclared emission
+    id rather than dropping it.
+    """
+
+    def test_emission_only_id_is_included_after_declared_ids(self):
+        from joulewise.analysis_engine.inputs import _cooldown_result_bundle_ids
+
+        declared = {"decl-a": [("m", 0, 0)], "decl-b": [("m", 1, 0)]}
+        emissions = {"decl-b": [(("m", 1, 0), {})], "emit-only": [(("m", 2, 0), {})]}
+        self.assertEqual(
+            _cooldown_result_bundle_ids(declared, emissions),
+            ["decl-a", "decl-b", "emit-only"],
+        )
+
+    def test_no_emission_only_ids_yields_declared_order(self):
+        from joulewise.analysis_engine.inputs import _cooldown_result_bundle_ids
+
+        declared = {"decl-a": [("m", 0, 0)]}
+        self.assertEqual(
+            _cooldown_result_bundle_ids(declared, {"decl-a": [(("m", 0, 0), {})]}),
+            ["decl-a"],
+        )
