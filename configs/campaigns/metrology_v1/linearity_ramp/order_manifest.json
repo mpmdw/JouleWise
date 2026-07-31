@@ -2,7 +2,7 @@
   "schema_version": "joulewise.order_manifest.v1",
   "manifest_id": "metrology-v1-linearity-ramp-order-v1",
   "plan_id": "metrology-v1-linearity-ramp-m3max",
-  "calibration_plan_sha256": "72e2c026032328a05e57e51511be5a0a4c75fdee2268ff20b4d8650af63d98ae",
+  "calibration_plan_sha256": "ac67019da92951b07d4f22dca5d90706c00816746bf99356664484a1037166f3",
   "planned_n_bundles": 40,
   "subcampaign_order": [
     {

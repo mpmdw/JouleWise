@@ -2,7 +2,7 @@
   "schema_version": "joulewise.order_manifest.v1",
   "manifest_id": "metrology-v1-additivity-shapes-01_shapes-order-v1",
   "plan_id": "metrology-v1-additivity-shapes-m3max",
-  "calibration_plan_sha256": "3d0b7db8ef3465585eeee807b303bda5624ac026e9259d85f3225be897115a32",
+  "calibration_plan_sha256": "4c63bf9e8bc0a85b9d2f1e7ffe8e53edeb8b70b0dde481dbdabb98235d244133",
   "ordering_note": "Eight fixed rotated replicate-blocks; each block contains each prompt/output shape exactly once.",
   "planned_n_bundles": 24,
   "executed_order": [

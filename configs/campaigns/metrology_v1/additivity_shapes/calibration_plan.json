@@ -2,8 +2,8 @@
   "schema_version": "joulewise.detection_floor_calibration_plan.v1",
   "plan_id": "metrology-v1-additivity-shapes-m3max",
   "calibration_scope": "production_window",
-  "freeze_status": "draft_pending_magistrate_ratification",
-  "draft_note": "The magistrate ratifies this draft before any production window.",
+  "freeze_status": "frozen_before_measurement",
+  "ratification_note": "Ratified and frozen by the magistrate 2026-07-31 (D-096) before any member of this plan was measured.",
   "fixed_n": 8,
   "stack_scope": {
     "hardware_target": "macbook_m3_max",

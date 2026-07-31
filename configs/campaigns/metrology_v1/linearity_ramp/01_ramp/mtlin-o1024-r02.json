@@ -46,7 +46,7 @@
       "production-window",
       "instrument-characterization",
       "df-condition=mt-q15-decode-p0128-o1024",
-      "calibration-plan-sha256=72e2c026032328a05e57e51511be5a0a4c75fdee2268ff20b4d8650af63d98ae",
+      "calibration-plan-sha256=ac67019da92951b07d4f22dca5d90706c00816746bf99356664484a1037166f3",
       "rep2",
       "linearity-output-tokens=1024"
     ]

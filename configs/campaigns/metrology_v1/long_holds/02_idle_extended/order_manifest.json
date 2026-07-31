@@ -2,7 +2,7 @@
   "schema_version": "joulewise.order_manifest.v1",
   "manifest_id": "metrology-v1-long-holds-02_idle_extended-order-v1",
   "plan_id": "metrology-v1-long-holds-m3max",
-  "calibration_plan_sha256": "c2db1e49ac4925c93b72f9107e4b90346ab0754ddacb6042be96a6970ded0e2e",
+  "calibration_plan_sha256": "34af9db79eb598063eacc2cce76c6c1f60c0fdf143521cc69c92b08e0ccea8f2",
   "ordering_note": "One fixed member each at 120, 300, and 600 idle seconds.",
   "planned_n_bundles": 3,
   "executed_order": [

@@ -118,6 +118,7 @@ be re-derived by a future agent gets an entry here.
 | D-093 | DA-1 cold-gate synthesis: no behavior-changing fix round (DA-1 closes in the gauntlet at the validator/reader boundary), merge at the comment-corrected head `707f76e`, DA-1 registered into gauntlet C5, raw-vs-validated bench scan added to every claim consumption | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-31) |
 | D-094 | Gauntlet counting domain: COMPOSED design adopted (prospective writer outcome enum + fail-closed legacy log binding; truth table preserves the struck cell; DA-1 closes at the raw reader boundary); D-088 benign-count corrected 46→44; three-commit landing order C1-first | accepted (D-088 cl.2 mandated consult + magistrate 2026-07-31) |
 | D-095 | MANIFEST-CONTRAST design: analysis-manifest v3 (new module + dispatcher, v1/v2 byte-frozen), governed ABBA block derivation, folded_sha256 arm binding, Holm m=1 two-sided positive-direction, cross_stack_armwise_max.v1 floor rule; claim chain = gauntlet → v3 → multi-cell mint → claim | accepted (rule-2 consult + magistrate 2026-07-31; implementation queued behind the gauntlet) |
+| D-096 | Metrology v1 plan vocabulary ratified (staleness_sentinel, plan-only field shapes, recorded fallbacks); four window-A plans FROZEN before measurement; F2 --k hardening is a standing pre-replacement condition | accepted (magistrate ratification pass 2026-07-31) |
 
 ---
 
@@ -5860,3 +5861,43 @@ armwise-max never sum, cl.11 survival, D-093 refusal precedence).
 Revisit when: the gauntlet lands (implementation may then be ordered), or
 any element above fails ratification review at the implementation delta
 audit.
+
+## D-096: Metrology v1 plan vocabulary ratified; four window-A plans FROZEN
+
+- Date: 2026-07-31
+- Status: accepted (magistrate ratification pass over the five campaign
+  READMEs' OPEN QUESTIONS + review findings F1-F3 of PR #90)
+- Applies to: `configs/campaigns/metrology_v1/**`
+
+Ratified as selected: `use_role: staleness_sentinel` for every metrology
+cell (characterization cells gate no claim; the semantically-wrong
+alternatives were correctly refused); the modular family-id template and
+cross-campaign byte-identical shared families; additivity's `df_ph_decode`
+workload retention (family byte-identity outranks a campaign-specific
+name — the modularity-directed fallback), its three-metric `df-condition=`
+tagging and request-family-as-primary-workload as DESCRIPTIVE vocabulary
+(a future manifest consumer must re-ratify before consuming); micro_delta's
+validator-forced `A_equals_B` alias literals on A≠B contrast families as a
+RECORDED fallback (any future family-only consumer must be checked against
+it — review F3); the plan-only field shapes `condition_families` arrays,
+`output_tokens_by_k`, and long_holds' `idle_seconds_by_condition_family` +
+`mt_idle_extended` (review F1 — any future plan validator is written
+against these ratified shapes, and their ratification happens HERE, before
+any consumer exists); `minimum_claim_n: 1` on the one-member idle
+characterization cells.
+
+Standing condition (review F2): before the micro_delta k0064 placeholder
+is replaced from the fitted ramp slope, `generate_configs.py --k` handling
+must be hardened to canonicalize order and remove-or-refuse stale k
+outputs; replacement without that hardening is out of contract.
+
+FREEZE: linearity_ramp, null_ladder, additivity_shapes, and long_holds
+flip `freeze_status` to `frozen_before_measurement` this date (regenerated
+deterministically; plan SHAs re-pinned in the sidecars and member tags; no
+member of any of these plans has ever been measured). micro_delta stays
+`draft_pending_slope` by design. Tonight's metrology window A therefore
+needs only §5A + launch; its stage list is the suite README's window-A
+packing (ramp + additivity + null o0512 + holds Part A).
+
+Revisit when: a plan validator or manifest consumer is introduced (must be
+written against the shapes ratified here), or the F2 hardening lands.

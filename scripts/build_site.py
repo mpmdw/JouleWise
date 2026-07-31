@@ -35,7 +35,7 @@ DECISION_LOG_ARCHIVE_PREFIX = "decision_log_archive_"
 # markdown produces identical page assignments across Python/zlib versions.
 # A packer-side 24,000-byte gzip+Base64 target independently verifies the
 # resulting HTML and retains 20% headroom below the runtime's 30,000-byte cap.
-DECISION_LOG_PART_MARKDOWN_BYTES = 18_000
+DECISION_LOG_PART_MARKDOWN_BYTES = 12_000
 DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"

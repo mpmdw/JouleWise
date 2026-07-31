@@ -48,7 +48,7 @@
       "df-condition=mt-q15-decode-p0512-o0512",
       "df-condition=mt-q15-prefill-p0512-o0512",
       "df-condition=mt-q15-request-p0512-o0512",
-      "calibration-plan-sha256=3d0b7db8ef3465585eeee807b303bda5624ac026e9259d85f3225be897115a32",
+      "calibration-plan-sha256=4c63bf9e8bc0a85b9d2f1e7ffe8e53edeb8b70b0dde481dbdabb98235d244133",
       "rep2",
       "shape-prompt-tokens=512",
       "shape-output-tokens=512"
