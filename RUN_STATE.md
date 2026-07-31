@@ -32,7 +32,85 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## CURRENT STATE (2026-07-30 afternoon; the resume script below is EXECUTED except where struck)
+## ACTIVE RESUME SCRIPT (2026-07-30 19:15 PT pre-window checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. THE CRITICAL PATH IS TONIGHT'S CONTRAST
+WINDOW — launch it before anything else. The capstone PIVOTED today
+(Rivoire-ratified): METROLOGY-CENTRIC paper; the instrument is the
+product. Session ledger (all rulings/facts — READ IT FIRST):
+/private/tmp/claude-501/-Users-edr-code-JouleWise/abec37a6-31cd-4c56-a8a8-9448acaf12be/scratchpad/magistrate-rulings-2026-07-29.md
+Paper outline: same dir /paper-outline-v1.md. Sweep memos: /sweep-*.md.
+
+WINDOW (do first, in order):
+1. Ed's §5A is DONE: clock verified, Network Time OFF at 19:02:38 PT
+   (record restore after window), charger 140W Apple (power-supply
+   identity), machine cleared for the night, last HID 19:02. Ed is
+   AWAY — do not wait on him.
+2. QUIET-LOCK: a Sol session may still be authoring metrology campaigns
+   (`ps aux | grep codex`; check the minttool worktree log for a
+   metrology_v1 commit). If committed and exited: fine. If still
+   running at launch time: kill the codex processes (authoring resumes
+   post-window; the window outranks it). NO agents during measurement.
+3. Prep: the chain hardcodes REPO=/Users/edr/code/JouleWise; main
+   checkout is currently on `main` — DETACH at the branch head first:
+   `git -C /Users/edr/code/JouleWise checkout --detach 16c7af0`
+   (campaign configs live on impl/mint-tool). Then
+   `bash scripts/quiet_mac_prep.sh`. Its "Graphics capability" FAIL is
+   a known false signal on this build — the authoritative display check
+   is `pmset -g log` showing "Display is turned off" with no later
+   wake (ledger precedent).
+4. LAUNCH (~21:00 PT, >=10 min after last local command),
+   run_in_background, then ZERO tool calls until measurement_complete:
+   caffeinate -is /bin/zsh /Users/edr/JouleWise-window-plans/window_contrast_20260730/window-chain.zsh /Users/edr/JouleWise-window-plans/window_contrast_20260730
+   Chain sha 2a334f64… (verified, includes §5B screen). Frozen plan
+   RATIFIED: splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b, n=10 ABBA,
+   arms 1.5B/8b403126 + 7B/c26a38f6, evidence-bearing-now /
+   claim-bearing-later per pre-reg §5. ~2.6h. If a member fails CPU
+   admission: quarantine, wait out the idle-daemon intruder, author a
+   continuation chain reusing THIS window's pre-cal
+   (window_7bfloor_20260729 precedent + §10; supersession recorder:
+   run ONCE per member, absolute --runs-dir). A third failure of any
+   signature closes the window as salvage (end triplet + post-cal
+   only) per cold-gate precedent.
+5. POST-WINDOW: §8 bracket check -> §9 whole-window verdict (absolute
+   --runs-dir) -> backup_runs.sh -> close-out record (template:
+   /Users/edr/JouleWise-window-custody/window_7bfloor_20260729/close-out.md;
+   include the network-time-restore reminder for Ed). NO floor
+   extraction (science window, not calibration): claim consumption is
+   blocked on MANIFEST-CONTRAST desk work; the paper's demonstration
+   numbers come from bundle summaries + the two existing floor
+   artifacts (1.5B 7.377086 J / 7B 13.998037 J).
+6. OVERNIGHT (agents OK after measurement_complete): implement D5-J —
+   the STRUCTURAL cooldown-join redesign (adopted design + the struck
+   liberalization cell + implementation sketch ALL in the ledger).
+   Sol xhigh, WRITE_SCOPE {joulewise/analysis_engine/inputs.py,
+   joulewise/whole_window.py matcher contract,
+   tests/test_analysis_integration.py}, one commit on impl/mint-tool
+   in the minttool worktree
+   (/private/tmp/claude-501/-Users-edr-code-JouleWise/9c166892-d763-42c4-8cf7-383912f054c9/scratchpad/minttool).
+   Then a fresh INDEPENDENT read-only delta audit (prior auditor
+   violated read-only and self-fixed — ledger process flags; emphasize
+   REPORT ONLY), full suite, and the merge train resumes (PR, D-072
+   gate). MERGE IS HELD until that audit passes (escalation-trigger
+   ruling; FIX-10 audited FAIL on B1/B2 — adversarial-shaped, honest
+   path verified clean 57/57).
+7. THEN: metrology campaign suite (finish/ratify the authoring if Sol
+   died mid-run; spec = paper-outline §5 + its campaign->claim map);
+   metrology window A next night (linearity ramp + additivity + holds
+   -> claims C1/C4/C5).
+8. BOOKKEEPING BATCH owed: decision-log entries from the ledger
+   (metrology pivot, D5-J adoption + struck cell, trigger firing,
+   FIX-10 process flags, Q1-Q9 ratifications, wall meter YES pending
+   hardware = P1-003 answered); council-log addendum; queue rows
+   MANIFEST-CONTRAST-01, MINT-GENERALIZE-01, POWERMETRICS-AUDIT-01,
+   SUPERSESSION-DUP-REFUSAL-01; sweep memos + paper outline into
+   docs/run_reports/; kernel refresh + gen_state; consistency sweep.
+
+Standing: gates never waived; magistrate operates windows solo; zero
+agents during measurement; plain language on advisor surfaces; the
+loop runs until the paper's claims table (outline §5) is measured.
+
+## PRIOR STATE (2026-07-30 afternoon; the resume script below is EXECUTED except where struck)
 
 Steps 2, 3, and 5 of the resume script below are DONE (audit harvested →
 FAIL → FIX-10 → escalation → cold gate → D-088 → PR #88 merged
