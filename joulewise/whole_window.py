@@ -2131,43 +2131,46 @@ def validated_supersession_entries(
 def supersession_selected_occurrence_identity(
     entries: Sequence[Mapping[str, Any]],
     bundle_id: str,
-    observed: Sequence[tuple[str, int, int]],
+    declared: Sequence[tuple[str, int, int]],
 ) -> tuple[str, int, int] | None:
-    """Name the selected occurrence when a record covers EXACTLY what was seen.
+    """Name the selected occurrence when a record covers all declarations.
 
     Duplicate occurrence records are ambiguous evidence by default, and that
     default is what stops outlier laundering.  The single licensed exception
     is an explicit operator supersession artifact -- hash-bound, reason-
     bearing, and naming the quarantined copy -- and it licenses nothing wider
-    than the duplicates it actually names.  The record must therefore account
-    for every observed occurrence and name no occurrence that was not
-    observed; a partial record, an extra record, two competing records, or a
-    repeated observed identity all return ``None`` and leave the caller's
-    existing refusal in place.
+    than the declarations it actually names.  The record must therefore
+    account for every declared occurrence and name no occurrence that was not
+    declared; a partial record, an extra record, two competing records, or a
+    repeated declared identity all return ``None`` and leave the caller's
+    existing refusal in place.  Whether emitted rows equal this declaration
+    set is the owning join's responsibility.
     """
 
-    observed_key = sorted(observed)
-    if len(observed_key) < 2 or len(set(observed_key)) != len(observed_key):
+    declared_key = sorted(declared)
+    if len(declared_key) < 2 or len(set(declared_key)) != len(declared_key):
         return None
-    matches: list[tuple[str, int, int]] = []
-    for entry in entries:
-        if not isinstance(entry, Mapping) or entry.get("bundle_id") != bundle_id:
-            continue
-        selected = occurrence_descriptor_identity(entry.get("selected_occurrence"))
-        superseded_values = entry.get("superseded_occurrences")
-        if selected is None or not isinstance(superseded_values, list):
-            continue
-        superseded = [
-            occurrence_descriptor_identity(value) for value in superseded_values
-        ]
-        if any(value is None for value in superseded):
-            continue
-        named = sorted([selected, *(value for value in superseded if value)])
-        if len(set(named)) == len(named) and named == observed_key:
-            matches.append(selected)
-    if len(matches) != 1:
+    candidates = [
+        entry
+        for entry in entries
+        if isinstance(entry, Mapping) and entry.get("bundle_id") == bundle_id
+    ]
+    if len(candidates) != 1:
         return None
-    return matches[0]
+    entry = candidates[0]
+    selected = occurrence_descriptor_identity(entry.get("selected_occurrence"))
+    superseded_values = entry.get("superseded_occurrences")
+    if selected is None or not isinstance(superseded_values, list):
+        return None
+    superseded = [
+        occurrence_descriptor_identity(value) for value in superseded_values
+    ]
+    if any(value is None for value in superseded):
+        return None
+    named = sorted([selected, *(value for value in superseded if value)])
+    if len(set(named)) != len(named) or named != declared_key:
+        return None
+    return selected
 
 
 def _evidence_map(path: Path) -> dict[str, bytes]:
