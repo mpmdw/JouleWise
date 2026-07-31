@@ -4371,3 +4371,31 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertIsNone(match([entry], "x", [a, a]))
         self.assertIsNone(match([entry], "wrong-id", [a, b]))
         self.assertIsNone(match([entry, dict(entry)], "x", [a, b]))
+
+class CooldownResultKeysetUnitTests(unittest.TestCase):
+    """Direct structural lock for the C1 keyset union (audit finding F1).
+
+    The public join cannot currently produce an emission-only id (emissions
+    are sourced from declared invoked positions), so this exercises the
+    helper directly: the defensive leg must surface an undeclared emission
+    id rather than dropping it.
+    """
+
+    def test_emission_only_id_is_included_after_declared_ids(self):
+        from joulewise.analysis_engine.inputs import _cooldown_result_bundle_ids
+
+        declared = {"decl-a": [("m", 0, 0)], "decl-b": [("m", 1, 0)]}
+        emissions = {"decl-b": [(("m", 1, 0), {})], "emit-only": [(("m", 2, 0), {})]}
+        self.assertEqual(
+            _cooldown_result_bundle_ids(declared, emissions),
+            ["decl-a", "decl-b", "emit-only"],
+        )
+
+    def test_no_emission_only_ids_yields_declared_order(self):
+        from joulewise.analysis_engine.inputs import _cooldown_result_bundle_ids
+
+        declared = {"decl-a": [("m", 0, 0)]}
+        self.assertEqual(
+            _cooldown_result_bundle_ids(declared, {"decl-a": [(("m", 0, 0), {})]}),
+            ["decl-a"],
+        )

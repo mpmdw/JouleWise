@@ -1562,6 +1562,24 @@ def campaign_cooldown_evidence(
     return _campaign_cooldown_evidence(Path(runs_root), manifest_id)
 
 
+def _cooldown_result_bundle_ids(
+    declarations: Mapping[str, Any], emissions: Mapping[str, Any]
+) -> list[str]:
+    """C1 keyset contract: declared ids, then emission-only ids, in order.
+
+    Every emission id is currently sourced from a declared invoked
+    ``bundle_ids`` position, so the second leg is defensive: it guarantees
+    the completeness contract survives any future emission path (the
+    commit-3 writer changes included) instead of relying on that invariant.
+    """
+
+    result = list(declarations)
+    result.extend(
+        bundle_id for bundle_id in emissions if bundle_id not in declarations
+    )
+    return result
+
+
 def _campaign_cooldown_evidence(
     runs_root: Path, manifest_id: str | None
 ) -> dict[str, Mapping[str, Any]]:
@@ -1808,10 +1826,7 @@ def _campaign_cooldown_evidence(
                 )
 
     resolved: dict[str, Mapping[str, Any]] = {}
-    result_bundle_ids = list(declarations)
-    result_bundle_ids.extend(
-        bundle_id for bundle_id in emissions if bundle_id not in declarations
-    )
+    result_bundle_ids = _cooldown_result_bundle_ids(declarations, emissions)
     refusal_payload = {
         "result": "unknown",
         "verified": False,
