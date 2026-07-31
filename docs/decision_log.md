@@ -115,6 +115,7 @@ be re-derived by a future agent gets an entry here.
 | D-090 | Delegation conduct on the FIX-10 round: a read-only audit brief is binding, and a commit message may not assert a review that has not happened or label non-defect-shaped tests as regressions | accepted (magistrate-recorded 2026-07-30) |
 | D-091 | Metrology pivot: the capstone is metrology-centric — the measurement instrument is the product; the paper leads with metrology claims (linearity, additivity, floors, drift governance) and the model contrasts become demonstration studies | accepted (Ed/Rivoire-ratified 2026-07-30) |
 | D-092 | Wall meter ratified for the paper (claim C8) with no hardware yet — operate without until purchased; P1-003 answered: buy per the SPEC/Khan/CCGRID references in the advisor brief | accepted (Rivoire-answered, relayed by Ed 2026-07-30) |
+| D-093 | DA-1 cold-gate synthesis: no behavior-changing fix round (DA-1 closes in the gauntlet at the validator/reader boundary), merge at the comment-corrected head `707f76e`, DA-1 registered into gauntlet C5, raw-vs-validated bench scan added to every claim consumption | accepted (cold gate + Opus refuter + magistrate synthesis 2026-07-31) |
 
 ---
 
@@ -5676,3 +5677,66 @@ made.
 Revisit when: the meter is purchased (C8 moves from conditional to planned and
 its own characterization work is queued), or the paper is submitted without it
 (C8 is cut and the limitation in outline §7 becomes load-bearing).
+
+## D-093: DA-1 cold-gate synthesis — register-and-merge at a corrected head; no behavior-changing fix round; bench scan extended
+
+- Date: 2026-07-31
+- Status: accepted (magistrate synthesis of a split cold gate: cold Fable
+  instance ruling O2 with five conditions vs Opus contract-lens refuter
+  finding O2 forbidden-as-framed; synthesis per the rule-9 split-verdict
+  mechanism, recorded here for Ed)
+- Applies to: `impl/mint-tool` merge train, `COOLDOWN-JOIN-GAUNTLET-01`,
+  every claim consumption through the cooldown join
+
+The D5-J delta audit (independent, read-only) returned FAIL: blocker DA-1 —
+`validated_supersession_entries` silently drops malformed supersession
+records BEFORE ambiguity evaluation, so one valid exact record plus one
+malformed same-bundle record RESOLVES instead of refusing (demonstrated by
+replay against the real contrast corpus plus a corrupted clone); should-fix
+DA-2 — the D5-J commit message overstated six tests as defect-shaped
+regressions (audited: three regressions, three preservation tests). Per
+D-089's revisit clause the failed audit returned the question to a cold gate.
+
+Synthesis of the split verdicts:
+
+1. **No behavior-changing fix round on the branch** (cold instance adopted;
+   refuter's round-count confirmed: DA-1 is the FOURTH consecutive
+   malformation-class residual, and the trigger counts by signature class,
+   not function). DA-1's structural closure belongs to
+   `COOLDOWN-JOIN-GAUNTLET-01`, scoped per the refuter: the fix must move
+   raw-record (malformation) visibility into the join's declared
+   responsibility — the validator/reader boundary — not another site patch;
+   if the class recurs after that boundary fix, work STOPS and the question
+   returns here.
+2. **Merge at a corrected head, not `aca78f8` exactly** (refuter adopted;
+   modifies the cold instance's condition 3 on its P2 evidence): `aca78f8`'s
+   message and an in-code comment assert the exact property DA-1 disproves,
+   and merging them uncorrected would land a false behavioral claim in
+   tracked source (D-090 class). The correction commit `707f76e` is
+   comment-only (verified: no executable statement touched), corrects both
+   false assertions, and does not constitute a fix round.
+3. **DA-1 registered before merge** (cold condition 1): blocker row against
+   the join contract, folded into the gauntlet's C5 as fail-closed handling
+   of malformed supersession RECORDS; it violates the D-089 struck-cell
+   principle at the reader. Row added to the staged intake table this date.
+4. **Bench scan extended, effective immediately** (cold condition 2): every
+   claim consumption through the cooldown join additionally records
+   raw-vs-validated supersession-record counts for its corpus; ANY
+   divergence refuses consumption. Initial scan this date: a10 0/0, window C
+   0/0, 7bfloor 2/2, contrast 1/1 — no divergence; DA-1 remains
+   corpus-unreachable.
+5. **Gauntlet closure must include a defect-shaped regression derived from
+   the auditor's V4 driver** (cold condition 5), plus the full-suite
+   evidence condition (cold condition 4) discharged by a lead-run suite at
+   the corrected head before merge.
+6. DA-2 record corrections land in: the correction commit message, this
+   entry, and the PR description. No force push (per the open multi-session
+   convention question, which remains Ed's).
+
+Ruling-change conditions carried forward from the cold instance: any corpus
+showing raw!=validated divergence voids the merge/consumption license and
+returns here; evidence that the D5-J consult assigned raw-record visibility
+to the join reopens the fix-now question.
+
+Revisit when: the gauntlet's DA-1 closure lands (record its audit here), or
+any clause-4 scan diverges.
