@@ -1,6 +1,30 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-31 (REPO AHEAD OF CAPSULE — claim-posture drift).
+Refreshed: 2026-08-01 (REPO AHEAD OF CAPSULE — claim-posture drift).
+New since the 2026-07-31 refresh below (capsule still
+`dep_2I04CG6tQ4t0mzY7` from `c3e2647`, 2026-07-25):
+
+- (2026-08-01) Both metrology windows collected and salvage-closed:
+  window A (`window_metrologyA_20260731`, linearity_ramp 40/40 complete)
+  and window B (`window_metrologyB_20260801`, null o0128+o0512 complete,
+  additivity 23/24 single-root, clean 2.25 ms bracket). BOTH
+  whole-window verdicts FAILED as-issued on distinct machinery
+  condition sets — desk adjudication (`MET-VERDICT-ADJ-01`) is running;
+  the corpora are banked and intact, and none of their numbers are
+  claim-bearing yet.
+- (2026-08-01) New standing root doc `CLAIMS_STATUS.md` — the single
+  home for claim validity state (valid / evidence-bearing / collected-
+  blocked / do-not-quote). Any future site build should surface it.
+- (2026-08-01) D-098/D-099 recorded: the salvage-close records, the
+  clock-anchor knife-edge instrument finding (rate-aware anchor design
+  queued; publishable metrology limitation), the bird-SIGSTOP window
+  protocol, the TM-attribution false-proxy retirement, and the
+  operator-streaming measurement hazard; C-039 addendum III (the
+  in-window consult that refuted the lead's mechanism).
+- (2026-08-01) Queue: `MET-WINDOW-C-01` (metrology remainder window)
+  blocked on the adjudication + Ed §5A.
+
+Prior refresh (2026-07-31, REPO AHEAD OF CAPSULE — claim-posture drift).
 The deployed capsule is still `dep_2I04CG6tQ4t0mzY7`, built from main
 `c3e2647` (2026-07-25); no agent has deployed since, and none will
 (D-068). Since that snapshot the repo gained front-facing state that the

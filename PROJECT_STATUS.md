@@ -25,7 +25,26 @@ are provided for anyone who wants the full evidence trail.
   observation, not yet a gated claim. As of 2026-07-30 the project's
   framing is **metrology-centric** (advisor-ratified): the measurement
   instrument itself is the product, and model comparisons serve as
-  demonstration studies of what it can resolve.
+  demonstration studies of what it can resolve. The first two nights of
+  the dedicated metrology campaign ran on 2026-07-31 and 2026-08-01:
+  the linearity data set is complete (40 of 40 runs), two of the three
+  planned "measure nothing and confirm the instrument reads zero"
+  rungs are complete, and the additivity data set is one run short of
+  complete. The measurements themselves are collected, verified, and
+  safely backed up. The automated end-of-night quality verdict for both
+  nights, however, came back FAILED — not because the data is bad, but
+  because these were the first nights that ended early under the
+  campaign's own safety rules (a run is abandoned after three
+  environmental interruptions), and the verdict software had never
+  before evaluated a night with that shape. Whether the verdict logic
+  or the expectation is wrong is being adjudicated before any of these
+  numbers are used. Two genuine instrument findings also came out of
+  those nights and will appear in the paper: the instrument's internal
+  clock-alignment step operates with about a millisecond of margin —
+  effectively a coin flip at the current capture length — and needs a
+  small redesign; and the operating computer's own text output, if it
+  streams while a measurement is waiting for a quiet moment, is enough
+  activity to spoil that measurement's admission check.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
