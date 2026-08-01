@@ -649,7 +649,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- CONTINUE — A2 `MET-VERDICT-ADJ-01`: Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

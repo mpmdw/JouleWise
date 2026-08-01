@@ -122,6 +122,7 @@ be re-derived by a future agent gets an entry here.
 | D-097 | B1 cold-gate synthesis: v2 outcome consumption deferred to gauntlet commit 3 (writer-minted authenticated discriminator required); interim v2-label and outcome-field refusal everywhere (reader accepted set == writer emitted set); merge train held on four release conditions | accepted (unanimous cold gate + refuter, magistrate synthesis 2026-07-31) |
 | D-098 | Metrology window A record: salvage close under the third-failure rule, a10-precedent recorded-deviation post-cal retry, whole-window verdict FAILED as-issued (dangling quarantined slot + refused bracket formation), two checkpoint corrections (additivity 21/24; Anker charger identity); machinery questions registered to MET-VERDICT-ADJ-01, never hand-applied | accepted (magistrate-recorded 2026-08-01) |
 | D-099 | Metrology window B record + doctrine: three-launch arc under the bird-SIGSTOP protocol (once-validated), clock-anchor knife-edge accepted as an instrument-design finding (rate-aware anchor queued), TM attribution retired as a false proxy, operator output streaming during idle gates recorded as a measurement hazard (one-line arm messages binding), verdict FAILED as-issued (membership resolution) with adjudication routed to MET-VERDICT-ADJ-01 | accepted (magistrate-recorded 2026-08-01) |
+| D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions, window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
 
 ---
 
@@ -6061,3 +6062,118 @@ Close-out: `~/JouleWise-window-custody/window_metrologyB_20260801/close-out.md`.
 Report: `docs/run_reports/2026-08-01-metrology-window-b.md`.
 Revisit when: MET-VERDICT-ADJ-01 rules on question group (c), or the
 rate-aware anchor design lands.
+
+## D-100: Salvage-dangler terminal semantic — cold-gate synthesis (S2-A as redrawn, landed in the S3 semantics-dispatch shape)
+
+- Date: 2026-08-01
+- Status: accepted (rule-11 mandatory cold gate: cold Fable instance ruling
+  + one bounded factual follow-up + independent Opus contract-lens
+  refutation; magistrate synthesis. This entry is the Ed-visible written
+  record required by the topology.)
+- Applies to: whole-window verdict machinery (`scripts/run_campaign.py`
+  membership/disposition paths), §10 contract amendment, windows
+  `runs_window_metrologyA_20260731` / `runs_window_metrologyB_20260801`,
+  MET-VERDICT-ADJ-01, MET-WINDOW-C-01 scope
+
+Question ruled: the terminal whole-window semantic for a §10-quarantined
+member occurrence with zero surviving bundles in a D-087 salvage-closed
+window (packet: `.desk/adjudication_packet_20260801/`, retained with the
+audit, both rulings, and the refutation as the session record).
+
+**1. Unanimous machinery repairs (both instances converged; land as one
+audited repair commit with the regressions below):**
+- Uniform count-independent dangler path: the accidental count-one
+  (silent accept, late strict invalidation) and count-two (duplicate-path
+  group discard) behaviors are both retired; presence check added to the
+  single-declaration branch.
+- A failing sibling group must NEVER discard an unrelated valid
+  supersession (window B's destroyed `mtnull-o0512-b04-b2` record is the
+  defect exemplar).
+- Membership groups must bind by explicit identity: all eight window B
+  manifests carry `analysis_manifest_id: null` and collapse into one
+  synthetic group (refuter R11); the repair adds an identity-binding
+  requirement or a recorded explicit safety finding at the verdict row.
+- Ledger honesty (refuter R12): rows recording `strict_valid: true` /
+  `clean` for a bundle with no bytes are repaired so exclusion evidence
+  derives from bundle bytes, never from those flags.
+
+**2. Disposition semantic adopted: the cold instance's S2-A with its
+redrawn condition (b), carried in the refuter's S3 shape.**
+- Fail-closed default everywhere the license fails, including every
+  non-salvage window.
+- Salvage-dangler exclusion license, ALL mechanical: (a) recorded D-087
+  closure binding the attempts; (b-i) launcher-layer refusal with zero
+  bundle bytes, OR (b-ii) pre-workload admission abort — no
+  `stage_started` for any workload/measurement stage (success vocabulary:
+  warmup, measured_run, idle_drift_sentinel; danglers terminate at
+  idle_baseline), `environment_admission.admitted == false`, summary
+  failed with zero measurand fields, telemetry bounded to the admission
+  phase (per R5a the implemented test accepts the real bundle shape,
+  including the ~150 ms instrument-teardown trace flush past the failure
+  event; unclassifiable evidence voids); (c) exhaustive per-attempt
+  evidence; (d) cap of ONE dangling member per window; (e) verdict-row
+  exclusion payload with per-attempt quarantine path, config/metadata/
+  summary sha256, terminal stage, failure reason, license branch, and
+  operator deviations flagged.
+- **Landing shape (refuter R5/R6, adopted over the cold instance's
+  bespoke supersession block):** any licensed re-evaluation appends a NEW
+  row under a NEW `consumption_semantics_id`
+  (`salvage_dangler_exclusion_v1`) with a genuinely new
+  `evaluation_basis.sha256`; consumers reach it only by explicitly
+  requesting those semantics with a pinned basis. The original FAILED
+  rows are never edited and continue to govern default consumption —
+  verdicts stand as issued BY CONSTRUCTION, and no
+  `whole_window_verdict_conflict` can arise.
+- **Registry amendment explicit (refuter R9):** the new spellings are the
+  first registered conditions that do not refuse; the D-078 registry's
+  governing sentence is amended by this entry to admit
+  semantics-dispatch-scoped non-refusing dispositions, which remain
+  unreachable outside an explicit semantics request.
+
+**3. Factual record corrected (both directions):**
+- Packet fact 6 wording corrected: the danglers' attempts DID create
+  quarantined idle-phase bundles; the MEASURAND was never observed (event
+  sequences terminate at idle_baseline; durations explained by two ~36 s
+  admission-baseline attempts, refuting the refuter's R2 workload
+  inference from primary evidence).
+- Refuter R1 confirmed for the three `p2048-o0128` cells (frozen
+  `minimum_claim_n: 8`, r08 named, 7 present — barred regardless of this
+  ruling; that shape re-collects in window C) and corrected in scope: the
+  other six additivity cells (two complete shapes) and both null rungs
+  remain the real, non-illusory stake of the license.
+**4. Prospectivity decided explicitly (refuter dissent 3):** D-078's
+prospectivity doctrine binds stored summaries and numeric semantics —
+none of which are rewritten here; adjudicated verdict re-evaluation
+through this cold-gate path, on a new basis under explicit semantics
+dispatch, is the ratified override channel (CLAIMS_STATUS §4 cl.3).
+
+**5. Window B re-evaluation license:** reinstated under the redrawn (b),
+subject to ALL cold-ruling conditions with condition 6 replaced by the
+S3 landing shape: contract amendment landed; repair landed with
+regressions R1-R8 + R5a/R5b + identity-binding and ledger-honesty
+regressions; independent read-only audit at the exact head; recorded
+(b-ii) bench verification of both r08 bundles (performed 2026-08-01,
+recorded in the packet: no workload stage, admitted false, zero measurand
+fields, both attempts); D-093 cl.4 raw-vs-validated scan on B's corpus;
+frozen byte-identical corpus; deviation-escape (any condition outside the
+audited cascade set returns to a cold gate). **Window A: no license** —
+its FAILED verdict rests on the immutable T1-incompatible retry.
+
+**6. Dissents recorded (Ed sees this entry):** the refuter preferred the
+`flagged`-status S4 landing, contingent on its R2 workload inference,
+which primary evidence refuted; its R10 preference for a
+named-and-removed-cause license axis over flag-not-void operator
+deviations is NOT adopted for the license (exclusion never improves a
+measured value and the per-cell gates bar the affected cells) but its
+standard is adopted for the surviving RE-COLLECTION duty (runbook
+:796-799): the re-collected slot launches only after the named cause is
+removed — for window B's r08 that includes the operator-streaming
+doctrine (D-099 cl.5). S1 is rejected on the refuter's R3/R4/R13 grounds
+(it would ratify a permanently false custody condition over a corpus
+whose provenance is present, complete, and bound).
+
+Revisit when: the repair commit's delta audit reports, any license
+condition fails, the R5a real-shape regression conflicts with any prose
+clause (regression wins; prose amends), or the cold instance's named
+falsifier (admission-gate sensitivity blind spot correlated with the
+dangler's intruder class) gains evidence.

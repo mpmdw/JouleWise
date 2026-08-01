@@ -1156,43 +1156,51 @@
       "status": "queued",
       "stop_card": null
     },
-    "MET-VERDICT-ADJ-01": {
+    "MET-DANGLER-DISPOSITION-01": {
       "acceptance": {
         "evidence": [
-          "Each of the three question groups — (a) dangling quarantined-without-replacement occurrences, (b) deviation-retry post-cal bracket selection, (c) window B membership resolution + supersession consumption + NEG-8 evaluation — is classified MACHINERY DEFECT, CONTRACT GAP, or CORRECT with behavior traced to code and the contract source cited",
-          "An independent read-only audit report exists over the assembled packet before any magistrate ruling",
-          "Any accepted repair is queued as its own row with defect-shaped regressions; any proposed override of an as-issued verdict goes to the cold-gate path with written dissent Ed sees",
-          "The banked window A/B corpora remain intact and unconsumed throughout"
+          "Uniform count-independent dangler path with a presence check on the single-declaration branch; a failing sibling group can no longer discard an unrelated valid supersession",
+          "Membership groups bind by explicit identity (or a recorded explicit safety finding at the verdict row); exclusion evidence derives from bundle bytes, never from the fail-open-shaped ledger flags",
+          "The D-100 exclusion license is mechanical (D-087 closure binding, b-i/b-ii measurand-existence tests, exhaustive per-attempt evidence, cap of one, hash-enumerated verdict-row payload) and any licensed re-evaluation lands as a NEW row under consumption_semantics_id salvage_dangler_exclusion_v1 with a genuinely new evaluation basis and pinned consumption",
+          "Regressions R1-R8 plus R5a/R5b plus identity-binding and ledger-honesty regressions all pass; the section-10 contract amendment and the D-078 registry amendment land with the commit",
+          "Independent read-only audit at the exact head before any merge"
         ],
         "pointer": {
-          "json_pointer": "/tasks/MET-VERDICT-ADJ-01/acceptance",
-          "label": "MET-VERDICT-ADJ-01 acceptance",
+          "json_pointer": "/tasks/MET-DANGLER-DISPOSITION-01/acceptance",
+          "label": "MET-DANGLER-DISPOSITION-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The whole-window verdict machinery's behavior over salvage-shaped windows is adjudicated: each question group classified with code-traced evidence, repairs queued, verdicts standing as issued unless a cold gate rules otherwise."
+        "summary": "The D-100 cold-gate synthesis lands as one audited repair: uniform dangler disposition, mechanical exclusion license, semantics-dispatch re-evaluation shape, and the unanimous membership repairs, with the full regression set."
       },
       "authority": {
-        "label": "2026-08-01 metrology window B run report (adjudication scope) + RUN_STATE desk queue",
-        "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+        "label": "D-100 salvage-dangler cold-gate synthesis (cold Fable + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01)",
+        "path": "docs/decision_log.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "CLAIMS_STATUS section 4: verdicts consumed as issued; overrides only via the cold-gate path",
-            "path": "CLAIMS_STATUS.md"
+            "label": "D-100 landing shape (refuter R5/R6 adopted)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No override or reinterpretation of the as-issued FAILED verdicts outside the mandatory cold-gate path; the audit is read-only and the banked bundles are never invalidated by this row"
+          "rule": "Original FAILED verdict rows are never edited, deleted, or reordered; re-evaluation is reachable ONLY via an explicit consumption_semantics_id request with a pinned new basis; the cap-of-one and the fail-closed default are not softened"
+        },
+        {
+          "authority": {
+            "label": "D-100 clause 2 / cold-ruling R5a primacy",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The R5a real-shape regression outranks any prose clause of the license test (regression wins; prose amends); the implemented b-ii test accepts the real quarantined idle-phase bundle shape including the instrument-teardown trace flush"
         }
       ],
       "flags": [],
-      "goal": "Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.",
-      "id": "MET-VERDICT-ADJ-01",
+      "goal": "Implement the D-100 ruling as one audited repair commit: section-10 contract amendment + registry amendment, uniform count-independent dangler path, sibling-discard fix, identity binding, ledger honesty, mechanical exclusion license with hash-enumerated payload, salvage_dangler_exclusion_v1 semantics-dispatch row, regressions R1-R8 + R5a/R5b + identity/ledger regressions.",
+      "id": "MET-DANGLER-DISPOSITION-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 2,
-      "status": "active",
+      "status": "queued",
       "stop_card": null
     },
     "MET-WINDOW-C-01": {
@@ -1226,9 +1234,21 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "Verdict-machinery adjudication ruled (salvage-shaped windows)",
+          "required": "D-100 repair landed and audited (window C's verdict must run on repaired machinery)",
           "scope": "start",
           "state": "pending",
+          "strength": "hard",
+          "target": "MET-DANGLER-DISPOSITION-01"
+        },
+        {
+          "evidence": {
+            "label": "MET-VERDICT-ADJ-01 completed 2026-08-01: all three groups classified (audit + bench verification), D-100 cold-gate synthesis ruled",
+            "path": "docs/decision_log.md"
+          },
+          "kind": "task",
+          "required": "Verdict-machinery adjudication ruled (salvage-shaped windows)",
+          "scope": "start",
+          "state": "satisfied",
           "strength": "hard",
           "target": "MET-VERDICT-ADJ-01"
         }
