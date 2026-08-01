@@ -116,7 +116,12 @@ jobs:
           PY
 
   release-chain:
+    # ADVISORY ONLY (Ed directive 2026-08-01, D-101): the site/publication
+    # chain gates nothing — this job may fail without failing CI. It still
+    # runs to inform (logs, DRIFT context). Code correctness for these
+    # modules is gated by the ordinary test job, not here.
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

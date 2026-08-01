@@ -10,7 +10,8 @@ reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 
 Last updated: **2026-08-01, second refresh** (post machinery
 adjudication: D-100 ruled; report:
-`docs/run_reports/2026-08-01-metrology-window-b.md`).
+`docs/run_reports/2026-08-01-desk-adjudication-session.md`; the window
+B collection report remains `2026-08-01-metrology-window-b.md`).
 
 ---
 
@@ -49,9 +50,10 @@ default consumption. Outcomes per window:
   machinery's rejection was CORRECT), so no calibration bracket can ever
   form. C1 re-collects in a future window.
 - **Window B: re-evaluation LICENSED but not yet performed.** License
-  rides the D-100 repair (`MET-DANGLER-DISPOSITION-01`): repair landed +
-  independently audited + regressions R1-R8/R5a/R5b + recorded license
-  verification (done 2026-08-01) + D-093 cl.4 scan + frozen corpus. Any
+  REQUIRES, in order: the D-100 repair (`MET-DANGLER-DISPOSITION-01`)
+  landing + independent audit + regressions R1-R8/R5a/R5b (none done
+  yet); the recorded (b-ii) license verification (DONE 2026-08-01);
+  the D-093 cl.4 scan; a frozen byte-identical corpus. Any
   surprise condition returns to a cold gate.
 
 | Paper claim | Campaign | Collected | State after D-100 |

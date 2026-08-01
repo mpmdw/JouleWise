@@ -29,16 +29,20 @@ are provided for anyone who wants the full evidence trail.
   the dedicated metrology campaign ran on 2026-07-31 and 2026-08-01:
   the linearity data set is complete (40 of 40 runs), two of the three
   planned "measure nothing and confirm the instrument reads zero"
-  rungs are complete, and the additivity data set is one run short of
-  complete. The measurements themselves are collected, verified, and
+  rungs are complete, and the additivity data set stands at 23 of 24
+  runs from the second night's single collection root, with 21 of 24
+  corroborating runs from the first night. The measurements themselves are collected, verified, and
   safely backed up. The automated end-of-night quality verdict for both
   nights, however, came back FAILED — not because the data is bad, but
   because these were the first nights that ended early under the
   campaign's own safety rules (a run is abandoned after three
   environmental interruptions), and the verdict software had never
-  before evaluated a night with that shape. Whether the verdict logic
-  or the expectation is wrong is being adjudicated before any of these
-  numbers are used. Two genuine instrument findings also came out of
+  before evaluated a night with that shape. That question has now been adjudicated (decision D-100): the first
+  night's data cannot be promoted — an end-of-night calibration was
+  recorded under a mismatched identity, an unfixable collection-time
+  error — while the second night's data may be re-evaluated once a
+  specific, already-designed software repair lands and passes an
+  independent audit. Two genuine instrument findings also came out of
   those nights and will appear in the paper: the instrument's internal
   clock-alignment step operates with about a millisecond of margin —
   effectively a coin flip at the current capture length — and needs a
@@ -390,7 +394,7 @@ implementing the statistical-uncertainty protocol) queued.
 |---|---|---|---|
 | 2026-07-31 | Contrast window + D5-J merge (PR #89) | The 1.5B-vs-7B decode comparison window collected and passed every gate (47 bundles, ~147 J difference as a preliminary observation); the cooldown-evidence join redesign merged under a cold-gate ruling; the project's framing was adopted as metrology-centric — the instrument is the product. | `docs/run_reports/2026-07-31-contrast-window-collection.md` |
 | 2026-07-30 | First published floor artifact (PR #88) | Mint #1 landed on main: the 1.5B decode floor **7.377086 J** is now a signed, validated artifact rather than prose, after a ten-round fix gauntlet and a cold-gate escalation ruling. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
-| 2026-07-29 | 7B floor window passed | The second calibration window (Qwen2.5 7B decode) passed its bracket and verdict, surviving two live contamination events; floors absolute 6.294380 J / comparative 13.998037 J, prose-only pending their mint. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
+| 2026-07-29 | 7B floor window passed | The second calibration window (Qwen2.5 7B decode) passed its bracket and verdict, surviving two live contamination events; floors absolute 6.294380135190098 J / comparative 13.998036715259254 J, prose-only pending their mint. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
 | 2026-07-25 | SCREEN+BUDGET rules merged (PR #85) | D-078 clause 10 landed: separate gross and idle-subtracted screens, a nonzero drift allowance in every passing window's budget, a 24-hour bound expiry, and mock evidence barred from claims. | `docs/run_reports/2026-07-24-screen-budget-gauntlet.md` |
 | 2026-07-22 | Instrument repair merged (PR #79) | The trace-time-anchor defect that voided claim use of the earlier corpora was repaired and confirmed end to end, reopening the path to claim-bearing measurement. | `docs/run_reports/2026-07-20-p0-instrument-repair.md` |
 | 2026-07-19 | Measurement-soundness audit (Ed-directed) | VERDICT: unsound for claim-bearing use as recorded — trace-time-anchor defect misattributes request/phase energies (all four P0s lead-verified); metric-level prechecks already failed 238/288 request metrics; four cooldown cap hits unjoined; analysis-engine wire incompat. Corpora demoted to instrument evidence; published 07-17 floor table caveated; instrument-repair path defined. | `docs/reviews/2026-07-19-measurement-soundness-audit.md` |

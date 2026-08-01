@@ -1087,7 +1087,17 @@
         "label": "splitwise_decode_v1 campaign doc section 2 Blocker B (MANIFEST-CONTRAST schema work)",
         "path": "docs/phase_2/splitwise_decode_campaign.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Gauntlet commit 3 landed (D-095 write surface overlaps; sequential, never parallel)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -1104,7 +1114,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 11,
-      "status": "queued",
+      "status": "blocked",
       "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
       "stop_card": null
     },

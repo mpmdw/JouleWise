@@ -123,6 +123,7 @@ be re-derived by a future agent gets an entry here.
 | D-098 | Metrology window A record: salvage close under the third-failure rule, a10-precedent recorded-deviation post-cal retry, whole-window verdict FAILED as-issued (dangling quarantined slot + refused bracket formation), two checkpoint corrections (additivity 21/24; Anker charger identity); machinery questions registered to MET-VERDICT-ADJ-01, never hand-applied | accepted (magistrate-recorded 2026-08-01) |
 | D-099 | Metrology window B record + doctrine: three-launch arc under the bird-SIGSTOP protocol (once-validated), clock-anchor knife-edge accepted as an instrument-design finding (rate-aware anchor queued), TM attribution retired as a false proxy, operator output streaming during idle gates recorded as a measurement hazard (one-line arm messages binding), verdict FAILED as-issued (membership resolution) with adjudication routed to MET-VERDICT-ADJ-01 | accepted (magistrate-recorded 2026-08-01) |
 | D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions, window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
+| D-101 | The site gates nothing: CI release-chain job advisory (continue-on-error), site source docs stay live and session-maintained, DRIFT.md refresh optional, site budgets never reshape governed records | accepted (Ed-directed 2026-08-01) |
 
 ---
 
@@ -5998,10 +5999,14 @@ Rulings recorded:
    was cosmetic.
 3. The corpus is banked, intact, and non-claim-bearing until
    MET-VERDICT-ADJ-01 rules; nothing in this entry invalidates the
-   bundles.
+   bundles. [Ruled 2026-08-01 → D-100: window A is PERMANENTLY denied a
+   re-evaluation license (immutable T1-incompatible retry); the corpus
+   stays design-input/diagnostic only.]
 
 Close-out: `~/JouleWise-window-custody/window_metrologyA_20260731/close-out.md`.
-Revisit when: MET-VERDICT-ADJ-01 rules on question groups (a)/(b).
+Revisit when: DISCHARGED 2026-08-01 by D-100 — (a) ruled as contract
+gap (repair `MET-DANGLER-DISPOSITION-01`), (b) ruled machinery defect
+with correct retry rejection (repair `CAL-BRACKET-D079-01`).
 
 ## D-099: Metrology window B record — bird-SIGSTOP protocol, knife-edge anchor finding, streaming hazard; verdict FAILED as-issued
 
@@ -6060,8 +6065,9 @@ Rulings and doctrine recorded:
 
 Close-out: `~/JouleWise-window-custody/window_metrologyB_20260801/close-out.md`.
 Report: `docs/run_reports/2026-08-01-metrology-window-b.md`.
-Revisit when: MET-VERDICT-ADJ-01 rules on question group (c), or the
-rate-aware anchor design lands.
+Revisit when: the rate-aware anchor design lands. [The (c) branch was
+DISCHARGED 2026-08-01 by D-100: pure cascade, machinery ruled CORRECT
+for window B.]
 
 ## D-100: Salvage-dangler terminal semantic — cold-gate synthesis (S2-A as redrawn, landed in the S3 semantics-dispatch shape)
 
@@ -6177,3 +6183,37 @@ condition fails, the R5a real-shape regression conflicts with any prose
 clause (regression wins; prose amends), or the cold instance's named
 falsifier (admission-gate sensitivity blind spot correlated with the
 dangler's intruder class) gains evidence.
+
+## D-101: The site gates nothing — publication chain fully decoupled from CI pass/fail and session doctrine
+
+- Date: 2026-08-01
+- Status: accepted (Ed-directed 2026-08-01, verbatim intent: "stop gating
+  anything on the website being up to date … keep whatever docs it needs
+  live but stop worrying about liveness of the site … the site should be
+  separate completely even though it's based on the project I want it
+  gating nothing")
+- Applies to: `.github/workflows/ci.yml` (release-chain job),
+  `scripts/build_site.py` / `scripts/pack_capsule.py` consumers,
+  RUN_STATE end-of-work step 8, DRIFT.md cadence
+
+1. The CI `release-chain` job (publication tools, capsule decoder check,
+   `release_check.py` site build + pack) is **advisory**:
+   `continue-on-error: true`. It still runs and its logs still inform;
+   it can never fail CI. The `test`, `build`, and `installed-wheel` jobs
+   remain the gates, and they already cover code correctness for the
+   site modules.
+2. The site's SOURCE docs (README, PROJECT_STATUS, CLAIMS_STATUS,
+   decision/council logs, run reports, queue/state files) remain live,
+   first-class, and session-maintained — the decoupling is of the
+   rendered/packaged site, not of the documentation.
+3. `docs/site/DRIFT.md` becomes optional/informative: refreshing it is
+   no longer a mandated close-out step (amends RUN_STATE end-of-work
+   step 8; D-068's no-agent-deploy rule is unchanged and Ed still
+   deploys manually whenever he chooses).
+4. Shard-budget or capsule-size failures are site-lane facts, never
+   session blockers; nobody trims or reshapes governed project records
+   to fit site budgets. (Today's roadmap rendering change stands on its
+   own merits as a de-duplication, not as a compliance obligation.)
+
+Revisit when: Ed changes the site's standing, or the site gains an
+external consumer whose freshness matters.

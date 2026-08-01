@@ -9,9 +9,10 @@ New since the 2026-07-31 refresh below (capsule still
   and window B (`window_metrologyB_20260801`, null o0128+o0512 complete,
   additivity 23/24 single-root, clean 2.25 ms bracket). BOTH
   whole-window verdicts FAILED as-issued on distinct machinery
-  condition sets — desk adjudication (`MET-VERDICT-ADJ-01`) is running;
-  the corpora are banked and intact, and none of their numbers are
-  claim-bearing yet.
+  condition sets — the machinery adjudication COMPLETED as **D-100**
+  (2026-08-01): window A is permanently non-claim-bearing (immutable
+  calibration-identity error); window B's re-evaluation is licensed
+  behind the queued repair. The corpora are banked and intact.
 - (2026-08-01) New standing root doc `CLAIMS_STATUS.md` — the single
   home for claim validity state (valid / evidence-bearing / collected-
   blocked / do-not-quote). Any future site build should surface it.
@@ -22,7 +23,10 @@ New since the 2026-07-31 refresh below (capsule still
   operator-streaming measurement hazard; C-039 addendum III (the
   in-window consult that refuted the lead's mechanism).
 - (2026-08-01) Queue: `MET-WINDOW-C-01` (metrology remainder window)
-  blocked on the adjudication + Ed §5A.
+  blocked on the D-100 repair (`MET-DANGLER-DISPOSITION-01`) + Ed §5A.
+- (2026-08-01) D-101: the site gates nothing — the CI release-chain job
+  is advisory, DRIFT refreshes are optional, and site budgets never
+  reshape governed records.
 
 Prior refresh (2026-07-31, REPO AHEAD OF CAPSULE — claim-posture drift).
 The deployed capsule is still `dep_2I04CG6tQ4t0mzY7`, built from main
