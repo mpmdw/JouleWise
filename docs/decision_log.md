@@ -120,6 +120,8 @@ be re-derived by a future agent gets an entry here.
 | D-095 | MANIFEST-CONTRAST design: analysis-manifest v3 (new module + dispatcher, v1/v2 byte-frozen), governed ABBA block derivation, folded_sha256 arm binding, Holm m=1 two-sided positive-direction, cross_stack_armwise_max.v1 floor rule; claim chain = gauntlet → v3 → multi-cell mint → claim | accepted (rule-2 consult + magistrate 2026-07-31; implementation queued behind the gauntlet) |
 | D-096 | Metrology v1 plan vocabulary ratified (staleness_sentinel, plan-only field shapes, recorded fallbacks); four window-A plans FROZEN before measurement; F2 --k hardening is a standing pre-replacement condition | accepted (magistrate ratification pass 2026-07-31) |
 | D-097 | B1 cold-gate synthesis: v2 outcome consumption deferred to gauntlet commit 3 (writer-minted authenticated discriminator required); interim v2-label and outcome-field refusal everywhere (reader accepted set == writer emitted set); merge train held on four release conditions | accepted (unanimous cold gate + refuter, magistrate synthesis 2026-07-31) |
+| D-098 | Metrology window A record: salvage close under the third-failure rule, a10-precedent recorded-deviation post-cal retry, whole-window verdict FAILED as-issued (dangling quarantined slot + refused bracket formation), two checkpoint corrections (additivity 21/24; Anker charger identity); machinery questions registered to MET-VERDICT-ADJ-01, never hand-applied | accepted (magistrate-recorded 2026-08-01) |
+| D-099 | Metrology window B record + doctrine: three-launch arc under the bird-SIGSTOP protocol (once-validated), clock-anchor knife-edge accepted as an instrument-design finding (rate-aware anchor queued), TM attribution retired as a false proxy, operator output streaming during idle gates recorded as a measurement hazard (one-line arm messages binding), verdict FAILED as-issued (membership resolution) with adjudication routed to MET-VERDICT-ADJ-01 | accepted (magistrate-recorded 2026-08-01) |
 
 ---
 
@@ -5955,3 +5957,107 @@ path, and claims about B1 severity are recorded on malformation grounds.
 
 Revisit when: commit 3 is designed (its consult must consume this entry),
 or any release condition fails.
+
+## D-098: Metrology window A record — salvage close, recorded-deviation post-cal, verdict FAILED as-issued
+
+- Date: 2026-08-01
+- Status: accepted (magistrate-recorded 2026-08-01)
+- Applies to: `runs_window_metrologyA_20260731` (+ its `_bound` root), MET-VERDICT-ADJ-01
+
+Window `window_metrologyA_20260731` (2026-07-31 night) collected and
+banked: NEG-8 bound corpus 12/12 + minted bound, start triplet 3/3,
+**linearity_ramp 40/40 complete** (claim C1's campaign), midpoint,
+additivity 21/24 at final state, end triplet 3/3. Three §10-handled
+member failures with cause named each time; the third closed the window
+as salvage per the ratified rule. Post-cal attempt 1 failed (preserved
+`20260731T214355-126fc2ab`); ONE settled retry ran under the
+a10-precedent RECORDED DEVIATION and is valid
+(`20260731T215120-fa1e9cda`). Supersessions recorded once each
+(claim root `mtadd-p0512o0512-r06`; bound root `neg8-refcorpus-r05`)
+before the verdict.
+
+Rulings recorded:
+
+1. **The whole-window verdict FAILED and stands as issued** (row
+   appended 2026-08-01T07:52Z): `whole_window_bundle_invalid` +
+   `environment_admission_failed` on the quarantined-never-replaced
+   `mtadd-p0512o0512-r08` occurrence, and
+   `instrument_calibration_bracket_missing` with the bracket selector
+   returning pre AND post null — it refused the deviation-retry
+   post-cal rather than consuming it, so the §8 budgetable case was
+   never evaluated. `neg8_bracket` passed; adapter continuity stable.
+   No hand-application of §8 to the preserved calibrations is
+   permitted; the machinery questions route EXCLUSIVELY through
+   MET-VERDICT-ADJ-01 (independent audit → magistrate ruling → cold
+   gate for any proposed override).
+2. **Two checkpoint corrections on the record:** final-state additivity
+   was **21/24**, not the 23/24 an earlier checkpoint carried; the
+   window's power identity is a **140 W Anker PD** charger
+   (instrument-visible "pd charger"/140.0) — the prior "Apple" label
+   was cosmetic.
+3. The corpus is banked, intact, and non-claim-bearing until
+   MET-VERDICT-ADJ-01 rules; nothing in this entry invalidates the
+   bundles.
+
+Close-out: `~/JouleWise-window-custody/window_metrologyA_20260731/close-out.md`.
+Revisit when: MET-VERDICT-ADJ-01 rules on question groups (a)/(b).
+
+## D-099: Metrology window B record — bird-SIGSTOP protocol, knife-edge anchor finding, streaming hazard; verdict FAILED as-issued
+
+- Date: 2026-08-01
+- Status: accepted (magistrate-recorded 2026-08-01)
+- Applies to: `runs_window_metrologyB_20260801` (+ its `_bound` root), window operation doctrine, MET-VERDICT-ADJ-01, MET-WINDOW-C-01
+
+Window `window_metrologyB_20260801` (2026-07-31→08-01 overnight) ran in
+three launches and salvage-closed at the third member failure,
+collecting: bound corpus 12/12 + in-window bound mint, references 7/7,
+**null_o0128 + null_o0512 complete** (claim C2, 2 of 3 rungs),
+**additivity 23/24 single-root** (C4), calibration bracket clean
+(2.25 ms drift vs the 10 ms policy screen, pre+post single-attempt).
+Banked to iCloud 72+13 bundles, backup rc=0. One supersession recorded
+pre-verdict (`mtnull-o0512-b04-b2`, entry `3896c5ed…`). Remainder
+(null_o2048, long_holds, additivity p2048o0128-r08) → MET-WINDOW-C-01.
+
+Rulings and doctrine recorded:
+
+1. **The whole-window verdict FAILED and stands as issued** (row
+   appended 2026-08-01T14:19Z), on a DIFFERENT machinery shape than
+   window A: `source_campaign_manifests` resolved EMPTY over the
+   four-chain-segment window (populated `campaign_manifests/` dir; the
+   supersession recorder had consumed it an hour earlier), the recorded
+   supersession was not consumed, the dangling r08 was NOT excluded,
+   and NEG-8 evaluated missing/reference-invalid/stale against the
+   bound minted in-window. All routed to MET-VERDICT-ADJ-01 question
+   group (c); no reinterpretation outside that path.
+2. **Clock-anchor knife-edge is an accepted instrument-design finding**
+   (bounded Sol xhigh consult, 2026-08-01, escalation-trigger-mandated
+   after two same-signature §5B pre-cal aborts): at 197 s capture
+   length the native-second intersection margins are ~±1 ms and the
+   unmodeled controller wall/monotonic rate (~−12 ppm ≈ 2.3 ms per
+   capture) exceeds every margin — pass/fail is quantization-phase
+   luck. The consult refuted the lead's cadence-drift mechanism.
+   Rate-aware anchor design is a queued desk/paper item; the finding is
+   publishable as a metrology limitation.
+3. **TM attribution is retired as a false proxy:** `tmutil
+   destinationinfo` shows no destinations configured; the prep script's
+   "TM RUNNING" line detects only process residency. Window A's
+   failure-#3 "TM-consistent" label is tainted. The observed overnight
+   intruder class is mobileassetd/softwareupdated (~04:29 PT both
+   nights) and bird.
+4. **bird-SIGSTOP is once-validated practice:** identity custody
+   (pid + lstart), double-verified state T, fail-safe CONT trap on all
+   exit paths, post-window identity check, cloudd/fileproviderd
+   launcher holds; pre-cal passed first-attempt under it after failing
+   twice with bird active.
+5. **Operator output streaming during idle gates is a measurement
+   hazard (binding doctrine):** window B failure #3 was caused by the
+   operating session's own post-arm status streaming (claude 12–18%
+   CPU + Terminal rendering) during a member's idle gate. Zero tool
+   calls is INSUFFICIENT; after arming a launcher the session's message
+   must be ONE LINE, and zero streaming during idle-gate exposure binds
+   all window operation (encoded as a MET-WINDOW-C-01 fence).
+
+Close-out: `~/JouleWise-window-custody/window_metrologyB_20260801/close-out.md`.
+Report: `docs/run_reports/2026-08-01-metrology-window-b.md`.
+Revisit when: MET-VERDICT-ADJ-01 rules on question group (c), or the
+rate-aware anchor design lands.

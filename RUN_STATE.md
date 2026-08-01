@@ -637,7 +637,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-31). Latest report: [Gauntlet commits 1-2 merged via PR #91: DA-1 closed under D-097's unanimous cold-gate deferral; metrology suite merged and window-A plans frozen (D-096)](docs/run_reports/2026-07-31-claims-desk-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Metrology window B collected + salvage-closed; both metrology whole-window verdicts FAILED as-issued (distinct machinery condition sets) -> three-part machinery adjudication heads the desk queue; bird-SIGSTOP protocol validated; streaming-during-idle-gate hazard recorded](docs/run_reports/2026-08-01-metrology-window-b.md).
 
 ### [ED-EXTERNAL]
 
@@ -649,7 +649,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- CONTINUE — A2 `MET-VERDICT-ADJ-01`: Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

@@ -2349,3 +2349,59 @@ code defect, and of a consult being convened at a stage boundary by a solo
 operator under quiet-lock. The cost was one consult against a ~2.6-hour window
 that would otherwise have been re-run on a third guess; the mechanism should be
 retained for window operation, not just for fix rounds.
+
+## C-039 addendum III: the clock-anchor knife-edge consult (2026-08-01, in-window)
+
+**Trigger.** Metrology window B's launch 1 aborted at the §5B
+pre-calibration gate twice with the same signature
+(`clock_anchor_unresolved` / `native_intersection_empty`) — and the
+signature matched window A's post-cal attempt-1 failure from the prior
+night. Three same-signature calibration failures across two windows is
+exactly the standing escalation trigger's shape; per rule 11 the next
+spend was a consult, not a third blind launch.
+
+**Layer:** bounded Sol xhigh consult, read-only, one round, convened by
+the solo window operator between launches (~01:00–01:30 PT). Full memo:
+session scratchpad `693609a9…/scratchpad/consult_anchor_v2.md`; findings
+ratified into D-099.
+
+**Unique catches:**
+
+- **The anchor is knife-edge by construction, and the lead's mechanism
+  was wrong.** The operator's working theory was cadence drift in the
+  capture stream. The consult showed the theory was
+  quantization-confounded and replaced it: at 197 s capture length the
+  native-second intersection margins were +0.86/+1.41 ms on the passing
+  attempts vs −0.25/−0.26/−0.51 ms on the failures, while the
+  *unmodeled* controller wall/monotonic rate (~−12 ppm ≈ 2.3 ms per
+  capture) exceeds every margin — pass/fail at this capture length is
+  quantization-phase luck, an instrument-design finding (rate-aware
+  anchor mapping is the queued repair) rather than an environmental
+  fault to wait out.
+- **Time Machine exonerated, and the prep-script proxy with it.**
+  `tmutil destinationinfo` showed no destinations configured; the prep
+  script's "TM RUNNING" line detects process residency only. This
+  retroactively taints window A's failure-#3 "TM-consistent"
+  attribution and re-identifies the overnight intruder class as
+  mobileassetd/softwareupdated (~04:29 PT both nights) plus bird.
+- **Discipline on the causal claim.** The consult recorded bird (99%
+  CPU uploading the prior window's 10.4 GB backup) as *plausible
+  trigger and objective preflight violation* — explicitly NOT confirmed
+  root cause. The distinction is what kept the relaunch decision
+  honest: launch 2 proceeded under a hardened protocol (bird-SIGSTOP
+  with identity custody and a fail-safe CONT trap) plus a predeclared
+  budget (frozen chain unchanged, built-in retry pair only, night
+  closes if the gate aborts again), rather than on a claimed fix.
+
+**Outcome:** launch 2 passed pre-calibration on the first attempt
+(b_fiducial 0.032787 s) and the window collected its core payload
+through to a clean salvage close. The consult cost one bounded session
+against an 11-hour runway that two more blind aborts would have burned.
+
+**Process note.** Second recorded instance of the escalation trigger
+firing inside a measurement window (first: C-039 addendum II (ii)), and
+the first where the consult *refuted the lead's mechanism* while
+confirming the lead's decision shape. The pattern holding across both:
+the consult's unique value is causal discipline under time pressure —
+separating "what we can prove" from "what we are tempted to conclude"
+before the next launch is committed.

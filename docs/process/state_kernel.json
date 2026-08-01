@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Gauntlet commits 1-2 merged via PR #91: DA-1 closed under D-097's unanimous cold-gate deferral; metrology suite merged and window-A plans frozen (D-096)",
-    "path": "docs/run_reports/2026-07-31-claims-desk-session.md"
+    "label": "Metrology window B collected + salvage-closed; both metrology whole-window verdicts FAILED as-issued (distinct machinery condition sets) -> three-part machinery adjudication heads the desk queue; bird-SIGSTOP protocol validated; streaming-during-idle-gate hazard recorded",
+    "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1068,6 +1068,111 @@
       "rank": 11,
       "status": "queued",
       "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
+      "stop_card": null
+    },
+    "MET-VERDICT-ADJ-01": {
+      "acceptance": {
+        "evidence": [
+          "Each of the three question groups — (a) dangling quarantined-without-replacement occurrences, (b) deviation-retry post-cal bracket selection, (c) window B membership resolution + supersession consumption + NEG-8 evaluation — is classified MACHINERY DEFECT, CONTRACT GAP, or CORRECT with behavior traced to code and the contract source cited",
+          "An independent read-only audit report exists over the assembled packet before any magistrate ruling",
+          "Any accepted repair is queued as its own row with defect-shaped regressions; any proposed override of an as-issued verdict goes to the cold-gate path with written dissent Ed sees",
+          "The banked window A/B corpora remain intact and unconsumed throughout"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MET-VERDICT-ADJ-01/acceptance",
+          "label": "MET-VERDICT-ADJ-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The whole-window verdict machinery's behavior over salvage-shaped windows is adjudicated: each question group classified with code-traced evidence, repairs queued, verdicts standing as issued unless a cold gate rules otherwise."
+      },
+      "authority": {
+        "label": "2026-08-01 metrology window B run report (adjudication scope) + RUN_STATE desk queue",
+        "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "CLAIMS_STATUS section 4: verdicts consumed as issued; overrides only via the cold-gate path",
+            "path": "CLAIMS_STATUS.md"
+          },
+          "rule": "No override or reinterpretation of the as-issued FAILED verdicts outside the mandatory cold-gate path; the audit is read-only and the banked bundles are never invalidated by this row"
+        }
+      ],
+      "flags": [],
+      "goal": "Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.",
+      "id": "MET-VERDICT-ADJ-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 2,
+      "status": "active",
+      "stop_card": null
+    },
+    "MET-WINDOW-C-01": {
+      "acceptance": {
+        "evidence": [
+          "null_o2048 collected (claim C2 ladder complete), long_holds Part A collected (C5), and additivity p2048o0128-r08 collected (C4 single-root 24/24), each under the frozen-plan discipline (D-096)",
+          "Window operated under the validated protocols: bird-SIGSTOP with identity custody, guarded launcher, one-line arm messages with zero output streaming during idle-gate exposure, third-failure salvage rule",
+          "Whole-window verdict emitted by machinery that has passed MET-VERDICT-ADJ-01 adjudication; supersessions recorded once, pre-verdict; both roots backed up rc=0"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MET-WINDOW-C-01/acceptance",
+          "label": "MET-WINDOW-C-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The metrology remainder window collects null_o2048, long_holds, and the last additivity slot under validated window protocols, with its verdict emitted by adjudicated machinery."
+      },
+      "authority": {
+        "label": "2026-08-01 metrology window B run report (remainder scope) + D-096 frozen-plan vocabulary",
+        "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed section-5A window prep (network time off, AC, settled machine, walk-away)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-5A"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Verdict-machinery adjudication ruled (salvage-shaped windows)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "MET-VERDICT-ADJ-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-096 frozen-plan ratification",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Plan root assembled and frozen before measurement; no plan edits after freeze"
+        },
+        {
+          "authority": {
+            "label": "2026-08-01 run report: streaming-during-idle-gate hazard + bird-SIGSTOP protocol",
+            "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+          },
+          "rule": "Zero agents AND zero operator output streaming during measurement idle gates; arm messages are one line; bird-SIGSTOP protocol with identity custody and fail-safe CONT trap on all exit paths"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Third metrology window: collect the remainder — null_o2048 (completes the C2 null ladder), long_holds Part A (C5), and additivity p2048o0128-r08 (completes C4 single-root 24/24) — as one ~2h quiet-Mac window.",
+      "id": "MET-WINDOW-C-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 1,
+      "status": "blocked",
       "stop_card": null
     },
     "MINT-GENERALIZE-01": {
@@ -2624,5 +2729,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-31"
+  "updated": "2026-08-01"
 }
