@@ -124,6 +124,7 @@ be re-derived by a future agent gets an entry here.
 | D-099 | Metrology window B record + doctrine: three-launch arc under the bird-SIGSTOP protocol (once-validated), clock-anchor knife-edge accepted as an instrument-design finding (rate-aware anchor queued), TM attribution retired as a false proxy, operator output streaming during idle gates recorded as a measurement hazard (one-line arm messages binding), verdict FAILED as-issued (membership resolution) with adjudication routed to MET-VERDICT-ADJ-01 | accepted (magistrate-recorded 2026-08-01) |
 | D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions, window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
 | D-101 | The site gates nothing: CI release-chain job advisory (continue-on-error), site source docs stay live and session-maintained, DRIFT.md refresh optional, site budgets never reshape governed records | accepted (Ed-directed 2026-08-01) |
+| D-102 | CAL-BRACKET-D079-01 pins: budget cap 0.001275166090593858 s (99% two-draw prediction ceiling 0.012093166090593858 s, blind n=19 derivation), exact-identity-epoch freshness with prospective re-derivation triggers, never-zero allowance max(drift, screen) embedded once, decimal-source numeric semantics with labelled presentation values | accepted (magistrate ratification, lead-replayed arithmetic, 2026-08-01) |
 
 ---
 
@@ -6255,3 +6256,67 @@ the salvage semantic is defined as the COMPOUND
 consumption + exactly one D-100 exclusion (one scalar id never carries
 two orthogonal meanings). Window B's re-evaluation stays OUTSIDE the
 repair commit, behind the exact-head audit.
+
+## D-102: CAL-BRACKET-D079-01 pins ratified — corpus-derived budget cap, identity-epoch freshness, never-zero allowance, decimal numeric semantics
+
+- Date: 2026-08-01
+- Status: accepted (magistrate ratification after the two-round Sol xhigh
+  design consult + the independent n=19 corpus reconstruction; ALL
+  arithmetic lead-replayed at the bench: ceiling, cap, t(0.995,18)
+  quantile by numerical CDF, window B pre-cal value against primary
+  evidence bytes)
+- Applies to: CAL-BRACKET-D079-01, the future
+  `configs/calibration/calibration_acceptance_d079_v2.json` artifact
+
+The four pins D-079 left unexecutable, now pinned:
+
+1. **Budget cap (Candidate A, 99% two-draw prediction family, derived
+   blind from the pre-window-B n=19 corpus):**
+   `max_budgetable_excess_s = 0.001275166090593858`;
+   `maximum_budgetable_drift_s = 0.012093166090593858`
+   (= t(0.995,18)=2.878440472713585 × sd 0.002970761365307205 × √2;
+   cap = ceiling − operative screen 0.010818). Consequences verified: a
+   ~11.58 ms drift branch is budgetable; a 15 ms bracket refuses.
+   **Window B itself remains refused regardless** — its pre-calibration
+   0.035435840879704805 s (verified in primary evidence) exceeds the
+   pre-flight level screen, and D-079 cl.2's systematic failure is
+   never budgetable. The CAL-BRACKET regression at ~11 ms models the
+   DRIFT BRANCH only, never a whole-window B pass.
+2. **Freshness = exact identity epoch, no calendar hard expiry:** the
+   artifact binds {os_build, hardware_model, power_policy,
+   sampling_interval_ms, estimator_revision, pulse_protocol_id}; any
+   change → `calibration_acceptance_bound_stale`. Mandatory prospective
+   re-derivation triggers: any identity-field change; protocol/estimator
+   byte change; a new valid same-identity calibration expanding the
+   observed range; corpus doubling (19→38); a new systematic failure
+   challenging the pre-flight screen. A trigger observation is judged
+   under the PRIOR artifact — never incorporated into a threshold that
+   judges itself. Calendar-age fields are provenance/advisory only (the
+   corpus spans four days; a calendar constant would be invented).
+3. **Never-zero allowance confirmed:**
+   `A_s = max(observed_drift_s, 0.010818)`;
+   `B_operative = max(B_pre, B_post) + A_s`, embedded ONCE in the
+   authenticated operative fiducial bound (anchor-envelope
+   re-reduction); no second calibration-drift energy term anywhere
+   downstream (D-078 cl.11 single-count).
+4. **Decimal numeric semantics:** the artifact stores source decimal
+   lexemes and exact-decimal derivations (range
+   0.010817749309353528 s; 95% prediction 0.008826584887500717 s;
+   pre-flight exact max 0.03355875667989999 s) SEPARATELY from the
+   ratified operative comparators (0.010818; 0.033558756679900;
+   ROUND_HALF_EVEN at the declared quantum), hashing the decimal
+   strings + rounding rule into the derivation sha256. D-079's
+   12-place `0.010817749309` is a LABELLED presentation value, never a
+   comparator. Acceptance comparisons run in decimal semantics;
+   binary64 conversion happens only at the reducer boundary and is
+   recorded.
+
+Corpus provenance: the n=19 member list with per-member manifest and
+evidence sha256s is reconstructed and lead-spot-verified (2026-08-01
+session records; summary in the session custody dir) — the artifact
+copies those tables verbatim with re-verification at authoring, never
+retyped. Implementation remains sequenced behind gauntlet commit 3 and
+the D-100 repair (shared write surfaces).
+
+Revisit when: CAL-BRACKET-D079-01's delta audit reports, or any
+re-derivation trigger fires.
