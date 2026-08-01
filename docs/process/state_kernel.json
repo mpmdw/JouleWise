@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Metrology window B collected + salvage-closed; both metrology whole-window verdicts FAILED as-issued (distinct machinery condition sets) -> three-part machinery adjudication heads the desk queue; bird-SIGSTOP protocol validated; streaming-during-idle-gate hazard recorded",
-    "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+    "label": "Desk session: machinery adjudication ruled (D-100 cold-gate synthesis, semantics-dispatch shape), window A permanently non-claim-bearing, window B re-evaluation licensed behind the repair; commit-3 design->implementation; CI shard-budget fix",
+    "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -576,6 +576,44 @@
       "status": "queued",
       "stop_card": null
     },
+    "CAL-BRACKET-D079-01": {
+      "acceptance": {
+        "evidence": [
+          "The calibration-bracket selector implements the D-079 acceptance-v2 semantics: provenance-bound derived screen, freshness refusal, budgeted excess allowance for ordinary repeatability excess, evaluation-basis recording, and propagation of the calibration-drift allowance into floor/claim consumption",
+          "Candidate authentication and latest-valid-pre / earliest-valid-post selection are preserved unchanged, including exact T1 binding-field matching",
+          "Defect-shaped regressions: a bracket slightly above the obsolete 0.010 hard value but within the derived screen + budget PASSES with the allowance recorded; a bracket beyond budget REFUSES; T1-mismatched candidates remain ineligible"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CAL-BRACKET-D079-01/acceptance",
+          "label": "CAL-BRACKET-D079-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The bracket selector stops hard-refusing at the obsolete 0.010 policy cliff and implements the D-079 derived screen plus budgeted allowance with propagation, without weakening candidate authentication or T1 exact matching."
+      },
+      "authority": {
+        "label": "MET-VERDICT-ADJ-01 independent audit group (b): D-079 calibration budget unimplemented in joulewise/calibration_bracketing.py (hard cliff at policy 0.010; no allowance emitted or propagated)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MET-VERDICT-ADJ-01 audit: retry rejection is CORRECT under T1 exact stationarity; relaxing exact matching would be contract-false",
+            "path": "docs/contracts/powermetrics_fiducial.md"
+          },
+          "rule": "Do not relax T1 exact binding-field matching or candidate authentication as part of this repair; window A's bracket remains unformable and its FAILED verdict untouched"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement D-079 calibration acceptance v2 in the bracket selector (non-salvage severity escalator: every ordinary complete window slightly above the obsolete 0.010 hard cliff is currently mis-ruled): derived screen, freshness refusal, excess allowance, evaluation-basis recording, floor/claim propagation. ~5-8 files, delegated claim-semantics commit with independent review.",
+      "id": "CAL-BRACKET-D079-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 13,
+      "status": "queued",
+      "stop_card": null
+    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -1049,7 +1087,17 @@
         "label": "splitwise_decode_v1 campaign doc section 2 Blocker B (MANIFEST-CONTRAST schema work)",
         "path": "docs/phase_2/splitwise_decode_campaign.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Gauntlet commit 3 landed (D-095 write surface overlaps; sequential, never parallel)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -1066,47 +1114,103 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 11,
-      "status": "queued",
+      "status": "blocked",
       "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
       "stop_card": null
     },
-    "MET-VERDICT-ADJ-01": {
+    "MEMBERSHIP-READER-FAILOPEN-01": {
       "acceptance": {
         "evidence": [
-          "Each of the three question groups — (a) dangling quarantined-without-replacement occurrences, (b) deviation-retry post-cal bracket selection, (c) window B membership resolution + supersession consumption + NEG-8 evaluation — is classified MACHINERY DEFECT, CONTRACT GAP, or CORRECT with behavior traced to code and the contract source cited",
-          "An independent read-only audit report exists over the assembled packet before any magistrate ruling",
-          "Any accepted repair is queued as its own row with defect-shaped regressions; any proposed override of an as-issued verdict goes to the cold-gate path with written dissent Ed sees",
-          "The banked window A/B corpora remain intact and unconsumed throughout"
+          "Malformed or validation-failed supersession catalog entries fail the affected candidate group instead of being silently skipped, reusing supersession_entry_validation_results per the D-093 visibility contract",
+          "Unreadable or wrong-schema campaign-manifest candidates refuse rather than being silently skipped where membership is claim-bearing",
+          "Valid-plus-malformed same-bundle regressions cover both the supersession catalog and manifest parsing paths"
         ],
         "pointer": {
-          "json_pointer": "/tasks/MET-VERDICT-ADJ-01/acceptance",
-          "label": "MET-VERDICT-ADJ-01 acceptance",
+          "json_pointer": "/tasks/MEMBERSHIP-READER-FAILOPEN-01/acceptance",
+          "label": "MEMBERSHIP-READER-FAILOPEN-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The whole-window verdict machinery's behavior over salvage-shaped windows is adjudicated: each question group classified with code-traced evidence, repairs queued, verdicts standing as issued unless a cold gate rules otherwise."
+        "summary": "The whole-window membership path stops silently skipping malformed supersession and manifest records, closing the latent fail-open the MET-VERDICT-ADJ-01 audit identified."
       },
       "authority": {
-        "label": "2026-08-01 metrology window B run report (adjudication scope) + RUN_STATE desk queue",
-        "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+        "label": "MET-VERDICT-ADJ-01 independent audit group (c) latent finding: _valid_supersession_entries and manifest parsing silently skip malformed records (D-093/D-094 visibility contract)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Commit 3 lands first (shared write surface in the membership/reader path)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-093 raw-vs-validated visibility; D-094 counting domain",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Recognizable invalid same-bundle records must remain visible and force ambiguity; closure must not re-scope or downgrade the D-093 contract"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the latent fail-open in whole-window membership reading: malformed supersession catalog entries and unreadable/wrong-schema manifests are silently skipped today (did not affect windows A/B, whose bytes are valid, but could fail open on a non-salvage window). ~2 files, 100-200 lines, delegated commit (claim-bearing membership semantics).",
+      "id": "MEMBERSHIP-READER-FAILOPEN-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 14,
+      "status": "queued",
+      "stop_card": null
+    },
+    "MET-DANGLER-DISPOSITION-01": {
+      "acceptance": {
+        "evidence": [
+          "Uniform count-independent dangler path with a presence check on the single-declaration branch; a failing sibling group can no longer discard an unrelated valid supersession",
+          "Membership groups bind by explicit identity (or a recorded explicit safety finding at the verdict row); exclusion evidence derives from bundle bytes, never from the fail-open-shaped ledger flags",
+          "The D-100 exclusion license is mechanical (D-087 closure binding, b-i/b-ii measurand-existence tests, exhaustive per-attempt evidence, cap of one, hash-enumerated verdict-row payload) and any licensed re-evaluation lands as a NEW row under consumption_semantics_id salvage_dangler_exclusion_v1 with a genuinely new evaluation basis and pinned consumption",
+          "Regressions R1-R8 plus R5a/R5b plus identity-binding and ledger-honesty regressions all pass; the section-10 contract amendment and the D-078 registry amendment land with the commit",
+          "Independent read-only audit at the exact head before any merge"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MET-DANGLER-DISPOSITION-01/acceptance",
+          "label": "MET-DANGLER-DISPOSITION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The D-100 cold-gate synthesis lands as one audited repair: uniform dangler disposition, mechanical exclusion license, semantics-dispatch re-evaluation shape, and the unanimous membership repairs, with the full regression set."
+      },
+      "authority": {
+        "label": "D-100 salvage-dangler cold-gate synthesis (cold Fable + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01)",
+        "path": "docs/decision_log.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "CLAIMS_STATUS section 4: verdicts consumed as issued; overrides only via the cold-gate path",
-            "path": "CLAIMS_STATUS.md"
+            "label": "D-100 landing shape (refuter R5/R6 adopted)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No override or reinterpretation of the as-issued FAILED verdicts outside the mandatory cold-gate path; the audit is read-only and the banked bundles are never invalidated by this row"
+          "rule": "Original FAILED verdict rows are never edited, deleted, or reordered; re-evaluation is reachable ONLY via an explicit consumption_semantics_id request with a pinned new basis; the cap-of-one and the fail-closed default are not softened"
+        },
+        {
+          "authority": {
+            "label": "D-100 clause 2 / cold-ruling R5a primacy",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The R5a real-shape regression outranks any prose clause of the license test (regression wins; prose amends); the implemented b-ii test accepts the real quarantined idle-phase bundle shape including the instrument-teardown trace flush"
         }
       ],
       "flags": [],
-      "goal": "Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.",
-      "id": "MET-VERDICT-ADJ-01",
+      "goal": "Implement the D-100 ruling as one audited repair commit: section-10 contract amendment + registry amendment, uniform count-independent dangler path, sibling-discard fix, identity binding, ledger honesty, mechanical exclusion license with hash-enumerated payload, salvage_dangler_exclusion_v1 semantics-dispatch row, regressions R1-R8 + R5a/R5b + identity/ledger regressions.",
+      "id": "MET-DANGLER-DISPOSITION-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 2,
-      "status": "active",
+      "status": "queued",
       "stop_card": null
     },
     "MET-WINDOW-C-01": {
@@ -1129,20 +1233,35 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "Ed authorization 2026-08-01: ~26-hour runway, machine plugged in and mostly untouched, multiple autonomous quiet windows permitted; README top-line machine-state banner is the notification channel; technical settle checks still run at each launch",
+            "path": "RUN_STATE.md"
+          },
           "kind": "external",
           "required": "Ed section-5A window prep (network time off, AC, settled machine, walk-away)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ED-5A"
         },
         {
           "evidence": null,
           "kind": "task",
-          "required": "Verdict-machinery adjudication ruled (salvage-shaped windows)",
+          "required": "D-100 repair landed and audited (window C's verdict must run on repaired machinery)",
           "scope": "start",
           "state": "pending",
+          "strength": "hard",
+          "target": "MET-DANGLER-DISPOSITION-01"
+        },
+        {
+          "evidence": {
+            "label": "MET-VERDICT-ADJ-01 completed 2026-08-01: all three groups classified (audit + bench verification), D-100 cold-gate synthesis ruled",
+            "path": "docs/decision_log.md"
+          },
+          "kind": "task",
+          "required": "Verdict-machinery adjudication ruled (salvage-shaped windows)",
+          "scope": "start",
+          "state": "satisfied",
           "strength": "hard",
           "target": "MET-VERDICT-ADJ-01"
         }

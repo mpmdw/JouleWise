@@ -1,5 +1,11 @@
 # JouleWise
 
+> **🖥️ MACHINE: DESK WORK — safe to wake/use.** Next quiet window: not
+> before the D-100 verdict-machinery repair lands (several hours of desk
+> work queued ahead of it). This line is updated only at defined moments
+> (never mid-measurement — pushing during a window would contaminate it);
+> details and staleness rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
 the frozen workload suite, run rules, and strict validator. The name is a

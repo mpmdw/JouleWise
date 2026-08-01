@@ -10,7 +10,9 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-07-31 (claims desk session). **Main is at the PR #91
+Last updated: 2026-08-01 (desk adjudication session; current head
+`df78b53`+, D-098..D-101 landed — see the ACTIVE RESUME SCRIPT below).
+Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
 four window-A plans FROZEN (D-096).** Decisions D-094..D-097 landed in
@@ -43,7 +45,60 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-01 ~07:00 PT checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-08-01 desk session, second checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. The morning checkpoint's desk queue is
+LARGELY EXECUTED this session (details in the prior section below, now
+historical). State:
+
+1. **MET-VERDICT-ADJ-01 COMPLETE → D-100.** Independent Sol xhigh audit
+   (bench-verified) classified the three groups: (a) CONTRACT GAP,
+   (b) MACHINERY DEFECT with CORRECT retry rejection — window A's
+   post-cal retry binds a T1-incompatible power_policy (immutable), so
+   window A is PERMANENTLY non-claim-bearing and C1 re-collects;
+   (c) CORRECT for window B (pure cascade from the twice-declared
+   dangler) + one latent fail-open. Group (a) ran the full rule-11 cold
+   gate (cold Fable ruling → bounded follow-up after the custody sweep
+   found idle-phase bundles → condition (b) re-drawn to the
+   measurand-existence line → independent Opus refutation, 14 findings
+   → magistrate synthesis). **D-100** adopted S2-A in the S3
+   consumption-semantics-dispatch shape: original FAILED rows stand BY
+   CONSTRUCTION; window B re-evaluation licensed only after the repair
+   lands (`salvage_dangler_exclusion_v1`, new pinned basis); the three
+   p2048-o0128 additivity cells are barred regardless (frozen min_n=8,
+   7 present) and that shape re-collects in window C. Packet + audit +
+   both rulings + refutation summary: `.desk/adjudication_packet_20260801/`
+   (UNTRACKED — do not commit; fold into a run report before deleting).
+2. **Repair rows queued:** MET-DANGLER-DISPOSITION-01 (A2, the D-100
+   repair commit), CAL-BRACKET-D079-01 (D-079 budget unimplemented in
+   calibration_bracketing.py — non-salvage escalator), MEMBERSHIP-
+   READER-FAILOPEN-01 (latent malformed-record skip). MET-WINDOW-C-01
+   now hard-depends on the dangler repair + Ed §5A.
+3. **Gauntlet commit 3 IN FLIGHT:** design consult DONE (Sol xhigh;
+   both D-097 riders ruled: classification NOT consumed beyond
+   authentication; attestation is anti-malformation, distinct from the
+   tamper layer; per-snapshot attestations). Ratified design brief:
+   C3-DESIGN.md (untracked) at the worktree root
+   /private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/scratchpad/c3-worktree
+   (branch impl/cooldown-gauntlet-c3 off 44f0744). Implementation Sol
+   session was RUNNING at this checkpoint (codex subagent gates the
+   commit after envelope validation + diff inspection + suite replay;
+   report lands at <scratchpad>/c3-impl-report.md). ON HARVEST: lead
+   verification (suite + the two canonical mapping hashes 57/57
+   aa48a122…, 47/47 5005816a…) → independent read-only delta audit →
+   fix rounds w/ delta re-audits → PR (D-072 gate). MANIFEST-CONTRAST
+   v3 (D-095) is SEQUENTIAL AFTER commit 3 (shared write surface).
+4. Landed on main this session: 1ea651f (D-098/D-099, council addendum
+   III, kernel rows), 44f0744 (DRIFT + PROJECT_STATUS plain-language),
+   1694eb9 (repair rows), 209201c (D-100 + adjudication retired),
+   plus the CLAIMS_STATUS second refresh (this commit).
+5. Still owed: commit-3 harvest chain (step 3). ~~Run report~~ [DONE
+   `df78b53`], ~~skill-usage log~~ [DONE], ~~consistency sweep~~ [DONE
+   2026-08-01 — 19 findings, all applied in the D-101 batch]. Ed owes: network-time restore (`sudo
+   systemsetup -setusingnetworktime on`). Ed context: timeline
+   pressure is LOW (started ~3 weeks early; horizon December).
+
+## PRIOR ACTIVE RESUME SCRIPT (2026-08-01 ~07:00 PT checkpoint; EXECUTED this desk session — retained for the collection facts)
 
 Successor is FABLE, MAGISTRATE. BOTH metrology windows are now
 SALVAGE-CLOSED and post-processed; tonight's session (2026-08-01
@@ -62,7 +117,9 @@ STATE AS OF THIS CHECKPOINT:
    the selector refused the deviation retry post-cal; §8 budgetable case
    never evaluated). neg8_bracket PASSED, adapter continuity STABLE.
    THE VERDICT STANDS — no reinterpretation. Desk-lane adjudication
-   required (see queue below). Close-out complete at
+   required (see queue below). [Adjudicated 2026-08-01 → D-100: window
+   A is PERMANENTLY unlicensed — the deviation retry binds a
+   T1-incompatible power_policy, immutable.] Close-out complete at
    ~/JouleWise-window-custody/window_metrologyA_20260731/close-out.md
    (also corrects: additivity was 21/24 not 23/24; Anker charger note).
 2. **Window B (window_metrologyB_20260801): COLLECTED and
@@ -88,7 +145,9 @@ STATE AS OF THIS CHECKPOINT:
    `whole_window_campaign_membership_unresolved`,
    `environment_admission_missing`, `neg8_bracket_missing`,
    `neg8_bracket_reference_invalid`, `neg8_drift_bound_stale` (bound
-   was minted in-window — "stale" itself needs adjudication). Verdict
+   was minted in-window — "stale" itself needs adjudication [ruled
+   2026-08-01: pure cascade, machinery CORRECT — MET-VERDICT-ADJ-01
+   audit + D-100]). Verdict
    STANDS as issued; close-out verdict line is FINAL.
 3. **NEW DOCTRINE FACTS (bind immediately):**
    - The clock anchor is KNIFE-EDGE by construction (Sol consult
@@ -110,7 +169,7 @@ STATE AS OF THIS CHECKPOINT:
 4. DESK QUEUE (order for the successor):
    1. [DONE this session] Window B verdict emitted (FAILED, see step 2)
       + close-out finalized.
-   2. **Machinery adjudication (both windows, THREE question groups):**
+   2. [DONE 2026-08-01 → D-100] **Machinery adjudication (both windows, THREE question groups):**
       (a) quarantined-without-replacement dangling occurrences in
       salvage-closed windows (A excluded-and-failed on it; B did not
       even exclude it); (b) deviation-retry post-cal selection (A's
@@ -141,8 +200,8 @@ STATE AS OF THIS CHECKPOINT:
    TM line and the two FAILED whole-window verdicts (expectation-setting:
    collections are fine; the machinery questions are desk work).
 
-Standing: gates never waived; verdicts stand as issued pending
-adjudication; magistrate operates windows solo; zero agents AND zero
+Standing: gates never waived; verdicts stand as issued (adjudication
+COMPLETE 2026-08-01 → D-100); magistrate operates windows solo; zero agents AND zero
 output-streaming during measurement idle gates; three-failure salvage
 rule, guarded launcher, and bird-SIGSTOP are validated practice; the
 loop runs until the paper's claims table is measured.
@@ -160,8 +219,8 @@ WINDOW `window_metrologyA_20260731` STATE (operator log in
 ~/JouleWise-window-custody/window_metrologyA_20260731/ is the full record):
 - COLLECTED AND BANKED (backed up, 70+13 bundles, both roots): NEG-8
   bound corpus 12/12 + minted bound; start triplet 3/3; **linearity_ramp
-  40/40 COMPLETE** (claim C1's campaign); midpoint; additivity 23/24 at
-  final state (r08 x2 shapes missing, p0512o0512-r08 quarantined);
+  40/40 COMPLETE** (claim C1's campaign); midpoint; additivity 21/24 at
+  final state [corrected per D-098; this checkpoint originally said 23/24] (r08 x2 shapes missing, p0512o0512-r08 quarantined);
   end triplet 3/3. NOT collected: null_ladder 02_null_o0512, long_holds
   01_holds (move to the next window with the additivity r08 remainder).
 - THREE failures, all §10-handled, slots quarantined, cause named each
@@ -323,8 +382,8 @@ day then merged two PRs and ratified four decisions:
       (status consumption beyond authentication; the anti-malformation
       vs anti-tamper distinction).
    3. **MANIFEST-CONTRAST v3 implementation** (D-095) — unblocked
-      file-wise now that PR #91 has landed; ordered behind commit 3 or
-      run in parallel, and **orderable next session**.
+      file-wise now that PR #91 has landed; ordered SEQUENTIALLY after commit 3 [superseded 2026-08-01: the
+      D-095 write surface overlaps commit 3's — no parallel start].
    4. **Multi-cell mint** (`MINT-GENERALIZE-01`) — still D-088-blocked
       by the no-mint-from-a-duplicate-bearing-corpus condition until the
       full gauntlet closes.
@@ -390,7 +449,7 @@ WINDOW (do first, in order):
    extraction (science window, not calibration): claim consumption is
    blocked on MANIFEST-CONTRAST desk work; the paper's demonstration
    numbers come from bundle summaries + the one minted floor artifact
-   (1.5B, 7.377086 J) plus the 7B prose-only floors (13.998037 J,
+   (1.5B, 7.377086 J) plus the 7B prose-only floors (≈13.998037 J,
    pending MINT-GENERALIZE-01).
 6. OVERNIGHT (agents OK after measurement_complete): implement D5-J —
    the STRUCTURAL cooldown-join redesign (adopted design + the struck
@@ -613,8 +672,8 @@ At the end of substantial work:
    (delegate to a fast subagent): stale test counts, gate-state
    contradictions between prose summaries and checklist matrix rows,
    numbers cited in multiple places (C-002; D-023 extension).
-   After any session that changed front-facing state, refresh
-   `docs/site/DRIFT.md` (site-drift report) instead of deploying:
+   Refreshing `docs/site/DRIFT.md` is OPTIONAL (D-101: the site gates
+   nothing and is fully decoupled); when touched, it informs only:
    per D-068 (2026-07-14) NO agent regenerates or deploys the site,
    ever — automation informs; Ed deploys manually. (Supersedes the
    C-013 regenerate+redeploy convention.)
@@ -637,7 +696,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Metrology window B collected + salvage-closed; both metrology whole-window verdicts FAILED as-issued (distinct machinery condition sets) -> three-part machinery adjudication heads the desk queue; bird-SIGSTOP protocol validated; streaming-during-idle-gate hazard recorded](docs/run_reports/2026-08-01-metrology-window-b.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Desk session: machinery adjudication ruled (D-100 cold-gate synthesis, semantics-dispatch shape), window A permanently non-claim-bearing, window B re-evaluation licensed behind the repair; commit-3 design->implementation; CI shard-budget fix](docs/run_reports/2026-08-01-desk-adjudication-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -649,7 +708,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- CONTINUE — A2 `MET-VERDICT-ADJ-01`: Adjudicate the whole-window verdict machinery over the two salvage-shaped metrology windows (A: dangling-slot exclusion + refused deviation post-cal bracket; B: empty source_campaign_manifests membership resolution, unconsumed supersession, NEG-8 stale-vs-in-window-bound), via mechanically assembled packet -> independent read-only audit -> magistrate ruling.
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -1325,7 +1384,12 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-07-31, CURRENT) `main` and `origin/main` are both at `6ed1625`:
+- (2026-08-01, CURRENT) `main` and `origin/main` at `df78b53` plus the
+  D-101 batch; working tree clean except the untracked private
+  `CLAUDE.local.md` (Ed's; never commit) and `.desk/` (adjudication
+  custody; never commit). Branch `impl/cooldown-gauntlet-c3` is open in
+  a scratch worktree (commit-3 implementation).
+- (2026-07-31, historical) `main` and `origin/main` were both at `6ed1625`:
   the PR #89 merge `7ee680c` (D5-J) plus the close-out commits
   `49c1876`, `0d0bd0b`, and `6ed1625`. Branch `impl/mint-tool` is MERGED
   (verified `git merge-base --is-ancestor impl/mint-tool main`), as are
@@ -1360,9 +1424,10 @@ the top of this file.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
   (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
-  content was refreshed on 2026-07-31 (claims-desk close-out): stamped
-  `updated: 2026-07-31`, `latest_report` points at
-  `docs/run_reports/2026-07-31-claims-desk-session.md`, the completed
+  content was refreshed on 2026-08-01 (desk adjudication session):
+  stamped `updated: 2026-08-01`, `latest_report` points at
+  `docs/run_reports/2026-08-01-desk-adjudication-session.md`, the MET
+  rows are folded in, the completed
   `FLOOR-LABEL-01`, `STACK-ID-BIND-01`, `P2-015`, and
   `COOLDOWN-JOIN-DA1-01` rows are retired to
   `TASK_QUEUE.md`'s completed table, and the post-mint intake

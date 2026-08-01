@@ -1509,6 +1509,17 @@ def priority_slug(priority: str) -> str:
     return "p4"
 
 
+def roadmap_acceptance_summary(acceptance: str) -> str:
+    """Leading acceptance-summary sentence of a queue row's combined
+    Evidence / Acceptance cell. The roadmap page is the flight-plan view;
+    the full cell (evidence, authority, fences, notes) stays on the Queue
+    page, which shards within the capsule byte budget. Rendering the full
+    cell here duplicated the Queue page and pushed roadmap.html past the
+    30 kB runtime shard budget (CI release-chain, 2026-08-01)."""
+    summary = acceptance.split(" Evidence:", 1)[0].strip()
+    return summary if summary else acceptance
+
+
 def render_roadmap_page(queue: list[QueueItem], completed: list[dict[str, str]], do_not_do: list[str], stamp: SourceStamp) -> str:
     cards = []
     for item in queue:
@@ -1519,7 +1530,7 @@ def render_roadmap_page(queue: list[QueueItem], completed: list[dict[str, str]],
     <div class="lane-head"><span class="lane-rank mono">#{html.escape(item.rank)}</span><span class="mono task-code">{html.escape(item.task_id)}</span><span class="status-chip">{html.escape(status_label)}</span>{lane_chip(item.lane)}</div>
     <p class="status-note">{inline_md(status_note)}</p>
     <h2>{inline_md(item.task)}</h2>
-    <details><summary>Acceptance</summary><p>{inline_md(item.acceptance)}</p></details>
+    <details><summary>Acceptance</summary><p>{inline_md(roadmap_acceptance_summary(item.acceptance))}</p><p><a href="task_queue.html">Full row on the Queue page</a></p></details>
     {source_chip(stamp)}
   </div>
 </article>""")
