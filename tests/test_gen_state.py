@@ -51,7 +51,13 @@ EXPECTED_IDS = {
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
+    # 2026-08-01 metrology adjudication session (D-098..D-101):
+    # MET-VERDICT-ADJ-01 was minted, completed the same day (D-100), and
+    # left the live kernel; its repairs and the remainder window remain.
+    "MET-DANGLER-DISPOSITION-01", "CAL-BRACKET-D079-01",
+    "MEMBERSHIP-READER-FAILOPEN-01",
     # [QUIET-MAC]
+    "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-046B", "P2-047B",
     # [ED-EXTERNAL]
@@ -61,7 +67,7 @@ EXPECTED_IDS = {
 TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
                 "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP",
                 "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015",
-                "COOLDOWN-JOIN-DA1-01"}
+                "COOLDOWN-JOIN-DA1-01", "MET-VERDICT-ADJ-01"}
 
 
 def load_kernel():
@@ -216,9 +222,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_56(self):
+    def test_exact_live_id_set_60(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 56)
+        self.assertEqual(len(self.tasks), 60)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -354,14 +360,23 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(self.tasks["P1-008"]["rank"], 1)
 
     def test_quiet_mac_all_lead_only_and_p2_006_is_queued_lane_head(self):
-        # P2-015 (rank 1) retired 2026-07-31; P2-006 inherits the lane head.
+        # P2-015 (rank 1) retired 2026-07-31; MET-WINDOW-C-01 took rank 1
+        # on 2026-08-01 but sits BLOCKED behind the D-100 repair + Ed 5A,
+        # so P2-006 remains the queued (selectable) lane head.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 7)
+        self.assertEqual(len(quiet), 8)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
+        self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
+        self.assertEqual(self.tasks["MET-WINDOW-C-01"]["status"], "blocked")
+        self.assertEqual(
+            self.tasks["MET-WINDOW-C-01"]["rank"],
+            min(task["rank"] for task in quiet),
+        )
+        queued = [t for t in quiet if t["status"] == "queued"]
         self.assertEqual(
             self.tasks["P2-006"]["rank"],
-            min(task["rank"] for task in quiet),
+            min(task["rank"] for task in queued),
         )
         self.assertEqual(self.tasks["P2-006"]["status"], "queued")
 

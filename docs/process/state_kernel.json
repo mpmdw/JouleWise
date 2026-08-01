@@ -1233,11 +1233,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "Ed authorization 2026-08-01: ~26-hour runway, machine plugged in and mostly untouched, multiple autonomous quiet windows permitted; README top-line machine-state banner is the notification channel; technical settle checks still run at each launch",
+            "path": "RUN_STATE.md"
+          },
           "kind": "external",
           "required": "Ed section-5A window prep (network time off, AC, settled machine, walk-away)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ED-5A"
         },
