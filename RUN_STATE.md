@@ -43,7 +43,82 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## CURRENT STATE (2026-07-31 claims-desk close-out; resume script below FULLY EXECUTED)
+## ACTIVE RESUME SCRIPT (2026-07-31 ~22:15 PT checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. Metrology window A ran tonight and
+SALVAGE-CLOSED under the third-failure rule; the ONLY remaining step to
+make it evidence-bearing is the whole-window verdict, which was
+deliberately stopped pre-supersession and NOT yet re-run. Session
+scratchpad (consult memos, audit reports, cold-gate packets, suite logs):
+/private/tmp/claude-501/-Users-edr-code-JouleWise/c4ec1557-9622-481f-b27e-72b695f1fc2a/scratchpad/
+
+WINDOW `window_metrologyA_20260731` STATE (operator log in
+~/JouleWise-window-custody/window_metrologyA_20260731/ is the full record):
+- COLLECTED AND BANKED (backed up, 70+13 bundles, both roots): NEG-8
+  bound corpus 12/12 + minted bound; start triplet 3/3; **linearity_ramp
+  40/40 COMPLETE** (claim C1's campaign); midpoint; additivity 23/24 at
+  final state (r08 x2 shapes missing, p0512o0512-r08 quarantined);
+  end triplet 3/3. NOT collected: null_ladder 02_null_o0512, long_holds
+  01_holds (move to the next window with the additivity r08 remainder).
+- THREE failures, all §10-handled, slots quarantined, cause named each
+  time: #1 neg8-refcorpus-r05 (login/display-transition intruder),
+  #2 mtadd-p0512o0512-r06 (operator walk-in, display wake — refused in
+  15.8 s), #3 mtadd-p0512o0512-r08 (transient daemon burst,
+  TM-consistent) -> salvage close per the ratified rule.
+- POST-CAL: attempt 1 FAILED (mixed pulse-detection reasons, preserved:
+  20260731T214355-126fc2ab); ONE settled retry under the a10-precedent
+  RECORDED DEVIATION is VALID: 20260731T215120-fa1e9cda (b_fiducial
+  0.045804 s). Pre-cal 20260731T161713-b8b08280 (0.030973 s, §5B
+  PASSED). Expect bracket drift ~15 ms > 10.818 ms screen: §8's
+  BUDGETABLE case (pre-cal level screen passed) — the governed verdict
+  owns that ruling; do NOT hand-apply anything.
+- SUPERSESSIONS: recorded ONCE each (claim root mtadd-p0512o0512-r06;
+  bound root neg8-refcorpus-r05) AFTER stopping the premature verdict.
+- Power identity: 140 W ANKER PD (instrument-visible "pd charger"/140.0;
+  prior docs' "Apple" label was cosmetic — correct it in the close-out).
+- Network time: RESTORED by Ed at wrap (confirmed) — no action owed.
+
+RESUME (in order):
+1. Emit the ONE governing whole-window verdict (post-supersession):
+   `.venv/bin/python scripts/run_campaign.py --whole-window-verdict
+   --runs-dir /Users/edr/code/JouleWise/runs_window_metrologyA_20260731
+   --log /Users/edr/code/JouleWise/runs_window_metrologyA_20260731/campaign_log.jsonl
+   --campaign-policy configs/campaign_policies/quiet_mac_p2_production.json
+   --neg8-drift-bound /Users/edr/code/JouleWise/runs_window_metrologyA_20260731_bound/neg8-drift-bound.json`
+   (~20 min). No prior whole-window row exists (verified pre-checkpoint).
+2. Close-out record at
+   ~/JouleWise-window-custody/window_metrologyA_20260731/close-out.md
+   (template: window_contrast_20260730 close-out; include the salvage
+   narrative above, the deviation, the Anker correction, backup-done,
+   and the verdict result). Then run report + WINDOW_STATUS +
+   RUN_STATE/kernel refresh + consistency sweep (the standard batch).
+3. NO extraction/claims from this window yet: C1 consumption follows the
+   D-095 chain (gauntlet commit 3 -> v3 manifest -> multi-cell mint) and
+   MUST record the D-093 raw-vs-validated scan (tonight: claim root 1/1,
+   bound root 1/1 at recording time) plus the D-088 cl.3(c) bench scan.
+4. NEXT WINDOW (needs Ed + quiet night): metrology remainder =
+   null_ladder 02_null_o0512 (~31 min) + long_holds 01_holds (~5 min) +
+   additivity r08 x3 (~5 min) + fresh references/bound (~30 min) ≈ 1.2 h;
+   optionally pack with window-B stages per the suite README. Fresh
+   window root, new plan root, the §6 chain (sha 2a334f64…), guarded
+   launcher from this session's pattern (HID-idle + daemon checks —
+   scratchpad launcher scripts).
+5. DESK QUEUE (order ratified): gauntlet commit 3 (D-097 composed
+   contract: writer emission + writer-external authenticated
+   discriminator + reader re-acceptance + v2 truth-table row, ONE
+   audited commit; fence in kernel); MANIFEST-CONTRAST v3 (D-095);
+   multi-cell mint (after gauntlet closes, D-088 cl.3(c)); then the
+   contrast claim = the paper's demonstration study #1.
+6. Bookkeeping owed from tonight: D-098 candidate (salvage close +
+   deviation ruling record), queue row for the metrology-remainder
+   window, WINDOW_STATUS refresh, skill-usage log append.
+
+Standing: gates never waived; magistrate operates windows solo; zero
+agents during measurement; three-failure salvage rule and the guarded
+launcher are now twice-validated practice; the loop runs until the
+paper's claims table (outline §5) is measured.
+
+## PRIOR STATE (2026-07-31 claims-desk close-out; resume script below FULLY EXECUTED)
 
 The 2026-07-30 19:15 resume script is fully executed; the 2026-07-31 desk
 day then merged two PRs and ratified four decisions:
