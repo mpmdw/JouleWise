@@ -690,7 +690,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Metrology window B collected + salvage-closed; both metrology whole-window verdicts FAILED as-issued (distinct machinery condition sets) -> three-part machinery adjudication heads the desk queue; bird-SIGSTOP protocol validated; streaming-during-idle-gate hazard recorded](docs/run_reports/2026-08-01-metrology-window-b.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Desk session: machinery adjudication ruled (D-100 cold-gate synthesis, semantics-dispatch shape), window A permanently non-claim-bearing, window B re-evaluation licensed behind the repair; commit-3 design->implementation; CI shard-budget fix](docs/run_reports/2026-08-01-desk-adjudication-session.md).
 
 ### [ED-EXTERNAL]
 
