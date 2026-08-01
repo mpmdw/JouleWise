@@ -78,8 +78,29 @@ WINDOW `window_metrologyA_20260731` STATE (operator log in
   prior docs' "Apple" label was cosmetic — correct it in the close-out).
 - Network time: RESTORED by Ed at wrap (confirmed) — no action owed.
 
+TONIGHT (2026-08-01 ~23:00 PT, Ed-authorized 11-hour runway; Ed's §5A
+done: network time OFF, plugged in, 140 W Anker, walking away):
+window_metrologyB_20260801 — the metrology REMAINDER window (~3 h):
+full null ladder (all three stages -> claim C2 complete), a clean
+single-root additivity 24/24 re-collection (C4; window A's 21/24 stay
+as corroboration), and long_holds Part A (C5). Plan root ASSEMBLED and
+sha-verified (2a334f64…) at
+/Users/edr/JouleWise-window-plans/window_metrologyB_20260801 (stages:
+before = null o0128 + o0512; after = additivity + null o2048 + holds).
+Only micro_delta (draft-pending-slope by design) then remains of the
+whole metrology suite. After measurement_complete: §8/§9 verdict,
+backup, close-out, then the overnight desk lane = gauntlet commit 3
+(D-097 composed contract) + its independent audit.
+
 RESUME (in order):
-1. Emit the ONE governing whole-window verdict (post-supersession):
+1. HARVEST OR EMIT window A's governing verdict: a verdict run was IN
+   FLIGHT at this checkpoint (log:
+   session scratchpad c4ec1557…/scratchpad/verdict_metrologyA_v2.log —
+   check its tail AND `tail -1` of the window A campaign log for an
+   appended whole-window row). If the row exists, consume it; if the
+   process died with the session (likely on a context clear), RE-RUN
+   the command below — no partial-row risk, the row appends only at
+   completion:
    `.venv/bin/python scripts/run_campaign.py --whole-window-verdict
    --runs-dir /Users/edr/code/JouleWise/runs_window_metrologyA_20260731
    --log /Users/edr/code/JouleWise/runs_window_metrologyA_20260731/campaign_log.jsonl
@@ -96,13 +117,21 @@ RESUME (in order):
    D-095 chain (gauntlet commit 3 -> v3 manifest -> multi-cell mint) and
    MUST record the D-093 raw-vs-validated scan (tonight: claim root 1/1,
    bound root 1/1 at recording time) plus the D-088 cl.3(c) bench scan.
-4. NEXT WINDOW (needs Ed + quiet night): metrology remainder =
-   null_ladder 02_null_o0512 (~31 min) + long_holds 01_holds (~5 min) +
-   additivity r08 x3 (~5 min) + fresh references/bound (~30 min) ≈ 1.2 h;
-   optionally pack with window-B stages per the suite README. Fresh
-   window root, new plan root, the §6 chain (sha 2a334f64…), guarded
-   launcher from this session's pattern (HID-idle + daemon checks —
-   scratchpad launcher scripts).
+4. RUN TONIGHT'S WINDOW (plan root ready, see TONIGHT block above):
+   `bash scripts/quiet_mac_prep.sh` (Graphics FAIL is the known false
+   signal), then arm the GUARDED LAUNCHER as a background job — poll
+   every 120 s; launch `caffeinate -is /bin/zsh <plan-root>/window-chain.zsh
+   <plan-root>` only when HID idle >= 600 s AND no XProtectRemediator
+   process AND Time Machine not running AND no
+   corespotlightd/mds/bird/photoanalysisd/softwareupdated/backupd above
+   15% CPU (launcher scripts from tonight's session are in the c4ec1557
+   scratchpad as the pattern; loginwindow >20% is also a hold). ZERO
+   tool calls during measurement. Failures: §10 quarantine/continuation
+   per this window's precedent; third failure of any signature closes
+   as salvage. Post-window: §8 -> §9 verdict (record supersessions
+   FIRST if any slot was rerun — the recorder-then-verdict order is
+   mandatory, learned tonight) -> backup_runs.sh both roots ->
+   close-out -> then the overnight desk lane (gauntlet commit 3).
 5. DESK QUEUE (order ratified): gauntlet commit 3 (D-097 composed
    contract: writer emission + writer-external authenticated
    discriminator + reader re-acceptance + v2 truth-table row, ONE
