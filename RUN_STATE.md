@@ -43,7 +43,107 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-07-31 ~22:15 PT checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-08-01 ~07:00 PT checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. BOTH metrology windows are now
+SALVAGE-CLOSED and post-processed; tonight's session (2026-08-01
+00:30–07:00 PT) ran window B end-to-end with three launches and full
+custody. Session scratchpad (consult report, launcher scripts):
+/private/tmp/claude-501/-Users-edr-code-JouleWise/693609a9-97c5-44fb-81a3-7a9aedb814de/scratchpad/
+
+STATE AS OF THIS CHECKPOINT:
+
+1. **Window A verdict: FAILED** (governed run 00:26–00:47 PT; row in
+   runs_window_metrologyA_20260731/campaign_log.jsonl). Conditions:
+   `whole_window_bundle_invalid` + `environment_admission_failed` (the
+   quarantined-never-replaced mtadd-p0512o0512-r08 occurrence dangles;
+   first time the machinery saw that shape) and
+   `instrument_calibration_bracket_missing` (bracket pre AND post null —
+   the selector refused the deviation retry post-cal; §8 budgetable case
+   never evaluated). neg8_bracket PASSED, adapter continuity STABLE.
+   THE VERDICT STANDS — no reinterpretation. Desk-lane adjudication
+   required (see queue below). Close-out complete at
+   ~/JouleWise-window-custody/window_metrologyA_20260731/close-out.md
+   (also corrects: additivity was 21/24 not 23/24; Anker charger note).
+2. **Window B (window_metrologyB_20260801): COLLECTED and
+   SALVAGE-CLOSED, measurement_complete 13:52Z.** Collected + BANKED
+   (72+13 bundles, both roots, backup rc=0): bound 12/12 + minted,
+   start triplet 3/3, **null_o0128 + null_o0512 COMPLETE** (C2: 2 of 3
+   stages), midpoint, **additivity 23/24 single-root** (C4
+   near-complete), end triplet 3/3, pre-cal 20260801T014059-8c3bfe9e /
+   post-cal 20260801T064830-c76f5d1c both single-attempt (bracket
+   fiducial diff ~2.3 ms vs 10 ms policy). NOT collected -> THIRD
+   metrology window: null_o2048, long_holds, additivity p2048o0128-r08.
+   Full narrative in the close-out:
+   ~/JouleWise-window-custody/window_metrologyB_20260801/close-out.md
+   (launch-1 §5B abort ×2, Sol consult, bird-SIGSTOP protocol, three
+   member failures, salvage). One supersession recorded
+   (mtnull-o0512-b04-b2, entry 3896c5ed…) BEFORE the verdict.
+   **Window B verdict: FAILED** (row appended 07:19 PT, 70-bundle
+   basis) — but NOT window A's failure shape: the §8 bracket PASSED
+   (drift 2.25 ms, pre+post formed), the dangling r08 was NOT excluded,
+   the recorded supersession was NOT consumed, and
+   `source_campaign_manifests` is EMPTY (zero manifests resolved
+   despite a populated dir). Conditions:
+   `whole_window_campaign_membership_unresolved`,
+   `environment_admission_missing`, `neg8_bracket_missing`,
+   `neg8_bracket_reference_invalid`, `neg8_drift_bound_stale` (bound
+   was minted in-window — "stale" itself needs adjudication). Verdict
+   STANDS as issued; close-out verdict line is FINAL.
+3. **NEW DOCTRINE FACTS (bind immediately):**
+   - The clock anchor is KNIFE-EDGE by construction (Sol consult
+     confirmed, margins ±1.4 ms at 197 s; the unmodeled ~−12 ppm
+     wall/monotonic rate ≈ 2.3 ms/capture exceeds every margin).
+     Desk item: rate-aware anchor design (paper-relevant).
+   - TM attributions were a FALSE PROXY (no TM destinations configured;
+     prep script line detects only process residency). Window A's #3
+     "TM-consistent" label is tainted; actual overnight intruder class:
+     mobileassetd/softwareupdated (~04:29 PT both nights) and bird.
+   - bird-SIGSTOP protocol (identity custody + CONT trap + launcher
+     hold) is now once-validated practice; pre-cal passed first attempt
+     under it after failing 2× with bird active.
+   - **The operating session's OUTPUT STREAMING is a measurement
+     hazard**: window B failure #3 was caused by the magistrate's own
+     post-arm status message streaming during an idle gate. Zero tool
+     calls is INSUFFICIENT; after arming a launcher the session's
+     message must be ONE LINE.
+4. DESK QUEUE (order for the successor):
+   1. [DONE this session] Window B verdict emitted (FAILED, see step 2)
+      + close-out finalized.
+   2. **Machinery adjudication (both windows, THREE question groups):**
+      (a) quarantined-without-replacement dangling occurrences in
+      salvage-closed windows (A excluded-and-failed on it; B did not
+      even exclude it); (b) deviation-retry post-cal selection (A's
+      bracket refused to form; B's formed and passed); (c) window B's
+      manifest/membership resolution — zero `source_campaign_manifests`
+      resolved over a four-chain-segment window, recorded supersession
+      not consumed, NEG-8 bracket evaluated missing/invalid/stale
+      against an in-window bound. Contract-lens work: independent audit
+      -> cold gate if any override of the as-issued FAILED verdicts is
+      proposed. The collected corpora are banked and intact either way.
+   3. Gauntlet commit 3 (D-097 composed contract) + independent audit —
+      unchanged from the prior checkpoint's desk lane.
+   4. MANIFEST-CONTRAST v3 (D-095) -> multi-cell mint (D-088 cl.3(c))
+      -> gated contrast claim, chain unchanged.
+   5. Bookkeeping owed: run report for tonight (2026-08-01 metrology
+      window B session), WINDOW_STATUS refresh, kernel refresh, D-098
+      candidate (window A salvage + deviation + verdict-FAIL record),
+      D-099 candidate (window B arc + bird protocol + streaming
+      hazard), queue row for metrology window C (remainder), council
+      log addendum (tonight's Sol consult), skill-usage log,
+      consistency sweep.
+5. Ed owes: network-time restore (`sudo systemsetup -setusingnetworktime
+   on` — OFF since §5A last night). Also flag to Ed: the prep script's
+   TM line and the two FAILED whole-window verdicts (expectation-setting:
+   collections are fine; the machinery questions are desk work).
+
+Standing: gates never waived; verdicts stand as issued pending
+adjudication; magistrate operates windows solo; zero agents AND zero
+output-streaming during measurement idle gates; three-failure salvage
+rule, guarded launcher, and bird-SIGSTOP are validated practice; the
+loop runs until the paper's claims table is measured.
+
+## PRIOR ACTIVE RESUME SCRIPT (2026-07-31 ~22:15 PT checkpoint; EXECUTED — window A verdict emitted [FAILED], window B run and salvage-closed; retained for the collection facts)
 
 Successor is FABLE, MAGISTRATE. Metrology window A ran tonight and
 SALVAGE-CLOSED under the third-failure rule; the ONLY remaining step to
