@@ -6217,3 +6217,41 @@ dangler's intruder class) gains evidence.
 
 Revisit when: Ed changes the site's standing, or the site gains an
 external consumer whose freshness matters.
+
+## D-100 addendum (2026-08-01): four mechanical spellings ratified for the repair; reader fail-open folds in
+
+- Status: accepted (magistrate ratification of the repair design consult's
+  four lead-owned spellings; each implements D-100's ruling under its R5a
+  real-shape-primacy clause — no disposition or landing-shape change)
+
+1. **R5a admission predicate:** license check (b-ii) reads
+   `metadata.environment_admission.decision == "abort"` with a nonempty
+   ordered attempt list, every `attempts[*].admitted == false`, and
+   `claim_reason == "environment_admission_failed"` — the real bundle
+   bytes' shape; D-100's prose `admitted: false` was a summary of exactly
+   this.
+2. **Teardown bound:** a final powermetrics trace flush ending no later
+   than **0.250 s** after the idle-baseline failure event is teardown
+   evidence, never workload evidence (real flushes measured 136–171 ms;
+   anything later voids).
+3. **D-087 closure artifact:** `joulewise.salvage_closure.v1` binds the
+   policy, membership-binding digest, the three failure occurrences with
+   a BYTE-DERIVED shared failure signature (never narrative root-cause
+   identity), the terminal occurrence, timestamps, evidence paths, and
+   operator deviations. Window A/B closure artifacts are authored from
+   custody evidence and lead-verified before any re-evaluation.
+4. **Custody-root universe for (b-i):** the closed set is the window's
+   runs root plus every quarantine/custody root declared by that
+   window's closure artifact (for windows A/B: the runs root and
+   `~/JouleWise-window-custody/<window>/quarantine`). "Zero bytes
+   anywhere" is evaluated over exactly that declared universe.
+
+Also ratified from the same consult: **MEMBERSHIP-READER-FAILOPEN-01
+FOLDS INTO the repair commit** (shared surface; the occurrence-resolver
+rewrite would otherwise leave R2's supersession path knowingly
+fail-open), retiring the separate queue row when the repair lands; and
+the salvage semantic is defined as the COMPOUND
+`salvage_dangler_exclusion_v1` = authenticated max-bracket survivor
+consumption + exactly one D-100 exclusion (one scalar id never carries
+two orthogonal meanings). Window B's re-evaluation stays OUTSIDE the
+repair commit, behind the exact-head audit.
