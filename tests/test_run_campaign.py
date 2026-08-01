@@ -571,6 +571,14 @@ def read_jsonl(path: Path) -> list[dict]:
 
 def read_all_jsonl(path: Path) -> list[dict]:
     return [
+        row
+        for row in read_wire_jsonl(path)
+        if row.get("record_type") != "campaign_provenance_attestation"
+    ]
+
+
+def read_wire_jsonl(path: Path) -> list[dict]:
+    return [
         json.loads(line)
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
@@ -1489,13 +1497,14 @@ class RunCampaignTests(unittest.TestCase):
             (manifest_dir / "retry.json").write_text(
                 json.dumps(
                     {
-                        "schema_version": run_campaign_module.CAMPAIGN_PROVENANCE_SCHEMA,
+                        "schema_version": "joulewise.campaign_provenance.v1",
                         "analysis_manifest_id": "m",
                         "campaign_policy": {"sha256": binding.sha256},
                         "attempt_ledger_selection": selection,
                         "members": [
                             {
                                 "execution": "invoked",
+                                "run_id": "retry-selection",
                                 "bundle_ids": [
                                     "p2-neg8-reference-start__a0__quarantined",
                                     *selected_ids,
@@ -3156,6 +3165,130 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(second["result"], "unknown")
             self.assertIn("mock telemetry", second["reason"])
 
+    def test_v2_writer_outcomes_and_snapshot_attestations(self) -> None:
+        from joulewise.campaign_provenance import (
+            CAMPAIGN_PROVENANCE_SCHEMA_V2,
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / "runs"
+            custom_log = root / "external" / "campaign.jsonl"
+            info = run_campaign_module.ConfigInfo(
+                path=root / "source.json",
+                run_id="source",
+                raw_run_id="source",
+                repetitions=2,
+            )
+            path, manifest = run_campaign_module.new_campaign_provenance(
+                root, runs_dir, None, log_path=custom_log
+            )
+            usable = run_campaign_module.MemberEvaluation(
+                bundle_id="usable",
+                bundle_path=root / "usable",
+                config_name="source.json",
+                status="succeeded",
+                strict_valid=True,
+            )
+            waiver = run_campaign_module.Waiver(
+                target_kind="bundle_id",
+                target="waived",
+                reason="fixture waiver",
+                approver="test",
+                timestamp="2026-08-01T12:00:00Z",
+                scope="any",
+            )
+            waived = run_campaign_module.MemberEvaluation(
+                bundle_id="waived",
+                bundle_path=root / "waived",
+                config_name="source.json",
+                status="failed",
+                strict_valid=False,
+                waiver=waiver,
+            )
+            failed = run_campaign_module.MemberEvaluation(
+                bundle_id="failed",
+                bundle_path=root / "failed",
+                config_name="source.json",
+                status="failed",
+                strict_valid=False,
+            )
+
+            def record(
+                bundle_ids: list[str],
+                evaluations: list,
+                *,
+                execution: str = "existing",
+                existing_incomplete: bool = False,
+                existing_invalid: bool = False,
+            ) -> None:
+                run_campaign_module.record_campaign_member_provenance(
+                    path,
+                    manifest,
+                    info=info,
+                    bundle_ids=bundle_ids,
+                    evaluations=evaluations,
+                    execution=execution,
+                    cooldown=None,
+                    existing_incomplete=existing_incomplete,
+                    existing_invalid=existing_invalid,
+                    log_path=custom_log,
+                )
+
+            record(["usable"], [usable])
+            record(["waived"], [waived])
+            record(["failed"], [failed])
+            record(["partial"], [failed], existing_incomplete=True)
+            record(["usable", "failed"], [usable, failed])
+            record(["usable", "waived"], [usable, waived])
+            record(["usable"], [usable], existing_invalid=True)
+            record(["usable"], [usable], execution="invoked")
+            record(["blocked"], [], execution="blocked_before_invoke")
+
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                persisted["schema_version"], CAMPAIGN_PROVENANCE_SCHEMA_V2
+            )
+            self.assertEqual(
+                [member.get("outcome") for member in persisted["members"][:7]],
+                [
+                    "usable",
+                    "waived",
+                    "failed",
+                    "incomplete",
+                    "failed",
+                    "waived",
+                    "failed",
+                ],
+            )
+            self.assertNotIn("outcome", persisted["members"][7])
+            self.assertNotIn("outcome", persisted["members"][8])
+
+            run_campaign_module.write_campaign_provenance(
+                path, manifest, custom_log
+            )
+            wire_rows = read_wire_jsonl(custom_log)
+            attestations = [
+                row
+                for row in wire_rows
+                if row.get("record_type") == "campaign_provenance_attestation"
+            ]
+            self.assertEqual(len(attestations), 10)
+            current_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(
+                sum(
+                    row["campaign_provenance_manifest_sha256"] == current_sha
+                    for row in attestations
+                ),
+                1,
+            )
+            self.assertFalse((runs_dir / "campaign_log.jsonl").exists())
+            self.assertIsNone(load_authenticated_campaign_catalog(runs_dir))
+            self.assertIsNotNone(
+                load_authenticated_campaign_catalog(runs_dir, custom_log)
+            )
+
     def test_prompt_hash_sidecar_match_records_matches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -4580,7 +4713,8 @@ class RunCampaignTests(unittest.TestCase):
             parsed = [
                 json.loads(line)
                 for line in lines[1:]
-                if json.loads(line).get("record_type") != "campaign_verdict"
+                if json.loads(line).get("record_type")
+                not in {"campaign_verdict", "campaign_provenance_attestation"}
             ]
             self.assertEqual([row["status"] for row in parsed], ["ok"])
 
@@ -6638,6 +6772,8 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     "campaign_policy": {"sha256": binding.sha256},
                     "members": [
                         {
+                            "config": f"{bundle_id}.json",
+                            "run_id": bundle_id,
                             "execution": "invoked",
                             "bundle_ids": [bundle_id],
                             "role": run_campaign_module.NEG8_REFERENCE_ROLE,
@@ -6676,7 +6812,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             }
 
         common = {
-            "schema_version": run_campaign_module.CAMPAIGN_PROVENANCE_SCHEMA,
+            "schema_version": "joulewise.campaign_provenance.v1",
             "analysis_manifest_id": "window-a",
             "campaign_policy": {"sha256": binding.sha256},
         }
@@ -6702,6 +6838,123 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             + "\n"
         )
         return work_id
+
+    def _install_v2_occurrence_sequence(
+        self, binding, bundle_id: str, sequence: list[str]
+    ) -> Path:
+        manifest_dir = self.root / "campaign_manifests"
+        log_path = self.root / "campaign_log.jsonl"
+        for index, execution in enumerate(sequence):
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": f"projection-{index}",
+                "analysis_manifest_id": "window-a",
+                "campaign_policy": {"sha256": binding.sha256},
+                "members": [
+                    {
+                        "config": f"{bundle_id}.json",
+                        "run_id": bundle_id,
+                        "execution": execution,
+                        "bundle_ids": [bundle_id],
+                        **({"outcome": "failed"} if execution == "existing" else {}),
+                    }
+                ],
+            }
+            run_campaign_module.write_campaign_provenance(
+                manifest_dir / f"{index:02d}-{execution}.json",
+                manifest,
+                log_path,
+            )
+        canonical = self.root / bundle_id
+        canonical.mkdir()
+        quarantine = Path(tempfile.mkdtemp(prefix="jw-projection-quarantine-"))
+        self.addCleanup(shutil.rmtree, quarantine, True)
+        for name, payload in (
+            ("config.json", {"run_id": bundle_id}),
+            ("metadata.json", {"status": "failed"}),
+            ("summary_metrics.json", {"status": "failed"}),
+        ):
+            raw = json.dumps(payload, sort_keys=True) + "\n"
+            (canonical / name).write_text(raw, encoding="utf-8")
+            (quarantine / name).write_text(raw, encoding="utf-8")
+        return quarantine
+
+    def test_supersession_recorder_consumes_join_normalized_projection(self) -> None:
+        binding = self._binding()
+        cases = (
+            (
+                ["invoked", "existing", "existing"],
+                False,
+                None,
+                [],
+            ),
+            (
+                ["existing", "existing", "invoked"],
+                True,
+                "campaign_manifests/02-invoked.json",
+                ["campaign_manifests/00-existing.json"],
+            ),
+            (
+                ["invoked", "invoked", "existing"],
+                True,
+                "campaign_manifests/01-invoked.json",
+                ["campaign_manifests/00-invoked.json"],
+            ),
+        )
+        for index, (sequence, accepted, selected_path, superseded_paths) in enumerate(cases):
+            with self.subTest(sequence=sequence):
+                case_root = Path(tempfile.mkdtemp(prefix=f"jw-projection-{index}-"))
+                self.addCleanup(shutil.rmtree, case_root, True)
+                original_root = self.root
+                self.root = case_root
+                try:
+                    quarantine = self._install_v2_occurrence_sequence(
+                        binding, "projection-bundle", sequence
+                    )
+                    args = run_campaign_module.parse_args(
+                        [
+                            "--record-supersession",
+                            "projection-bundle",
+                            "--quarantine-path",
+                            str(quarantine),
+                            "--reason",
+                            "failed occurrence quarantined before retry",
+                            "--runs-dir",
+                            str(case_root),
+                            "--campaign-policy",
+                            str(binding.path),
+                        ]
+                    )
+                    if not accepted:
+                        with self.assertRaisesRegex(
+                            ValueError, "exactly one duplicated ordinary-run"
+                        ):
+                            run_campaign_module.run_record_supersession(args)
+                        continue
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(
+                            run_campaign_module.run_record_supersession(args), 0
+                        )
+                    rows = read_wire_jsonl(case_root / "campaign_log.jsonl")
+                    entry = next(
+                        row
+                        for row in rows
+                        if row.get("record_type")
+                        == "campaign_occurrence_supersession"
+                    )
+                    self.assertEqual(
+                        entry["selected_occurrence"]["source_manifest"]["path"],
+                        selected_path,
+                    )
+                    self.assertEqual(
+                        [
+                            row["source_manifest"]["path"]
+                            for row in entry["superseded_occurrences"]
+                        ],
+                        superseded_paths,
+                    )
+                finally:
+                    self.root = original_root
 
     def _retry_occurrence_fixture(self, binding):
         members = []

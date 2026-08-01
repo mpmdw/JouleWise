@@ -85,7 +85,16 @@ from joulewise.idle_admission import (  # noqa: E402
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     ANCHOR_SHIFT_ENVELOPE_METHODS,
     cleanup_claim_evidence_flags,
+    normalized_campaign_representatives,
     token_provenance_from_artifacts,
+)
+from joulewise.campaign_provenance import (  # noqa: E402
+    CAMPAIGN_PROVENANCE_SCHEMA_V1,
+    CAMPAIGN_PROVENANCE_SCHEMA_V2,
+    campaign_provenance_attestation,
+    legacy_existing_outcome,
+    load_authenticated_campaign_catalog,
+    load_campaign_log_rows,
 )
 from joulewise.analysis_engine.ratio import (  # noqa: E402
     estimation_metric,
@@ -150,7 +159,7 @@ ORDER_MANIFEST_NAME = "order_manifest.json"
 ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
-CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
+CAMPAIGN_PROVENANCE_SCHEMA = CAMPAIGN_PROVENANCE_SCHEMA_V2
 IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA = (
     "joulewise.idle_admission_whole_window_verdict.v1"
 )
@@ -2395,6 +2404,7 @@ def new_campaign_provenance(
     runs_dir: Path,
     analysis_manifest: AnalysisManifestState | None,
     policy_binding: CampaignPolicyBinding | None = None,
+    log_path: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     session_id = f"campaign-{stamp}-p{os.getpid()}"
@@ -2416,15 +2426,45 @@ def new_campaign_provenance(
         "members": [],
         "cooldown_gates": [],
     }
-    write_campaign_provenance(path, manifest)
+    write_campaign_provenance(path, manifest, log_path)
     return path, manifest
 
 
-def write_campaign_provenance(path: Path, manifest: dict[str, Any]) -> None:
+def write_campaign_provenance(
+    path: Path,
+    manifest: dict[str, Any],
+    log_path: Path | None = None,
+) -> None:
+    """Atomically replace one changed snapshot and attest its exact bytes.
+
+    The external record distinguishes writer-emitted v2 snapshots from
+    self-relabelled files.  It is deliberately an anti-malformation layer,
+    not a secret-key signature or a substitute for claim-path source hashes.
+    """
+
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    try:
+        if path.read_bytes() == payload:
+            return
+    except FileNotFoundError:
+        pass
     tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-    tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_bytes(payload)
     os.replace(tmp, path)
+    if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+        raw_after_replace = path.read_bytes()
+        append_log(
+            log_path or path.parent.parent / "campaign_log.jsonl",
+            campaign_provenance_attestation(
+                manifest_path=path,
+                raw_manifest_bytes=raw_after_replace,
+                manifest=manifest,
+                timestamp=utc_timestamp(),
+            ),
+        )
 
 
 def verify_cooldown_raw_provenance(
@@ -2478,19 +2518,17 @@ def verify_cooldown_raw_provenance(
 
 
 def prior_campaign_cooldown_evidence(
-    runs_dir: Path, analysis_manifest_id: str | None
+    runs_dir: Path,
+    analysis_manifest_id: str | None,
+    log_path: Path | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Recover persistent per-member gate evidence from earlier invocations."""
     evidence: dict[str, dict[str, Any]] = {}
-    manifest_dir = runs_dir / "campaign_manifests"
-    if not manifest_dir.is_dir():
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
         return evidence
-    for path in sorted(manifest_dir.glob("*.json")):
-        raw, problem = _load_json_object(path, "campaign provenance")
-        if problem is not None or raw is None:
-            continue
-        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-            continue
+    for record in catalog:
+        raw = record.value
         if (
             analysis_manifest_id is not None
             and raw.get("analysis_manifest_id") != analysis_manifest_id
@@ -2806,17 +2844,14 @@ def prior_campaign_cooldown_anchor(
     runs_dir: Path,
     analysis_manifest_id: str | None,
     policy_sha256: str,
+    log_path: Path | None = None,
 ) -> dict[str, Any] | None:
-    manifest_dir = runs_dir / "campaign_manifests"
     candidates: list[dict[str, Any]] = []
-    if not manifest_dir.is_dir():
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
         return None
-    for path in sorted(manifest_dir.glob("*.json")):
-        raw, problem = _load_json_object(path, "campaign provenance")
-        if problem is not None or raw is None:
-            continue
-        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-            continue
+    for record in catalog:
+        raw = record.value
         if (
             analysis_manifest_id is not None
             and raw.get("analysis_manifest_id") != analysis_manifest_id
@@ -3037,6 +3072,9 @@ def record_campaign_member_provenance(
     execution: str,
     cooldown: dict[str, Any] | None,
     cooldowns_by_bundle: dict[str, dict[str, Any]] | None = None,
+    existing_incomplete: bool = False,
+    existing_invalid: bool = False,
+    log_path: Path | None = None,
 ) -> None:
     recorded_cooldown = (
         cooldown if execution in {"invoked", "blocked_before_invoke"} else None
@@ -3074,6 +3112,16 @@ def record_campaign_member_provenance(
             "preceding_campaign_cooldown": recorded_cooldown,
             "claim_evidence": claim_evidence,
         }
+    if execution == "existing":
+        if existing_incomplete:
+            outcome = "incomplete"
+        elif existing_invalid or any(evaluation.failed for evaluation in evaluations):
+            outcome = "failed"
+        elif any(evaluation.waived for evaluation in evaluations):
+            outcome = "waived"
+        else:
+            outcome = "usable"
+        member_row["outcome"] = outcome
     if cooldowns_by_bundle is not None:
         member_row["physical_members"] = [
             {
@@ -3093,7 +3141,7 @@ def record_campaign_member_provenance(
         for gate in gate_candidates
         if isinstance(gate, dict) and gate.get("result") != "first_run_exempt"
     )
-    write_campaign_provenance(path, manifest)
+    write_campaign_provenance(path, manifest, log_path)
 
 
 def skipped_log_extra(state: ExistingState) -> dict[str, Any] | None:
@@ -3793,16 +3841,13 @@ def _whole_window_campaign_membership(
     but mark membership unresolved so they cannot pass.
     """
 
-    manifest_dir = runs_dir / "campaign_manifests"
     supersession_entries = _valid_supersession_entries(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
-    if manifest_dir.is_dir():
-        for manifest_path in sorted(manifest_dir.glob("*.json")):
-            manifest, problem = _load_json_object(manifest_path, "campaign manifest")
-            if problem is not None or manifest is None:
-                continue
-            if manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-                continue
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is not None:
+        for record in catalog:
+            manifest_path = record.path
+            manifest = record.value
             binding = manifest.get("campaign_policy")
             if not isinstance(binding, dict) or binding.get("sha256") != policy_sha256:
                 continue
@@ -4110,52 +4155,79 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     policy_binding = load_campaign_policy(args.campaign_policy)
     bundle_id = args.record_supersession
     assert isinstance(bundle_id, str)
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    manifest_dir = runs_dir / "campaign_manifests"
-    if manifest_dir.is_dir():
-        for manifest_path in sorted(manifest_dir.glob("*.json")):
-            manifest, problem = _load_json_object(
-                manifest_path, "campaign manifest"
-            )
-            binding = (
-                manifest.get("campaign_policy")
-                if isinstance(manifest, dict)
-                else None
-            )
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
+        raise ValueError("campaign provenance catalog authentication failed")
+    log_rows = load_campaign_log_rows(log_path)
+    if log_rows is None:
+        raise ValueError("campaign log is not object-only JSONL")
+    grouped_events: dict[
+        str, dict[str, list[tuple[str, dict[str, Any]]]]
+    ] = {}
+    consumed_legacy_log_rows: set[int] = set()
+    for record in catalog:
+        manifest_path = record.path
+        manifest = record.value
+        binding = manifest.get("campaign_policy")
+        if (
+            not isinstance(binding, Mapping)
+            or binding.get("sha256") != policy_binding.sha256
+            or isinstance(manifest.get("attempt_ledger_selection"), Mapping)
+        ):
+            continue
+        identity = manifest.get("analysis_manifest_id")
+        key = identity if isinstance(identity, str) and identity else "<none>"
+        source = {
+            "path": f"campaign_manifests/{manifest_path.name}",
+            "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+        }
+        members = manifest["members"]
+        assert isinstance(members, list)
+        for member_index, member in enumerate(members):
+            assert isinstance(member, Mapping)
+            execution = member.get("execution")
+            if execution == "blocked_before_invoke":
+                continue
             if (
-                problem is not None
-                or manifest is None
-                or manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA
-                or not isinstance(binding, dict)
-                or binding.get("sha256") != policy_binding.sha256
-                or isinstance(manifest.get("attempt_ledger_selection"), dict)
+                execution == "existing"
+                and manifest.get("schema_version")
+                == CAMPAIGN_PROVENANCE_SCHEMA_V1
             ):
-                continue
-            identity = manifest.get("analysis_manifest_id")
-            key = identity if isinstance(identity, str) and identity else "<none>"
-            members = manifest.get("members")
-            if not isinstance(members, list):
-                continue
-            source = source_manifest_descriptors(runs_dir, [manifest_path])[0]
-            for member_index, member in enumerate(members):
-                if (
-                    not isinstance(member, dict)
-                    or member.get("execution") != "invoked"
-                    or not isinstance(member.get("bundle_ids"), list)
-                ):
-                    continue
-                for bundle_index, value in enumerate(member["bundle_ids"]):
-                    if value == bundle_id:
-                        grouped.setdefault(key, []).append(
-                            {
-                                "bundle_id": bundle_id,
-                                "source_manifest": source,
-                                "member_index": member_index,
-                                "bundle_index": bundle_index,
-                            }
-                        )
+                legacy_binding = legacy_existing_outcome(
+                    manifest_name=manifest_path.name,
+                    member=member,
+                    log_rows=log_rows,
+                )
+                if legacy_binding is None:
+                    raise ValueError(
+                        "v1 existing campaign member lacks a unique operational-log binding"
+                    )
+                _, log_row_index = legacy_binding
+                if log_row_index in consumed_legacy_log_rows:
+                    raise ValueError(
+                        "one campaign log row cannot authenticate two v1 existing members"
+                    )
+                consumed_legacy_log_rows.add(log_row_index)
+            member_bundle_ids = member.get("bundle_ids")
+            assert isinstance(member_bundle_ids, list)
+            for bundle_index, value in enumerate(member_bundle_ids):
+                descriptor = {
+                    "bundle_id": value,
+                    "source_manifest": dict(source),
+                    "member_index": member_index,
+                    "bundle_index": bundle_index,
+                }
+                grouped_events.setdefault(key, {}).setdefault(value, []).append(
+                    (str(execution), descriptor)
+                )
+    grouped = {
+        key: normalized_campaign_representatives(events)
+        for key, events in grouped_events.items()
+    }
     duplicate_groups = [
-        occurrences for occurrences in grouped.values() if len(occurrences) > 1
+        projection.get(bundle_id, [])
+        for projection in grouped.values()
+        if len(projection.get(bundle_id, [])) > 1
     ]
     if len(duplicate_groups) != 1:
         raise ValueError(
@@ -5127,17 +5199,17 @@ def run_axi_spec_campaign(
         frozen_cooldown_anchor: dict[str, Any] | None = None
         if policy_binding is not None:
             campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-                state.path.parent, runs_dir, state, policy_binding
+                state.path.parent, runs_dir, state, policy_binding, log_path
             )
             frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
-                runs_dir, state.manifest_id, policy_binding.sha256
+                runs_dir, state.manifest_id, policy_binding.sha256, log_path
             )
             campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
             campaign_provenance["cooldown_anchor_strategy"] = (
                 "first_admission_passing"
             )
             write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance
+                campaign_provenance_path, campaign_provenance, log_path
             )
             try:
                 environment_preflight = campaign_environment_preflight(
@@ -5155,7 +5227,7 @@ def run_axi_spec_campaign(
                 assert campaign_provenance is not None
                 campaign_provenance["environment_preflight"] = environment_error
                 write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance
+                    campaign_provenance_path, campaign_provenance, log_path
                 )
                 if log_path is not None:
                     append_environment_preflight_verdict(
@@ -5171,7 +5243,9 @@ def run_axi_spec_campaign(
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
             campaign_provenance["environment_preflight"] = environment_preflight
-            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
+            )
             if not environment_preflight["admitted"]:
                 evaluation = environment_preflight["evaluation"]
                 print(
@@ -5321,7 +5395,7 @@ def run_axi_spec_campaign(
                     }
                     campaign_provenance["first_physical_run_id"] = physical_run_id
                     write_campaign_provenance(
-                        campaign_provenance_path, campaign_provenance
+                        campaign_provenance_path, campaign_provenance, log_path
                     )
                 elif (
                     previous_physical_info is not None
@@ -5339,7 +5413,7 @@ def run_axi_spec_campaign(
                     if campaign_provenance.get("first_physical_run_id") is None:
                         campaign_provenance["first_physical_run_id"] = physical_run_id
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
                 else:
                     cooldown_note = {
@@ -5365,6 +5439,7 @@ def run_axi_spec_campaign(
                         execution="blocked_before_invoke",
                         cooldown=cooldown_note,
                         cooldowns_by_bundle={physical_run_id: cooldown_note},
+                        log_path=log_path,
                     )
                     print(
                         f"failed {entry_id}: cooldown v2 failed closed before "
@@ -5484,6 +5559,7 @@ def run_axi_spec_campaign(
                             if cooldown_note is not None
                             else None
                         ),
+                        log_path=log_path,
                     )
                 detail = str(dispatch_error) if dispatch_error is not None else reason
                 print(f"failed {entry_id} attempt={attempt_ordinal}: {detail}", file=sys.stderr)
@@ -5511,6 +5587,7 @@ def run_axi_spec_campaign(
                         if cooldown_note is not None
                         else None
                     ),
+                    log_path=log_path,
                 )
                 previous_physical_info = info
                 previous_physical_evaluation = evaluation
@@ -5528,7 +5605,7 @@ def run_axi_spec_campaign(
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
             print(f"ok {entry_id} attempt={attempt_ordinal}: bundle={bundle_path}")
 
@@ -5586,7 +5663,7 @@ def run_axi_spec_campaign(
                     }
                 )
             cooldown_evidence = prior_campaign_cooldown_evidence(
-                runs_dir, manifest_id
+                runs_dir, manifest_id, log_path
             )
             quarantined: list[dict[str, Any]] = []
             quarantine_unresolved = False
@@ -5669,7 +5746,7 @@ def run_axi_spec_campaign(
                 "quarantined_attempts": quarantined,
             }
             write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance
+                campaign_provenance_path, campaign_provenance, log_path
             )
 
         entry_by_id = {entry["entry_id"]: entry for entry in entries}
@@ -5708,7 +5785,9 @@ def run_axi_spec_campaign(
         if policy_binding is not None:
             assert campaign_provenance_path is not None
             selected_evaluations: list[MemberEvaluation] = []
-            cooldowns = prior_campaign_cooldown_evidence(runs_dir, manifest_id)
+            cooldowns = prior_campaign_cooldown_evidence(
+                runs_dir, manifest_id, log_path
+            )
             for entry_id, row in sorted(selected.items()):
                 if row is None or not isinstance(row.get("run_id"), str):
                     continue
@@ -5970,11 +6049,13 @@ def run_campaign(args: argparse.Namespace) -> int:
     cooldown_by_bundle = prior_campaign_cooldown_evidence(
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
+        log_path,
     )
     frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
         policy_binding.sha256,
+        log_path,
     )
     neg8_reference_expected = any(
         isinstance(item, ConfigInfo) and _is_neg8_reference_start(item)
@@ -5997,7 +6078,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-            config_dir, runs_dir, analysis_manifest, policy_binding
+            config_dir, runs_dir, analysis_manifest, policy_binding, log_path
         )
         campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
         campaign_provenance["cooldown_anchor_strategy"] = (
@@ -6005,7 +6086,9 @@ def run_campaign(args: argparse.Namespace) -> int:
             if neg8_reference_expected
             else "first_admission_passing"
         )
-        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+        write_campaign_provenance(
+            campaign_provenance_path, campaign_provenance, log_path
+        )
         try:
             environment_preflight = campaign_environment_preflight(
                 policy_binding,
@@ -6019,7 +6102,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                 "reason": f"{type(exc).__name__}: {exc}",
             }
             campaign_provenance["environment_preflight"] = environment_error
-            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
+            )
             append_environment_preflight_verdict(
                 log_path,
                 analysis_manifest=analysis_manifest,
@@ -6035,7 +6120,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                 pass
             return 2
         campaign_provenance["environment_preflight"] = environment_preflight
-        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+        write_campaign_provenance(
+            campaign_provenance_path, campaign_provenance, log_path
+        )
         preflight["environment_guard"] = environment_preflight
         if not environment_preflight["admitted"]:
             evaluation = environment_preflight["evaluation"]
@@ -6244,6 +6331,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                         if evaluations
                         else None
                     ),
+                    existing_invalid=status == "failed",
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6312,6 +6401,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                     evaluations=existing_evaluations,
                     execution="existing",
                     cooldown=None,
+                    existing_incomplete=True,
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6350,7 +6441,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "recorded_at": utc_timestamp(),
                 }
                 campaign_provenance["first_physical_run_id"] = first_physical_bundle_id
-                write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+                write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                )
             elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
                     previous_info=previous_physical_info,
@@ -6392,6 +6485,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     evaluations=[],
                     execution="blocked_before_invoke",
                     cooldown=cooldown_note,
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6457,7 +6551,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
             missing_after_run = [
                 evaluation.bundle_id
@@ -6533,6 +6627,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 execution="invoked",
                 cooldown=cooldown_note,
                 cooldowns_by_bundle=physical_cooldowns,
+                log_path=log_path,
             )
             append_log(
                 log_path,

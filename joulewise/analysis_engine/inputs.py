@@ -21,6 +21,12 @@ from typing import Any, Callable, Mapping, Sequence
 
 from joulewise.analysis_manifest import validate_analysis_manifest
 from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.campaign_provenance import (
+    CAMPAIGN_PROVENANCE_SCHEMA_V1,
+    legacy_existing_outcome,
+    load_authenticated_campaign_catalog,
+    load_campaign_log_rows,
+)
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -51,8 +57,6 @@ from joulewise.cooldown import cooldown_disposition_from_raw
 
 
 StrictValidator = Callable[[Path, bool], list[str]]
-CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
-CAMPAIGN_PROVENANCE_SCHEMAS = frozenset({CAMPAIGN_PROVENANCE_SCHEMA})
 GOVERNED_IDLE_VARIANCE_METHOD_V1 = "newey_west_bartlett_10s_iid_floor_v1"
 GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
     "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
@@ -1413,162 +1417,10 @@ def _cooldown_result_from_raw(rows: Sequence[Any]) -> str | None:
     return cooldown_disposition_from_raw(rows)
 
 
-def _campaign_log_rows(runs_root: Path) -> list[Mapping[str, Any]] | None:
-    """Read an object-only campaign log, with corruption failing globally."""
-
-    path = runs_root / "campaign_log.jsonl"
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return []
-    except (OSError, UnicodeDecodeError):
-        return None
-    rows: list[Mapping[str, Any]] = []
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(value, Mapping):
-            return None
-        rows.append(value)
-    return rows
-
-
-def _campaign_log_manifest_matches(value: object, manifest_name: str) -> bool:
-    """Match a relocatable manifest reference without basename-only aliasing."""
-
-    if not isinstance(value, str) or not value:
-        return False
-    parts = PurePosixPath(value).parts
-    return len(parts) >= 2 and parts[-2:] == ("campaign_manifests", manifest_name)
-
-
-def _legacy_log_member_classification(value: object) -> str | None:
-    if not isinstance(value, Mapping):
-        return None
-    classification = value.get("collection_classification")
-    if classification not in {"usable", "failed", "waived"}:
-        return None
-    flags = value.get("collection_integrity_flags")
-    if not isinstance(flags, list) or any(not isinstance(flag, str) for flag in flags):
-        return None
-    if classification == "usable" and not (
-        value.get("status") == "succeeded"
-        and value.get("strict_valid") is True
-        and not flags
-    ):
-        return None
-    if classification == "waived" and not isinstance(value.get("waiver"), Mapping):
-        return None
-    strict_valid = value.get("strict_valid")
-    if classification == "failed":
-        if strict_valid is not True and strict_valid is not False:
-            return None
-        if value.get("status") == "succeeded" and strict_valid is True and not flags:
-            return None
-    return classification
-
-
-def _legacy_existing_outcome(
-    *,
-    manifest_name: str,
-    member: Mapping[str, Any],
-    log_rows: Sequence[Mapping[str, Any]],
-) -> tuple[str, int] | None:
-    """Bind one v1 existing row to its exact outcome and log-row identity."""
-
-    run_id = member.get("run_id")
-    config = member.get("config")
-    bundle_ids = member.get("bundle_ids")
-    if (
-        not isinstance(run_id, str)
-        or not run_id
-        or not isinstance(config, str)
-        or not config
-        or not isinstance(bundle_ids, list)
-        or not bundle_ids
-        or any(not isinstance(bundle_id, str) or not bundle_id for bundle_id in bundle_ids)
-    ):
-        return None
-    candidates: list[tuple[int, Mapping[str, Any]]] = []
-    for row_index, row in enumerate(log_rows):
-        if not _campaign_log_manifest_matches(
-            row.get("campaign_provenance_manifest"), manifest_name
-        ):
-            continue
-        log_config = row.get("config")
-        if (
-            row.get("run_id") != run_id
-            or not isinstance(log_config, str)
-            or Path(log_config).name != config
-        ):
-            continue
-        candidates.append((row_index, row))
-    if len(candidates) != 1:
-        return None
-    row_index, candidate = candidates[0]
-    members = candidate.get("members")
-    if not isinstance(members, list):
-        return None
-    logged_bundle_ids = [
-        value.get("bundle_id") if isinstance(value, Mapping) else None
-        for value in members
-    ]
-    if logged_bundle_ids != bundle_ids:
-        return None
-    classifications = [
-        _legacy_log_member_classification(value) for value in members
-    ]
-    if any(value is None for value in classifications):
-        return None
-    status = candidate.get("status")
-    if status == "skipped" and set(classifications) == {"usable"}:
-        return "usable", row_index
-    if (
-        status == "waived"
-        and "waived" in classifications
-        and set(classifications) <= {"usable", "waived"}
-    ):
-        return "waived", row_index
-    if status == "failed":
-        return "failed", row_index
-    if status == "incomplete_existing":
-        return "incomplete", row_index
-    return None
-
-
-def _campaign_manifest_member_shape_valid(member: object) -> bool:
-    """Validate the member invariants that make a catalog manifest readable."""
-
-    if not isinstance(member, Mapping):
-        return False
-    execution = member.get("execution")
-    bundle_ids = member.get("bundle_ids")
-    if (
-        not isinstance(execution, str)
-        or execution not in {"invoked", "existing", "blocked_before_invoke"}
-        or not isinstance(member.get("run_id"), str)
-        or not member["run_id"]
-        or not isinstance(bundle_ids, list)
-        or not bundle_ids
-        or any(
-            not isinstance(bundle_id, str) or not bundle_id
-            for bundle_id in bundle_ids
-        )
-        or "outcome" in member
-    ):
-        return False
-    if execution != "existing":
-        return True
-    config = member.get("config")
-    return isinstance(config, str) and bool(config)
-
-
 def campaign_cooldown_evidence(
-    runs_root: Path, manifest_id: str | None = None
+    runs_root: Path,
+    manifest_id: str | None = None,
+    log_path: Path | None = None,
 ) -> dict[str, Mapping[str, Any]]:
     """Public reuse point for the hash-verified campaign cooldown join (T0.4).
 
@@ -1580,7 +1432,7 @@ def campaign_cooldown_evidence(
     or ambiguous evidence never verifies.
     """
 
-    return _campaign_cooldown_evidence(Path(runs_root), manifest_id)
+    return _campaign_cooldown_evidence(Path(runs_root), manifest_id, log_path)
 
 
 def _cooldown_result_bundle_ids(
@@ -1601,8 +1453,37 @@ def _cooldown_result_bundle_ids(
     return result
 
 
+def normalized_campaign_representatives(
+    declaration_events: Mapping[str, Sequence[tuple[str, Any]]],
+) -> dict[str, list[Any]]:
+    """Project declaration order into join-owned physical representatives.
+
+    An invoked row always begins a new occurrence.  Existing aliases attach to
+    the most recent occurrence; only a leading existing segment contributes a
+    nonselectable representative.  The payload is deliberately generic so the
+    cooldown join can carry tuple identities while the recorder carries the
+    same identities with current source-manifest hashes.
+    """
+
+    result: dict[str, list[Any]] = {}
+    for bundle_id, events in declaration_events.items():
+        representatives: list[Any] = []
+        has_current = False
+        for execution, payload in events:
+            if execution == "invoked":
+                representatives.append(payload)
+                has_current = True
+            elif execution == "existing" and not has_current:
+                representatives.append(payload)
+                has_current = True
+        result[bundle_id] = representatives
+    return result
+
+
 def _campaign_cooldown_evidence(
-    runs_root: Path, manifest_id: str | None
+    runs_root: Path,
+    manifest_id: str | None,
+    log_path: Path | None = None,
 ) -> dict[str, Mapping[str, Any]]:
     """Recover only independently verified per-member campaign provenance.
 
@@ -1618,35 +1499,16 @@ def _campaign_cooldown_evidence(
     """
 
     manifest_dir = runs_root / "campaign_manifests"
-    if not manifest_dir.is_dir():
+    catalog_records = load_authenticated_campaign_catalog(runs_root, log_path)
+    if catalog_records is None:
         return {}
-    catalog: list[tuple[Path, Mapping[str, Any]]] = []
-    for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return {}
-        if not isinstance(raw, Mapping):
-            return {}
-        schema_version = raw.get("schema_version")
-        if (
-            not isinstance(schema_version, str)
-            or schema_version not in CAMPAIGN_PROVENANCE_SCHEMAS
-            or not isinstance(raw.get("members"), list)
-        ):
-            return {}
-        if any(
-            not _campaign_manifest_member_shape_valid(member)
-            for member in raw["members"]
-        ):
-            return {}
-        catalog.append((path, raw))
+    catalog = [(record.path, record.value) for record in catalog_records]
 
-    supersession_read = supersession_entry_validation_results(runs_root)
+    supersession_read = supersession_entry_validation_results(runs_root, log_path)
     if supersession_read is None:
         return {}
     raw_supersessions, supersession_validations = supersession_read
-    log_rows = _campaign_log_rows(runs_root)
+    log_rows = load_campaign_log_rows(log_path or runs_root / "campaign_log.jsonl")
     if log_rows is None:
         return {}
 
@@ -1666,8 +1528,11 @@ def _campaign_cooldown_evidence(
             assert isinstance(bundle_ids, list)
             if execution == "blocked_before_invoke":
                 continue
-            if execution == "existing":
-                binding = _legacy_existing_outcome(
+            if (
+                execution == "existing"
+                and raw.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V1
+            ):
+                binding = legacy_existing_outcome(
                     manifest_name=path.name,
                     member=member,
                     log_rows=log_rows,
@@ -1686,21 +1551,13 @@ def _campaign_cooldown_evidence(
                     )
                 )
 
-    declarations: dict[str, list[tuple[str, int, int]]] = {}
+    declarations = normalized_campaign_representatives(declaration_events)
     invoked_declarations: dict[str, list[tuple[str, int, int]]] = {}
     for bundle_id, events in declaration_events.items():
-        representatives: list[tuple[str, int, int]] = []
         invoked: list[tuple[str, int, int]] = []
-        current: tuple[str, int, int] | None = None
         for execution, identity in events:
             if execution == "invoked":
-                current = identity
-                representatives.append(identity)
                 invoked.append(identity)
-            elif current is None:
-                current = identity
-                representatives.append(identity)
-        declarations[bundle_id] = representatives
         invoked_declarations[bundle_id] = invoked
 
     emissions: dict[
@@ -1900,21 +1757,16 @@ def _campaign_claim_records(
     with the recorded cleanup subset fails closed downstream.
     """
 
-    manifest_dir = runs_root / "campaign_manifests"
-    if not manifest_dir.is_dir():
+    catalog = load_authenticated_campaign_catalog(runs_root)
+    if catalog is None:
         return {}
     result: dict[str, tuple[str, ...]] = {}
     cleanup_scopes = {"runtime_cleanup_ok", "remote_cleanup_failed"}
-    for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            continue
+    for record in catalog:
+        path = record.path
+        raw = record.value
         if (
-            not isinstance(raw, Mapping)
-            or raw.get("schema_version") not in CAMPAIGN_PROVENANCE_SCHEMAS
-            or raw.get("analysis_manifest_id") != manifest_id
-            or not isinstance(raw.get("members"), list)
+            raw.get("analysis_manifest_id") != manifest_id
         ):
             continue
         for member in raw["members"]:
