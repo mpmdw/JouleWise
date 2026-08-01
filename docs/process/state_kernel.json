@@ -576,6 +576,44 @@
       "status": "queued",
       "stop_card": null
     },
+    "CAL-BRACKET-D079-01": {
+      "acceptance": {
+        "evidence": [
+          "The calibration-bracket selector implements the D-079 acceptance-v2 semantics: provenance-bound derived screen, freshness refusal, budgeted excess allowance for ordinary repeatability excess, evaluation-basis recording, and propagation of the calibration-drift allowance into floor/claim consumption",
+          "Candidate authentication and latest-valid-pre / earliest-valid-post selection are preserved unchanged, including exact T1 binding-field matching",
+          "Defect-shaped regressions: a bracket slightly above the obsolete 0.010 hard value but within the derived screen + budget PASSES with the allowance recorded; a bracket beyond budget REFUSES; T1-mismatched candidates remain ineligible"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CAL-BRACKET-D079-01/acceptance",
+          "label": "CAL-BRACKET-D079-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The bracket selector stops hard-refusing at the obsolete 0.010 policy cliff and implements the D-079 derived screen plus budgeted allowance with propagation, without weakening candidate authentication or T1 exact matching."
+      },
+      "authority": {
+        "label": "MET-VERDICT-ADJ-01 independent audit group (b): D-079 calibration budget unimplemented in joulewise/calibration_bracketing.py (hard cliff at policy 0.010; no allowance emitted or propagated)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MET-VERDICT-ADJ-01 audit: retry rejection is CORRECT under T1 exact stationarity; relaxing exact matching would be contract-false",
+            "path": "docs/contracts/powermetrics_fiducial.md"
+          },
+          "rule": "Do not relax T1 exact binding-field matching or candidate authentication as part of this repair; window A's bracket remains unformable and its FAILED verdict untouched"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement D-079 calibration acceptance v2 in the bracket selector (non-salvage severity escalator: every ordinary complete window slightly above the obsolete 0.010 hard cliff is currently mis-ruled): derived screen, freshness refusal, excess allowance, evaluation-basis recording, floor/claim propagation. ~5-8 files, delegated claim-semantics commit with independent review.",
+      "id": "CAL-BRACKET-D079-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 13,
+      "status": "queued",
+      "stop_card": null
+    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -1068,6 +1106,54 @@
       "rank": 11,
       "status": "queued",
       "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
+      "stop_card": null
+    },
+    "MEMBERSHIP-READER-FAILOPEN-01": {
+      "acceptance": {
+        "evidence": [
+          "Malformed or validation-failed supersession catalog entries fail the affected candidate group instead of being silently skipped, reusing supersession_entry_validation_results per the D-093 visibility contract",
+          "Unreadable or wrong-schema campaign-manifest candidates refuse rather than being silently skipped where membership is claim-bearing",
+          "Valid-plus-malformed same-bundle regressions cover both the supersession catalog and manifest parsing paths"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MEMBERSHIP-READER-FAILOPEN-01/acceptance",
+          "label": "MEMBERSHIP-READER-FAILOPEN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The whole-window membership path stops silently skipping malformed supersession and manifest records, closing the latent fail-open the MET-VERDICT-ADJ-01 audit identified."
+      },
+      "authority": {
+        "label": "MET-VERDICT-ADJ-01 independent audit group (c) latent finding: _valid_supersession_entries and manifest parsing silently skip malformed records (D-093/D-094 visibility contract)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Commit 3 lands first (shared write surface in the membership/reader path)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "COOLDOWN-JOIN-GAUNTLET-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-093 raw-vs-validated visibility; D-094 counting domain",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Recognizable invalid same-bundle records must remain visible and force ambiguity; closure must not re-scope or downgrade the D-093 contract"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the latent fail-open in whole-window membership reading: malformed supersession catalog entries and unreadable/wrong-schema manifests are silently skipped today (did not affect windows A/B, whose bytes are valid, but could fail open on a non-salvage window). ~2 files, 100-200 lines, delegated commit (claim-bearing membership semantics).",
+      "id": "MEMBERSHIP-READER-FAILOPEN-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 14,
+      "status": "queued",
       "stop_card": null
     },
     "MET-VERDICT-ADJ-01": {
