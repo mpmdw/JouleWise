@@ -43,7 +43,60 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-01 ~07:00 PT checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-08-01 desk session, second checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. The morning checkpoint's desk queue is
+LARGELY EXECUTED this session (details in the prior section below, now
+historical). State:
+
+1. **MET-VERDICT-ADJ-01 COMPLETE → D-100.** Independent Sol xhigh audit
+   (bench-verified) classified the three groups: (a) CONTRACT GAP,
+   (b) MACHINERY DEFECT with CORRECT retry rejection — window A's
+   post-cal retry binds a T1-incompatible power_policy (immutable), so
+   window A is PERMANENTLY non-claim-bearing and C1 re-collects;
+   (c) CORRECT for window B (pure cascade from the twice-declared
+   dangler) + one latent fail-open. Group (a) ran the full rule-11 cold
+   gate (cold Fable ruling → bounded follow-up after the custody sweep
+   found idle-phase bundles → condition (b) re-drawn to the
+   measurand-existence line → independent Opus refutation, 14 findings
+   → magistrate synthesis). **D-100** adopted S2-A in the S3
+   consumption-semantics-dispatch shape: original FAILED rows stand BY
+   CONSTRUCTION; window B re-evaluation licensed only after the repair
+   lands (`salvage_dangler_exclusion_v1`, new pinned basis); the three
+   p2048-o0128 additivity cells are barred regardless (frozen min_n=8,
+   7 present) and that shape re-collects in window C. Packet + audit +
+   both rulings + refutation summary: `.desk/adjudication_packet_20260801/`
+   (UNTRACKED — do not commit; fold into a run report before deleting).
+2. **Repair rows queued:** MET-DANGLER-DISPOSITION-01 (A2, the D-100
+   repair commit), CAL-BRACKET-D079-01 (D-079 budget unimplemented in
+   calibration_bracketing.py — non-salvage escalator), MEMBERSHIP-
+   READER-FAILOPEN-01 (latent malformed-record skip). MET-WINDOW-C-01
+   now hard-depends on the dangler repair + Ed §5A.
+3. **Gauntlet commit 3 IN FLIGHT:** design consult DONE (Sol xhigh;
+   both D-097 riders ruled: classification NOT consumed beyond
+   authentication; attestation is anti-malformation, distinct from the
+   tamper layer; per-snapshot attestations). Ratified design brief:
+   C3-DESIGN.md (untracked) at the worktree root
+   /private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/scratchpad/c3-worktree
+   (branch impl/cooldown-gauntlet-c3 off 44f0744). Implementation Sol
+   session was RUNNING at this checkpoint (codex subagent gates the
+   commit after envelope validation + diff inspection + suite replay;
+   report lands at <scratchpad>/c3-impl-report.md). ON HARVEST: lead
+   verification (suite + the two canonical mapping hashes 57/57
+   aa48a122…, 47/47 5005816a…) → independent read-only delta audit →
+   fix rounds w/ delta re-audits → PR (D-072 gate). MANIFEST-CONTRAST
+   v3 (D-095) is SEQUENTIAL AFTER commit 3 (shared write surface).
+4. Landed on main this session: 1ea651f (D-098/D-099, council addendum
+   III, kernel rows), 44f0744 (DRIFT + PROJECT_STATUS plain-language),
+   1694eb9 (repair rows), 209201c (D-100 + adjudication retired),
+   plus the CLAIMS_STATUS second refresh (this commit).
+5. Still owed: commit-3 harvest chain (step 3); run report for this
+   desk session; skill-usage log; consistency sweep before the final
+   bookkeeping commit. Ed owes: network-time restore (`sudo
+   systemsetup -setusingnetworktime on`). Ed context: timeline
+   pressure is LOW (started ~3 weeks early; horizon December).
+
+## PRIOR ACTIVE RESUME SCRIPT (2026-08-01 ~07:00 PT checkpoint; EXECUTED this desk session — retained for the collection facts)
 
 Successor is FABLE, MAGISTRATE. BOTH metrology windows are now
 SALVAGE-CLOSED and post-processed; tonight's session (2026-08-01
