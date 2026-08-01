@@ -125,8 +125,12 @@ STATE AS OF THIS CHECKPOINT:
       unchanged from the prior checkpoint's desk lane.
    4. MANIFEST-CONTRAST v3 (D-095) -> multi-cell mint (D-088 cl.3(c))
       -> gated contrast claim, chain unchanged.
-   5. Bookkeeping owed: run report for tonight (2026-08-01 metrology
-      window B session), WINDOW_STATUS refresh, kernel refresh, D-098
+   5. Bookkeeping owed: ~~run report~~ [DONE
+      `docs/run_reports/2026-08-01-metrology-window-b.md`],
+      ~~WINDOW_STATUS refresh~~ [DONE], **`CLAIMS_STATUS.md` created
+      (Ed-requested standing doc, repo root): the ONE home for claim
+      validity state — refresh it whenever claim-bearing state
+      changes**; still owed: kernel refresh, D-098
       candidate (window A salvage + deviation + verdict-FAIL record),
       D-099 candidate (window B arc + bird protocol + streaming
       hazard), queue row for metrology window C (remainder), council
