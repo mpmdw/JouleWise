@@ -26,10 +26,12 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -85,7 +87,22 @@ from joulewise.idle_admission import (  # noqa: E402
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     ANCHOR_SHIFT_ENVELOPE_METHODS,
     cleanup_claim_evidence_flags,
+    normalized_campaign_representatives,
     token_provenance_from_artifacts,
+)
+from joulewise.campaign_provenance import (  # noqa: E402
+    CAMPAIGN_PROVENANCE_SCHEMA_V1,
+    CAMPAIGN_PROVENANCE_SCHEMA_V2,
+    campaign_provenance_manifest_wire_path,
+    campaign_provenance_attestation,
+    legacy_existing_outcome,
+    load_authenticated_campaign_catalog,
+    load_campaign_log_rows,
+    load_campaign_provenance_manifest,
+    matching_campaign_provenance_attestations,
+    matching_campaign_provenance_lineage_attestations,
+    parse_campaign_log_bytes,
+    shape_valid_campaign_provenance_attestations,
 )
 from joulewise.analysis_engine.ratio import (  # noqa: E402
     estimation_metric,
@@ -150,7 +167,8 @@ ORDER_MANIFEST_NAME = "order_manifest.json"
 ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
-CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
+CAMPAIGN_PROVENANCE_SCHEMA = CAMPAIGN_PROVENANCE_SCHEMA_V2
+_CAMPAIGN_ATTESTATION_APPEND_LOCK = threading.Lock()
 IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA = (
     "joulewise.idle_admission_whole_window_verdict.v1"
 )
@@ -495,6 +513,23 @@ VALID_WAIVER_SCOPES = {
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["repair-campaign-provenance"]:
+        repair_parser = argparse.ArgumentParser(
+            prog="run_campaign.py repair-campaign-provenance",
+            description=(
+                "Repair lineage-proven v2 provenance strands under "
+                "campaign.lock."
+            ),
+        )
+        repair_parser.add_argument(
+            "--runs-dir", default="runs", help="Bundle output directory"
+        )
+        repair_parser.add_argument("--log", help="JSONL campaign log path")
+        repair_args = repair_parser.parse_args(arguments[1:])
+        repair_args.repair_campaign_provenance = True
+        return repair_args
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
@@ -609,7 +644,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--reason",
         help="Operator reason required by --record-supersession",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
+    args.repair_campaign_provenance = False
     if (args.instrument_calibration_dir is None) != (
         args.instrument_power_policy is None
     ):
@@ -1155,16 +1191,109 @@ def _require_external_campaign_log(log_path: Path) -> None:
         )
 
 
-def append_log(log_path: Path, row: dict[str, Any]) -> None:
+def _assert_ascii_mapping_keys(value: Any, path: str = "row") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_path = f"{path}[{key!r}]"
+            if not isinstance(key, str) or not key.isascii():
+                raise ValueError(
+                    f"campaign log row key must be str and ASCII at {key_path}"
+                )
+            _assert_ascii_mapping_keys(child, key_path)
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            _assert_ascii_mapping_keys(child, f"{path}[{index}]")
+
+
+def _quarantine_torn_campaign_tail(log_path: Path, tail: bytes) -> Path:
+    stamp = utc_timestamp().replace("-", "").replace(":", "").replace(".", "")
+    digest = hashlib.sha256(tail).hexdigest()[:12]
+    sidecar = log_path.with_name(f"{log_path.name}.torn-{stamp}-{digest}")
+    try:
+        fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            written = os.write(fd, tail)
+            if written != len(tail):
+                raise OSError(
+                    f"short torn-tail quarantine write: wrote {written} of {len(tail)} bytes"
+                )
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except BaseException as exc:
+        print(
+            f"warning: FAILED to preserve {len(tail)} torn campaign-log "
+            f"bytes to {sidecar} ({exc!r}); append refused, log untouched",
+            file=sys.stderr,
+        )
+        raise
+    print(
+        f"warning: preserved {len(tail)} torn campaign-log bytes at {sidecar}",
+        file=sys.stderr,
+    )
+    return sidecar
+
+
+def append_log(
+    log_path: Path,
+    row: dict[str, Any],
+    *,
+    lock_token: CampaignLockToken | None = None,
+) -> None:
+    """Durably append one JSONL row with one ``O_APPEND`` write.
+
+    A prior valid but unterminated row receives its separator in the same
+    write.  A malformed unterminated tail is the one tolerated torn-tail
+    artifact and is truncated before appending; earlier corruption refuses.
+    """
+
+    if lock_token is None:
+        raise RuntimeError("campaign log append requires a held campaign.lock")
+    ownership = _validated_campaign_lock_ownership(lock_token)
+    resolved_log_parent = Path(log_path).resolve(strict=False).parent
+    if (
+        resolved_log_parent != ownership.runs_root
+        and os.path.lexists(resolved_log_parent / "campaign.lock")
+    ):
+        raise RuntimeError(
+            "campaign log append cannot use a foreign lock token for lockable "
+            f"root {resolved_log_parent}"
+        )
     _require_external_campaign_log(log_path)
+    _assert_ascii_mapping_keys(row)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    if log_path.exists() and log_path.stat().st_size > 0:
-        with log_path.open("rb+") as handle:
-            handle.seek(-1, os.SEEK_END)
-            if handle.read(1) != b"\n":
-                handle.write(b"\n")
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    prefix = b""
+    try:
+        existing = log_path.read_bytes()
+    except FileNotFoundError:
+        existing = b""
+    if existing:
+        parsed, final_segment = parse_campaign_log_bytes(existing)
+        if parsed is None:
+            raise ValueError("campaign log contains non-final corruption")
+        if not existing.endswith(b"\n"):
+            tail_start = existing.rfind(b"\n") + 1
+            if final_segment == "mapping":
+                prefix = b"\n"
+            else:
+                _quarantine_torn_campaign_tail(log_path, existing[tail_start:])
+                truncate_fd = os.open(log_path, os.O_WRONLY)
+                try:
+                    os.ftruncate(truncate_fd, tail_start)
+                    os.fsync(truncate_fd)
+                finally:
+                    os.close(truncate_fd)
+    payload = prefix + (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        written = os.write(fd, payload)
+        if written != len(payload):
+            raise OSError(
+                f"short campaign-log append: wrote {written} of {len(payload)} bytes"
+            )
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def log_row(
@@ -2370,10 +2499,33 @@ def duplicate_run_id_error(items: list[ConfigInfo | ConfigError]) -> str | None:
     return "duplicate sanitized run_id(s): " + "; ".join(parts)
 
 
-def acquire_campaign_lock(runs_dir: Path) -> Path:
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = runs_dir / "campaign.lock"
-    content = f"pid={os.getpid()} created_at={utc_timestamp()}\n"
+@dataclass(frozen=True)
+class CampaignLockToken:
+    """Unforgeable process-local identity for one lock acquisition."""
+
+    lock_path: Path
+    runs_root: Path
+    st_dev: int
+    st_ino: int
+    nonce: str
+    acquisition_id: str
+
+
+_CAMPAIGN_LOCK_OWNERSHIP: dict[Path, CampaignLockToken] = {}
+_CAMPAIGN_LOCK_OWNERSHIP_LOCK = threading.Lock()
+
+
+def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
+    runs_root = Path(runs_dir).resolve(strict=False)
+    runs_root.mkdir(parents=True, exist_ok=True)
+    lock_path = runs_root / "campaign.lock"
+    nonce = secrets.token_hex(32)
+    acquisition_id = secrets.token_hex(32)
+    content = (
+        f"pid={os.getpid()} nonce={nonce} created_at={utc_timestamp()}\n"
+    )
+    fd = -1
+    token: CampaignLockToken | None = None
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
@@ -2385,9 +2537,224 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
             f"another campaign appears to be running (lock {lock_path}, created {existing}); "
             "if no campaign is running, delete the lock file and retry"
         ) from exc
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(content)
-    return lock_path
+    try:
+        acquired_stat = os.fstat(fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        token = CampaignLockToken(
+            lock_path=lock_path,
+            runs_root=runs_root,
+            st_dev=acquired_stat.st_dev,
+            st_ino=acquired_stat.st_ino,
+            nonce=nonce,
+            acquisition_id=acquisition_id,
+        )
+        with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+            _CAMPAIGN_LOCK_OWNERSHIP[lock_path] = token
+        return token
+    except BaseException as acquisition_exc:
+        cleanup_exc: BaseException | None = None
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except BaseException as exc:
+                cleanup_exc = exc
+        try:
+            lock_path.unlink(missing_ok=True)
+        except BaseException as exc:
+            if cleanup_exc is None:
+                cleanup_exc = exc
+        else:
+            if token is not None:
+                try:
+                    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+                        if _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path) is token:
+                            _CAMPAIGN_LOCK_OWNERSHIP.pop(lock_path)
+                except BaseException as exc:
+                    if cleanup_exc is None:
+                        cleanup_exc = exc
+        if cleanup_exc is not None:
+            raise acquisition_exc from cleanup_exc
+        raise
+
+
+def _validated_campaign_lock_ownership(
+    token: CampaignLockToken,
+) -> CampaignLockToken:
+    """Return acquisition identity only for this process's live lock."""
+
+    if not isinstance(token, CampaignLockToken):
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    lock_path = token.lock_path
+    if lock_path.name != "campaign.lock":
+        raise RuntimeError("campaign log append requires a campaign.lock token")
+    resolved_lock_path = lock_path.resolve(strict=False)
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        current_token = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
+    if current_token is not token:
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    if (
+        resolved_lock_path != token.lock_path
+        or resolved_lock_path != token.runs_root / "campaign.lock"
+    ):
+        raise RuntimeError(
+            "campaign provenance log write requires the registered runs-root lock"
+        )
+    fd = -1
+    try:
+        fd = os.open(resolved_lock_path, os.O_RDONLY)
+        current_stat = os.fstat(fd)
+        content_parts: list[bytes] = []
+        while True:
+            part = os.read(fd, 65536)
+            if not part:
+                break
+            content_parts.append(part)
+        content = b"".join(content_parts).decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"campaign provenance log write requires held lock {resolved_lock_path}"
+        ) from exc
+    finally:
+        if fd >= 0:
+            os.close(fd)
+    if (
+        (current_stat.st_dev, current_stat.st_ino)
+        != (token.st_dev, token.st_ino)
+        or not content.startswith(f"pid={os.getpid()} ")
+        or f" nonce={token.nonce} " not in content
+    ):
+        raise RuntimeError(
+            "campaign provenance log write requires this process's acquisition "
+            f"identity for {resolved_lock_path}"
+        )
+    return token
+
+
+def _assert_campaign_lock_token(
+    token: CampaignLockToken,
+) -> CampaignLockToken:
+    """Mechanically prove this process owns the supplied campaign lock."""
+
+    return _validated_campaign_lock_ownership(token)
+
+
+def _assert_campaign_lock_held(runs_dir: Path) -> CampaignLockToken:
+    """Assert an acquired lock; never mint ownership from file contents."""
+
+    lock_path = Path(runs_dir).resolve(strict=False) / "campaign.lock"
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        token = _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path)
+    if token is None:
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    return _assert_campaign_lock_token(token)
+
+
+def release_campaign_lock(
+    token: CampaignLockToken, *, in_flight: BaseException | None = None
+) -> None:
+    """Idempotently release only the lock identity acquired by this process."""
+
+    if not isinstance(token, CampaignLockToken):
+        return
+    resolved_lock_path = token.lock_path
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is not token:
+            return
+        try:
+            current_stat = os.stat(resolved_lock_path)
+        except FileNotFoundError:
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+            return
+        except OSError as cleanup_exc:
+            if in_flight is not None:
+                raise in_flight from cleanup_exc
+            raise
+        if (current_stat.st_dev, current_stat.st_ino) != (
+            token.st_dev,
+            token.st_ino,
+        ):
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+            return
+        try:
+            resolved_lock_path.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            if in_flight is not None:
+                raise in_flight from cleanup_exc
+            raise
+        if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is token:
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+
+
+def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
+    """Write and fsync one unique temporary manifest snapshot."""
+
+    tmp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.tmp-",
+            delete=False,
+        ) as handle:
+            tmp = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o644)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+    assert tmp is not None
+    return tmp
+
+
+def _append_campaign_provenance_attestation_if_missing(
+    *,
+    manifest_path: Path,
+    raw_manifest_bytes: bytes,
+    manifest: Mapping[str, Any],
+    log_path: Path,
+) -> bool:
+    """Append one current-byte attestation, idempotently under the lock."""
+
+    lock_token = _assert_campaign_lock_held(manifest_path.parent.parent)
+    with _CAMPAIGN_ATTESTATION_APPEND_LOCK:
+        rows = load_campaign_log_rows(log_path)
+        if rows is None:
+            raise ValueError("campaign log is not object-only JSONL")
+        matches = matching_campaign_provenance_attestations(
+            rows,
+            manifest_path=manifest_path,
+            raw_manifest_bytes=raw_manifest_bytes,
+            manifest=manifest,
+        )
+        if matches:
+            return False
+        append_log(
+            log_path,
+            campaign_provenance_attestation(
+                manifest_path=manifest_path,
+                raw_manifest_bytes=raw_manifest_bytes,
+                manifest=manifest,
+                timestamp=utc_timestamp(),
+            ),
+            lock_token=lock_token,
+        )
+        return True
 
 
 def new_campaign_provenance(
@@ -2395,6 +2762,7 @@ def new_campaign_provenance(
     runs_dir: Path,
     analysis_manifest: AnalysisManifestState | None,
     policy_binding: CampaignPolicyBinding | None = None,
+    log_path: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     session_id = f"campaign-{stamp}-p{os.getpid()}"
@@ -2416,15 +2784,163 @@ def new_campaign_provenance(
         "members": [],
         "cooldown_gates": [],
     }
-    write_campaign_provenance(path, manifest)
+    write_campaign_provenance(path, manifest, log_path)
     return path, manifest
 
 
-def write_campaign_provenance(path: Path, manifest: dict[str, Any]) -> None:
+def write_campaign_provenance(
+    path: Path,
+    manifest: dict[str, Any],
+    log_path: Path | None = None,
+) -> None:
+    """Atomically replace one changed snapshot and attest its exact bytes.
+
+    The external record distinguishes writer-emitted v2 snapshots from
+    self-relabelled files.  It is deliberately an anti-malformation layer,
+    not a secret-key signature or a substitute for claim-path source hashes.
+    """
+
+    campaign_provenance_manifest_wire_path(path)
+    if path.parent.name != "campaign_manifests":
+        raise ValueError(
+            "campaign provenance writer path must be inside campaign_manifests/"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-    tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    try:
+        if path.read_bytes() == payload:
+            if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+                selected_log = log_path or path.parent.parent / "campaign_log.jsonl"
+                _append_campaign_provenance_attestation_if_missing(
+                    manifest_path=path,
+                    raw_manifest_bytes=payload,
+                    manifest=manifest,
+                    log_path=selected_log,
+                )
+            return
+    except FileNotFoundError:
+        pass
+    tmp = _write_campaign_provenance_tmp(path, payload)
+    try:
+        if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+            _append_campaign_provenance_attestation_if_missing(
+                manifest_path=path,
+                raw_manifest_bytes=payload,
+                manifest=manifest,
+                log_path=(
+                    log_path or path.parent.parent / "campaign_log.jsonl"
+                ),
+            )
+        os.replace(tmp, path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
+    """Explicitly repair lineage-proven v2 strands under campaign.lock."""
+
+    runs_dir = Path(args.runs_dir)
+    if not runs_dir.is_dir():
+        raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
+    lock_path: CampaignLockToken | None = None
+    report: dict[str, Any] = {
+        "operation": "repair-campaign-provenance",
+        "repaired": [],
+        "already_authenticated": [],
+        "refused": [],
+    }
+    in_flight: BaseException | None = None
+    try:
+        lock_path = acquire_campaign_lock(runs_dir)
+        rows = load_campaign_log_rows(log_path)
+        if rows is None:
+            report["refused"].append(
+                {"path": str(log_path), "reason": "campaign_log_malformed"}
+            )
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+        attestations = shape_valid_campaign_provenance_attestations(rows)
+        if attestations is None:
+            report["refused"].append(
+                {
+                    "path": str(log_path),
+                    "reason": "campaign_attestation_malformed",
+                }
+            )
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+
+        repairable: list[tuple[Path, bytes, Mapping[str, Any]]] = []
+        manifest_dir = runs_dir / "campaign_manifests"
+        for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
+            record = load_campaign_provenance_manifest(path)
+            if record is None:
+                report["refused"].append(
+                    {
+                        "path": str(path),
+                        "reason": "campaign_manifest_malformed",
+                    }
+                )
+                continue
+            manifest = record.value
+            if manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2:
+                continue
+            current = matching_campaign_provenance_attestations(
+                attestations,
+                manifest_path=path,
+                raw_manifest_bytes=record.raw_bytes,
+                manifest=manifest,
+            )
+            if len(current) == 1:
+                report["already_authenticated"].append(str(path))
+                continue
+            if len(current) > 1:
+                report["refused"].append(
+                    {"path": str(path), "reason": "duplicate_current_attestation"}
+                )
+                continue
+            lineage = matching_campaign_provenance_lineage_attestations(
+                attestations,
+                manifest_path=path,
+                manifest=manifest,
+            )
+            if not lineage:
+                report["refused"].append(
+                    {"path": str(path), "reason": "lineage_unproven"}
+                )
+                continue
+            repairable.append((path, record.raw_bytes, manifest))
+
+        if report["refused"]:
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+        for path, raw_bytes, manifest in repairable:
+            if _append_campaign_provenance_attestation_if_missing(
+                manifest_path=path,
+                raw_manifest_bytes=raw_bytes,
+                manifest=manifest,
+                log_path=log_path,
+            ):
+                report["repaired"].append(str(path))
+        report["status"] = "repaired" if report["repaired"] else "no_change"
+        print(json.dumps(report, sort_keys=True))
+        return 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
+    finally:
+        if lock_path is not None:
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def verify_cooldown_raw_provenance(
@@ -2478,19 +2994,17 @@ def verify_cooldown_raw_provenance(
 
 
 def prior_campaign_cooldown_evidence(
-    runs_dir: Path, analysis_manifest_id: str | None
+    runs_dir: Path,
+    analysis_manifest_id: str | None,
+    log_path: Path | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Recover persistent per-member gate evidence from earlier invocations."""
     evidence: dict[str, dict[str, Any]] = {}
-    manifest_dir = runs_dir / "campaign_manifests"
-    if not manifest_dir.is_dir():
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
         return evidence
-    for path in sorted(manifest_dir.glob("*.json")):
-        raw, problem = _load_json_object(path, "campaign provenance")
-        if problem is not None or raw is None:
-            continue
-        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-            continue
+    for record in catalog:
+        raw = record.value
         if (
             analysis_manifest_id is not None
             and raw.get("analysis_manifest_id") != analysis_manifest_id
@@ -2806,17 +3320,14 @@ def prior_campaign_cooldown_anchor(
     runs_dir: Path,
     analysis_manifest_id: str | None,
     policy_sha256: str,
+    log_path: Path | None = None,
 ) -> dict[str, Any] | None:
-    manifest_dir = runs_dir / "campaign_manifests"
     candidates: list[dict[str, Any]] = []
-    if not manifest_dir.is_dir():
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
         return None
-    for path in sorted(manifest_dir.glob("*.json")):
-        raw, problem = _load_json_object(path, "campaign provenance")
-        if problem is not None or raw is None:
-            continue
-        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-            continue
+    for record in catalog:
+        raw = record.value
         if (
             analysis_manifest_id is not None
             and raw.get("analysis_manifest_id") != analysis_manifest_id
@@ -3037,6 +3548,9 @@ def record_campaign_member_provenance(
     execution: str,
     cooldown: dict[str, Any] | None,
     cooldowns_by_bundle: dict[str, dict[str, Any]] | None = None,
+    existing_incomplete: bool = False,
+    existing_invalid: bool = False,
+    log_path: Path | None = None,
 ) -> None:
     recorded_cooldown = (
         cooldown if execution in {"invoked", "blocked_before_invoke"} else None
@@ -3074,6 +3588,16 @@ def record_campaign_member_provenance(
             "preceding_campaign_cooldown": recorded_cooldown,
             "claim_evidence": claim_evidence,
         }
+    if execution == "existing":
+        if existing_incomplete:
+            outcome = "incomplete"
+        elif existing_invalid or any(evaluation.failed for evaluation in evaluations):
+            outcome = "failed"
+        elif any(evaluation.waived for evaluation in evaluations):
+            outcome = "waived"
+        else:
+            outcome = "usable"
+        member_row["outcome"] = outcome
     if cooldowns_by_bundle is not None:
         member_row["physical_members"] = [
             {
@@ -3093,7 +3617,7 @@ def record_campaign_member_provenance(
         for gate in gate_candidates
         if isinstance(gate, dict) and gate.get("result") != "first_run_exempt"
     )
-    write_campaign_provenance(path, manifest)
+    write_campaign_provenance(path, manifest, log_path)
 
 
 def skipped_log_extra(state: ExistingState) -> dict[str, Any] | None:
@@ -3793,16 +4317,13 @@ def _whole_window_campaign_membership(
     but mark membership unresolved so they cannot pass.
     """
 
-    manifest_dir = runs_dir / "campaign_manifests"
     supersession_entries = _valid_supersession_entries(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
-    if manifest_dir.is_dir():
-        for manifest_path in sorted(manifest_dir.glob("*.json")):
-            manifest, problem = _load_json_object(manifest_path, "campaign manifest")
-            if problem is not None or manifest is None:
-                continue
-            if manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
-                continue
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is not None:
+        for record in catalog:
+            manifest_path = record.path
+            manifest = record.value
             binding = manifest.get("campaign_policy")
             if not isinstance(binding, dict) or binding.get("sha256") != policy_sha256:
                 continue
@@ -4104,58 +4625,107 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
-    root = runs_dir.resolve()
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
+    lock_token = acquire_campaign_lock(runs_dir)
+    in_flight: BaseException | None = None
+    try:
+        return _run_record_supersession_locked(
+            args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
+        )
+    except BaseException as exc:
+        in_flight = exc
+        raise
+    finally:
+        release_campaign_lock(lock_token, in_flight=in_flight)
+
+
+def _run_record_supersession_locked(
+    args: argparse.Namespace,
+    *,
+    runs_dir: Path,
+    log_path: Path,
+    lock_token: CampaignLockToken,
+) -> int:
+    """Construct and append a supersession while ``campaign.lock`` is held."""
+
+    root = runs_dir.resolve()
     policy_binding = load_campaign_policy(args.campaign_policy)
     bundle_id = args.record_supersession
     assert isinstance(bundle_id, str)
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    manifest_dir = runs_dir / "campaign_manifests"
-    if manifest_dir.is_dir():
-        for manifest_path in sorted(manifest_dir.glob("*.json")):
-            manifest, problem = _load_json_object(
-                manifest_path, "campaign manifest"
-            )
-            binding = (
-                manifest.get("campaign_policy")
-                if isinstance(manifest, dict)
-                else None
-            )
+    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    if catalog is None:
+        raise ValueError("campaign provenance catalog authentication failed")
+    log_rows = load_campaign_log_rows(log_path)
+    if log_rows is None:
+        raise ValueError("campaign log is not object-only JSONL")
+    grouped_events: dict[
+        str, dict[str, list[tuple[str, dict[str, Any]]]]
+    ] = {}
+    consumed_legacy_log_rows: set[int] = set()
+    for record in catalog:
+        manifest_path = record.path
+        manifest = record.value
+        binding = manifest.get("campaign_policy")
+        if (
+            not isinstance(binding, Mapping)
+            or binding.get("sha256") != policy_binding.sha256
+            or isinstance(manifest.get("attempt_ledger_selection"), Mapping)
+        ):
+            continue
+        identity = manifest.get("analysis_manifest_id")
+        key = identity if isinstance(identity, str) and identity else "<none>"
+        source = {
+            "path": f"campaign_manifests/{manifest_path.name}",
+            "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+        }
+        members = manifest["members"]
+        assert isinstance(members, list)
+        for member_index, member in enumerate(members):
+            assert isinstance(member, Mapping)
+            execution = member.get("execution")
+            if execution == "blocked_before_invoke":
+                continue
             if (
-                problem is not None
-                or manifest is None
-                or manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA
-                or not isinstance(binding, dict)
-                or binding.get("sha256") != policy_binding.sha256
-                or isinstance(manifest.get("attempt_ledger_selection"), dict)
+                execution == "existing"
+                and manifest.get("schema_version")
+                == CAMPAIGN_PROVENANCE_SCHEMA_V1
             ):
-                continue
-            identity = manifest.get("analysis_manifest_id")
-            key = identity if isinstance(identity, str) and identity else "<none>"
-            members = manifest.get("members")
-            if not isinstance(members, list):
-                continue
-            source = source_manifest_descriptors(runs_dir, [manifest_path])[0]
-            for member_index, member in enumerate(members):
-                if (
-                    not isinstance(member, dict)
-                    or member.get("execution") != "invoked"
-                    or not isinstance(member.get("bundle_ids"), list)
-                ):
-                    continue
-                for bundle_index, value in enumerate(member["bundle_ids"]):
-                    if value == bundle_id:
-                        grouped.setdefault(key, []).append(
-                            {
-                                "bundle_id": bundle_id,
-                                "source_manifest": source,
-                                "member_index": member_index,
-                                "bundle_index": bundle_index,
-                            }
-                        )
+                legacy_binding = legacy_existing_outcome(
+                    manifest_name=manifest_path.name,
+                    member=member,
+                    log_rows=log_rows,
+                )
+                if legacy_binding is None:
+                    raise ValueError(
+                        "v1 existing campaign member lacks a unique operational-log binding"
+                    )
+                _, log_row_index = legacy_binding
+                if log_row_index in consumed_legacy_log_rows:
+                    raise ValueError(
+                        "one campaign log row cannot authenticate two v1 existing members"
+                    )
+                consumed_legacy_log_rows.add(log_row_index)
+            member_bundle_ids = member.get("bundle_ids")
+            assert isinstance(member_bundle_ids, list)
+            for bundle_index, value in enumerate(member_bundle_ids):
+                descriptor = {
+                    "bundle_id": value,
+                    "source_manifest": dict(source),
+                    "member_index": member_index,
+                    "bundle_index": bundle_index,
+                }
+                grouped_events.setdefault(key, {}).setdefault(value, []).append(
+                    (str(execution), descriptor)
+                )
+    grouped = {
+        key: normalized_campaign_representatives(events)
+        for key, events in grouped_events.items()
+    }
     duplicate_groups = [
-        occurrences for occurrences in grouped.values() if len(occurrences) > 1
+        projection.get(bundle_id, [])
+        for projection in grouped.values()
+        if len(projection.get(bundle_id, [])) > 1
     ]
     if len(duplicate_groups) != 1:
         raise ValueError(
@@ -4196,7 +4766,7 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     row["entry_sha256"] = supersession_entry_sha256(row)
     if not validate_occurrence_supersession_entry(row, runs_dir):
         raise ValueError("constructed supersession entry failed validation")
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
     print(json.dumps(row, sort_keys=True))
     return 0
 
@@ -4238,12 +4808,34 @@ def run_derive_neg8_drift_bound(args: argparse.Namespace) -> int:
 def run_whole_window_verdict(args: argparse.Namespace) -> int:
     """Emit the prospective NEG-8 verdict across a completed runs root."""
 
-    evaluation_started_at = utc_timestamp()
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
+    lock_token = acquire_campaign_lock(runs_dir)
+    in_flight: BaseException | None = None
+    try:
+        return _run_whole_window_verdict_locked(
+            args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
+        )
+    except BaseException as exc:
+        in_flight = exc
+        raise
+    finally:
+        release_campaign_lock(lock_token, in_flight=in_flight)
+
+
+def _run_whole_window_verdict_locked(
+    args: argparse.Namespace,
+    *,
+    runs_dir: Path,
+    log_path: Path,
+    lock_token: CampaignLockToken,
+) -> int:
+    """Evaluate and append the whole-window verdict under the campaign lock."""
+
+    evaluation_started_at = utc_timestamp()
     policy_binding = load_campaign_policy(args.campaign_policy)
     neg8_drift_bound = load_neg8_drift_bound_artifact(
         getattr(args, "neg8_drift_bound", None)
@@ -4353,7 +4945,7 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         bundle_ids=row["bundle_ids"],
         source_manifests=source_descriptors,
     )
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
     print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
     print(f"  decision: {bracket_decision}")
     for condition in core["conditions"]:
@@ -4806,6 +5398,7 @@ def print_verdict(
 def append_verdict(
     log_path: Path,
     *,
+    lock_token: CampaignLockToken,
     collection_verdict: str,
     collection_reasons: list[str],
     categories: dict[str, list[str]],
@@ -4845,12 +5438,13 @@ def append_verdict(
         row["idle_admission_core"] = idle_admission_core
     if warning is not None:
         row["block_order_warning"] = warning
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
 
 
 def append_environment_preflight_verdict(
     log_path: Path,
     *,
+    lock_token: CampaignLockToken,
     analysis_manifest: AnalysisManifestState | None,
     campaign_provenance_path: Path | None,
     preflight: dict[str, Any],
@@ -4864,6 +5458,7 @@ def append_environment_preflight_verdict(
     categories = {"usable": [], "waived": [], "failed": [], "missing": []}
     append_verdict(
         log_path,
+        lock_token=lock_token,
         collection_verdict="invalid",
         collection_reasons=[reason],
         categories=categories,
@@ -5116,7 +5711,8 @@ def run_axi_spec_campaign(
     else:
         _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
-    lock_path: Path | None = None
+    lock_path: CampaignLockToken | None = None
+    in_flight: BaseException | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
         child_environment: dict[str, str] | None = None
@@ -5127,17 +5723,17 @@ def run_axi_spec_campaign(
         frozen_cooldown_anchor: dict[str, Any] | None = None
         if policy_binding is not None:
             campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-                state.path.parent, runs_dir, state, policy_binding
+                state.path.parent, runs_dir, state, policy_binding, log_path
             )
             frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
-                runs_dir, state.manifest_id, policy_binding.sha256
+                runs_dir, state.manifest_id, policy_binding.sha256, log_path
             )
             campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
             campaign_provenance["cooldown_anchor_strategy"] = (
                 "first_admission_passing"
             )
             write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance
+                campaign_provenance_path, campaign_provenance, log_path
             )
             try:
                 environment_preflight = campaign_environment_preflight(
@@ -5155,11 +5751,12 @@ def run_axi_spec_campaign(
                 assert campaign_provenance is not None
                 campaign_provenance["environment_preflight"] = environment_error
                 write_campaign_provenance(
-                    campaign_provenance_path, campaign_provenance
+                    campaign_provenance_path, campaign_provenance, log_path
                 )
                 if log_path is not None:
                     append_environment_preflight_verdict(
                         log_path,
+                        lock_token=lock_path,
                         analysis_manifest=state,
                         campaign_provenance_path=campaign_provenance_path,
                         preflight=preflight or {},
@@ -5171,7 +5768,9 @@ def run_axi_spec_campaign(
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
             campaign_provenance["environment_preflight"] = environment_preflight
-            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
+            )
             if not environment_preflight["admitted"]:
                 evaluation = environment_preflight["evaluation"]
                 print(
@@ -5192,6 +5791,7 @@ def run_axi_spec_campaign(
                 if log_path is not None:
                     append_environment_preflight_verdict(
                         log_path,
+                        lock_token=lock_path,
                         analysis_manifest=state,
                         campaign_provenance_path=campaign_provenance_path,
                         preflight=preflight or {},
@@ -5321,7 +5921,7 @@ def run_axi_spec_campaign(
                     }
                     campaign_provenance["first_physical_run_id"] = physical_run_id
                     write_campaign_provenance(
-                        campaign_provenance_path, campaign_provenance
+                        campaign_provenance_path, campaign_provenance, log_path
                     )
                 elif (
                     previous_physical_info is not None
@@ -5339,7 +5939,7 @@ def run_axi_spec_campaign(
                     if campaign_provenance.get("first_physical_run_id") is None:
                         campaign_provenance["first_physical_run_id"] = physical_run_id
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
                 else:
                     cooldown_note = {
@@ -5365,6 +5965,7 @@ def run_axi_spec_campaign(
                         execution="blocked_before_invoke",
                         cooldown=cooldown_note,
                         cooldowns_by_bundle={physical_run_id: cooldown_note},
+                        log_path=log_path,
                     )
                     print(
                         f"failed {entry_id}: cooldown v2 failed closed before "
@@ -5484,6 +6085,7 @@ def run_axi_spec_campaign(
                             if cooldown_note is not None
                             else None
                         ),
+                        log_path=log_path,
                     )
                 detail = str(dispatch_error) if dispatch_error is not None else reason
                 print(f"failed {entry_id} attempt={attempt_ordinal}: {detail}", file=sys.stderr)
@@ -5511,6 +6113,7 @@ def run_axi_spec_campaign(
                         if cooldown_note is not None
                         else None
                     ),
+                    log_path=log_path,
                 )
                 previous_physical_info = info
                 previous_physical_evaluation = evaluation
@@ -5528,7 +6131,7 @@ def run_axi_spec_campaign(
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
             print(f"ok {entry_id} attempt={attempt_ordinal}: bundle={bundle_path}")
 
@@ -5586,7 +6189,7 @@ def run_axi_spec_campaign(
                     }
                 )
             cooldown_evidence = prior_campaign_cooldown_evidence(
-                runs_dir, manifest_id
+                runs_dir, manifest_id, log_path
             )
             quarantined: list[dict[str, Any]] = []
             quarantine_unresolved = False
@@ -5669,7 +6272,7 @@ def run_axi_spec_campaign(
                 "quarantined_attempts": quarantined,
             }
             write_campaign_provenance(
-                campaign_provenance_path, campaign_provenance
+                campaign_provenance_path, campaign_provenance, log_path
             )
 
         entry_by_id = {entry["entry_id"]: entry for entry in entries}
@@ -5708,7 +6311,9 @@ def run_axi_spec_campaign(
         if policy_binding is not None:
             assert campaign_provenance_path is not None
             selected_evaluations: list[MemberEvaluation] = []
-            cooldowns = prior_campaign_cooldown_evidence(runs_dir, manifest_id)
+            cooldowns = prior_campaign_cooldown_evidence(
+                runs_dir, manifest_id, log_path
+            )
             for entry_id, row in sorted(selected.items()):
                 if row is None or not isinstance(row.get("run_id"), str):
                     continue
@@ -5792,7 +6397,7 @@ def run_axi_spec_campaign(
                 source_manifests=descriptors,
             )
             if log_path is not None:
-                append_log(log_path, whole_row)
+                append_log(log_path, whole_row, lock_token=lock_path)
                 categories = classify_campaign_members(selected_evaluations, [])
                 collection_verdict, collection_reasons = collection_verdict_for(
                     categories
@@ -5808,6 +6413,7 @@ def run_axi_spec_campaign(
                 )
                 append_verdict(
                     log_path,
+                    lock_token=lock_path,
                     collection_verdict=collection_verdict,
                     collection_reasons=collection_reasons,
                     categories=categories,
@@ -5829,9 +6435,12 @@ def run_axi_spec_campaign(
                 return 1
         print(f"AXI attempt ledger: {ledger_path} sha256={axi_sha256_bytes(ledger_raw)}")
         return 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
         if lock_path is not None:
-            lock_path.unlink(missing_ok=True)
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_campaign(args: argparse.Namespace) -> int:
@@ -5894,19 +6503,28 @@ def run_campaign(args: argparse.Namespace) -> int:
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         if not args.dry_run:
             print_verdict("invalid", collection_reasons, categories, readiness)
-            append_verdict(
-                log_path,
-                collection_verdict="invalid",
-                collection_reasons=collection_reasons,
-                categories=categories,
-                claim_readiness=readiness,
-                analysis_manifest=analysis_manifest,
-                sampling_audit=sampling_audit_for(analysis_manifest),
-                members=[],
-                campaign_provenance_path=None,
-                warning=order_warning,
-                preflight=preflight,
-            )
+            verdict_lock = acquire_campaign_lock(runs_dir)
+            in_flight: BaseException | None = None
+            try:
+                append_verdict(
+                    log_path,
+                    lock_token=verdict_lock,
+                    collection_verdict="invalid",
+                    collection_reasons=collection_reasons,
+                    categories=categories,
+                    claim_readiness=readiness,
+                    analysis_manifest=analysis_manifest,
+                    sampling_audit=sampling_audit_for(analysis_manifest),
+                    members=[],
+                    campaign_provenance_path=None,
+                    warning=order_warning,
+                    preflight=preflight,
+                )
+            except BaseException as exc:
+                in_flight = exc
+                raise
+            finally:
+                release_campaign_lock(verdict_lock, in_flight=in_flight)
         return 1
     if analysis_manifest is not None and analysis_manifest.is_axi_v2:
         return run_axi_spec_campaign(
@@ -5944,24 +6562,34 @@ def run_campaign(args: argparse.Namespace) -> int:
         collection_reasons = ["analysis manifest validation failed before execution"]
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         print_verdict("invalid", collection_reasons, categories, readiness)
-        append_verdict(
-            log_path,
-            collection_verdict="invalid",
-            collection_reasons=collection_reasons,
-            categories=categories,
-            claim_readiness=readiness,
-            analysis_manifest=analysis_manifest,
-            sampling_audit=sampling_audit_for(analysis_manifest),
-            members=[],
-            campaign_provenance_path=None,
-            warning=order_warning,
-            preflight=preflight,
-        )
+        verdict_lock = acquire_campaign_lock(runs_dir)
+        in_flight: BaseException | None = None
+        try:
+            append_verdict(
+                log_path,
+                lock_token=verdict_lock,
+                collection_verdict="invalid",
+                collection_reasons=collection_reasons,
+                categories=categories,
+                claim_readiness=readiness,
+                analysis_manifest=analysis_manifest,
+                sampling_audit=sampling_audit_for(analysis_manifest),
+                members=[],
+                campaign_provenance_path=None,
+                warning=order_warning,
+                preflight=preflight,
+            )
+        except BaseException as exc:
+            in_flight = exc
+            raise
+        finally:
+            release_campaign_lock(verdict_lock, in_flight=in_flight)
         return 1
 
     counts: Counter[str] = Counter()
     failures = 0
-    lock_path: Path | None = None
+    lock_path: CampaignLockToken | None = None
+    in_flight: BaseException | None = None
     all_evaluations: list[MemberEvaluation] = []
     missing_members: list[str] = []
     previous_model_tag: str | None = None
@@ -5970,11 +6598,13 @@ def run_campaign(args: argparse.Namespace) -> int:
     cooldown_by_bundle = prior_campaign_cooldown_evidence(
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
+        log_path,
     )
     frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
         policy_binding.sha256,
+        log_path,
     )
     neg8_reference_expected = any(
         isinstance(item, ConfigInfo) and _is_neg8_reference_start(item)
@@ -5996,93 +6626,98 @@ def run_campaign(args: argparse.Namespace) -> int:
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-            config_dir, runs_dir, analysis_manifest, policy_binding
-        )
-        campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
-        campaign_provenance["cooldown_anchor_strategy"] = (
-            "neg8_reference_start_then_first_admission_passing"
-            if neg8_reference_expected
-            else "first_admission_passing"
-        )
-        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
-        try:
-            environment_preflight = campaign_environment_preflight(
-                policy_binding,
-                arm_quiet_mode=args.arm_quiet_mode,
-                arm_countdown_s=args.arm_countdown_s,
-                override_path=args.environment_override,
-            )
-        except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
-            environment_error = {
-                "status": "error",
-                "reason": f"{type(exc).__name__}: {exc}",
-            }
-            campaign_provenance["environment_preflight"] = environment_error
-            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
-            append_environment_preflight_verdict(
-                log_path,
-                analysis_manifest=analysis_manifest,
-                campaign_provenance_path=campaign_provenance_path,
-                preflight=preflight,
-                environment_guard=environment_error,
-                reason="environment preflight failed before member 1",
-            )
-            print(f"error: environment preflight failed: {exc}", file=sys.stderr)
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-            return 2
-        campaign_provenance["environment_preflight"] = environment_preflight
-        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
-        preflight["environment_guard"] = environment_preflight
-        if not environment_preflight["admitted"]:
-            evaluation = environment_preflight["evaluation"]
-            failed_findings = [
-                finding
-                for finding in evaluation["findings"]
-                if finding["status"] != "pass"
-            ]
-            print(
-                "ENVIRONMENT PREFLIGHT FAILED: "
-                + "; ".join(
-                    f"{row['field']}={row['actual']!r} ({row['status']})"
-                    for row in failed_findings
-                ),
-                file=sys.stderr,
-            )
-            print(
-                "override binding: "
-                f"snapshot_sha256={evaluation['snapshot_sha256']} "
-                f"findings_sha256={evaluation['findings_sha256']}",
-                file=sys.stderr,
-            )
-            append_environment_preflight_verdict(
-                log_path,
-                analysis_manifest=analysis_manifest,
-                campaign_provenance_path=campaign_provenance_path,
-                preflight=preflight,
-                environment_guard=environment_preflight,
-                reason="environment preflight rejected before member 1",
-            )
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-            return 1
-
-    child_environment = os.environ.copy()
-    child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
-    child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
-    if campaign_provenance is not None:
-        child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
-            campaign_provenance["environment_preflight"],
-            sort_keys=True,
-            separators=(",", ":"),
-        )
 
     try:
+        if not args.dry_run:
+            campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+                config_dir, runs_dir, analysis_manifest, policy_binding, log_path
+            )
+            campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
+            campaign_provenance["cooldown_anchor_strategy"] = (
+                "neg8_reference_start_then_first_admission_passing"
+                if neg8_reference_expected
+                else "first_admission_passing"
+            )
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
+            )
+            try:
+                environment_preflight = campaign_environment_preflight(
+                    policy_binding,
+                    arm_quiet_mode=args.arm_quiet_mode,
+                    arm_countdown_s=args.arm_countdown_s,
+                    override_path=args.environment_override,
+                )
+            except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
+                environment_error = {
+                    "status": "error",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+                campaign_provenance["environment_preflight"] = environment_error
+                write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                )
+                append_environment_preflight_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    analysis_manifest=analysis_manifest,
+                    campaign_provenance_path=campaign_provenance_path,
+                    preflight=preflight,
+                    environment_guard=environment_error,
+                    reason="environment preflight failed before member 1",
+                )
+                print(
+                    f"error: environment preflight failed: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            campaign_provenance["environment_preflight"] = environment_preflight
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
+            )
+            preflight["environment_guard"] = environment_preflight
+            if not environment_preflight["admitted"]:
+                evaluation = environment_preflight["evaluation"]
+                failed_findings = [
+                    finding
+                    for finding in evaluation["findings"]
+                    if finding["status"] != "pass"
+                ]
+                print(
+                    "ENVIRONMENT PREFLIGHT FAILED: "
+                    + "; ".join(
+                        f"{row['field']}={row['actual']!r} ({row['status']})"
+                        for row in failed_findings
+                    ),
+                    file=sys.stderr,
+                )
+                print(
+                    "override binding: "
+                    f"snapshot_sha256={evaluation['snapshot_sha256']} "
+                    f"findings_sha256={evaluation['findings_sha256']}",
+                    file=sys.stderr,
+                )
+                append_environment_preflight_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    analysis_manifest=analysis_manifest,
+                    campaign_provenance_path=campaign_provenance_path,
+                    preflight=preflight,
+                    environment_guard=environment_preflight,
+                    reason="environment preflight rejected before member 1",
+                )
+                return 1
+
+        child_environment = os.environ.copy()
+        child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
+        child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
+        if campaign_provenance is not None:
+            child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
+                campaign_provenance["environment_preflight"],
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+
         for item in items:
             if isinstance(item, ConfigError):
                 if args.dry_run:
@@ -6101,6 +6736,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=None,
                         extra={"error": item.message},
                     ),
+                    lock_token=lock_path,
                 )
                 counts["config_error"] += 1
                 if failures >= args.max_failures:
@@ -6203,7 +6839,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                             f"bundle={exc.bundle_id} detail={exc.detail}",
                             file=sys.stderr,
                         )
-                    append_log(log_path, gate_record)
+                    append_log(log_path, gate_record, lock_token=lock_path)
                 exit_code = None
                 duration_s = None
                 if status != "failed" and state.members_total is None:
@@ -6244,6 +6880,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                         if evaluations
                         else None
                     ),
+                    existing_invalid=status == "failed",
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6255,6 +6893,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=duration_s,
                         extra=extra,
                     ),
+                    lock_token=lock_path,
                 )
                 counts[status] += 1
                 if failures >= args.max_failures:
@@ -6312,6 +6951,8 @@ def run_campaign(args: argparse.Namespace) -> int:
                     evaluations=existing_evaluations,
                     execution="existing",
                     cooldown=None,
+                    existing_incomplete=True,
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6323,6 +6964,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=duration_s,
                         extra=extra,
                     ),
+                    lock_token=lock_path,
                 )
                 counts[status] += 1
                 if failures >= args.max_failures:
@@ -6350,7 +6992,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "recorded_at": utc_timestamp(),
                 }
                 campaign_provenance["first_physical_run_id"] = first_physical_bundle_id
-                write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+                write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                )
             elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
                     previous_info=previous_physical_info,
@@ -6392,6 +7036,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     evaluations=[],
                     execution="blocked_before_invoke",
                     cooldown=cooldown_note,
+                    log_path=log_path,
                 )
                 append_log(
                     log_path,
@@ -6410,6 +7055,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                             ),
                         },
                     ),
+                    lock_token=lock_path,
                 )
                 if failures >= args.max_failures:
                     break
@@ -6457,7 +7103,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         frozen_cooldown_anchor = candidate_anchor
                         campaign_provenance["cooldown_anchor"] = candidate_anchor
                         write_campaign_provenance(
-                            campaign_provenance_path, campaign_provenance
+                            campaign_provenance_path, campaign_provenance, log_path
                         )
             missing_after_run = [
                 evaluation.bundle_id
@@ -6491,7 +7137,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"detail={exc.detail}",
                         file=sys.stderr,
                     )
-                append_log(log_path, shakedown_record)
+                append_log(
+                    log_path, shakedown_record, lock_token=lock_path
+                )
             if status == "failed":
                 failures += 1
                 if exit_code == 0:
@@ -6533,6 +7181,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 execution="invoked",
                 cooldown=cooldown_note,
                 cooldowns_by_bundle=physical_cooldowns,
+                log_path=log_path,
             )
             append_log(
                 log_path,
@@ -6544,6 +7193,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     duration_s=duration_s,
                     extra=extra,
                 ),
+                lock_token=lock_path,
             )
             counts[status] += 1
             print(f"{status} {info.run_id}: exit={exit_code} duration_s={duration_s:.3f}")
@@ -6557,54 +7207,50 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             if failures >= args.max_failures:
                 break
-    finally:
-        if lock_path is not None:
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-
-    print("Summary:")
-    for status in STATUSES:
-        if counts[status]:
-            print(f"  {status}: {counts[status]}")
-    if args.dry_run:
-        return 0
-    categories = classify_campaign_members(all_evaluations, missing_members)
-    collection_verdict, collection_reasons = collection_verdict_for(categories)
-    sampling_audit = sampling_audit_for(analysis_manifest)
-    idle_admission_core = idle_admission_core_verdict(
-        all_evaluations,
-        policy_binding,
-        runs_root=runs_dir,
-        neg8_drift_bound=neg8_drift_bound,
-    )
-    extension = policy_binding.idle_admission_extension
-    claim_bearing = bool(
-        analysis_manifest is not None
-        and extension is not None
-        and extension.claim_bearing
-    )
-    claim_readiness = apply_idle_admission_claim_barrier(
-        claim_readiness_for(analysis_manifest, collection_verdict, all_evaluations),
-        idle_admission_core,
-        claim_bearing=claim_bearing,
-    )
-    print_verdict(
-        collection_verdict,
-        collection_reasons,
-        categories,
-        claim_readiness,
-    )
-    print("IDLE-ADMISSION CORE:")
-    if idle_admission_core["conditions"]:
-        for condition in idle_admission_core["conditions"]:
-            print(f"  condition: {condition}")
-    else:
-        print("  conditions: <none>")
-    if not args.dry_run:
+        print("Summary:")
+        for summary_status in STATUSES:
+            if counts[summary_status]:
+                print(f"  {summary_status}: {counts[summary_status]}")
+        if args.dry_run:
+            return 0
+        categories = classify_campaign_members(all_evaluations, missing_members)
+        collection_verdict, collection_reasons = collection_verdict_for(categories)
+        sampling_audit = sampling_audit_for(analysis_manifest)
+        idle_admission_core = idle_admission_core_verdict(
+            all_evaluations,
+            policy_binding,
+            runs_root=runs_dir,
+            neg8_drift_bound=neg8_drift_bound,
+        )
+        extension = policy_binding.idle_admission_extension
+        claim_bearing = bool(
+            analysis_manifest is not None
+            and extension is not None
+            and extension.claim_bearing
+        )
+        claim_readiness = apply_idle_admission_claim_barrier(
+            claim_readiness_for(
+                analysis_manifest, collection_verdict, all_evaluations
+            ),
+            idle_admission_core,
+            claim_bearing=claim_bearing,
+        )
+        print_verdict(
+            collection_verdict,
+            collection_reasons,
+            categories,
+            claim_readiness,
+        )
+        print("IDLE-ADMISSION CORE:")
+        if idle_admission_core["conditions"]:
+            for condition in idle_admission_core["conditions"]:
+                print(f"  condition: {condition}")
+        else:
+            print("  conditions: <none>")
+        assert lock_path is not None
         append_verdict(
             log_path,
+            lock_token=lock_path,
             collection_verdict=collection_verdict,
             collection_reasons=collection_reasons,
             categories=categories,
@@ -6617,14 +7263,21 @@ def run_campaign(args: argparse.Namespace) -> int:
             preflight=preflight,
             idle_admission_core=idle_admission_core,
         )
-    core_blocks_claim = bool(
-        claim_bearing and _idle_admission_claim_barrier_reasons(idle_admission_core)
-    )
-    return 1 if (
-        failures
-        or collection_verdict in {"blocked", "invalid"}
-        or core_blocks_claim
-    ) else 0
+        core_blocks_claim = bool(
+            claim_bearing
+            and _idle_admission_claim_barrier_reasons(idle_admission_core)
+        )
+        return 1 if (
+            failures
+            or collection_verdict in {"blocked", "invalid"}
+            or core_blocks_claim
+        ) else 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
+    finally:
+        if lock_path is not None:
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
@@ -6641,6 +7294,8 @@ def run_prompt_hash_check(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.repair_campaign_provenance:
+            return run_repair_campaign_provenance(args)
         if args.check_prompt_hashes is not None:
             return run_prompt_hash_check(args)
         if args.record_supersession is not None:

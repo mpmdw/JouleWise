@@ -1,0 +1,247 @@
+{
+  "analysis_manifest_id": null,
+  "campaign_policy": {
+    "calibration_bracketing": {
+      "calibration_bracket_max_drift_s": 0.01,
+      "require_bracket": true
+    },
+    "idle_admission_extension": {
+      "claim_bearing": true,
+      "policy_version": "idle-admission-core-v1",
+      "schema_version": "joulewise.idle_admission_extension.v1",
+      "sha256": "e664671eb4d39a6cec7c7d28c5f54ebe297bf5e7f0678b346918def7a376c0ad"
+    },
+    "policy_id": "quiet-mac-p2-production",
+    "policy_version": "environment-guard-cooldown-v2",
+    "profile": "production",
+    "schema_version": "joulewise.campaign_policy.v1",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+    "source": "/Users/edr/code/JouleWise/configs/campaign_policies/quiet_mac_p2_production.json"
+  },
+  "config_dir": "/Users/edr/code/JouleWise/configs/campaigns/window_references/midpoint",
+  "cooldown_anchor": {
+    "baseline": {
+      "duration_s": 36.286823069,
+      "gpu_freq_hz_mean": 4.506666666666667,
+      "gpu_freq_mhz_mean": 4.506666666666667,
+      "gpu_idle_ratio_mean": 0.9995926833333333,
+      "gpu_idle_ratio_min": 0.958918,
+      "idle_window_suspect": false,
+      "power_w_mean": 0.09325699635317888,
+      "power_w_stddev": 0.044501928724892795,
+      "sample_count": 300,
+      "telemetry_backend": "powermetrics"
+    },
+    "bundle_id": "neg8-window-start-r1",
+    "eligibility": {
+      "bundle_id": "neg8-window-start-r1",
+      "critical_environment_passed": true,
+      "eligible": true,
+      "idle_window_suspect": false,
+      "provenance_present": true,
+      "reasons": []
+    },
+    "environment_snapshot_sha256": "b23f3ef4efb13a7ae5e1a8049f6ae81e2a272fa499568a1da9aff0766839345e",
+    "frozen_at": "2026-07-30T04:28:32.995388Z",
+    "immutable_after_freeze": true,
+    "policy_sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+    "run_id": "neg8-window-start-r1",
+    "schema_version": "joulewise.cooldown_anchor.v1",
+    "source_kind": "neg8_reference_start"
+  },
+  "cooldown_anchor_strategy": "first_admission_passing",
+  "cooldown_gates": [],
+  "created_at": "2026-07-30T08:02:12.006690Z",
+  "environment_preflight": {
+    "admitted": true,
+    "arm_quiet_mode": {
+      "command": [
+        "pmset",
+        "displaysleepnow"
+      ],
+      "command_returncode": 0,
+      "countdown_s": 20,
+      "requested": true,
+      "verified_by_reprobe": true
+    },
+    "captured_at": "2026-07-30T08:02:32.899650Z",
+    "enforced": true,
+    "evaluation": {
+      "eligible": true,
+      "findings": [
+        {
+          "actual": "AC Power",
+          "code": "power_source_not_ac",
+          "critical": true,
+          "field": "power_source",
+          "required": "AC Power",
+          "status": "pass"
+        },
+        {
+          "actual": true,
+          "code": "external_power_not_connected",
+          "critical": true,
+          "field": "power.external_connected",
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "low_power_mode_enabled",
+          "critical": true,
+          "field": "low_power_mode",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "all_asleep",
+          "code": "display_not_all_asleep",
+          "critical": true,
+          "field": "display_power_state",
+          "required": "all_asleep",
+          "status": "pass"
+        },
+        {
+          "actual": false,
+          "code": "screensaver_engaged",
+          "critical": true,
+          "field": "screensaver_engaged",
+          "required": false,
+          "status": "pass"
+        },
+        {
+          "actual": "nominal",
+          "code": "thermal_not_nominal",
+          "critical": true,
+          "field": "thermal_pressure",
+          "required": "nominal",
+          "status": "pass"
+        }
+      ],
+      "findings_sha256": "dd9f19b39b77c0770f62e3abf1a19d9db4b614f2ff6ccae70cc5fcbf404be3e6",
+      "load_average_evidence": {
+        "admission_gate": false,
+        "load_average_15m": 1.67,
+        "load_average_1m": 1.91,
+        "load_average_5m": 1.77
+      },
+      "schema_version": "joulewise.environment_evaluation.v1",
+      "snapshot_sha256": "38bb5b014653283fd1acc25773e435941903e0318c1b31445b20911f23bd362d"
+    },
+    "initial_findings_sha256": "dd9f19b39b77c0770f62e3abf1a19d9db4b614f2ff6ccae70cc5fcbf404be3e6",
+    "initial_snapshot_sha256": "1715f8514f378df36d07cfcd61510c1ec3d9012994ea1995113facbb62bddd1a",
+    "override": null,
+    "policy_sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+    "schema_version": "joulewise.campaign_environment_preflight.v1",
+    "snapshot": {
+      "battery_percent": 80,
+      "battery_state": "AC attached",
+      "boot_time_s": 1783962965,
+      "build_version": "25F84",
+      "clock_sync": {
+        "status": "limited_without_admin",
+        "timed_probe_error": null,
+        "timed_running": true
+      },
+      "cpu_brand": "Apple M3 Max",
+      "display": {
+        "active_displays": 1,
+        "asleep_display_count": 1,
+        "asleep_evidence_count": 1,
+        "built_in_display_count": 1,
+        "external_display_count": 0,
+        "framebuffer_pipes_external_capable": 4,
+        "framebuffer_pipes_total": 5,
+        "probe": "system_profiler_spdisplays",
+        "reason": null,
+        "status": "ok"
+      },
+      "display_power_state": "all_asleep",
+      "display_sleep_prevented": false,
+      "errors": {},
+      "hid_idle_s": 17366.99696525,
+      "hw_model": "Mac15,9",
+      "load_average_15m": 1.67,
+      "load_average_1m": 1.91,
+      "load_average_5m": 1.77,
+      "logical_cpu_count": 16,
+      "low_power_mode": false,
+      "memory": {
+        "compressor_bytes": 132153344,
+        "page_size_bytes": 16384,
+        "pageins": 113335200,
+        "pageouts": 10022,
+        "pages_free": 4637837,
+        "pages_occupied_by_compressor": 8066,
+        "pages_stored_in_compressor": 34639,
+        "swap_usage": {
+          "free": "0.00M",
+          "total": "0.00M",
+          "used": "0.00M"
+        }
+      },
+      "memory_free_percent": 97.0,
+      "memory_pressure_percent": 3.0,
+      "power": {
+        "adapter_description": "pd charger",
+        "adapter_watts": 140,
+        "external_connected": true,
+        "fully_charged": false,
+        "is_charging": false
+      },
+      "power_source": "AC Power",
+      "product_name": "macOS",
+      "product_version": "26.5.2",
+      "python_packages": {
+        "mlx": {
+          "present": true,
+          "version": "0.31.2"
+        },
+        "mlx-lm": {
+          "present": true,
+          "version": "0.31.3"
+        },
+        "transformers": {
+          "present": true,
+          "version": "5.12.1"
+        }
+      },
+      "screensaver_delay_s": 0,
+      "screensaver_engaged": false,
+      "screensaver_module": "Ventura",
+      "thermal_pressure": "nominal",
+      "thermal_probe_reason": null,
+      "uptime_s": 1435587.8621840477
+    }
+  },
+  "first_physical_run_id": null,
+  "members": [
+    {
+      "bundle_ids": [
+        "neg8-window-midpoint"
+      ],
+      "canonical_neg8_workload": true,
+      "claim_evidence": [
+        {
+          "bundle_id": "neg8-window-midpoint",
+          "claim_evidence_flags": [
+            "anchor_energy_envelope_unrecorded",
+            "cadence_ratio_unrecorded",
+            "clock_bound_exceeds_quarter_window",
+            "insufficient_in_window_samples"
+          ],
+          "waiver": null
+        }
+      ],
+      "config": "neg8-window-midpoint.json",
+      "execution": "existing",
+      "preceding_campaign_cooldown": null,
+      "role": "neg8_daily_reference_midpoint",
+      "run_id": "neg8-window-midpoint",
+      "scientific_config_sha256": "f752cfb7fbcfa3925694d36b0ad2f0cbe58fe8b8010522d922e269f2026fbdfb",
+      "sentinel_position": "midpoint"
+    }
+  ],
+  "schema_version": "joulewise.campaign_provenance.v1",
+  "session_id": "campaign-20260730T080212006675Z-p53096"
+}
