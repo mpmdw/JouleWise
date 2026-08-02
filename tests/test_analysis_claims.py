@@ -84,6 +84,43 @@ from tests.test_detection_floor import (
 HEX = "a" * 64
 MANIFEST_ID = "am-" + "b" * 64
 
+
+def _embedded_floor_fixture(artifact_id: str) -> tuple[dict, list[dict]]:
+    artifact = make_artifact()
+    artifact["artifact_id"] = artifact_id
+    raw = (json.dumps(artifact, indent=2) + "\n").encode("utf-8")
+    basis_by_root: dict[str, set[str]] = {}
+    for cell in artifact["cells"]:
+        for component_name in ("absolute", "comparative"):
+            component = cell["provenance"][component_name]
+            basis_by_root.setdefault(component["evidence_root_id"], set()).add(
+                component["campaign_log"]["sha256"]
+            )
+    return (
+        {
+            "artifact_id": artifact_id,
+            "file_sha256": hashlib.sha256(raw).hexdigest(),
+            "embedded_bytes_base64": base64.b64encode(raw).decode("ascii"),
+        },
+        [
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": root_id,
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": sorted(basis_by_root[root_id]),
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            }
+            for root_id in sorted(basis_by_root)
+        ],
+    )
+
+
+_FLOOR_LINK, _FLOOR_AUDITS = _embedded_floor_fixture("df-test")
+
 # Byte-exact copy of the stored 0.5.0/v2 corpus wire
 # runs_recal4_20260719/p2015-df-su-sentinel-abs-r01/summary_metrics.json
 # (gzip+base64; never hand-simplified).  The sha256 pin guards the fixture.
@@ -269,11 +306,7 @@ def minimal_artifact():
         },
         "inputs": {
             "analysis_manifest": {"manifest_id": MANIFEST_ID, "file_sha256": HEX},
-            "floor_artifact": {
-                "artifact_id": "df-test",
-                "file_sha256": HEX,
-                "evidence_root_ids": ["floor-root"],
-            },
+            "floor_artifact": copy.deepcopy(_FLOOR_LINK),
             "runs_root_label": "runs",
             "evidence_class": "current",
             "limitations": [],
@@ -290,17 +323,7 @@ def minimal_artifact():
                 "validated_count": 0,
                 "status": "clean",
             },
-            {
-                "scope": "floor_evidence",
-                "evidence_root_id": "floor-root",
-                "authenticated_basis": {
-                    "kind": "floor_component_campaign_log_sha256",
-                    "sha256s": [HEX],
-                },
-                "raw_count": 0,
-                "validated_count": 0,
-                "status": "clean",
-            },
+            *copy.deepcopy(_FLOOR_AUDITS),
         ],
         "bundle_audit": [
             bundle_audit_row(bundle_id)
@@ -561,17 +584,7 @@ class ClaimOutcomeTests(unittest.TestCase):
                 "validated_count": 1,
                 "status": "clean",
             },
-            {
-                "scope": "floor_evidence",
-                "evidence_root_id": "floor-root",
-                "authenticated_basis": {
-                    "kind": "floor_component_campaign_log_sha256",
-                    "sha256s": [HEX],
-                },
-                "raw_count": 0,
-                "validated_count": 0,
-                "status": "clean",
-            },
+            *copy.deepcopy(_FLOOR_AUDITS),
         ]
         published = finalize_claim_verdicts(artifact)
         self.assertEqual(validate_claim_verdicts(published), [])
@@ -2591,17 +2604,7 @@ class ClaimArtifactTests(unittest.TestCase):
                 "validated_count": 1,
                 "status": "refused",
             },
-            {
-                "scope": "floor_evidence",
-                "evidence_root_id": "floor-root",
-                "authenticated_basis": {
-                    "kind": "floor_component_campaign_log_sha256",
-                    "sha256s": [HEX],
-                },
-                "raw_count": 0,
-                "validated_count": 0,
-                "status": "clean",
-            },
+            *copy.deepcopy(_FLOOR_AUDITS),
         ]
         artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
         errors = validate_claim_verdicts(artifact)

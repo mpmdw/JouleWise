@@ -196,6 +196,16 @@ class AnalysisInputError(ValueError):
 
 
 @dataclass(frozen=True)
+class AuthenticatedFloorArtifact:
+    """Validated floor bytes plus the only authorized root-set projection."""
+
+    value: Mapping[str, Any]
+    raw_bytes: bytes
+    file_sha256: str
+    root_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
 class FloorRequest:
     backend: str
     metric: str
@@ -360,6 +370,7 @@ class LoadedAnalysisInputs:
     valid_replacements: tuple[Mapping[str, Any], ...]
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
+    floor_artifact_bytes: bytes = b""
     supersession_audit: tuple[Mapping[str, Any], ...] = ()
     supersession_diverged: bool = False
     floor_binding: FloorEvidenceBinding = field(
@@ -437,12 +448,73 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     return value, hashlib.sha256(raw).hexdigest()
 
 
-def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
-    value, raw = _load_json_object(path, "floor artifact")
+def authenticate_floor_artifact_bytes(
+    raw: bytes,
+    *,
+    expected_sha256: str | None = None,
+    expected_artifact_id: str | None = None,
+) -> AuthenticatedFloorArtifact:
+    """Authenticate floor bytes and derive their exhaustive evidence roots.
+
+    This is the sole floor-root derivation used by both runtime scanning and
+    serialized claim validation.  Callers never derive roots from a claim-side
+    declaration.
+    """
+
+    if not isinstance(raw, bytes):
+        raise AnalysisInputError("floor artifact bytes must be bytes")
+    digest = hashlib.sha256(raw).hexdigest()
+    if expected_sha256 is not None and digest != expected_sha256:
+        raise AnalysisInputError(
+            "floor artifact bytes sha256 does not match bound file_sha256"
+        )
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AnalysisInputError(
+            f"floor artifact is not valid UTF-8 JSON: {exc}"
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise AnalysisInputError("floor artifact top level must be an object")
     errors = validate_floor_artifact(value)
     if errors:
         raise AnalysisInputError("invalid floor artifact: " + "; ".join(errors))
-    return value, hashlib.sha256(raw).hexdigest()
+    artifact_id = value.get("artifact_id")
+    if expected_artifact_id is not None and artifact_id != expected_artifact_id:
+        raise AnalysisInputError(
+            "floor artifact bytes artifact_id does not match bound artifact_id"
+        )
+    root_ids = frozenset(
+        root_id
+        for cell in value.get("cells", [])
+        if isinstance(cell, Mapping)
+        for component_name in ("absolute", "comparative")
+        for provenance in (cell.get("provenance"),)
+        if isinstance(provenance, Mapping)
+        for component in (provenance.get(component_name),)
+        if isinstance(component, Mapping)
+        for root_id in (component.get("evidence_root_id"),)
+        if isinstance(root_id, str) and root_id
+    )
+    return AuthenticatedFloorArtifact(
+        value=value,
+        raw_bytes=raw,
+        file_sha256=digest,
+        root_ids=root_ids,
+    )
+
+
+def _load_authenticated_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as exc:
+        raise AnalysisInputError(f"cannot read floor artifact {path}: {exc}") from exc
+    return authenticate_floor_artifact_bytes(raw)
+
+
+def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
+    authenticated = _load_authenticated_floor_artifact(path)
+    return authenticated.value, authenticated.file_sha256
 
 
 def _path_independent_stack_identifier(value: object) -> str | None:
@@ -818,23 +890,6 @@ def _component_order_sequences(
     return sequences
 
 
-def _component_evidence_root_ids(
-    artifact: Mapping[str, Any],
-) -> frozenset[str]:
-    return frozenset(
-        root_id
-        for cell in artifact.get("cells", [])
-        if isinstance(cell, Mapping)
-        for component_name in ("absolute", "comparative")
-        for provenance in (cell.get("provenance"),)
-        if isinstance(provenance, Mapping)
-        for component in (provenance.get(component_name),)
-        if isinstance(component, Mapping)
-        for root_id in (component.get("evidence_root_id"),)
-        if isinstance(root_id, str) and root_id
-    )
-
-
 def declared_evidence_roots(
     floor_artifact_path: Path,
     evidence_roots: Mapping[str, Path] | None,
@@ -844,11 +899,8 @@ def declared_evidence_roots(
     if evidence_roots is None:
         return None
     try:
-        raw = Path(floor_artifact_path).read_bytes()
-        artifact = json.loads(raw.decode("utf-8"))
-        if not isinstance(artifact, Mapping) or validate_floor_artifact(artifact):
-            return evidence_roots
-        declared_root_ids = _component_evidence_root_ids(artifact)
+        authenticated = _load_authenticated_floor_artifact(floor_artifact_path)
+        declared_root_ids = authenticated.root_ids
     except Exception:
         # This pre-authentication read only narrows separation inputs. Preserve
         # the full, stricter mapping on every failure; authenticated loading
@@ -863,10 +915,9 @@ def declared_evidence_roots(
 
 
 def _normalize_evidence_roots(
-    artifact: Mapping[str, Any],
+    declared_root_ids: frozenset[str],
     evidence_roots: Mapping[str, Path] | Path,
 ) -> tuple[dict[str, Path], tuple[str, ...]]:
-    declared_root_ids = _component_evidence_root_ids(artifact)
     if isinstance(evidence_roots, Mapping):
         supplied_roots = {
             str(root_id): Path(root)
@@ -1187,12 +1238,24 @@ def bind_floor_artifact_evidence(
     evidence_roots: Mapping[str, Path] | Path,
     *,
     strict_validator: StrictValidator,
+    _authenticated_floor: AuthenticatedFloorArtifact | None = None,
 ) -> FloorEvidenceBinding:
     """Bind v2 component values to their named strict evidence roots."""
 
     floor_path = Path(floor_path)
+    if _authenticated_floor is not None:
+        authenticated_floor = _authenticated_floor
+    elif floor_path.is_file():
+        authenticated_floor = _load_authenticated_floor_artifact(floor_path)
+    else:
+        # Preserve the established pure binding seam used by callers that
+        # supply an in-memory artifact and a descriptor base directory.  Root
+        # projection still goes through the one validated-byte derivation.
+        authenticated_floor = authenticate_floor_artifact_bytes(
+            (json.dumps(artifact, indent=2) + "\n").encode("utf-8")
+        )
     normalized_roots, root_mapping_problems = _normalize_evidence_roots(
-        artifact, evidence_roots
+        authenticated_floor.root_ids, evidence_roots
     )
     global_problems = [
         *root_mapping_problems,
@@ -2487,14 +2550,18 @@ def load_analysis_inputs(
     """
 
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
-    floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
+    authenticated_floor = _load_authenticated_floor_artifact(
+        Path(floor_artifact_path)
+    )
+    floor_artifact = authenticated_floor.value
+    floor_sha = authenticated_floor.file_sha256
     runs_root = Path(runs_root)
     verdict_basis_sha256 = _manifest_verdict_basis_sha256(manifest)
     normalized_scan_roots, _ = _normalize_evidence_roots(
-        floor_artifact,
+        authenticated_floor.root_ids,
         evidence_roots if evidence_roots is not None else runs_root,
     )
-    declared_floor_root_ids = _component_evidence_root_ids(floor_artifact)
+    declared_floor_root_ids = authenticated_floor.root_ids
     supersession_audit = [
         supersession_visibility_scan(
             runs_root,
@@ -2543,6 +2610,7 @@ def load_analysis_inputs(
         Path(floor_artifact_path),
         evidence_roots if evidence_roots is not None else runs_root,
         strict_validator=strict_validator,
+        _authenticated_floor=authenticated_floor,
     )
     cleanup_records = _campaign_claim_records(
         runs_root, str(manifest["manifest_id"])
@@ -2657,6 +2725,7 @@ def load_analysis_inputs(
         manifest_sha256=manifest_sha,
         floor_artifact=floor_artifact,
         floor_sha256=floor_sha,
+        floor_artifact_bytes=authenticated_floor.raw_bytes,
         floor_binding=floor_binding,
         registered=registered,
         effective=effective,
@@ -3658,6 +3727,8 @@ def unavailable_floor_resolution(
 
 __all__ = [
     "AnalysisInputError",
+    "AuthenticatedFloorArtifact",
+    "authenticate_floor_artifact_bytes",
     "bind_floor_artifact_evidence",
     "BundleEvidence",
     "cleanup_claim_evidence_flags",

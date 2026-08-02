@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import math
 from dataclasses import asdict
@@ -87,27 +88,6 @@ def _private_factory_identity(factory: Callable[..., Any] | None, default: str) 
     module = getattr(factory, "__module__", factory.__class__.__module__)
     qualname = getattr(factory, "__qualname__", factory.__class__.__qualname__)
     return f"private_test_seam:{module}.{qualname}"
-
-
-def _declared_floor_evidence_root_ids(
-    floor_artifact: Mapping[str, Any],
-) -> list[str]:
-    """Project the authenticated floor artifact's exhaustive root declaration."""
-
-    return sorted(
-        {
-            root_id
-            for cell in floor_artifact.get("cells", [])
-            if isinstance(cell, Mapping)
-            for component_name in ("absolute", "comparative")
-            for provenance in (cell.get("provenance"),)
-            if isinstance(provenance, Mapping)
-            for component in (provenance.get(component_name),)
-            if isinstance(component, Mapping)
-            for root_id in (component.get("evidence_root_id"),)
-            if isinstance(root_id, str) and root_id
-        }
-    )
 
 
 def _validate_output_separation(
@@ -1770,6 +1750,10 @@ def analyze_claims(
             if entry["role"] == "condition"
         }
     )
+    if not inputs.floor_artifact_bytes:
+        raise AnalysisInputError(
+            "authenticated floor artifact bytes are unavailable for embedding"
+        )
     body = {
         "schema_version": "joulewise.claim_verdicts.v1",
         "claim_verdicts_id": "",
@@ -1795,9 +1779,9 @@ def analyze_claims(
             "floor_artifact": {
                 "artifact_id": inputs.floor_artifact["artifact_id"],
                 "file_sha256": inputs.floor_sha256,
-                "evidence_root_ids": _declared_floor_evidence_root_ids(
-                    inputs.floor_artifact
-                ),
+                "embedded_bytes_base64": base64.b64encode(
+                    inputs.floor_artifact_bytes
+                ).decode("ascii"),
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,

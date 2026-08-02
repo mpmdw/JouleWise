@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import importlib.util
@@ -11,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from joulewise.analysis_engine.artifact import validate_claim_verdicts
+from tests.test_detection_floor import make_artifact
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +31,43 @@ FIXTURE_BUNDLE_PAIRS = tuple(
 FIXTURE_BUNDLE_IDS = tuple(
     bundle_id for pair in FIXTURE_BUNDLE_PAIRS for bundle_id in pair
 )
+
+
+def embedded_floor_fixture() -> tuple[dict, list[dict]]:
+    artifact = make_artifact()
+    artifact["artifact_id"] = "df-fixture"
+    raw = (json.dumps(artifact, indent=2) + "\n").encode("utf-8")
+    basis_by_root: dict[str, set[str]] = {}
+    for cell in artifact["cells"]:
+        for component_name in ("absolute", "comparative"):
+            component = cell["provenance"][component_name]
+            basis_by_root.setdefault(component["evidence_root_id"], set()).add(
+                component["campaign_log"]["sha256"]
+            )
+    return (
+        {
+            "artifact_id": artifact["artifact_id"],
+            "file_sha256": hashlib.sha256(raw).hexdigest(),
+            "embedded_bytes_base64": base64.b64encode(raw).decode("ascii"),
+        },
+        [
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": root_id,
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": sorted(basis_by_root[root_id]),
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            }
+            for root_id in sorted(basis_by_root)
+        ],
+    )
+
+
+FLOOR_LINK, FLOOR_AUDITS = embedded_floor_fixture()
 
 
 def bundle_audit_row(bundle_id: str) -> dict:
@@ -98,11 +137,7 @@ def base_artifact() -> dict:
                 "manifest_id": "am-fixture",
                 "file_sha256": "1" * 64,
             },
-            "floor_artifact": {
-                "artifact_id": "df-fixture",
-                "file_sha256": "2" * 64,
-                "evidence_root_ids": ["floor-root"],
-            },
+            "floor_artifact": copy.deepcopy(FLOOR_LINK),
             "runs_root_label": "runs",
             "evidence_class": "current",
             "limitations": [],
@@ -119,17 +154,7 @@ def base_artifact() -> dict:
                 "validated_count": 0,
                 "status": "clean",
             },
-            {
-                "scope": "floor_evidence",
-                "evidence_root_id": "floor-root",
-                "authenticated_basis": {
-                    "kind": "floor_component_campaign_log_sha256",
-                    "sha256s": ["2" * 64],
-                },
-                "raw_count": 0,
-                "validated_count": 0,
-                "status": "clean",
-            },
+            *copy.deepcopy(FLOOR_AUDITS),
         ],
         "bundle_audit": [
             bundle_audit_row(bundle_id) for bundle_id in sorted(FIXTURE_BUNDLE_IDS)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import math
@@ -21,6 +23,7 @@ from joulewise.detection_floor import (
 from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
 from .estimators import tost_p_value
+from .inputs import AnalysisInputError, authenticate_floor_artifact_bytes
 from .multiplicity import adjust_p_values
 from .ratio import (
     ratio_floor_diagnostic_collision_source_ids,
@@ -74,7 +77,7 @@ _INPUT_KEYS = {
     "limitations",
 }
 _INPUT_ARTIFACT_KEYS = {"manifest_id", "file_sha256"}
-_INPUT_FLOOR_KEYS = {"artifact_id", "file_sha256", "evidence_root_ids"}
+_INPUT_FLOOR_KEYS = {"artifact_id", "file_sha256", "embedded_bytes_base64"}
 _BUNDLE_AUDIT_KEYS = {
     "bundle_id",
     "relative_path",
@@ -887,7 +890,7 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         f"artifact.engine.policy_identity.{key_name}: must be nonempty"
                     )
 
-    declared_floor_root_ids: set[str] | None = None
+    authenticated_floor_root_ids: set[str] | None = None
     inputs = value.get("inputs")
     if _exact_keys(inputs, _INPUT_KEYS, "artifact.inputs", errors):
         _validate_input_link(
@@ -910,21 +913,45 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
         floor_id = floor_link.get("artifact_id") if isinstance(floor_link, Mapping) else None
         if not isinstance(floor_id, str) or not floor_id:
             errors.append("artifact.inputs.floor_artifact.artifact_id: invalid")
-        root_ids = _string_list(
-            floor_link.get("evidence_root_ids")
+        embedded = (
+            floor_link.get("embedded_bytes_base64")
             if isinstance(floor_link, Mapping)
-            else None,
-            "artifact.inputs.floor_artifact.evidence_root_ids",
-            errors,
+            else None
         )
-        if root_ids is not None:
-            if root_ids != sorted(set(root_ids)):
+        if not isinstance(embedded, str) or not embedded:
+            errors.append(
+                "artifact.inputs.floor_artifact.embedded_bytes_base64: "
+                "must be nonempty canonical base64"
+            )
+        else:
+            try:
+                embedded_bytes = base64.b64decode(embedded, validate=True)
+            except (binascii.Error, ValueError):
                 errors.append(
-                    "artifact.inputs.floor_artifact.evidence_root_ids: "
-                    "must be sorted and unique"
+                    "artifact.inputs.floor_artifact.embedded_bytes_base64: "
+                    "invalid base64"
                 )
             else:
-                declared_floor_root_ids = set(root_ids)
+                if base64.b64encode(embedded_bytes).decode("ascii") != embedded:
+                    errors.append(
+                        "artifact.inputs.floor_artifact.embedded_bytes_base64: "
+                        "must use canonical base64 encoding"
+                    )
+                try:
+                    authenticated_floor = authenticate_floor_artifact_bytes(
+                        embedded_bytes,
+                        expected_sha256=floor_link.get("file_sha256"),
+                        expected_artifact_id=floor_id,
+                    )
+                except AnalysisInputError as exc:
+                    errors.append(
+                        "artifact.inputs.floor_artifact.embedded_bytes_base64: "
+                        f"{exc}"
+                    )
+                else:
+                    authenticated_floor_root_ids = set(
+                        authenticated_floor.root_ids
+                    )
         if not _relative_label(inputs["runs_root_label"]):
             errors.append("artifact.inputs.runs_root_label: must be a relative label")
         if not isinstance(inputs["evidence_class"], str) or inputs[
@@ -1051,12 +1078,12 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     "artifact.supersession_audit: requires exactly one analysis-corpus row"
                 )
-            if declared_floor_root_ids is not None:
+            if authenticated_floor_root_ids is not None:
                 missing_floor_roots = sorted(
-                    declared_floor_root_ids - floor_root_ids
+                    authenticated_floor_root_ids - floor_root_ids
                 )
                 unexpected_floor_roots = sorted(
-                    floor_root_ids - declared_floor_root_ids
+                    floor_root_ids - authenticated_floor_root_ids
                 )
                 if missing_floor_roots:
                     errors.append(

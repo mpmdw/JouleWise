@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import copy
 import io
 import hashlib
@@ -329,22 +330,19 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
             replacement_classification="registered",
             inclusion_status="excluded" if diverged else "included",
         )
-    floor_artifact = {
-        "artifact_id": "df-v3-test",
-        "cells": [
-            {
-                "provenance": {
-                    "absolute": {"evidence_root_id": "floor-root"},
-                    "comparative": {"evidence_root_id": "floor-root"},
-                }
-            }
-        ],
-    }
+    floor_artifact = make_artifact()
+    floor_artifact["artifact_id"] = "df-v3-test"
+    self_errors = validate_floor_artifact(floor_artifact)
+    if self_errors:
+        raise AssertionError(self_errors)
+    floor_bytes = (json.dumps(floor_artifact, indent=2) + "\n").encode("utf-8")
+    floor_sha256 = hashlib.sha256(floor_bytes).hexdigest()
     loaded_inputs = LoadedAnalysisInputs(
         manifest=manifest,
         manifest_sha256="b" * 64,
         floor_artifact=floor_artifact,
-        floor_sha256="c" * 64,
+        floor_sha256=floor_sha256,
+        floor_artifact_bytes=floor_bytes,
         registered=evidence_by_entry,
         effective=evidence_by_entry,
         extra_audits=(),
@@ -365,10 +363,21 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
             },
             {
                 "scope": "floor_evidence",
-                "evidence_root_id": "floor-root",
+                "evidence_root_id": "a10",
                 "authenticated_basis": {
                     "kind": "floor_component_campaign_log_sha256",
                     "sha256s": ["e" * 64],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "window_c",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": ["f" * 64],
                 },
                 "raw_count": 0,
                 "validated_count": 0,
@@ -381,7 +390,7 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
         FloorResolution(
             status="exact",
             artifact_id="df-v3-test",
-            artifact_sha256="c" * 64,
+            artifact_sha256=floor_sha256,
             source_cell_ids=("floor-a",),
             transport_group_id=None,
             transport_rule_id=None,
@@ -393,7 +402,7 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
         FloorResolution(
             status="exact",
             artifact_id="df-v3-test",
-            artifact_sha256="c" * 64,
+            artifact_sha256=floor_sha256,
             source_cell_ids=("floor-b",),
             transport_group_id=None,
             transport_rule_id=None,
@@ -522,8 +531,105 @@ class AnalysisIntegrationTests(unittest.TestCase):
         errors = validate_claim_verdicts(stripped)
 
         self.assertTrue(
-            any("missing floor-evidence scan row(s): floor-root" in error for error in errors),
+            any(
+                "missing floor-evidence scan row(s): a10, window_c" in error
+                for error in errors
+            ),
             errors,
+        )
+
+    def test_v3_zero_root_coordinated_attack_refuses(self):
+        attacked = copy.deepcopy(_v3_fixture_artifact())
+        attacked["inputs"]["floor_artifact"]["evidence_root_ids"] = []
+        attacked["supersession_audit"] = [
+            row
+            for row in attacked["supersession_audit"]
+            if row["scope"] == "analysis_corpus"
+        ]
+        attacked["claim_verdicts_id"] = calculate_claim_verdicts_id(attacked)
+
+        errors = validate_claim_verdicts(attacked)
+
+        self.assertTrue(
+            any("unrecognized key(s): evidence_root_ids" in error for error in errors),
+            errors,
+        )
+        self.assertTrue(
+            any(
+                "missing floor-evidence scan row(s): a10, window_c" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_v3_missing_real_root_decoy_attack_refuses(self):
+        attacked = copy.deepcopy(_v3_fixture_artifact())
+        attacked["inputs"]["floor_artifact"]["evidence_root_ids"] = ["decoy"]
+        attacked["supersession_audit"] = [
+            row
+            for row in attacked["supersession_audit"]
+            if row["scope"] == "analysis_corpus"
+        ]
+        attacked["supersession_audit"].append(
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "decoy",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": ["e" * 64],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            }
+        )
+        attacked["claim_verdicts_id"] = calculate_claim_verdicts_id(attacked)
+
+        errors = validate_claim_verdicts(attacked)
+
+        self.assertTrue(
+            any("unrecognized key(s): evidence_root_ids" in error for error in errors),
+            errors,
+        )
+        self.assertTrue(
+            any(
+                "missing floor-evidence scan row(s): a10, window_c" in error
+                for error in errors
+            ),
+            errors,
+        )
+        self.assertTrue(
+            any("unexpected floor-evidence scan row(s): decoy" in error for error in errors),
+            errors,
+        )
+
+    def test_v3_embedded_floor_bytes_are_hash_and_schema_bound(self):
+        artifact = _v3_fixture_artifact()
+
+        hash_mismatch = copy.deepcopy(artifact)
+        hash_mismatch["inputs"]["floor_artifact"]["embedded_bytes_base64"] = (
+            base64.b64encode(b"{}").decode("ascii")
+        )
+        hash_mismatch["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            hash_mismatch
+        )
+        hash_errors = validate_claim_verdicts(hash_mismatch)
+        self.assertTrue(
+            any("sha256 does not match bound file_sha256" in error for error in hash_errors),
+            hash_errors,
+        )
+
+        invalid_floor = copy.deepcopy(hash_mismatch)
+        invalid_floor["inputs"]["floor_artifact"]["file_sha256"] = hashlib.sha256(
+            b"{}"
+        ).hexdigest()
+        invalid_floor["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            invalid_floor
+        )
+        schema_errors = validate_claim_verdicts(invalid_floor)
+        self.assertTrue(
+            any("invalid floor artifact" in error for error in schema_errors),
+            schema_errors,
         )
 
     def test_supersession_authenticated_basis_kind_is_scope_bound(self):
