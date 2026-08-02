@@ -41,9 +41,10 @@ EXPECTED_IDS = {
     # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling).
     # STACK-ID-BIND-01 completed 2026-07-30 in PR #88 (da83337).
     "MODULARITY-01",
-    # 2026-07-30 cold-gate intake fold (D-088; PR #88 merge session)
-    "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
-    "QA-10B-EXISTING-RETRY", "MINT-GENERALIZE-01",
+    # 2026-07-30 cold-gate intake fold (D-088; PR #88 merge session).
+    # COOLDOWN-JOIN-GAUNTLET-01 + QA-10A/QA-10B closed 2026-08-02 with
+    # commit 3 (PR #93) and retired to the completed table.
+    "MINT-GENERALIZE-01",
     "MANIFEST-CONTRAST-01", "SUPERSESSION-DUP-REFUSAL-01",
     # COOLDOWN-JOIN-DA1-01 was folded in 2026-07-31 (D-093) as P2-015
     # retired, and closed the same day inside the gauntlet's commit 2
@@ -69,7 +70,9 @@ EXPECTED_IDS = {
 TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
                 "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP",
                 "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015",
-                "COOLDOWN-JOIN-DA1-01", "MET-VERDICT-ADJ-01"}
+                "COOLDOWN-JOIN-DA1-01", "MET-VERDICT-ADJ-01",
+                "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
+                "QA-10B-EXISTING-RETRY"}
 
 
 def load_kernel():
@@ -224,9 +227,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_61(self):
+    def test_exact_live_id_set_58(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 61)
+        self.assertEqual(len(self.tasks), 58)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

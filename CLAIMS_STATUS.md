@@ -8,8 +8,8 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-01, second refresh** (post machinery
-adjudication: D-100 ruled; report:
+Last updated: **2026-08-02** (gauntlet CLOSED — PR #93; standing scans
+lifted; prior refresh post-D-100; report:
 `docs/run_reports/2026-08-01-desk-adjudication-session.md`; the window
 B collection report remains `2026-08-01-metrology-window-b.md`).
 
@@ -66,13 +66,20 @@ default consumption. Outcomes per window:
 
 ## 4. Standing gates on EVERY claim consumption
 
-1. **D-088 cl.3(c)** three-check bench scan (no unlicensed declared
-   duplicates, no zero-candidate declarations, no failed/incomplete-
-   existing encounters) — binds until the cooldown-join gauntlet closes.
-2. **D-093** raw-vs-validated supersession-record scan — any divergence
-   refuses consumption.
+1. ~~D-088 cl.3(c) three-check bench scan~~ — **LIFTED 2026-08-02**: the
+   cooldown-join gauntlet closed (commit 3 merged, PR #93 `cb860e1`);
+   the landed machinery now enforces these properties structurally
+   (result-map completeness, counting domain, authenticated v2
+   discrimination).
+2. ~~D-093 raw-vs-validated supersession-record scan~~ — **LIFTED
+   2026-08-02** with the gauntlet's close per its row contract; the
+   validated reader boundary (PR #91) plus the commit-3 authenticated
+   catalog own raw-record visibility permanently.
 3. Verdicts consumed as issued; overrides only via the cold-gate path
-   with written dissent Ed sees.
+   with written dissent Ed sees. (UNCHANGED — permanent.)
+4. NEW (D-105): while `C3-RECOGNIZER-EXACT-01` is open, the tail
+   recognizer's accepted set may only shrink, and the custody sidecar +
+   writer-side key assertion may not be weakened.
 
 ## 5. DO NOT QUOTE — retired, void, or wrong-as-stated
 

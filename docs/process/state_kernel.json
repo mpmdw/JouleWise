@@ -699,54 +699,6 @@
       "status": "shelved",
       "stop_card": null
     },
-    "COOLDOWN-JOIN-GAUNTLET-01": {
-      "acceptance": {
-        "evidence": [
-          "C1 result-map completeness landed as a first, independently audited commit (75e9f29 + audit response c0adc93; PR #91 67d268a)",
-          "The counting domain is decided by the D-094 bounded pre-decision consult (composed writer outcome enum + fail-closed legacy log binding) and lands with C4/C5 fail-closed; C3 authorship parity rides commit 3",
-          "Commit 3 lands writer outcome emission, a writer-external authenticated discriminator, reader re-acceptance, and the D-094 v2 truth-table row as ONE composed, audited change (D-097), with the relabel probe as a permanent regression",
-          "Resolves the 7B window including its two supersessions and both mint corpora cleanly, refuses the QA-10A and QA-10B fixtures, delta re-audit clean",
-          "DA-1 (COOLDOWN-JOIN-DA1-01) CLOSED at the validator/reader boundary with a V4-driver-derived regression (D-093), landed in e749c95 and merged in PR #91"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/COOLDOWN-JOIN-GAUNTLET-01/acceptance",
-          "label": "COOLDOWN-JOIN-GAUNTLET-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The cold-gate-ratified join contract C1 through C5 lands and lifts the D-088 standing conditions on claim consumption and minting."
-      },
-      "authority": {
-        "label": "D-088 ratified join contract C1-C5 (cold-gate ruling + Opus refutation, 2026-07-30)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-088 escalation ruling: no FIX-11; D-088 standing conditions",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No further in-line fix round on this defect class: the counting rules are structurally unsound without the missing existing-outcome bit, so the repair runs as its own gauntlet"
-        },
-        {
-          "authority": {
-            "label": "D-097 unanimous cold gate: no in-manifest v2 discrimination",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No in-manifest-only v2 discrimination may be reintroduced; v2 acceptance returns only with the commit-3 writer-external authenticated discriminator, landed and audited as one composed change with the relabel probe as a permanent regression."
-        }
-      ],
-      "flags": [],
-      "goal": "Run the cooldown-join refusal contract through its own gauntlet, landing C1 result-map completeness, the C2 counting domain, C3 supersession authorship parity, C4 fail-closed legacy-corpus classification from campaign_log.jsonl, and C5 fail-closed unparseable manifests, with both blocker-shaped fixtures and the QA-10C comment correction.",
-      "id": "COOLDOWN-JOIN-GAUNTLET-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 9,
-      "status": "queued",
-      "status_note": "Minted 2026-07-30 from the cold-gate escalation; owns closure of QA-10A and QA-10B and gates MINT-GENERALIZE-01. Commits 1-2 of the D-094 landing order LANDED via PR #91 (67d268a): C1 result-map completeness, the C2 reader/counting domain, and DA-1 closed at the raw reader boundary (COOLDOWN-JOIN-DA1-01 retired 2026-07-31). REMAINING: commit 3 under the D-097 composed-commit contract - writer outcome emission + a writer-external authenticated discriminator + reader re-acceptance + the D-094 v2 truth-table row as ONE audited change, with the relabel probe as a permanent regression. The D-088 standing conditions and the D-093 scans stay binding until it lands.",
-      "stop_card": null
-    },
     "CUSTODY-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -1134,11 +1086,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "Gauntlet closed 2026-08-02: commit 3 merged as PR #93 (cb860e1) after five audited fix rounds + three cold gates (D-103/D-104/D-105)",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "required": "Gauntlet commit 3 landed (D-095 write surface overlaps; sequential, never parallel)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "COOLDOWN-JOIN-GAUNTLET-01"
         }
@@ -1159,7 +1114,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 11,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
       "stop_card": null
     },
@@ -1183,11 +1138,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "Gauntlet closed 2026-08-02 (PR #93); this row is FOLDED into MET-DANGLER-DISPOSITION-01 per the D-100 addendum and retires when that repair lands",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "required": "Commit 3 lands first (shared write surface in the membership/reader path)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "advisory",
           "target": "COOLDOWN-JOIN-GAUNTLET-01"
         }
@@ -1359,12 +1317,15 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "Gauntlet closed 2026-08-02: commit 3 merged as PR #93 (cb860e1)",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "note": "D-088 forbids any mint from a duplicate-bearing corpus until the join gauntlet closes; this includes the 7B mint.",
           "required": "the cooldown-join gauntlet closes first, per the D-088 no-mint-from-duplicate-bearing-corpus condition",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "COOLDOWN-JOIN-GAUNTLET-01"
         }
@@ -1385,7 +1346,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 12,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "Minted 2026-07-30; BLOCKED on COOLDOWN-JOIN-GAUNTLET-01 by the D-088 no-mint condition. The 7B mint's remaining scope details (D-085 Q6) ride this row.",
       "stop_card": null
     },
@@ -2710,104 +2671,6 @@
       "rank": 48,
       "status": "queued",
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
-      "stop_card": null
-    },
-    "QA-10A-JOIN-OMISSION": {
-      "acceptance": {
-        "evidence": [
-          "Returned result-map keyset equals candidates union tallied declared ids, and every unlicensed declared id carries the exact unknown or unverified refusal payload",
-          "A QA-10A-shaped zero-candidate fixture refuses instead of resolving"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/QA-10A-JOIN-OMISSION/acceptance",
-          "label": "QA-10A-JOIN-OMISSION acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The join can no longer silently omit a declared duplicate whose candidate rows are all malformed."
-      },
-      "authority": {
-        "label": "D-088 cooldown-join escalation ruling (cold gate + Opus contract refuter, 2026-07-30)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "note": "Cold-gate ruling assigns closure to contract C1 (result-map completeness), owned by the join gauntlet.",
-          "required": "the join gauntlet lands contract C1 result-map completeness",
-          "scope": "close",
-          "state": "pending",
-          "strength": "hard",
-          "target": "COOLDOWN-JOIN-GAUNTLET-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-088 blocker registration (not merge-gating)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Registered blocker: do not downgrade severity or close by re-scoping; closure runs only through the ratified join contract"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the cooldown-join result-map omission: declared-duplicate bundle ids whose candidate rows are all malformed yield zero candidates and vanish from the returned map, whose keyset is all that floor_extraction completeness inspects, so the omission escapes the no-outlier-deletion check.",
-      "id": "QA-10A-JOIN-OMISSION",
-      "lane": "agent",
-      "priority": "p0_safety",
-      "rank": 5,
-      "status": "queued",
-      "status_note": "FIX-10 delta re-audit finding, registered 2026-07-30: blocker against the join contract, NOT merge-gating; shape absent from all three claim-bearing corpora. Closes as contract C1 inside the join gauntlet.",
-      "stop_card": null
-    },
-    "QA-10B-EXISTING-RETRY": {
-      "acceptance": {
-        "evidence": [
-          "The gauntlet's counting domain makes the retried-existing case visible to the declared tally, with C3 authorship parity holding",
-          "A QA-10B-shaped fixture refuses instead of resolving through the one-row fast path"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/QA-10B-EXISTING-RETRY/acceptance",
-          "label": "QA-10B-EXISTING-RETRY acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A retried pre-existing failure can no longer be laundered into a fast-path resolution whose repair record cannot be authored."
-      },
-      "authority": {
-        "label": "D-088 cooldown-join escalation ruling (cold gate + Opus contract refuter, 2026-07-30)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "note": "Closure requires the gauntlet's counting-domain design decision (C2) plus C3 authorship parity; no standalone fix was licensed.",
-          "required": "the join gauntlet decides its counting domain (C2) and lands authorship parity (C3)",
-          "scope": "close",
-          "state": "pending",
-          "strength": "hard",
-          "target": "COOLDOWN-JOIN-GAUNTLET-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-088 registration plus recorded refuter dissent",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Registered blocker with recorded dissent (the Opus refuter argued should-fix: the laundered outcome is correct attribution and the loss is a custody receipt); the dissent is not a downgrade"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the cooldown-join existing-retry launder: complete-but-failed pre-existing bundles are recorded as execution existing and retried as invoked, so the invoked-only declared tally sees count 1 and licenses the fast path while the supersession writer, scanning invoked rows only, cannot author the required repair record.",
-      "id": "QA-10B-EXISTING-RETRY",
-      "lane": "agent",
-      "priority": "p0_safety",
-      "rank": 8,
-      "status": "queued",
-      "status_note": "FIX-10 delta re-audit finding, registered 2026-07-30: blocker against the join contract, NOT merge-gating; shape verified ABSENT from all three claim-bearing corpora by three independent bench scans.",
       "stop_card": null
     },
     "SUPERSESSION-DUP-REFUSAL-01": {
