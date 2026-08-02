@@ -128,6 +128,7 @@ be re-derived by a future agent gets an entry here.
 | D-103 | C3 structural cold-gate synthesis: WAL attestation ordering + torn-tail tolerance + origin-gated operator repair (B1); one authentication predicate with TWO named aggregation policies, cold instance OVERRULED on catalog-global verdicts with recorded dissent (B2); writer-strict/reader-tolerant path discipline, backslash false-malformed corrected (B3); origin-binding redesign registered as fallback; fix-round-2 scope restated | accepted (cold gate + Opus refuter, magistrate synthesis with bench-verified overruling, 2026-08-01) |
 | D-104 | C3 residuals cold-gate synthesis (CONVERGENT): acquisition-identity lock tokens (registry + dev/ino + nonce + root binding; log_path.parent candidate rejected), positive writer-grammar tail recognizer with byte-exact canonical round-trip (message-class discrimination ruled out; refuter-discovered whitespace-preservation hole closed), SF1 ruled jointly, R1-R11 regressions, origin-binding fallback not routed | accepted (cold gate + Opus refuter converged; magistrate synthesis 2026-08-02) |
 | D-105 | C3 disposition: LAND via a final custody micro-commit (preserve-then-truncate sidecar, writer-side ASCII key assertion, F3 hygiene, R7-as-ruled) + narrow fresh audit + merge; F1/F2 registered as a NEW ruling (not D-088 precedent) closing via C3-RECOGNIZER-EXACT-01 with the number-grammar exactness STRUCK for a documented decidable superset (D-104 cl.2 amended); three-scan absence evidence recorded; runway-context-in-packet process violation recorded | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
+| D-106 | b-ii residual: Variant D — merge the inert D-100 repair at its audited head, register NOTHING (D-105 guard failure + decidable-closure inversion accepted), window B re-evaluation BLOCKED on D100-BII-BINDING-01 (interval containment + custody digest freeze + nested closure + condition-3 re-record); cold instance overruled on the refuter's bench-verified showing; magistrate packet-hygiene failures recorded | accepted (cold gate + refuter, magistrate synthesis 2026-08-02) |
 
 ---
 
@@ -6628,3 +6629,77 @@ mechanisms, however shaped, returns to a cold gate — no further
 formulation-vs-brief-vs-implementation parsing. Auditor dissent, if
 either re-auditor reads the trigger as already fired, is preserved in
 their reports.
+
+## D-106: b-ii residual synthesis — Variant D (land the inert branch, register NOTHING, window B blocked on two decidable fixes; cold instance overruled with dissent)
+
+- Date: 2026-08-02
+- Status: accepted (cold gate: cold Fable ruled Option A + window-B YES;
+  Opus refuter demonstrated the fence and the YES unsound on
+  bench-verified facts; magistrate synthesis ADOPTS THE REFUTER'S
+  VARIANT D, overruling the cold instance a second time this runway —
+  written dissent below, Ed sees this entry.)
+- Applies to: impl/met-dangler-disposition merge, new row
+  D100-BII-BINDING-01, window B re-evaluation gating
+
+**Bench-verified grounds for the overruling:** (1) the Option A fence
+binds by PATH against a CONTENT-substitution defect — the recorded
+manual verification (winB-closure-facts.md) contains ZERO bundle
+digests, so the fence's predicate survives the attack it fences;
+(2) the operative runbook's condition 3 requires RE-RECORDING with the
+repaired tool at execution time — the packet's parenthetical quoted the
+half that supported its lean (a packet-authoring failure, the
+magistrate's own, recorded); (3) the window's three sibling quarantine
+bundles are mutually substitutable by a single same-name file copy — no
+adversary, no coordination — so the rider-(ii) exemption does not reach
+it (the rider ASSIGNS this layer the anti-malformation duty);
+(4) NEW WRITER-LEVEL FACT (refuter): powermetrics emits identical
+8-field telemetry rows for measured and idle captures from one code
+path — telemetry rows carry NO identity BY CONSTRUCTION, so per-file
+schema formulations can never bind capture identity; only interval
+containment or a digest freeze can. This diagnoses both failed
+formulations and discriminates a viable third fix in kind.
+
+**Ruling (Variant D):**
+1. **MERGE impl/met-dangler-disposition at 05d99b6** — both instances
+   agree the branch strictly narrows a PRE-EXISTING gap and is INERT
+   (salvage semantics reachable only by explicit dispatch + pinned
+   basis; no non-salvage behavior change; lead suite 2396 OK unmasked
+   and mapping pins hash-identical ON RECORD at this head in the
+   gate-commit). An in-code marker lands with the binding fix noting
+   the open row (a follow-up commit's docstring, not a branch commit —
+   audited-head discipline).
+2. **NOTHING is registered.** The refuter's S-1 is accepted: D-105's
+   guard failed on first contact and the ratio was inverted (D-105
+   registered the UNDECIDABLE; this is DECIDABLE). Structural cap
+   adopted: registration is never granted for decidable closures, and
+   no second registration may cite shape without independently
+   satisfying D-105's F-A5-style criteria.
+3. **Window B's re-evaluation is BLOCKED** on row
+   **D100-BII-BINDING-01**: (a) interval containment — every telemetry
+   timestamp within [run_started event, failure + 0.250 s] (the
+   ~5-line decidable-superset control; the cadence-consistency clause
+   is STRUCK as the recognizer-exactness trap; the concurrent-capture
+   residual is RECORDED as a known limitation); (b) custody digest
+   freeze — the closure artifact records sha256 of every file in each
+   b-ii bundle and a root-level digest manifest of the quarantine dir,
+   re-verified at license execution (digests the tool already
+   computes); (c) nested-content closure per the decisive audit's
+   second scenario; (d) the runbook's condition-3 re-record with the
+   REPAIRED tool. These are different IN KIND from the two failed
+   enumerations (the standing trigger's own requirement) and land as
+   ordinary audited work — one commit + focused audit.
+4. **Packet-hygiene violations recorded against the magistrate:** the
+   Option C runway line repeated the D-105 S3 violation under a false
+   self-certification; the condition-3 selective quotation. Packet
+   authorship for cold gates moves to MECHANICAL assembly only:
+   verbatim source quotes with file:line, no paraphrase of governing
+   conditions.
+**Dissent recorded (cold instance):** Option A with fences + window-B
+YES on the compensating-control theory; its own stated
+strongest-counterargument (doctrinal fences decay) is noted as
+convergent with the refuter's B-1. **Refuter dissents absorbed** into
+the ruling itself.
+
+Revisit when: D100-BII-BINDING-01's focused audit reports (window B
+re-evaluation unblocks on its closure), or any window-C dangler seeks
+the b-ii license first.
