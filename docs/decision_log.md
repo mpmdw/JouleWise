@@ -126,6 +126,7 @@ be re-derived by a future agent gets an entry here.
 | D-101 | The site gates nothing: CI release-chain job advisory (continue-on-error), site source docs stay live and session-maintained, DRIFT.md refresh optional, site budgets never reshape governed records | accepted (Ed-directed 2026-08-01) |
 | D-102 | CAL-BRACKET-D079-01 pins: budget cap 0.001275166090593858 s (99% two-draw prediction ceiling 0.012093166090593858 s, blind n=19 derivation), exact-identity-epoch freshness with prospective re-derivation triggers, never-zero allowance max(drift, screen) embedded once, decimal-source numeric semantics with labelled presentation values | accepted (magistrate ratification, lead-replayed arithmetic, 2026-08-01) |
 | D-103 | C3 structural cold-gate synthesis: WAL attestation ordering + torn-tail tolerance + origin-gated operator repair (B1); one authentication predicate with TWO named aggregation policies, cold instance OVERRULED on catalog-global verdicts with recorded dissent (B2); writer-strict/reader-tolerant path discipline, backslash false-malformed corrected (B3); origin-binding redesign registered as fallback; fix-round-2 scope restated | accepted (cold gate + Opus refuter, magistrate synthesis with bench-verified overruling, 2026-08-01) |
+| D-104 | C3 residuals cold-gate synthesis (CONVERGENT): acquisition-identity lock tokens (registry + dev/ino + nonce + root binding; log_path.parent candidate rejected), positive writer-grammar tail recognizer with byte-exact canonical round-trip (message-class discrimination ruled out; refuter-discovered whitespace-preservation hole closed), SF1 ruled jointly, R1-R11 regressions, origin-binding fallback not routed | accepted (cold gate + Opus refuter converged; magistrate synthesis 2026-08-02) |
 
 ---
 
@@ -6442,3 +6443,72 @@ thread afterward (independence rule).
 Revisit when: fix round 2's delta re-audit reports (any same-signature
 failure => the registered origin-binding fallback goes to a new cold
 gate), or any rider text conflicts with observed writer behavior.
+
+## D-104: C3 residuals cold-gate synthesis — acquisition-identity lock tokens, positive writer-grammar tail recognizer (convergent gate; both magistrate candidates rejected)
+
+- Date: 2026-08-02
+- Status: accepted (second rule-11 cold gate on gauntlet commit 3: cold
+  Fable ruling + independent Opus refutation CONVERGED on rejecting both
+  magistrate candidate formulations and on their replacements; magistrate
+  synthesis merges the two near-identical prescriptions. Both instances
+  probed CPython's json taxonomy independently rather than trusting the
+  packet.)
+- Applies to: impl/cooldown-gauntlet-c3 fix round 4, D-103 §1
+
+1. **Lock token (Defect 1) — BLOCKER stands (refuter's should-fix
+   dissent recorded; operationally identical since both mandated
+   in-commit remediation).** Formulation, merged: ownership is
+   established at acquisition and verified by identity — a process-local
+   registry keyed by the resolved lock path records (st_dev, st_ino)
+   from the O_EXCL fd, the resolved runs_dir, and a random NONCE written
+   into the lock content; the assert requires registry presence + stat
+   identity + nonce match + path == root/campaign.lock + the retained
+   basename/pid checks; append target binding: the log's resolved parent
+   equals the registered root, OR an external log is legal iff its
+   directory contains NO campaign.lock. The magistrate's log_path.parent
+   candidate was REJECTED — it breaks the supported --log configuration
+   at four derivation sites and leaves PID-reuse open. Registered
+   residual queued, not folded: two roots sharing one external --log
+   remain mutually unserialized (pre-existing). SF1 (pre-loop lock
+   stranding) is ruled JOINTLY as the stale-lock generator: guard
+   try/finally begins immediately after acquisition; unlink sites
+   idempotent beyond FileNotFoundError.
+2. **Torn-tail (Defect 2) — REPLACED with the positive writer-grammar
+   recognizer; error-message-class discrimination is RULED OUT** (both
+   instances verified it unsound in both directions and
+   version-unstable; it would have been the third negative-check
+   formulation). Case (ii) preserve+LF-complete iff ASCII AND dict AND
+   byte-exact canonical round-trip (dumps(loads(S), sort_keys=True)
+   == S) — this also closes the refuter's NEWLY DISCOVERED preservation
+   hole ('{"a":1} ' — json.loads tolerates trailing whitespace — would
+   have been PERMANENTLY WRITTEN into the log; missed by rounds 2, 3,
+   the round-3 re-audit, and the packet). Case (i) truncate iff a
+   proper prefix of a canonical writer serialization per an explicit
+   incremental recognizer of the writer's closed grammar (first byte
+   "{", isascii-only — the UTF-8-prefix latitude is struck; writer
+   output is pure ASCII). Everything else refuses globally; refusal
+   raises BEFORE any truncation. Acceptance-set contract for the delta
+   re-audit: accepted set ⊆ prefixes of canonical serializations AND
+   ⊇ every prefix of every dumps(dict, sort_keys=True) output — pinned
+   by the R7 property test over real writer rows (self-checking
+   completeness, the answer to the cold instance's own proportionality
+   counterargument). raw_decode end-check may remain as a redundant
+   early refusal only.
+3. **Regressions:** the cold ruling's R1-R11 (stale-pid-reuse,
+   inode-recreate, cross-root append, external-log positive/negative
+   controls, post-release refusal; the prefix property corpus incl.
+   '{"a": 1e' and '{"a": tru'; the refusal table incl. '{"a":1} ',
+   whitespace-only tail flip, and the '{"a" : 1' canonical-strictness
+   pin; byte-exact preservation; refusal-touches-nothing) + the parse
+   count pin as a nit-level extra.
+4. **Corrections on the record:** the packet miscited the B3/NUL
+   precedent (D-103 ratified NUL rows STALE; blocker status attached to
+   the predicate SHAPE, not the row's fate) and understated the append
+   surface (8 token origins, 12 append call sites).
+5. **Origin-binding fallback: NOT routed — both instances, emphatically.**
+   Scope boundary restated: the D-103 fallback triggers only on a
+   same-signature failure of the per-snapshot ATTESTATION mechanism; a
+   recognizer bug is not a structural trigger, but a third formulation
+   failure on the tail-classification clause returns to a cold gate.
+
+Revisit when: fix round 4's fresh delta re-audit reports.
