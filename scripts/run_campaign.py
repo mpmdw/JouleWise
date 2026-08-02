@@ -1195,7 +1195,7 @@ def append_log(
     log_path: Path,
     row: dict[str, Any],
     *,
-    lock_token: Path | None = None,
+    lock_token: CampaignLockToken | None = None,
 ) -> None:
     """Durably append one JSONL row with one ``O_APPEND`` write.
 
@@ -2455,26 +2455,32 @@ def duplicate_run_id_error(items: list[ConfigInfo | ConfigError]) -> str | None:
 
 
 @dataclass(frozen=True)
-class _CampaignLockOwnership:
+class CampaignLockToken:
+    """Unforgeable process-local identity for one lock acquisition."""
+
     lock_path: Path
     runs_root: Path
     st_dev: int
     st_ino: int
     nonce: str
+    acquisition_id: str
 
 
-_CAMPAIGN_LOCK_OWNERSHIP: dict[Path, _CampaignLockOwnership] = {}
+_CAMPAIGN_LOCK_OWNERSHIP: dict[Path, CampaignLockToken] = {}
 _CAMPAIGN_LOCK_OWNERSHIP_LOCK = threading.Lock()
 
 
-def acquire_campaign_lock(runs_dir: Path) -> Path:
+def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
     runs_root = Path(runs_dir).resolve(strict=False)
     runs_root.mkdir(parents=True, exist_ok=True)
     lock_path = runs_root / "campaign.lock"
     nonce = secrets.token_hex(32)
+    acquisition_id = secrets.token_hex(32)
     content = (
         f"pid={os.getpid()} nonce={nonce} created_at={utc_timestamp()}\n"
     )
+    fd = -1
+    token: CampaignLockToken | None = None
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
@@ -2493,101 +2499,150 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-    except BaseException:
+        token = CampaignLockToken(
+            lock_path=lock_path,
+            runs_root=runs_root,
+            st_dev=acquired_stat.st_dev,
+            st_ino=acquired_stat.st_ino,
+            nonce=nonce,
+            acquisition_id=acquisition_id,
+        )
+        with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+            _CAMPAIGN_LOCK_OWNERSHIP[lock_path] = token
+        return token
+    except BaseException as acquisition_exc:
+        cleanup_exc: BaseException | None = None
         if fd >= 0:
-            os.close(fd)
+            try:
+                os.close(fd)
+            except BaseException as exc:
+                cleanup_exc = exc
         try:
             lock_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except BaseException as exc:
+            if cleanup_exc is None:
+                cleanup_exc = exc
+        else:
+            if token is not None:
+                try:
+                    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+                        if _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path) is token:
+                            _CAMPAIGN_LOCK_OWNERSHIP.pop(lock_path)
+                except BaseException as exc:
+                    if cleanup_exc is None:
+                        cleanup_exc = exc
+        if cleanup_exc is not None:
+            raise acquisition_exc from cleanup_exc
         raise
-    ownership = _CampaignLockOwnership(
-        lock_path=lock_path,
-        runs_root=runs_root,
-        st_dev=acquired_stat.st_dev,
-        st_ino=acquired_stat.st_ino,
-        nonce=nonce,
-    )
-    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
-        _CAMPAIGN_LOCK_OWNERSHIP[lock_path] = ownership
-    return lock_path
 
 
 def _validated_campaign_lock_ownership(
-    lock_path: Path,
-) -> _CampaignLockOwnership:
+    token: CampaignLockToken,
+) -> CampaignLockToken:
     """Return acquisition identity only for this process's live lock."""
 
-    lock_path = Path(lock_path)
+    if not isinstance(token, CampaignLockToken):
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    lock_path = token.lock_path
     if lock_path.name != "campaign.lock":
         raise RuntimeError("campaign log append requires a campaign.lock token")
     resolved_lock_path = lock_path.resolve(strict=False)
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
-        ownership = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
-    if ownership is None:
+        current_token = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
+    if current_token is not token:
         raise RuntimeError(
             "campaign provenance log write requires held lock acquired by this process"
         )
     if (
-        resolved_lock_path != ownership.lock_path
-        or resolved_lock_path != ownership.runs_root / "campaign.lock"
+        resolved_lock_path != token.lock_path
+        or resolved_lock_path != token.runs_root / "campaign.lock"
     ):
         raise RuntimeError(
             "campaign provenance log write requires the registered runs-root lock"
         )
+    fd = -1
     try:
-        current_stat = os.stat(resolved_lock_path)
-        content = resolved_lock_path.read_text(encoding="utf-8")
-    except OSError as exc:
+        fd = os.open(resolved_lock_path, os.O_RDONLY)
+        current_stat = os.fstat(fd)
+        content_parts: list[bytes] = []
+        while True:
+            part = os.read(fd, 65536)
+            if not part:
+                break
+            content_parts.append(part)
+        content = b"".join(content_parts).decode("utf-8")
+    except (OSError, UnicodeError) as exc:
         raise RuntimeError(
             f"campaign provenance log write requires held lock {resolved_lock_path}"
         ) from exc
+    finally:
+        if fd >= 0:
+            os.close(fd)
     if (
         (current_stat.st_dev, current_stat.st_ino)
-        != (ownership.st_dev, ownership.st_ino)
+        != (token.st_dev, token.st_ino)
         or not content.startswith(f"pid={os.getpid()} ")
-        or f" nonce={ownership.nonce} " not in content
+        or f" nonce={token.nonce} " not in content
     ):
         raise RuntimeError(
             "campaign provenance log write requires this process's acquisition "
             f"identity for {resolved_lock_path}"
         )
-    return ownership
+    return token
 
 
-def _assert_campaign_lock_token(lock_path: Path) -> Path:
+def _assert_campaign_lock_token(
+    token: CampaignLockToken,
+) -> CampaignLockToken:
     """Mechanically prove this process owns the supplied campaign lock."""
 
-    return _validated_campaign_lock_ownership(lock_path).lock_path
+    return _validated_campaign_lock_ownership(token)
 
 
-def _assert_campaign_lock_held(runs_dir: Path) -> Path:
+def _assert_campaign_lock_held(runs_dir: Path) -> CampaignLockToken:
     """Assert an acquired lock; never mint ownership from file contents."""
 
-    return _assert_campaign_lock_token(Path(runs_dir) / "campaign.lock")
+    lock_path = Path(runs_dir).resolve(strict=False) / "campaign.lock"
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        token = _CAMPAIGN_LOCK_OWNERSHIP.get(lock_path)
+    if token is None:
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    return _assert_campaign_lock_token(token)
 
 
-def release_campaign_lock(lock_path: Path) -> None:
+def release_campaign_lock(token: CampaignLockToken) -> None:
     """Idempotently release only the lock identity acquired by this process."""
 
-    supplied_lock_path = Path(lock_path)
-    resolved_lock_path = (
-        supplied_lock_path.parent.resolve(strict=False) / supplied_lock_path.name
-    )
+    if not isinstance(token, CampaignLockToken):
+        return
+    resolved_lock_path = token.lock_path
+    in_flight_exc = sys.exception()
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
-        ownership = _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path, None)
-    if ownership is None:
-        return
-    try:
-        current_stat = os.stat(resolved_lock_path)
-    except FileNotFoundError:
-        return
-    if (current_stat.st_dev, current_stat.st_ino) != (
-        ownership.st_dev,
-        ownership.st_ino,
-    ):
-        return
-    resolved_lock_path.unlink(missing_ok=True)
+        if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is not token:
+            return
+        try:
+            current_stat = os.stat(resolved_lock_path)
+        except FileNotFoundError:
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+            return
+        if (current_stat.st_dev, current_stat.st_ino) != (
+            token.st_dev,
+            token.st_ino,
+        ):
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
+            return
+        try:
+            resolved_lock_path.unlink(missing_ok=True)
+        except BaseException as unlink_exc:
+            if in_flight_exc is not None:
+                raise in_flight_exc from unlink_exc
+            raise
+        if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is token:
+            _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
 
 
 def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
@@ -2744,7 +2799,7 @@ def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
-    lock_path: Path | None = None
+    lock_path: CampaignLockToken | None = None
     report: dict[str, Any] = {
         "operation": "repair-campaign-provenance",
         "repaired": [],
@@ -4532,7 +4587,7 @@ def _run_record_supersession_locked(
     *,
     runs_dir: Path,
     log_path: Path,
-    lock_token: Path,
+    lock_token: CampaignLockToken,
 ) -> int:
     """Construct and append a supersession while ``campaign.lock`` is held."""
 
@@ -4714,7 +4769,7 @@ def _run_whole_window_verdict_locked(
     *,
     runs_dir: Path,
     log_path: Path,
-    lock_token: Path,
+    lock_token: CampaignLockToken,
 ) -> int:
     """Evaluate and append the whole-window verdict under the campaign lock."""
 
@@ -5281,7 +5336,7 @@ def print_verdict(
 def append_verdict(
     log_path: Path,
     *,
-    lock_token: Path,
+    lock_token: CampaignLockToken,
     collection_verdict: str,
     collection_reasons: list[str],
     categories: dict[str, list[str]],
@@ -5327,7 +5382,7 @@ def append_verdict(
 def append_environment_preflight_verdict(
     log_path: Path,
     *,
-    lock_token: Path,
+    lock_token: CampaignLockToken,
     analysis_manifest: AnalysisManifestState | None,
     campaign_provenance_path: Path | None,
     preflight: dict[str, Any],
@@ -5594,7 +5649,7 @@ def run_axi_spec_campaign(
     else:
         _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
-    lock_path: Path | None = None
+    lock_path: CampaignLockToken | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
         child_environment: dict[str, str] | None = None
@@ -6459,7 +6514,7 @@ def run_campaign(args: argparse.Namespace) -> int:
 
     counts: Counter[str] = Counter()
     failures = 0
-    lock_path: Path | None = None
+    lock_path: CampaignLockToken | None = None
     all_evaluations: list[MemberEvaluation] = []
     missing_members: list[str] = []
     previous_model_tag: str | None = None

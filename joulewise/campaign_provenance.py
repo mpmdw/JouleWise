@@ -143,7 +143,7 @@ def _python_number_prefix(text: str) -> bool:
         while index < len(text) and text[index].isdigit():
             index += 1
     if index == len(text):
-        return False
+        return text == "-0"
     if text[index] == ".":
         index += 1
         if index == len(text):
@@ -172,7 +172,21 @@ def _python_number_prefix(text: str) -> bool:
         index += 1
     if index != len(text):
         return False
-    return index - exponent_start < 2 or not _canonical_number(text)
+    exponent = text[exponent_start:index]
+    if len(exponent) < 2:
+        return True
+    if exponent.startswith("0"):
+        return False
+    return True
+
+
+def _key_prefix_can_exceed(prefix: str, previous: str) -> bool:
+    """Return whether some completion of ``prefix`` can sort after ``previous``."""
+
+    for current_character, previous_character in zip(prefix, previous):
+        if current_character != previous_character:
+            return current_character > previous_character
+    return True
 
 
 class _CanonicalWriterPrefixRecognizer:
@@ -205,12 +219,24 @@ class _CanonicalWriterPrefixRecognizer:
         if self.text[self.index] == "}":
             self.index += 1
             return _PREFIX_COMPLETE
+        previous_key: str | None = None
         while True:
             if self.text[self.index] != '"':
                 return _PREFIX_INVALID
-            status, _key = self._parse_string()
-            if status != _PREFIX_COMPLETE:
+            status, key = self._parse_string()
+            if status == _PREFIX_INCOMPLETE:
+                if (
+                    previous_key is not None
+                    and key is not None
+                    and not _key_prefix_can_exceed(key, previous_key)
+                ):
+                    return _PREFIX_INVALID
                 return status
+            if status != _PREFIX_COMPLETE or key is None:
+                return status
+            if previous_key is not None and key <= previous_key:
+                return _PREFIX_INVALID
+            previous_key = key
             status = self._expect(": ")
             if status != _PREFIX_COMPLETE:
                 return status
@@ -300,6 +326,14 @@ class _CanonicalWriterPrefixRecognizer:
 
     def _parse_string(self) -> tuple[str, str | None]:
         start = self.index
+
+        def decoded_prefix(end: int) -> str | None:
+            try:
+                value = json.loads(self.text[start:end] + '"')
+            except json.JSONDecodeError:
+                return None
+            return value if isinstance(value, str) else None
+
         self.index += 1
         while self.index < len(self.text):
             character = self.text[self.index]
@@ -313,14 +347,15 @@ class _CanonicalWriterPrefixRecognizer:
                 if not isinstance(value, str) or json.dumps(value) != token:
                     return _PREFIX_INVALID, None
                 return _PREFIX_COMPLETE, value
-            if ord(character) < 0x20:
+            if ord(character) < 0x20 or ord(character) >= 0x7F:
                 return _PREFIX_INVALID, None
             if character != "\\":
                 self.index += 1
                 continue
+            escape_start = self.index
             self.index += 1
             if self.index == len(self.text):
-                return _PREFIX_INCOMPLETE, None
+                return _PREFIX_INCOMPLETE, decoded_prefix(escape_start)
             escape = self.text[self.index]
             if escape in _JSON_SIMPLE_ESCAPES:
                 self.index += 1
@@ -340,13 +375,13 @@ class _CanonicalWriterPrefixRecognizer:
                 if self.index < len(self.text):
                     return _PREFIX_INVALID, None
                 return (
-                    (_PREFIX_INCOMPLETE, None)
+                    (_PREFIX_INCOMPLETE, decoded_prefix(escape_start))
                     if _unicode_escape_prefix_can_complete(digits)
                     else (_PREFIX_INVALID, None)
                 )
             if not _writer_emits_unicode_escape(int(digits, 16)):
                 return _PREFIX_INVALID, None
-        return _PREFIX_INCOMPLETE, None
+        return _PREFIX_INCOMPLETE, decoded_prefix(self.index)
 
 
 def _canonical_unterminated_mapping(segment: bytes) -> dict[str, Any] | None:

@@ -47,6 +47,12 @@ sys.modules["run_campaign_module"] = run_campaign_module
 spec.loader.exec_module(run_campaign_module)
 
 
+def campaign_lock_path(token) -> Path:
+    """Return the lock path for both legacy path and identity-object tokens."""
+
+    return Path(getattr(token, "lock_path", token))
+
+
 @contextmanager
 def held_campaign_lock(runs_dir: Path):
     lock_path = run_campaign_module.acquire_campaign_lock(runs_dir)
@@ -66,7 +72,7 @@ class CampaignLockIdentityTests(unittest.TestCase):
             token = run_campaign_module.acquire_campaign_lock(owner_root)
             try:
                 foreign_token = foreign_root / "campaign.lock"
-                foreign_token.write_bytes(token.read_bytes())
+                foreign_token.write_bytes(campaign_lock_path(token).read_bytes())
                 with self.assertRaisesRegex(RuntimeError, "acquired by this process"):
                     run_campaign_module._assert_campaign_lock_token(foreign_token)
             finally:
@@ -90,8 +96,9 @@ class CampaignLockIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             token = run_campaign_module.acquire_campaign_lock(root)
-            acquired_content = token.read_bytes()
-            acquired_identity = (token.stat().st_dev, token.stat().st_ino)
+            token_path = campaign_lock_path(token)
+            acquired_content = token_path.read_bytes()
+            acquired_identity = (token_path.stat().st_dev, token_path.stat().st_ino)
             replacement = root / "replacement.lock"
             replacement.write_bytes(acquired_content)
             replacement_identity = (
@@ -99,22 +106,25 @@ class CampaignLockIdentityTests(unittest.TestCase):
                 replacement.stat().st_ino,
             )
             self.assertNotEqual(replacement_identity, acquired_identity)
-            token.unlink()
-            os.replace(replacement, token)
+            token_path.unlink()
+            os.replace(replacement, token_path)
             try:
                 with self.assertRaisesRegex(RuntimeError, "acquisition identity"):
                     run_campaign_module._assert_campaign_lock_token(token)
             finally:
                 run_campaign_module.release_campaign_lock(token)
-            self.assertTrue(token.is_file(), "release must preserve a replacement inode")
+            self.assertTrue(
+                token_path.is_file(), "release must preserve a replacement inode"
+            )
 
     def test_lock_nonce_tamper_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             token = run_campaign_module.acquire_campaign_lock(Path(tmp))
+            token_path = campaign_lock_path(token)
             try:
-                fields = token.read_text(encoding="utf-8").split()
+                fields = token_path.read_text(encoding="utf-8").split()
                 fields[1] = "nonce=forged"
-                token.write_text(" ".join(fields) + "\n", encoding="utf-8")
+                token_path.write_text(" ".join(fields) + "\n", encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "acquisition identity"):
                     run_campaign_module._assert_campaign_lock_token(token)
             finally:
@@ -170,9 +180,10 @@ class CampaignLockIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             token = run_campaign_module.acquire_campaign_lock(root)
-            acquired_content = token.read_bytes()
+            token_path = campaign_lock_path(token)
+            acquired_content = token_path.read_bytes()
             run_campaign_module.release_campaign_lock(token)
-            token.write_bytes(acquired_content)
+            token_path.write_bytes(acquired_content)
             before = b'{"existing": true}\n'
             log_path = root / "campaign_log.jsonl"
             log_path.write_bytes(before)
@@ -182,6 +193,118 @@ class CampaignLockIdentityTests(unittest.TestCase):
                 )
             self.assertEqual(log_path.read_bytes(), before)
             run_campaign_module.release_campaign_lock(token)
+
+    def test_b1_release_reacquire_stale_token_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = run_campaign_module.acquire_campaign_lock(root)
+            run_campaign_module.release_campaign_lock(stale)
+            current = run_campaign_module.acquire_campaign_lock(root)
+            try:
+                self.assertIsNot(stale, current)
+                with self.assertRaisesRegex(RuntimeError, "acquired by this process"):
+                    run_campaign_module._assert_campaign_lock_token(stale)
+                run_campaign_module.release_campaign_lock(stale)
+                self.assertIs(
+                    run_campaign_module._assert_campaign_lock_token(current),
+                    current,
+                )
+            finally:
+                run_campaign_module.release_campaign_lock(current)
+
+    def test_s1_identity_and_nonce_are_read_from_one_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token = run_campaign_module.acquire_campaign_lock(root)
+            token_path = campaign_lock_path(token)
+            replacement = root / "replacement.lock"
+            replacement.write_bytes(token_path.read_bytes())
+            self.assertNotEqual(
+                (replacement.stat().st_dev, replacement.stat().st_ino),
+                (token_path.stat().st_dev, token_path.stat().st_ino),
+            )
+            replaced = False
+            real_os_open = run_campaign_module.os.open
+            real_read_text = Path.read_text
+
+            def replace_lock_once() -> None:
+                nonlocal replaced
+                if replaced:
+                    return
+                replaced = True
+                token_path.unlink()
+                os.replace(replacement, token_path)
+
+            def replacing_os_open(path, flags, *args, **kwargs):
+                if Path(path) == token_path and flags == os.O_RDONLY:
+                    replace_lock_once()
+                return real_os_open(path, flags, *args, **kwargs)
+
+            def replacing_read_text(path, *args, **kwargs):
+                if Path(path) == token_path:
+                    replace_lock_once()
+                return real_read_text(path, *args, **kwargs)
+
+            try:
+                with patch.object(
+                    run_campaign_module.os, "open", side_effect=replacing_os_open
+                ), patch.object(Path, "read_text", replacing_read_text):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "acquisition identity"
+                    ):
+                        run_campaign_module._assert_campaign_lock_token(token)
+            finally:
+                run_campaign_module.release_campaign_lock(token)
+            self.assertTrue(replaced)
+
+    def test_s2_registry_install_failure_removes_lock_file(self) -> None:
+        class FailingRegistry(dict):
+            def __setitem__(self, key, value):
+                raise MemoryError("injected registry install failure")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lock_path = root.resolve() / "campaign.lock"
+            registry = FailingRegistry(run_campaign_module._CAMPAIGN_LOCK_OWNERSHIP)
+            with patch.object(
+                run_campaign_module, "_CAMPAIGN_LOCK_OWNERSHIP", registry
+            ):
+                with self.assertRaisesRegex(MemoryError, "registry install failure"):
+                    run_campaign_module.acquire_campaign_lock(root)
+                self.assertFalse(lock_path.exists())
+                self.assertNotIn(lock_path, registry)
+
+    def test_s2_unlink_failure_retains_registry_and_chains_body_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token = run_campaign_module.acquire_campaign_lock(root)
+            token_path = campaign_lock_path(token)
+            original = RuntimeError("injected body failure")
+            real_unlink = Path.unlink
+
+            def refusing_unlink(path, *args, **kwargs):
+                if Path(path) == token_path:
+                    raise PermissionError("injected unlink failure")
+                return real_unlink(path, *args, **kwargs)
+
+            caught = None
+            with patch.object(Path, "unlink", refusing_unlink):
+                try:
+                    try:
+                        raise original
+                    finally:
+                        run_campaign_module.release_campaign_lock(token)
+                except RuntimeError as exc:
+                    caught = exc
+            self.assertIs(caught, original)
+            self.assertIsInstance(caught.__cause__, PermissionError)
+            self.assertIs(
+                run_campaign_module._CAMPAIGN_LOCK_OWNERSHIP.get(token_path),
+                token,
+            )
+            self.assertTrue(token_path.exists())
+            run_campaign_module.release_campaign_lock(token)
+            self.assertFalse(token_path.exists())
 
     def test_sf1_failure_immediately_after_acquisition_releases_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -239,6 +362,12 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                 "truth": True,
                 "falsehood": False,
             },
+            {
+                "negative_zero": -0.0,
+                "nan": float("nan"),
+                "positive_infinity": float("inf"),
+                "negative_infinity": -float("inf"),
+            },
         )
         for row in corpus:
             wire = json.dumps(row, sort_keys=True).encode("ascii")
@@ -257,6 +386,60 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertEqual(self._parse(prefix), ([], "torn_prefix"))
+
+    def test_b2_out_of_order_duplicate_and_decoded_torn_keys_refuse(self) -> None:
+        for name, segment in (
+            ("out_of_order", b'{"b": 1, "a'),
+            ("duplicate", b'{"a": 1, "a"'),
+            ("decoded_out_of_order", b'{"\\u2603": 1, "\\u00e9'),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(self._parse(segment), (None, "invalid"))
+
+    def test_b2_number_grammar_round_trips_writer_forms_byte_exactly(self) -> None:
+        for name, value, literal in (
+            ("nan", float("nan"), b"NaN"),
+            ("positive_infinity", float("inf"), b"Infinity"),
+            ("negative_infinity", -float("inf"), b"-Infinity"),
+        ):
+            with self.subTest(name=name):
+                special_segment = json.dumps(
+                    {"a": value}, sort_keys=True
+                ).encode("ascii")
+                self.assertIn(literal, special_segment)
+                parsed, final_segment = self._parse(special_segment)
+                self.assertEqual(final_segment, "mapping")
+                assert parsed is not None
+                self.assertEqual(
+                    json.dumps(parsed[0], sort_keys=True).encode("ascii"),
+                    special_segment,
+                )
+
+        self.assertEqual(self._parse(b'{"a": -0'), ([], "torn_prefix"))
+        row = {"a": -0.0}
+        segment = json.dumps(row, sort_keys=True).encode("ascii")
+        parsed, final_segment = self._parse(segment)
+        self.assertEqual(final_segment, "mapping")
+        assert parsed is not None
+        self.assertEqual(
+            json.dumps(parsed[0], sort_keys=True).encode("ascii"), segment
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            log_path.write_bytes(segment)
+            with held_campaign_lock(root) as token:
+                run_campaign_module.append_log(
+                    log_path, {"next": 1}, lock_token=token
+                )
+            self.assertEqual(
+                log_path.read_bytes(),
+                segment
+                + b"\n"
+                + json.dumps({"next": 1}, sort_keys=True).encode("ascii")
+                + b"\n",
+            )
 
     def test_r8_complete_row_missing_lf_is_preserved_byte_exactly(self) -> None:
         from joulewise import campaign_provenance
@@ -297,6 +480,8 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
             ("scalar_exponent", b"1e"),
             ("array", b"[1, 2"),
             ("non_ascii", b"\xff"),
+            ("leading_zero_exponent", b'{"a": 1e+000'),
+            ("raw_del", b'{"a": "\x7f'),
             ("whitespace_only", b" \t"),
             ("noncanonical_key_separator", b'{"a" : 1'),
         )
@@ -3721,7 +3906,9 @@ class RunCampaignTests(unittest.TestCase):
                             "pid": os.getpid(),
                             "session_id": fresh["session_id"],
                             "manifest_path": str(fresh_path),
-                            "lock_existed_while_held": lock_token.is_file(),
+                            "lock_existed_while_held": getattr(
+                                lock_token, "lock_path", lock_token
+                            ).is_file(),
                             "leftover_tmp_existed": leftover_tmp.is_file(),
                         }, sort_keys=True))
                     finally:
@@ -3981,7 +4168,7 @@ class RunCampaignTests(unittest.TestCase):
                 ],
             )
             with held_campaign_lock(runs_dir) as lock_token:
-                locked_content = lock_token.read_bytes()
+                locked_content = campaign_lock_path(lock_token).read_bytes()
                 for arguments in commands:
                     with self.subTest(command=arguments[0]):
                         completed = subprocess.run(
@@ -3997,7 +4184,10 @@ class RunCampaignTests(unittest.TestCase):
                             "another campaign appears to be running",
                             completed.stderr,
                         )
-                        self.assertEqual(lock_token.read_bytes(), locked_content)
+                        self.assertEqual(
+                            campaign_lock_path(lock_token).read_bytes(),
+                            locked_content,
+                        )
                         self.assertFalse(
                             (runs_dir / "campaign_log.jsonl").exists()
                         )
