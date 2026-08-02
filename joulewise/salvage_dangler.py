@@ -18,6 +18,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.schemas import BenchmarkConfig, SchemaError
+
 
 SALVAGE_CLOSURE_SCHEMA = "joulewise.salvage_closure.v1"
 SALVAGE_EXCLUSION_SCHEMA = "joulewise.salvage_dangler_exclusion.v1"
@@ -33,11 +35,84 @@ _REQUIRED_BUNDLE_FILES = (
     "events.jsonl",
     "power_trace.csv",
 )
-_KNOWN_IDLE_TELEMETRY_FILES = frozenset(
+_MINIMAL_TELEMETRY_ROW_FIELDS = frozenset(
+    {"index", "timestamp_s", "processor_combined_power_w"}
+)
+_RICH_TELEMETRY_ROW_FIELDS = frozenset(
     {
-        "rich_telemetry.jsonl",
-        "rich_telemetry_idle.jsonl",
-        "rich_telemetry_idle_attempt_2.jsonl",
+        "index",
+        "timestamp_s",
+        "elapsed_ns",
+        "gpu",
+        "clusters",
+        "processor_combined_power_w",
+        "rail_sum_power_w",
+        "combined_power_delta_w",
+    }
+)
+_GPU_TELEMETRY_FIELDS = frozenset(
+    {
+        "freq_hz",
+        "idle_ratio",
+        "idle_ns",
+        "gpu_energy",
+        "active_freq_mhz_weighted",
+        "dvfm_states",
+        "sw_state",
+        "sw_requested_state",
+    }
+)
+_CLUSTER_TELEMETRY_FIELDS = frozenset(
+    {
+        "name",
+        "freq_hz",
+        "idle_ratio",
+        "down_ratio",
+        "online_ratio",
+        "dvfm_states",
+        "cpus",
+    }
+)
+_CPU_TELEMETRY_FIELDS = frozenset(
+    {"cpu", "freq_hz", "idle_ratio", "down_ratio", "online_ratio"}
+)
+_EVENT_FIELDS = frozenset(
+    {"event_type", "phase", "timestamp_s", "message", "metadata"}
+)
+_ADMISSION_METADATA_FIELDS = frozenset(
+    {
+        "platform",
+        "machine",
+        "python_version",
+        "joulewise_version",
+        "schema_version",
+        "config_sha256",
+        "run_id",
+        "git_commit",
+        "source_provenance",
+        "clock",
+        "config_warnings",
+        "model",
+        "quantization",
+        "device",
+        "connection",
+        "environment",
+        "campaign_policy",
+        "campaign_environment_preflight",
+        "environment_admission",
+        "instrument_calibration",
+        "trace_window_margins",
+        "adapters",
+        "idle_baseline",
+        "thermal_pre",
+        "thermal_post",
+        "uncertainty_evidence",
+        "clock_anchor_bound_s",
+        "marker_to_first_sample_phase_bound_s",
+        "marker_to_last_sample_phase_bound_s",
+        "idle_drift_bound_w",
+        "suite",
+        "extra",
     }
 )
 _EXPECTED_EVENT_SEQUENCE = (
@@ -216,16 +291,261 @@ def _finite_timestamp(value: object) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _contains_occurrence_identity(value: object, bundle_id: str) -> bool:
-    if isinstance(value, Mapping):
-        return any(
-            (key in {"run_id", "bundle_id"} and child == bundle_id)
-            or _contains_occurrence_identity(child, bundle_id)
-            for key, child in value.items()
+def _finite_number_or_none(value: object) -> bool:
+    return value is None or _finite_timestamp(value) is not None
+
+
+def _validate_state_rows(
+    value: object, *, allowed_fields: frozenset[str], label: str
+) -> None:
+    if not isinstance(value, list):
+        raise SalvageAuthorizationError(f"malformed admission-phase telemetry {label}")
+    for row in value:
+        if (
+            not isinstance(row, Mapping)
+            or not row
+            or not set(row).issubset(allowed_fields)
+            or any(
+                not isinstance(child, str | int | float | bool) and child is not None
+                for child in row.values()
+            )
+            or any(isinstance(child, float) and not math.isfinite(child) for child in row.values())
+        ):
+            raise SalvageAuthorizationError(
+                f"malformed admission-phase telemetry {label}"
+            )
+
+
+def _validate_gpu_telemetry(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, Mapping) or set(value) != _GPU_TELEMETRY_FIELDS:
+        raise SalvageAuthorizationError("unclassifiable admission-phase telemetry gpu")
+    for field in ("freq_hz", "idle_ratio", "active_freq_mhz_weighted"):
+        if not _finite_number_or_none(value.get(field)):
+            raise SalvageAuthorizationError("malformed admission-phase telemetry gpu")
+    for field in ("idle_ns", "gpu_energy"):
+        child = value.get(field)
+        if child is not None and (isinstance(child, bool) or not isinstance(child, int)):
+            raise SalvageAuthorizationError("malformed admission-phase telemetry gpu")
+    _validate_state_rows(
+        value.get("dvfm_states"),
+        allowed_fields=frozenset({"freq", "used_ns", "used_ratio"}),
+        label="gpu dvfm state",
+    )
+    _validate_state_rows(
+        value.get("sw_state"),
+        allowed_fields=frozenset({"sw_state", "used_ns", "used_ratio"}),
+        label="gpu software state",
+    )
+    _validate_state_rows(
+        value.get("sw_requested_state"),
+        allowed_fields=frozenset({"sw_req_state", "used_ns", "used_ratio"}),
+        label="gpu requested state",
+    )
+
+
+def _validate_cluster_telemetry(value: object) -> None:
+    if not isinstance(value, list):
+        raise SalvageAuthorizationError("malformed admission-phase telemetry clusters")
+    for cluster in value:
+        if not isinstance(cluster, Mapping) or set(cluster) != _CLUSTER_TELEMETRY_FIELDS:
+            raise SalvageAuthorizationError(
+                "unclassifiable admission-phase telemetry cluster"
+            )
+        name = cluster.get("name")
+        if name is not None and not isinstance(name, str):
+            raise SalvageAuthorizationError("malformed admission-phase telemetry cluster")
+        for field in ("freq_hz", "idle_ratio", "down_ratio", "online_ratio"):
+            if not _finite_number_or_none(cluster.get(field)):
+                raise SalvageAuthorizationError(
+                    "malformed admission-phase telemetry cluster"
+                )
+        _validate_state_rows(
+            cluster.get("dvfm_states"),
+            allowed_fields=frozenset({"freq", "used_ns", "used_ratio"}),
+            label="cluster dvfm state",
         )
+        cpus = cluster.get("cpus")
+        if not isinstance(cpus, list):
+            raise SalvageAuthorizationError("malformed admission-phase telemetry cpus")
+        for cpu in cpus:
+            if not isinstance(cpu, Mapping) or set(cpu) != _CPU_TELEMETRY_FIELDS:
+                raise SalvageAuthorizationError(
+                    "unclassifiable admission-phase telemetry cpu"
+                )
+            cpu_index = cpu.get("cpu")
+            if cpu_index is not None and (
+                isinstance(cpu_index, bool) or not isinstance(cpu_index, int)
+            ):
+                raise SalvageAuthorizationError("malformed admission-phase telemetry cpu")
+            for field in ("freq_hz", "idle_ratio", "down_ratio", "online_ratio"):
+                if not _finite_number_or_none(cpu.get(field)):
+                    raise SalvageAuthorizationError(
+                        "malformed admission-phase telemetry cpu"
+                    )
+
+
+def _validate_admission_telemetry(path: Path) -> list[float]:
+    timestamps: list[float] = []
+    indices: list[int] = []
+    for row in _jsonl_rows(path):
+        fields = frozenset(row)
+        if fields not in {
+            _MINIMAL_TELEMETRY_ROW_FIELDS,
+            _RICH_TELEMETRY_ROW_FIELDS,
+        }:
+            raise SalvageAuthorizationError(
+                f"unclassifiable admission-phase telemetry row: {path}"
+            )
+        index = row.get("index")
+        timestamp = _finite_timestamp(row.get("timestamp_s"))
+        if (
+            isinstance(index, bool)
+            or not isinstance(index, int)
+            or index < 0
+            or timestamp is None
+            or not _finite_number_or_none(row.get("processor_combined_power_w"))
+        ):
+            raise SalvageAuthorizationError(
+                f"malformed admission-phase telemetry row: {path}"
+            )
+        if fields == _RICH_TELEMETRY_ROW_FIELDS:
+            elapsed_ns = row.get("elapsed_ns")
+            if (
+                isinstance(elapsed_ns, bool)
+                or not isinstance(elapsed_ns, int)
+                or elapsed_ns < 0
+                or not _finite_number_or_none(row.get("rail_sum_power_w"))
+                or not _finite_number_or_none(row.get("combined_power_delta_w"))
+            ):
+                raise SalvageAuthorizationError(
+                    f"malformed admission-phase telemetry row: {path}"
+                )
+            _validate_gpu_telemetry(row.get("gpu"))
+            _validate_cluster_telemetry(row.get("clusters"))
+        indices.append(index)
+        timestamps.append(timestamp)
+    if indices != sorted(indices) or len(indices) != len(set(indices)):
+        raise SalvageAuthorizationError(
+            f"admission-phase telemetry indices are unordered: {path}"
+        )
+    if timestamps != sorted(timestamps):
+        raise SalvageAuthorizationError(
+            f"rich telemetry timestamps are unordered: {path}"
+        )
+    return timestamps
+
+
+def _contains_workload_evidence(value: object) -> bool:
+    """Reject result-shaped bytes from admission-only evidence structures."""
+
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            normalized = str(key).lower()
+            if child is not None and (
+                normalized in _MEASURAND_FIELDS
+                or normalized.startswith("workload_")
+                or "token_count" in normalized
+                or normalized in {
+                    "measurement_result",
+                    "request_result",
+                    "runtime_result",
+                    "generated_text",
+                }
+            ):
+                return True
+            if normalized == "phase" and (
+                not isinstance(child, str)
+                or (
+                    child
+                    not in {"run", "validate", "prepare", "idle_baseline", "launcher"}
+                    and not child.startswith("before_attempt_")
+                )
+            ):
+                return True
+            if _contains_workload_evidence(child):
+                return True
+        return False
     if isinstance(value, list):
-        return any(_contains_occurrence_identity(child, bundle_id) for child in value)
+        return any(_contains_workload_evidence(child) for child in value)
     return False
+
+
+def _validate_bundle_config(config: Mapping[str, Any]) -> None:
+    """Accept only a complete schema-0.1 config or the closed test-safe shape."""
+
+    compact_fields = {"schema_version", "run_id", "workload_profile"}
+    if set(config) == compact_fields:
+        workload = config.get("workload_profile")
+        if (
+            config.get("schema_version") != "0.1"
+            or not isinstance(config.get("run_id"), str)
+            or not config.get("run_id")
+            or not isinstance(workload, Mapping)
+            or set(workload) != {"name"}
+            or not isinstance(workload.get("name"), str)
+            or not workload.get("name")
+        ):
+            raise SalvageAuthorizationError("compact bundle config is malformed")
+        return
+    try:
+        parsed = BenchmarkConfig.from_mapping(dict(config))
+    except (SchemaError, TypeError, ValueError) as exc:
+        raise SalvageAuthorizationError("bundle config is not schema-valid") from exc
+    if parsed.config_warnings or parsed.to_dict() != dict(config):
+        raise SalvageAuthorizationError("bundle config has unclassifiable fields")
+
+
+def _expected_idle_artifact_sets(metadata: Mapping[str, Any]) -> tuple[set[str], ...]:
+    admission = metadata.get("environment_admission")
+    attempts = admission.get("attempts") if isinstance(admission, Mapping) else None
+    if not isinstance(attempts, list) or not attempts:
+        raise SalvageAuthorizationError("environment admission attempts are missing")
+    idle_telemetry = {
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+        for attempt in range(1, len(attempts) + 1)
+    }
+    compact = set(_REQUIRED_BUNDLE_FILES) | {"rich_telemetry.jsonl"}
+    complete = compact | idle_telemetry
+    return (compact, complete)
+
+
+def _validate_idle_artifact_inventory(
+    manifest: Sequence[Mapping[str, Any]], metadata: Mapping[str, Any]
+) -> list[str]:
+    actual = {str(row.get("path")) for row in manifest}
+    expected_sets = _expected_idle_artifact_sets(metadata)
+    missing_required = sorted(set(_REQUIRED_BUNDLE_FILES) - actual)
+    if missing_required:
+        raise SalvageAuthorizationError(
+            "required salvage evidence missing: " + ", ".join(missing_required)
+        )
+    if not any(actual == expected for expected in expected_sets):
+        expected = min(expected_sets, key=lambda candidate: len(actual ^ candidate))
+        differences = [
+            *(f"unexpected {name}" for name in sorted(actual - expected)),
+            *(f"missing {name}" for name in sorted(expected - actual)),
+        ]
+        raise SalvageAuthorizationError(
+            "unexpected salvage artifact inventory: " + ", ".join(differences)
+        )
+    by_sha: dict[str, list[str]] = {}
+    for row in manifest:
+        sha256 = row.get("sha256")
+        path = row.get("path")
+        if not isinstance(sha256, str) or not isinstance(path, str):
+            raise SalvageAuthorizationError("malformed salvage artifact inventory")
+        by_sha.setdefault(sha256, []).append(path)
+    duplicate_groups = [paths for paths in by_sha.values() if len(paths) > 1]
+    if duplicate_groups:
+        duplicate_paths = {path for paths in duplicate_groups for path in paths}
+        if all(path.startswith("rich_telemetry") for path in duplicate_paths):
+            raise SalvageAuthorizationError("duplicate telemetry content")
+        raise SalvageAuthorizationError("duplicate allowlisted artifact content")
+    return sorted(actual - set(_REQUIRED_BUNDLE_FILES))
 
 
 def _resolved_directory_root(value: str | Path, *, label: str) -> Path:
@@ -241,12 +561,31 @@ def _resolved_directory_root(value: str | Path, *, label: str) -> Path:
     return resolved
 
 
-def _telemetry_last_timestamp(bundle_path: Path) -> float:
+def _raw_file_contains_identity(path: Path, identities: Sequence[bytes]) -> bool:
+    """Search complete file bytes without size limits or format assumptions."""
+
+    overlap = max(len(identity) for identity in identities) - 1
+    tail = b""
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                return False
+            candidate = tail + chunk
+            if any(identity in candidate for identity in identities):
+                return True
+            tail = candidate[-overlap:] if overlap else b""
+
+
+def _telemetry_last_timestamp(
+    bundle_path: Path, rich_telemetry_names: Sequence[str]
+) -> float:
     timestamps: list[float] = []
     power_path = bundle_path / "power_trace.csv"
     try:
         with power_path.open("r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
+            reader = csv.DictReader(handle)
+            rows = list(reader)
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
         raise SalvageAuthorizationError("power trace is unreadable or truncated") from exc
     required_columns = {
@@ -257,7 +596,12 @@ def _telemetry_last_timestamp(bundle_path: Path) -> float:
         "interval_start_s",
         "interval_end_s",
     }
-    if not rows or not required_columns.issubset(rows[0]):
+    if (
+        not rows
+        or reader.fieldnames is None
+        or len(reader.fieldnames) != len(required_columns)
+        or set(reader.fieldnames) != required_columns
+    ):
         raise SalvageAuthorizationError("power trace has no telemetry rows")
     for row in rows:
         if any(row.get(column) in (None, "") for column in required_columns):
@@ -274,36 +618,48 @@ def _telemetry_last_timestamp(bundle_path: Path) -> float:
             for value in (timestamp, power_w, interval_start, interval_end)
         ) or interval_start > interval_end:
             raise SalvageAuthorizationError("power trace numeric evidence is invalid")
+        if any(
+            marker in str(row[field]).lower()
+            for field in ("source", "rail")
+            for marker in ("workload", "measured_run")
+        ):
+            raise SalvageAuthorizationError(
+                "power trace contains non-admission telemetry"
+            )
         timestamps.append(max(timestamp, interval_end))
     if timestamps != sorted(timestamps):
         raise SalvageAuthorizationError("power trace timestamps are unordered")
-    rich_paths = sorted(bundle_path.glob("rich_telemetry*.jsonl"))
-    if not rich_paths:
-        raise SalvageAuthorizationError("rich telemetry evidence is missing")
-    for rich_path in rich_paths:
-        rich_timestamps: list[float] = []
-        for row in _jsonl_rows(rich_path):
-            timestamp = _finite_timestamp(row.get("timestamp_s"))
-            if timestamp is None:
-                raise SalvageAuthorizationError(
-                    f"rich telemetry timestamp is malformed: {rich_path}"
-                )
-            rich_timestamps.append(timestamp)
-        if rich_timestamps != sorted(rich_timestamps):
-            raise SalvageAuthorizationError(
-                f"rich telemetry timestamps are unordered: {rich_path}"
-            )
-        timestamps.extend(rich_timestamps)
+    for name in rich_telemetry_names:
+        timestamps.extend(_validate_admission_telemetry(bundle_path / name))
     return max(timestamps)
 
 
-def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
+def _inspect_preworkload_abort(
+    path: Path, manifest: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
     """Re-derive the D-100 b-ii admission-bounded abort from bundle bytes."""
 
-    path = Path(bundle_path).resolve(strict=True)
+    config = _read_json_object(path / "config.json")
     metadata = _read_json_object(path / "metadata.json")
     summary = _read_json_object(path / "summary_metrics.json")
     events = _jsonl_rows(path / "events.jsonl")
+    _validate_bundle_config(config)
+    rich_telemetry_names = _validate_idle_artifact_inventory(manifest, metadata)
+
+    if not set(metadata).issubset(_ADMISSION_METADATA_FIELDS):
+        raise SalvageAuthorizationError("metadata contains unclassifiable fields")
+    if metadata.get("config_warnings") not in (None, []):
+        raise SalvageAuthorizationError("metadata contains config warnings")
+    if _contains_workload_evidence(metadata):
+        raise SalvageAuthorizationError("metadata contains workload evidence")
+    if any(not set(row).issubset(_EVENT_FIELDS) for row in events):
+        raise SalvageAuthorizationError("event stream contains unclassifiable fields")
+    if any(
+        ("message" in row and not isinstance(row["message"], str))
+        or ("metadata" in row and not isinstance(row["metadata"], Mapping))
+        for row in events
+    ):
+        raise SalvageAuthorizationError("event stream contains malformed fields")
 
     event_timestamps = [_finite_timestamp(row.get("timestamp_s")) for row in events]
     if (
@@ -323,6 +679,8 @@ def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
         raise SalvageAuthorizationError(
             "unexpected event or stage_started outside the closed idle-abort sequence"
         )
+    if _contains_workload_evidence(events):
+        raise SalvageAuthorizationError("event stream contains workload evidence")
 
     started = [
         row.get("phase")
@@ -371,6 +729,8 @@ def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
             "unknown non-null failed-summary fields: "
             + ", ".join(sorted(unknown_nonnull))
         )
+    if _contains_workload_evidence(summary):
+        raise SalvageAuthorizationError("failed attempt contains workload evidence")
     failure_reason = summary.get("failure_reason")
     event_reason = failures[0].get("metadata")
     event_reason = (
@@ -383,7 +743,7 @@ def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
     if event_reason != failure_reason:
         raise SalvageAuthorizationError("event and summary failure reasons disagree")
 
-    telemetry_last = _telemetry_last_timestamp(path)
+    telemetry_last = _telemetry_last_timestamp(path, rich_telemetry_names)
     teardown_s = telemetry_last - failure_timestamp
     if teardown_s > TEARDOWN_BOUND_S + 1e-9:
         raise SalvageAuthorizationError(
@@ -408,6 +768,14 @@ def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
     }
 
 
+def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
+    """Re-derive one admission abort while validating its complete inventory."""
+
+    supplied = Path(bundle_path)
+    manifest = _enumerate_artifacts(supplied)
+    return _inspect_preworkload_abort(supplied.resolve(strict=True), manifest)
+
+
 def inspect_salvage_attempt(bundle_path: str | Path) -> dict[str, Any]:
     """Inspect one physical failed occurrence and bind its complete file set."""
 
@@ -415,23 +783,6 @@ def inspect_salvage_attempt(bundle_path: str | Path) -> dict[str, Any]:
     manifest = _enumerate_artifacts(supplied)
     path = supplied.resolve(strict=True)
     by_path = {row["path"]: row for row in manifest}
-    missing = [name for name in _REQUIRED_BUNDLE_FILES if name not in by_path]
-    if missing:
-        raise SalvageAuthorizationError(
-            "required salvage evidence missing: " + ", ".join(missing)
-        )
-    unexpected = sorted(
-        name
-        for name in by_path
-        if name not in _REQUIRED_BUNDLE_FILES
-        and name not in _KNOWN_IDLE_TELEMETRY_FILES
-    )
-    rich_telemetry = [name for name in by_path if name in _KNOWN_IDLE_TELEMETRY_FILES]
-    if unexpected or not rich_telemetry:
-        raise SalvageAuthorizationError(
-            "unexpected salvage artifact inventory: "
-            + ", ".join(unexpected or ["rich telemetry missing"])
-        )
     config = _read_json_object(path / "config.json")
     metadata = _read_json_object(path / "metadata.json")
     bundle_id = config.get("run_id")
@@ -439,7 +790,7 @@ def inspect_salvage_attempt(bundle_path: str | Path) -> dict[str, Any]:
         raise SalvageAuthorizationError("config run_id is missing")
     if metadata.get("run_id") != bundle_id:
         raise SalvageAuthorizationError("config and metadata run_id disagree")
-    abort = inspect_preworkload_abort(path)
+    abort = _inspect_preworkload_abort(path, manifest)
     return {
         "bundle_id": bundle_id,
         "quarantine_path": str(path),
@@ -474,6 +825,11 @@ def inspect_launcher_refusal(
         or refusal.get("record_sha256") != _canonical_sha256(payload)
     ):
         raise SalvageAuthorizationError("launcher refusal record is malformed")
+    run_id = payload.get("run_id")
+    if run_id is not None and (not isinstance(run_id, str) or not run_id):
+        raise SalvageAuthorizationError("launcher refusal record is malformed")
+    identity_text = tuple(dict.fromkeys([bundle_id, *([run_id] if run_id else [])]))
+    identity_bytes = tuple(identity.encode("utf-8") for identity in identity_text)
     roots = [
         _resolved_directory_root(value, label="custody root")
         for value in custody_roots
@@ -487,22 +843,25 @@ def inspect_launcher_refusal(
             f"custody universe cannot be exhaustively inspected: {error.filename}"
         ) from error
 
+    def path_contains_identity(path: Path) -> bool:
+        return any(
+            identity in component
+            for component in path.parts
+            for identity in identity_text
+        )
+
+    seen_inodes: set[tuple[int, int]] = set()
     for root in roots:
         if not root.is_dir():
             raise SalvageAuthorizationError(f"custody root is not a directory: {root}")
+        if path_contains_identity(root):
+            raise SalvageAuthorizationError("launcher-refused occurrence bytes exist")
         for parent, directories, files in os.walk(
             root, followlinks=False, onerror=walk_error
         ):
             parent_path = Path(parent)
-            if bundle_id in directories or bundle_id in files:
-                raise SalvageAuthorizationError("launcher-refused occurrence bytes exist")
             for directory in directories:
-                if (parent_path / directory).is_symlink():
-                    raise SalvageAuthorizationError(
-                        "custody universe contains a symlink"
-                    )
-            for filename in files:
-                candidate = parent_path / filename
+                candidate = parent_path / directory
                 try:
                     mode = candidate.lstat().st_mode
                 except OSError as exc:
@@ -510,30 +869,50 @@ def inspect_launcher_refusal(
                         "custody universe cannot be exhaustively inspected"
                     ) from exc
                 if stat.S_ISLNK(mode):
-                    raise SalvageAuthorizationError("custody universe contains a symlink")
-                if not stat.S_ISREG(mode):
                     raise SalvageAuthorizationError(
-                        "custody universe contains a non-regular node"
+                        "custody universe contains a symlink"
                     )
-                try:
-                    relative_text = candidate.relative_to(root).as_posix()
-                except ValueError as exc:
+                if not stat.S_ISDIR(mode):
                     raise SalvageAuthorizationError(
-                        "custody universe cannot be exhaustively inspected"
-                    ) from exc
-                if bundle_id in relative_text:
+                        "custody universe contains a non-directory node"
+                    )
+                if path_contains_identity(candidate):
                     raise SalvageAuthorizationError(
                         "launcher-refused occurrence bytes exist"
                     )
-                parsed_rows: list[object] = []
-                if filename in {"config.json", "metadata.json"}:
-                    parsed_rows = [_read_json_object(candidate)]
-                elif filename == "events.jsonl":
-                    parsed_rows = _jsonl_rows(candidate)
-                if any(
-                    _contains_occurrence_identity(row, bundle_id)
-                    for row in parsed_rows
-                ):
+            for filename in files:
+                candidate = parent_path / filename
+                if path_contains_identity(candidate):
+                    raise SalvageAuthorizationError(
+                        "launcher-refused occurrence bytes exist"
+                    )
+                try:
+                    info = candidate.lstat()
+                except OSError as exc:
+                    raise SalvageAuthorizationError(
+                        "custody universe cannot be exhaustively inspected"
+                    ) from exc
+                if stat.S_ISLNK(info.st_mode):
+                    raise SalvageAuthorizationError("custody universe contains a symlink")
+                if not stat.S_ISREG(info.st_mode):
+                    raise SalvageAuthorizationError(
+                        "custody universe contains a non-regular node"
+                    )
+                inode = (info.st_dev, info.st_ino)
+                if inode in seen_inodes:
+                    raise SalvageAuthorizationError(
+                        "custody universe contains a duplicate file inode"
+                    )
+                seen_inodes.add(inode)
+                try:
+                    contains_identity = _raw_file_contains_identity(
+                        candidate, identity_bytes
+                    )
+                except OSError as exc:
+                    raise SalvageAuthorizationError(
+                        "custody universe cannot be exhaustively inspected"
+                    ) from exc
+                if contains_identity:
                     raise SalvageAuthorizationError(
                         "launcher-refused occurrence bytes exist"
                     )

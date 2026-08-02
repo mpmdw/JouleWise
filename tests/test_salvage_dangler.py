@@ -50,6 +50,21 @@ class SalvageDanglerTests(unittest.TestCase):
     def copy_attempt(self, name: str = "attempt") -> Path:
         destination = self.root / name
         shutil.copytree(FIXTURE, destination)
+        idle_rows = [
+            {"index": 1, "processor_combined_power_w": 0.19, "timestamp_s": 99.81},
+            {"index": 2, "processor_combined_power_w": 0.21, "timestamp_s": 99.91},
+        ]
+        retry_rows = [
+            {"index": 1, "processor_combined_power_w": 0.22, "timestamp_s": 99.92},
+            {"index": 2, "processor_combined_power_w": 0.24, "timestamp_s": 100.05},
+        ]
+        for telemetry_name, rows in (
+            ("rich_telemetry_idle.jsonl", idle_rows),
+            ("rich_telemetry_idle_attempt_2.jsonl", retry_rows),
+        ):
+            (destination / telemetry_name).write_text(
+                "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+            )
         return destination
 
     def write_binding(self) -> Path:
@@ -130,6 +145,8 @@ class SalvageDanglerTests(unittest.TestCase):
                 "events.jsonl",
                 "power_trace.csv",
                 "rich_telemetry.jsonl",
+                "rich_telemetry_idle.jsonl",
+                "rich_telemetry_idle_attempt_2.jsonl",
             },
         )
         second = self.copy_attempt("r5a-136ms")
@@ -219,6 +236,43 @@ class SalvageDanglerTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(SalvageAuthorizationError, "unexpected event"):
             inspect_preworkload_abort(attempt)
+
+    def test_b3_closed_inventory_rejects_copied_idle_telemetry(self) -> None:
+        attempt = self.copy_attempt()
+        metadata_path = attempt / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["environment_admission"]["attempts"] = [
+            {"admitted": False, "attempt": 1}
+        ]
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        (attempt / "rich_telemetry_idle_attempt_2.jsonl").unlink()
+        shutil.copyfile(
+            attempt / "rich_telemetry.jsonl",
+            attempt / "rich_telemetry_idle.jsonl",
+        )
+        with self.assertRaisesRegex(
+            SalvageAuthorizationError, "duplicate telemetry content"
+        ):
+            inspect_salvage_attempt(attempt)
+
+    def test_b3_telemetry_rejects_workload_fields_inside_teardown_bound(self) -> None:
+        attempt = self.copy_attempt()
+        telemetry_path = attempt / "rich_telemetry.jsonl"
+        rows = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
+        rows[-1].update(
+            {
+                "phase": "measured_run",
+                "workload_result": {"gross_energy_j": 0.0},
+                "output_token_count": 0,
+            }
+        )
+        telemetry_path.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(
+            SalvageAuthorizationError, "admission-phase telemetry"
+        ):
+            inspect_salvage_attempt(attempt)
 
     def test_full_file_enumeration_rejects_symlinks_and_duplicate_inodes(self) -> None:
         attempt = self.copy_attempt()
@@ -328,6 +382,33 @@ class SalvageDanglerTests(unittest.TestCase):
         with self.assertRaisesRegex(SalvageAuthorizationError, "bytes exist"):
             inspect_launcher_refusal(refusal, [custody])
 
+    def _assert_b2_raw_occurrence_bytes_refuse(self, relative_path: str) -> None:
+        custody = self.root / "custody"
+        candidate = custody / "nested" / relative_path
+        candidate.parent.mkdir(parents=True)
+        core = {
+            "schema_version": LAUNCHER_REFUSAL_SCHEMA,
+            "bundle_id": "never-launched",
+            "timestamp": "2026-08-01T10:00:00Z",
+            "reason": "launcher refused before bundle creation",
+            "refusal_code": "launcher_precondition_refused",
+        }
+        refusal = {**core, "record_sha256": canonical_sha256(core)}
+        candidate.write_bytes(
+            b'\x00unparsed:{"bundle_id":"never-launched"}:bytes\xff'
+        )
+        with self.assertRaisesRegex(SalvageAuthorizationError, "bytes exist"):
+            inspect_launcher_refusal(refusal, [custody])
+
+    def test_b2_total_sweep_finds_raw_bytes_in_summary_metrics(self) -> None:
+        self._assert_b2_raw_occurrence_bytes_refuse("summary_metrics.json")
+
+    def test_b2_total_sweep_finds_raw_bytes_in_rich_telemetry(self) -> None:
+        self._assert_b2_raw_occurrence_bytes_refuse("rich_telemetry.jsonl")
+
+    def test_b2_total_sweep_finds_raw_bytes_in_renamed_json(self) -> None:
+        self._assert_b2_raw_occurrence_bytes_refuse("renamed.json")
+
     def test_launcher_refusal_hash_and_custody_universe_fail_closed(self) -> None:
         custody = self.root / "custody"
         custody.mkdir()
@@ -348,8 +429,10 @@ class SalvageDanglerTests(unittest.TestCase):
     def test_b_i_closure_binds_refusal_files_and_zero_byte_universe(self) -> None:
         runs_root = self.root / "runs"
         quarantine = self.root / "quarantine"
+        refusal_root = self.root / "refusals"
         runs_root.mkdir()
         quarantine.mkdir()
+        refusal_root.mkdir()
         binding = self.write_binding()
         occurrences = []
         for index in range(3):
@@ -361,7 +444,7 @@ class SalvageDanglerTests(unittest.TestCase):
                 "refusal_code": "launcher_precondition_refused",
             }
             refusal = {**core, "record_sha256": canonical_sha256(core)}
-            refusal_path = quarantine / f"refusal-{index}.json"
+            refusal_path = refusal_root / f"refusal-{index}.json"
             refusal_path.write_text(json.dumps(refusal) + "\n")
             occurrences.append(
                 {
