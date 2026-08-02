@@ -39,6 +39,10 @@ SUITE_CONFIG = ROOT / "configs" / "examples" / "mock_suite_local.json"
 COMMAND_TIMEOUT_S = 60
 GENERATOR = ROOT / "scripts" / "generate_matrix.py"
 TEST_CAMPAIGN_POLICY = ROOT / "tests" / "fixtures" / "campaign_policy_test.json"
+REAL_CAMPAIGN_LOGS = (
+    Path("/Users/edr/code/JouleWise/runs_window_contrast_20260730/campaign_log.jsonl"),
+    Path("/Users/edr/code/JouleWise/runs/p2_015_floors_window_a/campaign_log.jsonl"),
+)
 
 spec = importlib.util.spec_from_file_location("run_campaign_module", SCRIPT)
 run_campaign_module = importlib.util.module_from_spec(spec)
@@ -290,12 +294,14 @@ class CampaignLockIdentityTests(unittest.TestCase):
             caught = None
             with patch.object(Path, "unlink", refusing_unlink):
                 try:
-                    try:
-                        raise original
-                    finally:
-                        run_campaign_module.release_campaign_lock(token)
+                    raise original
                 except RuntimeError as exc:
-                    caught = exc
+                    try:
+                        run_campaign_module.release_campaign_lock(
+                            token, in_flight=exc
+                        )
+                    except RuntimeError as chained:
+                        caught = chained
             self.assertIs(caught, original)
             self.assertIsInstance(caught.__cause__, PermissionError)
             self.assertIs(
@@ -305,6 +311,36 @@ class CampaignLockIdentityTests(unittest.TestCase):
             self.assertTrue(token_path.exists())
             run_campaign_module.release_campaign_lock(token)
             self.assertFalse(token_path.exists())
+
+    def test_f3_stat_failure_retains_registry_and_chains_body_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token = run_campaign_module.acquire_campaign_lock(root)
+            token_path = campaign_lock_path(token)
+            original = RuntimeError("injected body failure")
+            caught = None
+            with patch.object(
+                run_campaign_module.os,
+                "stat",
+                side_effect=PermissionError("injected stat failure"),
+            ):
+                try:
+                    raise original
+                except RuntimeError as exc:
+                    try:
+                        run_campaign_module.release_campaign_lock(
+                            token, in_flight=exc
+                        )
+                    except RuntimeError as chained:
+                        caught = chained
+            self.assertIs(caught, original)
+            self.assertIsInstance(caught.__cause__, PermissionError)
+            self.assertIs(
+                run_campaign_module._CAMPAIGN_LOCK_OWNERSHIP.get(token_path),
+                token,
+            )
+            self.assertTrue(token_path.exists())
+            run_campaign_module.release_campaign_lock(token)
 
     def test_sf1_failure_immediately_after_acquisition_releases_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -344,7 +380,7 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
 
         return parse_campaign_log_bytes(raw)
 
-    def test_r7_every_nonempty_proper_prefix_of_real_rows_is_tolerable(self) -> None:
+    def test_r7_every_nonempty_proper_prefix_of_writer_rows_is_tolerable(self) -> None:
         corpus = (
             {},
             {
@@ -377,6 +413,48 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                         self._parse(wire[:boundary]),
                         ([], "torn_prefix"),
                     )
+
+    @unittest.skipUnless(
+        all(path.is_file() for path in REAL_CAMPAIGN_LOGS),
+        "real campaign-log corpus is unavailable",
+    )
+    def test_r7_real_campaign_log_writer_rows_are_complete(self) -> None:
+        for log_path in REAL_CAMPAIGN_LOGS:
+            lines = log_path.read_bytes().splitlines()
+            windows = (
+                range(0, min(5, len(lines))),
+                range(max(0, len(lines) // 2 - 2), min(len(lines), len(lines) // 2 + 3)),
+                range(max(0, len(lines) - 5), len(lines)),
+            )
+            sample_indexes = [
+                min(window, key=lambda index: (len(lines[index]), index))
+                for window in windows
+            ]
+            for row_index in sample_indexes:
+                wire = lines[row_index]
+                self.assertIsInstance(json.loads(wire), dict)
+                for boundary in range(1, len(wire)):
+                    with self.subTest(
+                        log=log_path.name,
+                        row_index=row_index,
+                        boundary=boundary,
+                    ):
+                        self.assertEqual(
+                            self._parse(wire[:boundary]),
+                            ([], "torn_prefix"),
+                        )
+
+    @unittest.expectedFailure
+    def test_r7_non_bmp_key_prefix_known_f1(self) -> None:
+        """C3-RECOGNIZER-EXACT-01: high-surrogate key tear is known F1."""
+
+        wire = json.dumps({"\ue000": 1, "😀": 2}, sort_keys=True).encode("ascii")
+        for boundary in range(1, len(wire)):
+            with self.subTest(boundary=boundary):
+                self.assertEqual(
+                    self._parse(wire[:boundary]),
+                    ([], "torn_prefix"),
+                )
 
     def test_r7_named_prefix_pins(self) -> None:
         for name, prefix in (
@@ -521,6 +599,74 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                 log_path.read_bytes(),
                 first + json.dumps(appended, sort_keys=True).encode() + b"\n",
             )
+
+    def test_torn_tail_is_quarantined_exactly_before_truncation(self) -> None:
+        first = json.dumps({"first": 1}, sort_keys=True).encode() + b"\n"
+        torn = b'{"torn": [1, 2'
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            log_path.write_bytes(first + torn)
+            stderr = io.StringIO()
+            with held_campaign_lock(root) as token, patch.object(
+                run_campaign_module,
+                "utc_timestamp",
+                return_value="2026-08-02T12:34:56.789Z",
+            ), redirect_stderr(stderr):
+                run_campaign_module.append_log(
+                    log_path, {"after": True}, lock_token=token
+                )
+            sidecars = list(root.glob("campaign_log.jsonl.torn-*-*"))
+            self.assertEqual(len(sidecars), 1)
+            self.assertEqual(sidecars[0].read_bytes(), torn)
+            self.assertIn(str(sidecars[0]), stderr.getvalue())
+            self.assertIn(f"{len(torn)} torn campaign-log bytes", stderr.getvalue())
+
+    def test_torn_tail_sidecar_failure_refuses_without_truncation(self) -> None:
+        first = json.dumps({"first": 1}, sort_keys=True).encode() + b"\n"
+        torn = b'{"torn": tru'
+        before = first + torn
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            log_path.write_bytes(before)
+            real_open = run_campaign_module.os.open
+
+            def refusing_sidecar_open(path, flags, *args, **kwargs):
+                if flags & os.O_EXCL and ".torn-" in str(path):
+                    raise PermissionError("injected sidecar failure")
+                return real_open(path, flags, *args, **kwargs)
+
+            with held_campaign_lock(root) as token, patch.object(
+                run_campaign_module.os,
+                "open",
+                side_effect=refusing_sidecar_open,
+            ), patch.object(run_campaign_module.os, "ftruncate") as truncate_mock:
+                with self.assertRaisesRegex(PermissionError, "sidecar failure"):
+                    run_campaign_module.append_log(
+                        log_path, {"after": True}, lock_token=token
+                    )
+            truncate_mock.assert_not_called()
+            self.assertEqual(log_path.read_bytes(), before)
+            self.assertEqual(list(root.glob("campaign_log.jsonl.torn-*-*")), [])
+
+    def test_append_log_rejects_non_string_and_non_ascii_key_paths(self) -> None:
+        cases = (
+            ({"outer": [{1: "bad"}]}, "row['outer'][0][1]"),
+            ({"outer": [{"😀": "bad"}]}, "row['outer'][0]['😀']"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            with held_campaign_lock(root) as token:
+                for row, key_path in cases:
+                    with self.subTest(key_path=key_path):
+                        with self.assertRaises(ValueError) as caught:
+                            run_campaign_module.append_log(
+                                log_path, row, lock_token=token
+                            )
+                        self.assertIn(key_path, str(caught.exception))
+            self.assertFalse(log_path.exists())
 
     def test_r11_mid_file_malformation_refuses_and_is_untouched(self) -> None:
         first = json.dumps({"first": 1}, sort_keys=True).encode() + b"\n"

@@ -1191,6 +1191,41 @@ def _require_external_campaign_log(log_path: Path) -> None:
         )
 
 
+def _assert_ascii_mapping_keys(value: Any, path: str = "row") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_path = f"{path}[{key!r}]"
+            if not isinstance(key, str) or not key.isascii():
+                raise ValueError(
+                    f"campaign log row key must be str and ASCII at {key_path}"
+                )
+            _assert_ascii_mapping_keys(child, key_path)
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            _assert_ascii_mapping_keys(child, f"{path}[{index}]")
+
+
+def _quarantine_torn_campaign_tail(log_path: Path, tail: bytes) -> Path:
+    stamp = utc_timestamp().replace("-", "").replace(":", "").replace(".", "")
+    digest = hashlib.sha256(tail).hexdigest()[:12]
+    sidecar = log_path.with_name(f"{log_path.name}.torn-{stamp}-{digest}")
+    fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        written = os.write(fd, tail)
+        if written != len(tail):
+            raise OSError(
+                f"short torn-tail quarantine write: wrote {written} of {len(tail)} bytes"
+            )
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    print(
+        f"warning: preserved {len(tail)} torn campaign-log bytes at {sidecar}",
+        file=sys.stderr,
+    )
+    return sidecar
+
+
 def append_log(
     log_path: Path,
     row: dict[str, Any],
@@ -1217,6 +1252,7 @@ def append_log(
             f"root {resolved_log_parent}"
         )
     _require_external_campaign_log(log_path)
+    _assert_ascii_mapping_keys(row)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     prefix = b""
     try:
@@ -1232,6 +1268,7 @@ def append_log(
             if final_segment == "mapping":
                 prefix = b"\n"
             else:
+                _quarantine_torn_campaign_tail(log_path, existing[tail_start:])
                 truncate_fd = os.open(log_path, os.O_WRONLY)
                 try:
                     os.ftruncate(truncate_fd, tail_start)
@@ -2614,13 +2651,14 @@ def _assert_campaign_lock_held(runs_dir: Path) -> CampaignLockToken:
     return _assert_campaign_lock_token(token)
 
 
-def release_campaign_lock(token: CampaignLockToken) -> None:
+def release_campaign_lock(
+    token: CampaignLockToken, *, in_flight: BaseException | None = None
+) -> None:
     """Idempotently release only the lock identity acquired by this process."""
 
     if not isinstance(token, CampaignLockToken):
         return
     resolved_lock_path = token.lock_path
-    in_flight_exc = sys.exception()
     with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
         if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is not token:
             return
@@ -2629,6 +2667,10 @@ def release_campaign_lock(token: CampaignLockToken) -> None:
         except FileNotFoundError:
             _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
             return
+        except OSError as cleanup_exc:
+            if in_flight is not None:
+                raise in_flight from cleanup_exc
+            raise
         if (current_stat.st_dev, current_stat.st_ino) != (
             token.st_dev,
             token.st_ino,
@@ -2637,9 +2679,9 @@ def release_campaign_lock(token: CampaignLockToken) -> None:
             return
         try:
             resolved_lock_path.unlink(missing_ok=True)
-        except BaseException as unlink_exc:
-            if in_flight_exc is not None:
-                raise in_flight_exc from unlink_exc
+        except OSError as cleanup_exc:
+            if in_flight is not None:
+                raise in_flight from cleanup_exc
             raise
         if _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path) is token:
             _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path)
@@ -2806,6 +2848,7 @@ def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
         "already_authenticated": [],
         "refused": [],
     }
+    in_flight: BaseException | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
         rows = load_campaign_log_rows(log_path)
@@ -2884,9 +2927,12 @@ def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
         report["status"] = "repaired" if report["repaired"] else "no_change"
         print(json.dumps(report, sort_keys=True))
         return 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
         if lock_path is not None:
-            release_campaign_lock(lock_path)
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def verify_cooldown_raw_provenance(
@@ -4574,12 +4620,16 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
     lock_token = acquire_campaign_lock(runs_dir)
+    in_flight: BaseException | None = None
     try:
         return _run_record_supersession_locked(
             args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
         )
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
-        release_campaign_lock(lock_token)
+        release_campaign_lock(lock_token, in_flight=in_flight)
 
 
 def _run_record_supersession_locked(
@@ -4756,12 +4806,16 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
     lock_token = acquire_campaign_lock(runs_dir)
+    in_flight: BaseException | None = None
     try:
         return _run_whole_window_verdict_locked(
             args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
         )
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
-        release_campaign_lock(lock_token)
+        release_campaign_lock(lock_token, in_flight=in_flight)
 
 
 def _run_whole_window_verdict_locked(
@@ -5650,6 +5704,7 @@ def run_axi_spec_campaign(
         _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
     lock_path: CampaignLockToken | None = None
+    in_flight: BaseException | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
         child_environment: dict[str, str] | None = None
@@ -6372,9 +6427,12 @@ def run_axi_spec_campaign(
                 return 1
         print(f"AXI attempt ledger: {ledger_path} sha256={axi_sha256_bytes(ledger_raw)}")
         return 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
         if lock_path is not None:
-            release_campaign_lock(lock_path)
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_campaign(args: argparse.Namespace) -> int:
@@ -6438,6 +6496,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         if not args.dry_run:
             print_verdict("invalid", collection_reasons, categories, readiness)
             verdict_lock = acquire_campaign_lock(runs_dir)
+            in_flight: BaseException | None = None
             try:
                 append_verdict(
                     log_path,
@@ -6453,8 +6512,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                     warning=order_warning,
                     preflight=preflight,
                 )
+            except BaseException as exc:
+                in_flight = exc
+                raise
             finally:
-                release_campaign_lock(verdict_lock)
+                release_campaign_lock(verdict_lock, in_flight=in_flight)
         return 1
     if analysis_manifest is not None and analysis_manifest.is_axi_v2:
         return run_axi_spec_campaign(
@@ -6493,6 +6555,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         print_verdict("invalid", collection_reasons, categories, readiness)
         verdict_lock = acquire_campaign_lock(runs_dir)
+        in_flight: BaseException | None = None
         try:
             append_verdict(
                 log_path,
@@ -6508,13 +6571,17 @@ def run_campaign(args: argparse.Namespace) -> int:
                 warning=order_warning,
                 preflight=preflight,
             )
+        except BaseException as exc:
+            in_flight = exc
+            raise
         finally:
-            release_campaign_lock(verdict_lock)
+            release_campaign_lock(verdict_lock, in_flight=in_flight)
         return 1
 
     counts: Counter[str] = Counter()
     failures = 0
     lock_path: CampaignLockToken | None = None
+    in_flight: BaseException | None = None
     all_evaluations: list[MemberEvaluation] = []
     missing_members: list[str] = []
     previous_model_tag: str | None = None
@@ -7197,9 +7264,12 @@ def run_campaign(args: argparse.Namespace) -> int:
             or collection_verdict in {"blocked", "invalid"}
             or core_blocks_claim
         ) else 0
+    except BaseException as exc:
+        in_flight = exc
+        raise
     finally:
         if lock_path is not None:
-            release_campaign_lock(lock_path)
+            release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
