@@ -6604,3 +6604,27 @@ pins already on record at 5a2868b are re-run at the micro-commit head
 
 Revisit when: the micro-commit's narrow audit reports, or
 C3-RECOGNIZER-EXACT-01 closes.
+
+## Repairs disposition note (2026-08-02, magistrate; D-104-precedent containment)
+
+Both repair branches' delta re-audits each left one refined blocker
+cluster: MET-DANGLER (B2: the b-i content sweep parses only three exact
+filenames; B3: the b-ii allowlist is not closed over multiplicity or
+allowed-file content) and MANIFEST-CONTRAST v3 (F1 refined: floor-root
+exact cover validates against a mutable self-declared set rather than
+the file_sha256-bound artifact's roots). ADJUDICATION ON THE RECORD:
+the RULED formulations (D-100's "zero bytes anywhere" and
+"unclassifiable ⇒ void"; D-095's "every declared floor-evidence root")
+are intact and decide every audit scenario correctly — the misses trace
+to the MAGISTRATE'S FIX-ROUND BRIEFS, which operationalized them as
+filename/field enumerations. One brief-repair round each is licensed
+with the corrected content-general operationalizations (b-i: byte-level
+occurrence-identifier sweep over EVERY file under every custody root,
+no filename enumeration; b-ii: exact file-set equality + per-file
+schema validation of allowlisted content; v3: exact-cover derived from
+the authenticated artifact's bound root set). BINDING COMMITMENT (the
+D-104 shape): any blocker in either round's re-audit on these
+mechanisms, however shaped, returns to a cold gate — no further
+formulation-vs-brief-vs-implementation parsing. Auditor dissent, if
+either re-auditor reads the trigger as already fired, is preserved in
+their reports.
