@@ -21,6 +21,7 @@ from joulewise.analysis_engine.inputs import floor_stack_identity
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 )
 from scripts import mint_floor_artifact as mint
 
@@ -533,6 +534,67 @@ class PreRegistrationGateTests(unittest.TestCase):
 
 
 class AuthenticationTests(unittest.TestCase):
+    def test_salvage_semantics_is_cli_and_authenticator_allowlisted(self) -> None:
+        self.assertIn(
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            mint._SEMANTICS_IDS,
+        )
+        parsed = mint._parser().parse_args(
+            [
+                "--artifact-id", "test",
+                "--out", "out.json",
+                "--single-count-out", "statement.md",
+                "--calibration-plan", "plan.json",
+                "--calibration-plan-relative-path", "plan.json",
+                "--a10-root", "a10",
+                "--a10-report", "a10-report.json",
+                "--a10-order-manifest", "a10-order.json",
+                "--window-c-root", "window-c",
+                "--window-c-report", "window-c-report.json",
+                "--window-c-order-manifest", "window-c-order.json",
+                "--project-commit", "a" * 40,
+                "--project-tree-state", "clean",
+                "--consumption-semantics-id",
+                SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            ]
+        )
+        self.assertEqual(
+            parsed.consumption_semantics_id,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        )
+
+    def test_no_argument_mint_consumer_does_not_infer_salvage_dispatch(self) -> None:
+        class PendingSession:
+            ready = False
+            refusal_reasons = ()
+            path_refusal_reasons = {}
+
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        with (
+            mock.patch.object(
+                mint, "AuthenticatedConsumptionSession", PendingSession
+            ),
+            mock.patch.object(
+                mint,
+                "whole_window_refusal_reasons",
+                return_value=("whole_window_neg8_verdict_missing",),
+            ) as selector,
+            self.assertRaisesRegex(
+                mint.MintError, "whole_window_neg8_verdict_missing"
+            ),
+        ):
+            mint._authenticated_consumption_summaries(
+                Path("/unused"),
+                {"member"},
+                "a" * 64,
+                target_bundle_ids={"member"},
+            )
+        self.assertIsNone(
+            selector.call_args.kwargs["consumption_semantics_id"]
+        )
+
     @staticmethod
     def _synthetic_consumption(
         root: Path,

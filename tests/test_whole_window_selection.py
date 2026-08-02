@@ -14,6 +14,7 @@ from unittest.mock import patch
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
@@ -27,6 +28,7 @@ from joulewise.whole_window import (
     _consumption_provenance_valid,
     _derived_neg8_decision,
     _validate_row,
+    build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     canonical_sha256,
     custody_telemetry_identity,
@@ -260,6 +262,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
             )
         self.assertIsNone(decision)
         self.assertEqual(problem, "bundle_strict_invalid")
+
 
     def test_neg8_drift_mint_names_custody_triangle_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2165,6 +2168,118 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         )
         self.assertIsNone(session.summary_for("member"))
         self.assertIsNone(session.provenance_for("member"))
+
+
+class SalvageSemanticsDispatchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def row(self, semantics: str, *, basis: str = "b" * 64) -> dict:
+        return {
+            "record_type": "idle_admission_whole_window_verdict",
+            "bundle_ids": ["survivor"],
+            "evaluation_basis": {
+                "sha256": basis,
+                "consumption_semantics_id": semantics,
+                "member_occurrences": [{"bundle_id": "survivor"}],
+            },
+        }
+
+    def write_rows(self, *rows: dict) -> None:
+        (self.root / "campaign_log.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+
+    def test_no_argument_consumers_exclude_salvage_rows(self) -> None:
+        self.write_rows(self.row(SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID))
+        with patch("joulewise.whole_window._validate_row", return_value=(True, ())):
+            reasons = whole_window_refusal_reasons(self.root, {"survivor"})
+        self.assertIn("whole_window_neg8_verdict_missing", reasons)
+        self.assertEqual(
+            whole_window_refusal_reasons(
+                self.root,
+                {"survivor"},
+                consumption_semantics_id=(
+                    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+            ),
+            ("whole_window_verdict_provenance_invalid",),
+        )
+
+    def test_explicit_salvage_dispatch_selects_only_salvage(self) -> None:
+        self.write_rows(self.row(SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID))
+        with patch("joulewise.whole_window._validate_row", return_value=(True, ())):
+            self.assertEqual(
+                whole_window_refusal_reasons(
+                    self.root,
+                    {"survivor"},
+                    evaluation_basis_sha256="b" * 64,
+                    consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+                ),
+                (),
+            )
+            for semantics in (
+                MINTED_CONSUMPTION_SEMANTICS_ID,
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            ):
+                with self.subTest(semantics=semantics):
+                    self.assertIn(
+                        "whole_window_neg8_verdict_missing",
+                        whole_window_refusal_reasons(
+                            self.root,
+                            {"survivor"},
+                            evaluation_basis_sha256="b" * 64,
+                            consumption_semantics_id=semantics,
+                        ),
+                    )
+
+    def test_multiple_salvage_rows_for_one_basis_conflict_even_if_identical(self) -> None:
+        row = self.row(SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID)
+        self.write_rows(row, row)
+        with patch("joulewise.whole_window._validate_row", return_value=(True, ())):
+            reasons = whole_window_refusal_reasons(
+                self.root,
+                {"survivor"},
+                evaluation_basis_sha256="b" * 64,
+                consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            )
+        self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+
+    def test_salvage_basis_is_compound_max_plus_exact_exclusion(self) -> None:
+        occurrence = {
+            "bundle_id": "survivor",
+            "bundle_path": "survivor",
+            "config_sha256": "1" * 64,
+            "metadata_sha256": "2" * 64,
+            "summary_sha256": "3" * 64,
+        }
+        provenance = {
+            "survivor": {
+                "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            }
+        }
+        exclusion = {"schema_version": "joulewise.salvage_dangler_exclusion.v1"}
+        with patch(
+            "joulewise.whole_window.validate_salvage_exclusion_payload",
+            return_value=True,
+        ):
+            basis = build_evaluation_basis(
+                policy_sha256="a" * 64,
+                member_occurrences=[occurrence],
+                calibration_bracket=None,
+                consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+                consumption_provenance=provenance,
+                salvage_dangler_exclusion=exclusion,
+            )
+        self.assertEqual(
+            basis["consumption_semantics_id"],
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        )
+        self.assertEqual(basis["salvage_dangler_exclusion"], exclusion)
+        self.assertEqual(basis["consumption_provenance"], provenance)
 
 
 if __name__ == "__main__":

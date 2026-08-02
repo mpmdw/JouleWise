@@ -47,6 +47,10 @@ from joulewise.reduce import (
     _verify_instrument_calibration,
 )
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy, TelemetryBackend
+from joulewise.salvage_dangler import (
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    validate_salvage_exclusion_payload,
+)
 
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
@@ -363,10 +367,20 @@ class AuthenticatedConsumptionSession:
         referenced_bundle_ids: set[str],
         *,
         evaluation_basis_sha256: str | None = None,
+        consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     ) -> None:
+        if consumption_semantics_id not in {
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        }:
+            raise ValueError(
+                f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
+            )
         self.runs_root = Path(runs_root)
         self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
         self.evaluation_basis_sha256 = evaluation_basis_sha256
+        self.consumption_semantics_id = consumption_semantics_id
         self.calibration_bracket: Mapping[str, Any] | None = None
         self.operative_fiducial_bound_s: float | None = None
         self.refusal_reasons: tuple[str, ...] = ()
@@ -430,6 +444,17 @@ class AuthenticatedConsumptionSession:
             self._fail_global(
                 {"whole_window_verdict_provenance_invalid"}
             )
+            return
+
+        if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+            for bundle_id, path in sorted(bundle_paths.items()):
+                stored_summary = _read_json_object(path / "summary_metrics.json")
+                if not isinstance(stored_summary, Mapping):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                else:
+                    self._summaries[bundle_id] = stored_summary
+            if reasons:
+                self._fail_global(reasons)
             return
 
         bracket, bracket_reasons = calibration_bracket_for_bundles(
@@ -1838,18 +1863,23 @@ def build_evaluation_basis(
     calibration_bracket: Mapping[str, Any] | None,
     consumption_semantics_id: str = MINTED_CONSUMPTION_SEMANTICS_ID,
     consumption_provenance: Mapping[str, Mapping[str, Any]] | None = None,
+    salvage_dangler_exclusion: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bind one verdict to physical member bytes and its calibration pair."""
 
     if consumption_semantics_id not in {
         MINTED_CONSUMPTION_SEMANTICS_ID,
         MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     }:
         raise ValueError(
             f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
         )
     if (
-        consumption_semantics_id == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        consumption_semantics_id in {
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        }
         and not isinstance(consumption_provenance, Mapping)
     ):
         raise ValueError(
@@ -1884,7 +1914,10 @@ def build_evaluation_basis(
         "calibration_bracket_set": bracket_set,
         "consumption_semantics_id": consumption_semantics_id,
     }
-    if consumption_semantics_id == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID:
+    if consumption_semantics_id in {
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    }:
         assert isinstance(consumption_provenance, Mapping)
         expected_ids = {
             value.get("bundle_id")
@@ -1899,6 +1932,20 @@ def build_evaluation_basis(
             bundle_id: dict(consumption_provenance[bundle_id])
             for bundle_id in sorted(consumption_provenance)
         }
+    if consumption_semantics_id == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID:
+        if not isinstance(
+            salvage_dangler_exclusion, Mapping
+        ) or not validate_salvage_exclusion_payload(salvage_dangler_exclusion):
+            raise ValueError(
+                "salvage-dangler semantics require one authenticated exclusion"
+            )
+        payload["salvage_dangler_exclusion"] = dict(
+            salvage_dangler_exclusion
+        )
+    elif salvage_dangler_exclusion is not None:
+        raise ValueError(
+            "salvage exclusion is valid only under salvage-dangler semantics"
+        )
     return {**payload, "sha256": canonical_sha256(payload)}
 
 
@@ -3463,9 +3510,18 @@ def _consumption_provenance_valid(
     provenance = basis.get("consumption_provenance")
     if semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
         return provenance is None
-    if semantics_id != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID or not isinstance(
-        provenance, Mapping
-    ):
+    if semantics_id not in {
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    } or not isinstance(provenance, Mapping):
+        return False
+    exclusion = basis.get("salvage_dangler_exclusion")
+    if semantics_id == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID:
+        if not isinstance(exclusion, Mapping) or not validate_salvage_exclusion_payload(
+            exclusion
+        ):
+            return False
+    elif exclusion is not None:
         return False
     session_ready = (
         consumption_session is not None
@@ -3933,13 +3989,47 @@ def _validate_row_uncached(
     if row_semantics not in {
         MINTED_CONSUMPTION_SEMANTICS_ID,
         MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     }:
         reasons.add("whole_window_verdict_provenance_invalid")
-    if row_semantics == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID and (
+    if row_semantics in {
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    } and (
         not isinstance(row.get("evaluation_basis"), Mapping)
         or row["evaluation_basis"].get("consumption_semantics_id")
-        != MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        != row_semantics
     ):
+        reasons.add("whole_window_verdict_provenance_invalid")
+    row_exclusion = row.get("salvage_dangler_exclusion")
+    basis_exclusion = (
+        row["evaluation_basis"].get("salvage_dangler_exclusion")
+        if isinstance(row.get("evaluation_basis"), Mapping)
+        else None
+    )
+    if row_semantics == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID:
+        membership = row.get("window_membership")
+        exclusion_binding = (
+            row_exclusion.get("membership_binding")
+            if isinstance(row_exclusion, Mapping)
+            else None
+        )
+        if (
+            not isinstance(row_exclusion, Mapping)
+            or row_exclusion != basis_exclusion
+            or not validate_salvage_exclusion_payload(row_exclusion)
+            or not isinstance(membership, Mapping)
+            or membership.get("membership_id")
+            != row_exclusion.get("membership_id")
+            or not isinstance(exclusion_binding, Mapping)
+            or membership.get("binding")
+            != {
+                key: exclusion_binding.get(key)
+                for key in ("path", "sha256", "size")
+            }
+        ):
+            reasons.add("whole_window_verdict_provenance_invalid")
+    elif row_exclusion is not None or basis_exclusion is not None:
         reasons.add("whole_window_verdict_provenance_invalid")
     bundle_ids = row.get("bundle_ids")
     if (
@@ -3950,6 +4040,12 @@ def _validate_row_uncached(
     ):
         reasons.add("whole_window_verdict_coverage_incomplete")
         return False, tuple(sorted(reasons))
+    if (
+        row_semantics == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and isinstance(row_exclusion, Mapping)
+        and row_exclusion.get("bundle_id") in bundle_ids
+    ):
+        reasons.add("whole_window_verdict_provenance_invalid")
 
     policy = row.get("campaign_policy")
     policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
@@ -4062,7 +4158,11 @@ def _validate_row_uncached(
             )
         )
     if (
-        row_semantics == MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        row_semantics
+        in {
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        }
         and (
             basis is None
             or consumption_session is None
@@ -4312,6 +4412,7 @@ def whole_window_refusal_reasons(
     *,
     evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    consumption_semantics_id: str | None = None,
 ) -> tuple[str, ...]:
     """Return refusals from the verdict governing the requested exact basis."""
 
@@ -4320,12 +4421,32 @@ def whole_window_refusal_reasons(
         "adapter_continuity_evidence_missing",
         "cpu_admission_core_missing",
     )
+    if consumption_semantics_id is not None and consumption_semantics_id not in {
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    }:
+        return ("whole_window_verdict_provenance_invalid",)
+    if consumption_semantics_id is not None and not (
+        isinstance(evaluation_basis_sha256, str)
+        and len(evaluation_basis_sha256) == 64
+        and all(
+            character in "0123456789abcdef"
+            for character in evaluation_basis_sha256
+        )
+    ):
+        return ("whole_window_verdict_provenance_invalid",)
     if consumption_session is not None and (
         Path(runs_root) != consumption_session.runs_root
         or frozenset(referenced_bundle_ids)
         != consumption_session.referenced_bundle_ids
         or evaluation_basis_sha256
         != consumption_session.evaluation_basis_sha256
+        or (
+            consumption_semantics_id is not None
+            and consumption_semantics_id
+            != consumption_session.consumption_semantics_id
+        )
     ):
         return ("whole_window_verdict_provenance_invalid",)
     try:
@@ -4358,6 +4479,19 @@ def whole_window_refusal_reasons(
         if not ids.intersection(referenced_bundle_ids):
             continue
         verdict_rows.append(row)
+    if consumption_semantics_id is None:
+        verdict_rows = [
+            row
+            for row in verdict_rows
+            if _row_consumption_semantics_id(row)
+            != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        ]
+    else:
+        verdict_rows = [
+            row
+            for row in verdict_rows
+            if _row_consumption_semantics_id(row) == consumption_semantics_id
+        ]
     basis_rows = [
         row
         for row in verdict_rows
@@ -4398,6 +4532,11 @@ def whole_window_refusal_reasons(
         # mint-time history; it is selected because the consumer requests
         # these semantics, independent of append order.
         overlapping = widened_rows
+    if (
+        consumption_semantics_id == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and len(overlapping) > 1
+    ):
+        return ("whole_window_verdict_conflict",)
     valid: list[Mapping[str, Any]] = []
     invalid_reasons: set[str] = set()
     for row in overlapping:
@@ -4463,6 +4602,7 @@ def whole_window_drift_allowances(
     *,
     evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    consumption_semantics_id: str | None = None,
 ) -> WholeWindowDriftAllowanceResult:
     """Return authenticated family allowances for the selected passing basis.
 
@@ -4477,6 +4617,7 @@ def whole_window_drift_allowances(
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
+        consumption_semantics_id=consumption_semantics_id,
     ):
         return WholeWindowDriftAllowanceResult("absent", {})
     try:
@@ -4492,6 +4633,19 @@ def whole_window_drift_allowances(
         ]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return WholeWindowDriftAllowanceResult("absent", {})
+    if consumption_semantics_id is None:
+        rows = [
+            row
+            for row in rows
+            if _row_consumption_semantics_id(row)
+            != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        ]
+    else:
+        rows = [
+            row
+            for row in rows
+            if _row_consumption_semantics_id(row) == consumption_semantics_id
+        ]
     overlapping_rows = []
     for row in rows:
         bundle_ids = row.get("bundle_ids")
@@ -4667,6 +4821,7 @@ __all__ = [
     "CONSUMPTION_PROVENANCE_PRECHECK_KEY",
     "MAX_BRACKET_CONSUMPTION_SEMANTICS_ID",
     "MINTED_CONSUMPTION_SEMANTICS_ID",
+    "SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",

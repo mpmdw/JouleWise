@@ -6604,3 +6604,16 @@ pins already on record at 5a2868b are re-run at the micro-commit head
 
 Revisit when: the micro-commit's narrow audit reports, or
 C3-RECOGNIZER-EXACT-01 closes.
+
+### D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
+
+D-078's closed-registry rule is amended narrowly to register
+`whole_window_member_terminally_absent_salvage` as the first non-refusing
+disposition. It is non-refusing only when selected through the explicit
+`salvage_dangler_exclusion_v1` consumption semantic with a pinned 64-hex
+evaluation-basis digest and exactly one fully authenticated D-100 exclusion.
+Under `d078_minted_envelopes_v1`,
+`d078_authenticated_max_bracket_rederivation_v1`, or no-argument dispatch,
+the same spelling is unknown/refusing and a salvage row is ineligible for
+selection. This amendment licenses no historical re-evaluation by itself and
+does not weaken any existing D-078 refusal spelling.

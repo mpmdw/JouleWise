@@ -52,6 +52,7 @@ from joulewise.floor_extraction import (
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WholeWindowDriftAllowanceResult,
     neg8_claim_family_for_metric,
 )
@@ -610,6 +611,21 @@ class TestWidthClosure(unittest.TestCase):
                         admissible_half_widths_j=[0.0] * (len(values) - 1),
                     )
 
+    def test_salvage_semantics_is_a_registered_floor_record_dispatch(self):
+        estimate = absolute_false_effect_floor(
+            FIXTURE_A_ENERGIES,
+            admissible_half_widths_j=[0.0] * len(FIXTURE_A_ENERGIES),
+        )
+        record = build_absolute_record(
+            estimate,
+            [{} for _ in range(estimate.n)],
+            consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+        self.assertEqual(
+            record["consumption_semantics_id"],
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        )
     def test_builders_reject_missing_empty_or_wrong_length_widths(self):
         absolute = absolute_false_effect_floor(
             FIXTURE_A_ENERGIES,

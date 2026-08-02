@@ -124,7 +124,11 @@ from joulewise.output_identity import (  # noqa: E402
     render_output_identity_report,
 )
 from joulewise.whole_window import (  # noqa: E402
+    AuthenticatedConsumptionSession,
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     OCCURRENCE_SUPERSESSION_SCHEMA,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
     build_evaluation_basis,
     build_neg8_drift_bound_artifact,
@@ -136,9 +140,15 @@ from joulewise.whole_window import (  # noqa: E402
     ordinary_present_bundle_paths,
     source_manifest_descriptors,
     supersession_entry_sha256,
+    supersession_entry_validation_results,
     validated_attempt_selection,
     validate_occurrence_supersession_entry,
     validate_neg8_drift_bound_artifact,
+)
+from joulewise.salvage_dangler import (  # noqa: E402
+    MEMBERSHIP_BINDING_SCHEMA,
+    SalvageAuthorizationError,
+    authorize_salvage_dangler_exclusion,
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
@@ -223,6 +233,40 @@ class WholeWindowMemberSource:
     scientific_config_sha256: str | None = None
     canonical_neg8_workload: bool = False
     occurrence: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class OrdinaryOccurrenceResolution:
+    """Presence-first result for one ordinary bundle id."""
+
+    bundle_id: str
+    status: str
+    selected_occurrence: dict[str, Any] | None = None
+    selected_path: Path | None = None
+    supersession: dict[str, Any] | None = None
+    present_paths: tuple[Path, ...] = ()
+
+
+@dataclass(frozen=True)
+class WholeWindowMembershipResolution:
+    """Authenticated whole-window join, including a licensed absence if any."""
+
+    sources: tuple[WholeWindowMemberSource, ...]
+    source_manifests: tuple[str, ...]
+    conditions: tuple[str, ...]
+    occurrence_supersessions: tuple[dict[str, Any], ...]
+    occurrence_resolutions: tuple[OrdinaryOccurrenceResolution, ...] = ()
+    membership_id: str | None = None
+    membership_binding: dict[str, Any] | None = None
+    salvage_dangler_exclusion: dict[str, Any] | None = None
+
+    def __iter__(self):
+        """Keep the pre-D-100 four-value diagnostic API replay-readable."""
+
+        yield list(self.sources)
+        yield list(self.source_manifests)
+        yield list(self.conditions)
+        yield list(self.occurrence_supersessions)
 
 
 @dataclass(frozen=True)
@@ -612,6 +656,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--consumption-semantics-id",
+        choices=(
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        ),
+        default=MINTED_CONSUMPTION_SEMANTICS_ID,
+        help="Explicit whole-window consumption semantics (default: minted)",
+    )
+    parser.add_argument(
+        "--window-membership-binding",
+        help=(
+            "Hash-bound joulewise.whole_window_membership_binding.v1 artifact "
+            "required for a null-identity campaign set"
+        ),
+    )
+    parser.add_argument(
+        "--salvage-closure",
+        help="D-087 joulewise.salvage_closure.v1 for the one-member D-100 repair",
+    )
+    parser.add_argument(
         "--neg8-drift-bound",
         help=(
             "Hash-sealed governed NEG-8 point-drift bound artifact consumed by "
@@ -698,6 +763,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     elif args.quarantine_path is not None or args.reason is not None:
         parser.error(
             "--quarantine-path and --reason require --record-supersession"
+        )
+    whole_window_only = (
+        args.window_membership_binding is not None
+        or args.salvage_closure is not None
+        or args.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
+    )
+    if whole_window_only and not args.whole_window_verdict:
+        parser.error(
+            "--consumption-semantics-id, --window-membership-binding, and "
+            "--salvage-closure are whole-window-verdict options"
+        )
+    salvage_mode = (
+        args.consumption_semantics_id
+        == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+    )
+    if salvage_mode:
+        if not args.window_membership_binding or not args.salvage_closure:
+            parser.error(
+                "salvage-dangler semantics require --window-membership-binding "
+                "and --salvage-closure"
+            )
+        if args.waivers:
+            parser.error("--waivers is forbidden under salvage-dangler semantics")
+    elif args.salvage_closure is not None:
+        parser.error(
+            "--salvage-closure requires salvage_dangler_exclusion_v1 semantics"
         )
     if args.arm_countdown_s < 0:
         parser.error("--arm-countdown-s must be >= 0")
@@ -4300,14 +4391,156 @@ def _matching_supersession(
     return matches[0] if len(matches) == 1 else None
 
 
+def _resolve_ordinary_occurrence(
+    runs_dir: Path,
+    bundle_id: str,
+    occurrences: Sequence[Mapping[str, Any]],
+    policy_sha256: str,
+    supersession_results: tuple[list[dict[str, Any]], list[bool]] | None,
+) -> OrdinaryOccurrenceResolution:
+    """Resolve one id uniformly, independent of the declaration count."""
+
+    present = tuple(ordinary_present_bundle_paths(runs_dir, bundle_id))
+    if len(present) > 1:
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "ambiguous", present_paths=present
+        )
+    if not present:
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "terminal_absent", present_paths=()
+        )
+    if supersession_results is None:
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "unresolved", present_paths=present
+        )
+    raw_entries, validations = supersession_results
+    relevant = [
+        (entry, valid)
+        for entry, valid in zip(raw_entries, validations, strict=True)
+        if entry.get("bundle_id") == bundle_id
+    ]
+    # A malformed recognizable record for the same bundle remains evidence of
+    # a competing disposition; it may not be filtered into invisibility.
+    if any(not valid for _entry, valid in relevant):
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "ambiguous", present_paths=present
+        )
+    if len(occurrences) == 1:
+        return OrdinaryOccurrenceResolution(
+            bundle_id,
+            "selected",
+            selected_occurrence=dict(occurrences[0]),
+            selected_path=present[0],
+            present_paths=present,
+        )
+    if len(occurrences) < 2:
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "unresolved", present_paths=present
+        )
+    supersession = _matching_supersession(
+        [entry for entry, valid in relevant if valid],
+        bundle_id,
+        occurrences,
+        policy_sha256,
+    )
+    if supersession is None:
+        return OrdinaryOccurrenceResolution(
+            bundle_id, "unresolved", present_paths=present
+        )
+    return OrdinaryOccurrenceResolution(
+        bundle_id,
+        "selected",
+        selected_occurrence=dict(occurrences[-1]),
+        selected_path=present[0],
+        supersession=supersession,
+        present_paths=present,
+    )
+
+
+def _membership_manifest_descriptor(
+    runs_dir: Path, record: Any
+) -> dict[str, Any]:
+    root = runs_dir.resolve()
+    path = Path(record.path).resolve()
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+        "size": len(record.raw_bytes),
+    }
+
+
+def whole_window_membership_id(
+    descriptors: Sequence[Mapping[str, Any]],
+) -> str:
+    """Derive the null-identity membership id from the exact descriptor set."""
+
+    normalized = sorted(
+        (dict(descriptor) for descriptor in descriptors),
+        key=lambda row: str(row.get("path")),
+    )
+    return hashlib.sha256(
+        json.dumps(
+            normalized,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def load_window_membership_binding(
+    path_text: str | Path,
+    *,
+    runs_dir: Path,
+    policy_sha256: str,
+    catalog: Sequence[Any],
+) -> dict[str, Any]:
+    """Authenticate an exhaustive binding for policy-matching null identities."""
+
+    path = Path(path_text).resolve(strict=True)
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("window membership binding is unreadable") from exc
+    if not isinstance(value, dict):
+        raise ValueError("window membership binding is not an object")
+    expected = [
+        _membership_manifest_descriptor(runs_dir, record)
+        for record in catalog
+        if record.value.get("analysis_manifest_id") is None
+        and isinstance(record.value.get("campaign_policy"), Mapping)
+        and record.value["campaign_policy"].get("sha256") == policy_sha256
+    ]
+    expected = sorted(expected, key=lambda row: row["path"])
+    supplied = value.get("source_campaign_manifests")
+    membership_id = whole_window_membership_id(expected)
+    if (
+        value.get("schema_version") != MEMBERSHIP_BINDING_SCHEMA
+        or value.get("campaign_policy_sha256") != policy_sha256
+        or supplied != expected
+        or value.get("membership_id") != membership_id
+    ):
+        raise ValueError("window membership binding is not exhaustive/authenticated")
+    return {
+        **value,
+        "path": str(path),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "size": len(raw),
+    }
+
+
 def _whole_window_campaign_membership(
-    runs_dir: Path, policy_sha256: str, log_path: Path | None = None
-) -> tuple[
-    list[WholeWindowMemberSource],
-    list[str],
-    list[str],
-    list[dict[str, Any]],
-]:
+    runs_dir: Path,
+    policy_sha256: str,
+    log_path: Path | None = None,
+    *,
+    membership_binding_path: str | Path | None = None,
+    consumption_semantics_id: str = MINTED_CONSUMPTION_SEMANTICS_ID,
+    salvage_closure_path: str | Path | None = None,
+    waivers: object = None,
+) -> WholeWindowMembershipResolution:
     """Resolve bundle paths from campaign ledgers, never directory order.
 
     Matching manifests are grouped by analysis-manifest identity.  Exactly one
@@ -4317,9 +4550,20 @@ def _whole_window_campaign_membership(
     but mark membership unresolved so they cannot pass.
     """
 
-    supersession_entries = _valid_supersession_entries(runs_dir, log_path)
+    supersession_results = supersession_entry_validation_results(runs_dir, log_path)
     groups: dict[str, dict[str, Any]] = {}
     catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    membership_binding: dict[str, Any] | None = None
+    if catalog is not None and membership_binding_path is not None:
+        try:
+            membership_binding = load_window_membership_binding(
+                membership_binding_path,
+                runs_dir=runs_dir,
+                policy_sha256=policy_sha256,
+                catalog=catalog,
+            )
+        except (OSError, RuntimeError, ValueError):
+            catalog = None
     if catalog is not None:
         for record in catalog:
             manifest_path = record.path
@@ -4474,6 +4718,8 @@ def _whole_window_campaign_membership(
                         group["bundle_provenance"][bundle_id] = provenance
     candidates = []
     ambiguous_duplicate = False
+    all_resolutions: list[OrdinaryOccurrenceResolution] = []
+    retained_supersessions: list[dict[str, Any]] = []
     for identity, group in groups.items():
         if group["selection_invalid"]:
             continue
@@ -4489,40 +4735,41 @@ def _whole_window_campaign_membership(
             if len(set(raw_bundle_ids)) != len(raw_bundle_ids):
                 continue
             bundle_ids = raw_bundle_ids
+            resolutions = [
+                OrdinaryOccurrenceResolution(
+                    bundle_id,
+                    "selected",
+                    selected_path=group["selected_bundle_paths"].get(bundle_id),
+                    present_paths=(group["selected_bundle_paths"].get(bundle_id),),
+                )
+                for bundle_id in bundle_ids
+            ]
         else:
             bundle_ids = list(dict.fromkeys(raw_bundle_ids))
-            occurrence_resolution_failed = False
+            resolutions = []
             for bundle_id in bundle_ids:
                 occurrences = [
                     value
                     for value in group["occurrences"]
                     if value.get("bundle_id") == bundle_id
                 ]
-                if len(occurrences) == 1:
-                    active_occurrences[bundle_id] = occurrences[0]
-                    continue
-                present = ordinary_present_bundle_paths(runs_dir, bundle_id)
-                if len(present) > 1:
-                    ambiguous_duplicate = True
-                    occurrence_resolution_failed = True
-                    break
-                supersession = _matching_supersession(
-                    supersession_entries,
+                resolution = _resolve_ordinary_occurrence(
+                    runs_dir,
                     bundle_id,
                     occurrences,
                     policy_sha256,
+                    supersession_results,
                 )
-                if (
-                    len(occurrences) < 2
-                    or present != [runs_dir.resolve() / bundle_id]
-                    or supersession is None
-                ):
-                    occurrence_resolution_failed = True
-                    break
-                active_occurrences[bundle_id] = occurrences[-1]
-                used_supersessions.append(supersession)
-            if occurrence_resolution_failed:
-                continue
+                resolutions.append(resolution)
+                all_resolutions.append(resolution)
+                if resolution.status == "ambiguous":
+                    ambiguous_duplicate = True
+                if resolution.selected_occurrence is not None:
+                    active_occurrences[bundle_id] = resolution.selected_occurrence
+                if resolution.supersession is not None:
+                    used_supersessions.append(resolution.supersession)
+                    if resolution.supersession not in retained_supersessions:
+                        retained_supersessions.append(resolution.supersession)
         source_manifests = (
             group["selection_manifests"] if using_selection else group["manifests"]
         )
@@ -4543,20 +4790,63 @@ def _whole_window_campaign_membership(
                     source_manifests,
                     active_occurrences,
                     used_supersessions,
+                    resolutions,
                 )
             )
-    if len(candidates) == 1:
-        identity, bundle_ids, manifests, active_occurrences, supersessions = (
-            candidates[0]
-        )
+    eligible_candidates = []
+    for candidate in candidates:
+        identity, bundle_ids, manifests, active_occurrences, supersessions, resolutions = candidate
+        absent = [row.bundle_id for row in resolutions if row.status == "terminal_absent"]
+        failed = [row for row in resolutions if row.status in {"unresolved", "ambiguous"}]
+        if failed:
+            continue
+        if identity == "<none>" and membership_binding is None:
+            continue
+        salvage_payload = None
+        if consumption_semantics_id == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID:
+            if (
+                len(absent) != 1
+                or membership_binding is None
+                or salvage_closure_path is None
+            ):
+                continue
+            try:
+                salvage_payload = authorize_salvage_dangler_exclusion(
+                    salvage_closure_path,
+                    membership_binding["path"],
+                    campaign_policy_sha256=policy_sha256,
+                    terminal_absent_bundle_ids=absent,
+                    waivers=waivers,
+                )
+            except (OSError, SalvageAuthorizationError, ValueError):
+                continue
+        elif absent:
+            continue
+        eligible_candidates.append((*candidate, salvage_payload))
+    if len(eligible_candidates) == 1:
+        (
+            identity,
+            bundle_ids,
+            manifests,
+            active_occurrences,
+            supersessions,
+            resolutions,
+            salvage_payload,
+        ) = eligible_candidates[0]
         group = groups[identity]
-        paths = (
-            [group["selected_bundle_paths"][value] for value in bundle_ids]
-            if group["selected_bundle_ids"]
-            else [runs_dir / value for value in bundle_ids]
-        )
         sources = []
-        for bundle_id, path in zip(bundle_ids, paths, strict=True):
+        resolution_by_id = {row.bundle_id: row for row in resolutions}
+        for bundle_id in bundle_ids:
+            resolution = resolution_by_id[bundle_id]
+            if resolution.status == "terminal_absent":
+                continue
+            path = (
+                group["selected_bundle_paths"][bundle_id]
+                if group["selected_bundle_ids"]
+                else resolution.selected_path
+            )
+            if path is None:
+                continue
             provenance = group["bundle_provenance"].get(bundle_id, {})
             sources.append(
                 WholeWindowMemberSource(
@@ -4574,7 +4864,20 @@ def _whole_window_campaign_membership(
                     occurrence=active_occurrences.get(bundle_id),
                 )
             )
-        return sources, manifests, [], supersessions
+        return WholeWindowMembershipResolution(
+            sources=tuple(sources),
+            source_manifests=tuple(manifests),
+            conditions=(),
+            occurrence_supersessions=tuple(supersessions),
+            occurrence_resolutions=tuple(resolutions),
+            membership_id=(
+                membership_binding.get("membership_id")
+                if identity == "<none>" and membership_binding is not None
+                else identity
+            ),
+            membership_binding=membership_binding,
+            salvage_dangler_exclusion=salvage_payload,
+        )
     fallback = sorted(
         path
         for path in runs_dir.iterdir()
@@ -4582,14 +4885,16 @@ def _whole_window_campaign_membership(
     )
     condition = (
         "whole_window_campaign_membership_ambiguous"
-        if len(candidates) > 1 or ambiguous_duplicate
+        if len(eligible_candidates) > 1 or len(candidates) > 1 or ambiguous_duplicate
         else "whole_window_campaign_membership_unresolved"
     )
-    return (
-        [WholeWindowMemberSource(path=path) for path in fallback],
-        [],
-        [condition],
-        [],
+    return WholeWindowMembershipResolution(
+        sources=tuple(WholeWindowMemberSource(path=path) for path in fallback),
+        source_manifests=(),
+        conditions=(condition,),
+        occurrence_supersessions=tuple(retained_supersessions),
+        occurrence_resolutions=tuple(all_resolutions),
+        membership_binding=membership_binding,
     )
 
 
@@ -4841,22 +5146,80 @@ def _run_whole_window_verdict_locked(
         getattr(args, "neg8_drift_bound", None)
     )
     waivers = load_waivers(args.waivers)
-    (
-        bundle_sources,
-        source_manifests,
-        selection_conditions,
-        occurrence_supersessions,
-    ) = (
-        _whole_window_campaign_membership(
-            runs_dir, policy_binding.sha256, log_path
-        )
+    membership = _whole_window_campaign_membership(
+        runs_dir,
+        policy_binding.sha256,
+        log_path,
+        membership_binding_path=getattr(args, "window_membership_binding", None),
+        consumption_semantics_id=getattr(
+            args,
+            "consumption_semantics_id",
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+        ),
+        salvage_closure_path=getattr(args, "salvage_closure", None),
+        waivers=args.waivers,
     )
+    bundle_sources = list(membership.sources)
+    source_manifests = list(membership.source_manifests)
+    selection_conditions = list(membership.conditions)
+    occurrence_supersessions = list(membership.occurrence_supersessions)
     evaluations = [
         _whole_window_member(source, waivers) for source in bundle_sources
     ]
     included = [evaluation for evaluation in evaluations if evaluation.usable]
     waived = [evaluation for evaluation in evaluations if evaluation.waived]
     excluded = [evaluation for evaluation in evaluations if evaluation.failed]
+    consumption_semantics_id = getattr(
+        args,
+        "consumption_semantics_id",
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+    )
+    consumption_session: AuthenticatedConsumptionSession | None = None
+    consumption_provenance: dict[str, Mapping[str, Any]] | None = None
+    if consumption_semantics_id in {
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    }:
+        consumption_session = AuthenticatedConsumptionSession(
+            runs_dir,
+            {evaluation.bundle_id for evaluation in included},
+            consumption_semantics_id=consumption_semantics_id,
+        )
+        consumption_session._prepare(
+            bundle_paths={
+                evaluation.bundle_id: evaluation.bundle_path
+                for evaluation in included
+            },
+            policy=policy_binding.policy,
+        )
+        if not consumption_session.ready:
+            raise ValueError(
+                "authenticated survivor consumption refused: "
+                + ", ".join(consumption_session.refusal_reasons)
+            )
+        included = [
+            replace(
+                evaluation,
+                summary=dict(
+                    consumption_session.summary_for(evaluation.bundle_id) or {}
+                ),
+            )
+            for evaluation in included
+        ]
+        consumption_provenance = {
+            evaluation.bundle_id: dict(provenance)
+            for evaluation in included
+            if isinstance(
+                (
+                    provenance := consumption_session.provenance_for(
+                        evaluation.bundle_id
+                    )
+                ),
+                Mapping,
+            )
+        }
+        if len(consumption_provenance) != len(included):
+            raise ValueError("authenticated survivor consumption provenance is incomplete")
     core = idle_admission_core_verdict(
         included,
         policy_binding,
@@ -4905,6 +5268,9 @@ def _run_whole_window_verdict_locked(
             if isinstance(core.get("instrument_calibration_bracket"), dict)
             else None
         ),
+        consumption_semantics_id=consumption_semantics_id,
+        consumption_provenance=consumption_provenance,
+        salvage_dangler_exclusion=membership.salvage_dangler_exclusion,
     )
     row = {
         "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
@@ -4938,6 +5304,20 @@ def _run_whole_window_verdict_locked(
         ],
         "idle_admission_core": core,
     }
+    if membership.salvage_dangler_exclusion is not None:
+        row["salvage_dangler_exclusion"] = membership.salvage_dangler_exclusion
+    if membership.membership_id is not None:
+        row["window_membership"] = {
+            "membership_id": membership.membership_id,
+            "binding": (
+                {
+                    key: membership.membership_binding.get(key)
+                    for key in ("path", "sha256", "size")
+                }
+                if membership.membership_binding is not None
+                else None
+            ),
+        }
     source_descriptors = source_manifest_descriptors(runs_dir, source_manifests)
     row["source_campaign_manifests"] = source_descriptors
     row["row_provenance"] = build_row_provenance(

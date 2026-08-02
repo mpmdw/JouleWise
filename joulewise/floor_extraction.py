@@ -89,6 +89,7 @@ from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -202,7 +203,12 @@ def _ingested_consumption_semantics_id(
     """Normalize authenticated legacy absence only at report ingestion."""
 
     if consumption_session.ready:
-        return MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        value = getattr(consumption_session, "consumption_semantics_id", None)
+        return (
+            value
+            if isinstance(value, str)
+            else MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        )
     if not consumption_session.refusal_reasons:
         return MINTED_CONSUMPTION_SEMANTICS_ID
     return None
@@ -1572,6 +1578,7 @@ def extract_cells(
     *,
     manifest_id: str | None = None,
     evaluation_basis_sha256: str | None = None,
+    consumption_semantics_id: str | None = None,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
 ) -> dict[str, Any]:
@@ -1585,6 +1592,22 @@ def extract_cells(
     cells = spec.get("cells")
     assert isinstance(cells, list) and cells
 
+    if (consumption_semantics_id is None) != (evaluation_basis_sha256 is None):
+        raise FloorExtractionError(
+            "consumption_semantics_id and a 64-hex evaluation basis are required together"
+        )
+    if consumption_semantics_id is not None and consumption_semantics_id not in {
+        MINTED_CONSUMPTION_SEMANTICS_ID,
+        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    }:
+        raise FloorExtractionError("unknown whole-window consumption semantics")
+    if evaluation_basis_sha256 is not None and not (
+        len(evaluation_basis_sha256) == 64
+        and all(character in "0123456789abcdef" for character in evaluation_basis_sha256)
+    ):
+        raise FloorExtractionError("evaluation_basis_sha256 must be 64 lowercase hex")
+
     runs_root = Path(runs_root)
     cooldowns = campaign_cooldown_evidence(runs_root, manifest_id)
     referenced_bundle_ids = _spec_referenced_bundle_ids(cells)
@@ -1592,12 +1615,16 @@ def extract_cells(
         runs_root,
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
+        consumption_semantics_id=(
+            consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        ),
     )
     whole_window_refusals = _whole_window_extraction_refusals(
         runs_root,
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
+        consumption_semantics_id=consumption_semantics_id,
     )
     member_consumption_session = (
         consumption_session
@@ -1663,6 +1690,7 @@ def extract_cells(
             referenced_bundle_ids,
             evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_session=consumption_session,
+            consumption_semantics_id=consumption_semantics_id,
         )
     whole_window_allowances = (
         whole_window_allowance_result.allowances
@@ -1839,6 +1867,7 @@ def _whole_window_extraction_refusals(
     *,
     evaluation_basis_sha256: str | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    consumption_semantics_id: str | None = None,
 ) -> tuple[str, ...]:
     """Consume a hash-bound verdict that covers every referenced bundle."""
 
@@ -1847,6 +1876,7 @@ def _whole_window_extraction_refusals(
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=consumption_session,
+        consumption_semantics_id=consumption_semantics_id,
     )
 
 

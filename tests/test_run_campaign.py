@@ -8674,5 +8674,561 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
 
 
+class D100MembershipRepairTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    @staticmethod
+    def occurrence(bundle_id: str, index: int) -> dict:
+        return {
+            "bundle_id": bundle_id,
+            "source_manifest": {
+                "path": f"campaign_manifests/{index}.json",
+                "sha256": str(index) * 64,
+            },
+            "member_index": 0,
+            "bundle_index": 0,
+        }
+
+    def test_r3_presence_first_resolution_is_count_independent(self) -> None:
+        bundle_id = "ordinary"
+        one = [self.occurrence(bundle_id, 1)]
+        many = [self.occurrence(bundle_id, 1), self.occurrence(bundle_id, 2)]
+        present = self.root / bundle_id
+        selected = many[-1]
+        supersession = {
+            "bundle_id": bundle_id,
+            "campaign_policy_sha256": "a" * 64,
+            "selected_occurrence": selected,
+            "superseded_occurrences": many[:-1],
+        }
+        cases = (
+            ([present], one, ([], []), "selected"),
+            ([present], many, ([supersession], [True]), "selected"),
+            ([], many, ([], []), "terminal_absent"),
+            ([present, self.root / "copy"], one, ([], []), "ambiguous"),
+            ([present], many, ([supersession], [False]), "ambiguous"),
+            ([present], one, ([supersession], [False]), "ambiguous"),
+            (
+                [present],
+                many,
+                ([supersession, supersession], [True, False]),
+                "ambiguous",
+            ),
+        )
+        for paths, occurrences, evidence, expected in cases:
+            with self.subTest(expected=expected), patch.object(
+                run_campaign_module,
+                "ordinary_present_bundle_paths",
+                return_value=paths,
+            ):
+                resolution = run_campaign_module._resolve_ordinary_occurrence(
+                    self.root,
+                    bundle_id,
+                    occurrences,
+                    "a" * 64,
+                    evidence,
+                )
+            self.assertEqual(resolution.status, expected)
+
+    def test_reader_failopen_valid_plus_wrong_schema_manifest_refuses(self) -> None:
+        self._write_manifest(
+            "valid.json",
+            [
+                self._member("neg8-start", position="start"),
+                self._member("neg8-end", position="end"),
+            ],
+        )
+        malformed = self.root / "campaign_manifests" / "malformed.json"
+        malformed.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.campaign_provenance.future",
+                    "analysis_manifest_id": "d100-window",
+                    "campaign_policy": {"sha256": "a" * 64},
+                    "members": [self._member("neg8-start", position="start")],
+                }
+            )
+            + "\n"
+        )
+        for bundle_id in ("neg8-start", "neg8-end"):
+            path = self.root / bundle_id
+            path.mkdir()
+            (path / "summary_metrics.json").write_text('{"status":"succeeded"}\n')
+        resolution = run_campaign_module._whole_window_campaign_membership(
+            self.root, "a" * 64
+        )
+        self.assertEqual(
+            resolution.conditions,
+            ("whole_window_campaign_membership_unresolved",),
+        )
+
+    def _write_manifest(self, name: str, members: list[dict]) -> object:
+        directory = self.root / "campaign_manifests"
+        directory.mkdir(exist_ok=True)
+        path = directory / name
+        payload = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": "d100-window",
+            "campaign_policy": {"sha256": "a" * 64},
+            "members": members,
+        }
+        path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        record = run_campaign_module.load_campaign_provenance_manifest(path)
+        self.assertIsNotNone(record)
+        return record
+
+    @staticmethod
+    def _member(bundle_id: str, *, position: str | None = None) -> dict:
+        return {
+            "config": f"{bundle_id}.json",
+            "run_id": bundle_id,
+            "execution": "invoked",
+            "bundle_ids": [bundle_id],
+            "role": (
+                run_campaign_module.NEG8_REFERENCE_ROLE
+                if position is not None
+                else None
+            ),
+            "sentinel_position": position,
+            "canonical_neg8_workload": position is not None,
+        }
+
+    def test_r2_unrelated_supersession_survives_failing_sibling(self) -> None:
+        start = "neg8-start"
+        retried = "retried"
+        absent = "absent"
+        end = "neg8-end"
+        records = [
+            self._write_manifest("00.json", [self._member(retried)]),
+            self._write_manifest(
+                "01.json",
+                [
+                    self._member(start, position="start"),
+                    self._member(retried),
+                    self._member(absent),
+                    self._member(end, position="end"),
+                ],
+            ),
+        ]
+        for bundle_id in (start, retried, end):
+            path = self.root / bundle_id
+            path.mkdir()
+            (path / "config.json").write_text(json.dumps({"run_id": bundle_id}))
+            (path / "summary_metrics.json").write_text('{"status":"succeeded"}\n')
+        descriptors = run_campaign_module.source_manifest_descriptors(
+            self.root, [record.path for record in records]
+        )
+        first = {
+            "bundle_id": retried,
+            "source_manifest": descriptors[0],
+            "member_index": 0,
+            "bundle_index": 0,
+        }
+        second = {
+            "bundle_id": retried,
+            "source_manifest": descriptors[1],
+            "member_index": 1,
+            "bundle_index": 0,
+        }
+        supersession = {
+            "bundle_id": retried,
+            "campaign_policy_sha256": "a" * 64,
+            "selected_occurrence": second,
+            "superseded_occurrences": [first],
+        }
+        with (
+            patch.object(
+                run_campaign_module,
+                "load_authenticated_campaign_catalog",
+                return_value=records,
+            ),
+            patch.object(
+                run_campaign_module,
+                "supersession_entry_validation_results",
+                return_value=([supersession], [True]),
+            ),
+        ):
+            resolution = run_campaign_module._whole_window_campaign_membership(
+                self.root, "a" * 64
+            )
+        self.assertIn("whole_window_campaign_membership_unresolved", resolution.conditions)
+        self.assertEqual(
+            [row["bundle_id"] for row in resolution.occurrence_supersessions],
+            [retried],
+        )
+
+    def test_r4_null_identity_binding_is_exhaustive_and_descriptor_derived(self) -> None:
+        records = [
+            self._write_manifest("00.json", [self._member("one")]),
+            self._write_manifest("01.json", [self._member("two")]),
+        ]
+        for record in records:
+            record.value["analysis_manifest_id"] = None
+        descriptors = [
+            run_campaign_module._membership_manifest_descriptor(self.root, record)
+            for record in records
+        ]
+        descriptors.sort(key=lambda row: row["path"])
+        membership_id = run_campaign_module.whole_window_membership_id(descriptors)
+        binding = self.root / "binding.json"
+        binding.write_text(
+            json.dumps(
+                {
+                    "schema_version": run_campaign_module.MEMBERSHIP_BINDING_SCHEMA,
+                    "campaign_policy_sha256": "a" * 64,
+                    "source_campaign_manifests": descriptors,
+                    "membership_id": membership_id,
+                }
+            )
+            + "\n"
+        )
+        loaded = run_campaign_module.load_window_membership_binding(
+            binding,
+            runs_dir=self.root,
+            policy_sha256="a" * 64,
+            catalog=records,
+        )
+        self.assertEqual(loaded["membership_id"], membership_id)
+
+        value = json.loads(binding.read_text())
+        value["source_campaign_manifests"] = descriptors[:-1]
+        binding.write_text(json.dumps(value) + "\n")
+        with self.assertRaisesRegex(ValueError, "exhaustive"):
+            run_campaign_module.load_window_membership_binding(
+                binding,
+                runs_dir=self.root,
+                policy_sha256="a" * 64,
+                catalog=records,
+            )
+
+    def test_r1_r6_r8_terminal_absence_requires_exactly_one_salvage_license(self) -> None:
+        records = [
+            self._write_manifest(
+                "window.json",
+                [
+                    self._member("neg8-start", position="start"),
+                    self._member("dangler"),
+                    self._member("neg8-end", position="end"),
+                ],
+            )
+        ]
+        records[0].value["analysis_manifest_id"] = None
+        for bundle_id in ("neg8-start", "neg8-end"):
+            path = self.root / bundle_id
+            path.mkdir()
+            (path / "config.json").write_text(json.dumps({"run_id": bundle_id}))
+            (path / "summary_metrics.json").write_text('{"status":"succeeded"}\n')
+        descriptors = [
+            run_campaign_module._membership_manifest_descriptor(self.root, record)
+            for record in records
+        ]
+        binding_path = self.root / "binding.json"
+        binding_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": run_campaign_module.MEMBERSHIP_BINDING_SCHEMA,
+                    "campaign_policy_sha256": "a" * 64,
+                    "source_campaign_manifests": descriptors,
+                    "membership_id": run_campaign_module.whole_window_membership_id(
+                        descriptors
+                    ),
+                }
+            )
+            + "\n"
+        )
+        with patch.object(
+            run_campaign_module,
+            "load_authenticated_campaign_catalog",
+            return_value=records,
+        ):
+            default = run_campaign_module._whole_window_campaign_membership(
+                self.root, "a" * 64, membership_binding_path=binding_path
+            )
+        self.assertIn("whole_window_campaign_membership_unresolved", default.conditions)
+
+        exclusion = {"bundle_id": "dangler", "payload_sha256": "c" * 64}
+        with (
+            patch.object(
+                run_campaign_module,
+                "load_authenticated_campaign_catalog",
+                return_value=records,
+            ),
+            patch.object(
+                run_campaign_module,
+                "authorize_salvage_dangler_exclusion",
+                return_value=exclusion,
+            ) as authorize,
+        ):
+            salvage = run_campaign_module._whole_window_campaign_membership(
+                self.root,
+                "a" * 64,
+                membership_binding_path=binding_path,
+                consumption_semantics_id=(
+                    run_campaign_module.SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+                salvage_closure_path=self.root / "closure.json",
+            )
+        self.assertEqual(salvage.conditions, ())
+        self.assertEqual(
+            {source.path.name for source in salvage.sources},
+            {"neg8-start", "neg8-end"},
+        )
+        self.assertEqual(salvage.salvage_dangler_exclusion, exclusion)
+        authorize.assert_called_once()
+
+        # A second absent ordinary member exceeds the mechanical cap before
+        # authorization is even considered.
+        records[0].value["members"].insert(2, self._member("second-dangler"))
+        with (
+            patch.object(
+                run_campaign_module,
+                "load_authenticated_campaign_catalog",
+                return_value=records,
+            ),
+            patch.object(
+                run_campaign_module,
+                "authorize_salvage_dangler_exclusion",
+            ) as authorize_two,
+        ):
+            two = run_campaign_module._whole_window_campaign_membership(
+                self.root,
+                "a" * 64,
+                membership_binding_path=binding_path,
+                consumption_semantics_id=(
+                    run_campaign_module.SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+                salvage_closure_path=self.root / "closure.json",
+            )
+        self.assertIn("whole_window_campaign_membership_unresolved", two.conditions)
+        authorize_two.assert_not_called()
+
+    def test_r7_ledger_honesty_ignores_outcome_and_classification_flags(self) -> None:
+        manifest_path = self.root / "campaign_manifests" / "window.json"
+        manifest_path.parent.mkdir()
+        manifest = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": "d100-window",
+            "campaign_policy": {"sha256": "a" * 64},
+            "members": [
+                {
+                    **self._member("neg8-start", position="start"),
+                    "outcome": "failed",
+                    "strict_valid": False,
+                    "classification": "failed",
+                },
+                {
+                    **self._member("neg8-end", position="end"),
+                    "outcome": "failed",
+                    "strict_valid": False,
+                    "classification": "failed",
+                },
+            ],
+        }
+        raw = (json.dumps(manifest) + "\n").encode()
+        manifest_path.write_bytes(raw)
+        record = type("CatalogRecord", (), {})()
+        record.path = manifest_path
+        record.raw_bytes = raw
+        record.value = manifest
+        records = [record]
+        for bundle_id in ("neg8-start", "neg8-end"):
+            path = self.root / bundle_id
+            path.mkdir()
+            (path / "config.json").write_text(json.dumps({"run_id": bundle_id}))
+            (path / "summary_metrics.json").write_text('{"status":"succeeded"}\n')
+        with patch.object(
+            run_campaign_module,
+            "load_authenticated_campaign_catalog",
+            return_value=records,
+        ):
+            resolution = run_campaign_module._whole_window_campaign_membership(
+                self.root, "a" * 64
+            )
+        self.assertEqual(resolution.conditions, ())
+        self.assertEqual({source.path.name for source in resolution.sources}, {
+            "neg8-start", "neg8-end"
+        })
+
+    def test_salvage_cli_requires_binding_closure_and_refuses_waivers(self) -> None:
+        base = [
+            "--whole-window-verdict",
+            "--consumption-semantics-id",
+            run_campaign_module.SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        ]
+        with self.assertRaises(SystemExit):
+            run_campaign_module.parse_args(base)
+        with self.assertRaises(SystemExit):
+            run_campaign_module.parse_args(
+                [
+                    *base,
+                    "--window-membership-binding",
+                    "binding.json",
+                    "--salvage-closure",
+                    "closure.json",
+                    "--waivers",
+                    "waivers.json",
+                ]
+            )
+
+    def test_r8_salvage_runner_appends_new_pinned_row_without_editing_failure(self) -> None:
+        members = []
+        sources = []
+        for bundle_id in ("neg8-start", "neg8-end"):
+            path = self.root / bundle_id
+            path.mkdir()
+            for name, value in (
+                ("config.json", {"run_id": bundle_id}),
+                ("metadata.json", {}),
+                ("summary_metrics.json", {"status": "succeeded"}),
+            ):
+                (path / name).write_text(json.dumps(value) + "\n")
+            sources.append(run_campaign_module.WholeWindowMemberSource(path=path))
+            members.append(
+                run_campaign_module.MemberEvaluation(
+                    bundle_id=bundle_id,
+                    bundle_path=path,
+                    config_name=f"{bundle_id}.json",
+                    status="succeeded",
+                    strict_valid=True,
+                    summary={"status": "succeeded"},
+                    metadata={},
+                )
+            )
+        exclusion = {
+            "bundle_id": "dangler",
+            "membership_id": "membership",
+            "membership_binding": {
+                "path": str(self.root / "binding.json"),
+                "sha256": "d" * 64,
+                "size": 10,
+            },
+            "payload_sha256": "e" * 64,
+        }
+        membership = run_campaign_module.WholeWindowMembershipResolution(
+            sources=tuple(sources),
+            source_manifests=(),
+            conditions=(),
+            occurrence_supersessions=(),
+            membership_id="membership",
+            membership_binding={
+                "path": str(self.root / "binding.json"),
+                "sha256": "d" * 64,
+                "size": 10,
+            },
+            salvage_dangler_exclusion=exclusion,
+        )
+        failed_row = {
+            "record_type": "idle_admission_whole_window_verdict",
+            "status": "failed",
+            "bundle_ids": ["dangler"],
+        }
+        log_path = self.root / "campaign_log.jsonl"
+        original = (json.dumps(failed_row, sort_keys=True) + "\n").encode()
+        log_path.write_bytes(original)
+
+        class ReadySession:
+            ready = True
+            refusal_reasons = ()
+            path_refusal_reasons = {}
+
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def _prepare(self, **_kwargs):
+                return None
+
+            @staticmethod
+            def summary_for(_bundle_id):
+                return {"status": "succeeded"}
+
+            @staticmethod
+            def provenance_for(_bundle_id):
+                return {
+                    "consumption_semantics_id": (
+                        run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                    )
+                }
+
+        core = {
+            "schema_version": "joulewise.idle_admission_core_verdict.v1",
+            "conditions": [],
+            "neg8_bracket": {"decision": "passed"},
+            "adapter_wattage_continuity": {"decision": "stable"},
+            "members": [
+                {"cpu_admission": {"decision": "admitted"}},
+                {"cpu_admission": {"decision": "admitted"}},
+            ],
+            "instrument_calibration_bracket": {},
+        }
+        basis = {
+            "schema_version": "joulewise.idle_admission_evaluation_basis.v1",
+            "sha256": "f" * 64,
+            "consumption_semantics_id": (
+                run_campaign_module.SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+            ),
+            "salvage_dangler_exclusion": exclusion,
+        }
+        policy_payload = json.loads(TEST_CAMPAIGN_POLICY.read_text())
+        policy_payload["idle_admission_extension"] = (
+            _idle_admission_extension_mapping("exploratory")
+        )
+        policy_path = self.root / "campaign_policy.json"
+        policy_path.write_text(json.dumps(policy_payload) + "\n")
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--log",
+                str(log_path),
+                "--campaign-policy",
+                str(policy_path),
+                "--consumption-semantics-id",
+                run_campaign_module.SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+                "--window-membership-binding",
+                str(self.root / "binding.json"),
+                "--salvage-closure",
+                str(self.root / "closure.json"),
+            ]
+        )
+        with (
+            patch.object(
+                run_campaign_module,
+                "_whole_window_campaign_membership",
+                return_value=membership,
+            ),
+            patch.object(
+                run_campaign_module,
+                "_whole_window_member",
+                side_effect=members,
+            ),
+            patch.object(
+                run_campaign_module,
+                "AuthenticatedConsumptionSession",
+                ReadySession,
+            ),
+            patch.object(
+                run_campaign_module,
+                "idle_admission_core_verdict",
+                return_value=core,
+            ),
+            patch.object(
+                run_campaign_module,
+                "build_evaluation_basis",
+                return_value=basis,
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        self.assertTrue(log_path.read_bytes().startswith(original))
+        rows = read_all_jsonl(log_path)
+        self.assertEqual(rows[0], failed_row)
+        self.assertEqual(rows[-1]["evaluation_basis"], basis)
+        self.assertEqual(rows[-1]["salvage_dangler_exclusion"], exclusion)
+
+
 if __name__ == "__main__":
     unittest.main()

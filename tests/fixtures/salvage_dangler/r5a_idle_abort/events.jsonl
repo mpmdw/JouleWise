@@ -1,0 +1,8 @@
+{"event_type":"run_started","phase":"run","timestamp_s":10.0}
+{"event_type":"stage_started","phase":"validate","timestamp_s":10.01}
+{"event_type":"stage_completed","phase":"validate","timestamp_s":10.02}
+{"event_type":"stage_started","phase":"prepare","timestamp_s":10.03}
+{"event_type":"stage_completed","phase":"prepare","timestamp_s":10.04}
+{"event_type":"stage_started","phase":"idle_baseline","timestamp_s":10.05}
+{"event_type":"failure","metadata":{"failure_reason":"unknown_error"},"phase":"idle_baseline","timestamp_s":100.0}
+{"event_type":"run_finalized","phase":"run","timestamp_s":102.7}

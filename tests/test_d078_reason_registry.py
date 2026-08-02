@@ -12,14 +12,32 @@ from joulewise import idle_admission
 from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
 
 
-# The lead pre-authorized these round-5 spellings and owns their decision-log
-# registration. This scoped worker must not edit that lead-owned file.
-# Pending-registration exception retired: the fifth-wave D-078 addendum
-# registered the bracketing and thermal-window spellings.
+# The lead pre-authorized the one D-100 registry append made by this repair.
+# Pending-registration exceptions remain empty: all emitted spellings must be
+# present in the governing decision-log amendments.
 PENDING_DECISION_LOG_REGISTRATION: set[str] = set()
 
 
 class D078ReasonRegistryTests(unittest.TestCase):
+    def test_d100_non_refusing_disposition_is_exact_dispatch_scoped(self) -> None:
+        decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
+        marker = (
+            "### D-078 registry amendment — 2026-08-02: "
+            "D-100 semantics-scoped non-refusing disposition"
+        )
+        self.assertEqual(decision_log.count(marker), 1)
+        amendment = decision_log.split(marker, 1)[1]
+        for spelling in (
+            "`whole_window_member_terminally_absent_salvage`",
+            "`salvage_dangler_exclusion_v1`",
+            "`d078_minted_envelopes_v1`",
+            "`d078_authenticated_max_bracket_rederivation_v1`",
+            "no-argument dispatch",
+            "unknown/refusing",
+        ):
+            with self.subTest(spelling=spelling):
+                self.assertIn(spelling, amendment)
+
     def test_code_vocabularies_are_present_in_d078_amendment(self) -> None:
         decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
         marker = "### D-078 amendment — 2026-07-20"
