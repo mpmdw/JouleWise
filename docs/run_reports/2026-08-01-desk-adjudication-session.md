@@ -183,3 +183,41 @@ the fix.
 - Decisions: D-098, D-099, D-100. Council: C-039 addendum III.
 - Ed owes: network-time restore. Wall-meter purchase (D-092) open,
   non-blocking.
+
+## 8. Runway continuation (2026-08-01 evening → 08-02): the commit-3 gauntlet arc
+
+Appended during the Ed-authorized ~26 h autonomous runway. Full custody
+in `.desk/coldgate_c3_structural/` and `.desk/coldgate_c3_round4/`.
+
+- Composed commit `ddd7e5b` → delta audit FAIL (3 blockers) → fix round
+  1 `690acd0` → fresh re-audit FAIL, same signature → **escalation
+  trigger honored** → cold gate 1 → **D-103** (root cause in the design
+  text: attest-after-publish ordering; WAL inversion ruled; cold
+  instance OVERRULED on B2 with recorded dissent — the verdict path's
+  pointwise byte-pinned dereference stands; two named aggregation
+  policies; origin-binding registered as fallback).
+- Fix round 2 `7e44c1b` → fresh re-audit: structural shapes PASS; three
+  narrow new blockers → triage: trigger not fired (first-round fixes
+  for round-2 adjacencies) → fix round 3 `48aeca3` → fresh re-audit: 2
+  blockers remain (lock token unbound to root; torn-tail still
+  enumeration-shaped) → **both rule-11 triggers hit → cold gate 2 →
+  D-104** (CONVERGENT: both instances rejected both magistrate
+  candidates; acquisition-identity lock tokens ruled; positive
+  writer-grammar recognizer ruled; the refuter discovered the
+  whitespace-preservation hole that survived four reviews; packet's
+  B3/NUL precedent citation corrected on the record).
+- Fix round 4 implemented D-104 (no NEEDS_RULING; the
+  assert-without-acquire path resolved as non-minting, lead-verified);
+  lead gate in progress at report time.
+- Parallel landings: PR #92 MERGED (D-096 F2 --k hardening);
+  related-work draft committed (Phase 2 complete); D-102 (CAL-BRACKET
+  pins, all arithmetic lead-replayed; n=19 corpus reconstructed with
+  member-level hashes); D-100 addendum (mechanical spellings +
+  fail-open fold); D-100 repair design consult complete and
+  implementation-ready.
+- Process observations for the council log: FOUR directing-subagent
+  stalls after background Sol runs (harvest-from-disk is now standing
+  practice + memory); MCP 1800 s idle-timeout on xhigh rounds — use the
+  audited CLI route for >30 min implementations; the "deferred
+  residual" packet discipline (unswept evidence named, not assumed)
+  caught a cold ruling's disk-shape miscalibration for the second time.
