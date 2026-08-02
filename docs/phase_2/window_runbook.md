@@ -769,6 +769,33 @@ whole-window verdict `flagged`; claim-bearing extraction requires `passed`.
 A passing screen is not a declaration of zero drift. The allowance is the
 budget carried into every matching floor or claim envelope.
 
+### D-100 §9 amendment — explicit salvage-dangler verdict dispatch
+
+The ordinary command above never consumes a terminally absent member and
+never selects a salvage row. A D-100 re-evaluation is a separate, licensed
+operation performed only after an audited `joulewise.salvage_closure.v1` and
+an exhaustive `joulewise.whole_window_membership_binding.v1` have been
+lead-verified. It appends one new row; it does not edit a failed row:
+
+```sh
+.venv/bin/python scripts/run_campaign.py \
+  --whole-window-verdict \
+  --runs-dir "$RUNS_ROOT" \
+  --log "$RUNS_ROOT/campaign_log.jsonl" \
+  --campaign-policy configs/campaign_policies/quiet_mac_p2_production.json \
+  --neg8-drift-bound "$BOUND_RUNS_ROOT/neg8-drift-bound.json" \
+  --consumption-semantics-id salvage_dangler_exclusion_v1 \
+  --window-membership-binding "$WINDOW_PLAN_ROOT/window-membership-binding.json" \
+  --salvage-closure "$CUSTODY_ROOT/salvage-closure.json"
+```
+
+The new basis consumes every surviving member under authenticated
+max-bracket re-derivation plus exactly one D-100 exclusion. Every downstream
+consumer must name both `salvage_dangler_exclusion_v1` and that row's exact
+64-hex `evaluation_basis.sha256`. `--waivers` is forbidden in this mode.
+Creating the artifacts or running this command does not itself license a
+historical window; that remains a separate lead-controlled step.
+
 ## 10. Failure playbook
 
 | Symptom or refusal | Meaning | Required action |
@@ -828,6 +855,32 @@ occurrence:
 ```
 
 Two present bundles for one occurrence always refuse.
+
+### D-100 §10 amendment — terminally absent salvage is exceptional
+
+Zero present bundles is `terminal_absent`, not a successful retry. It refuses
+by default. The only non-refusing disposition is capped at one absent member
+and requires three same-failure D-087 occurrences bound by byte-derived
+signatures and exhaustive evidence. Each occurrence must mechanically prove
+one of these branches:
+
+- a hash-bound launcher refusal with no bytes for the member anywhere in the
+  closure-declared custody universe (the runs root plus every declared
+  quarantine/custody root); or
+- a pre-workload admission abort whose only `stage_started` prefix is
+  `validate`, `prepare`, `idle_baseline`, whose metadata records
+  `environment_admission.decision: abort`, a nonempty ordered attempt list
+  with every `admitted: false`, and
+  `claim_reason: environment_admission_failed`, and whose failed summary has
+  every measurand field null.
+
+For the second branch, powermetrics/rich telemetry may end at most **0.250 s**
+after the idle-baseline failure event. The observed 136–171 ms final flush is
+teardown evidence; a later sample, a missing or truncated event stream, any
+workload/measurement stage, any non-null measurand, an unknown non-null
+summary field, an unreadable file, a symlink/duplicate artifact, or a fourth
+occurrence voids the license. Preserve original failed bundles and verdict
+rows byte-for-byte.
 
 ### Post-calibration failure and the a10 recorded deviation
 

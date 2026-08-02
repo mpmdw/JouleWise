@@ -50,6 +50,7 @@ from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
@@ -96,6 +97,7 @@ _WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _SEMANTICS_IDS = {
     MINTED_CONSUMPTION_SEMANTICS_ID,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 }
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
 StrictValidator = Callable[[Path, bool], Sequence[str]]
@@ -503,6 +505,7 @@ def _authenticated_consumption_summaries(
     evaluation_basis_sha256: str,
     *,
     target_bundle_ids: set[str],
+    consumption_semantics_id: str | None = None,
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -510,12 +513,16 @@ def _authenticated_consumption_summaries(
         runs_root,
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
+        consumption_semantics_id=(
+            consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        ),
     )
     reasons = whole_window_refusal_reasons(
         runs_root,
         referenced_bundle_ids,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_session=session,
+        consumption_semantics_id=consumption_semantics_id,
     )
     if reasons:
         raise MintError(
@@ -543,7 +550,11 @@ def _authenticated_consumption_summaries(
             raise MintError(
                 "authenticated whole-window consumption omitted source members"
             )
-        return summaries, MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        return summaries, getattr(
+            session,
+            "consumption_semantics_id",
+            consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        )
 
     summaries: dict[str, Mapping[str, Any]] = {}
     for bundle_id in referenced_bundle_ids:
@@ -999,6 +1010,7 @@ def _authenticate_component(
         _authenticated_consumption_summaries
     ),
     allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
+    expected_consumption_semantics_id: str | None = None,
 ) -> AuthenticatedComponent:
     report, report_raw = _load_json_object(paths.report_path, "extraction report")
     spec, spec_raw = _load_json_object(paths.spec_path, "extraction spec")
@@ -1035,14 +1047,24 @@ def _authenticate_component(
         for row in report_members
         if isinstance(row.get("bundle_id"), str)
     }
+    semantics = report.get("consumption_semantics_id")
+    if semantics not in _SEMANTICS_IDS:
+        raise MintError("extraction report consumption_semantics_id is unknown")
+    if (
+        expected_consumption_semantics_id is not None
+        and semantics != expected_consumption_semantics_id
+    ):
+        raise MintError(
+            "extraction report consumption_semantics_id differs from explicit dispatch"
+        )
     operative_summaries, actual_semantics = consumption_authenticator(
         paths.evidence_root,
         referenced_bundle_ids,
         expected_basis_sha256,
         target_bundle_ids=target_ids,
+        consumption_semantics_id=expected_consumption_semantics_id,
     )
-    semantics = report.get("consumption_semantics_id")
-    if semantics not in _SEMANTICS_IDS or semantics != actual_semantics:
+    if semantics != actual_semantics:
         raise MintError(
             "extraction report consumption_semantics_id differs from "
             "authenticated source consumption"
@@ -1101,12 +1123,17 @@ def _authenticate_component(
             paths.evidence_root,
             referenced_bundle_ids,
             evaluation_basis_sha256=expected_basis_sha256,
+            consumption_semantics_id=(
+                expected_consumption_semantics_id
+                or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            ),
         )
         allowance_result = allowance_deriver(
             paths.evidence_root,
             referenced_bundle_ids,
             evaluation_basis_sha256=expected_basis_sha256,
             consumption_session=allowance_session,
+            consumption_semantics_id=expected_consumption_semantics_id,
         )
     except Exception as exc:
         if (
@@ -1701,6 +1728,7 @@ def bind_floor_artifact_evidence(
                             str(row["bundle_id"])
                             for row in record_rows
                         },
+                        consumption_semantics_id=semantics,
                     )
                 )
                 if actual_semantics != semantics:
@@ -1877,6 +1905,7 @@ def mint_floor_artifact(
     project_commit: str,
     project_tree_state: str,
     strict_validator: StrictValidator,
+    consumption_semantics_id: str | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, rebind, validate, and write mint #1."""
 
@@ -1887,12 +1916,14 @@ def mint_floor_artifact(
         expected_cell_id=A10_CELL_ID,
         expected_basis_sha256=A10_EVALUATION_BASIS_SHA256,
         strict_validator=strict_validator,
+        expected_consumption_semantics_id=consumption_semantics_id,
     )
     comparative = _authenticate_component(
         comparative_paths,
         expected_cell_id=WINDOW_C_CELL_ID,
         expected_basis_sha256=WINDOW_C_EVALUATION_BASIS_SHA256,
         strict_validator=strict_validator,
+        expected_consumption_semantics_id=consumption_semantics_id,
     )
     artifact = mint_authenticated_artifact(
         artifact_id=artifact_id,
@@ -1966,6 +1997,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--project-tree-state", choices=("clean", "dirty"), required=True
     )
+    parser.add_argument(
+        "--consumption-semantics-id",
+        choices=tuple(sorted(_SEMANTICS_IDS)),
+        help=(
+            "optional exact semantics dispatch; when supplied both component "
+            "reports must use this id"
+        ),
+    )
     return parser
 
 
@@ -2003,6 +2042,7 @@ def main(argv: list[str] | None = None) -> int:
             strict_validator=lambda path, strict: validate_bundle(
                 path, strict=strict
             ),
+            consumption_semantics_id=args.consumption_semantics_id,
         )
     except MintError as exc:
         print(f"error: {exc}", file=sys.stderr)

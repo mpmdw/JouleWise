@@ -28,6 +28,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.floor_extraction import FloorExtractionError, extract_cells  # noqa: E402
+from joulewise.whole_window import (  # noqa: E402
+    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+)
 
 
 def _stored_bundle_containing(path: Path) -> Path | None:
@@ -77,11 +82,36 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--consumption-semantics-id",
+        default=None,
+        choices=(
+            MINTED_CONSUMPTION_SEMANTICS_ID,
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        ),
+        help="exact whole-window verdict consumption semantics",
+    )
+    parser.add_argument(
         "--hash-bundles",
         action="store_true",
         help="record complete-bundle and config sha256 pins per member",
     )
     args = parser.parse_args(argv)
+
+    if (args.evaluation_basis_sha256 is None) != (
+        args.consumption_semantics_id is None
+    ):
+        parser.error(
+            "--evaluation-basis-sha256 and --consumption-semantics-id are required together"
+        )
+    if args.evaluation_basis_sha256 is not None and not (
+        len(args.evaluation_basis_sha256) == 64
+        and all(
+            character in "0123456789abcdef"
+            for character in args.evaluation_basis_sha256
+        )
+    ):
+        parser.error("--evaluation-basis-sha256 must be 64 lowercase hex")
 
     try:
         spec = json.loads(args.spec.read_text(encoding="utf-8"))
@@ -112,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
             spec,
             manifest_id=args.manifest_id,
             evaluation_basis_sha256=args.evaluation_basis_sha256,
+            consumption_semantics_id=args.consumption_semantics_id,
             hash_bundles=args.hash_bundles,
         )
     except FloorExtractionError as exc:

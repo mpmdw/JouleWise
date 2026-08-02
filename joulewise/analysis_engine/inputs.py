@@ -41,6 +41,7 @@ from joulewise.detection_floor import (
 from joulewise.whole_window import (
     CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
@@ -1066,6 +1067,8 @@ def bind_floor_artifact_evidence(
     evidence_roots: Mapping[str, Path] | Path,
     *,
     strict_validator: StrictValidator,
+    consumption_semantics_id: str | None = None,
+    evaluation_basis_sha256: str | None = None,
 ) -> FloorEvidenceBinding:
     """Bind v2 component values to their named strict evidence roots."""
 
@@ -1081,6 +1084,98 @@ def bind_floor_artifact_evidence(
             normalized_roots,
         ),
     ]
+    salvage_records_present = False
+    salvage_components: list[tuple[str, Path, set[str], str]] = []
+    salvage_component_bases: list[object] = []
+    for cell in artifact.get("cells", []):
+        if not isinstance(cell, Mapping):
+            continue
+        provenance = cell.get("provenance")
+        for component_name in ("absolute", "comparative"):
+            record = cell.get(component_name)
+            component_provenance = (
+                provenance.get(component_name)
+                if isinstance(provenance, Mapping)
+                else None
+            )
+            if (
+                not isinstance(record, Mapping)
+                or record.get("consumption_semantics_id")
+                != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+            ):
+                continue
+            salvage_records_present = True
+            basis = record.get("whole_window_evaluation_basis_sha256")
+            salvage_component_bases.append(basis)
+            root_id = (
+                component_provenance.get("evidence_root_id")
+                if isinstance(component_provenance, Mapping)
+                else None
+            )
+            root = normalized_roots.get(root_id) if isinstance(root_id, str) else None
+            rows: list[Mapping[str, Any]] = []
+            if component_name == "absolute":
+                observations = record.get("bundle_observations")
+                if isinstance(observations, list):
+                    rows = [row for row in observations if isinstance(row, Mapping)]
+            else:
+                blocks = record.get("blocks")
+                if isinstance(blocks, list):
+                    rows = [
+                        row
+                        for block in blocks
+                        if isinstance(block, Mapping)
+                        for row in (
+                            block.get("members")
+                            if isinstance(block.get("members"), list)
+                            else []
+                        )
+                        if isinstance(row, Mapping)
+                    ]
+            member_ids = {
+                str(row["bundle_id"])
+                for row in rows
+                if isinstance(row.get("bundle_id"), str) and row.get("bundle_id")
+            }
+            if root is not None and isinstance(basis, str):
+                salvage_components.append((component_name, root, member_ids, basis))
+
+    if salvage_records_present:
+        valid_basis_dispatch = bool(
+            isinstance(evaluation_basis_sha256, str)
+            and re.fullmatch(r"[0-9a-f]{64}", evaluation_basis_sha256)
+        )
+        if (
+            consumption_semantics_id
+            != SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+            or not valid_basis_dispatch
+        ):
+            global_problems.append("salvage_floor_dispatch_required")
+        elif any(basis != evaluation_basis_sha256 for basis in salvage_component_bases):
+            global_problems.append("salvage_floor_dispatch_mismatch")
+        else:
+            for component_name, root, member_ids, basis in salvage_components:
+                try:
+                    session = AuthenticatedConsumptionSession(
+                        root,
+                        member_ids,
+                        evaluation_basis_sha256=basis,
+                        consumption_semantics_id=consumption_semantics_id,
+                    )
+                    reasons = whole_window_refusal_reasons(
+                        root,
+                        member_ids,
+                        evaluation_basis_sha256=basis,
+                        consumption_session=session,
+                        consumption_semantics_id=consumption_semantics_id,
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    reasons = ("whole_window_verdict_provenance_invalid",)
+                if reasons:
+                    global_problems.append(
+                        "salvage_floor_verdict_revalidation_failed: "
+                        f"{component_name}: {reasons[0]}"
+                    )
     bound_ids: set[str] = set()
     identities: dict[str, str] = {}
     stack_hashes: dict[str, str] = {}
@@ -2338,6 +2433,8 @@ def load_analysis_inputs(
     *,
     strict_validator: StrictValidator,
     evidence_roots: Mapping[str, Path] | None = None,
+    consumption_semantics_id: str | None = None,
+    evaluation_basis_sha256: str | None = None,
 ) -> LoadedAnalysisInputs:
     """Load analysis-corpus inputs and independently bind floor evidence.
 
@@ -2355,6 +2452,8 @@ def load_analysis_inputs(
         Path(floor_artifact_path),
         evidence_roots if evidence_roots is not None else runs_root,
         strict_validator=strict_validator,
+        consumption_semantics_id=consumption_semantics_id,
+        evaluation_basis_sha256=evaluation_basis_sha256,
     )
     cleanup_records = _campaign_claim_records(
         runs_root, str(manifest["manifest_id"])

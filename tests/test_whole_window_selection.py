@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import joulewise.whole_window as whole_window_module
+
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
     CONDITION_NEG8_DRIFT_BOUND_STALE,
     CONDITION_NEG8_DRIFT_BOUND_UNDERIVED,
@@ -27,6 +32,7 @@ from joulewise.whole_window import (
     _consumption_provenance_valid,
     _derived_neg8_decision,
     _validate_row,
+    build_evaluation_basis,
     build_neg8_drift_bound_artifact,
     canonical_sha256,
     custody_telemetry_identity,
@@ -46,6 +52,12 @@ from joulewise.analysis_engine.registry import (
     sha256_bytes,
 )
 from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
+from tests.test_run_campaign import (
+    d100_real_salvage_leaf_patches,
+    install_real_salvage_window,
+    read_all_jsonl,
+    run_campaign_module,
+)
 
 
 class WholeWindowSelectionTests(unittest.TestCase):
@@ -260,6 +272,7 @@ class WholeWindowSelectionTests(unittest.TestCase):
             )
         self.assertIsNone(decision)
         self.assertEqual(problem, "bundle_strict_invalid")
+
 
     def test_neg8_drift_mint_names_custody_triangle_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2165,6 +2178,250 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         )
         self.assertIsNone(session.summary_for("member"))
         self.assertIsNone(session.provenance_for("member"))
+
+
+class SalvageSemanticsDispatchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def row(self, semantics: str, *, basis: str = "b" * 64) -> dict:
+        return {
+            "record_type": "idle_admission_whole_window_verdict",
+            "bundle_ids": ["survivor"],
+            "evaluation_basis": {
+                "sha256": basis,
+                "consumption_semantics_id": semantics,
+                "member_occurrences": [{"bundle_id": "survivor"}],
+            },
+        }
+
+    def write_rows(self, *rows: dict) -> None:
+        (self.root / "campaign_log.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+
+    def test_b5_salvage_binding_cannot_substitute_same_policy_window(self) -> None:
+        descriptor_x = {
+            "path": "campaign_manifests/window-x.json",
+            "sha256": "1" * 64,
+            "size": 101,
+        }
+        descriptor_y = {
+            "path": "campaign_manifests/window-y.json",
+            "sha256": "2" * 64,
+            "size": 202,
+        }
+        binding_x = {"source_campaign_manifests": [descriptor_x]}
+        manifest_y = {
+            "members": [
+                {
+                    "execution": "invoked",
+                    "bundle_ids": ["survivor-y", "dangler-y"],
+                }
+            ]
+        }
+        self.assertFalse(
+            whole_window_module._salvage_binding_matches_verified_manifest_set(
+                binding_x,
+                [descriptor_y],
+                [manifest_y],
+                self.root,
+                "dangler-y",
+            )
+        )
+        binding_y = {"source_campaign_manifests": [descriptor_y]}
+        self.assertTrue(
+            whole_window_module._salvage_binding_matches_verified_manifest_set(
+                binding_y,
+                [descriptor_y],
+                [manifest_y],
+                self.root,
+                "dangler-y",
+            )
+        )
+        self.assertFalse(
+            whole_window_module._salvage_binding_matches_verified_manifest_set(
+                binding_y,
+                [descriptor_y, descriptor_x],
+                [manifest_y, manifest_y],
+                self.root,
+                "dangler-y",
+            )
+        )
+
+    def test_no_argument_consumers_exclude_salvage_rows(self) -> None:
+        args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+            reasons = whole_window_refusal_reasons(self.root, set(bundle_ids))
+            self.assertIn("whole_window_neg8_verdict_missing", reasons)
+            self.assertEqual(
+                whole_window_refusal_reasons(
+                    self.root,
+                    set(bundle_ids),
+                    consumption_semantics_id=(
+                        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                    ),
+                ),
+                ("whole_window_verdict_provenance_invalid",),
+            )
+
+    def test_explicit_salvage_dispatch_selects_only_salvage(self) -> None:
+        args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+            row = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+            basis_sha256 = row["evaluation_basis"]["sha256"]
+            session = AuthenticatedConsumptionSession(
+                self.root,
+                set(bundle_ids),
+                evaluation_basis_sha256=basis_sha256,
+                consumption_semantics_id=(
+                    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+            )
+            session._prepare(
+                bundle_paths={bundle_id: self.root / bundle_id for bundle_id in bundle_ids},
+                policy=run_campaign_module.load_campaign_policy(
+                    args.campaign_policy
+                ).policy,
+            )
+            self.assertTrue(session.ready)
+            self.assertEqual(
+                whole_window_refusal_reasons(
+                    self.root,
+                    set(bundle_ids),
+                    evaluation_basis_sha256=basis_sha256,
+                    consumption_session=session,
+                    consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+                ),
+                (),
+            )
+            for semantics in (
+                MINTED_CONSUMPTION_SEMANTICS_ID,
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            ):
+                with self.subTest(semantics=semantics):
+                    self.assertIn(
+                        "whole_window_neg8_verdict_missing",
+                        whole_window_refusal_reasons(
+                            self.root,
+                            set(bundle_ids),
+                            evaluation_basis_sha256=basis_sha256,
+                            consumption_semantics_id=semantics,
+                        ),
+                    )
+
+    def test_multiple_salvage_rows_for_one_basis_conflict_even_if_identical(self) -> None:
+        args, _failed, bundle_ids = install_real_salvage_window(self.root)
+        with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+            log_path = self.root / "campaign_log.jsonl"
+            row = read_all_jsonl(log_path)[-1]
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
+            reasons = whole_window_refusal_reasons(
+                self.root,
+                set(bundle_ids),
+                evaluation_basis_sha256=row["evaluation_basis"]["sha256"],
+                consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            )
+        self.assertEqual(reasons, ("whole_window_verdict_conflict",))
+
+    def test_b5_real_row_rejects_same_policy_binding_substitution(self) -> None:
+        root_x = self.root / "window-x"
+        root_y = self.root / "window-y"
+        args_x, _failed_x, bundle_ids_x = install_real_salvage_window(
+            root_x, session_id="window-x"
+        )
+        args_y, _failed_y, bundle_ids_y = install_real_salvage_window(
+            root_y, session_id="window-y"
+        )
+        self.assertEqual(bundle_ids_x, bundle_ids_y)
+        with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args_x), 0)
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args_y), 0)
+            row_x = read_all_jsonl(root_x / "campaign_log.jsonl")[-1]
+            rows_y = read_all_jsonl(root_y / "campaign_log.jsonl")
+            forged = json.loads(json.dumps(rows_y[-1]))
+            forged["salvage_dangler_exclusion"] = row_x[
+                "salvage_dangler_exclusion"
+            ]
+            forged["window_membership"] = row_x["window_membership"]
+            forged["evaluation_basis"]["salvage_dangler_exclusion"] = row_x[
+                "salvage_dangler_exclusion"
+            ]
+            basis_core = {
+                key: value
+                for key, value in forged["evaluation_basis"].items()
+                if key != "sha256"
+            }
+            forged["evaluation_basis"]["sha256"] = canonical_sha256(basis_core)
+            rows_y[-1] = forged
+            (root_y / "campaign_log.jsonl").write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows_y),
+                encoding="utf-8",
+            )
+            session = AuthenticatedConsumptionSession(
+                root_y,
+                set(bundle_ids_y),
+                evaluation_basis_sha256=forged["evaluation_basis"]["sha256"],
+                consumption_semantics_id=(
+                    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+            )
+            session._prepare(
+                bundle_paths={bundle_id: root_y / bundle_id for bundle_id in bundle_ids_y},
+                policy=run_campaign_module.load_campaign_policy(
+                    args_y.campaign_policy
+                ).policy,
+            )
+            reasons = whole_window_refusal_reasons(
+                root_y,
+                set(bundle_ids_y),
+                evaluation_basis_sha256=forged["evaluation_basis"]["sha256"],
+                consumption_session=session,
+                consumption_semantics_id=(
+                    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+            )
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_salvage_basis_is_compound_max_plus_exact_exclusion(self) -> None:
+        occurrence = {
+            "bundle_id": "survivor",
+            "bundle_path": "survivor",
+            "config_sha256": "1" * 64,
+            "metadata_sha256": "2" * 64,
+            "summary_sha256": "3" * 64,
+        }
+        provenance = {
+            "survivor": {
+                "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            }
+        }
+        exclusion = {"schema_version": "joulewise.salvage_dangler_exclusion.v1"}
+        with patch(
+            "joulewise.whole_window.validate_salvage_exclusion_payload",
+            return_value=True,
+        ):
+            basis = build_evaluation_basis(
+                policy_sha256="a" * 64,
+                member_occurrences=[occurrence],
+                calibration_bracket=None,
+                consumption_semantics_id=SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+                consumption_provenance=provenance,
+                salvage_dangler_exclusion=exclusion,
+            )
+        self.assertEqual(
+            basis["consumption_semantics_id"],
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+        )
+        self.assertEqual(basis["salvage_dangler_exclusion"], exclusion)
+        self.assertEqual(basis["consumption_provenance"], provenance)
 
 
 if __name__ == "__main__":

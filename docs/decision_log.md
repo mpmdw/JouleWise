@@ -6704,6 +6704,19 @@ Revisit when: D100-BII-BINDING-01's focused audit reports (window B
 re-evaluation unblocks on its closure), or any window-C dangler seeks
 the b-ii license first.
 
+### D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
+
+D-078's closed-registry rule is amended narrowly to register
+`whole_window_member_terminally_absent_salvage` as the first non-refusing
+disposition. It is non-refusing only when selected through the explicit
+`salvage_dangler_exclusion_v1` consumption semantic with a pinned 64-hex
+evaluation-basis digest and exactly one fully authenticated D-100 exclusion.
+Under `d078_minted_envelopes_v1`,
+`d078_authenticated_max_bracket_rederivation_v1`, or no-argument dispatch,
+the same spelling is unknown/refusing and a salvage row is ineligible for
+selection. This amendment licenses no historical re-evaluation by itself and
+does not weaken any existing D-078 refusal spelling.
+
 ## D-101 addendum (2026-08-02): live-content site tests leave the blocking gate
 
 - Status: accepted (Ed-directed 2026-08-02: the site was ratified as

@@ -1,0 +1,1 @@
+{"environment_admission":{"attempts":[{"admitted":false,"attempt":1},{"admitted":false,"attempt":2}],"claim_reason":"environment_admission_failed","decision":"abort","failure":"idle environment admission failed after one retry","schema_version":"joulewise.environment_admission.v1"},"run_id":"d100-dangler-r5a"}

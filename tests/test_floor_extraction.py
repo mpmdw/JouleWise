@@ -2466,6 +2466,7 @@ class EvaluationBasisPlumbingTests(
             *,
             evaluation_basis_sha256=None,
             consumption_session=None,
+            consumption_semantics_id=None,
         ):
             self.assertEqual(evaluation_basis_sha256, basis_sha256)
             self.assertEqual(
@@ -2475,6 +2476,10 @@ class EvaluationBasisPlumbingTests(
             self.assertEqual(
                 consumption_session.referenced_bundle_ids,
                 frozenset(referenced_bundle_ids),
+            )
+            self.assertEqual(
+                consumption_semantics_id,
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
             )
             return ()
 
@@ -2531,6 +2536,7 @@ class EvaluationBasisPlumbingTests(
                 "bundle_ids": [*bundle_ids, "basis-extra"],
                 "evaluation_basis": {
                     "sha256": basis_sha256,
+                    "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
                     "member_occurrences": [
                         {"bundle_id": bundle_id}
                         for bundle_id in (*bundle_ids, "basis-extra")
@@ -2569,6 +2575,7 @@ class EvaluationBasisPlumbingTests(
                     runs_root,
                     spec,
                     evaluation_basis_sha256=basis_sha256,
+                    consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
                 )
 
         self.assertEqual(
@@ -2669,12 +2676,18 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
                         str(out_path),
                         "--evaluation-basis-sha256",
                         basis_sha256,
+                        "--consumption-semantics-id",
+                        MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
                     ]
                 )
         self.assertEqual(code, 0)
         self.assertEqual(
             extraction.call_args.kwargs["evaluation_basis_sha256"],
             basis_sha256,
+        )
+        self.assertEqual(
+            extraction.call_args.kwargs["consumption_semantics_id"],
+            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         )
 
     def test_floor_consumer_accepts_the_reducer_mint_envelope_method(self) -> None:

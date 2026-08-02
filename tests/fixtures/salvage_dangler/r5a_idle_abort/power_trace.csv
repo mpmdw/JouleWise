@@ -1,0 +1,3 @@
+timestamp_s,power_w,source,rail,interval_start_s,interval_end_s
+99.9,0.2,powermetrics,cpu_power,99.8,99.9
+100.171,0.3,powermetrics,cpu_power,100.05,100.171
