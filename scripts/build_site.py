@@ -1741,7 +1741,11 @@ def decision_log_site_markdown(md: str) -> str:
 def decision_anchor_slugs(markdown: str) -> dict[str, str]:
     anchors: dict[str, str] = {}
     for text, slug in markdown_h2_toc(markdown):
-        match = re.match(r"^(D-\d{3})(?::|\b)", text)
+        # Entry headings only ("D-NNN:"): an addendum heading such as
+        # "D-100 addendum (...)" rides inside a NEWER entry's body and must
+        # not mint the short anchor for a decision whose own entry may have
+        # aged out of the bounded site view.
+        match = re.match(r"^(D-\d{3}):", text)
         if match:
             anchors[match.group(1)] = slug
     return anchors

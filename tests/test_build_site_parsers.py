@@ -306,6 +306,20 @@ Text.
             [f"D-{index:03d}: Entry" for index in range(3, 9)],
         )
 
+    def test_decision_anchor_slugs_ignore_addendum_headings(self):
+        # Regression: a "## D-100 addendum (...)" H2 rides inside a newer
+        # entry's body; it must not mint the d-100 short anchor once D-100's
+        # own entry has aged out of the bounded site view.
+        md = (
+            "## D-101: Entry\nbody\n\n"
+            "## D-100 addendum (2026-08-01): later ruling\naddendum body\n\n"
+            "## D-102: Entry\nbody\n"
+        )
+        self.assertEqual(
+            set(build_site.decision_anchor_slugs(md)),
+            {"D-101", "D-102"},
+        )
+
     def test_trim_note_is_escaped_by_offline_fallback_renderer(self):
         md = "# Log\n\n" + "".join(
             f"## D-{index:03d}: <Entry & {index}>\nbody\n\n"
