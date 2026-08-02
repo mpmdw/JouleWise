@@ -458,23 +458,25 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
         update this pin to full correctness at closure."""
 
         wire = json.dumps({"\ue000": 1, "😀": 2}, sort_keys=True).encode("ascii")
-        span_start = wire.index(b"\\ud83d")
-        span_end = span_start + len(b"\\ud83d\\ude00")
+        # The EXACT boundary set misclassified by registered blocker F1,
+        # frozen literally (boundaries torn inside the high-surrogate
+        # escape's hex digits and the following low-surrogate prefix).
+        # ANY deviation is a hard failure: an addition anywhere is a new
+        # recognizer regression; a removal means F1 was (partly) fixed —
+        # close C3-RECOGNIZER-EXACT-01 and update this pin to the full
+        # correctness property.
+        known_f1_misclassified = {21, 22, 23, 24, 25, 26}
         misclassified = {
             boundary
             for boundary in range(1, len(wire))
             if self._parse(wire[:boundary]) != ([], "torn_prefix")
         }
-        self.assertTrue(
+        self.assertEqual(
             misclassified,
-            "registered blocker F1 appears fixed: close "
-            "C3-RECOGNIZER-EXACT-01 and update this pin",
-        )
-        outside = {b for b in misclassified if not (span_start < b < span_end)}
-        self.assertFalse(
-            outside,
-            f"NEW recognizer regression outside the registered F1 span: "
-            f"boundaries {sorted(outside)}",
+            known_f1_misclassified,
+            "recognizer misclassification set changed: additions are NEW "
+            "regressions; removals mean registered blocker F1 was fixed — "
+            "close C3-RECOGNIZER-EXACT-01 and update this pin",
         )
 
     def test_r7_named_prefix_pins(self) -> None:
