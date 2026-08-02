@@ -74,20 +74,47 @@ historical). State:
    calibration_bracketing.py — non-salvage escalator), MEMBERSHIP-
    READER-FAILOPEN-01 (latent malformed-record skip). MET-WINDOW-C-01
    now hard-depends on the dangler repair + Ed §5A.
-3. **Gauntlet commit 3 IN FLIGHT:** design consult DONE (Sol xhigh;
-   both D-097 riders ruled: classification NOT consumed beyond
-   authentication; attestation is anti-malformation, distinct from the
-   tamper layer; per-snapshot attestations). Ratified design brief:
-   C3-DESIGN.md (untracked) at the worktree root
-   /private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/scratchpad/c3-worktree
-   (branch impl/cooldown-gauntlet-c3 off 44f0744). Implementation Sol
-   session was RUNNING at this checkpoint (codex subagent gates the
-   commit after envelope validation + diff inspection + suite replay;
-   report lands at <scratchpad>/c3-impl-report.md). ON HARVEST: lead
-   verification (suite + the two canonical mapping hashes 57/57
-   aa48a122…, 47/47 5005816a…) → independent read-only delta audit →
-   fix rounds w/ delta re-audits → PR (D-072 gate). MANIFEST-CONTRAST
-   v3 (D-095) is SEQUENTIAL AFTER commit 3 (shared write surface).
+3. **Gauntlet commit 3 IN FLIGHT (updated 2026-08-01 late evening):**
+   the arc so far on branch impl/cooldown-gauntlet-c3 (worktree
+   /private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/scratchpad/c3-worktree):
+   composed commit `ddd7e5b` (design-consult-ratified; both D-097
+   riders ruled) → main merged `8f1651e` → delta audit FAIL (3
+   blockers) → fix round 1 `690acd0` → fresh re-audit FAIL, SAME
+   signature on B1/B2/B3 → **escalation trigger fired → full cold gate
+   → D-103** (WAL attestation ordering; TWO named aggregation policies
+   — cold instance OVERRULED on B2 with recorded dissent;
+   writer-strict/reader-tolerant grammar; origin-binding redesign
+   REGISTERED as fallback on any further same-signature structural
+   failure) → fix round 2 `7e44c1b` (D-103 implemented; lead suite
+   2325 OK; mapping gates PASS) → fresh re-audit: **B1/B2/B3
+   structural shapes PASS**, three NEW narrow blockers (lock
+   enforcement fail-open in append_log + two alternate commands;
+   torn-tail tolerance broader than the writer's possible artifacts;
+   new-session regression not a real second process) → magistrate
+   triage: trigger does NOT fire (first-round fixes for
+   round-2-introduced adjacencies) → **fix round 3 RUNNING** (narrow
+   brief; structural shapes untouched). ON ITS HARVEST: lead gate
+   (suite + mapping hashes, MY canonicalization pins 7B 57
+   entries 09934c6b…, contrast 47 entries 9ebeca3a…) → fresh delta
+   re-audit → PR (D-072 gate). MANIFEST-CONTRAST v3 (D-095) stays
+   SEQUENTIAL AFTER commit 3.
+3b. **Landed this desk runway (Ed-authorized ~26 h, began ~16:00 PT):**
+   D-102 (CAL-BRACKET pins: cap 0.001275166090593858 s / ceiling
+   0.012093166090593858 s, identity-epoch freshness, never-zero
+   allowance, decimal semantics — n=19 corpus reconstructed with
+   member hashes, summary in .desk/cal_acceptance_d079/); D-103; D-100
+   addendum (four mechanical spellings + reader-fail-open fold);
+   PR #92 MERGED `3eaa37e` (D-096 F2 --k hardening); related-work
+   draft committed (docs/paper/related_work_draft.md, Phase 2
+   complete); micro_delta slope fit banked as DESIGN INPUT
+   (.desk/microdelta-slope-fit-design-input.md: 0.1057 J/token,
+   superlinearity finding, k=140 / k=48 candidates; k-set ratification
+   deferred to micro_delta planning); README machine-state banner
+   (D-101 batch); D-100 repair design consult COMPLETE (full
+   implementation design incl. fold-in of the reader fail-open;
+   awaiting commit-3 landing). Subagent stall pattern noted twice:
+   directing codex agents go dormant after background runs — harvest
+   their report files from the scratchpad directly.
 4. Landed on main this session: 1ea651f (D-098/D-099, council addendum
    III, kernel rows), 44f0744 (DRIFT + PROJECT_STATUS plain-language),
    1694eb9 (repair rows), 209201c (D-100 + adjudication retired),
