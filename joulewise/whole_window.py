@@ -3917,6 +3917,41 @@ def _basis_source_manifests(
     return selected_manifests
 
 
+def _salvage_binding_matches_verified_manifest_set(
+    exclusion_binding: Mapping[str, Any],
+    verified_descriptors: Sequence[Mapping[str, Any]],
+    verified_manifests: Sequence[Mapping[str, Any]],
+    runs_root: Path,
+    excluded_bundle_id: object,
+) -> bool:
+    """Join a D-100 exclusion to this row's authenticated manifest set."""
+
+    declared = exclusion_binding.get("source_campaign_manifests")
+    normalized_verified = sorted(
+        (
+            {
+                key: descriptor.get(key)
+                for key in ("path", "sha256", "size")
+            }
+            for descriptor in verified_descriptors
+        ),
+        key=lambda descriptor: str(descriptor.get("path")),
+    )
+    if declared != normalized_verified or len(verified_manifests) != len(
+        normalized_verified
+    ):
+        return False
+    if not isinstance(excluded_bundle_id, str) or not excluded_bundle_id:
+        return False
+    declared_members: set[str] = set()
+    for manifest in verified_manifests:
+        members = _manifest_members(manifest, Path(runs_root))
+        if members is None:
+            return False
+        declared_members.update(members)
+    return excluded_bundle_id in declared_members
+
+
 def _validate_row(
     row: Mapping[str, Any],
     runs_root: Path,
@@ -4002,6 +4037,7 @@ def _validate_row_uncached(
     ):
         reasons.add("whole_window_verdict_provenance_invalid")
     row_exclusion = row.get("salvage_dangler_exclusion")
+    exclusion_binding: Mapping[str, Any] | None = None
     basis_exclusion = (
         row["evaluation_basis"].get("salvage_dangler_exclusion")
         if isinstance(row.get("evaluation_basis"), Mapping)
@@ -4017,7 +4053,9 @@ def _validate_row_uncached(
         if (
             not isinstance(row_exclusion, Mapping)
             or row_exclusion != basis_exclusion
-            or not validate_salvage_exclusion_payload(row_exclusion)
+            or not validate_salvage_exclusion_payload(
+                row_exclusion, expected_runs_root=runs_root
+            )
             or not isinstance(membership, Mapping)
             or membership.get("membership_id")
             != row_exclusion.get("membership_id")
@@ -4074,6 +4112,7 @@ def _validate_row_uncached(
     )
     covered_by_sources: set[str] = set()
     verified_source_manifests: list[Mapping[str, Any]] = []
+    verified_source_descriptors: list[Mapping[str, Any]] = []
     verified_sources: list[
         tuple[Mapping[str, Any], Mapping[str, Any]]
     ] = []
@@ -4119,6 +4158,13 @@ def _validate_row_uncached(
                 reasons.add("whole_window_verdict_provenance_invalid")
                 continue
             verified_sources.append((descriptor, manifest))
+            verified_source_descriptors.append(
+                {
+                    "path": text,
+                    "sha256": expected_sha,
+                    "size": len(authenticated.raw_bytes),
+                }
+            )
             if basis is None:
                 members = _manifest_members(manifest, runs_root)
                 if members is None:
@@ -4126,6 +4172,22 @@ def _validate_row_uncached(
                     continue
                 covered_by_sources.update(members)
                 verified_source_manifests.append(manifest)
+    if (
+        row_semantics == SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        and (
+            exclusion_binding is None
+            or not _salvage_binding_matches_verified_manifest_set(
+                exclusion_binding,
+                verified_source_descriptors,
+                [manifest for _descriptor, manifest in verified_sources],
+                runs_root,
+                row_exclusion.get("bundle_id")
+                if isinstance(row_exclusion, Mapping)
+                else None,
+            )
+        )
+    ):
+        reasons.add("whole_window_verdict_provenance_invalid")
     if basis is not None:
         projected = _basis_source_manifests(
             basis=basis,

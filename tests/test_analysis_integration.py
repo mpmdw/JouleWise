@@ -43,6 +43,7 @@ from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCH
 from joulewise.whole_window import (
     CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
+    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
     source_manifest_descriptors,
@@ -73,6 +74,12 @@ from tests.test_detection_floor import (
     make_cell,
     make_regime,
     whole_window_allowance,
+)
+from tests.test_run_campaign import (
+    d100_real_salvage_leaf_patches,
+    install_real_salvage_window,
+    read_all_jsonl,
+    run_campaign_module,
 )
 
 
@@ -250,6 +257,96 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         source_patch.start()
         self.addCleanup(source_patch.stop)
+
+    def _salvage_floor_dispatch_fixture(self, root: Path) -> tuple[dict, dict[str, Path]]:
+        artifact = make_artifact()
+        record = artifact["cells"][0]["absolute"]
+        record["consumption_semantics_id"] = (
+            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+        )
+        record["whole_window_evaluation_basis_sha256"] = "b" * 64
+        record["whole_window_drift_allowance"][
+            "whole_window_evaluation_basis_sha256"
+        ] = "b" * 64
+        self.assertEqual(validate_floor_artifact(artifact), [])
+        roots = {"a10": root / "a10", "window_c": root / "window-c"}
+        for value in roots.values():
+            value.mkdir()
+        return artifact, roots
+
+    def test_b4_salvage_floor_binder_refuses_without_explicit_dispatch_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            binding = bind_floor_artifact_evidence(
+                artifact,
+                root / "floor.json",
+                roots,
+                strict_validator=lambda _path, _strict: (),
+            )
+        self.assertIn("salvage_floor_dispatch_required", binding.global_problems)
+        self.assertFalse(binding.bound_cell_ids)
+
+    def test_b4_salvage_floor_binder_rejects_mismatched_dispatch_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact, roots = self._salvage_floor_dispatch_fixture(root)
+            binding = bind_floor_artifact_evidence(
+                artifact,
+                root / "floor.json",
+                roots,
+                strict_validator=lambda _path, _strict: (),
+                consumption_semantics_id=(
+                    SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                ),
+                evaluation_basis_sha256="c" * 64,
+            )
+        self.assertIn("salvage_floor_dispatch_mismatch", binding.global_problems)
+        self.assertFalse(binding.bound_cell_ids)
+
+    def test_b4_salvage_floor_binder_accepts_correct_pair_after_real_row_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = make_artifact()
+            record = artifact["cells"][0]["absolute"]
+            record["consumption_semantics_id"] = (
+                SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+            )
+            ordinary_ids = tuple(
+                row["bundle_id"] for row in record["bundle_observations"]
+            )
+            roots = {"a10": root / "a10", "window_c": root / "window-c"}
+            roots["window_c"].mkdir()
+            args, _failed, _bundle_ids = install_real_salvage_window(
+                roots["a10"], ordinary_bundle_ids=ordinary_ids
+            )
+            with d100_real_salvage_leaf_patches(), redirect_stdout(io.StringIO()):
+                self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+                row = read_all_jsonl(roots["a10"] / "campaign_log.jsonl")[-1]
+                basis_sha256 = row["evaluation_basis"]["sha256"]
+                record["whole_window_evaluation_basis_sha256"] = basis_sha256
+                record["whole_window_drift_allowance"][
+                    "whole_window_evaluation_basis_sha256"
+                ] = basis_sha256
+                self.assertEqual(validate_floor_artifact(artifact), [])
+                binding = bind_floor_artifact_evidence(
+                    artifact,
+                    root / "floor.json",
+                    roots,
+                    strict_validator=lambda _path, _strict: (),
+                    consumption_semantics_id=(
+                        SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+                    ),
+                    evaluation_basis_sha256=basis_sha256,
+                )
+        self.assertNotIn("salvage_floor_dispatch_required", binding.global_problems)
+        self.assertNotIn("salvage_floor_dispatch_mismatch", binding.global_problems)
+        self.assertFalse(
+            any(
+                problem.startswith("salvage_floor_verdict_revalidation_failed")
+                for problem in binding.global_problems
+            )
+        )
 
     @classmethod
     def setUpClass(cls):

@@ -33,6 +33,23 @@ _REQUIRED_BUNDLE_FILES = (
     "events.jsonl",
     "power_trace.csv",
 )
+_KNOWN_IDLE_TELEMETRY_FILES = frozenset(
+    {
+        "rich_telemetry.jsonl",
+        "rich_telemetry_idle.jsonl",
+        "rich_telemetry_idle_attempt_2.jsonl",
+    }
+)
+_EXPECTED_EVENT_SEQUENCE = (
+    ("run_started", "run"),
+    ("stage_started", "validate"),
+    ("stage_completed", "validate"),
+    ("stage_started", "prepare"),
+    ("stage_completed", "prepare"),
+    ("stage_started", "idle_baseline"),
+    ("failure", "idle_baseline"),
+    ("run_finalized", "run"),
+)
 _MEASURAND_FIELDS = frozenset(
     {
         "decode_latency_s",
@@ -199,6 +216,31 @@ def _finite_timestamp(value: object) -> float | None:
     return result if math.isfinite(result) else None
 
 
+def _contains_occurrence_identity(value: object, bundle_id: str) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            (key in {"run_id", "bundle_id"} and child == bundle_id)
+            or _contains_occurrence_identity(child, bundle_id)
+            for key, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_occurrence_identity(child, bundle_id) for child in value)
+    return False
+
+
+def _resolved_directory_root(value: str | Path, *, label: str) -> Path:
+    supplied = Path(value)
+    if supplied.is_symlink():
+        raise SalvageAuthorizationError(f"{label} is a symlink")
+    try:
+        resolved = supplied.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SalvageAuthorizationError(f"{label} cannot be resolved") from exc
+    if not resolved.is_dir():
+        raise SalvageAuthorizationError(f"{label} is not a directory")
+    return resolved
+
+
 def _telemetry_last_timestamp(bundle_path: Path) -> float:
     timestamps: list[float] = []
     power_path = bundle_path / "power_trace.csv"
@@ -273,6 +315,14 @@ def inspect_preworkload_abort(bundle_path: str | Path) -> dict[str, Any]:
         or sum(row.get("event_type") == "run_finalized" for row in events) != 1
     ):
         raise SalvageAuthorizationError("event stream is incomplete or unordered")
+
+    observed_sequence = tuple(
+        (row.get("event_type"), row.get("phase")) for row in events
+    )
+    if observed_sequence != _EXPECTED_EVENT_SEQUENCE:
+        raise SalvageAuthorizationError(
+            "unexpected event or stage_started outside the closed idle-abort sequence"
+        )
 
     started = [
         row.get("phase")
@@ -370,6 +420,18 @@ def inspect_salvage_attempt(bundle_path: str | Path) -> dict[str, Any]:
         raise SalvageAuthorizationError(
             "required salvage evidence missing: " + ", ".join(missing)
         )
+    unexpected = sorted(
+        name
+        for name in by_path
+        if name not in _REQUIRED_BUNDLE_FILES
+        and name not in _KNOWN_IDLE_TELEMETRY_FILES
+    )
+    rich_telemetry = [name for name in by_path if name in _KNOWN_IDLE_TELEMETRY_FILES]
+    if unexpected or not rich_telemetry:
+        raise SalvageAuthorizationError(
+            "unexpected salvage artifact inventory: "
+            + ", ".join(unexpected or ["rich telemetry missing"])
+        )
     config = _read_json_object(path / "config.json")
     metadata = _read_json_object(path / "metadata.json")
     bundle_id = config.get("run_id")
@@ -412,12 +474,14 @@ def inspect_launcher_refusal(
         or refusal.get("record_sha256") != _canonical_sha256(payload)
     ):
         raise SalvageAuthorizationError("launcher refusal record is malformed")
-    supplied_roots = [Path(value) for value in custody_roots]
-    if any(root.is_symlink() for root in supplied_roots):
-        raise SalvageAuthorizationError("custody universe contains a symlink")
-    roots = [root.resolve(strict=True) for root in supplied_roots]
+    roots = [
+        _resolved_directory_root(value, label="custody root")
+        for value in custody_roots
+    ]
     if not roots:
         raise SalvageAuthorizationError("launcher refusal custody universe is empty")
+    if len(roots) != len(set(roots)):
+        raise SalvageAuthorizationError("launcher refusal custody universe has duplicates")
     def walk_error(error: OSError) -> None:
         raise SalvageAuthorizationError(
             f"custody universe cannot be exhaustively inspected: {error.filename}"
@@ -451,17 +515,28 @@ def inspect_launcher_refusal(
                     raise SalvageAuthorizationError(
                         "custody universe contains a non-regular node"
                     )
-                if filename == "config.json":
-                    try:
-                        config = json.loads(candidate.read_bytes())
-                    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                        raise SalvageAuthorizationError(
-                            "custody universe cannot be exhaustively inspected"
-                        ) from exc
-                    if isinstance(config, Mapping) and config.get("run_id") == bundle_id:
-                        raise SalvageAuthorizationError(
-                            "launcher-refused occurrence bytes exist"
-                        )
+                try:
+                    relative_text = candidate.relative_to(root).as_posix()
+                except ValueError as exc:
+                    raise SalvageAuthorizationError(
+                        "custody universe cannot be exhaustively inspected"
+                    ) from exc
+                if bundle_id in relative_text:
+                    raise SalvageAuthorizationError(
+                        "launcher-refused occurrence bytes exist"
+                    )
+                parsed_rows: list[object] = []
+                if filename in {"config.json", "metadata.json"}:
+                    parsed_rows = [_read_json_object(candidate)]
+                elif filename == "events.jsonl":
+                    parsed_rows = _jsonl_rows(candidate)
+                if any(
+                    _contains_occurrence_identity(row, bundle_id)
+                    for row in parsed_rows
+                ):
+                    raise SalvageAuthorizationError(
+                        "launcher-refused occurrence bytes exist"
+                    )
     signature_payload = {
         "license_branch": "launcher_refusal_zero_bytes",
         "refusal_code": payload["refusal_code"],
@@ -533,6 +608,7 @@ def load_salvage_closure(
     *,
     expected_policy_sha256: str | None = None,
     expected_membership_binding_sha256: str | None = None,
+    expected_runs_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Load and re-authenticate one exactly-three-occurrence D-087 closure."""
 
@@ -567,6 +643,50 @@ def load_salvage_closure(
         or any(not isinstance(root, str) or not root for root in custody_roots)
     ):
         raise SalvageAuthorizationError("closure custody-root universe is malformed")
+    has_launcher_refusal = any(
+        isinstance(occurrence, Mapping)
+        and occurrence.get("license_branch") == "launcher_refusal_zero_bytes"
+        for occurrence in occurrences
+    )
+    if has_launcher_refusal:
+        closure_runs_root = value.get("runs_root")
+        quarantine_roots = value.get("quarantine_roots")
+        if (
+            not isinstance(closure_runs_root, str)
+            or not closure_runs_root
+            or not isinstance(quarantine_roots, list)
+            or any(not isinstance(root, str) or not root for root in quarantine_roots)
+            or expected_runs_root is None
+        ):
+            raise SalvageAuthorizationError(
+                "closure runs root or declared quarantine roots are malformed"
+            )
+        resolved_expected_runs = _resolved_directory_root(
+            expected_runs_root, label="adjudicated window runs root"
+        )
+        resolved_closure_runs = _resolved_directory_root(
+            closure_runs_root, label="closure runs root"
+        )
+        resolved_quarantine = [
+            _resolved_directory_root(root, label="declared quarantine root")
+            for root in quarantine_roots
+        ]
+        resolved_custody = [
+            _resolved_directory_root(root, label="closure custody root")
+            for root in custody_roots
+        ]
+        expected_universe = {resolved_expected_runs, *resolved_quarantine}
+        if (
+            resolved_closure_runs != resolved_expected_runs
+            or len(resolved_quarantine) != len(set(resolved_quarantine))
+            or len(resolved_custody) != len(set(resolved_custody))
+            or set(resolved_custody) != expected_universe
+        ):
+            raise SalvageAuthorizationError(
+                "closure custody-root universe must equal the runs root plus "
+                "declared quarantine roots"
+            )
+        custody_roots = [str(root) for root in resolved_custody]
     if not isinstance(value.get("opened_at"), str) or not isinstance(
         value.get("closed_at"), str
     ):
@@ -735,7 +855,8 @@ def build_salvage_exclusion_payload(
 
 
 def validate_salvage_exclusion_payload(
-    payload: Mapping[str, Any], *, revalidate_bytes: bool = True
+    payload: Mapping[str, Any], *, revalidate_bytes: bool = True,
+    expected_runs_root: str | Path | None = None,
 ) -> bool:
     """Validate the closed payload shape and, by default, every named byte."""
 
@@ -778,10 +899,13 @@ def validate_salvage_exclusion_payload(
             key: binding.get(key) for key in ("path", "sha256", "size")
         }:
             return False
+        raw_closure = _read_json_object(closure_path)
+        revalidation_runs_root = expected_runs_root or raw_closure.get("runs_root")
         loaded = load_salvage_closure(
             closure_path,
             expected_policy_sha256=payload["campaign_policy_sha256"],
             expected_membership_binding_sha256=binding["sha256"],
+            expected_runs_root=revalidation_runs_root,
         )
         return build_salvage_exclusion_payload(loaded, binding_path) == dict(payload)
     except (OSError, SalvageAuthorizationError, TypeError, ValueError):
@@ -794,6 +918,7 @@ def authorize_salvage_dangler_exclusion(
     *,
     campaign_policy_sha256: str,
     terminal_absent_bundle_ids: Sequence[str],
+    runs_root: str | Path | None = None,
     waivers: object = None,
 ) -> dict[str, Any]:
     """Authorize the single exceptional absence, or fail closed."""
@@ -809,10 +934,11 @@ def authorize_salvage_dangler_exclusion(
         closure_path,
         expected_policy_sha256=campaign_policy_sha256,
         expected_membership_binding_sha256=binding_descriptor["sha256"],
+        expected_runs_root=runs_root,
     )
     payload = build_salvage_exclusion_payload(closure, binding_path)
     if payload.get("bundle_id") != absent[0] or not validate_salvage_exclusion_payload(
-        payload
+        payload, expected_runs_root=runs_root
     ):
         raise SalvageAuthorizationError("closure does not license the absent member")
     return payload

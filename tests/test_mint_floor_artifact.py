@@ -1525,6 +1525,57 @@ class BinderTests(unittest.TestCase):
                 )
             self.assertEqual(set(rebound), {"absolute", "comparative"})
 
+    def test_b4_cache_free_rebinding_preserves_stored_salvage_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact, floor_path, roots = self._tree(tmp)
+            artifact["cells"][0]["absolute"]["consumption_semantics_id"] = (
+                SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID
+            )
+            self.assertEqual(validate_floor_artifact(artifact), [])
+            mint._BINDING_SUMMARY_CACHE.clear()
+            self.addCleanup(mint._BINDING_SUMMARY_CACHE.clear)
+
+            def authenticate(
+                root: Path,
+                member_ids: set[str],
+                basis_sha256: str,
+                *,
+                consumption_semantics_id: str | None = None,
+                **_kwargs: object,
+            ) -> tuple[dict[str, dict], str]:
+                summaries = {
+                    bundle_id: load_json(root / bundle_id / "summary_metrics.json")
+                    for bundle_id in member_ids
+                }
+                fallback = (
+                    MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+                    if basis_sha256 == mint.A10_EVALUATION_BASIS_SHA256
+                    else MINTED_CONSUMPTION_SEMANTICS_ID
+                )
+                return summaries, consumption_semantics_id or fallback
+
+            with (
+                mock.patch.object(
+                    mint,
+                    "_derive_stack_identity",
+                    return_value=artifact["cells"][0]["source_regime"][
+                        "stack_identity"
+                    ],
+                ),
+                mock.patch.object(
+                    mint,
+                    "_authenticated_consumption_summaries",
+                    side_effect=authenticate,
+                ),
+            ):
+                rebound = mint.bind_floor_artifact_evidence(
+                    artifact,
+                    floor_path,
+                    roots,
+                    strict_validator=lambda _path, _strict: (),
+                )
+            self.assertEqual(set(rebound), {"absolute", "comparative"})
+
     def test_binder_rejects_source_byte_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             artifact, floor_path, roots = self._tree(tmp)

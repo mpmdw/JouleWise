@@ -4816,6 +4816,7 @@ def _whole_window_campaign_membership(
                     membership_binding["path"],
                     campaign_policy_sha256=policy_sha256,
                     terminal_absent_bundle_ids=absent,
+                    runs_root=runs_dir,
                     waivers=waivers,
                 )
             except (OSError, SalvageAuthorizationError, ValueError):

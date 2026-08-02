@@ -1728,6 +1728,7 @@ def bind_floor_artifact_evidence(
                             str(row["bundle_id"])
                             for row in record_rows
                         },
+                        consumption_semantics_id=semantics,
                     )
                 )
                 if actual_semantics != semantics:

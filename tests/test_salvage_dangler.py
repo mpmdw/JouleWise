@@ -188,6 +188,38 @@ class SalvageDanglerTests(unittest.TestCase):
         with self.assertRaisesRegex(SalvageAuthorizationError, "unknown non-null"):
             inspect_salvage_attempt(attempt)
 
+    def test_b3_closed_idle_inventory_rejects_extra_artifact(self) -> None:
+        attempt = self.copy_attempt()
+        (attempt / "workload_result.json").write_text(
+            json.dumps({"status": "succeeded", "phase": "workload"}) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(
+            SalvageAuthorizationError, "unexpected salvage artifact"
+        ):
+            inspect_salvage_attempt(attempt)
+
+    def test_b3_closed_event_sequence_rejects_non_stage_workload_event(self) -> None:
+        attempt = self.copy_attempt()
+        events = [
+            json.loads(line)
+            for line in (attempt / "events.jsonl").read_text().splitlines()
+        ]
+        events.insert(
+            -1,
+            {
+                "event_type": "measurement_result",
+                "phase": "workload",
+                "timestamp_s": 101.0,
+            },
+        )
+        (attempt / "events.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in events),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(SalvageAuthorizationError, "unexpected event"):
+            inspect_preworkload_abort(attempt)
+
     def test_full_file_enumeration_rejects_symlinks_and_duplicate_inodes(self) -> None:
         attempt = self.copy_attempt()
         os.symlink(attempt / "config.json", attempt / "alias.json")
@@ -267,6 +299,35 @@ class SalvageDanglerTests(unittest.TestCase):
         with self.assertRaisesRegex(SalvageAuthorizationError, "bytes exist"):
             inspect_launcher_refusal(refusal, [custody])
 
+    def test_b2_launcher_refusal_sweep_finds_renamed_partial_bundle_content(self) -> None:
+        custody = self.root / "custody"
+        partial = custody / "x"
+        partial.mkdir(parents=True)
+        core = {
+            "schema_version": LAUNCHER_REFUSAL_SCHEMA,
+            "bundle_id": "never-launched",
+            "timestamp": "2026-08-01T10:00:00Z",
+            "reason": "launcher refused before bundle creation",
+            "refusal_code": "launcher_precondition_refused",
+        }
+        refusal = {**core, "record_sha256": canonical_sha256(core)}
+        (partial / "metadata.json").write_text(
+            json.dumps({"run_id": "never-launched"}) + "\n", encoding="utf-8"
+        )
+        (partial / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "event_type": "run_started",
+                    "bundle_id": "never-launched",
+                    "timestamp_s": 1.0,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(SalvageAuthorizationError, "bytes exist"):
+            inspect_launcher_refusal(refusal, [custody])
+
     def test_launcher_refusal_hash_and_custody_universe_fail_closed(self) -> None:
         custody = self.root / "custody"
         custody.mkdir()
@@ -285,8 +346,10 @@ class SalvageDanglerTests(unittest.TestCase):
             )
 
     def test_b_i_closure_binds_refusal_files_and_zero_byte_universe(self) -> None:
-        custody = self.root / "custody"
-        custody.mkdir()
+        runs_root = self.root / "runs"
+        quarantine = self.root / "quarantine"
+        runs_root.mkdir()
+        quarantine.mkdir()
         binding = self.write_binding()
         occurrences = []
         for index in range(3):
@@ -298,7 +361,7 @@ class SalvageDanglerTests(unittest.TestCase):
                 "refusal_code": "launcher_precondition_refused",
             }
             refusal = {**core, "record_sha256": canonical_sha256(core)}
-            refusal_path = custody / f"refusal-{index}.json"
+            refusal_path = quarantine / f"refusal-{index}.json"
             refusal_path.write_text(json.dumps(refusal) + "\n")
             occurrences.append(
                 {
@@ -306,7 +369,7 @@ class SalvageDanglerTests(unittest.TestCase):
                     "license_branch": "launcher_refusal_zero_bytes",
                     "launcher_refusal_path": str(refusal_path),
                     "failure_signature_sha256": inspect_launcher_refusal(
-                        refusal, [custody]
+                        refusal, [runs_root, quarantine]
                     )["failure_signature_sha256"],
                     "evidence_paths": [
                         {
@@ -320,25 +383,59 @@ class SalvageDanglerTests(unittest.TestCase):
                     "operator_deviations": [],
                 }
             )
+        closure_value = {
+            "schema_version": SALVAGE_CLOSURE_SCHEMA,
+            "campaign_policy_sha256": POLICY_SHA,
+            "membership_binding_sha256": hashlib.sha256(
+                binding.read_bytes()
+            ).hexdigest(),
+            "opened_at": "2026-08-01T10:00:00Z",
+            "closed_at": "2026-08-01T10:03:00Z",
+            "runs_root": str(runs_root),
+            "quarantine_roots": [str(quarantine)],
+            "custody_roots": [str(quarantine)],
+            "terminal_occurrence_index": 2,
+            "occurrences": occurrences,
+        }
         closure_path = self.root / "launcher-closure.json"
-        closure_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": SALVAGE_CLOSURE_SCHEMA,
-                    "campaign_policy_sha256": POLICY_SHA,
-                    "membership_binding_sha256": hashlib.sha256(
-                        binding.read_bytes()
-                    ).hexdigest(),
-                    "opened_at": "2026-08-01T10:00:00Z",
-                    "closed_at": "2026-08-01T10:03:00Z",
-                    "custody_roots": [str(custody)],
-                    "terminal_occurrence_index": 2,
-                    "occurrences": occurrences,
-                }
+        closure_path.write_text(json.dumps(closure_value) + "\n")
+        with self.assertRaisesRegex(SalvageAuthorizationError, "runs root"):
+            load_salvage_closure(
+                closure_path,
+                expected_runs_root=runs_root,
             )
-            + "\n"
+
+        extra = self.root / "undeclared-custody"
+        extra.mkdir()
+        closure_value["custody_roots"] = [
+            str(runs_root),
+            str(quarantine),
+            str(extra),
+        ]
+        closure_path.write_text(json.dumps(closure_value) + "\n")
+        with self.assertRaisesRegex(SalvageAuthorizationError, "must equal"):
+            load_salvage_closure(
+                closure_path,
+                expected_runs_root=runs_root,
+            )
+
+        missing = self.root / "missing-quarantine"
+        closure_value["quarantine_roots"] = [str(missing)]
+        closure_value["custody_roots"] = [str(runs_root), str(missing)]
+        closure_path.write_text(json.dumps(closure_value) + "\n")
+        with self.assertRaisesRegex(SalvageAuthorizationError, "cannot be resolved"):
+            load_salvage_closure(
+                closure_path,
+                expected_runs_root=runs_root,
+            )
+
+        closure_value["quarantine_roots"] = [str(quarantine)]
+        closure_value["custody_roots"] = [str(runs_root), str(quarantine)]
+        closure_path.write_text(json.dumps(closure_value) + "\n")
+        closure = load_salvage_closure(
+            closure_path,
+            expected_runs_root=runs_root,
         )
-        closure = load_salvage_closure(closure_path)
         payload = build_salvage_exclusion_payload(closure, binding)
         self.assertTrue(validate_salvage_exclusion_payload(payload))
 
