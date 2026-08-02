@@ -576,6 +576,51 @@
       "status": "queued",
       "stop_card": null
     },
+    "C3-RECOGNIZER-EXACT-01": {
+      "acceptance": {
+        "evidence": [
+          "F1 closes via the exact escape-ordering completion-feasibility procedure (hex-digit interval derivation, surrogate-pair arithmetic, prefix-extension rule) with both registered counterexamples pinned verbatim and a BMP/non-BMP boundary property test",
+          "F2 closes via a DOCUMENTED DECIDABLE SUPERSET grammar of json.dumps float spellings (fixed-notation exponent window, coefficient rules, two-digit exponent padding) — the D-104 cl.2 subset direction is amended per D-105 to 'accepted within the documented superset AND containing every real writer prefix'; both counterexamples refuse; randomized-float completeness property passes",
+          "Both registered blockers close together with an independent delta audit at the exact head; the acceptance-set contract re-proven in both amended directions over a corpus including non-BMP keys"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/C3-RECOGNIZER-EXACT-01/acceptance",
+          "label": "C3-RECOGNIZER-EXACT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The two registered recognizer-exactness blockers (escaped-key ordering; number-prefix over-acceptance) close together under D-105's refuter-amended criteria with an independent audit."
+      },
+      "authority": {
+        "label": "D-105 disposition synthesis (F1/F2 registered as a NEW ruling, not D-088 precedent; closure criteria refuter-amended; number-grammar exactness struck)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-105 registration fences",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "F1/F2 severity may not be downgraded by any role; closure ONLY through this row; while open the recognizer's accepted set may only SHRINK; the custody sidecar and writer-side ASCII key assertion (the D-105 micro-commit) are load-bearing compensating controls and may not be weakened"
+        },
+        {
+          "authority": {
+            "label": "D-105: branch-introduced registration is NOT QA-10A/B precedent",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "This registration must not be cited as precedent for registering corpus-absent defects generally; it is a new ruling made with three recorded independent absence scans and mechanical compensating controls"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the two D-105-registered recognizer-exactness blockers: exact escape-ordering completion-feasibility (F1) and the documented decidable superset number grammar (F2, with the D-104 cl.2 subset-direction amendment), plus the bundled F3/N2 release-path hygiene if not already landed.",
+      "id": "C3-RECOGNIZER-EXACT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 15,
+      "status": "queued",
+      "stop_card": null
+    },
     "CAL-BRACKET-D079-01": {
       "acceptance": {
         "evidence": [

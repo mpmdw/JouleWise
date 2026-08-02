@@ -56,6 +56,8 @@ EXPECTED_IDS = {
     # left the live kernel; its repairs and the remainder window remain.
     "MET-DANGLER-DISPOSITION-01", "CAL-BRACKET-D079-01",
     "MEMBERSHIP-READER-FAILOPEN-01",
+    # 2026-08-02 D-105 registration (C3 gauntlet close-out)
+    "C3-RECOGNIZER-EXACT-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -222,9 +224,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_60(self):
+    def test_exact_live_id_set_61(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 60)
+        self.assertEqual(len(self.tasks), 61)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
