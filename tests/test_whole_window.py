@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import tempfile
 import unittest
@@ -12,11 +13,161 @@ from unittest.mock import patch
 
 from joulewise.floor_extraction import extract_absolute_cell
 from joulewise.whole_window import AuthenticatedConsumptionSession
+from joulewise.whole_window import (
+    ADAPTER_CONTINUITY_SCHEMA,
+    IDLE_ADMISSION_CORE_SCHEMA,
+    NEG8_BRACKET_SCHEMA,
+    WHOLE_WINDOW_SCHEMA,
+    _validate_row,
+    build_row_provenance,
+)
+from joulewise.campaign_provenance import campaign_provenance_attestation
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
 UNRECORDED_ENVELOPE = "anchor_energy_envelope_unrecorded"
 SENTINEL_J = 987_654_321.125
+
+
+class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
+    POLICY_SHA = "a" * 64
+    BRACKET_POLICY = {"require_bracket": True}
+
+    def _verdict_fixture(
+        self,
+        root: Path,
+        *,
+        schema_version: str,
+        attest: bool,
+        relabel: bool = False,
+    ) -> dict:
+        manifest_dir = root / "campaign_manifests"
+        manifest_dir.mkdir(parents=True)
+        manifest_path = manifest_dir / "source.json"
+        manifest = {
+            "schema_version": (
+                "joulewise.campaign_provenance.v1"
+                if relabel
+                else schema_version
+            ),
+            "session_id": "source-session",
+            "campaign_policy": {"sha256": self.POLICY_SHA},
+            "members": [
+                {
+                    "execution": "invoked",
+                    "run_id": "member",
+                    "bundle_ids": ["member"],
+                }
+            ],
+        }
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        if relabel:
+            raw = manifest_path.read_bytes()
+            v1 = b'"schema_version": "joulewise.campaign_provenance.v1"'
+            v2 = b'"schema_version": "joulewise.campaign_provenance.v2"'
+            self.assertEqual(raw.count(v1), 1)
+            manifest_path.write_bytes(raw.replace(v1, v2, 1))
+            manifest["schema_version"] = schema_version
+
+        raw = manifest_path.read_bytes()
+        if attest:
+            attestation = campaign_provenance_attestation(
+                manifest_path=manifest_path,
+                raw_manifest_bytes=raw,
+                manifest=manifest,
+                timestamp="2026-08-01T12:00:00Z",
+            )
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(attestation) + "\n",
+                encoding="utf-8",
+            )
+        row = {
+            "schema_version": WHOLE_WINDOW_SCHEMA,
+            "status": "passed",
+            "campaign_policy": {"sha256": self.POLICY_SHA},
+            "bundle_ids": ["member"],
+            "idle_admission_core": {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": self.POLICY_SHA,
+                "members": [
+                    {
+                        "bundle_id": "member",
+                        "cpu_admission": {"decision": "admitted"},
+                    }
+                ],
+                "adapter_wattage_continuity": {
+                    "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                    "decision": "stable",
+                },
+                "neg8_bracket": {
+                    "schema_version": NEG8_BRACKET_SCHEMA,
+                    "decision": "passed",
+                    "policy": dict(self.BRACKET_POLICY),
+                },
+            },
+        }
+        row["row_provenance"] = build_row_provenance(
+            policy_sha256=self.POLICY_SHA,
+            bundle_ids=["member"],
+            source_manifests=[
+                {
+                    "path": "campaign_manifests/source.json",
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            ],
+        )
+        return row
+
+    def _validate(self, row: dict, root: Path) -> tuple[bool, tuple[str, ...]]:
+        with (
+            patch(
+                "joulewise.whole_window._current_core_rederivation_reasons",
+                return_value=set(),
+            ),
+            patch(
+                "joulewise.whole_window._registered_bracket_policy",
+                return_value=self.BRACKET_POLICY,
+            ),
+            patch(
+                "joulewise.whole_window._derived_neg8_decision",
+                return_value=("passed", None),
+            ),
+        ):
+            return _validate_row(row, root, {"member"})
+
+    def test_attested_v2_source_passes_verdict_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = self._verdict_fixture(
+                root,
+                schema_version="joulewise.campaign_provenance.v2",
+                attest=True,
+            )
+            ok, reasons = self._validate(row, root)
+
+        self.assertTrue(ok, reasons)
+        self.assertEqual(reasons, ())
+
+    def test_unattested_and_relabelled_v2_sources_refuse_verdict(self) -> None:
+        for relabel in (False, True):
+            with self.subTest(relabel=relabel), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                row = self._verdict_fixture(
+                    root,
+                    schema_version="joulewise.campaign_provenance.v2",
+                    attest=False,
+                    relabel=relabel,
+                )
+                ok, reasons = self._validate(row, root)
+
+                self.assertFalse(ok)
+                self.assertIn(
+                    "whole_window_verdict_provenance_invalid",
+                    reasons,
+                )
 
 
 class TwoScopeRefusalTests(unittest.TestCase):

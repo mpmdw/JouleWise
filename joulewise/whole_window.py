@@ -36,6 +36,7 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import calibration_bracket_for_bundles
+from joulewise.campaign_provenance import load_authenticated_campaign_manifest
 from joulewise.reduce import (
     _rederive_summary_for_authenticated_fiducial_bound,
     _verify_instrument_calibration,
@@ -3996,22 +3997,22 @@ def _validate_row_uncached(
                 reasons.add("whole_window_verdict_provenance_invalid")
                 continue
             seen_paths.add(text)
-            try:
-                raw = path.read_bytes()
-                manifest = json.loads(raw)
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                reasons.add("whole_window_verdict_provenance_invalid")
-                continue
-            if hashlib.sha256(raw).hexdigest() != expected_sha or not isinstance(
-                manifest, Mapping
+            authenticated = load_authenticated_campaign_manifest(
+                runs_root,
+                path,
+                runs_root / "campaign_log.jsonl",
+            )
+            if (
+                authenticated is None
+                or hashlib.sha256(authenticated.raw_bytes).hexdigest()
+                != expected_sha
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")
                 continue
+            manifest = authenticated.value
             manifest_policy = manifest.get("campaign_policy")
             if (
-                manifest.get("schema_version")
-                != "joulewise.campaign_provenance.v1"
-                or not isinstance(manifest_policy, Mapping)
+                not isinstance(manifest_policy, Mapping)
                 or manifest_policy.get("sha256") != policy_sha
             ):
                 reasons.add("whole_window_verdict_provenance_invalid")

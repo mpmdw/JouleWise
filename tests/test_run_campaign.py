@@ -3289,6 +3289,94 @@ class RunCampaignTests(unittest.TestCase):
                 load_authenticated_campaign_catalog(runs_dir, custom_log)
             )
 
+    def test_v2_writer_repairs_crash_stranded_current_snapshot_once(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / "runs"
+            custom_log = root / "external" / "campaign.jsonl"
+            path, manifest = run_campaign_module.new_campaign_provenance(
+                root,
+                runs_dir,
+                None,
+                log_path=custom_log,
+            )
+            stranded_bytes = path.read_bytes()
+            custom_log.unlink()
+
+            # Simulate a crash after os.replace but before append_log: the
+            # desired bytes are current, but their external attestation is gone.
+            run_campaign_module.write_campaign_provenance(
+                path,
+                manifest,
+                custom_log,
+            )
+            first_rows = read_wire_jsonl(custom_log)
+            self.assertEqual(len(first_rows), 1)
+            self.assertEqual(
+                first_rows[0]["campaign_provenance_manifest_sha256"],
+                hashlib.sha256(stranded_bytes).hexdigest(),
+            )
+            self.assertIsNotNone(
+                load_authenticated_campaign_catalog(runs_dir, custom_log)
+            )
+
+            run_campaign_module.write_campaign_provenance(
+                path,
+                manifest,
+                custom_log,
+            )
+            self.assertEqual(read_wire_jsonl(custom_log), first_rows)
+
+    def test_v2_attestation_hashes_exact_noncanonical_manifest_bytes(self) -> None:
+        from joulewise.campaign_provenance import (
+            campaign_provenance_attestation,
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / "runs"
+            manifest_dir = runs_dir / "campaign_manifests"
+            manifest_dir.mkdir(parents=True)
+            path = manifest_dir / "odd-wire.json"
+            raw = (
+                b'{ "members" : [ { "run_id" : "odd", '
+                b'"bundle_ids" : [ "odd" ], "execution" : "invoked" } ],\n'
+                b'  "session_id" : "odd-session",\n'
+                b' "schema_version" : "joulewise.campaign_provenance.v2" }\n\n'
+            )
+            path.write_bytes(raw)
+            manifest = json.loads(raw.decode("utf-8"))
+            canonical = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            self.assertNotEqual(
+                hashlib.sha256(raw).digest(),
+                hashlib.sha256(canonical).digest(),
+            )
+            row = campaign_provenance_attestation(
+                manifest_path=path,
+                raw_manifest_bytes=raw,
+                manifest=manifest,
+                timestamp="2026-08-01T12:00:00Z",
+            )
+            self.assertEqual(
+                row["campaign_provenance_manifest_sha256"],
+                hashlib.sha256(raw).hexdigest(),
+            )
+            log_path = runs_dir / "campaign_log.jsonl"
+            log_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+            catalog = load_authenticated_campaign_catalog(runs_dir)
+
+            self.assertIsNotNone(catalog)
+            assert catalog is not None
+            self.assertEqual(catalog[0].raw_bytes, raw)
+
     def test_prompt_hash_sidecar_match_records_matches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

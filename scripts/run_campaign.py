@@ -95,6 +95,7 @@ from joulewise.campaign_provenance import (  # noqa: E402
     legacy_existing_outcome,
     load_authenticated_campaign_catalog,
     load_campaign_log_rows,
+    matching_campaign_provenance_attestations,
 )
 from joulewise.analysis_engine.ratio import (  # noqa: E402
     estimation_metric,
@@ -2448,6 +2449,29 @@ def write_campaign_provenance(
     )
     try:
         if path.read_bytes() == payload:
+            if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+                selected_log = log_path or path.parent.parent / "campaign_log.jsonl"
+                rows = load_campaign_log_rows(selected_log)
+                matches = (
+                    matching_campaign_provenance_attestations(
+                        rows,
+                        manifest_path=path,
+                        raw_manifest_bytes=payload,
+                        manifest=manifest,
+                    )
+                    if rows is not None
+                    else ()
+                )
+                if rows is not None and len(matches) == 0:
+                    append_log(
+                        selected_log,
+                        campaign_provenance_attestation(
+                            manifest_path=path,
+                            raw_manifest_bytes=payload,
+                            manifest=manifest,
+                            timestamp=utc_timestamp(),
+                        ),
+                    )
             return
     except FileNotFoundError:
         pass
