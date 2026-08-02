@@ -221,3 +221,76 @@ in `.desk/coldgate_c3_structural/` and `.desk/coldgate_c3_round4/`.
   audited CLI route for >30 min implementations; the "deferred
   residual" packet discipline (unswept evidence named, not assumed)
   caught a cold ruling's disk-shape miscalibration for the second time.
+
+## 9. Runway close-out (2026-08-02 evening): both repair branches landed; D-106; the site ungated
+
+Appended by the post-move session executing the checkpoint's resume
+script. Custody for the branch arcs: `.desk/runway-20260801-artifacts/`
+(both briefs, all audit and fix-round reports) and
+`.desk/coldgate_d100_bii/` (the b-ii cold-gate packet + decisive
+re-audit).
+
+- **C3 disposition (D-105)** landed the gauntlet close (§8); the two
+  repair branches then each ran one brief-repair round (repairs
+  disposition note) to decisive re-audits: MET-DANGLER's found the b-ii
+  residual fail-open (schema-valid measured-run telemetry and nested
+  workload content can disagree with the admission event stream and
+  still license); MANIFEST-CONTRAST v3's came back CLEAN, zero
+  findings, after the embedded-floor-bytes ruling round (`e94d4a7`).
+- **D-106 (cold gate, Variant D):** merge the inert D-100 repair,
+  register NOTHING (D-105's registration guard inverted on first
+  contact), window B re-evaluation HARD-BLOCKED on the new decidable
+  row `D100-BII-BINDING-01`; second cold-instance overruling with
+  recorded dissent; magistrate packet-hygiene failures recorded, packet
+  authorship moved to mechanical assembly.
+- **Main went red** at the D-106 commit itself: the entry aged D-100
+  out of the site's 6-entry bounded view while the D-100 addendum H2
+  (inside D-101's retained entry) still minted a `d-100` short anchor,
+  failing the live-content pack tests on both Python versions — three
+  failure emails to Ed and the misread that PR #95's CI had failed on
+  its own defect. Fixed on the merits (`775fa23`, anchors mint only
+  from `D-NNN:` entry headings + regression), then the CLASS closed by
+  Ed's directive as the **D-101 addendum** (`2491760`): live-content
+  site tests default-skip out of the blocking suite and run in the
+  advisory release-chain job.
+- **PR #94 MERGED** at the audited head `05d99b6` (merge `bc2ab19`)
+  under D-106 clause 1 + the checkpoint's ruled CI fallback; the
+  docs-only decision-log conflict (branch's D-078 registry amendment vs
+  main's D-106 tail) resolved in the merge commit; push-to-main verdict
+  CI GREEN, all five jobs.
+- **PR #95 MERGED** per the same ruled pattern after GitHub likewise
+  could not schedule its merge-ref CI: the two code conflicts against
+  post-#94 main resolved as clean unions (floor-binding signature/call
+  site: #94's `consumption_semantics_id`/`evaluation_basis_sha256` +
+  #95's `_authenticated_floor`; both PRs' appended integration tests),
+  full suite green on the composed tree as the lead integration gate
+  (`Ran 2418`, OK, skipped=22), merged as `200e6db`, push-to-main
+  verdict CI the final word.
+- **Kernel batch:** MET-DANGLER-DISPOSITION-01 (+ folded
+  MEMBERSHIP-READER-FAILOPEN-01) and MANIFEST-CONTRAST-01 retired to
+  the completed table; `D100-BII-BINDING-01` minted (P1, agent lane,
+  D-106 clause 3's four parts as acceptance); pins 60→58;
+  MET-WINDOW-C-01's dangler dependency satisfied but the row stays
+  BLOCKED on a fresh post-move Ed §5A (the move invalidated
+  settled-machine conditions), with the D-106 dangler-returns-to-the-
+  gate fence added.
+- **D100-BII-BINDING-01 implementation: PROTOCOL FAILURE, work held.**
+  The Sol xhigh run (codex-run-v3, enforced WRITE_SCOPE) completed the
+  implementation in the `scratchpad/d100bii` worktree (236 insertions,
+  scope-confined; module tests 21/21 green at the bench; log shows the
+  four D-106 parts plus one live compatibility finding — governed
+  pre-workload aborts legitimately carry an `extra` mapping, classified
+  by exact producer-owned scalar keys so `extra.model_output` still
+  voids) — but the final report envelope was never written
+  (`run_status=ACCEPTANCE_FAILED`; the out-file write failed). Per the
+  bridge contract a missing envelope is protocol failure, never
+  success: the diff stays UNCOMMITTED and UNCONSUMED. Next session:
+  independent focused audit of the worktree diff (required by the row
+  regardless), treating the report-less work as untrusted; commit on
+  the branch only after it passes.
+- Process note: the auto-mode permission classifier blocked the
+  CI-workflow push and several benign commands this session; Ed pushed
+  the addendum commit by hand (`! git push`). Two false starts on the
+  codex-run-v3 flag interface (out-file is positional; WRITE_SCOPE must
+  appear as a literal prompt field) — recorded here so the next session
+  reads `usage()` first.

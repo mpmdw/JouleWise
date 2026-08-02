@@ -34,7 +34,7 @@ instrument-tightening program.
 | Candidate claim | Value (prose-only until gated) | Window / verdict | Blocker |
 |---|---|---|---|
 | **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | `MINT-GENERALIZE-01`: D-088 no-mint-from-duplicate-bearing-corpus condition until the cooldown-join gauntlet fully closes (commit 3 outstanding). |
-| **1.5B-vs-7B decode contrast** (demonstration study #1) | 7B−1.5B per-block 146.730349 J, σ 0.241 J, n=10 ABBA blocks (~600× block scatter, ~10–20× the floors) | `window_contrast_20260730`, **PASSED** | The D-095 chain, in order: gauntlet commit 3 (D-097) → MANIFEST-CONTRAST v3 → multi-cell mint → gated claim. Diagnostic is quotable as prose, never as a gated claim. |
+| **1.5B-vs-7B decode contrast** (demonstration study #1) | 7B−1.5B per-block 146.730349 J, σ 0.241 J, n=10 ABBA blocks (~600× block scatter, ~10–20× the floors) | `window_contrast_20260730`, **PASSED** | The D-095 chain, in order: gauntlet commit 3 (D-097, PR #93 MERGED 2026-08-02) → MANIFEST-CONTRAST v3 (PR #95 MERGED 2026-08-02) → multi-cell mint (`MINT-GENERALIZE-01`, the remaining gate) → gated claim. Diagnostic is quotable as prose, never as a gated claim. |
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
 

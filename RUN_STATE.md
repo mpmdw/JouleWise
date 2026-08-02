@@ -10,8 +10,10 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-01 (desk adjudication session; current head
-`df78b53`+, D-098..D-101 landed — see the ACTIVE RESUME SCRIPT below).
+Last updated: 2026-08-02 evening (post-move session: PRs #94/#95
+merged, kernel batch + D100-BII-BINDING-01 minted, site tests
+advisory-lane per the D-101 addendum — see the ACTIVE RESUME SCRIPT
+below).
 Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
@@ -45,7 +47,28 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT — Ed's context-clear + laptop-move checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-4 EXECUTED post-move — see the EXECUTION UPDATE, then steps 5+)
+
+**EXECUTION UPDATE (2026-08-02 evening, post-move session):** Steps 1-3
+are DONE and step 4 is IN FLIGHT. PR #94 MERGED at audited head
+`05d99b6` (merge `bc2ab19`, docs-only conflict resolved; verdict CI
+GREEN 5/5). PR #95 MERGED per the same ruled pattern (GitHub could not
+build its merge ref either; code conflicts resolved as clean unions,
+composed-tree full suite green, push-to-main verdict CI). Kernel batch
+landed with this commit (3 retirements, D100-BII-BINDING-01 minted,
+pins 58; window C BLOCKED on a fresh post-move Ed §5A). The
+D100-BII-BINDING-01 implementation ran (Sol xhigh, worktree
+`scratchpad/d100bii`, branch impl/d100-bii-binding) and ended in
+PROTOCOL FAILURE — envelope never written (ACCEPTANCE_FAILED) — so the
+scope-confined diff (236 insertions, module tests 21/21 at the bench)
+is HELD UNCOMMITTED in that worktree. Next: independent focused audit
+of the diff as untrusted work, commit on the branch only after it
+passes, then window B re-evaluation (step 5). Run-report §9 has the
+detail. ALSO: main went
+red at the D-106 commit via the live-content site tests — fixed
+(`775fa23`) and the class closed by Ed's directive (D-101 addendum,
+`2491760`: those tests are advisory-lane now); run-report §9 has the
+full arc. Ed hand-pushed once past the permission classifier.
 
 Successor is FABLE, MAGISTRATE. Main is at `326d05f`+ (D-106 et al.
 pushed). The 2026-08-01→02 runway (~26 h) closed the cooldown-join

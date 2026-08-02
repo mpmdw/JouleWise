@@ -731,6 +731,53 @@
       "status_note": "Minted 2026-07-25 from PR #85 gauntlet deferrals; triangle-agreement enforcement (merged) already raises these seams to three-file forgery cost.",
       "stop_card": null
     },
+    "D100-BII-BINDING-01": {
+      "acceptance": {
+        "evidence": [
+          "Interval containment: every telemetry timestamp lies within [run_started event, failure + 0.250 s] (decidable superset control, ~5 lines); the cadence-consistency clause is STRUCK; the concurrent-capture residual is RECORDED as a known limitation",
+          "Custody digest freeze: the closure artifact records sha256 of every file in each b-ii bundle plus a root-level digest manifest of the quarantine directory, re-verified at license execution; any mismatch voids",
+          "Nested-content closure: nested workload evidence under metadata or event metadata voids per the decisive audit's second scenario (unclassifiable means void)",
+          "In-code marker in salvage_dangler.py names this row and the D-106 clause-3 gate on the b-ii mechanical license",
+          "Defect-shaped regressions red pre-fix: early-telemetry substitution, digest-freeze tamper, nested workload evidence; focused independent audit at the exact head"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D100-BII-BINDING-01/acceptance",
+          "label": "D100-BII-BINDING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "D-106 clause 3 closes as one audited commit: interval containment, custody digest freeze, nested-content closure, and the open-row marker, with defect-shaped regressions and a focused independent audit; window B re-evaluation unblocks on closure."
+      },
+      "authority": {
+        "label": "D-106 b-ii residual synthesis clause 3 (Variant D; refuter's writer-level diagnosis adopted)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-106 clause 3 (fix-kind discrimination)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The fixes bind capture identity by interval containment and digest freeze, never by per-file schema formulations (telemetry rows carry no identity by construction); no third schema-shaped formulation may be proposed"
+        },
+        {
+          "authority": {
+            "label": "D-106 clause 3 / D-100 fences",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window B re-evaluation stays hard-blocked until this row closes, and its execution must re-record with the repaired tool and carry the per-file digest freeze (runbook condition 3 + D-106)"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the two decidable b-ii capture-identity fixes D-106 ruled (window B re-evaluation is HARD-BLOCKED on this row): telemetry interval containment, custody digest freeze, nested-content closure, and the in-code open-row marker, as one commit plus a focused audit.",
+      "id": "D100-BII-BINDING-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 2,
+      "status": "queued",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
@@ -1067,155 +1114,6 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
-    "MANIFEST-CONTRAST-01": {
-      "acceptance": {
-        "evidence": [
-          "A cross-model decode contrast manifest validates end-to-end, with the Slice-2M-frozen assumptions replaced or parameterized rather than bypassed",
-          "A bounded pre-decision cross-model consult is run and recorded before implementation"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/MANIFEST-CONTRAST-01/acceptance",
-          "label": "MANIFEST-CONTRAST-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A Qwen2.5 1.5B-vs-7B decode contrast manifest validates end-to-end through the validator analyze_claims actually uses."
-      },
-      "authority": {
-        "label": "splitwise_decode_v1 campaign doc section 2 Blocker B (MANIFEST-CONTRAST schema work)",
-        "path": "docs/phase_2/splitwise_decode_campaign.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "Gauntlet closed 2026-08-02: commit 3 merged as PR #93 (cb860e1) after five audited fix rounds + three cold gates (D-103/D-104/D-105)",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "task",
-          "required": "Gauntlet commit 3 landed (D-095 write surface overlaps; sequential, never parallel)",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "COOLDOWN-JOIN-GAUNTLET-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "splitwise_decode_v1 campaign doc section 2 Blocker B",
-            "path": "docs/phase_2/splitwise_decode_campaign.md"
-          },
-          "rule": "Design-bearing and contract-adjacent: run the bounded pre-decision consult first and decide the versioning story instead of widening the v1 validator in place"
-        }
-      ],
-      "flags": [],
-      "goal": "Unfreeze the analysis-manifest path that gates every contrast claim: analyze_claims validates unconditionally with the AP-2 v1 validator frozen to the Slice-2M speculation design (prefix-stripped block ids, a fixed six-hypothesis Holm object, fixed estimator and side), and the equally frozen v2 sibling is not the validator it uses.",
-      "id": "MANIFEST-CONTRAST-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 11,
-      "status": "queued",
-      "status_note": "Minted 2026-07-30; gates every contrast claim, so it precedes any contrast-window consumption.",
-      "stop_card": null
-    },
-    "MEMBERSHIP-READER-FAILOPEN-01": {
-      "acceptance": {
-        "evidence": [
-          "Malformed or validation-failed supersession catalog entries fail the affected candidate group instead of being silently skipped, reusing supersession_entry_validation_results per the D-093 visibility contract",
-          "Unreadable or wrong-schema campaign-manifest candidates refuse rather than being silently skipped where membership is claim-bearing",
-          "Valid-plus-malformed same-bundle regressions cover both the supersession catalog and manifest parsing paths"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/MEMBERSHIP-READER-FAILOPEN-01/acceptance",
-          "label": "MEMBERSHIP-READER-FAILOPEN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The whole-window membership path stops silently skipping malformed supersession and manifest records, closing the latent fail-open the MET-VERDICT-ADJ-01 audit identified."
-      },
-      "authority": {
-        "label": "MET-VERDICT-ADJ-01 independent audit group (c) latent finding: _valid_supersession_entries and manifest parsing silently skip malformed records (D-093/D-094 visibility contract)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "Gauntlet closed 2026-08-02 (PR #93); this row is FOLDED into MET-DANGLER-DISPOSITION-01 per the D-100 addendum and retires when that repair lands",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "task",
-          "required": "Commit 3 lands first (shared write surface in the membership/reader path)",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "advisory",
-          "target": "COOLDOWN-JOIN-GAUNTLET-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-093 raw-vs-validated visibility; D-094 counting domain",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Recognizable invalid same-bundle records must remain visible and force ambiguity; closure must not re-scope or downgrade the D-093 contract"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the latent fail-open in whole-window membership reading: malformed supersession catalog entries and unreadable/wrong-schema manifests are silently skipped today (did not affect windows A/B, whose bytes are valid, but could fail open on a non-salvage window). ~2 files, 100-200 lines, delegated commit (claim-bearing membership semantics).",
-      "id": "MEMBERSHIP-READER-FAILOPEN-01",
-      "lane": "agent",
-      "priority": "p0_safety",
-      "rank": 14,
-      "status": "queued",
-      "stop_card": null
-    },
-    "MET-DANGLER-DISPOSITION-01": {
-      "acceptance": {
-        "evidence": [
-          "Uniform count-independent dangler path with a presence check on the single-declaration branch; a failing sibling group can no longer discard an unrelated valid supersession",
-          "Membership groups bind by explicit identity (or a recorded explicit safety finding at the verdict row); exclusion evidence derives from bundle bytes, never from the fail-open-shaped ledger flags",
-          "The D-100 exclusion license is mechanical (D-087 closure binding, b-i/b-ii measurand-existence tests, exhaustive per-attempt evidence, cap of one, hash-enumerated verdict-row payload) and any licensed re-evaluation lands as a NEW row under consumption_semantics_id salvage_dangler_exclusion_v1 with a genuinely new evaluation basis and pinned consumption",
-          "Regressions R1-R8 plus R5a/R5b plus identity-binding and ledger-honesty regressions all pass; the section-10 contract amendment and the D-078 registry amendment land with the commit",
-          "Independent read-only audit at the exact head before any merge"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/MET-DANGLER-DISPOSITION-01/acceptance",
-          "label": "MET-DANGLER-DISPOSITION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The D-100 cold-gate synthesis lands as one audited repair: uniform dangler disposition, mechanical exclusion license, semantics-dispatch re-evaluation shape, and the unanimous membership repairs, with the full regression set."
-      },
-      "authority": {
-        "label": "D-100 salvage-dangler cold-gate synthesis (cold Fable + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-100 landing shape (refuter R5/R6 adopted)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Original FAILED verdict rows are never edited, deleted, or reordered; re-evaluation is reachable ONLY via an explicit consumption_semantics_id request with a pinned new basis; the cap-of-one and the fail-closed default are not softened"
-        },
-        {
-          "authority": {
-            "label": "D-100 clause 2 / cold-ruling R5a primacy",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "The R5a real-shape regression outranks any prose clause of the license test (regression wins; prose amends); the implemented b-ii test accepts the real quarantined idle-phase bundle shape including the instrument-teardown trace flush"
-        }
-      ],
-      "flags": [],
-      "goal": "Implement the D-100 ruling as one audited repair commit: section-10 contract amendment + registry amendment, uniform count-independent dangler path, sibling-discard fix, identity binding, ledger honesty, mechanical exclusion license with hash-enumerated payload, salvage_dangler_exclusion_v1 semantics-dispatch row, regressions R1-R8 + R5a/R5b + identity/ledger regressions.",
-      "id": "MET-DANGLER-DISPOSITION-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 2,
-      "status": "queued",
-      "stop_card": null
-    },
     "MET-WINDOW-C-01": {
       "acceptance": {
         "evidence": [
@@ -1236,23 +1134,23 @@
       },
       "dependencies": [
         {
-          "evidence": {
-            "label": "Ed authorization 2026-08-01: ~26-hour runway, machine plugged in and mostly untouched, multiple autonomous quiet windows permitted; README top-line machine-state banner is the notification channel; technical settle checks still run at each launch",
-            "path": "RUN_STATE.md"
-          },
+          "evidence": null,
           "kind": "external",
-          "required": "Ed section-5A window prep (network time off, AC, settled machine, walk-away)",
+          "required": "Ed section-5A window prep FRESH POST-MOVE (the 2026-08-02 laptop move invalidated settled-machine conditions; network time off, AC, settled machine, walk-away)",
           "scope": "start",
-          "state": "satisfied",
+          "state": "pending",
           "strength": "hard",
           "target": "ED-5A"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "MET-DANGLER-DISPOSITION-01 completed 2026-08-02: PR #94 merged at audited head 05d99b6 (merge bc2ab19) under D-106 clause 1 with three independent audits on record",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "required": "D-100 repair landed and audited (window C's verdict must run on repaired machinery)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "MET-DANGLER-DISPOSITION-01"
         },
@@ -1271,6 +1169,13 @@
       ],
       "fallback": null,
       "fences": [
+        {
+          "authority": {
+            "label": "D-106 revisit clause",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "A window-C dangler seeking the b-ii mechanical license before D100-BII-BINDING-01 closes RETURNS TO THE GATE; the window itself may run"
+        },
         {
           "authority": {
             "label": "D-096 frozen-plan ratification",

@@ -44,8 +44,10 @@ EXPECTED_IDS = {
     # 2026-07-30 cold-gate intake fold (D-088; PR #88 merge session).
     # COOLDOWN-JOIN-GAUNTLET-01 + QA-10A/QA-10B closed 2026-08-02 with
     # commit 3 (PR #93) and retired to the completed table.
+    # MANIFEST-CONTRAST-01 closed 2026-08-02 (PR #95, v3 at audited head
+    # e94d4a7) and retired to the completed table.
     "MINT-GENERALIZE-01",
-    "MANIFEST-CONTRAST-01", "SUPERSESSION-DUP-REFUSAL-01",
+    "SUPERSESSION-DUP-REFUSAL-01",
     # COOLDOWN-JOIN-DA1-01 was folded in 2026-07-31 (D-093) as P2-015
     # retired, and closed the same day inside the gauntlet's commit 2
     # (e749c95, PR #91 67d268a); it left the live kernel at close-out.
@@ -54,9 +56,13 @@ EXPECTED_IDS = {
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
     # 2026-08-01 metrology adjudication session (D-098..D-101):
     # MET-VERDICT-ADJ-01 was minted, completed the same day (D-100), and
-    # left the live kernel; its repairs and the remainder window remain.
-    "MET-DANGLER-DISPOSITION-01", "CAL-BRACKET-D079-01",
-    "MEMBERSHIP-READER-FAILOPEN-01",
+    # left the live kernel. MET-DANGLER-DISPOSITION-01 (+ folded
+    # MEMBERSHIP-READER-FAILOPEN-01) closed 2026-08-02 with PR #94
+    # (audited head 05d99b6) and retired to the completed table.
+    "CAL-BRACKET-D079-01",
+    # 2026-08-02 D-106 clause 3: the two decidable b-ii capture-identity
+    # fixes; window B re-evaluation is hard-blocked on this row.
+    "D100-BII-BINDING-01",
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
     # 2026-08-02 runway: load-sensitive NVIDIA test blocked three streams
@@ -76,7 +82,9 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "FLOOR-LABEL-01", "STACK-ID-BIND-01", "P2-015",
                 "COOLDOWN-JOIN-DA1-01", "MET-VERDICT-ADJ-01",
                 "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
-                "QA-10B-EXISTING-RETRY"}
+                "QA-10B-EXISTING-RETRY",
+                "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
+                "MEMBERSHIP-READER-FAILOPEN-01"}
 
 
 def load_kernel():
@@ -231,9 +239,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_60(self):
+    def test_exact_live_id_set_58(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 60)
+        self.assertEqual(len(self.tasks), 58)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
