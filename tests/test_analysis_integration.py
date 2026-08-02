@@ -27,6 +27,8 @@ from joulewise.analysis_engine.inputs import (
     CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     FloorEvidenceBinding,
     FloorRequest,
+    FloorResolution,
+    LoadedAnalysisInputs,
     MOCK_TELEMETRY_CLAIM_REFUSAL,
     _campaign_cooldown_evidence,
     bind_floor_artifact_evidence,
@@ -250,6 +252,196 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         source_patch.start()
         self.addCleanup(source_patch.stop)
+
+    def test_holm_m1_is_identity_and_keeps_the_registered_denominator(self):
+        self.assertEqual(holm_adjust({"only-contrast": 0.04}, m=1), {"only-contrast": 0.04})
+        self.assertEqual(holm_adjust({"only-contrast": None}, m=1), {"only-contrast": None})
+        with self.assertRaises(ValueError):
+            holm_adjust({"only-contrast": 0.04}, m=2)
+
+    def test_v3_abba_engine_and_d093_refusal_precedence(self):
+        manifest_path = (
+            ROOT
+            / "configs"
+            / "campaigns"
+            / "splitwise_decode_v1"
+            / "analysis_manifest_v3.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        def loaded_inputs(*, diverged: bool) -> LoadedAnalysisInputs:
+            evidence_by_entry = {}
+            for entry in manifest["entries"]:
+                block_number = entry["block_number"]
+                value = (
+                    10.0 + block_number
+                    if entry["arm_id"] == "A"
+                    else 20.0 + block_number
+                )
+                evidence_by_entry[entry["entry_id"]] = BundleEvidence(
+                    entry=entry,
+                    bundle_id=entry["run_id"],
+                    relative_path=entry["run_id"],
+                    path=Path("runs") / entry["run_id"],
+                    summary={
+                        "status": "succeeded",
+                        "test_value": value,
+                        "measurement_quality": {
+                            "cooldown_cap_hit": False,
+                            "idle_window_suspect": False,
+                        },
+                    },
+                    metadata=None,
+                    raw_config=None,
+                    strict_problems=(),
+                    base_reason_codes=(
+                        ("whole_window_verdict_conflict",) if diverged else ()
+                    ),
+                    config_sha256=entry["config_sha256"],
+                    expected_config_sha256=entry["config_sha256"],
+                    summary_sha256="a" * 64,
+                    replacement_classification="registered",
+                    inclusion_status="excluded" if diverged else "included",
+                )
+            return LoadedAnalysisInputs(
+                manifest=manifest,
+                manifest_sha256="b" * 64,
+                floor_artifact={"artifact_id": "df-v3-test"},
+                floor_sha256="c" * 64,
+                registered=evidence_by_entry,
+                effective=evidence_by_entry,
+                extra_audits=(),
+                valid_replacements=(),
+                unregistered_matching=(),
+                top_up_entry_ids=frozenset(),
+                supersession_audit=(
+                    {
+                        "scope": "analysis_corpus",
+                        "evidence_root_id": None,
+                        "authenticated_basis": {
+                            "kind": "whole_window_evaluation_basis_sha256",
+                            "sha256": "d" * 64,
+                        },
+                        "raw_count": 2 if diverged else 1,
+                        "validated_count": 1,
+                        "status": "refused" if diverged else "clean",
+                    },
+                    {
+                        "scope": "floor_evidence",
+                        "evidence_root_id": "floor-root",
+                        "authenticated_basis": {
+                            "kind": "floor_component_campaign_log_sha256",
+                            "sha256s": ["e" * 64],
+                        },
+                        "raw_count": 0,
+                        "validated_count": 0,
+                        "status": "clean",
+                    },
+                ),
+                supersession_diverged=diverged,
+            )
+
+        floor_resolutions = (
+            FloorResolution(
+                status="exact",
+                artifact_id="df-v3-test",
+                artifact_sha256="c" * 64,
+                source_cell_ids=("floor-a",),
+                transport_group_id=None,
+                transport_rule_id=None,
+                floor_abs_j=0.8,
+                floor_cmp_j=1.0,
+                floor_gate_j=1.0,
+                reason_codes=(),
+            ),
+            FloorResolution(
+                status="exact",
+                artifact_id="df-v3-test",
+                artifact_sha256="c" * 64,
+                source_cell_ids=("floor-b",),
+                transport_group_id=None,
+                transport_rule_id=None,
+                floor_abs_j=0.9,
+                floor_cmp_j=1.2,
+                floor_gate_j=1.2,
+                reason_codes=(),
+            ),
+        )
+
+        patches = (
+            mock.patch(
+                "joulewise.analysis_engine.metric_value",
+                side_effect=lambda summary, metric: summary["test_value"],
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.window_evidence_precheck",
+                return_value={"reasons": ()},
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.governed_stochastic_variance",
+                return_value=([{"name": "idle", "variance": 0.0}], ()),
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.deterministic_bounds",
+                return_value=(
+                    {
+                        "E_interpolation_joint_edge_bound_j": 0.05,
+                        "E_clock_anchor_shift_bound_j": 0.10,
+                    },
+                    (),
+                ),
+            ),
+            mock.patch(
+                "joulewise.analysis_engine._resolve_contrast_floor",
+                return_value=list(floor_resolutions),
+            ),
+        )
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            with mock.patch(
+                "joulewise.analysis_engine.load_analysis_inputs",
+                return_value=loaded_inputs(diverged=False),
+            ):
+                clean = analyze_claims(
+                    manifest_path,
+                    Path("runs"),
+                    Path("floor.json"),
+                    strict_validator=lambda path, strict=True: [],
+                )
+            with mock.patch(
+                "joulewise.analysis_engine.load_analysis_inputs",
+                return_value=loaded_inputs(diverged=True),
+            ):
+                refused = analyze_claims(
+                    manifest_path,
+                    Path("runs"),
+                    Path("floor.json"),
+                    strict_validator=lambda path, strict=True: [],
+                )
+
+        self.assertEqual(validate_claim_verdicts(clean), [])
+        contrast = clean["contrasts"][0]
+        self.assertEqual(contrast["estimator"]["name"], "abba_block_arm_mean_difference_t_v1")
+        self.assertEqual(contrast["estimator"]["estimate"], 10.0)
+        self.assertAlmostEqual(contrast["deterministic_bounds"]["total"], 0.3)
+        self.assertEqual(contrast["floor"]["active_floor_j"], 1.2)
+        self.assertEqual(contrast["floor"]["aggregation"], "max_never_sum")
+        self.assertEqual(len(contrast["bundle_blocks"]["included_bundle_ids"]), 40)
+        self.assertTrue(
+            all(
+                set(block["position_bundle_ids"]) == {"A1", "B1", "B2", "A2"}
+                for block in contrast["bundle_blocks"]["blocks"]
+            )
+        )
+
+        self.assertEqual(validate_claim_verdicts(refused), [])
+        refused_contrast = refused["contrasts"][0]
+        self.assertEqual(refused["supersession_audit"][0]["status"], "refused")
+        self.assertEqual(refused_contrast["estimator"]["n"], 0)
+        self.assertEqual(refused_contrast["bundle_blocks"]["included_bundle_ids"], [])
+        self.assertIn(
+            "whole_window_verdict_conflict",
+            refused_contrast["claim_evaluation"]["reason_codes"],
+        )
 
     @classmethod
     def setUpClass(cls):
@@ -4568,6 +4760,35 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(row["result"], "unknown")
         self.assertFalse(row["verified"])
         self.assertIsNone(row["manifest"])
+
+    def test_d093_visibility_scan_records_divergence_before_consumption(self):
+        from joulewise.analysis_engine.inputs import supersession_visibility_scan
+
+        root = self._duplicated_root()
+        entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
+        )
+        corrupted_clone = dict(entry)
+        corrupted_clone["entry_sha256"] = "0" * 64
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(corrupted_clone, sort_keys=True) + "\n")
+
+        audit = supersession_visibility_scan(
+            root,
+            scope="analysis_corpus",
+            evidence_root_id=None,
+            authenticated_basis={
+                "kind": "whole_window_evaluation_basis_sha256",
+                "sha256": "a" * 64,
+            },
+        )
+        self.assertEqual(audit["raw_count"], 2)
+        self.assertEqual(audit["validated_count"], 1)
+        self.assertEqual(audit["status"], "refused")
+        self.assertNotIn("path", audit["authenticated_basis"])
 
     def test_invalid_json_supersession_reader_input_refuses_join_globally(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence

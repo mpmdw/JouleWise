@@ -44,6 +44,17 @@ _TOP_KEYS = {
     "families",
     "contrasts",
 }
+_SUPERSESSION_TOP_KEYS = {"supersession_audit"}
+_SUPERSESSION_AUDIT_KEYS = {
+    "scope",
+    "evidence_root_id",
+    "authenticated_basis",
+    "raw_count",
+    "validated_count",
+    "status",
+}
+_AUTHENTICATED_SHA_BASIS_KEYS = {"kind", "sha256"}
+_AUTHENTICATED_SHA_SET_BASIS_KEYS = {"kind", "sha256s"}
 _ENGINE_KEYS = {
     "implementation",
     "algorithm_version",
@@ -176,6 +187,8 @@ _BLOCK_KEYS = {
     "included",
     "reason_codes",
 }
+_POSITION_BLOCK_KEYS = {"position_bundle_ids"}
+_POSITION_KEYS = {"A1", "B1", "B2", "A2"}
 _CONTRAST_SAMPLING_KEYS = {"confirmatory_status", "planned_n", "observed_complete_n"}
 _ESTIMATOR_KEYS = {
     "name",
@@ -208,6 +221,13 @@ _FLOOR_KEYS = {
     "active_floor_j",
     "transport_verdict",
     "resolutions",
+}
+_V3_FLOOR_KEYS = {"claim_floor_rule", "aggregation", "arm_gates"}
+_ARM_GATE_KEYS = {
+    "arm_id",
+    "condition_family_id",
+    "status",
+    "floor_gate_j",
 }
 _FLOOR_RESOLUTION_KEYS = {
     "status",
@@ -544,6 +564,32 @@ def _same_number(left: Any, right: Any) -> bool:
     )
 
 
+def _is_v3_claim_contrast(contrast: Mapping[str, Any]) -> bool:
+    floor = contrast.get("floor")
+    estimator = contrast.get("estimator")
+    bundle_blocks = contrast.get("bundle_blocks")
+    rows = (
+        bundle_blocks.get("blocks")
+        if isinstance(bundle_blocks, Mapping)
+        else None
+    )
+    return bool(
+        (isinstance(floor, Mapping) and bool(set(floor) & _V3_FLOOR_KEYS))
+        or (
+            isinstance(estimator, Mapping)
+            and estimator.get("name")
+            == "abba_block_arm_mean_difference_t_v1"
+        )
+        or (
+            isinstance(rows, list)
+            and any(
+                isinstance(row, Mapping) and "position_bundle_ids" in row
+                for row in rows
+            )
+        )
+    )
+
+
 def _validate_cross_field_claim_semantics(
     contrast: Mapping[str, Any],
     family: Mapping[str, Any] | None,
@@ -626,6 +672,16 @@ def _validate_cross_field_claim_semantics(
 
     contrast_id = contrast.get("contrast_id")
     if isinstance(family, Mapping) and isinstance(contrast_id, str):
+        if _is_v3_claim_contrast(contrast) and not (
+            family.get("method") == "holm"
+            and _same_number(family.get("alpha"), 0.05)
+            and family.get("q") is None
+            and family.get("m") == 1
+            and family.get("contrast_ids") == [contrast_id]
+        ):
+            errors.append(
+                f"{where}.family_instance_id: v3 requires frozen Holm alpha=0.05 m=1"
+            )
         adjusted_values = family.get("adjusted_p_values")
         family_adjusted = (
             adjusted_values.get(contrast_id)
@@ -687,6 +743,13 @@ def _validate_cross_field_claim_semantics(
                 confirmatory_status=str(sampling.get("confirmatory_status", "")),
                 evidence_class=str(evidence_class),
                 floor_metadata=floor_metadata,
+                hypothesized_direction=(
+                    str(contrast.get("hypothesized_direction"))
+                    if _is_v3_claim_contrast(contrast)
+                    and contrast.get("hypothesized_direction")
+                    in {"positive", "negative"}
+                    else None
+                ),
             )
         except (TypeError, ValueError):
             recomputed = None
@@ -783,7 +846,13 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
     """Return every structural/canonical error in a v1 verdict artifact."""
 
     errors: list[str] = []
-    if not _exact_keys(value, _TOP_KEYS, "artifact", errors):
+    if not _exact_keys_with_optional_group(
+        value,
+        _TOP_KEYS,
+        _SUPERSESSION_TOP_KEYS,
+        "artifact",
+        errors,
+    ):
         return errors
     if value.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"artifact.schema_version: expected {SCHEMA_VERSION!r}")
@@ -851,6 +920,115 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             "legacy_l1_mechanics_only"
         ]:
             errors.append("artifact.inputs.limitations: legacy_l1 requires exact limitation")
+
+    supersession_audit = value.get("supersession_audit")
+    supersession_refused = False
+    if "supersession_audit" in value:
+        if not isinstance(supersession_audit, list) or not supersession_audit:
+            errors.append("artifact.supersession_audit: must be a nonempty array")
+        else:
+            analysis_rows = 0
+            floor_root_ids: set[str] = set()
+            for audit_index, audit in enumerate(supersession_audit):
+                audit_where = f"artifact.supersession_audit[{audit_index}]"
+                if not _exact_keys(
+                    audit,
+                    _SUPERSESSION_AUDIT_KEYS,
+                    audit_where,
+                    errors,
+                ):
+                    continue
+                scope = audit["scope"]
+                root_id = audit["evidence_root_id"]
+                if scope == "analysis_corpus":
+                    analysis_rows += 1
+                    if root_id is not None:
+                        errors.append(
+                            f"{audit_where}.evidence_root_id: analysis corpus must use null"
+                        )
+                elif scope == "floor_evidence":
+                    if not isinstance(root_id, str) or not root_id:
+                        errors.append(
+                            f"{audit_where}.evidence_root_id: floor evidence requires a nonempty ID"
+                        )
+                    elif root_id in floor_root_ids:
+                        errors.append(
+                            f"{audit_where}.evidence_root_id: duplicate floor evidence root"
+                        )
+                    else:
+                        floor_root_ids.add(root_id)
+                else:
+                    errors.append(f"{audit_where}.scope: invalid")
+
+                basis = audit["authenticated_basis"]
+                basis_valid = False
+                if isinstance(basis, Mapping):
+                    if set(basis) == _AUTHENTICATED_SHA_BASIS_KEYS:
+                        basis_valid = bool(
+                            isinstance(basis.get("kind"), str)
+                            and basis.get("kind")
+                            in {
+                                "whole_window_evaluation_basis_sha256",
+                                "analysis_manifest_file_sha256",
+                            }
+                            and isinstance(basis.get("sha256"), str)
+                            and SHA_RE.fullmatch(str(basis.get("sha256")))
+                        )
+                    elif set(basis) == _AUTHENTICATED_SHA_SET_BASIS_KEYS:
+                        digests = basis.get("sha256s")
+                        basis_valid = bool(
+                            basis.get("kind")
+                            == "floor_component_campaign_log_sha256"
+                            and isinstance(digests, list)
+                            and bool(digests)
+                            and digests == sorted(set(digests))
+                            and all(
+                                isinstance(digest, str)
+                                and SHA_RE.fullmatch(digest)
+                                for digest in digests
+                            )
+                        )
+                if not basis_valid:
+                    errors.append(
+                        f"{audit_where}.authenticated_basis: invalid or unauthenticated"
+                    )
+
+                raw_count = audit["raw_count"]
+                validated_count = audit["validated_count"]
+                counts_valid = all(
+                    isinstance(count, int)
+                    and not isinstance(count, bool)
+                    and count >= 0
+                    for count in (raw_count, validated_count)
+                )
+                status = audit["status"]
+                if status == "clean":
+                    if not counts_valid or raw_count != validated_count:
+                        errors.append(
+                            f"{audit_where}: clean status requires equal nonnegative counts"
+                        )
+                    if not basis_valid:
+                        errors.append(
+                            f"{audit_where}.status: unauthenticated root cannot be clean"
+                        )
+                elif status == "refused":
+                    supersession_refused = True
+                    if counts_valid and raw_count == validated_count and basis_valid:
+                        errors.append(
+                            f"{audit_where}.status: authenticated equal counts cannot be refused"
+                        )
+                    if not counts_valid and not (
+                        raw_count is None and validated_count is None
+                    ):
+                        errors.append(
+                            f"{audit_where}: unreadable scan requires both counts null"
+                        )
+                else:
+                    errors.append(f"{audit_where}.status: invalid")
+            if analysis_rows != 1:
+                errors.append(
+                    "artifact.supersession_audit: requires exactly one analysis-corpus row"
+                )
 
     bundle_audit = value.get("bundle_audit")
     audited_bundle_ids: set[str] = set()
@@ -1262,6 +1440,7 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             errors.append(f"{where}.contrast_id: invalid or duplicate")
             continue
         contrast_by_id[contrast_id] = contrast
+        v3_contract = _is_v3_claim_contrast(contrast)
         evaluation = contrast["claim_evaluation"]
         if _exact_keys_with_optional_group(
             evaluation,
@@ -1413,8 +1592,16 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             else:
                 for block_index, block in enumerate(rows):
                     block_where = f"{where}.bundle_blocks.blocks[{block_index}]"
-                    if not _exact_keys(block, _BLOCK_KEYS, block_where, errors):
+                    if not _exact_keys_with_optional_group(
+                        block,
+                        _BLOCK_KEYS,
+                        _POSITION_BLOCK_KEYS,
+                        block_where,
+                        errors,
+                    ):
                         continue
+                    position_bundle_ids = block.get("position_bundle_ids")
+                    has_positions = isinstance(position_bundle_ids, Mapping)
                     if not isinstance(block["block_id"], str) or not block["block_id"]:
                         errors.append(f"{block_where}.block_id: invalid")
                     if not isinstance(block["included"], bool):
@@ -1446,6 +1633,47 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                                 errors.append(
                                     f"{block_where}.{side_key}: audit slot linkage disagrees with contrast"
                                 )
+                    if "position_bundle_ids" in block:
+                        if not _exact_keys(
+                            position_bundle_ids,
+                            _POSITION_KEYS,
+                            f"{block_where}.position_bundle_ids",
+                            errors,
+                        ):
+                            has_positions = False
+                        else:
+                            if block["bundle_a_id"] is not None or block["bundle_b_id"] is not None:
+                                errors.append(
+                                    f"{block_where}: position blocks require null legacy bundle sides"
+                                )
+                            for position, expected_condition_key in (
+                                ("A1", "condition_a_id"),
+                                ("B1", "condition_b_id"),
+                                ("B2", "condition_b_id"),
+                                ("A2", "condition_a_id"),
+                            ):
+                                bundle_id = position_bundle_ids[position]
+                                if bundle_id is not None and (
+                                    not isinstance(bundle_id, str) or not bundle_id
+                                ):
+                                    errors.append(
+                                        f"{block_where}.position_bundle_ids.{position}: must be a nonempty string or null"
+                                    )
+                                elif isinstance(bundle_id, str):
+                                    audit = audit_by_bundle_id.get(bundle_id)
+                                    if audit is None:
+                                        errors.append(
+                                            f"{block_where}.position_bundle_ids.{position}: missing bundle audit row"
+                                        )
+                                    elif (
+                                        audit.get("block_id") != block["block_id"]
+                                        or not isinstance(conditions, Mapping)
+                                        or audit.get("condition_id")
+                                        != conditions.get(expected_condition_key)
+                                    ):
+                                        errors.append(
+                                            f"{block_where}.position_bundle_ids.{position}: audit slot linkage disagrees with contrast"
+                                        )
                     block_reasons = _string_list(
                         block["reason_codes"], f"{block_where}.reason_codes", errors
                     )
@@ -1460,11 +1688,26 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                                 f"{block_where}.reason_codes: excluded block must explain exclusion"
                             )
                     if block.get("included") is True:
-                        for side_key in ("bundle_a_id", "bundle_b_id"):
-                            bundle_id = block[side_key]
+                        included_slot_ids = (
+                            list(position_bundle_ids.values())
+                            if has_positions
+                            else [block["bundle_a_id"], block["bundle_b_id"]]
+                        )
+                        string_slot_ids = [
+                            bundle_id
+                            for bundle_id in included_slot_ids
+                            if isinstance(bundle_id, str)
+                        ]
+                        if has_positions and len(string_slot_ids) == 4 and len(
+                            set(string_slot_ids)
+                        ) != 4:
+                            errors.append(
+                                f"{block_where}.position_bundle_ids: every physical position must consume a distinct bundle"
+                            )
+                        for bundle_id in included_slot_ids:
                             if not isinstance(bundle_id, str):
                                 errors.append(
-                                    f"{block_where}.{side_key}: included block requires a bundle"
+                                    f"{block_where}: included block requires every physical bundle"
                                 )
                             else:
                                 audit = audit_by_bundle_id.get(bundle_id)
@@ -1477,17 +1720,28 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                 if planned_ids is not None and [row.get("block_id") for row in rows if isinstance(row, Mapping)] != planned_ids:
                     errors.append(f"{where}.bundle_blocks.blocks: must follow planned block order")
                 if included_ids is not None:
-                    row_included_ids = sorted(
-                        {
-                            bundle_id
-                            for row in rows
-                            if isinstance(row, Mapping) and row.get("included") is True
-                            for bundle_id in (
+                    physical_included_ids = [
+                        bundle_id
+                        for row in rows
+                        if isinstance(row, Mapping) and row.get("included") is True
+                        for bundle_id in (
+                            tuple(row.get("position_bundle_ids", {}).values())
+                            if isinstance(row.get("position_bundle_ids"), Mapping)
+                            else (
                                 row.get("bundle_a_id"),
                                 row.get("bundle_b_id"),
                             )
-                            if isinstance(bundle_id, str)
-                        }
+                        )
+                        if isinstance(bundle_id, str)
+                    ]
+                    if len(physical_included_ids) != len(
+                        set(physical_included_ids)
+                    ):
+                        errors.append(
+                            f"{where}.bundle_blocks.blocks: a physical bundle may be consumed only once"
+                        )
+                    row_included_ids = sorted(
+                        set(physical_included_ids)
                     )
                     if included_ids != row_included_ids:
                         errors.append(
@@ -1673,13 +1927,50 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             )
 
         floor = contrast["floor"]
-        if _exact_keys_with_optional_group(
-            floor,
-            _FLOOR_KEYS,
-            _ATTRIBUTION_FLOOR_KEYS,
-            f"{where}.floor",
-            errors,
-        ):
+        floor_expected_keys = set(_FLOOR_KEYS)
+        if isinstance(floor, Mapping):
+            if set(floor) & _ATTRIBUTION_FLOOR_KEYS:
+                floor_expected_keys.update(_ATTRIBUTION_FLOOR_KEYS)
+            if set(floor) & _V3_FLOOR_KEYS:
+                floor_expected_keys.update(_V3_FLOOR_KEYS)
+        if _exact_keys(floor, floor_expected_keys, f"{where}.floor", errors):
+            v3_floor = _V3_FLOOR_KEYS <= set(floor)
+            if v3_contract and not v3_floor:
+                errors.append(
+                    f"{where}.floor: v3 contrast requires the complete cross-stack armwise floor contract"
+                )
+            if v3_floor:
+                if floor["claim_floor_rule"] != "cross_stack_armwise_max.v1":
+                    errors.append(f"{where}.floor.claim_floor_rule: invalid")
+                if floor["aggregation"] != "max_never_sum":
+                    errors.append(f"{where}.floor.aggregation: invalid")
+                if not isinstance(estimator, Mapping) or estimator.get(
+                    "name"
+                ) != "abba_block_arm_mean_difference_t_v1":
+                    errors.append(
+                        f"{where}.estimator.name: v3 floor requires the registered ABBA estimator"
+                    )
+                if contrast.get("hypothesized_direction") != "positive":
+                    errors.append(
+                        f"{where}.hypothesized_direction: v3 registration is positive"
+                    )
+                if contrast.get("equivalence") is not None or contrast.get(
+                    "mde"
+                ) is not None:
+                    errors.append(
+                        f"{where}: v3 equivalence and MDE must remain unregistered"
+                    )
+                v3_block_rows = (
+                    blocks.get("blocks") if isinstance(blocks, Mapping) else None
+                )
+                if not isinstance(v3_block_rows, list) or any(
+                    not isinstance(block, Mapping)
+                    or set(block.get("position_bundle_ids", {})) != _POSITION_KEYS
+                    for block in v3_block_rows
+                ):
+                    errors.append(
+                        f"{where}.bundle_blocks.blocks: v3 requires all four physical ABBA positions"
+                    )
             floor_row_ids = _string_list(
                 floor["floor_row_ids"], f"{where}.floor.floor_row_ids", errors
             )
@@ -1821,6 +2112,146 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             errors.append(
                                 f"{resolution_where}.reason_codes: refused resolution must explain refusal"
                             )
+
+            if v3_floor:
+                arm_gates = floor["arm_gates"]
+                if not isinstance(arm_gates, list) or len(arm_gates) != 2:
+                    errors.append(
+                        f"{where}.floor.arm_gates: requires exactly two arm gates"
+                    )
+                else:
+                    seen_arms: set[str] = set()
+                    expected_conditions = {
+                        conditions.get("condition_a_id")
+                        if isinstance(conditions, Mapping)
+                        else None,
+                        conditions.get("condition_b_id")
+                        if isinstance(conditions, Mapping)
+                        else None,
+                    }
+                    seen_conditions: set[str] = set()
+                    arm_gate_values: list[float] = []
+                    for arm_index, arm_gate in enumerate(arm_gates):
+                        arm_where = f"{where}.floor.arm_gates[{arm_index}]"
+                        if not _exact_keys(
+                            arm_gate,
+                            _ARM_GATE_KEYS,
+                            arm_where,
+                            errors,
+                        ):
+                            continue
+                        arm_id = arm_gate["arm_id"]
+                        condition_family_id = arm_gate["condition_family_id"]
+                        if arm_id not in {"A", "B"} or arm_id in seen_arms:
+                            errors.append(f"{arm_where}.arm_id: invalid or duplicate")
+                        else:
+                            seen_arms.add(arm_id)
+                        if (
+                            not isinstance(condition_family_id, str)
+                            or condition_family_id not in expected_conditions
+                            or condition_family_id in seen_conditions
+                        ):
+                            errors.append(
+                                f"{arm_where}.condition_family_id: invalid or duplicate"
+                            )
+                        else:
+                            seen_conditions.add(condition_family_id)
+                        if arm_gate["status"] not in {"exact", "refused"}:
+                            errors.append(
+                                f"{arm_where}.status: v3 permits only exact or refused"
+                            )
+                        if arm_gate["status"] == "exact" and not _number(
+                            arm_gate["floor_gate_j"], nonnegative=True
+                        ):
+                            errors.append(
+                                f"{arm_where}.floor_gate_j: exact gate requires a value"
+                            )
+                        elif arm_gate["status"] == "refused" and arm_gate[
+                            "floor_gate_j"
+                        ] is not None:
+                            errors.append(
+                                f"{arm_where}.floor_gate_j: refused gate requires null"
+                            )
+                        elif _number(arm_gate["floor_gate_j"], nonnegative=True):
+                            arm_gate_values.append(float(arm_gate["floor_gate_j"]))
+                    if seen_arms != {"A", "B"}:
+                        errors.append(f"{where}.floor.arm_gates: must cover arms A and B")
+                    if seen_conditions != expected_conditions:
+                        errors.append(
+                            f"{where}.floor.arm_gates: must cover both contrast conditions"
+                        )
+                    expected_gate_order = (
+                        (
+                            "A",
+                            conditions.get("condition_a_id"),
+                        ),
+                        (
+                            "B",
+                            conditions.get("condition_b_id"),
+                        ),
+                    ) if isinstance(conditions, Mapping) else ()
+                    observed_gate_order = tuple(
+                        (
+                            gate.get("arm_id"),
+                            gate.get("condition_family_id"),
+                        )
+                        for gate in arm_gates
+                        if isinstance(gate, Mapping)
+                    )
+                    if observed_gate_order != expected_gate_order:
+                        errors.append(
+                            f"{where}.floor.arm_gates: must follow registered A, B order"
+                        )
+                    if isinstance(resolutions, list) and len(resolutions) == 2:
+                        for arm_index, (arm_gate, resolution) in enumerate(
+                            zip(arm_gates, resolutions, strict=True)
+                        ):
+                            if not isinstance(arm_gate, Mapping) or not isinstance(
+                                resolution, Mapping
+                            ):
+                                continue
+                            if arm_gate.get("status") != resolution.get("status"):
+                                errors.append(
+                                    f"{where}.floor.arm_gates[{arm_index}].status: disagrees with resolution"
+                                )
+                            if arm_gate.get("floor_gate_j") is None:
+                                if resolution.get("floor_gate_j") is not None:
+                                    errors.append(
+                                        f"{where}.floor.arm_gates[{arm_index}].floor_gate_j: disagrees with resolution"
+                                    )
+                            elif not _same_number(
+                                arm_gate.get("floor_gate_j"),
+                                resolution.get("floor_gate_j"),
+                            ):
+                                errors.append(
+                                    f"{where}.floor.arm_gates[{arm_index}].floor_gate_j: disagrees with resolution"
+                                )
+                    if (
+                        len(arm_gate_values) == 2
+                        and _number(floor.get("active_floor_j"), nonnegative=True)
+                        and not math.isclose(
+                            float(floor["active_floor_j"]),
+                            max(arm_gate_values),
+                            rel_tol=0.0,
+                            abs_tol=1e-12,
+                        )
+                    ):
+                        errors.append(
+                            f"{where}.floor.active_floor_j: armwise rule requires max, never sum"
+                        )
+                if resolution_statuses and any(
+                    status not in {"exact", "refused"}
+                    for status in resolution_statuses
+                ):
+                    errors.append(
+                        f"{where}.floor.resolutions: v3 forbids cross-stack transport"
+                    )
+                if floor.get("status") == "resolved" and any(
+                    status != "exact" for status in resolution_statuses
+                ):
+                    errors.append(
+                        f"{where}.floor.resolutions: resolved v3 floor requires exact resolution for both arms"
+                    )
 
             if floor_row_ids is not None and floor_row_ids != sorted(
                 resolution_source_ids
@@ -2685,6 +3116,57 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             f"{loo_where}.outcome: equivalent contradicts stored LOO gates"
                         )
 
+    has_v3_contrast = any(
+        _is_v3_claim_contrast(contrast)
+        for contrast in contrast_by_id.values()
+    )
+    if has_v3_contrast and "supersession_audit" not in value:
+        errors.append(
+            "artifact.supersession_audit: v3 contrast requires the pre-estimation D-093 scan record"
+        )
+
+    if supersession_refused:
+        for contrast_id, contrast in contrast_by_id.items():
+            evaluation = contrast.get("claim_evaluation")
+            reasons = (
+                evaluation.get("reason_codes")
+                if isinstance(evaluation, Mapping)
+                else None
+            )
+            if not isinstance(reasons, list) or (
+                "whole_window_verdict_conflict" not in reasons
+            ):
+                errors.append(
+                    f"artifact.contrasts[{contrast_id}].claim_evaluation.reason_codes: "
+                    "supersession refusal must take precedence"
+                )
+            estimator = contrast.get("estimator")
+            if not isinstance(estimator, Mapping) or estimator.get("n") != 0:
+                errors.append(
+                    f"artifact.contrasts[{contrast_id}].estimator.n: "
+                    "supersession refusal forbids estimation"
+                )
+            sampling_row = contrast.get("sampling")
+            if (
+                not isinstance(sampling_row, Mapping)
+                or sampling_row.get("observed_complete_n") != 0
+            ):
+                errors.append(
+                    f"artifact.contrasts[{contrast_id}].sampling.observed_complete_n: "
+                    "supersession refusal requires zero observations"
+                )
+            bundle_blocks = contrast.get("bundle_blocks")
+            included_ids = (
+                bundle_blocks.get("included_bundle_ids")
+                if isinstance(bundle_blocks, Mapping)
+                else None
+            )
+            if included_ids != []:
+                errors.append(
+                    f"artifact.contrasts[{contrast_id}].bundle_blocks.included_bundle_ids: "
+                    "supersession refusal requires no included evidence"
+                )
+
     _finite_json(value, "artifact", errors)
     return errors
 
@@ -2729,9 +3211,16 @@ def validate_claim_verdicts_for_claim_index(value: Any) -> list[str]:
     if not isinstance(value, Mapping):
         return errors
 
+    artifact_order = _CLAIMS_INDEX_KEY_ORDERS["artifact"]
+    if "supersession_audit" in value:
+        artifact_order = (
+            *artifact_order[:4],
+            "supersession_audit",
+            *artifact_order[4:],
+        )
     _claims_index_key_order(
         value,
-        _CLAIMS_INDEX_KEY_ORDERS["artifact"],
+        artifact_order,
         "artifact",
         errors,
     )

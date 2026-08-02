@@ -19,7 +19,15 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
-from joulewise.analysis_manifest import validate_analysis_manifest
+from joulewise.analysis_manifest import (
+    SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
+    validate_analysis_manifest,
+)
+from joulewise.analysis_manifest_v3 import (
+    SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
+    normalized_realized_stack_identity,
+    validate_analysis_manifest_v3,
+)
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.campaign_provenance import (
     CAMPAIGN_PROVENANCE_SCHEMA_V1,
@@ -57,6 +65,7 @@ from joulewise.cooldown import cooldown_disposition_from_raw
 
 
 StrictValidator = Callable[[Path, bool], list[str]]
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GOVERNED_IDLE_VARIANCE_METHOD_V1 = "newey_west_bartlett_10s_iid_floor_v1"
 GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
     "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
@@ -351,6 +360,8 @@ class LoadedAnalysisInputs:
     valid_replacements: tuple[Mapping[str, Any], ...]
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
+    supersession_audit: tuple[Mapping[str, Any], ...] = ()
+    supersession_diverged: bool = False
     floor_binding: FloorEvidenceBinding = field(
         default_factory=lambda: FloorEvidenceBinding(
             bound_cell_ids=frozenset(),
@@ -407,7 +418,20 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
 
 def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     value, raw = _load_json_object(path, "analysis manifest")
-    errors = validate_analysis_manifest(value, manifest_dir=path.parent)
+    schema_version = value.get("schema_version")
+    if schema_version == ANALYSIS_MANIFEST_V1_SCHEMA:
+        errors = validate_analysis_manifest(value, manifest_dir=path.parent)
+    elif schema_version == ANALYSIS_MANIFEST_V3_SCHEMA:
+        errors = validate_analysis_manifest_v3(value, manifest_dir=path.parent)
+    elif schema_version == "joulewise.analysis_manifest.v2":
+        raise AnalysisInputError(
+            "analysis manifest v2 is the AP-SPEC sibling and is not consumable "
+            "by analyze-claims"
+        )
+    else:
+        raise AnalysisInputError(
+            f"unsupported analysis manifest schema_version: {schema_version!r}"
+        )
     if errors:
         raise AnalysisInputError("invalid analysis manifest: " + "; ".join(errors))
     return value, hashlib.sha256(raw).hexdigest()
@@ -873,6 +897,103 @@ def _normalize_evidence_roots(
         else ()
     )
     return normalized, problems
+
+
+def _manifest_verdict_basis_sha256(manifest: Mapping[str, Any]) -> str | None:
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_V3_SCHEMA:
+        return None
+    source = manifest.get("source")
+    verdict = (
+        source.get("authenticated_verdict_basis")
+        if isinstance(source, Mapping)
+        else None
+    )
+    digest = (
+        verdict.get("evaluation_basis_sha256")
+        if isinstance(verdict, Mapping)
+        else None
+    )
+    return digest if isinstance(digest, str) and _SHA256_RE.fullmatch(digest) else None
+
+
+def _floor_root_authenticated_basis(
+    artifact: Mapping[str, Any], root_id: str
+) -> Mapping[str, Any]:
+    """Name a physical floor root only by its authenticated campaign-log pins."""
+
+    digests = sorted(
+        {
+            digest
+            for cell in artifact.get("cells", [])
+            if isinstance(cell, Mapping)
+            for component_name in ("absolute", "comparative")
+            for provenance in (cell.get("provenance"),)
+            if isinstance(provenance, Mapping)
+            for component in (provenance.get(component_name),)
+            if isinstance(component, Mapping)
+            and component.get("evidence_root_id") == root_id
+            for campaign_log in (component.get("campaign_log"),)
+            if isinstance(campaign_log, Mapping)
+            for digest in (campaign_log.get("sha256"),)
+            if isinstance(digest, str) and _SHA256_RE.fullmatch(digest)
+        }
+    )
+    return {
+        "kind": "floor_component_campaign_log_sha256",
+        "sha256s": digests,
+    }
+
+
+def supersession_visibility_scan(
+    root: Path,
+    *,
+    scope: str,
+    evidence_root_id: str | None,
+    authenticated_basis: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expose D-093 raw/validated counts without filtering malformed rows."""
+
+    basis_digest = authenticated_basis.get("sha256")
+    basis_digests = authenticated_basis.get("sha256s")
+    basis_authenticated = bool(
+        (
+            isinstance(basis_digest, str)
+            and _SHA256_RE.fullmatch(basis_digest)
+        )
+        or (
+            isinstance(basis_digests, list)
+            and bool(basis_digests)
+            and all(
+                isinstance(digest, str) and _SHA256_RE.fullmatch(digest)
+                for digest in basis_digests
+            )
+        )
+    )
+    result = supersession_entry_validation_results(Path(root))
+    if result is None:
+        return {
+            "scope": scope,
+            "evidence_root_id": evidence_root_id,
+            "authenticated_basis": copy.deepcopy(dict(authenticated_basis)),
+            "raw_count": None,
+            "validated_count": None,
+            "status": "refused",
+        }
+    entries, validations = result
+    raw_count = len(entries)
+    validated_count = sum(validations)
+    return {
+        "scope": scope,
+        "evidence_root_id": evidence_root_id,
+        "authenticated_basis": copy.deepcopy(dict(authenticated_basis)),
+        "raw_count": raw_count,
+        "validated_count": validated_count,
+        "status": (
+            "clean"
+            if raw_count == validated_count and basis_authenticated
+            else "refused"
+        ),
+    }
 
 
 def _campaign_order_binding_problems(
@@ -2172,6 +2293,18 @@ def _enforce_registered_realized_identity(
     for entry_id, evidence in registered.items():
         if evidence.raw_config is not None and evidence.metadata is not None:
             by_model.setdefault(model_by_entry[entry_id], []).append(evidence)
+    expected_by_model: dict[str, Mapping[str, Any]] = {}
+    if manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+        for arm in manifest.get("arms", []):
+            if not isinstance(arm, Mapping):
+                continue
+            model_tag = arm.get("model_tag")
+            normalized = normalized_realized_stack_identity(
+                arm.get("realized_stack_identity")
+            )
+            if isinstance(model_tag, str) and normalized is not None:
+                expected_by_model[model_tag] = normalized
+
     result: dict[str, Mapping[str, Any]] = {}
     for model_tag, evidence_rows in by_model.items():
         identities = [
@@ -2194,6 +2327,12 @@ def _enforce_registered_realized_identity(
             continue
         if identities:
             assert identities[0] is not None
+            expected = expected_by_model.get(model_tag)
+            observed = normalized_realized_stack_identity(identities[0])
+            if expected is not None and observed != expected:
+                for row in evidence_rows:
+                    _exclude_evidence(row, "config_hash_mismatch")
+                continue
             result[model_tag] = identities[0]
     return result
 
@@ -2350,6 +2489,55 @@ def load_analysis_inputs(
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
+    verdict_basis_sha256 = _manifest_verdict_basis_sha256(manifest)
+    normalized_scan_roots, _ = _normalize_evidence_roots(
+        floor_artifact,
+        evidence_roots if evidence_roots is not None else runs_root,
+    )
+    declared_floor_root_ids = _component_evidence_root_ids(floor_artifact)
+    supersession_audit = [
+        supersession_visibility_scan(
+            runs_root,
+            scope="analysis_corpus",
+            evidence_root_id=None,
+            authenticated_basis=(
+                {
+                    "kind": "whole_window_evaluation_basis_sha256",
+                    "sha256": verdict_basis_sha256,
+                }
+                if verdict_basis_sha256 is not None
+                else {
+                    "kind": "analysis_manifest_file_sha256",
+                    "sha256": manifest_sha,
+                }
+            ),
+        )
+    ]
+    for root_id in sorted(declared_floor_root_ids):
+        authenticated_basis = _floor_root_authenticated_basis(
+            floor_artifact, root_id
+        )
+        root = normalized_scan_roots.get(root_id)
+        supersession_audit.append(
+            supersession_visibility_scan(
+                root,
+                scope="floor_evidence",
+                evidence_root_id=root_id,
+                authenticated_basis=authenticated_basis,
+            )
+            if root is not None
+            else {
+                "scope": "floor_evidence",
+                "evidence_root_id": root_id,
+                "authenticated_basis": dict(authenticated_basis),
+                "raw_count": None,
+                "validated_count": None,
+                "status": "refused",
+            }
+        )
+    supersession_diverged = any(
+        row["status"] != "clean" for row in supersession_audit
+    )
     floor_binding = bind_floor_artifact_evidence(
         floor_artifact,
         Path(floor_artifact_path),
@@ -2391,6 +2579,12 @@ def load_analysis_inputs(
         cohort_identities,
         cleanup_records,
     )
+    if supersession_diverged:
+        # D-093 is a pre-estimation source-visibility gate.  Preserve a
+        # claim artifact with the raw/validated counts, but make every
+        # possible observation ineligible before any estimator is invoked.
+        for evidence in (*registered.values(), *extras):
+            _exclude_evidence(evidence, "whole_window_verdict_conflict")
     cooldown_by_bundle = _campaign_cooldown_evidence(
         runs_root, str(manifest["manifest_id"])
     )
@@ -2399,14 +2593,21 @@ def load_analysis_inputs(
     effective_bundle_ids = {
         evidence.bundle_id for evidence in effective.values()
     }
+    basis_kwargs = (
+        {"evaluation_basis_sha256": verdict_basis_sha256}
+        if verdict_basis_sha256 is not None
+        else {}
+    )
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         effective_bundle_ids,
+        **basis_kwargs,
     )
     whole_window_reasons = whole_window_refusal_reasons(
         runs_root,
         effective_bundle_ids,
         consumption_session=consumption_session,
+        **basis_kwargs,
     )
     if whole_window_reasons:
         # The whole-window NEG-8/adapter/CPU verdict is a campaign-wide causal
@@ -2437,6 +2638,7 @@ def load_analysis_inputs(
             runs_root,
             effective_bundle_ids,
             consumption_session=consumption_session,
+            **basis_kwargs,
         )
         for evidence in (*registered.values(), *extras):
             # A ``legacy`` result is never an allowance waiver: every
@@ -2462,6 +2664,8 @@ def load_analysis_inputs(
         valid_replacements=tuple(replacements),
         unregistered_matching=tuple(unregistered),
         top_up_entry_ids=frozenset(top_up_ids),
+        supersession_audit=tuple(supersession_audit),
+        supersession_diverged=supersession_diverged,
     )
 
 
@@ -3474,6 +3678,7 @@ __all__ = [
     "resolve_floor",
     "replacement_config_identity",
     "scientific_config_identity",
+    "supersession_visibility_scan",
     "token_provenance",
     "token_provenance_from_artifacts",
     "unavailable_floor_resolution",

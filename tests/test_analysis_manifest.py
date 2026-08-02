@@ -13,6 +13,7 @@ from unittest import mock
 import joulewise.analysis_manifest as analysis_manifest_module
 from joulewise.analysis_engine import estimate_manifest_observations
 from joulewise.analysis_engine.estimators import RatioObservation
+from joulewise.analysis_engine.inputs import load_manifest as load_analysis_manifest
 from joulewise.analysis_engine.sensitivity import randomization_check
 from joulewise.analysis_manifest import (
     AnalysisManifestError,
@@ -96,6 +97,17 @@ class AnalysisManifestTests(unittest.TestCase):
         result = run_generator(*BASE_CONFIGS[0], out_dir)
         self.assertEqual(result.returncode, 0, result.stderr)
         return load_manifest(out_dir)
+
+    def test_dispatcher_preserves_v1_loading_without_schema_coercion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            expected = self._generated_manifest(out_dir)
+            manifest_path = out_dir / "analysis_manifest.json"
+            expected_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            loaded, digest = load_analysis_manifest(manifest_path)
+        self.assertEqual(loaded, expected)
+        self.assertEqual(loaded["schema_version"], "joulewise.analysis_manifest.v1")
+        self.assertEqual(digest, expected_digest)
 
     @staticmethod
     def _set_ratio(manifest: dict, form: object) -> dict:
