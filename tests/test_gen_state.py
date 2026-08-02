@@ -61,6 +61,8 @@ EXPECTED_IDS = {
     "C3-RECOGNIZER-EXACT-01",
     # 2026-08-02 runway: load-sensitive NVIDIA test blocked three streams
     "NVIDIA-RETENTION-FLAKE-01",
+    # 2026-08-02 two-lens extension consult (Ed ratifies S2)
+    "NVIDIA-PORTABILITY-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -229,9 +231,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_59(self):
+    def test_exact_live_id_set_60(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 59)
+        self.assertEqual(len(self.tasks), 60)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

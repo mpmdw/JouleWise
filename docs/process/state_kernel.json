@@ -1389,6 +1389,54 @@
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
       "stop_card": null
     },
+    "NVIDIA-PORTABILITY-01": {
+      "acceptance": {
+        "evidence": [
+          "S1 landed: NVML counter-mechanics appendix drafted (desk-only) + zero-claim rig capability probe recorded + borrow-window doc staleness fixed",
+          "S2 (post-Mac-table, Ed-ratified): the four Sol gates — live promotion + retention closure; counter mechanics + rate-aware pulse anchor; RTX-specific floors with the minimal battery; one bounded named-GPU-board-boundary result (wall cross-check only if the D-092 meter passes its own battery)",
+          "A calibrated non-result at any gate is recorded as publishable evidence and stops escalation (no ad hoc smoothing)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NVIDIA-PORTABILITY-01/acceptance",
+          "label": "NVIDIA-PORTABILITY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Staged NVIDIA extension: desk-only appendix + capability probe now; the single-node RTX instrument-portability study only after the Mac claims table is green and Ed ratifies; split study explicitly deferred to the Phase-3 second paper."
+      },
+      "authority": {
+        "label": "2026-08-02 two-lens extension consult (Sol feasibility + Fable science advisory), magistrate synthesis in .desk/nvidia-extension/SYNTHESIS.md — ED RATIFIES the S2 gate",
+        "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ratifies the staged plan and answers the intent question (claim vs appendix vs asset)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-NVIDIA-RATIFY"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Consult synthesis: December claims table stays Mac-only (both lenses)",
+            "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
+          },
+          "rule": "No NVIDIA energy number enters the December paper's claims table; S2 never binds the submission; mixed-boundary sums are never presented as split totals"
+        }
+      ],
+      "flags": [],
+      "goal": "NVIDIA extension, staged: S1 NVML counter-mechanics appendix + zero-claim capability probe (desk); S2 single-node RTX 3080 Ti instrument-portability study under four hard gates AFTER the Mac claims table closes; S3 split study deferred to the Phase-3 second paper. P1-008's acceptance-bar answers are the reopening trigger.",
+      "id": "NVIDIA-PORTABILITY-01",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 50,
+      "status": "blocked",
+      "stop_card": null
+    },
     "NVIDIA-RETENTION-FLAKE-01": {
       "acceptance": {
         "evidence": [
