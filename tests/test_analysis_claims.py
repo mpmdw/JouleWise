@@ -19,7 +19,12 @@ from joulewise.analysis_engine.artifact import (
     render_claim_verdicts,
     validate_claim_verdicts,
 )
-from joulewise.analysis_engine import _combined_floor, _interpolation_reasons, _subset_floor
+from joulewise.analysis_engine import (
+    _combined_floor,
+    _decorate_v3_floor,
+    _interpolation_reasons,
+    _subset_floor,
+)
 from joulewise.analysis_engine.estimators import (
     DeterministicBoundTerm,
     PairedObservation,
@@ -78,6 +83,43 @@ from tests.test_detection_floor import (
 
 HEX = "a" * 64
 MANIFEST_ID = "am-" + "b" * 64
+
+
+def _embedded_floor_fixture(artifact_id: str) -> tuple[dict, list[dict]]:
+    artifact = make_artifact()
+    artifact["artifact_id"] = artifact_id
+    raw = (json.dumps(artifact, indent=2) + "\n").encode("utf-8")
+    basis_by_root: dict[str, set[str]] = {}
+    for cell in artifact["cells"]:
+        for component_name in ("absolute", "comparative"):
+            component = cell["provenance"][component_name]
+            basis_by_root.setdefault(component["evidence_root_id"], set()).add(
+                component["campaign_log"]["sha256"]
+            )
+    return (
+        {
+            "artifact_id": artifact_id,
+            "file_sha256": hashlib.sha256(raw).hexdigest(),
+            "embedded_bytes_base64": base64.b64encode(raw).decode("ascii"),
+        },
+        [
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": root_id,
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": sorted(basis_by_root[root_id]),
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            }
+            for root_id in sorted(basis_by_root)
+        ],
+    )
+
+
+_FLOOR_LINK, _FLOOR_AUDITS = _embedded_floor_fixture("df-test")
 
 # Byte-exact copy of the stored 0.5.0/v2 corpus wire
 # runs_recal4_20260719/p2015-df-su-sentinel-abs-r01/summary_metrics.json
@@ -264,11 +306,25 @@ def minimal_artifact():
         },
         "inputs": {
             "analysis_manifest": {"manifest_id": MANIFEST_ID, "file_sha256": HEX},
-            "floor_artifact": {"artifact_id": "df-test", "file_sha256": HEX},
+            "floor_artifact": copy.deepcopy(_FLOOR_LINK),
             "runs_root_label": "runs",
             "evidence_class": "current",
             "limitations": [],
         },
+        "supersession_audit": [
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "analysis_manifest_file_sha256",
+                    "sha256": HEX,
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+            *copy.deepcopy(_FLOOR_AUDITS),
+        ],
         "bundle_audit": [
             bundle_audit_row(bundle_id)
             for bundle_id in ("a-1", "a-2", "b-1", "b-2")
@@ -343,6 +399,207 @@ class ClaimOutcomeTests(unittest.TestCase):
             equivalence={"margin": 1.0, "method": "tost_v1"},
         )
         self.assertEqual(equivalent["outcome"], "equivalent")
+
+    def test_significant_negative_does_not_satisfy_positive_registration(self):
+        result = evaluation(
+            estimate=-2.0,
+            metrology_aware_ci95={"lower": -2.5, "upper": -1.5},
+            decision_interval={"lower": -2.75, "upper": -1.25},
+            hypothesized_direction="positive",
+        )
+        self.assertEqual(result["outcome"], "direction_supported")
+        self.assertEqual(result["direction"], "negative")
+        self.assertFalse(result["claim_ready_for_l2_l3"])
+        self.assertEqual(result["claim_level_ceiling"], "L1")
+
+    def test_abba_arm_means_use_paired_t_and_never_cancel_bounds(self):
+        observations = (
+            PairedObservation(
+                block_id="b01",
+                value_a=(10.0 + 14.0) / 2.0,
+                value_b=(20.0 + 22.0) / 2.0,
+                stochastic_terms=(),
+                deterministic_terms=(
+                    DeterministicBoundTerm(
+                        name="anchor",
+                        bound_a=(0.2 + 0.4) / 2.0,
+                        bound_b=(0.5 + 0.7) / 2.0,
+                    ),
+                ),
+            ),
+            PairedObservation(
+                block_id="b02",
+                value_a=(11.0 + 15.0) / 2.0,
+                value_b=(21.0 + 23.0) / 2.0,
+                stochastic_terms=(),
+                deterministic_terms=(
+                    DeterministicBoundTerm(
+                        name="anchor",
+                        bound_a=(0.2 + 0.4) / 2.0,
+                        bound_b=(0.5 + 0.7) / 2.0,
+                    ),
+                ),
+            ),
+        )
+        estimate = estimate_paired_blocks(
+            observations,
+            estimator="abba_block_arm_mean_difference_t_v1",
+        )
+        self.assertEqual(estimate.paired_values, (9.0, 9.0))
+        self.assertEqual(estimate.estimate, 9.0)
+        self.assertAlmostEqual(estimate.deterministic_bound_total, 0.9)
+
+    def test_cross_stack_armwise_floor_is_max_never_sum_and_clause11_survives(self):
+        discipline = attribution_single_count_discipline()
+        diagnostic_a = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.3,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.45,
+        }
+        diagnostic_b = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.5,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.75,
+        }
+        resolutions = (
+            FloorResolution(
+                status="exact",
+                artifact_id="df",
+                artifact_sha256=HEX,
+                source_cell_ids=("floor-a",),
+                transport_group_id=None,
+                transport_rule_id=None,
+                floor_abs_j=0.5,
+                floor_cmp_j=1.0,
+                floor_gate_j=1.0,
+                reason_codes=(),
+                floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                point_floor_diagnostics=diagnostic_a,
+                single_count_discipline=discipline,
+            ),
+            FloorResolution(
+                status="exact",
+                artifact_id="df",
+                artifact_sha256=HEX,
+                source_cell_ids=("floor-b",),
+                transport_group_id=None,
+                transport_rule_id=None,
+                floor_abs_j=0.7,
+                floor_cmp_j=1.2,
+                floor_gate_j=1.2,
+                reason_codes=(),
+                floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                point_floor_diagnostics=diagnostic_b,
+                single_count_discipline=discipline,
+            ),
+        )
+        manifest = {
+            "schema_version": "joulewise.analysis_manifest.v3",
+            "arms": [
+                {"arm_id": "A", "condition_family_id": "cond-a"},
+                {"arm_id": "B", "condition_family_id": "cond-b"},
+            ],
+        }
+        contrast_registration = {
+            "floor_selector": {"condition_family_ids": ["cond-a", "cond-b"]}
+        }
+        floor = _decorate_v3_floor(
+            manifest,
+            contrast_registration,
+            _combined_floor(resolutions),
+            resolutions,
+        )
+        self.assertEqual(floor["active_floor_j"], 1.2)
+        self.assertNotEqual(floor["active_floor_j"], 2.2)
+        self.assertEqual(floor["aggregation"], "max_never_sum")
+
+        artifact = minimal_artifact()
+        contrast = artifact["contrasts"][0]
+        physical_bundle_ids = []
+        physical_audits = []
+        for block_index in (1, 2):
+            position_ids = {
+                "A1": f"a1-{block_index}",
+                "B1": f"b1-{block_index}",
+                "B2": f"b2-{block_index}",
+                "A2": f"a2-{block_index}",
+            }
+            physical_bundle_ids.extend(position_ids.values())
+            contrast["bundle_blocks"]["blocks"][block_index - 1].update(
+                {
+                    "bundle_a_id": None,
+                    "bundle_b_id": None,
+                    "position_bundle_ids": position_ids,
+                }
+            )
+            for position, bundle_id in position_ids.items():
+                audit = bundle_audit_row(bundle_id)
+                is_a = position.startswith("A")
+                audit.update(
+                    {
+                        "entry_id": f"entry-{bundle_id}",
+                        "cell_id": "cell-a" if is_a else "cell-b",
+                        "condition_id": "cond-a" if is_a else "cond-b",
+                    }
+                )
+                physical_audits.append(audit)
+        contrast["bundle_blocks"]["included_bundle_ids"] = sorted(
+            physical_bundle_ids
+        )
+        artifact["bundle_audit"] = physical_audits
+        contrast["floor"] = floor
+        contrast["estimator"]["name"] = "abba_block_arm_mean_difference_t_v1"
+        contrast["claim_evaluation"] = evaluate_claim(
+            estimate=contrast["estimator"]["estimate"],
+            metrology_aware_ci95=contrast["estimator"]["metrology_aware_CI95"],
+            decision_interval=contrast["deterministic_bounds"]["decision_interval"],
+            floor_gate_j=floor["active_floor_j"],
+            adjusted_rejected=True,
+            hypothesized_direction="positive",
+            floor_metadata={
+                key: floor[key]
+                for key in (
+                    "floor_source",
+                    "floor_limit_class",
+                    "point_floor_diagnostics",
+                    "single_count_discipline",
+                )
+            },
+        )
+        artifact["supersession_audit"] = [
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "whole_window_evaluation_basis_sha256",
+                    "sha256": HEX,
+                },
+                "raw_count": 1,
+                "validated_count": 1,
+                "status": "clean",
+            },
+            *copy.deepcopy(_FLOOR_AUDITS),
+        ]
+        published = finalize_claim_verdicts(artifact)
+        self.assertEqual(validate_claim_verdicts(published), [])
+        published_contrast = published["contrasts"][0]
+        self.assertEqual(
+            published_contrast["claim_evaluation"]["floor_limit"][
+                "single_count_discipline"
+            ],
+            discipline,
+        )
+        self.assertEqual(
+            discipline["effective_clearable_effect_formula"],
+            "floor_j + claim_side_bound_j",
+        )
+        self.assertEqual(published_contrast["deterministic_bounds"]["total"], 0.25)
 
     def test_normative_four_j_interpolation_counterexample_fails_closed(self):
         estimate = estimate_paired_blocks(
@@ -2333,6 +2590,33 @@ class MetricWindowHygieneTests(unittest.TestCase):
 
 
 class ClaimArtifactTests(unittest.TestCase):
+    def test_d093_divergence_cannot_be_rehashed_around_estimation_precedence(self):
+        artifact = minimal_artifact()
+        artifact["supersession_audit"] = [
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "whole_window_evaluation_basis_sha256",
+                    "sha256": HEX,
+                },
+                "raw_count": 2,
+                "validated_count": 1,
+                "status": "refused",
+            },
+            *copy.deepcopy(_FLOOR_AUDITS),
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any("supersession refusal forbids estimation" in error for error in errors),
+            errors,
+        )
+        self.assertTrue(
+            any("supersession refusal must take precedence" in error for error in errors),
+            errors,
+        )
+
     def test_artifact_identity_and_bytes_are_deterministic(self):
         first = minimal_artifact()
         second = minimal_artifact()

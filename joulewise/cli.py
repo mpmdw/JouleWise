@@ -2175,7 +2175,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="derive paired contrast and claim verdicts from frozen evidence",
     )
     analyze.add_argument(
-        "--analysis-manifest", required=True, help="frozen analysis_manifest.json path"
+        "--analysis-manifest",
+        required=True,
+        help="frozen analysis-manifest v1 or v3 JSON path",
     )
     analyze.add_argument(
         "--runs-root",

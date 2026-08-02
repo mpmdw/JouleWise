@@ -257,6 +257,7 @@ def evaluate_claim(
     evidence_class: str = "current",
     sensitivity_blocking: bool = False,
     floor_metadata: Mapping[str, Any] | None = None,
+    hypothesized_direction: str | None = None,
 ) -> dict[str, Any]:
     """Apply the adjudicated five-outcome precedence.
 
@@ -373,6 +374,11 @@ def evaluate_claim(
         "loo_verdict_influential",
         "randomization_check_insufficient_blocks",
     }
+    direction_matches_registration = bool(
+        hypothesized_direction not in {"positive", "negative"}
+        or outcome == "equivalent"
+        or direction == hypothesized_direction
+    )
     claim_ready = bool(
         outcome in {"direction_supported", "equivalent"}
         and claim_role in {"primary", "secondary"}
@@ -380,6 +386,7 @@ def evaluate_claim(
         and not legacy
         and not sensitivity_blocking
         and not sensitivity_reasons
+        and direction_matches_registration
     )
     ceiling = "L2" if claim_ready else "L1"
 

@@ -22,6 +22,11 @@ from joulewise.detection_floor import (  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
 )
+from joulewise.analysis_manifest_v3 import (  # noqa: E402
+    MANIFEST_NAME as ANALYSIS_MANIFEST_V3_NAME,
+    build_analysis_manifest_v3,
+    write_manifest_atomic as write_analysis_manifest_v3_atomic,
+)
 
 
 N = 10
@@ -443,9 +448,16 @@ def main() -> int:
     }
     write_json(OUT / "order_manifest.json", root_manifest)
 
+    analysis_manifest_v3 = build_analysis_manifest_v3(OUT)
+    write_analysis_manifest_v3_atomic(
+        OUT / ANALYSIS_MANIFEST_V3_NAME,
+        analysis_manifest_v3,
+    )
+
     print(
         f"generated {len(root_entries)} runnable configs across {len(stages)} "
-        f"subcampaigns; calibration_plan_sha256={plan_sha256}"
+        f"subcampaigns plus {ANALYSIS_MANIFEST_V3_NAME}; "
+        f"calibration_plan_sha256={plan_sha256}"
     )
     return 0
 

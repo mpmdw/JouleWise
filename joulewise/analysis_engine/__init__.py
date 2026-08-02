@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import math
 from dataclasses import asdict
@@ -13,6 +14,11 @@ from joulewise.detection_floor import (
     ATTRIBUTION_LIMIT_CLASS,
     attribution_single_count_discipline,
 )
+from joulewise.analysis_manifest_v3 import (
+    ESTIMATOR_ID as ABBA_ESTIMATOR_ID,
+    FLOOR_RULE_ID as CROSS_STACK_FLOOR_RULE_ID,
+    SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
+)
 
 from .artifact import finalize_claim_verdicts, write_claim_verdicts_atomic
 from .claims import evaluate_claim, ordered_reason_codes
@@ -22,6 +28,7 @@ from .estimators import (
     PairedEstimate,
     PairedObservation,
     StochasticVarianceTerm,
+    estimate_paired_blocks,
     tost_p_value,
 )
 from .inputs import (
@@ -320,7 +327,7 @@ def _entries_for_contrast(
 def _sentinel_entries_by_block(manifest: Mapping[str, Any]) -> dict[str, tuple[str, str]]:
     return {
         link["block_id"]: (link["start_entry_id"], link["end_entry_id"])
-        for link in manifest["sentinel_links"]
+        for link in manifest.get("sentinel_links", [])
     }
 
 
@@ -357,6 +364,12 @@ def _resolve_contrast_floor(
     request_factory: _FloorRequestFactory | None,
 ) -> list[FloorResolution]:
     resolutions: list[FloorResolution] = []
+    is_v3 = inputs.manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA
+    arm_hashes = {
+        arm.get("condition_family_id"): arm.get("condition_family_sha256")
+        for arm in inputs.manifest.get("arms", [])
+        if isinstance(arm, Mapping)
+    }
     for condition_id in contrast["floor_selector"]["condition_family_ids"]:
         evidence = included.get(condition_id, ())
         request = (
@@ -374,6 +387,11 @@ def _resolve_contrast_floor(
             request.metric != contrast["floor_selector"]["metric"]
             or request.window_class != contrast["floor_selector"]["window_class"]
             or request.condition_family_id != condition_id
+            or (
+                is_v3
+                and request.condition_family_sha256
+                != arm_hashes.get(condition_id)
+            )
         ):
             if request_factory is None and (
                 inputs.floor_binding.global_problems
@@ -417,15 +435,340 @@ def _resolve_contrast_floor(
                     problems_by_cell={},
                     global_problems=(),
                 )
-            resolutions.append(
-                resolve_floor(
-                    inputs.floor_artifact,
-                    inputs.floor_sha256,
-                    request,
-                    evidence_binding=binding,
-                )
+            resolution = resolve_floor(
+                inputs.floor_artifact,
+                inputs.floor_sha256,
+                request,
+                evidence_binding=binding,
             )
+            if is_v3 and resolution.status != "exact":
+                resolution = FloorResolution(
+                    status="refused",
+                    artifact_id=resolution.artifact_id,
+                    artifact_sha256=resolution.artifact_sha256,
+                    source_cell_ids=resolution.source_cell_ids,
+                    transport_group_id=resolution.transport_group_id,
+                    transport_rule_id=resolution.transport_rule_id,
+                    floor_abs_j=None,
+                    floor_cmp_j=None,
+                    floor_gate_j=None,
+                    reason_codes=(
+                        *resolution.reason_codes,
+                        "exact_stack_required",
+                    ),
+                )
+            resolutions.append(resolution)
     return resolutions
+
+
+def _decorate_v3_floor(
+    manifest: Mapping[str, Any],
+    contrast: Mapping[str, Any],
+    floor: dict[str, Any],
+    resolutions: Sequence[FloorResolution],
+) -> dict[str, Any]:
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_V3_SCHEMA:
+        return floor
+    arm_by_condition = {
+        arm["condition_family_id"]: arm["arm_id"]
+        for arm in manifest.get("arms", [])
+        if isinstance(arm, Mapping)
+        and isinstance(arm.get("condition_family_id"), str)
+        and isinstance(arm.get("arm_id"), str)
+    }
+    condition_ids = contrast["floor_selector"]["condition_family_ids"]
+    floor.update(
+        {
+            "claim_floor_rule": CROSS_STACK_FLOOR_RULE_ID,
+            "aggregation": "max_never_sum",
+            "arm_gates": [
+                {
+                    "arm_id": arm_by_condition.get(condition_id),
+                    "condition_family_id": condition_id,
+                    "status": resolution.status,
+                    "floor_gate_j": resolution.floor_gate_j,
+                }
+                for condition_id, resolution in zip(
+                    condition_ids, resolutions, strict=True
+                )
+            ],
+        }
+    )
+    return floor
+
+
+def _prepare_contrast_v3(
+    inputs: LoadedAnalysisInputs,
+    contrast: Mapping[str, Any],
+    request_factory: _FloorRequestFactory | None,
+    pair_stochastic_factory: _PairStochasticFactory | None,
+    *,
+    evidence_class: str,
+) -> dict[str, Any]:
+    """Prepare ten physical A/B/B/A blocks without inferring cancellation."""
+
+    if pair_stochastic_factory is not None:
+        raise AnalysisInputError(
+            "the two-run stochastic test seam is not valid for v3 ABBA blocks"
+        )
+    evidence_metric = estimation_metric(contrast["metric"])
+    entry_by_id = {
+        entry["entry_id"]: entry for entry in inputs.manifest["entries"]
+    }
+    block_by_id = {
+        block["block_id"]: block for block in inputs.manifest["blocks"]
+    }
+    block_rows: list[dict[str, Any]] = []
+    observation_parts: list[dict[str, Any]] = []
+    global_reasons: list[str] = []
+    included_by_condition: dict[str, list[BundleEvidence]] = {
+        contrast["condition_a_id"]: [],
+        contrast["condition_b_id"]: [],
+    }
+
+    for block_id in contrast["block_ids"]:
+        block = block_by_id.get(block_id)
+        positions = (
+            block.get("position_entry_ids")
+            if isinstance(block, Mapping)
+            else None
+        )
+        reasons: list[str] = []
+        if not isinstance(positions, Mapping):
+            reasons.append("paired_block_incomplete")
+            block_rows.append(
+                {
+                    "block_id": block_id,
+                    "bundle_a_id": None,
+                    "bundle_b_id": None,
+                    "position_bundle_ids": {
+                        position: None for position in ("A1", "B1", "B2", "A2")
+                    },
+                    "included": False,
+                    "reason_codes": ordered_reason_codes(reasons),
+                }
+            )
+            continue
+        evidence_by_position: dict[str, BundleEvidence] = {}
+        for position in ("A1", "B1", "B2", "A2"):
+            entry = entry_by_id.get(positions.get(position))
+            evidence = (
+                inputs.effective.get(entry["entry_id"])
+                if isinstance(entry, Mapping)
+                else None
+            )
+            if evidence is None:
+                reasons.append("bundle_missing")
+            else:
+                evidence_by_position[position] = evidence
+                reasons.extend(evidence.base_reason_codes)
+
+        values: dict[str, float | None] = {}
+        stochastic_by_position: dict[str, dict[str, Mapping[str, Any]]] = {}
+        bounds_by_position: dict[str, Mapping[str, float]] = {}
+        for position, evidence in evidence_by_position.items():
+            value = metric_value(evidence.summary or {}, evidence_metric)
+            values[position] = value
+            if value is None:
+                reasons.append("metric_missing_or_nonfinite")
+            precheck = window_evidence_precheck(evidence, evidence_metric)
+            reasons.extend(precheck["reasons"])
+            governed, stochastic_reasons = governed_stochastic_variance(
+                evidence, evidence_metric
+            )
+            reasons.extend(stochastic_reasons)
+            stochastic_by_position[position] = {
+                str(term["name"]): term for term in governed
+            }
+            bounds, bound_reasons = deterministic_bounds(evidence, evidence_metric)
+            reasons.extend(bound_reasons)
+            bounds_by_position[position] = bounds
+
+        complete_positions = set(evidence_by_position) == {"A1", "B1", "B2", "A2"}
+        usable = bool(
+            complete_positions
+            and all(evidence.included for evidence in evidence_by_position.values())
+            and all(values.get(position) is not None for position in ("A1", "B1", "B2", "A2"))
+        )
+
+        stochastic_terms: tuple[StochasticVarianceTerm, ...] = ()
+        deterministic_terms: tuple[DeterministicBoundTerm, ...] = ()
+        if complete_positions:
+            stochastic_name_sets = [
+                set(stochastic_by_position[position])
+                for position in ("A1", "B1", "B2", "A2")
+            ]
+            if len({frozenset(names) for names in stochastic_name_sets}) != 1:
+                reasons.append("required_error_term_unknown")
+            else:
+                stochastic_terms = tuple(
+                    StochasticVarianceTerm(
+                        name=name,
+                        variance_a=(
+                            float(stochastic_by_position["A1"][name]["variance"])
+                            + float(stochastic_by_position["A2"][name]["variance"])
+                        )
+                        / 4.0,
+                        variance_b=(
+                            float(stochastic_by_position["B1"][name]["variance"])
+                            + float(stochastic_by_position["B2"][name]["variance"])
+                        )
+                        / 4.0,
+                        covariance_ab=None,
+                        correlation_scope="independent_run",
+                    )
+                    for name in sorted(stochastic_name_sets[0])
+                )
+
+            deterministic_name_sets = [
+                set(bounds_by_position[position])
+                for position in ("A1", "B1", "B2", "A2")
+            ]
+            deterministic_names = (
+                deterministic_name_sets[0]
+                if len({frozenset(names) for names in deterministic_name_sets}) == 1
+                else set()
+            )
+            if not deterministic_names and any(deterministic_name_sets):
+                reasons.append("required_error_term_unknown")
+                if any(
+                    "E_clock_anchor_shift_bound_j" in names
+                    for names in deterministic_name_sets
+                ):
+                    reasons.append("anchor_energy_envelope_unrecorded")
+            deterministic_terms = tuple(
+                DeterministicBoundTerm(
+                    name=name,
+                    # Conservative arm means: average both physical member
+                    # bounds within each arm, then let the paired estimator
+                    # add the two arm bounds.  No ABBA cancellation is inferred.
+                    bound_a=(
+                        float(bounds_by_position["A1"][name])
+                        + float(bounds_by_position["A2"][name])
+                    )
+                    / 2.0,
+                    bound_b=(
+                        float(bounds_by_position["B1"][name])
+                        + float(bounds_by_position["B2"][name])
+                    )
+                    / 2.0,
+                )
+                for name in sorted(deterministic_names)
+            )
+
+        position_bundle_ids = {
+            position: (
+                evidence_by_position[position].bundle_id
+                if position in evidence_by_position
+                else None
+            )
+            for position in ("A1", "B1", "B2", "A2")
+        }
+        block_rows.append(
+            {
+                "block_id": block_id,
+                "bundle_a_id": None,
+                "bundle_b_id": None,
+                "position_bundle_ids": position_bundle_ids,
+                "included": usable,
+                "reason_codes": ordered_reason_codes(reasons),
+            }
+        )
+        if usable:
+            assert all(values[position] is not None for position in position_bundle_ids)
+            evidence_a = (
+                evidence_by_position["A1"],
+                evidence_by_position["A2"],
+            )
+            evidence_b = (
+                evidence_by_position["B1"],
+                evidence_by_position["B2"],
+            )
+            included_by_condition[contrast["condition_a_id"]].extend(evidence_a)
+            included_by_condition[contrast["condition_b_id"]].extend(evidence_b)
+            observation_parts.append(
+                {
+                    "block_id": block_id,
+                    "value_a": (
+                        float(values["A1"]) + float(values["A2"])
+                    )
+                    / 2.0,
+                    "value_b": (
+                        float(values["B1"]) + float(values["B2"])
+                    )
+                    / 2.0,
+                    "evidence_by_arm": {
+                        contrast["condition_a_id"]: evidence_a,
+                        contrast["condition_b_id"]: evidence_b,
+                    },
+                    "stochastic_terms": stochastic_terms,
+                    "deterministic_terms": deterministic_terms,
+                    "reason_codes": ordered_reason_codes(reasons),
+                }
+            )
+
+    complete_blocks = len(observation_parts)
+    planned_n = inputs.manifest["design"]["sampling_plan"]["planned_n_blocks"]
+    if complete_blocks < 2:
+        global_reasons.append("insufficient_complete_blocks")
+    if complete_blocks < planned_n:
+        global_reasons.append("fixed_n_plan_incomplete")
+    if any(not row["included"] for row in block_rows):
+        global_reasons.append("paired_block_incomplete")
+
+    observations = tuple(
+        PairedObservation(
+            block_id=part["block_id"],
+            value_a=part["value_a"],
+            value_b=part["value_b"],
+            stochastic_terms=part["stochastic_terms"],
+            deterministic_terms=part["deterministic_terms"],
+        )
+        for part in observation_parts
+    )
+    estimate = (
+        estimate_paired_blocks(observations, estimator=ABBA_ESTIMATOR_ID)
+        if len(observations) >= 2
+        else None
+    )
+    resolutions = _resolve_contrast_floor(
+        inputs, contrast, included_by_condition, request_factory
+    )
+    floor = _decorate_v3_floor(
+        inputs.manifest,
+        contrast,
+        _combined_floor(resolutions),
+        resolutions,
+    )
+
+    affected_entry_ids = {entry["entry_id"] for entry in inputs.manifest["entries"]}
+    demoted = bool(affected_entry_ids & inputs.top_up_entry_ids)
+    confirmatory_status = "demoted_exploratory" if demoted else "confirmatory"
+    if demoted:
+        global_reasons.append("outcome_dependent_top_up")
+    if evidence_class == "legacy_l1":
+        global_reasons.append("legacy_l1_mechanics_only")
+    randomization = {
+        "status": "not_required",
+        "reason": None,
+        "n_blocks": len(observations),
+        "exact_two_sided_p": None,
+        "rejects": None,
+    }
+    return {
+        "manifest": contrast,
+        "block_rows": block_rows,
+        "observation_parts": observation_parts,
+        "observations": observations,
+        "estimate": estimate,
+        "floor": floor,
+        "floor_resolutions": tuple(resolutions),
+        "global_reason_codes": ordered_reason_codes(global_reasons),
+        "confirmatory_status": confirmatory_status,
+        "randomization_check": randomization,
+        "evidence_class": evidence_class,
+        "manifest_schema_version": ANALYSIS_MANIFEST_V3_SCHEMA,
+    }
 
 
 def _prepare_contrast(
@@ -437,6 +780,14 @@ def _prepare_contrast(
     *,
     evidence_class: str,
 ) -> dict[str, Any]:
+    if inputs.manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+        return _prepare_contrast_v3(
+            inputs,
+            contrast,
+            request_factory,
+            pair_stochastic_factory,
+            evidence_class=evidence_class,
+        )
     entries = _entries_for_contrast(inputs.manifest, contrast)
     evidence_metric = estimation_metric(contrast["metric"])
     ratio_estimand = contrast["metric"].get("ratio_estimand")
@@ -780,12 +1131,27 @@ def _subset_floor(
     for part in prepared["observation_parts"]:
         if part["block_id"] == omit_block:
             continue
-        included[contrast["condition_a_id"]].append(part["evidence_a"])
-        included[contrast["condition_b_id"]].append(part["evidence_b"])
+        evidence_by_arm = part.get("evidence_by_arm")
+        if isinstance(evidence_by_arm, Mapping):
+            for condition_id in (
+                contrast["condition_a_id"],
+                contrast["condition_b_id"],
+            ):
+                rows = evidence_by_arm.get(condition_id)
+                if isinstance(rows, Sequence):
+                    included[condition_id].extend(rows)
+        else:
+            included[contrast["condition_a_id"]].append(part["evidence_a"])
+            included[contrast["condition_b_id"]].append(part["evidence_b"])
     resolutions = tuple(
         _resolve_contrast_floor(inputs, contrast, included, request_factory)
     )
-    floor = _combined_floor(resolutions)
+    floor = _decorate_v3_floor(
+        inputs.manifest,
+        contrast,
+        _combined_floor(resolutions),
+        resolutions,
+    )
     metric = contrast.get("metric")
     if not isinstance(metric, Mapping) or metric.get("ratio_estimand") is None:
         return floor, resolutions
@@ -798,6 +1164,48 @@ def _subset_floor(
         metric, observations, floor
     )
     return converted, resolutions
+
+
+def _estimate_prepared_observations(
+    prepared: Mapping[str, Any], observations: Sequence[PairedObservation]
+) -> PairedEstimate:
+    if prepared.get("manifest_schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+        return estimate_paired_blocks(observations, estimator=ABBA_ESTIMATOR_ID)
+    return estimate_manifest_observations(
+        prepared["manifest"]["metric"], observations
+    )
+
+
+def _randomization_for_prepared(
+    inputs: LoadedAnalysisInputs,
+    prepared: Mapping[str, Any],
+    estimate: PairedEstimate | None,
+    observations: Sequence[PairedObservation],
+) -> Mapping[str, Any]:
+    if prepared.get("manifest_schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+        return {
+            "status": "not_required",
+            "reason": None,
+            "n_blocks": len(observations),
+            "exact_two_sided_p": None,
+            "rejects": None,
+        }
+    return randomization_check(
+        estimate.paired_values if estimate is not None else (),
+        randomization_design_for_blocks(
+            inputs.manifest["design"]["randomization"],
+            tuple(observation.block_id for observation in observations),
+        ),
+        alpha=_randomization_alpha(
+            inputs.manifest,
+            prepared["manifest"],
+        ),
+        block_ids=(
+            tuple(observation.block_id for observation in observations)
+            if estimate is not None
+            else ()
+        ),
+    )
 
 
 def _analysis_reasons(
@@ -871,6 +1279,12 @@ def _evaluation(
         evidence_class=prepared["evidence_class"],
         sensitivity_blocking=sensitivity_blocking,
         floor_metadata=floor_metadata,
+        hypothesized_direction=(
+            prepared["manifest"].get("hypothesized_direction")
+            if prepared.get("manifest_schema_version")
+            == ANALYSIS_MANIFEST_V3_SCHEMA
+            else None
+        ),
     )
 
 
@@ -992,8 +1406,8 @@ def _loo_family(
                 if observation.block_id != omitted_block
             )
             estimate = (
-                estimate_manifest_observations(
-                    prepared_by_id[contrast_id]["manifest"]["metric"], observations
+                _estimate_prepared_observations(
+                    prepared_by_id[contrast_id], observations
                 )
                 if len(observations) >= 2
                 else None
@@ -1007,21 +1421,11 @@ def _loo_family(
             )
             floors[contrast_id] = floor
             floor_resolutions[contrast_id] = resolutions
-            randomizations[contrast_id] = randomization_check(
-                estimate.paired_values if estimate is not None else (),
-                randomization_design_for_blocks(
-                    inputs.manifest["design"]["randomization"],
-                    tuple(observation.block_id for observation in observations),
-                ),
-                alpha=_randomization_alpha(
-                    inputs.manifest,
-                    prepared_by_id[contrast_id]["manifest"],
-                ),
-                block_ids=(
-                    tuple(observation.block_id for observation in observations)
-                    if estimate is not None
-                    else ()
-                ),
+            randomizations[contrast_id] = _randomization_for_prepared(
+                inputs,
+                prepared_by_id[contrast_id],
+                estimate,
+                observations,
             )
             raw[contrast_id] = _claim_raw_p(prepared_by_id[contrast_id], estimate)
         adjusted = adjust_p_values(
@@ -1120,7 +1524,11 @@ def _contrast_row(
             bundle_id
             for row in prepared["block_rows"]
             if row["included"]
-            for bundle_id in (row["bundle_a_id"], row["bundle_b_id"])
+            for bundle_id in (
+                tuple(row.get("position_bundle_ids", {}).values())
+                if isinstance(row.get("position_bundle_ids"), Mapping)
+                else (row["bundle_a_id"], row["bundle_b_id"])
+            )
             if bundle_id is not None
         }
     )
@@ -1342,6 +1750,10 @@ def analyze_claims(
             if entry["role"] == "condition"
         }
     )
+    if not inputs.floor_artifact_bytes:
+        raise AnalysisInputError(
+            "authenticated floor artifact bytes are unavailable for embedding"
+        )
     body = {
         "schema_version": "joulewise.claim_verdicts.v1",
         "claim_verdicts_id": "",
@@ -1367,11 +1779,17 @@ def analyze_claims(
             "floor_artifact": {
                 "artifact_id": inputs.floor_artifact["artifact_id"],
                 "file_sha256": inputs.floor_sha256,
+                "embedded_bytes_base64": base64.b64encode(
+                    inputs.floor_artifact_bytes
+                ).decode("ascii"),
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,
             "limitations": ["legacy_l1_mechanics_only"] if legacy_l1_mechanics else [],
         },
+        "supersession_audit": [
+            dict(row) for row in inputs.supersession_audit
+        ],
         "bundle_audit": [
             evidence.audit_row()
             for evidence in sorted(

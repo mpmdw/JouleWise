@@ -1,0 +1,962 @@
+{
+  "schema_version": "joulewise.analysis_manifest.v3",
+  "manifest_id": "am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3",
+  "freeze_status": "frozen",
+  "design": {
+    "design_id": "splitwise_decode_cross_model_abba_v1",
+    "analysis_type": "comparative_contrast",
+    "null_alias": false,
+    "unit_of_analysis": "abba_block_arm_mean_difference",
+    "difference_orientation": "condition_b_minus_condition_a",
+    "sampling_plan": {
+      "design": "fixed_n",
+      "planned_n_blocks": 10,
+      "freeze_basis": "frozen_before_measurement",
+      "allowed_replacement_reasons": [
+        "bundle_incomplete",
+        "run_failed",
+        "strict_invalid",
+        "unsupported_before_measurement"
+      ]
+    },
+    "randomization": {
+      "scheme": "deterministic_abba",
+      "exchangeability": "none",
+      "seed": null
+    }
+  },
+  "source": {
+    "generator": "configs/campaigns/splitwise_decode_v1/generate_configs.py",
+    "calibration_plan": {
+      "path": "calibration_plan.json",
+      "sha256": "7b563724be38254bf0769bca5818e9bcd70f76288e79650b55c3e051bf636b04",
+      "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b"
+    },
+    "root_order_manifest": {
+      "path": "order_manifest.json",
+      "sha256": "a0184a5e994c3139ed9ce8a43951368e7058a6cf635e8637f7ad693d827e0404"
+    },
+    "stage_order_manifests": [
+      {
+        "stage_id": "01_decode_contrast_blocks_01_05",
+        "path": "01_decode_contrast_blocks_01_05/order_manifest.json",
+        "sha256": "16866c00031e138c002b962a3873dfba49e59413f39e702329c4f5d87c164e06"
+      },
+      {
+        "stage_id": "02_decode_contrast_blocks_06_10",
+        "path": "02_decode_contrast_blocks_06_10/order_manifest.json",
+        "sha256": "8e7fc04cc3b5f27735c9ff862a690b6b8358bb7e38cedffd86995fd3465f4ab0"
+      }
+    ],
+    "condition_families": [
+      {
+        "arm_id": "A",
+        "path": "condition_families/condition_family_sw_decode_a_qwen25_1p5b.json",
+        "file_sha256": "3ff3a801d7f74ca3d3bd74d961aadde304e7fd1adc7940a39cf47ff0c40943cf",
+        "condition_family_sha256": "c13a3ebf5461ed9a442a8e67555f70301848d56a55ab766570d46ca067934f12"
+      },
+      {
+        "arm_id": "B",
+        "path": "condition_families/condition_family_sw_decode_b_qwen25_7b.json",
+        "file_sha256": "c153b8dcbae5761e1d39404e55415d0ed95072151fb98fe75bce3e2740d54b9e",
+        "condition_family_sha256": "5149a8552600341883439a73fa135caa0e6ba292544c7c6fe2e69674318df4e3"
+      }
+    ],
+    "authenticated_verdict_basis": {
+      "status": "passed",
+      "evaluation_basis_sha256": "1e08e8eff4ede001a6d68525a7748bbf66f81278a3b963b9b24e7405d105d147"
+    }
+  },
+  "derivation_rule": {
+    "rule_id": "swdec_contrast_run_id_to_abba_block.v1",
+    "run_id_pattern": "^swdec-contrast-b(?P<block>[0-9]{2})-(?P<position>a1|b1|b2|a2)$",
+    "block_id_template": "sw-decode-contrast-bNN",
+    "position_order": [
+      "A1",
+      "B1",
+      "B2",
+      "A2"
+    ],
+    "exact_cover": true,
+    "contiguous_block_numbers": {
+      "first": 1,
+      "last": 10
+    }
+  },
+  "arms": [
+    {
+      "condition_family_id": "sw-decode-a-qwen25-1p5b",
+      "condition_family_sha256": "c13a3ebf5461ed9a442a8e67555f70301848d56a55ab766570d46ca067934f12",
+      "model_tag": "qwen25-1p5b-mlx",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "realized_stack_identity": {
+        "model_artifact": {
+          "algorithm": "sha256",
+          "kind": "file_set",
+          "folded_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712"
+        },
+        "tokenizer": {
+          "backend": "mlx",
+          "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+          "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "class": "TokenizerWrapper",
+          "vocab_size": 151643
+        },
+        "runtime": {
+          "name": "mlx",
+          "adapter": "mlx_runtime",
+          "version": null
+        },
+        "telemetry": {
+          "name": "powermetrics"
+        },
+        "device_boundary": {
+          "device": "macbook_m3_max",
+          "telemetry": "powermetrics",
+          "rail_manifest": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ],
+          "boundary": "Apple SoC CPU + GPU + ANE package power"
+        },
+        "model": {
+          "name": "Qwen2.5-1.5B-Instruct-4bit",
+          "family": "qwen2.5",
+          "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+          "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "weight_format": "mlx",
+          "context_window": 32768
+        },
+        "quantization": {
+          "name": "int4",
+          "bits": 4,
+          "group_size": null
+        }
+      },
+      "arm_id": "A"
+    },
+    {
+      "condition_family_id": "sw-decode-b-qwen25-7b",
+      "condition_family_sha256": "5149a8552600341883439a73fa135caa0e6ba292544c7c6fe2e69674318df4e3",
+      "model_tag": "qwen25-7b-mlx",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "realized_stack_identity": {
+        "model_artifact": {
+          "algorithm": "sha256",
+          "kind": "file_set",
+          "folded_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630"
+        },
+        "tokenizer": {
+          "backend": "mlx",
+          "identifier": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "class": "TokenizerWrapper",
+          "vocab_size": 151643
+        },
+        "runtime": {
+          "name": "mlx",
+          "adapter": "mlx_runtime",
+          "version": null
+        },
+        "telemetry": {
+          "name": "powermetrics"
+        },
+        "device_boundary": {
+          "device": "macbook_m3_max",
+          "telemetry": "powermetrics",
+          "rail_manifest": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ],
+          "boundary": "Apple SoC CPU + GPU + ANE package power"
+        },
+        "model": {
+          "name": "Qwen2.5-7B-Instruct-4bit",
+          "family": "qwen2.5",
+          "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "weight_format": "mlx",
+          "context_window": 32768
+        },
+        "quantization": {
+          "name": "int4",
+          "bits": 4,
+          "group_size": null
+        }
+      },
+      "arm_id": "B"
+    }
+  ],
+  "entries": [
+    {
+      "entry_id": "entry-swdec-contrast-b01-a1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b01-a1.json",
+      "config_sha256": "1041e07b81831e88cbdd717fca69ca87a8304339db6ed805c04cceb67cf11228",
+      "run_id": "swdec-contrast-b01-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b01",
+      "block_number": 1,
+      "position": "A1",
+      "order_index": 1
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b01-b1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b01-b1.json",
+      "config_sha256": "913cd1fd0971f4ae5a3ede9d1f377a259e8d7b28a237d6118439d29577308ae4",
+      "run_id": "swdec-contrast-b01-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b01",
+      "block_number": 1,
+      "position": "B1",
+      "order_index": 2
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b01-b2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b01-b2.json",
+      "config_sha256": "50899ed905974a96cb69ea62291dc4f7209a10b479aa71ea9c73cc4cea78a921",
+      "run_id": "swdec-contrast-b01-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b01",
+      "block_number": 1,
+      "position": "B2",
+      "order_index": 3
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b01-a2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b01-a2.json",
+      "config_sha256": "90895771bd798a01fe738c1a0f680dd7485714f4e6d01f69792b435ed54df062",
+      "run_id": "swdec-contrast-b01-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b01",
+      "block_number": 1,
+      "position": "A2",
+      "order_index": 4
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b02-a1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b02-a1.json",
+      "config_sha256": "7aa24511f1314d5589dae3b8fe7cbf3745aa7e8fb39540d01fabeb6aa082c666",
+      "run_id": "swdec-contrast-b02-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b02",
+      "block_number": 2,
+      "position": "A1",
+      "order_index": 5
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b02-b1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b02-b1.json",
+      "config_sha256": "b1ff18ee9426345d8f2c50a127fee3b6b7c83acdc6d763ae20be308ac6a07a90",
+      "run_id": "swdec-contrast-b02-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b02",
+      "block_number": 2,
+      "position": "B1",
+      "order_index": 6
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b02-b2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b02-b2.json",
+      "config_sha256": "adf32ce9afb7015c70112eded96737b1181e8b53dd78920850d0307c23c6103e",
+      "run_id": "swdec-contrast-b02-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b02",
+      "block_number": 2,
+      "position": "B2",
+      "order_index": 7
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b02-a2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b02-a2.json",
+      "config_sha256": "baa7990e323b25226191778010b13774d15daf8f11dd0802a6e62e927174873b",
+      "run_id": "swdec-contrast-b02-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b02",
+      "block_number": 2,
+      "position": "A2",
+      "order_index": 8
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b03-a1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b03-a1.json",
+      "config_sha256": "f890fb39043a541d29dacf5bac6c6e554d7151e84492d171db4f08235a339a31",
+      "run_id": "swdec-contrast-b03-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b03",
+      "block_number": 3,
+      "position": "A1",
+      "order_index": 9
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b03-b1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b03-b1.json",
+      "config_sha256": "da46190328ea8a58fff04ab1d34927e1b6304b80313ab5c4d6e6c40fa4859c19",
+      "run_id": "swdec-contrast-b03-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b03",
+      "block_number": 3,
+      "position": "B1",
+      "order_index": 10
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b03-b2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b03-b2.json",
+      "config_sha256": "7e81379121528e83ad0a18b9c363eb5fc70e409cc44d1a97532c354509ca476d",
+      "run_id": "swdec-contrast-b03-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b03",
+      "block_number": 3,
+      "position": "B2",
+      "order_index": 11
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b03-a2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b03-a2.json",
+      "config_sha256": "8ec397f8b180163a5dd3e7e0d3773f7953979d4a7a4ebc31a46ecbb56f09b1cc",
+      "run_id": "swdec-contrast-b03-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b03",
+      "block_number": 3,
+      "position": "A2",
+      "order_index": 12
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b04-a1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b04-a1.json",
+      "config_sha256": "f2c07fabe0ecb964ec47dbe4735264969467a41c365f8cf727d77b404592a068",
+      "run_id": "swdec-contrast-b04-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b04",
+      "block_number": 4,
+      "position": "A1",
+      "order_index": 13
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b04-b1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b04-b1.json",
+      "config_sha256": "4c34260488027c02295ca057c5ab3fec815aecfb5b4dcaacfe6ee48c0620552b",
+      "run_id": "swdec-contrast-b04-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b04",
+      "block_number": 4,
+      "position": "B1",
+      "order_index": 14
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b04-b2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b04-b2.json",
+      "config_sha256": "c7dc7d599de8368086e152a1d47da15ff458db509f289c3dfc080234b9d50f6b",
+      "run_id": "swdec-contrast-b04-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b04",
+      "block_number": 4,
+      "position": "B2",
+      "order_index": 15
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b04-a2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b04-a2.json",
+      "config_sha256": "e577d2392bfa8546cd71da3dd741bea5e9c233478739140bdee2b577f485fde2",
+      "run_id": "swdec-contrast-b04-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b04",
+      "block_number": 4,
+      "position": "A2",
+      "order_index": 16
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b05-a1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b05-a1.json",
+      "config_sha256": "96d497acda8a6ab9a49b7f665c5b06b5757cf73f92ae023cffcbf611a9e6dcbc",
+      "run_id": "swdec-contrast-b05-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b05",
+      "block_number": 5,
+      "position": "A1",
+      "order_index": 17
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b05-b1",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b05-b1.json",
+      "config_sha256": "7243b9916cdbb716e920346c628287ed39015b0403da76d339dbce6e36bfb633",
+      "run_id": "swdec-contrast-b05-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b05",
+      "block_number": 5,
+      "position": "B1",
+      "order_index": 18
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b05-b2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b05-b2.json",
+      "config_sha256": "4eb5d1189ffe224ce2404b6b0b044209905bac00adf1efb9d77a46bf3c0f7a5b",
+      "run_id": "swdec-contrast-b05-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b05",
+      "block_number": 5,
+      "position": "B2",
+      "order_index": 19
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b05-a2",
+      "config": "01_decode_contrast_blocks_01_05/swdec-contrast-b05-a2.json",
+      "config_sha256": "af202fabc0c0523b237cacc0e9607406cd2733706063cbbb297fd393c68e8b22",
+      "run_id": "swdec-contrast-b05-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b05",
+      "block_number": 5,
+      "position": "A2",
+      "order_index": 20
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b06-a1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b06-a1.json",
+      "config_sha256": "54719452e790b50371cb68904df04a8f500558271f9e63dbe1046bc1d54fe9d3",
+      "run_id": "swdec-contrast-b06-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b06",
+      "block_number": 6,
+      "position": "A1",
+      "order_index": 21
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b06-b1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b06-b1.json",
+      "config_sha256": "731fafd285a5883a7060965004f45e8b2659f1d0fd4b1c80ed9f312ceac7b85e",
+      "run_id": "swdec-contrast-b06-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b06",
+      "block_number": 6,
+      "position": "B1",
+      "order_index": 22
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b06-b2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b06-b2.json",
+      "config_sha256": "85968d44c41cb10dbb56a07acf3c613b83ee7cee9b91177a9d2ffa3e5fc856af",
+      "run_id": "swdec-contrast-b06-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b06",
+      "block_number": 6,
+      "position": "B2",
+      "order_index": 23
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b06-a2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b06-a2.json",
+      "config_sha256": "ea2e20483d536a65285fd35e6057c2ef8b63d7a2e874b4f542af2a4bcc67c88f",
+      "run_id": "swdec-contrast-b06-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b06",
+      "block_number": 6,
+      "position": "A2",
+      "order_index": 24
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b07-a1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b07-a1.json",
+      "config_sha256": "eab098dc11d78e9df8575014dca56aa62f3f310d972d8634b2af015b27557ffc",
+      "run_id": "swdec-contrast-b07-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b07",
+      "block_number": 7,
+      "position": "A1",
+      "order_index": 25
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b07-b1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b07-b1.json",
+      "config_sha256": "f57cf09eb866e105aa1a05e4cf5c3f8c45b30930d7d8474746f4814b0af69726",
+      "run_id": "swdec-contrast-b07-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b07",
+      "block_number": 7,
+      "position": "B1",
+      "order_index": 26
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b07-b2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b07-b2.json",
+      "config_sha256": "66687b6541c20cbc00cf237f6452104696f234d6337951a1fb7be1eb8f1b1831",
+      "run_id": "swdec-contrast-b07-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b07",
+      "block_number": 7,
+      "position": "B2",
+      "order_index": 27
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b07-a2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b07-a2.json",
+      "config_sha256": "1acb138ffc4662a5f5050fff4d41e5aad95bb48f979ed34a73ab0c40a85425b6",
+      "run_id": "swdec-contrast-b07-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b07",
+      "block_number": 7,
+      "position": "A2",
+      "order_index": 28
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b08-a1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b08-a1.json",
+      "config_sha256": "7f1dcc1473f5c57d93911cb3b6c6fccb0b71a79561f04400978c8e34f09d125b",
+      "run_id": "swdec-contrast-b08-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b08",
+      "block_number": 8,
+      "position": "A1",
+      "order_index": 29
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b08-b1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b08-b1.json",
+      "config_sha256": "2212e40dc7504beb13bc3bbee09cb70964e848b1deba71977036cb1aa8876387",
+      "run_id": "swdec-contrast-b08-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b08",
+      "block_number": 8,
+      "position": "B1",
+      "order_index": 30
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b08-b2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b08-b2.json",
+      "config_sha256": "98162bc3ce3afe5b6c9d7ee9f23876c4bcf90da28dce9441b83bec885363375e",
+      "run_id": "swdec-contrast-b08-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b08",
+      "block_number": 8,
+      "position": "B2",
+      "order_index": 31
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b08-a2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b08-a2.json",
+      "config_sha256": "7cfce1809f3c41b36568db2724be3e626d52a63edb3d2a954b38638b029e6d21",
+      "run_id": "swdec-contrast-b08-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b08",
+      "block_number": 8,
+      "position": "A2",
+      "order_index": 32
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b09-a1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b09-a1.json",
+      "config_sha256": "04c266c1124e3029b503574fbbbca84b5a4de22204a7603ea5f43153e1a66535",
+      "run_id": "swdec-contrast-b09-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b09",
+      "block_number": 9,
+      "position": "A1",
+      "order_index": 33
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b09-b1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b09-b1.json",
+      "config_sha256": "d5716bb162e66a40850088e74fa38c222f41956ef37a077e392507b83069a9fd",
+      "run_id": "swdec-contrast-b09-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b09",
+      "block_number": 9,
+      "position": "B1",
+      "order_index": 34
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b09-b2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b09-b2.json",
+      "config_sha256": "a1b416964afbd308c6d672cc0f0f16d962465bab8d4a5126ab83db3a31591b12",
+      "run_id": "swdec-contrast-b09-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b09",
+      "block_number": 9,
+      "position": "B2",
+      "order_index": 35
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b09-a2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b09-a2.json",
+      "config_sha256": "7d1f0453a30493b300f031a5215caedd1e92a787f5f20791503bce4bf39d047a",
+      "run_id": "swdec-contrast-b09-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b09",
+      "block_number": 9,
+      "position": "A2",
+      "order_index": 36
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b10-a1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b10-a1.json",
+      "config_sha256": "f93fea5058fddcf9f45d57960ab496c07d5b615e43f261684ce3d9fbf6d202f6",
+      "run_id": "swdec-contrast-b10-a1",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b10",
+      "block_number": 10,
+      "position": "A1",
+      "order_index": 37
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b10-b1",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b10-b1.json",
+      "config_sha256": "46805e92e429601e40b5ed94bf2a07d69ba3402efb5c033f67a5ae85055140d2",
+      "run_id": "swdec-contrast-b10-b1",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b10",
+      "block_number": 10,
+      "position": "B1",
+      "order_index": 38
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b10-b2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b10-b2.json",
+      "config_sha256": "bf87a438a8eae12b380d357b612efc6211b427b389eadafd9d5b7340138976fc",
+      "run_id": "swdec-contrast-b10-b2",
+      "model_tag": "qwen25-7b-mlx",
+      "role": "condition",
+      "arm_id": "B",
+      "condition_id": "sw-decode-b-qwen25-7b",
+      "cell_id": "sw-decode-arm-b-qwen25-7b",
+      "block_id": "sw-decode-contrast-b10",
+      "block_number": 10,
+      "position": "B2",
+      "order_index": 39
+    },
+    {
+      "entry_id": "entry-swdec-contrast-b10-a2",
+      "config": "02_decode_contrast_blocks_06_10/swdec-contrast-b10-a2.json",
+      "config_sha256": "74feaa0dca373538ea6d1c2b2da4f924bdd8c19acd07736c826df75b63decd60",
+      "run_id": "swdec-contrast-b10-a2",
+      "model_tag": "qwen25-1p5b-mlx",
+      "role": "condition",
+      "arm_id": "A",
+      "condition_id": "sw-decode-a-qwen25-1p5b",
+      "cell_id": "sw-decode-arm-a-qwen25-1p5b",
+      "block_id": "sw-decode-contrast-b10",
+      "block_number": 10,
+      "position": "A2",
+      "order_index": 40
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "sw-decode-contrast-b01",
+      "block_number": 1,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b01-a1",
+        "B1": "entry-swdec-contrast-b01-b1",
+        "B2": "entry-swdec-contrast-b01-b2",
+        "A2": "entry-swdec-contrast-b01-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b02",
+      "block_number": 2,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b02-a1",
+        "B1": "entry-swdec-contrast-b02-b1",
+        "B2": "entry-swdec-contrast-b02-b2",
+        "A2": "entry-swdec-contrast-b02-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b03",
+      "block_number": 3,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b03-a1",
+        "B1": "entry-swdec-contrast-b03-b1",
+        "B2": "entry-swdec-contrast-b03-b2",
+        "A2": "entry-swdec-contrast-b03-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b04",
+      "block_number": 4,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b04-a1",
+        "B1": "entry-swdec-contrast-b04-b1",
+        "B2": "entry-swdec-contrast-b04-b2",
+        "A2": "entry-swdec-contrast-b04-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b05",
+      "block_number": 5,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b05-a1",
+        "B1": "entry-swdec-contrast-b05-b1",
+        "B2": "entry-swdec-contrast-b05-b2",
+        "A2": "entry-swdec-contrast-b05-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b06",
+      "block_number": 6,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b06-a1",
+        "B1": "entry-swdec-contrast-b06-b1",
+        "B2": "entry-swdec-contrast-b06-b2",
+        "A2": "entry-swdec-contrast-b06-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b07",
+      "block_number": 7,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b07-a1",
+        "B1": "entry-swdec-contrast-b07-b1",
+        "B2": "entry-swdec-contrast-b07-b2",
+        "A2": "entry-swdec-contrast-b07-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b08",
+      "block_number": 8,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b08-a1",
+        "B1": "entry-swdec-contrast-b08-b1",
+        "B2": "entry-swdec-contrast-b08-b2",
+        "A2": "entry-swdec-contrast-b08-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b09",
+      "block_number": 9,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b09-a1",
+        "B1": "entry-swdec-contrast-b09-b1",
+        "B2": "entry-swdec-contrast-b09-b2",
+        "A2": "entry-swdec-contrast-b09-a2"
+      }
+    },
+    {
+      "block_id": "sw-decode-contrast-b10",
+      "block_number": 10,
+      "position_entry_ids": {
+        "A1": "entry-swdec-contrast-b10-a1",
+        "B1": "entry-swdec-contrast-b10-b1",
+        "B2": "entry-swdec-contrast-b10-b2",
+        "A2": "entry-swdec-contrast-b10-a2"
+      }
+    }
+  ],
+  "families": [
+    {
+      "family_id": "splitwise-decode-cross-model-primary",
+      "family_instance_id": "fam-splitwise-decode-cross-model-primary",
+      "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+      "claim_role": "primary",
+      "metric_tag": "phase_decode_energy",
+      "multiplicity": {
+        "method": "holm",
+        "alpha": 0.05,
+        "q": null,
+        "m": 1
+      },
+      "contrast_ids": [
+        "ctr-sw-decode-qwen25-1p5b-vs-7b"
+      ]
+    }
+  ],
+  "contrasts": [
+    {
+      "contrast_id": "ctr-sw-decode-qwen25-1p5b-vs-7b",
+      "plan_id": "splitwise-decode-v1-m3max-qwen25-1p5b-vs-7b",
+      "family_instance_id": "fam-splitwise-decode-cross-model-primary",
+      "claim_role": "primary",
+      "metric": {
+        "name": "phase_energy_j.decode",
+        "metric_tag": "phase_decode_energy",
+        "window_class": "phase",
+        "unit": "J",
+        "ratio_estimand": null
+      },
+      "estimator": "abba_block_arm_mean_difference_t_v1",
+      "condition_a_id": "sw-decode-a-qwen25-1p5b",
+      "condition_b_id": "sw-decode-b-qwen25-7b",
+      "cell_a_id": "sw-decode-arm-a-qwen25-1p5b",
+      "cell_b_id": "sw-decode-arm-b-qwen25-7b",
+      "block_ids": [
+        "sw-decode-contrast-b01",
+        "sw-decode-contrast-b02",
+        "sw-decode-contrast-b03",
+        "sw-decode-contrast-b04",
+        "sw-decode-contrast-b05",
+        "sw-decode-contrast-b06",
+        "sw-decode-contrast-b07",
+        "sw-decode-contrast-b08",
+        "sw-decode-contrast-b09",
+        "sw-decode-contrast-b10"
+      ],
+      "sidedness": "two_sided",
+      "hypothesized_direction": "positive",
+      "equivalence": null,
+      "mde": null,
+      "floor_selector": {
+        "backend": "from_bundle",
+        "metric": "phase_energy_j.decode",
+        "window_class": "phase",
+        "condition_family_ids": [
+          "sw-decode-a-qwen25-1p5b",
+          "sw-decode-b-qwen25-7b"
+        ],
+        "floor_field": "floor_gate_j",
+        "transport_rule_id": "exact_stack_only.v1",
+        "claim_floor_rule": "cross_stack_armwise_max.v1"
+      }
+    }
+  ]
+}
