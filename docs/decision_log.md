@@ -127,6 +127,7 @@ be re-derived by a future agent gets an entry here.
 | D-102 | CAL-BRACKET-D079-01 pins: budget cap 0.001275166090593858 s (99% two-draw prediction ceiling 0.012093166090593858 s, blind n=19 derivation), exact-identity-epoch freshness with prospective re-derivation triggers, never-zero allowance max(drift, screen) embedded once, decimal-source numeric semantics with labelled presentation values | accepted (magistrate ratification, lead-replayed arithmetic, 2026-08-01) |
 | D-103 | C3 structural cold-gate synthesis: WAL attestation ordering + torn-tail tolerance + origin-gated operator repair (B1); one authentication predicate with TWO named aggregation policies, cold instance OVERRULED on catalog-global verdicts with recorded dissent (B2); writer-strict/reader-tolerant path discipline, backslash false-malformed corrected (B3); origin-binding redesign registered as fallback; fix-round-2 scope restated | accepted (cold gate + Opus refuter, magistrate synthesis with bench-verified overruling, 2026-08-01) |
 | D-104 | C3 residuals cold-gate synthesis (CONVERGENT): acquisition-identity lock tokens (registry + dev/ino + nonce + root binding; log_path.parent candidate rejected), positive writer-grammar tail recognizer with byte-exact canonical round-trip (message-class discrimination ruled out; refuter-discovered whitespace-preservation hole closed), SF1 ruled jointly, R1-R11 regressions, origin-binding fallback not routed | accepted (cold gate + Opus refuter converged; magistrate synthesis 2026-08-02) |
+| D-105 | C3 disposition: LAND via a final custody micro-commit (preserve-then-truncate sidecar, writer-side ASCII key assertion, F3 hygiene, R7-as-ruled) + narrow fresh audit + merge; F1/F2 registered as a NEW ruling (not D-088 precedent) closing via C3-RECOGNIZER-EXACT-01 with the number-grammar exactness STRUCK for a documented decidable superset (D-104 cl.2 amended); three-scan absence evidence recorded; runway-context-in-packet process violation recorded | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
 
 ---
 
@@ -6523,3 +6524,83 @@ licensed as fidelity repair under this ruling's recognizer-bug clause,
 with a BINDING commitment: any blocker in round 5's re-audit on either
 mechanism, however shaped, returns to a cold gate and opens the descope
 question with Ed — no further formulation-vs-implementation parsing.]
+
+## D-105: C3 disposition synthesis — LAND with a final custody micro-commit; F1/F2 registered as a NEW ruling with refuter-amended closure; number-grammar exactness struck
+
+- Date: 2026-08-02
+- Status: accepted (third rule-11 cold gate on gauntlet commit 3: cold
+  Fable ruling [Option A, fences, closure procedures] + independent
+  Opus refutation [does not oppose landing; replaces the grounds and
+  fences]; magistrate synthesis of the split on pre-merge scope. Ed
+  sees this entry; his override outranks it.)
+- Applies to: impl/cooldown-gauntlet-c3 final commit, the C3 merge,
+  new row C3-RECOGNIZER-EXACT-01, D-104 cl.2 amendment
+
+**Disposition: LAND, via one final MICRO-COMMIT on the branch, then a
+narrow fresh audit of that micro-diff alone, then PR/merge.** The
+micro-commit contains ONLY (~40-60 lines + tests, recognizer
+classification logic UNTOUCHED): (1) preserve-then-truncate custody —
+append_log copies any to-be-truncated tail bytes to a quarantine
+sidecar and emits a warning BEFORE ftruncate (the refuter's central
+fix: classifier errors can no longer destroy evidence, making
+recognizer exactness irrelevant to custody); (2) writer-side key
+assertion at the append_log serialization point (every row key must be
+str and ASCII, raising otherwise) — closes the five unvalidated
+on-disk-JSON splice sites, the integer-key canonicality break, AND the
+F1 false-negative's entire reachability in ~2 lines; (3) F3 + the
+sys.exception() hygiene fix (explicit exception passing; release-path
+stat failures chain, never mask) — the refuter is right that this sits
+on the SF1 path D-104 already ruled jointly; (4) R7 extended to real
+writer rows from the actual corpora PLUS a non-BMP-key row (the
+ratified pin was implemented over a synthetic corpus and missed F1 by
+one character position — an as-ruled infidelity corrected before it
+guards anything). This synthesis adopts the refuter's pre-merge
+position over the cold instance's merge-head-exactly rule BECAUSE the
+audited-head discipline is preserved by auditing the new head: the
+micro-diff gets its own fresh narrow audit before PR. The cold
+instance's registration fences otherwise stand as amended below.
+
+**F1/F2 registration — a NEW ruling, not a D-088 application** (the
+refuter's B4 is accepted: QA-10A/B were pre-existing defects; these are
+branch-introduced; future sessions must not cite this as precedent for
+registering anything corpus-absent). Registered as non-downgradable
+blockers against D-104 cl.2 with closure ONLY through
+C3-RECOGNIZER-EXACT-01, whose acceptance criteria are the REFUTER'S
+amended set: (i) exact escape-ordering completion-feasibility (the
+cold instance's interval + surrogate-pair procedure — cheap and real,
+~40 lines); (ii) number grammar tightened to a DOCUMENTED DECIDABLE
+SUPERSET of json.dumps float spellings (fixed-notation window,
+coefficient rules, exponent padding), with **D-104 cl.2's ⊆ direction
+AMENDED** to the honest two-sided form "accepted ⊆ prefixes of the
+documented decidable superset grammar AND ⊇ every prefix of every
+dumps(dict, sort_keys=True) output" — three rounds failed on the
+literal ⊆ half because it demands deciding the image of CPython's
+shortest-repr algorithm; the exactness demand is STRUCK (the cold
+instance's own strongest-counterargument anticipated this); (iii)
+independent delta audit; both registered rows close together. While
+open: the accepted set may only shrink; the custody sidecar makes torn
+tail preservation AUTOMATIC (supersedes the manual operator fence);
+non-ASCII row keys are blocked MECHANICALLY by the assertion
+(supersedes the doctrine fence).
+
+**Evidence record:** three independent absence scans now on file with
+stated predicates (cold instance: recursive Python, 40 files/1747
+rows; refuter: own scanner, 40 files, plus canonicality and key-depth
+checks; third: shell-bytes-only via delegated scanner, 40 files, byte
+level) — all clean; the 33-count in the packet was a depth-1 glob and
+is corrected. The refuter's TYPE correction is adopted on the record:
+corpus scans corroborate but cannot bound a future-crash-artifact
+recognizer; the sound bound is the writer grammar plus the key
+assertion, which the micro-commit lands.
+
+**Process findings (bind future gates):** cost-of-delay/runway context
+MUST NOT appear in material a cold instance reads — it goes in a
+sealed annex Ed sees alongside the ruling (the refuter's S3; this
+packet violated it and the paired-refuter design absorbed the damage);
+packet options sections state facts and verified costs only, no
+adverbs of advocacy. Merge conditions: the lead-side suite + mapping
+pins already on record at 5a2868b are re-run at the micro-commit head
+(rule 1), CI green, D-072 gate.
+
+Revisit when: the micro-commit's narrow audit reports, or
+C3-RECOGNIZER-EXACT-01 closes.
