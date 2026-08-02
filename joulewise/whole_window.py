@@ -4,6 +4,10 @@ The verdict is a claim barrier, not an append-log preference.  A consumer must
 prove that one internally consistent row covers the exact evaluation basis it
 is about to use.  Different bases coexist in append-only history; file order
 never grants a later row authority to erase an earlier failure.
+
+Source manifests are pinned descriptors, so verdict verification uses the
+pointwise-dereference aggregation policy.  Catalog-enumerating consumers use
+the separate all-or-nothing policy from the same provenance module.
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import calibration_bracket_for_bundles
+# Pinned verdict descriptors are pointwise dereferences, not catalog discovery.
 from joulewise.campaign_provenance import load_authenticated_campaign_manifest
 from joulewise.reduce import (
     _rederive_summary_for_authenticated_fiducial_bound,

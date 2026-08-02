@@ -21,7 +21,10 @@ from joulewise.whole_window import (
     _validate_row,
     build_row_provenance,
 )
-from joulewise.campaign_provenance import campaign_provenance_attestation
+from joulewise.campaign_provenance import (
+    campaign_provenance_attestation,
+    load_authenticated_campaign_catalog,
+)
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
@@ -40,6 +43,7 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
         schema_version: str,
         attest: bool,
         relabel: bool = False,
+        poisoned_sibling: bool = False,
     ) -> dict:
         manifest_dir = root / "campaign_manifests"
         manifest_dir.mkdir(parents=True)
@@ -73,6 +77,22 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
             manifest["schema_version"] = schema_version
 
         raw = manifest_path.read_bytes()
+        if poisoned_sibling:
+            sibling = {
+                **manifest,
+                "session_id": "unattested-sibling-session",
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "run_id": "unattested-sibling",
+                        "bundle_ids": ["unattested-sibling"],
+                    }
+                ],
+            }
+            (manifest_dir / "unattested-sibling.json").write_text(
+                json.dumps(sibling, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
         if attest:
             attestation = campaign_provenance_attestation(
                 manifest_path=manifest_path,
@@ -138,18 +158,21 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
         ):
             return _validate_row(row, root, {"member"})
 
-    def test_attested_v2_source_passes_verdict_provenance(self) -> None:
+    def test_attested_v2_source_passes_beside_poisoned_sibling(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             row = self._verdict_fixture(
                 root,
                 schema_version="joulewise.campaign_provenance.v2",
                 attest=True,
+                poisoned_sibling=True,
             )
             ok, reasons = self._validate(row, root)
+            catalog = load_authenticated_campaign_catalog(root)
 
         self.assertTrue(ok, reasons)
         self.assertEqual(reasons, ())
+        self.assertIsNone(catalog)
 
     def test_unattested_and_relabelled_v2_sources_refuse_verdict(self) -> None:
         for relabel in (False, True):

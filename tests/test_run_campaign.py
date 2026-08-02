@@ -13,7 +13,8 @@ import tempfile
 import textwrap
 import time
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -45,6 +46,15 @@ run_campaign_module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 sys.modules["run_campaign_module"] = run_campaign_module
 spec.loader.exec_module(run_campaign_module)
+
+
+@contextmanager
+def held_campaign_lock(runs_dir: Path):
+    lock_path = run_campaign_module.acquire_campaign_lock(runs_dir)
+    try:
+        yield lock_path
+    finally:
+        lock_path.unlink(missing_ok=True)
 
 
 def run_campaign(
@@ -1259,9 +1269,12 @@ class RunCampaignTests(unittest.TestCase):
             binding = run_campaign_module.load_campaign_policy(
                 str(TEST_CAMPAIGN_POLICY)
             )
-            provenance_path, _provenance = run_campaign_module.new_campaign_provenance(
-                config_dir, runs_dir, None, binding
-            )
+            with held_campaign_lock(runs_dir):
+                provenance_path, _provenance = (
+                    run_campaign_module.new_campaign_provenance(
+                        config_dir, runs_dir, None, binding
+                    )
+                )
             first = {
                 **run_campaign_module._cooldown_policy_decision_surface(
                     binding.policy.cooldown
@@ -3181,6 +3194,9 @@ class RunCampaignTests(unittest.TestCase):
                 raw_run_id="source",
                 repetitions=2,
             )
+            lock_context = held_campaign_lock(runs_dir)
+            lock_context.__enter__()
+            self.addCleanup(lock_context.__exit__, None, None, None)
             path, manifest = run_campaign_module.new_campaign_provenance(
                 root, runs_dir, None, log_path=custom_log
             )
@@ -3289,7 +3305,7 @@ class RunCampaignTests(unittest.TestCase):
                 load_authenticated_campaign_catalog(runs_dir, custom_log)
             )
 
-    def test_v2_writer_repairs_crash_stranded_current_snapshot_once(self) -> None:
+    def test_v2_writer_equality_branch_is_concurrently_idempotent(self) -> None:
         from joulewise.campaign_provenance import (
             load_authenticated_campaign_catalog,
         )
@@ -3297,39 +3313,390 @@ class RunCampaignTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runs_dir = root / "runs"
-            custom_log = root / "external" / "campaign.jsonl"
-            path, manifest = run_campaign_module.new_campaign_provenance(
-                root,
-                runs_dir,
-                None,
-                log_path=custom_log,
-            )
-            stranded_bytes = path.read_bytes()
-            custom_log.unlink()
+            path = runs_dir / "campaign_manifests" / "equality.json"
+            path.parent.mkdir(parents=True)
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "equality-session",
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "run_id": "member",
+                        "bundle_ids": ["member"],
+                    }
+                ],
+            }
+            payload = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            path.write_bytes(payload)
+            log_path = runs_dir / "campaign_log.jsonl"
 
-            # Simulate a crash after os.replace but before append_log: the
-            # desired bytes are current, but their external attestation is gone.
-            run_campaign_module.write_campaign_provenance(
-                path,
-                manifest,
-                custom_log,
-            )
-            first_rows = read_wire_jsonl(custom_log)
-            self.assertEqual(len(first_rows), 1)
+            with held_campaign_lock(runs_dir), ThreadPoolExecutor(
+                max_workers=2
+            ) as executor:
+                futures = [
+                    executor.submit(
+                        run_campaign_module.write_campaign_provenance,
+                        path,
+                        manifest,
+                        log_path,
+                    )
+                    for _ in range(2)
+                ]
+                for future in futures:
+                    future.result()
+
+            rows = read_wire_jsonl(log_path)
+            self.assertEqual(len(rows), 1)
             self.assertEqual(
-                first_rows[0]["campaign_provenance_manifest_sha256"],
-                hashlib.sha256(stranded_bytes).hexdigest(),
+                rows[0]["campaign_provenance_manifest_sha256"],
+                hashlib.sha256(payload).hexdigest(),
             )
-            self.assertIsNotNone(
-                load_authenticated_campaign_catalog(runs_dir, custom_log)
+            self.assertIsNotNone(load_authenticated_campaign_catalog(runs_dir))
+
+    def test_v2_wal_faults_never_publish_an_unattested_snapshot(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+        )
+
+        for stage in ("tmp_write", "tmp_fsync", "attest", "replace"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as tmp:
+                runs_dir = Path(tmp) / "runs"
+                path = runs_dir / "campaign_manifests" / "faulted.json"
+                manifest = {
+                    "schema_version": "joulewise.campaign_provenance.v2",
+                    "session_id": "faulted-session",
+                    "members": [
+                        {
+                            "execution": "invoked",
+                            "run_id": "faulted",
+                            "bundle_ids": ["faulted"],
+                        }
+                    ],
+                }
+                owner, attribute = {
+                    "tmp_write": (
+                        run_campaign_module,
+                        "_write_campaign_provenance_tmp",
+                    ),
+                    "tmp_fsync": (run_campaign_module.os, "fsync"),
+                    "attest": (
+                        run_campaign_module,
+                        "_append_campaign_provenance_attestation_if_missing",
+                    ),
+                    "replace": (run_campaign_module.os, "replace"),
+                }[stage]
+                with held_campaign_lock(runs_dir), patch.object(
+                    owner, attribute, side_effect=OSError(f"injected {stage}")
+                ):
+                    with self.assertRaisesRegex(OSError, f"injected {stage}"):
+                        run_campaign_module.write_campaign_provenance(
+                            path, manifest
+                        )
+
+                self.assertFalse(path.exists())
+                fresh_path = (
+                    runs_dir / "campaign_manifests" / f"fresh-{stage}.json"
+                )
+                fresh = {
+                    **manifest,
+                    "session_id": f"fresh-{stage}",
+                    "members": [
+                        {
+                            "execution": "invoked",
+                            "run_id": f"fresh-{stage}",
+                            "bundle_ids": [f"fresh-{stage}"],
+                        }
+                    ],
+                }
+                with held_campaign_lock(runs_dir):
+                    run_campaign_module.write_campaign_provenance(
+                        fresh_path, fresh
+                    )
+                catalog = load_authenticated_campaign_catalog(runs_dir)
+                self.assertIsNotNone(catalog)
+                assert catalog is not None
+                self.assertEqual([row.path for row in catalog], [fresh_path])
+
+    def test_v2_a_b_a_content_revisit_reuses_existing_attestation(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            path = runs_dir / "campaign_manifests" / "revisit.json"
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "revisit-session",
+                "members": [],
+            }
+            payloads = []
+            with held_campaign_lock(runs_dir):
+                for run_id in ("a", "b", "a"):
+                    manifest["members"] = [
+                        {
+                            "execution": "invoked",
+                            "run_id": run_id,
+                            "bundle_ids": [run_id],
+                        }
+                    ]
+                    payloads.append(
+                        (
+                            json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+                        ).encode("utf-8")
+                    )
+                    run_campaign_module.write_campaign_provenance(path, manifest)
+
+            rows = read_wire_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                [
+                    row["campaign_provenance_manifest_sha256"]
+                    for row in rows
+                ],
+                [
+                    hashlib.sha256(payloads[0]).hexdigest(),
+                    hashlib.sha256(payloads[1]).hexdigest(),
+                ],
+            )
+            self.assertIsNotNone(load_authenticated_campaign_catalog(runs_dir))
+
+    def test_operator_repair_heals_only_lineage_proven_legacy_strand(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            path = runs_dir / "campaign_manifests" / "legacy-strand.json"
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "legacy-session",
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "run_id": "a",
+                        "bundle_ids": ["a"],
+                    }
+                ],
+            }
+            with held_campaign_lock(runs_dir):
+                run_campaign_module.write_campaign_provenance(path, manifest)
+            manifest["members"][0]["run_id"] = "b"
+            manifest["members"][0]["bundle_ids"] = ["b"]
+            stranded = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            path.write_bytes(stranded)
+            log_path = runs_dir / "campaign_log.jsonl"
+            before_reader = log_path.read_bytes()
+
+            self.assertIsNone(load_authenticated_campaign_catalog(runs_dir))
+            self.assertEqual(log_path.read_bytes(), before_reader)
+
+            fresh_path = runs_dir / "campaign_manifests" / "new-session.json"
+            fresh = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "new-session",
+                "members": [
+                    {
+                        "execution": "invoked",
+                        "run_id": "fresh",
+                        "bundle_ids": ["fresh"],
+                    }
+                ],
+            }
+            with held_campaign_lock(runs_dir):
+                run_campaign_module.write_campaign_provenance(fresh_path, fresh)
+            self.assertIsNone(load_authenticated_campaign_catalog(runs_dir))
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = run_campaign_module.main(
+                    [
+                        "repair-campaign-provenance",
+                        "--runs-dir",
+                        str(runs_dir),
+                    ]
+                )
+            self.assertEqual(code, 0, output.getvalue())
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["status"], "repaired")
+            self.assertEqual(report["repaired"], [str(path)])
+            self.assertIsNotNone(load_authenticated_campaign_catalog(runs_dir))
+            current_sha = hashlib.sha256(stranded).hexdigest()
+            self.assertEqual(
+                sum(
+                    row.get("campaign_provenance_manifest_sha256") == current_sha
+                    for row in read_wire_jsonl(log_path)
+                ),
+                1,
             )
 
-            run_campaign_module.write_campaign_provenance(
-                path,
-                manifest,
-                custom_log,
+    def test_operator_repair_refuses_lineage_less_relabel_probe(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            path = runs_dir / "campaign_manifests" / "relabelled.json"
+            path.parent.mkdir(parents=True)
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "relabelled-session",
+                "members": [
+                    {
+                        "execution": "existing",
+                        "outcome": "usable",
+                        "config": "member.json",
+                        "run_id": "member",
+                        "bundle_ids": ["member"],
+                    }
+                ],
+            }
+            path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = run_campaign_module.main(
+                    [
+                        "repair-campaign-provenance",
+                        "--runs-dir",
+                        str(runs_dir),
+                    ]
+                )
+            self.assertEqual(code, 1)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["status"], "refused")
+            self.assertEqual(
+                report["refused"],
+                [{"path": str(path), "reason": "lineage_unproven"}],
             )
-            self.assertEqual(read_wire_jsonl(custom_log), first_rows)
+            self.assertFalse((runs_dir / "campaign_log.jsonl").exists())
+            self.assertIsNone(load_authenticated_campaign_catalog(runs_dir))
+
+    def test_writer_requires_lock_and_strict_mint_path_grammar(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "grammar-session",
+                "members": [],
+            }
+            valid = runs_dir / "campaign_manifests" / "A-valid_1.thing.json"
+            with self.assertRaisesRegex(RuntimeError, "requires held lock"):
+                run_campaign_module.write_campaign_provenance(valid, manifest)
+            with held_campaign_lock(runs_dir):
+                run_campaign_module.write_campaign_provenance(valid, manifest)
+            self.assertTrue(valid.is_file())
+
+            invalid_names = (
+                ".leading.json",
+                "unicodé.json",
+                "back\\slash.json",
+                "line\nbreak.json",
+                ("a" * 252) + ".json",
+            )
+            with held_campaign_lock(runs_dir):
+                for name in invalid_names:
+                    with self.subTest(name=name), self.assertRaisesRegex(
+                        ValueError, "strict grammar"
+                    ):
+                        run_campaign_module.write_campaign_provenance(
+                            runs_dir / "campaign_manifests" / name,
+                            {**manifest, "session_id": f"invalid-{len(name)}"},
+                        )
+
+    def test_equality_branch_propagates_non_missing_os_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            path = runs_dir / "campaign_manifests" / "permission.json"
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v2",
+                "session_id": "permission-session",
+                "members": [],
+            }
+            with held_campaign_lock(runs_dir), patch.object(
+                Path, "read_bytes", side_effect=PermissionError("denied")
+            ):
+                with self.assertRaisesRegex(PermissionError, "denied"):
+                    run_campaign_module.write_campaign_provenance(path, manifest)
+
+    def test_campaign_log_torn_final_line_only_is_tolerated(self) -> None:
+        from joulewise.campaign_provenance import (
+            load_authenticated_campaign_catalog,
+            load_campaign_log_rows,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            first = {"status": "ok", "run_id": "first"}
+            second = {"status": "ok", "run_id": "second"}
+            log_path.write_bytes(
+                (json.dumps(first) + "\n").encode("utf-8") + b'{"status":'
+            )
+            self.assertEqual(load_campaign_log_rows(log_path), [first])
+
+            log_path.write_bytes(
+                (json.dumps(first) + "\n").encode("utf-8")
+                + b'{"status":\n'
+                + (json.dumps(second) + "\n").encode("utf-8")
+            )
+            self.assertIsNone(load_campaign_log_rows(log_path))
+
+            manifest_dir = root / "campaign_manifests"
+            manifest_dir.mkdir()
+            (manifest_dir / "legacy.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.campaign_provenance.v1",
+                        "session_id": "legacy",
+                        "members": [
+                            {
+                                "execution": "invoked",
+                                "run_id": "legacy",
+                                "bundle_ids": ["legacy"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            log_path.write_bytes(
+                (json.dumps(first) + "\n").encode("utf-8") + b'{"torn"'
+            )
+            self.assertEqual(load_campaign_log_rows(log_path), [first])
+            self.assertIsNotNone(load_authenticated_campaign_catalog(root))
+
+    def test_append_log_uses_one_o_append_write_and_recovers_torn_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "campaign_log.jsonl"
+            with (
+                patch.object(
+                    run_campaign_module.os,
+                    "open",
+                    wraps=run_campaign_module.os.open,
+                ) as open_mock,
+                patch.object(
+                    run_campaign_module.os,
+                    "write",
+                    wraps=run_campaign_module.os.write,
+                ) as write_mock,
+            ):
+                run_campaign_module.append_log(log_path, {"row": 1})
+            self.assertEqual(write_mock.call_count, 1)
+            flags = open_mock.call_args.args[1]
+            self.assertTrue(flags & os.O_APPEND)
+
+            log_path.write_bytes(log_path.read_bytes() + b'{"torn"')
+            run_campaign_module.append_log(log_path, {"row": 2})
+            self.assertEqual(
+                read_wire_jsonl(log_path),
+                [{"row": 1}, {"row": 2}],
+            )
 
     def test_v2_attestation_hashes_exact_noncanonical_manifest_bytes(self) -> None:
         from joulewise.campaign_provenance import (
@@ -4777,7 +5144,7 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
 
-    def test_torn_log_gets_newline_before_new_json_rows(self) -> None:
+    def test_torn_final_log_row_is_removed_before_new_json_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -4797,10 +5164,10 @@ class RunCampaignTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = log_path.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(lines[0], "dead partial")
+            self.assertNotIn("dead partial", lines)
             parsed = [
                 json.loads(line)
-                for line in lines[1:]
+                for line in lines
                 if json.loads(line).get("record_type")
                 not in {"campaign_verdict", "campaign_provenance_attestation"}
             ]
@@ -6932,27 +7299,32 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
     ) -> Path:
         manifest_dir = self.root / "campaign_manifests"
         log_path = self.root / "campaign_log.jsonl"
-        for index, execution in enumerate(sequence):
-            manifest = {
-                "schema_version": "joulewise.campaign_provenance.v2",
-                "session_id": f"projection-{index}",
-                "analysis_manifest_id": "window-a",
-                "campaign_policy": {"sha256": binding.sha256},
-                "members": [
-                    {
-                        "config": f"{bundle_id}.json",
-                        "run_id": bundle_id,
-                        "execution": execution,
-                        "bundle_ids": [bundle_id],
-                        **({"outcome": "failed"} if execution == "existing" else {}),
-                    }
-                ],
-            }
-            run_campaign_module.write_campaign_provenance(
-                manifest_dir / f"{index:02d}-{execution}.json",
-                manifest,
-                log_path,
-            )
+        with held_campaign_lock(self.root):
+            for index, execution in enumerate(sequence):
+                manifest = {
+                    "schema_version": "joulewise.campaign_provenance.v2",
+                    "session_id": f"projection-{index}",
+                    "analysis_manifest_id": "window-a",
+                    "campaign_policy": {"sha256": binding.sha256},
+                    "members": [
+                        {
+                            "config": f"{bundle_id}.json",
+                            "run_id": bundle_id,
+                            "execution": execution,
+                            "bundle_ids": [bundle_id],
+                            **(
+                                {"outcome": "failed"}
+                                if execution == "existing"
+                                else {}
+                            ),
+                        }
+                    ],
+                }
+                run_campaign_module.write_campaign_provenance(
+                    manifest_dir / f"{index:02d}-{execution}.json",
+                    manifest,
+                    log_path,
+                )
         canonical = self.root / bundle_id
         canonical.mkdir()
         quarantine = Path(tempfile.mkdtemp(prefix="jw-projection-quarantine-"))

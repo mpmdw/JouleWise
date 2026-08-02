@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import hashlib
 import json
@@ -3830,38 +3831,75 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
                 else:
                     self.assertEqual(joined, {})
 
-    def test_noncanonical_attestation_paths_refuse_catalog_globally(self):
+    def test_attestation_reader_path_classification_table(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
 
-        variants = (
+        malformed = (
+            "current.json",
             "./campaign_manifests/current.json",
             "campaign_manifests//current.json",
             "/campaign_manifests/current.json",
             "campaign_manifests\\current.json",
             "campaign_manifests/./current.json",
+            "campaign_manifests/nested/current.json",
+            "campaign_manifests/",
+            "campaign_manifests/.json",
+            "campaign_manifests/current.JSON",
         )
-        for variant in variants:
-            with self.subTest(variant=variant):
-                root = Path(tempfile.mkdtemp(prefix="gauntlet-attest-path-"))
-                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-                manifest = self._manifest(
-                    root,
-                    "current.json",
-                    "current-session",
-                    "bundle",
-                    schema_version="joulewise.campaign_provenance.v2",
-                )
-                self._attest(root, manifest)
-                self.assertTrue(
-                    _campaign_cooldown_evidence(root, None)["bundle"]["verified"]
-                )
-                self._attest(
-                    root,
-                    manifest,
-                    campaign_provenance_manifest=variant,
-                )
+        stale = (
+            "campaign_manifests/nul\x00name.json",
+            "campaign_manifests/line\nbreak.json",
+            "campaign_manifests/unicodé.json",
+            "campaign_manifests/.leading-dot.json",
+            "campaign_manifests/back\\slash.json",
+            "campaign_manifests/ordinary-missing.json",
+        )
+        for classification, variants in (("malformed", malformed), ("stale", stale)):
+            for variant in variants:
+                with self.subTest(classification=classification, variant=variant):
+                    root = Path(
+                        tempfile.mkdtemp(prefix="gauntlet-attest-path-")
+                    )
+                    self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                    manifest = self._manifest(
+                        root,
+                        "current.json",
+                        "current-session",
+                        "bundle",
+                        schema_version="joulewise.campaign_provenance.v2",
+                    )
+                    self._attest(root, manifest)
+                    self.assertTrue(
+                        _campaign_cooldown_evidence(root, None)["bundle"][
+                            "verified"
+                        ]
+                    )
+                    self._attest(
+                        root,
+                        manifest,
+                        campaign_provenance_manifest=variant,
+                    )
 
-                self.assertEqual(_campaign_cooldown_evidence(root, None), {})
+                    joined = _campaign_cooldown_evidence(root, None)
+                    if classification == "malformed":
+                        self.assertEqual(joined, {})
+                    else:
+                        self.assertTrue(joined["bundle"]["verified"])
+
+        with self.subTest(classification="positive-control"):
+            root = Path(tempfile.mkdtemp(prefix="gauntlet-attest-path-"))
+            self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+            manifest = self._manifest(
+                root,
+                "current.json",
+                "current-session",
+                "bundle",
+                schema_version="joulewise.campaign_provenance.v2",
+            )
+            self._attest(root, manifest)
+            self.assertTrue(
+                _campaign_cooldown_evidence(root, None)["bundle"]["verified"]
+            )
 
     def test_v2_outcome_presence_and_closed_enum_are_global_catalog_gates(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
@@ -4233,6 +4271,52 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(row["result"], "first_run_exempt")
         self.assertTrue(row["verified"])
         self.assertEqual(row["manifest"], "campaign_manifests/selected.json")
+
+    def test_campaign_provenance_aggregation_call_site_fence(self):
+        production_paths = list((ROOT / "joulewise").rglob("*.py")) + list(
+            (ROOT / "scripts").glob("*.py")
+        )
+        catalog_calls: dict[str, int] = {}
+        dereference_calls: dict[str, int] = {}
+        catalog_importers: set[str] = set()
+        dereference_importers: set[str] = set()
+        for path in production_paths:
+            relative = path.relative_to(ROOT).as_posix()
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id == "load_authenticated_campaign_catalog":
+                        catalog_calls[relative] = catalog_calls.get(relative, 0) + 1
+                    if node.func.id == "load_authenticated_campaign_manifest":
+                        dereference_calls[relative] = (
+                            dereference_calls.get(relative, 0) + 1
+                        )
+                if isinstance(node, ast.ImportFrom) and node.module == (
+                    "joulewise.campaign_provenance"
+                ):
+                    imported = {alias.name for alias in node.names}
+                    if "load_authenticated_campaign_catalog" in imported:
+                        catalog_importers.add(relative)
+                    if "load_authenticated_campaign_manifest" in imported:
+                        dereference_importers.add(relative)
+
+        self.assertEqual(
+            catalog_calls,
+            {
+                "joulewise/analysis_engine/inputs.py": 2,
+                "scripts/run_campaign.py": 4,
+            },
+        )
+        self.assertEqual(sum(catalog_calls.values()), 6)
+        self.assertEqual(catalog_importers, set(catalog_calls))
+        self.assertEqual(
+            dereference_calls,
+            {"joulewise/whole_window.py": 1},
+        )
+        self.assertEqual(
+            dereference_importers,
+            {"joulewise/whole_window.py"},
+        )
 
     def test_b2_wrong_schema_duplicate_or_unreadable_catalog_refuses_join(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence

@@ -30,6 +30,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -91,11 +92,15 @@ from joulewise.analysis_engine.inputs import (  # noqa: E402
 from joulewise.campaign_provenance import (  # noqa: E402
     CAMPAIGN_PROVENANCE_SCHEMA_V1,
     CAMPAIGN_PROVENANCE_SCHEMA_V2,
+    campaign_provenance_manifest_wire_path,
     campaign_provenance_attestation,
     legacy_existing_outcome,
     load_authenticated_campaign_catalog,
     load_campaign_log_rows,
+    load_campaign_provenance_manifest,
     matching_campaign_provenance_attestations,
+    matching_campaign_provenance_lineage_attestations,
+    shape_valid_campaign_provenance_attestations,
 )
 from joulewise.analysis_engine.ratio import (  # noqa: E402
     estimation_metric,
@@ -161,6 +166,7 @@ ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
 CAMPAIGN_PROVENANCE_SCHEMA = CAMPAIGN_PROVENANCE_SCHEMA_V2
+_CAMPAIGN_ATTESTATION_APPEND_LOCK = threading.Lock()
 IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA = (
     "joulewise.idle_admission_whole_window_verdict.v1"
 )
@@ -505,6 +511,23 @@ VALID_WAIVER_SCOPES = {
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["repair-campaign-provenance"]:
+        repair_parser = argparse.ArgumentParser(
+            prog="run_campaign.py repair-campaign-provenance",
+            description=(
+                "Repair lineage-proven v2 provenance strands under "
+                "campaign.lock."
+            ),
+        )
+        repair_parser.add_argument(
+            "--runs-dir", default="runs", help="Bundle output directory"
+        )
+        repair_parser.add_argument("--log", help="JSONL campaign log path")
+        repair_args = repair_parser.parse_args(arguments[1:])
+        repair_args.repair_campaign_provenance = True
+        return repair_args
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
@@ -619,7 +642,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--reason",
         help="Operator reason required by --record-supersession",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
+    args.repair_campaign_provenance = False
     if (args.instrument_calibration_dir is None) != (
         args.instrument_power_policy is None
     ):
@@ -1166,15 +1190,51 @@ def _require_external_campaign_log(log_path: Path) -> None:
 
 
 def append_log(log_path: Path, row: dict[str, Any]) -> None:
+    """Durably append one JSONL row with one ``O_APPEND`` write.
+
+    A prior valid but unterminated row receives its separator in the same
+    write.  A malformed unterminated tail is the one tolerated torn-tail
+    artifact and is truncated before appending; earlier corruption refuses.
+    """
+
     _require_external_campaign_log(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    if log_path.exists() and log_path.stat().st_size > 0:
-        with log_path.open("rb+") as handle:
-            handle.seek(-1, os.SEEK_END)
-            if handle.read(1) != b"\n":
-                handle.write(b"\n")
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    prefix = b""
+    try:
+        existing = log_path.read_bytes()
+    except FileNotFoundError:
+        existing = b""
+    if existing:
+        parsed = load_campaign_log_rows(log_path)
+        if parsed is None:
+            raise ValueError("campaign log contains non-final corruption")
+        if not existing.endswith(b"\n"):
+            tail_start = existing.rfind(b"\n") + 1
+            tail = existing[tail_start:]
+            try:
+                tail_value = json.loads(tail.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                tail_value = None
+            if isinstance(tail_value, Mapping):
+                prefix = b"\n"
+            else:
+                truncate_fd = os.open(log_path, os.O_WRONLY)
+                try:
+                    os.ftruncate(truncate_fd, tail_start)
+                    os.fsync(truncate_fd)
+                finally:
+                    os.close(truncate_fd)
+    payload = prefix + (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        written = os.write(fd, payload)
+        if written != len(payload):
+            raise OSError(
+                f"short campaign-log append: wrote {written} of {len(payload)} bytes"
+            )
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def log_row(
@@ -2400,6 +2460,84 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
     return lock_path
 
 
+def _assert_campaign_lock_held(runs_dir: Path) -> Path:
+    """Mechanically prove this process owns the runs-root campaign lock."""
+
+    lock_path = Path(runs_dir) / "campaign.lock"
+    try:
+        content = lock_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(
+            f"campaign provenance log write requires held lock {lock_path}"
+        ) from exc
+    if not content.startswith(f"pid={os.getpid()} "):
+        raise RuntimeError(
+            f"campaign provenance log write requires this process to own {lock_path}"
+        )
+    return lock_path
+
+
+def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
+    """Write and fsync one unique temporary manifest snapshot."""
+
+    tmp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.tmp-",
+            delete=False,
+        ) as handle:
+            tmp = Path(handle.name)
+            os.fchmod(handle.fileno(), 0o644)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+    assert tmp is not None
+    return tmp
+
+
+def _append_campaign_provenance_attestation_if_missing(
+    *,
+    manifest_path: Path,
+    raw_manifest_bytes: bytes,
+    manifest: Mapping[str, Any],
+    log_path: Path,
+) -> bool:
+    """Append one current-byte attestation, idempotently under the lock."""
+
+    _assert_campaign_lock_held(manifest_path.parent.parent)
+    with _CAMPAIGN_ATTESTATION_APPEND_LOCK:
+        rows = load_campaign_log_rows(log_path)
+        if rows is None:
+            raise ValueError("campaign log is not object-only JSONL")
+        matches = matching_campaign_provenance_attestations(
+            rows,
+            manifest_path=manifest_path,
+            raw_manifest_bytes=raw_manifest_bytes,
+            manifest=manifest,
+        )
+        if matches:
+            return False
+        append_log(
+            log_path,
+            campaign_provenance_attestation(
+                manifest_path=manifest_path,
+                raw_manifest_bytes=raw_manifest_bytes,
+                manifest=manifest,
+                timestamp=utc_timestamp(),
+            ),
+        )
+        return True
+
+
 def new_campaign_provenance(
     config_dir: Path,
     runs_dir: Path,
@@ -2443,6 +2581,11 @@ def write_campaign_provenance(
     not a secret-key signature or a substitute for claim-path source hashes.
     """
 
+    campaign_provenance_manifest_wire_path(path)
+    if path.parent.name != "campaign_manifests":
+        raise ValueError(
+            "campaign provenance writer path must be inside campaign_manifests/"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(
         "utf-8"
@@ -2451,44 +2594,130 @@ def write_campaign_provenance(
         if path.read_bytes() == payload:
             if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
                 selected_log = log_path or path.parent.parent / "campaign_log.jsonl"
-                rows = load_campaign_log_rows(selected_log)
-                matches = (
-                    matching_campaign_provenance_attestations(
-                        rows,
-                        manifest_path=path,
-                        raw_manifest_bytes=payload,
-                        manifest=manifest,
-                    )
-                    if rows is not None
-                    else ()
+                _append_campaign_provenance_attestation_if_missing(
+                    manifest_path=path,
+                    raw_manifest_bytes=payload,
+                    manifest=manifest,
+                    log_path=selected_log,
                 )
-                if rows is not None and len(matches) == 0:
-                    append_log(
-                        selected_log,
-                        campaign_provenance_attestation(
-                            manifest_path=path,
-                            raw_manifest_bytes=payload,
-                            manifest=manifest,
-                            timestamp=utc_timestamp(),
-                        ),
-                    )
             return
     except FileNotFoundError:
         pass
-    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-    tmp.write_bytes(payload)
-    os.replace(tmp, path)
-    if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
-        raw_after_replace = path.read_bytes()
-        append_log(
-            log_path or path.parent.parent / "campaign_log.jsonl",
-            campaign_provenance_attestation(
+    tmp = _write_campaign_provenance_tmp(path, payload)
+    try:
+        if manifest.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2:
+            _append_campaign_provenance_attestation_if_missing(
                 manifest_path=path,
-                raw_manifest_bytes=raw_after_replace,
+                raw_manifest_bytes=payload,
                 manifest=manifest,
-                timestamp=utc_timestamp(),
-            ),
-        )
+                log_path=(
+                    log_path or path.parent.parent / "campaign_log.jsonl"
+                ),
+            )
+        os.replace(tmp, path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
+    """Explicitly repair lineage-proven v2 strands under campaign.lock."""
+
+    runs_dir = Path(args.runs_dir)
+    if not runs_dir.is_dir():
+        raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    _require_external_campaign_log(log_path)
+    lock_path: Path | None = None
+    report: dict[str, Any] = {
+        "operation": "repair-campaign-provenance",
+        "repaired": [],
+        "already_authenticated": [],
+        "refused": [],
+    }
+    try:
+        lock_path = acquire_campaign_lock(runs_dir)
+        rows = load_campaign_log_rows(log_path)
+        if rows is None:
+            report["refused"].append(
+                {"path": str(log_path), "reason": "campaign_log_malformed"}
+            )
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+        attestations = shape_valid_campaign_provenance_attestations(rows)
+        if attestations is None:
+            report["refused"].append(
+                {
+                    "path": str(log_path),
+                    "reason": "campaign_attestation_malformed",
+                }
+            )
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+
+        repairable: list[tuple[Path, bytes, Mapping[str, Any]]] = []
+        manifest_dir = runs_dir / "campaign_manifests"
+        for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
+            record = load_campaign_provenance_manifest(path)
+            if record is None:
+                report["refused"].append(
+                    {
+                        "path": str(path),
+                        "reason": "campaign_manifest_malformed",
+                    }
+                )
+                continue
+            manifest = record.value
+            if manifest.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA_V2:
+                continue
+            current = matching_campaign_provenance_attestations(
+                attestations,
+                manifest_path=path,
+                raw_manifest_bytes=record.raw_bytes,
+                manifest=manifest,
+            )
+            if len(current) == 1:
+                report["already_authenticated"].append(str(path))
+                continue
+            if len(current) > 1:
+                report["refused"].append(
+                    {"path": str(path), "reason": "duplicate_current_attestation"}
+                )
+                continue
+            lineage = matching_campaign_provenance_lineage_attestations(
+                attestations,
+                manifest_path=path,
+                manifest=manifest,
+            )
+            if not lineage:
+                report["refused"].append(
+                    {"path": str(path), "reason": "lineage_unproven"}
+                )
+                continue
+            repairable.append((path, record.raw_bytes, manifest))
+
+        if report["refused"]:
+            report["status"] = "refused"
+            print(json.dumps(report, sort_keys=True))
+            return 1
+        for path, raw_bytes, manifest in repairable:
+            if _append_campaign_provenance_attestation_if_missing(
+                manifest_path=path,
+                raw_manifest_bytes=raw_bytes,
+                manifest=manifest,
+                log_path=log_path,
+            ):
+                report["repaired"].append(str(path))
+        report["status"] = "repaired" if report["repaired"] else "no_change"
+        print(json.dumps(report, sort_keys=True))
+        return 0
+    finally:
+        if lock_path is not None:
+            lock_path.unlink(missing_ok=True)
 
 
 def verify_cooldown_raw_provenance(
@@ -6760,6 +6989,8 @@ def run_prompt_hash_check(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.repair_campaign_provenance:
+            return run_repair_campaign_provenance(args)
         if args.check_prompt_hashes is not None:
             return run_prompt_hash_check(args)
         if args.record_supersession is not None:

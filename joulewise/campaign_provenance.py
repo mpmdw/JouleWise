@@ -5,6 +5,11 @@ campaign writer emitted a particular raw manifest snapshot.  It is not an
 anti-tamper signature; a coordinated rewrite of both the manifest and its
 external log can recreate the evidence.  Claim-path tamper resistance remains
 the separately rechecked source-manifest hashes carried by verdict provenance.
+
+The shared authentication predicate has two named aggregation policies.
+``load_authenticated_campaign_manifest`` performs pointwise dereference for a
+pinned-descriptor verifier.  ``load_authenticated_campaign_catalog`` performs
+all-or-nothing enumeration for consumers whose inputs are the complete catalog.
 """
 
 from __future__ import annotations
@@ -30,6 +35,9 @@ CAMPAIGN_PROVENANCE_ATTESTATION_SCHEMA = (
 )
 CAMPAIGN_PROVENANCE_ATTESTATION_RECORD_TYPE = (
     "campaign_provenance_attestation"
+)
+CAMPAIGN_PROVENANCE_WRITER_PATH_PATTERN = (
+    r"campaign_manifests/[A-Za-z0-9][A-Za-z0-9._-]{0,250}\.json"
 )
 
 
@@ -75,26 +83,51 @@ def campaign_manifest_member_shape_valid(
 
 
 def load_campaign_log_rows(log_path: Path) -> list[Mapping[str, Any]] | None:
-    """Read an object-only JSONL campaign log; corruption fails closed."""
+    """Read object-only JSONL, ignoring at most one torn final line.
+
+    A final unterminated malformed row is the recognizable artifact of a
+    short append.  Any malformed terminated row, or any malformed row before
+    the final unterminated row, still refuses the complete log.
+    """
 
     try:
-        lines = Path(log_path).read_text(encoding="utf-8").splitlines()
+        raw = Path(log_path).read_bytes()
     except FileNotFoundError:
         return []
-    except (OSError, UnicodeDecodeError):
+    except OSError:
         return None
+    terminated = raw.endswith(b"\n")
+    lines = raw.split(b"\n")
+    if terminated:
+        lines = lines[:-1]
     rows: list[Mapping[str, Any]] = []
-    for line in lines:
+    for index, line in enumerate(lines):
         if not line.strip():
             continue
         try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
+            value = json.loads(line.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            if not terminated and index == len(lines) - 1:
+                continue
             return None
         if not isinstance(value, Mapping):
+            if not terminated and index == len(lines) - 1:
+                continue
             return None
         rows.append(value)
     return rows
+
+
+def campaign_provenance_manifest_wire_path(manifest_path: Path) -> str:
+    """Return the writer-minted wire path, enforcing the strict grammar."""
+
+    path = f"campaign_manifests/{Path(manifest_path).name}"
+    if re.fullmatch(CAMPAIGN_PROVENANCE_WRITER_PATH_PATTERN, path) is None:
+        raise ValueError(
+            "campaign provenance writer path violates the strict grammar: "
+            f"{path!r}"
+        )
+    return path
 
 
 def campaign_provenance_attestation(
@@ -117,8 +150,8 @@ def campaign_provenance_attestation(
         "schema_version": CAMPAIGN_PROVENANCE_ATTESTATION_SCHEMA,
         "record_type": CAMPAIGN_PROVENANCE_ATTESTATION_RECORD_TYPE,
         "timestamp": timestamp,
-        "campaign_provenance_manifest": (
-            f"campaign_manifests/{manifest_path.name}"
+        "campaign_provenance_manifest": campaign_provenance_manifest_wire_path(
+            manifest_path
         ),
         "campaign_provenance_manifest_sha256": hashlib.sha256(
             raw_manifest_bytes
@@ -137,11 +170,19 @@ def _recognizable_attestation(row: Mapping[str, Any]) -> bool:
 
 def _attestation_shape_valid(row: Mapping[str, Any]) -> bool:
     path_text = row.get("campaign_provenance_manifest")
-    path_name = PurePosixPath(path_text).name if isinstance(path_text, str) else ""
-    canonical_path = (
-        f"campaign_manifests/{path_name}"
-        if path_name and path_name != ".json" and "\\" not in path_name
-        else None
+    prefix = "campaign_manifests/"
+    path_name = (
+        path_text[len(prefix) :]
+        if isinstance(path_text, str) and path_text.startswith(prefix)
+        else ""
+    )
+    reader_path_valid = bool(
+        isinstance(path_text, str)
+        and path_text.startswith(prefix)
+        and path_name
+        and "/" not in path_name
+        and path_name.endswith(".json")
+        and path_name != ".json"
     )
     digest = row.get("campaign_provenance_manifest_sha256")
     return bool(
@@ -150,8 +191,7 @@ def _attestation_shape_valid(row: Mapping[str, Any]) -> bool:
         == CAMPAIGN_PROVENANCE_ATTESTATION_RECORD_TYPE
         and isinstance(row.get("timestamp"), str)
         and row["timestamp"]
-        and path_text == canonical_path
-        and path_name.endswith(".json")
+        and reader_path_valid
         and re.fullmatch(r"[0-9a-f]{64}", digest or "") is not None
         and row.get("campaign_provenance_schema_version")
         == CAMPAIGN_PROVENANCE_SCHEMA_V2
@@ -184,7 +224,32 @@ def matching_campaign_provenance_attestations(
     )
 
 
-def _load_campaign_manifest(path: Path) -> AuthenticatedCampaignManifest | None:
+def matching_campaign_provenance_lineage_attestations(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    manifest_path: Path,
+    manifest: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], ...]:
+    """Return shape-valid attestations proving a path/session lineage."""
+
+    expected_path = f"campaign_manifests/{Path(manifest_path).name}"
+    session_id = manifest.get("session_id")
+    return tuple(
+        row
+        for row in rows
+        if _attestation_shape_valid(row)
+        and row.get("campaign_provenance_manifest") == expected_path
+        and row.get("campaign_provenance_schema_version")
+        == CAMPAIGN_PROVENANCE_SCHEMA_V2
+        and row.get("campaign_provenance_session_id") == session_id
+    )
+
+
+def load_campaign_provenance_manifest(
+    path: Path,
+) -> AuthenticatedCampaignManifest | None:
+    """Load and shape-check one manifest without authenticating v2 bytes."""
+
     try:
         raw_bytes = Path(path).read_bytes()
         raw = json.loads(raw_bytes.decode("utf-8"))
@@ -210,9 +275,11 @@ def _load_campaign_manifest(path: Path) -> AuthenticatedCampaignManifest | None:
     )
 
 
-def _shape_valid_attestations(
+def shape_valid_campaign_provenance_attestations(
     rows: Sequence[Mapping[str, Any]],
 ) -> list[Mapping[str, Any]] | None:
+    """Collect recognizable attestations, refusing any malformed member."""
+
     attestations: list[Mapping[str, Any]] = []
     for row in rows:
         if not _recognizable_attestation(row):
@@ -228,7 +295,7 @@ def load_authenticated_campaign_manifest(
     manifest_path: Path,
     log_path: Path | None = None,
 ) -> AuthenticatedCampaignManifest | None:
-    """Load one source manifest under the shared v1/v2 acceptance rules.
+    """Pointwise-dereference one manifest under shared acceptance rules.
 
     Legacy v1 descriptors retain their existing relocatable path behavior.
     A v2 descriptor is accepted only at its canonical catalog location and
@@ -236,7 +303,7 @@ def load_authenticated_campaign_manifest(
     current raw bytes.
     """
 
-    record = _load_campaign_manifest(Path(manifest_path))
+    record = load_campaign_provenance_manifest(Path(manifest_path))
     if record is None:
         return None
     if record.value.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V1:
@@ -252,7 +319,7 @@ def load_authenticated_campaign_manifest(
     rows = load_campaign_log_rows(log_path or root / "campaign_log.jsonl")
     if rows is None:
         return None
-    attestations = _shape_valid_attestations(rows)
+    attestations = shape_valid_campaign_provenance_attestations(rows)
     if attestations is None:
         return None
     matches = matching_campaign_provenance_attestations(
@@ -282,7 +349,7 @@ def load_authenticated_campaign_catalog(
         return []
     catalog: list[AuthenticatedCampaignManifest] = []
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
-        record = _load_campaign_manifest(path)
+        record = load_campaign_provenance_manifest(path)
         if record is None:
             return None
         catalog.append(record)
@@ -297,7 +364,7 @@ def load_authenticated_campaign_catalog(
     rows = load_campaign_log_rows(log_path or root / "campaign_log.jsonl")
     if rows is None:
         return None
-    attestations = _shape_valid_attestations(rows)
+    attestations = shape_valid_campaign_provenance_attestations(rows)
     if attestations is None:
         return None
     for record in v2_manifests:
