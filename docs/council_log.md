@@ -2405,3 +2405,106 @@ confirming the lead's decision shape. The pattern holding across both:
 the consult's unique value is causal discipline under time pressure —
 separating "what we can prove" from "what we are tempted to conclude"
 before the next launch is committed.
+## C-040: The commit-3 gauntlet — five fix rounds, two cold gates, and what each layer uniquely caught (2026-08-01/02)
+
+**Shape.** Composed commit (Sol xhigh, ratified design) → independent
+delta audit → fix rounds each followed by a FRESH-thread re-audit →
+rule-11 cold gates when triggers fired (twice) → [outcome line filled at
+close]. All delegated; magistrate gates: suite + mapping-hash pins at
+every head, bench verification of every load-bearing audit claim before
+acting.
+
+**Per-layer unique catches (zero dead layers this arc):**
+- Implementer self-verification: caught nothing the auditors later
+  confirmed as remaining — necessary but NEVER sufficient, again.
+- Audit 1: crash-strand ordering, v1-pinned verdict verifier (a DESIGN
+  scope omission it attributed as implementation), path normalization.
+- Re-audit 1 (fresh): proved fix-1's heal unreachable-shaped and the
+  same-signature persistence that fired the trigger.
+- COLD GATE 1 — cold instance: THE ROOT CAUSE (the design's
+  attest-after-publish clause guarantees the crash window; both prior
+  rounds were downstream patches). Refuter: the design's TWO
+  contradictory acceptance clauses; the pointwise-vs-enumerative
+  aggregation distinction that OVERTURNED the cold instance's B2 order
+  (magistrate overruled with dissent, bench-verified); the torn-log-line
+  second brick + its v1-history regression that the re-audit had called
+  acceptable; the B2 trigger miscount (round 1 had no license).
+- Re-audit 2: three narrow adjacencies in an otherwise-passing
+  structural implementation (fail-open lock surfaces, tolerance
+  breadth, test fidelity).
+- Re-audit 3: unbound lock token; enumeration-shaped tail (the pattern
+  recurrence that fired the second gate).
+- COLD GATE 2 (convergent): both instances independently probed
+  CPython's json taxonomy and rejected BOTH magistrate candidates.
+  Refuter uniquely: the whitespace-preservation hole (json.loads
+  tolerates trailing whitespace → permanent acceptance of
+  writer-impossible bytes) that had survived FOUR prior reviews; the
+  packet's miscited B3/NUL precedent. Cold instance uniquely: the
+  '{"a": 1e' false-refusal proving pos-based refinements unsound; the
+  byte-exact canonical round-trip construction.
+- Re-audit 4: token aliasing across release/reacquire (bare-Path
+  registry keys); two recognizer grammar corners (canonical key
+  ordering; -0.0); single-fd TOCTOU; exception-path cleanup.
+
+**Process findings for the skills:**
+1. Fix rounds introduce defects — now proven FIVE consecutive times on
+   one commit; the fresh-thread re-audit after EVERY round is
+   non-negotiable doctrine, permanently.
+2. The refuter layer's value concentrates exactly where instances agree
+   too readily: both its overturning arguments (B2 aggregation; the
+   whitespace hole) came with runnable probes, not rhetoric. Keep
+   requiring probes in refuter briefs.
+3. Formulation-vs-implementation trigger parsing is a loophole risk:
+   the D-104 disposition note's pattern (one explicit fidelity round,
+   then ANY blocker → gate + descope, no further parsing) is the
+   containment shape to reuse.
+4. Directing-subagent stalls (4×) and the MCP 1800 s timeout: audited
+   CLI route for >30 min Sol rounds; harvest-from-disk + process
+   watchdogs as standing practice (memory recorded).
+5. Magistrate candidate formulations in cold-gate packets get REJECTED
+   when drafted at the bench under fatigue (both round-4 candidates) —
+   the gate caught both; drafting candidates is still net-positive
+   (they focus the ruling) but they must be labelled candidates, never
+   presumptive.
+
+**COLD GATE 3 (disposition, 2026-08-02) addendum:**
+- Round 5 closed the lock mechanism entirely (all identity attacks
+  incl. field-copied clones) but left two recognizer-exactness
+  blockers; the binding commitment fired as written — no round 6.
+- Cold instance: Option A on the merits with verbatim fences + complete
+  closure procedures; its own wider absence scan (40 files vs the
+  packet's 33 — depth-1 glob error caught); demanded the third
+  independent scan and made lead live verification an explicit merge
+  condition rather than trusting the packet's uncited green claim.
+- Refuter (the arc's strongest document): did NOT oppose landing;
+  replaced the fences — the preserve-then-truncate custody sidecar
+  (classifier errors can no longer destroy evidence, decoupling
+  exactness from custody), the 2-line writer-side ASCII key assertion
+  (closed five unvalidated splice sites nobody had seen), proof the
+  ratified R7 pin was implemented over a synthetic corpus and missed
+  F1 by ONE character position, proof the number-grammar's literal
+  subset direction is undecidable-at-sane-cost (three rounds failed on
+  it), the branch-introduced-vs-pre-existing precedent distinction,
+  and the packet-hygiene finding (runway/cost-of-delay context reached
+  a cold instance — recorded as a process rule: sealed annex only).
+- Synthesis D-105: land via custody micro-commit + narrow audit;
+  registration as a NEW ruling; exactness struck for a documented
+  decidable superset; D-104 cl.2 amended.
+- Layer scorecard update: the refuter layer has now overturned or
+  materially amended the magistrate/cold-instance position at ALL THREE
+  gates — it is the single highest-unique-catch layer of the project
+  and its probe-required brief format is ratified practice.
+
+**Outcome.** Gauntlet commit 3 MERGED as PR #93 (`cb860e1`, 2026-08-02):
+composed commit + five audited fix rounds + custody micro-commit +
+bench fixes + the frozen exact-set pin; suite 2352 OK at the final
+head; 57/57 + 47/47 mapping pins hash-identical at every head of the
+branch; COOLDOWN-JOIN-GAUNTLET-01 and QA-10A/QA-10B retired; the D-088
+standing conditions and D-093 scans lifted per their row contracts;
+residual exactness blockers registered non-downgradable in
+C3-RECOGNIZER-EXACT-01 under D-105's compensating controls (custody
+sidecar; writer-side key assertion). Total spend: ~6 Sol implementation
+sessions, 6 independent audits, 3 cold-gate pairs, across ~20 hours of
+the Ed-authorized runway — the most heavily reviewed change in the
+project's history, protecting the machinery every future claim
+consumes.
