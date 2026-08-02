@@ -6,7 +6,10 @@ import json
 import unittest
 from pathlib import Path
 
-from joulewise.analysis_engine.inputs import load_manifest
+from joulewise.analysis_engine.inputs import (
+    load_manifest,
+    realized_scientific_identity,
+)
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
     ESTIMATOR_ID,
@@ -131,28 +134,41 @@ class AnalysisManifestV3Tests(unittest.TestCase):
         errors = validate_analysis_manifest_v3(noncontiguous)
         self.assertTrue(any("not contiguous" in error for error in errors))
 
-    def test_file_set_folded_sha256_normalizes_with_file_sha256(self) -> None:
-        for arm_id in ("A", "B"):
-            file_set = copy.deepcopy(ARM_FREEZE[arm_id]["realized_stack_identity"])
-            folded = file_set["model_artifact"]["folded_sha256"]
-            normalized_file_set = normalized_realized_stack_identity(file_set)
-            self.assertIsNotNone(normalized_file_set)
-            self.assertEqual(
-                normalized_file_set["model_artifact"]["digest_sha256"],
-                folded,
-            )
+    def test_real_mlx_metadata_file_set_folded_sha256_normalizes(self) -> None:
+        fixture = ROOT / "tests" / "fixtures" / "d078_r01"
+        raw_config = json.loads(
+            (fixture / "config.json").read_text(encoding="utf-8")
+        )
+        metadata = json.loads(
+            (fixture / "metadata.json").read_text(encoding="utf-8")
+        )
+        artifact = metadata["workload_provenance"]["model"][
+            "artifact_identity"
+        ]
+        self.assertEqual(artifact["kind"], "file_set")
+        self.assertNotIn("sha256", artifact)
 
-            file_identity = copy.deepcopy(file_set)
-            file_identity["model_artifact"] = {
-                "algorithm": "sha256",
-                "kind": "file",
-                "sha256": folded,
-            }
-            normalized_file = normalized_realized_stack_identity(file_identity)
-            self.assertEqual(
-                normalized_file["model_artifact"]["digest_sha256"],
-                folded,
-            )
+        realized = realized_scientific_identity(raw_config, metadata)
+        self.assertIsNotNone(realized)
+        self.assertEqual(realized["model_artifact"]["sha256"], artifact["folded_sha256"])
+        self.assertEqual(
+            normalized_realized_stack_identity(realized),
+            normalized_realized_stack_identity(
+                ARM_FREEZE["A"]["realized_stack_identity"]
+            ),
+        )
+
+        file_identity = copy.deepcopy(realized)
+        file_identity["model_artifact"] = {
+            "algorithm": "sha256",
+            "kind": "file",
+            "sha256": artifact["folded_sha256"],
+        }
+        normalized_file = normalized_realized_stack_identity(file_identity)
+        self.assertEqual(
+            normalized_file["model_artifact"]["digest_sha256"],
+            artifact["folded_sha256"],
+        )
 
         invalid = copy.deepcopy(ARM_FREEZE["A"]["realized_stack_identity"])
         invalid["model_artifact"]["folded_sha256"] = "not-a-digest"

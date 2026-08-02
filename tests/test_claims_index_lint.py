@@ -101,11 +101,36 @@ def base_artifact() -> dict:
             "floor_artifact": {
                 "artifact_id": "df-fixture",
                 "file_sha256": "2" * 64,
+                "evidence_root_ids": ["floor-root"],
             },
             "runs_root_label": "runs",
             "evidence_class": "current",
             "limitations": [],
         },
+        "supersession_audit": [
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "analysis_manifest_file_sha256",
+                    "sha256": "1" * 64,
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "floor-root",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": ["2" * 64],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+        ],
         "bundle_audit": [
             bundle_audit_row(bundle_id) for bundle_id in sorted(FIXTURE_BUNDLE_IDS)
         ],

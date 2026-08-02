@@ -269,11 +269,39 @@ def minimal_artifact():
         },
         "inputs": {
             "analysis_manifest": {"manifest_id": MANIFEST_ID, "file_sha256": HEX},
-            "floor_artifact": {"artifact_id": "df-test", "file_sha256": HEX},
+            "floor_artifact": {
+                "artifact_id": "df-test",
+                "file_sha256": HEX,
+                "evidence_root_ids": ["floor-root"],
+            },
             "runs_root_label": "runs",
             "evidence_class": "current",
             "limitations": [],
         },
+        "supersession_audit": [
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "analysis_manifest_file_sha256",
+                    "sha256": HEX,
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "floor-root",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": [HEX],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+        ],
         "bundle_audit": [
             bundle_audit_row(bundle_id)
             for bundle_id in ("a-1", "a-2", "b-1", "b-2")
@@ -532,7 +560,18 @@ class ClaimOutcomeTests(unittest.TestCase):
                 "raw_count": 1,
                 "validated_count": 1,
                 "status": "clean",
-            }
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "floor-root",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": [HEX],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
         ]
         published = finalize_claim_verdicts(artifact)
         self.assertEqual(validate_claim_verdicts(published), [])
@@ -2551,7 +2590,18 @@ class ClaimArtifactTests(unittest.TestCase):
                 "raw_count": 2,
                 "validated_count": 1,
                 "status": "refused",
-            }
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "floor-root",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": [HEX],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
         ]
         artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
         errors = validate_claim_verdicts(artifact)

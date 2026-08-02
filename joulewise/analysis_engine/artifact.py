@@ -74,7 +74,7 @@ _INPUT_KEYS = {
     "limitations",
 }
 _INPUT_ARTIFACT_KEYS = {"manifest_id", "file_sha256"}
-_INPUT_FLOOR_KEYS = {"artifact_id", "file_sha256"}
+_INPUT_FLOOR_KEYS = {"artifact_id", "file_sha256", "evidence_root_ids"}
 _BUNDLE_AUDIT_KEYS = {
     "bundle_id",
     "relative_path",
@@ -887,6 +887,7 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         f"artifact.engine.policy_identity.{key_name}: must be nonempty"
                     )
 
+    declared_floor_root_ids: set[str] | None = None
     inputs = value.get("inputs")
     if _exact_keys(inputs, _INPUT_KEYS, "artifact.inputs", errors):
         _validate_input_link(
@@ -909,6 +910,21 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
         floor_id = floor_link.get("artifact_id") if isinstance(floor_link, Mapping) else None
         if not isinstance(floor_id, str) or not floor_id:
             errors.append("artifact.inputs.floor_artifact.artifact_id: invalid")
+        root_ids = _string_list(
+            floor_link.get("evidence_root_ids")
+            if isinstance(floor_link, Mapping)
+            else None,
+            "artifact.inputs.floor_artifact.evidence_root_ids",
+            errors,
+        )
+        if root_ids is not None:
+            if root_ids != sorted(set(root_ids)):
+                errors.append(
+                    "artifact.inputs.floor_artifact.evidence_root_ids: "
+                    "must be sorted and unique"
+                )
+            else:
+                declared_floor_root_ids = set(root_ids)
         if not _relative_label(inputs["runs_root_label"]):
             errors.append("artifact.inputs.runs_root_label: must be a relative label")
         if not isinstance(inputs["evidence_class"], str) or inputs[
@@ -963,7 +979,10 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                 basis = audit["authenticated_basis"]
                 basis_valid = False
                 if isinstance(basis, Mapping):
-                    if set(basis) == _AUTHENTICATED_SHA_BASIS_KEYS:
+                    if (
+                        scope == "analysis_corpus"
+                        and set(basis) == _AUTHENTICATED_SHA_BASIS_KEYS
+                    ):
                         basis_valid = bool(
                             isinstance(basis.get("kind"), str)
                             and basis.get("kind")
@@ -974,7 +993,10 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             and isinstance(basis.get("sha256"), str)
                             and SHA_RE.fullmatch(str(basis.get("sha256")))
                         )
-                    elif set(basis) == _AUTHENTICATED_SHA_SET_BASIS_KEYS:
+                    elif (
+                        scope == "floor_evidence"
+                        and set(basis) == _AUTHENTICATED_SHA_SET_BASIS_KEYS
+                    ):
                         digests = basis.get("sha256s")
                         basis_valid = bool(
                             basis.get("kind")
@@ -1029,6 +1051,23 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     "artifact.supersession_audit: requires exactly one analysis-corpus row"
                 )
+            if declared_floor_root_ids is not None:
+                missing_floor_roots = sorted(
+                    declared_floor_root_ids - floor_root_ids
+                )
+                unexpected_floor_roots = sorted(
+                    floor_root_ids - declared_floor_root_ids
+                )
+                if missing_floor_roots:
+                    errors.append(
+                        "artifact.supersession_audit: missing floor-evidence scan "
+                        "row(s): " + ", ".join(missing_floor_roots)
+                    )
+                if unexpected_floor_roots:
+                    errors.append(
+                        "artifact.supersession_audit: unexpected floor-evidence scan "
+                        "row(s): " + ", ".join(unexpected_floor_roots)
+                    )
 
     bundle_audit = value.get("bundle_audit")
     audited_bundle_ids: set[str] = set()
@@ -1688,14 +1727,17 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                                 f"{block_where}.reason_codes: excluded block must explain exclusion"
                             )
                     if block.get("included") is True:
-                        included_slot_ids = (
-                            list(position_bundle_ids.values())
+                        included_slots = (
+                            list(position_bundle_ids.items())
                             if has_positions
-                            else [block["bundle_a_id"], block["bundle_b_id"]]
+                            else [
+                                ("bundle_a_id", block["bundle_a_id"]),
+                                ("bundle_b_id", block["bundle_b_id"]),
+                            ]
                         )
                         string_slot_ids = [
                             bundle_id
-                            for bundle_id in included_slot_ids
+                            for _, bundle_id in included_slots
                             if isinstance(bundle_id, str)
                         ]
                         if has_positions and len(string_slot_ids) == 4 and len(
@@ -1704,10 +1746,16 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             errors.append(
                                 f"{block_where}.position_bundle_ids: every physical position must consume a distinct bundle"
                             )
-                        for bundle_id in included_slot_ids:
+                        for slot_key, bundle_id in included_slots:
+                            slot_where = (
+                                f"position_bundle_ids.{slot_key}"
+                                if has_positions
+                                else slot_key
+                            )
                             if not isinstance(bundle_id, str):
                                 errors.append(
-                                    f"{block_where}: included block requires every physical bundle"
+                                    f"{block_where}.{slot_where}: included block "
+                                    "requires every physical bundle"
                                 )
                             else:
                                 audit = audit_by_bundle_id.get(bundle_id)
@@ -1715,7 +1763,8 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                                     "inclusion_status"
                                 ) != "included":
                                     errors.append(
-                                        f"{block_where}.{side_key}: included block requires included audit evidence"
+                                        f"{block_where}.{slot_where}: included block "
+                                        "requires included audit evidence"
                                     )
                 if planned_ids is not None and [row.get("block_id") for row in rows if isinstance(row, Mapping)] != planned_ids:
                     errors.append(f"{where}.bundle_blocks.blocks: must follow planned block order")
@@ -3116,13 +3165,10 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                             f"{loo_where}.outcome: equivalent contradicts stored LOO gates"
                         )
 
-    has_v3_contrast = any(
-        _is_v3_claim_contrast(contrast)
-        for contrast in contrast_by_id.values()
-    )
-    if has_v3_contrast and "supersession_audit" not in value:
+    if "supersession_audit" not in value:
         errors.append(
-            "artifact.supersession_audit: v3 contrast requires the pre-estimation D-093 scan record"
+            "artifact.supersession_audit: every claim consumption requires "
+            "the pre-estimation D-093 scan record"
         )
 
     if supersession_refused:

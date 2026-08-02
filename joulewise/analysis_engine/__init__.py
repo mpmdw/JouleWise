@@ -89,6 +89,27 @@ def _private_factory_identity(factory: Callable[..., Any] | None, default: str) 
     return f"private_test_seam:{module}.{qualname}"
 
 
+def _declared_floor_evidence_root_ids(
+    floor_artifact: Mapping[str, Any],
+) -> list[str]:
+    """Project the authenticated floor artifact's exhaustive root declaration."""
+
+    return sorted(
+        {
+            root_id
+            for cell in floor_artifact.get("cells", [])
+            if isinstance(cell, Mapping)
+            for component_name in ("absolute", "comparative")
+            for provenance in (cell.get("provenance"),)
+            if isinstance(provenance, Mapping)
+            for component in (provenance.get(component_name),)
+            if isinstance(component, Mapping)
+            for root_id in (component.get("evidence_root_id"),)
+            if isinstance(root_id, str) and root_id
+        }
+    )
+
+
 def _validate_output_separation(
     output_path: Path,
     analysis_manifest_path: Path,
@@ -1774,21 +1795,17 @@ def analyze_claims(
             "floor_artifact": {
                 "artifact_id": inputs.floor_artifact["artifact_id"],
                 "file_sha256": inputs.floor_sha256,
+                "evidence_root_ids": _declared_floor_evidence_root_ids(
+                    inputs.floor_artifact
+                ),
             },
             "runs_root_label": Path(runs_root).name or "runs",
             "evidence_class": evidence_class,
             "limitations": ["legacy_l1_mechanics_only"] if legacy_l1_mechanics else [],
         },
-        **(
-            {
-                "supersession_audit": [
-                    dict(row) for row in inputs.supersession_audit
-                ]
-            }
-            if inputs.manifest.get("schema_version")
-            == ANALYSIS_MANIFEST_V3_SCHEMA
-            else {}
-        ),
+        "supersession_audit": [
+            dict(row) for row in inputs.supersession_audit
+        ],
         "bundle_audit": [
             evidence.audit_row()
             for evidence in sorted(

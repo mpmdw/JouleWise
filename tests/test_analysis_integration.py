@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import io
 import hashlib
 import json
@@ -20,6 +21,10 @@ from joulewise.analysis_engine.artifact import (
     validate_claim_verdicts,
 )
 from joulewise.analysis_manifest import calculate_manifest_id
+from joulewise.analysis_manifest_v3 import (
+    ARM_FREEZE,
+    normalized_realized_stack_identity,
+)
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (
@@ -244,6 +249,201 @@ def install_passing_analysis_whole_window(
     )
 
 
+def _real_mlx_identity_inputs(arm_id: str) -> tuple[dict, dict]:
+    """Adapt a real MLX metadata boundary to either frozen v3 arm."""
+
+    fixture = ROOT / "tests" / "fixtures" / "d078_r01"
+    raw_config = json.loads(
+        (fixture / "config.json").read_text(encoding="utf-8")
+    )
+    metadata = json.loads(
+        (fixture / "metadata.json").read_text(encoding="utf-8")
+    )
+    expected = ARM_FREEZE[arm_id]["realized_stack_identity"]
+    expected_artifact = expected["model_artifact"]
+    artifact = metadata["workload_provenance"]["model"]["artifact_identity"]
+    artifact.pop("sha256", None)
+    artifact.update(
+        status="ok",
+        kind=expected_artifact["kind"],
+        algorithm=expected_artifact["algorithm"],
+        folded_sha256=expected_artifact["folded_sha256"],
+    )
+    metadata["workload_provenance"]["tokenizer"] = copy.deepcopy(
+        expected["tokenizer"]
+    )
+    metadata["adapters"]["runtime"]["name"] = expected["runtime"]["name"]
+    metadata["adapters"]["runtime"]["prepare_metadata"].update(
+        adapter=expected["runtime"]["adapter"],
+        version=expected["runtime"]["version"],
+    )
+    metadata["adapters"]["telemetry"]["name"] = expected["telemetry"]["name"]
+    metadata["device"] = copy.deepcopy(expected["device_boundary"])
+    metadata["model"] = copy.deepcopy(expected["model"])
+    metadata["quantization"] = copy.deepcopy(expected["quantization"])
+    raw_config["model"] = copy.deepcopy(expected["model"])
+    raw_config["quantization"] = copy.deepcopy(expected["quantization"])
+    return raw_config, metadata
+
+
+def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
+    manifest_path = (
+        ROOT
+        / "configs"
+        / "campaigns"
+        / "splitwise_decode_v1"
+        / "analysis_manifest_v3.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evidence_by_entry = {}
+    for entry in manifest["entries"]:
+        block_number = entry["block_number"]
+        value = (
+            10.0 + block_number
+            if entry["arm_id"] == "A"
+            else 20.0 + block_number
+        )
+        raw_config, metadata = _real_mlx_identity_inputs(entry["arm_id"])
+        evidence_by_entry[entry["entry_id"]] = BundleEvidence(
+            entry=entry,
+            bundle_id=entry["run_id"],
+            relative_path=entry["run_id"],
+            path=Path("runs") / entry["run_id"],
+            summary={
+                "status": "succeeded",
+                "test_value": value,
+                "measurement_quality": {
+                    "cooldown_cap_hit": False,
+                    "idle_window_suspect": False,
+                },
+            },
+            metadata=metadata,
+            raw_config=raw_config,
+            strict_problems=(),
+            base_reason_codes=(
+                ("whole_window_verdict_conflict",) if diverged else ()
+            ),
+            config_sha256=entry["config_sha256"],
+            expected_config_sha256=entry["config_sha256"],
+            summary_sha256="a" * 64,
+            replacement_classification="registered",
+            inclusion_status="excluded" if diverged else "included",
+        )
+    floor_artifact = {
+        "artifact_id": "df-v3-test",
+        "cells": [
+            {
+                "provenance": {
+                    "absolute": {"evidence_root_id": "floor-root"},
+                    "comparative": {"evidence_root_id": "floor-root"},
+                }
+            }
+        ],
+    }
+    loaded_inputs = LoadedAnalysisInputs(
+        manifest=manifest,
+        manifest_sha256="b" * 64,
+        floor_artifact=floor_artifact,
+        floor_sha256="c" * 64,
+        registered=evidence_by_entry,
+        effective=evidence_by_entry,
+        extra_audits=(),
+        valid_replacements=(),
+        unregistered_matching=(),
+        top_up_entry_ids=frozenset(),
+        supersession_audit=(
+            {
+                "scope": "analysis_corpus",
+                "evidence_root_id": None,
+                "authenticated_basis": {
+                    "kind": "whole_window_evaluation_basis_sha256",
+                    "sha256": "d" * 64,
+                },
+                "raw_count": 2 if diverged else 1,
+                "validated_count": 1,
+                "status": "refused" if diverged else "clean",
+            },
+            {
+                "scope": "floor_evidence",
+                "evidence_root_id": "floor-root",
+                "authenticated_basis": {
+                    "kind": "floor_component_campaign_log_sha256",
+                    "sha256s": ["e" * 64],
+                },
+                "raw_count": 0,
+                "validated_count": 0,
+                "status": "clean",
+            },
+        ),
+        supersession_diverged=diverged,
+    )
+    floor_resolutions = (
+        FloorResolution(
+            status="exact",
+            artifact_id="df-v3-test",
+            artifact_sha256="c" * 64,
+            source_cell_ids=("floor-a",),
+            transport_group_id=None,
+            transport_rule_id=None,
+            floor_abs_j=0.8,
+            floor_cmp_j=1.0,
+            floor_gate_j=1.0,
+            reason_codes=(),
+        ),
+        FloorResolution(
+            status="exact",
+            artifact_id="df-v3-test",
+            artifact_sha256="c" * 64,
+            source_cell_ids=("floor-b",),
+            transport_group_id=None,
+            transport_rule_id=None,
+            floor_abs_j=0.9,
+            floor_cmp_j=1.2,
+            floor_gate_j=1.2,
+            reason_codes=(),
+        ),
+    )
+    patches = (
+        mock.patch(
+            "joulewise.analysis_engine.metric_value",
+            side_effect=lambda summary, metric: summary["test_value"],
+        ),
+        mock.patch(
+            "joulewise.analysis_engine.window_evidence_precheck",
+            return_value={"reasons": ()},
+        ),
+        mock.patch(
+            "joulewise.analysis_engine.governed_stochastic_variance",
+            return_value=([{"name": "idle", "variance": 0.0}], ()),
+        ),
+        mock.patch(
+            "joulewise.analysis_engine.deterministic_bounds",
+            return_value=(
+                {
+                    "E_interpolation_joint_edge_bound_j": 0.05,
+                    "E_clock_anchor_shift_bound_j": 0.10,
+                },
+                (),
+            ),
+        ),
+        mock.patch(
+            "joulewise.analysis_engine._resolve_contrast_floor",
+            return_value=list(floor_resolutions),
+        ),
+        mock.patch(
+            "joulewise.analysis_engine.load_analysis_inputs",
+            return_value=loaded_inputs,
+        ),
+    )
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+        return analyze_claims(
+            manifest_path,
+            Path("runs"),
+            Path("floor.json"),
+            strict_validator=lambda path, strict=True: [],
+        )
+
+
 class AnalysisIntegrationTests(unittest.TestCase):
     def setUp(self):
         source_patch = mock.patch(
@@ -260,165 +460,31 @@ class AnalysisIntegrationTests(unittest.TestCase):
             holm_adjust({"only-contrast": 0.04}, m=2)
 
     def test_v3_abba_engine_and_d093_refusal_precedence(self):
-        manifest_path = (
-            ROOT
-            / "configs"
-            / "campaigns"
-            / "splitwise_decode_v1"
-            / "analysis_manifest_v3.json"
-        )
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-        def loaded_inputs(*, diverged: bool) -> LoadedAnalysisInputs:
-            evidence_by_entry = {}
-            for entry in manifest["entries"]:
-                block_number = entry["block_number"]
-                value = (
-                    10.0 + block_number
-                    if entry["arm_id"] == "A"
-                    else 20.0 + block_number
-                )
-                evidence_by_entry[entry["entry_id"]] = BundleEvidence(
-                    entry=entry,
-                    bundle_id=entry["run_id"],
-                    relative_path=entry["run_id"],
-                    path=Path("runs") / entry["run_id"],
-                    summary={
-                        "status": "succeeded",
-                        "test_value": value,
-                        "measurement_quality": {
-                            "cooldown_cap_hit": False,
-                            "idle_window_suspect": False,
-                        },
-                    },
-                    metadata=None,
-                    raw_config=None,
-                    strict_problems=(),
-                    base_reason_codes=(
-                        ("whole_window_verdict_conflict",) if diverged else ()
-                    ),
-                    config_sha256=entry["config_sha256"],
-                    expected_config_sha256=entry["config_sha256"],
-                    summary_sha256="a" * 64,
-                    replacement_classification="registered",
-                    inclusion_status="excluded" if diverged else "included",
-                )
-            return LoadedAnalysisInputs(
-                manifest=manifest,
-                manifest_sha256="b" * 64,
-                floor_artifact={"artifact_id": "df-v3-test"},
-                floor_sha256="c" * 64,
-                registered=evidence_by_entry,
-                effective=evidence_by_entry,
-                extra_audits=(),
-                valid_replacements=(),
-                unregistered_matching=(),
-                top_up_entry_ids=frozenset(),
-                supersession_audit=(
-                    {
-                        "scope": "analysis_corpus",
-                        "evidence_root_id": None,
-                        "authenticated_basis": {
-                            "kind": "whole_window_evaluation_basis_sha256",
-                            "sha256": "d" * 64,
-                        },
-                        "raw_count": 2 if diverged else 1,
-                        "validated_count": 1,
-                        "status": "refused" if diverged else "clean",
-                    },
-                    {
-                        "scope": "floor_evidence",
-                        "evidence_root_id": "floor-root",
-                        "authenticated_basis": {
-                            "kind": "floor_component_campaign_log_sha256",
-                            "sha256s": ["e" * 64],
-                        },
-                        "raw_count": 0,
-                        "validated_count": 0,
-                        "status": "clean",
-                    },
-                ),
-                supersession_diverged=diverged,
-            )
-
-        floor_resolutions = (
-            FloorResolution(
-                status="exact",
-                artifact_id="df-v3-test",
-                artifact_sha256="c" * 64,
-                source_cell_ids=("floor-a",),
-                transport_group_id=None,
-                transport_rule_id=None,
-                floor_abs_j=0.8,
-                floor_cmp_j=1.0,
-                floor_gate_j=1.0,
-                reason_codes=(),
-            ),
-            FloorResolution(
-                status="exact",
-                artifact_id="df-v3-test",
-                artifact_sha256="c" * 64,
-                source_cell_ids=("floor-b",),
-                transport_group_id=None,
-                transport_rule_id=None,
-                floor_abs_j=0.9,
-                floor_cmp_j=1.2,
-                floor_gate_j=1.2,
-                reason_codes=(),
-            ),
-        )
-
-        patches = (
-            mock.patch(
-                "joulewise.analysis_engine.metric_value",
-                side_effect=lambda summary, metric: summary["test_value"],
-            ),
-            mock.patch(
-                "joulewise.analysis_engine.window_evidence_precheck",
-                return_value={"reasons": ()},
-            ),
-            mock.patch(
-                "joulewise.analysis_engine.governed_stochastic_variance",
-                return_value=([{"name": "idle", "variance": 0.0}], ()),
-            ),
-            mock.patch(
-                "joulewise.analysis_engine.deterministic_bounds",
-                return_value=(
-                    {
-                        "E_interpolation_joint_edge_bound_j": 0.05,
-                        "E_clock_anchor_shift_bound_j": 0.10,
-                    },
-                    (),
-                ),
-            ),
-            mock.patch(
-                "joulewise.analysis_engine._resolve_contrast_floor",
-                return_value=list(floor_resolutions),
-            ),
-        )
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
-            with mock.patch(
-                "joulewise.analysis_engine.load_analysis_inputs",
-                return_value=loaded_inputs(diverged=False),
-            ):
-                clean = analyze_claims(
-                    manifest_path,
-                    Path("runs"),
-                    Path("floor.json"),
-                    strict_validator=lambda path, strict=True: [],
-                )
-            with mock.patch(
-                "joulewise.analysis_engine.load_analysis_inputs",
-                return_value=loaded_inputs(diverged=True),
-            ):
-                refused = analyze_claims(
-                    manifest_path,
-                    Path("runs"),
-                    Path("floor.json"),
-                    strict_validator=lambda path, strict=True: [],
-                )
+        clean = _v3_fixture_artifact()
+        refused = _v3_fixture_artifact(diverged=True)
 
         self.assertEqual(validate_claim_verdicts(clean), [])
+        manifest = json.loads(
+            (
+                ROOT
+                / "configs"
+                / "campaigns"
+                / "splitwise_decode_v1"
+                / "analysis_manifest_v3.json"
+            ).read_text(encoding="utf-8")
+        )
+        arm_by_entry = {
+            entry["entry_id"]: entry["arm_id"] for entry in manifest["entries"]
+        }
+        for audit in clean["bundle_audit"]:
+            arm_id = arm_by_entry[audit["entry_id"]]
+            self.assertIsNotNone(audit["scientific_identity"])
+            self.assertEqual(
+                normalized_realized_stack_identity(audit["scientific_identity"]),
+                normalized_realized_stack_identity(
+                    ARM_FREEZE[arm_id]["realized_stack_identity"]
+                ),
+            )
         contrast = clean["contrasts"][0]
         self.assertEqual(contrast["estimator"]["name"], "abba_block_arm_mean_difference_t_v1")
         self.assertEqual(contrast["estimator"]["estimate"], 10.0)
@@ -441,6 +507,93 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertIn(
             "whole_window_verdict_conflict",
             refused_contrast["claim_evaluation"]["reason_codes"],
+        )
+
+    def test_v3_requires_scan_row_for_every_declared_floor_root(self):
+        artifact = _v3_fixture_artifact()
+        stripped = copy.deepcopy(artifact)
+        stripped["supersession_audit"] = [
+            row
+            for row in stripped["supersession_audit"]
+            if row["scope"] != "floor_evidence"
+        ]
+        stripped["claim_verdicts_id"] = calculate_claim_verdicts_id(stripped)
+
+        errors = validate_claim_verdicts(stripped)
+
+        self.assertTrue(
+            any("missing floor-evidence scan row(s): floor-root" in error for error in errors),
+            errors,
+        )
+
+    def test_supersession_authenticated_basis_kind_is_scope_bound(self):
+        artifact = _v3_fixture_artifact()
+        floor_misbound = copy.deepcopy(artifact)
+        floor_row = next(
+            row
+            for row in floor_misbound["supersession_audit"]
+            if row["scope"] == "floor_evidence"
+        )
+        floor_row["authenticated_basis"] = {
+            "kind": "analysis_manifest_file_sha256",
+            "sha256": "f" * 64,
+        }
+        floor_misbound["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            floor_misbound
+        )
+        self.assertTrue(
+            any(
+                "authenticated_basis: invalid or unauthenticated" in error
+                for error in validate_claim_verdicts(floor_misbound)
+            )
+        )
+
+        corpus_misbound = copy.deepcopy(artifact)
+        corpus_row = next(
+            row
+            for row in corpus_misbound["supersession_audit"]
+            if row["scope"] == "analysis_corpus"
+        )
+        corpus_row["authenticated_basis"] = {
+            "kind": "floor_component_campaign_log_sha256",
+            "sha256s": ["f" * 64],
+        }
+        corpus_misbound["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            corpus_misbound
+        )
+        self.assertTrue(
+            any(
+                "authenticated_basis: invalid or unauthenticated" in error
+                for error in validate_claim_verdicts(corpus_misbound)
+            )
+        )
+
+    def test_v3_excluded_position_diagnostic_names_physical_abba_slot(self):
+        artifact = _v3_fixture_artifact()
+        first_block = artifact["contrasts"][0]["bundle_blocks"]["blocks"][0]
+        a1_bundle_id = first_block["position_bundle_ids"]["A1"]
+        audit = next(
+            row for row in artifact["bundle_audit"] if row["bundle_id"] == a1_bundle_id
+        )
+        audit["inclusion_status"] = "excluded"
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+
+        errors = validate_claim_verdicts(artifact)
+
+        self.assertTrue(
+            any(
+                ".position_bundle_ids.A1: included block requires included audit evidence"
+                in error
+                for error in errors
+            ),
+            errors,
+        )
+        self.assertFalse(
+            any(
+                ".bundle_b_id: included block requires included audit evidence" in error
+                for error in errors
+            ),
+            errors,
         )
 
     @classmethod
@@ -554,6 +707,38 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     )
                 )
         self.assertEqual(validate_claim_verdicts(first), [])
+
+    def test_v1_claim_consumption_records_and_requires_d093_counts(self):
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            manifest["schema_version"],
+            "joulewise.analysis_manifest.v1",
+        )
+        artifact = analyze_claims(
+            self.manifest_path,
+            self.runs_root,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        self.assertEqual(validate_claim_verdicts(artifact), [])
+        self.assertTrue(artifact["supersession_audit"])
+        for row in artifact["supersession_audit"]:
+            self.assertIsInstance(row["raw_count"], int)
+            self.assertIsInstance(row["validated_count"], int)
+            self.assertEqual(row["raw_count"], row["validated_count"])
+
+        omitted = copy.deepcopy(artifact)
+        del omitted["supersession_audit"]
+        omitted["claim_verdicts_id"] = calculate_claim_verdicts_id(omitted)
+        errors = validate_claim_verdicts(omitted)
+        self.assertTrue(
+            any(
+                "every claim consumption requires the pre-estimation D-093 scan record"
+                in error
+                for error in errors
+            ),
+            errors,
+        )
 
     def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact_with_production_telemetry_identity(
         self,
