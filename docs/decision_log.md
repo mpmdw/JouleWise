@@ -125,6 +125,7 @@ be re-derived by a future agent gets an entry here.
 | D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions, window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
 | D-101 | The site gates nothing: CI release-chain job advisory (continue-on-error), site source docs stay live and session-maintained, DRIFT.md refresh optional, site budgets never reshape governed records | accepted (Ed-directed 2026-08-01) |
 | D-102 | CAL-BRACKET-D079-01 pins: budget cap 0.001275166090593858 s (99% two-draw prediction ceiling 0.012093166090593858 s, blind n=19 derivation), exact-identity-epoch freshness with prospective re-derivation triggers, never-zero allowance max(drift, screen) embedded once, decimal-source numeric semantics with labelled presentation values | accepted (magistrate ratification, lead-replayed arithmetic, 2026-08-01) |
+| D-103 | C3 structural cold-gate synthesis: WAL attestation ordering + torn-tail tolerance + origin-gated operator repair (B1); one authentication predicate with TWO named aggregation policies, cold instance OVERRULED on catalog-global verdicts with recorded dissent (B2); writer-strict/reader-tolerant path discipline, backslash false-malformed corrected (B3); origin-binding redesign registered as fallback; fix-round-2 scope restated | accepted (cold gate + Opus refuter, magistrate synthesis with bench-verified overruling, 2026-08-01) |
 
 ---
 
@@ -6320,3 +6321,124 @@ the D-100 repair (shared write surfaces).
 
 Revisit when: CAL-BRACKET-D079-01's delta audit reports, or any
 re-derivation trigger fires.
+
+## D-103: C3 structural cold-gate synthesis — WAL attestation ordering, two named aggregation policies (cold instance overruled on B2 with recorded dissent), reader-tolerant/writer-strict path discipline
+
+- Date: 2026-08-01
+- Status: accepted (rule-11 cold gate on the C3 escalation trigger: cold
+  Fable structural ruling + independent Opus contract refutation;
+  magistrate synthesis with ALL load-bearing claims bench-verified —
+  the unreachable heal, the pointwise byte-pinned verdict path, the
+  design's contradictory acceptance clauses, the reconstruction-based
+  grammar hole. THIS ENTRY CARRIES A WRITTEN OVERRULING of the cold
+  instance's B2 order, which Ed sees here.)
+- Applies to: impl/cooldown-gauntlet-c3 (fix round 2), D-097 (three
+  riders), COOLDOWN-JOIN-GAUNTLET-01
+
+**Root cause (layered, all in the DESIGN, not the implementation):**
+(a) C3-DESIGN §2's "hash and attest AFTER atomic replacement" ordering
+guarantees the crash window — no downstream formulation could close it
+(cold instance; bench-verified: session-and-pid-unique manifest paths
+make any same-path heal unreachable after a real restart);
+(b) the design's §3 acceptance text is self-contradictory (union
+invariant vs refuse-the-entire-catalog-including-siblings — both
+clauses verified in the text), so B2's two "failed formulations" were
+implementations of the two contradictory clauses;
+(c) the design's WRITE_SCOPE forbade whole_window.py while its
+call-site list omitted the verdict verifier, so round 1's B2 "failure"
+was scope compliance (refuter §4.3 — the trigger count for B2 is
+corrected on the record; the trigger's firing remains valid via B1/B3).
+Per-snapshot attestation is NOT ruled structurally unsound; the
+refuter's per-session ORIGIN-binding redesign is recorded as the
+REGISTERED FALLBACK — one further same-signature failure of this
+mechanism goes to a new cold gate with origin binding as the default
+candidate, not to a round 4.
+
+**1. B1 (D-097 rider i-bis, the WAL ordering):** write tmp → fsync →
+attest the exact tmp bytes → THEN os.replace. A crash now leaves a
+dangling attestation row (authenticates nothing, tolerated by design)
+instead of a published-unattested manifest (which latches the ENTIRE
+runs_root — including all future campaigns — into global refusal; the
+refuter's blast-radius finding is accepted and both prior audits
+understated it). Both helper branches attest the same in-process bytes
+(resolves the TOCTOU inconsistency). Append discipline: mandatory
+campaign.lock enforced mechanically + single O_APPEND row write +
+check-before-append idempotence (which also closes the latent
+duplicate-current A→B→A brick for the locked writer — refuter §3(b)).
+**Torn-tail tolerance:** load_campaign_log_rows tolerates exactly ONE
+torn FINAL line as a recognized crash artifact (ignoring that row
+alone); any earlier malformation still refuses globally — this cures
+the second unhealable brick and its regression of v1-only histories
+(the refuter's severity correction of the re-audit is accepted).
+Strand-then-refuse remains the correct baseline; cross-session repair
+is an EXPLICIT operator command under the lock, healing only
+lineage-proven strands (>=1 shape-valid attestation, same
+path+session_id, zero current) and REFUSING lineage-less files
+(relabel-indistinguishable). Reader-side healing and blind sweeps are
+rejected unanimously — a campaign-start sweep would void D-097's
+relabel ruling outright.
+
+**2. B2 (D-097 rider iii — the OVERRULING):** the cold instance
+ordered the verdict path onto the global catalog with the per-manifest
+loader deleted. **The magistrate overrules.** Grounds, bench-verified:
+the verdict verifier is a pointwise dereference of PINNED descriptors —
+each sha256 rechecked against the authenticated raw bytes, policy sha
+matched, membership itself pinned; no code path in it enumerates
+campaign_manifests/ — so a poisoned sibling cannot enter, alter
+coverage, or alter re-derivation there. Forcing catalog consumption
+would multiply the B1 latch into issued verdicts, hand a
+denial-of-verdict primitive to anything that can drop a file in the
+directory, and violate the union invariant. The cold instance's own
+recorded counterargument (availability hostage to directory hygiene)
+corroborates. RATIFIED CONTRACT: **one authentication predicate, two
+named aggregation policies** — pointwise-dereference (pinned-descriptor
+verification; the per-manifest loader is RETAINED as this policy's
+entry point, documented and fenced by a regression that no enumerative
+consumer imports it) and all-or-nothing enumeration (all six catalog
+consumers, unchanged). The design's §3 invariant is amended to name
+both policies explicitly. The fix-round-1 poisoned-sibling regression
+INVERTS: a verdict row referencing attested manifest A PASSES beside an
+unattested sibling; every enumerative consumer still refuses globally.
+
+**3. B3 (D-097 rider iv — writer-strict, reader-tolerant):** the
+reader's MALFORMED class narrows to the minimal decidable predicate
+(exact "campaign_manifests/" prefix; single-segment, non-empty basename;
+".json" suffix; basename != ".json"; no "/" in basename). Backslash is
+REMOVED from the malformed set (legal APFS basename character — the
+current false-malformed classification is the brick direction; the
+refuter's finding is accepted). Recognizable rows that pass the
+predicate but match no manifest are STALE — pinned deliberately by
+regression (NUL and newline rows are inert-by-construction: exact-match
+against a reconstruction cannot alias, POSIX forbids NUL filenames).
+The WRITER applies the cold instance's anchored strict grammar
+(fullmatch [A-Za-z0-9][A-Za-z0-9._-]{0,250}\.json) at mint time and
+raises on its own violation — strict emission, tolerant-but-decidable
+classification, both ends inside the one shared module.
+
+**4. Regression set for fix round 2 (defect-pinning, union of both
+instances):** B1 fault injection at each ordering point + NEW-SESSION
+end-to-end (catalog never poisoned; synthetic legacy strand refuses,
+is not healed by new-session writes, heals via the operator command
+with lineage, refuses without — relabel probe); append idempotence
+under concurrent equality-branch calls; torn-FINAL-line tolerated /
+mid-file malformation refused / v1-only history with torn tail still
+loads; A→B→A content revisit does not brick; B2 poisoned-sibling pair
+(dereference passes, enumeration refuses) + no-enumerative-import pin;
+B3 classification table (predicate failures => malformed; NUL, newline,
+unicode, leading-dot => stale; backslash no longer malformed) + writer
+mint-grammar positive control + writer-raise probe. Performance:
+re-stated as a measured nit (largest real corpus 1.78 MB / 14
+manifests); the one-parse-per-verification counter lands only if
+trivial. The broad-OSError nit in the equality branch is folded in.
+
+**5. Fix-round-2 WRITE_SCOPE (restated lease, exhaustive):**
+scripts/run_campaign.py, joulewise/campaign_provenance.py,
+tests/test_run_campaign.py, tests/test_analysis_integration.py,
+tests/test_whole_window.py, and joulewise/whole_window.py
+(docstring/comment alignment only — its production dereference logic
+is now contract-correct as committed). Fresh delta re-audit on a NEW
+thread afterward (independence rule).
+
+Revisit when: fix round 2's delta re-audit reports (any same-signature
+failure => the registered origin-binding fallback goes to a new cold
+gate), or any rider text conflicts with observed writer behavior.
