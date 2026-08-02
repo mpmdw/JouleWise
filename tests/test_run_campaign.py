@@ -3396,24 +3396,66 @@ class RunCampaignTests(unittest.TestCase):
                         )
 
                 self.assertFalse(path.exists())
-                fresh_path = (
-                    runs_dir / "campaign_manifests" / f"fresh-{stage}.json"
-                )
-                fresh = {
-                    **manifest,
-                    "session_id": f"fresh-{stage}",
-                    "members": [
-                        {
+                leftover_tmp = path.parent / f".{path.name}.tmp-dead-process"
+                leftover_tmp.write_bytes(b"crash-left tmp bytes")
+                driver = textwrap.dedent(
+                    """
+                    import json
+                    import os
+                    import sys
+                    from pathlib import Path
+                    from scripts import run_campaign
+
+                    runs_dir = Path(sys.argv[1])
+                    leftover_tmp = Path(sys.argv[2])
+                    lock_token = run_campaign.acquire_campaign_lock(runs_dir)
+                    try:
+                        fresh_path, fresh = run_campaign.new_campaign_provenance(
+                            runs_dir.parent, runs_dir, None
+                        )
+                        fresh["members"] = [{
                             "execution": "invoked",
-                            "run_id": f"fresh-{stage}",
-                            "bundle_ids": [f"fresh-{stage}"],
-                        }
+                            "run_id": "fresh-child",
+                            "bundle_ids": ["fresh-child"],
+                        }]
+                        run_campaign.write_campaign_provenance(
+                            fresh_path, fresh
+                        )
+                        print(json.dumps({
+                            "pid": os.getpid(),
+                            "session_id": fresh["session_id"],
+                            "manifest_path": str(fresh_path),
+                            "lock_existed_while_held": lock_token.is_file(),
+                            "leftover_tmp_existed": leftover_tmp.is_file(),
+                        }, sort_keys=True))
+                    finally:
+                        lock_token.unlink(missing_ok=True)
+                    """
+                )
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        driver,
+                        str(runs_dir),
+                        str(leftover_tmp),
                     ],
-                }
-                with held_campaign_lock(runs_dir):
-                    run_campaign_module.write_campaign_provenance(
-                        fresh_path, fresh
-                    )
+                    cwd=ROOT,
+                    text=True,
+                    capture_output=True,
+                    timeout=COMMAND_TIMEOUT_S,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                child = json.loads(completed.stdout)
+                self.assertNotEqual(child["pid"], os.getpid())
+                self.assertTrue(child["session_id"].endswith(f"-p{child['pid']}"))
+                self.assertTrue(child["lock_existed_while_held"])
+                self.assertTrue(child["leftover_tmp_existed"])
+                fresh_path = Path(child["manifest_path"])
+                self.assertTrue(fresh_path.is_file())
+                self.assertTrue(leftover_tmp.is_file())
+                self.assertFalse((runs_dir / "campaign.lock").exists())
                 catalog = load_authenticated_campaign_catalog(runs_dir)
                 self.assertIsNotNone(catalog)
                 assert catalog is not None
@@ -3512,17 +3554,22 @@ class RunCampaignTests(unittest.TestCase):
                 run_campaign_module.write_campaign_provenance(fresh_path, fresh)
             self.assertIsNone(load_authenticated_campaign_catalog(runs_dir))
 
-            output = io.StringIO()
-            with redirect_stdout(output):
-                code = run_campaign_module.main(
-                    [
-                        "repair-campaign-provenance",
-                        "--runs-dir",
-                        str(runs_dir),
-                    ]
-                )
-            self.assertEqual(code, 0, output.getvalue())
-            report = json.loads(output.getvalue())
+            repaired = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "repair-campaign-provenance",
+                    "--runs-dir",
+                    str(runs_dir),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                timeout=COMMAND_TIMEOUT_S,
+                check=False,
+            )
+            self.assertEqual(repaired.returncode, 0, repaired.stderr)
+            report = json.loads(repaired.stdout)
             self.assertEqual(report["status"], "repaired")
             self.assertEqual(report["repaired"], [str(path)])
             self.assertIsNotNone(load_authenticated_campaign_catalog(runs_dir))
@@ -3609,6 +3656,56 @@ class RunCampaignTests(unittest.TestCase):
                             {**manifest, "session_id": f"invalid-{len(name)}"},
                         )
 
+    def test_post_window_commands_refuse_while_campaign_lock_is_held(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / "runs"
+            runs_dir.mkdir()
+            quarantine = root / "quarantine"
+            quarantine.mkdir()
+            commands = (
+                [
+                    "--record-supersession",
+                    "bundle",
+                    "--quarantine-path",
+                    str(quarantine),
+                    "--reason",
+                    "concurrent lock probe",
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--campaign-policy",
+                    str(TEST_CAMPAIGN_POLICY),
+                ],
+                [
+                    "--whole-window-verdict",
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--campaign-policy",
+                    str(TEST_CAMPAIGN_POLICY),
+                ],
+            )
+            with held_campaign_lock(runs_dir) as lock_token:
+                locked_content = lock_token.read_bytes()
+                for arguments in commands:
+                    with self.subTest(command=arguments[0]):
+                        completed = subprocess.run(
+                            [sys.executable, str(SCRIPT), *arguments],
+                            cwd=ROOT,
+                            text=True,
+                            capture_output=True,
+                            timeout=COMMAND_TIMEOUT_S,
+                            check=False,
+                        )
+                        self.assertEqual(completed.returncode, 2)
+                        self.assertIn(
+                            "another campaign appears to be running",
+                            completed.stderr,
+                        )
+                        self.assertEqual(lock_token.read_bytes(), locked_content)
+                        self.assertFalse(
+                            (runs_dir / "campaign_log.jsonl").exists()
+                        )
+
     def test_equality_branch_propagates_non_missing_os_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_dir = Path(tmp) / "runs"
@@ -3640,10 +3737,25 @@ class RunCampaignTests(unittest.TestCase):
             )
             self.assertEqual(load_campaign_log_rows(log_path), [first])
 
+            complete_without_lf = (json.dumps(first) + "\n" + json.dumps(second)).encode(
+                "utf-8"
+            )
+            log_path.write_bytes(complete_without_lf)
+            self.assertEqual(load_campaign_log_rows(log_path), [first, second])
+
+            log_path.write_bytes((json.dumps(first) + "\n[]").encode("utf-8"))
+            self.assertIsNone(load_campaign_log_rows(log_path))
+
             log_path.write_bytes(
                 (json.dumps(first) + "\n").encode("utf-8")
                 + b'{"status":\n'
                 + (json.dumps(second) + "\n").encode("utf-8")
+            )
+            self.assertIsNone(load_campaign_log_rows(log_path))
+
+            log_path.write_bytes(
+                (json.dumps(first) + "\n").encode("utf-8")
+                + b'{"first_torn"\n{"second_torn"'
             )
             self.assertIsNone(load_campaign_log_rows(log_path))
 
@@ -3673,8 +3785,13 @@ class RunCampaignTests(unittest.TestCase):
 
     def test_append_log_uses_one_o_append_write_and_recovers_torn_tail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            log_path = Path(tmp) / "campaign_log.jsonl"
+            root = Path(tmp)
+            log_path = root / "campaign_log.jsonl"
+            with self.assertRaisesRegex(RuntimeError, "held campaign.lock"):
+                run_campaign_module.append_log(log_path, {"row": 0})
+
             with (
+                held_campaign_lock(root) as lock_token,
                 patch.object(
                     run_campaign_module.os,
                     "open",
@@ -3686,16 +3803,39 @@ class RunCampaignTests(unittest.TestCase):
                     wraps=run_campaign_module.os.write,
                 ) as write_mock,
             ):
-                run_campaign_module.append_log(log_path, {"row": 1})
+                run_campaign_module.append_log(
+                    log_path, {"row": 1}, lock_token=lock_token
+                )
             self.assertEqual(write_mock.call_count, 1)
             flags = open_mock.call_args.args[1]
             self.assertTrue(flags & os.O_APPEND)
 
             log_path.write_bytes(log_path.read_bytes() + b'{"torn"')
-            run_campaign_module.append_log(log_path, {"row": 2})
+            with held_campaign_lock(root) as lock_token:
+                run_campaign_module.append_log(
+                    log_path, {"row": 2}, lock_token=lock_token
+                )
             self.assertEqual(
                 read_wire_jsonl(log_path),
                 [{"row": 1}, {"row": 2}],
+            )
+
+            complete_mapping = json.dumps({"row": "preserved"}).encode("utf-8")
+            log_path.write_bytes(complete_mapping)
+            original_read_bytes = Path.read_bytes
+            with held_campaign_lock(root) as lock_token, patch.object(
+                Path,
+                "read_bytes",
+                autospec=True,
+                side_effect=original_read_bytes,
+            ) as read_mock:
+                run_campaign_module.append_log(
+                    log_path, {"row": "new"}, lock_token=lock_token
+                )
+            self.assertEqual(read_mock.call_count, 1)
+            self.assertEqual(
+                read_wire_jsonl(log_path),
+                [{"row": "preserved"}, {"row": "new"}],
             )
 
     def test_v2_attestation_hashes_exact_noncanonical_manifest_bytes(self) -> None:
@@ -5406,10 +5546,12 @@ class RunCampaignTests(unittest.TestCase):
                 f"detail={error.detail}"
             )
             self.assertIn("SHAKEDOWN_GATE_FAILED[backup_failed]", rendered)
-            append_log(
-                log_path,
-                failed_shakedown_record("production_uncertainty_v1", error),
-            )
+            with held_campaign_lock(root) as lock_token:
+                append_log(
+                    log_path,
+                    failed_shakedown_record("production_uncertainty_v1", error),
+                    lock_token=lock_token,
+                )
             gate = read_all_jsonl(log_path)[0]
             self.assertEqual(gate["status"], "failed")
             self.assertEqual(gate["code"], "backup_failed")
@@ -7391,10 +7533,16 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                         ):
                             run_campaign_module.run_record_supersession(args)
                         continue
-                    with redirect_stdout(io.StringIO()):
+                    with redirect_stdout(io.StringIO()), patch.object(
+                        run_campaign_module,
+                        "acquire_campaign_lock",
+                        wraps=run_campaign_module.acquire_campaign_lock,
+                    ) as acquire_mock:
                         self.assertEqual(
                             run_campaign_module.run_record_supersession(args), 0
                         )
+                    acquire_mock.assert_called_once_with(case_root)
+                    self.assertFalse((case_root / "campaign.lock").exists())
                     rows = read_wire_jsonl(case_root / "campaign_log.jsonl")
                     entry = next(
                         row
@@ -7557,8 +7705,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     (),
                 ),
             ),
+            patch.object(
+                run_campaign_module,
+                "acquire_campaign_lock",
+                wraps=run_campaign_module.acquire_campaign_lock,
+            ) as acquire_mock,
         ):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        acquire_mock.assert_called_once_with(self.root)
+        self.assertFalse((self.root / "campaign.lock").exists())
         verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
         self.assertEqual(
             verdict["record_type"], "idle_admission_whole_window_verdict"

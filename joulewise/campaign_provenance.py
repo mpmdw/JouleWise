@@ -82,39 +82,57 @@ def campaign_manifest_member_shape_valid(
     return "outcome" not in member
 
 
-def load_campaign_log_rows(log_path: Path) -> list[Mapping[str, Any]] | None:
-    """Read object-only JSONL, ignoring at most one torn final line.
+def parse_campaign_log_bytes(
+    raw: bytes,
+) -> tuple[list[Mapping[str, Any]] | None, str]:
+    """Parse object-only JSONL and classify its final segment.
 
-    A final unterminated malformed row is the recognizable artifact of a
-    short append.  Any malformed terminated row, or any malformed row before
-    the final unterminated row, still refuses the complete log.
+    The writer emits one complete JSON mapping plus LF per append.  Therefore
+    an unterminated final segment is tolerable only when it is either an
+    unparseable prefix of that mapping or a complete mapping missing its LF.
+    A complete non-mapping value is corruption even without the final LF.
     """
 
-    try:
-        raw = Path(log_path).read_bytes()
-    except FileNotFoundError:
-        return []
-    except OSError:
-        return None
     terminated = raw.endswith(b"\n")
     lines = raw.split(b"\n")
     if terminated:
         lines = lines[:-1]
     rows: list[Mapping[str, Any]] = []
+    final_segment = "terminated" if terminated else "empty"
     for index, line in enumerate(lines):
+        is_unterminated_final = not terminated and index == len(lines) - 1
         if not line.strip():
+            if is_unterminated_final and raw:
+                final_segment = "unparseable"
             continue
         try:
             value = json.loads(line.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            if not terminated and index == len(lines) - 1:
+            if is_unterminated_final:
+                final_segment = "unparseable"
                 continue
-            return None
+            return None, "invalid"
         if not isinstance(value, Mapping):
-            if not terminated and index == len(lines) - 1:
-                continue
-            return None
+            return None, "invalid"
         rows.append(value)
+        if is_unterminated_final:
+            final_segment = "mapping"
+    return rows, final_segment
+
+
+def load_campaign_log_rows(
+    log_path: Path, *, raw_bytes: bytes | None = None
+) -> list[Mapping[str, Any]] | None:
+    """Read object-only JSONL, tolerating exactly one recognized final tear."""
+
+    if raw_bytes is None:
+        try:
+            raw_bytes = Path(log_path).read_bytes()
+        except FileNotFoundError:
+            return []
+        except OSError:
+            return None
+    rows, _final_segment = parse_campaign_log_bytes(raw_bytes)
     return rows
 
 

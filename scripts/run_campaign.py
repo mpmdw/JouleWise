@@ -100,6 +100,7 @@ from joulewise.campaign_provenance import (  # noqa: E402
     load_campaign_provenance_manifest,
     matching_campaign_provenance_attestations,
     matching_campaign_provenance_lineage_attestations,
+    parse_campaign_log_bytes,
     shape_valid_campaign_provenance_attestations,
 )
 from joulewise.analysis_engine.ratio import (  # noqa: E402
@@ -1189,7 +1190,12 @@ def _require_external_campaign_log(log_path: Path) -> None:
         )
 
 
-def append_log(log_path: Path, row: dict[str, Any]) -> None:
+def append_log(
+    log_path: Path,
+    row: dict[str, Any],
+    *,
+    lock_token: Path | None = None,
+) -> None:
     """Durably append one JSONL row with one ``O_APPEND`` write.
 
     A prior valid but unterminated row receives its separator in the same
@@ -1197,6 +1203,9 @@ def append_log(log_path: Path, row: dict[str, Any]) -> None:
     artifact and is truncated before appending; earlier corruption refuses.
     """
 
+    if lock_token is None:
+        raise RuntimeError("campaign log append requires a held campaign.lock")
+    _assert_campaign_lock_token(lock_token)
     _require_external_campaign_log(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     prefix = b""
@@ -1205,17 +1214,12 @@ def append_log(log_path: Path, row: dict[str, Any]) -> None:
     except FileNotFoundError:
         existing = b""
     if existing:
-        parsed = load_campaign_log_rows(log_path)
+        parsed, final_segment = parse_campaign_log_bytes(existing)
         if parsed is None:
             raise ValueError("campaign log contains non-final corruption")
         if not existing.endswith(b"\n"):
             tail_start = existing.rfind(b"\n") + 1
-            tail = existing[tail_start:]
-            try:
-                tail_value = json.loads(tail.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                tail_value = None
-            if isinstance(tail_value, Mapping):
+            if final_segment == "mapping":
                 prefix = b"\n"
             else:
                 truncate_fd = os.open(log_path, os.O_WRONLY)
@@ -2460,10 +2464,12 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
     return lock_path
 
 
-def _assert_campaign_lock_held(runs_dir: Path) -> Path:
-    """Mechanically prove this process owns the runs-root campaign lock."""
+def _assert_campaign_lock_token(lock_path: Path) -> Path:
+    """Mechanically prove this process owns the supplied campaign lock."""
 
-    lock_path = Path(runs_dir) / "campaign.lock"
+    lock_path = Path(lock_path)
+    if lock_path.name != "campaign.lock":
+        raise RuntimeError("campaign log append requires a campaign.lock token")
     try:
         content = lock_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -2475,6 +2481,12 @@ def _assert_campaign_lock_held(runs_dir: Path) -> Path:
             f"campaign provenance log write requires this process to own {lock_path}"
         )
     return lock_path
+
+
+def _assert_campaign_lock_held(runs_dir: Path) -> Path:
+    """Mechanically prove this process owns the runs-root campaign lock."""
+
+    return _assert_campaign_lock_token(Path(runs_dir) / "campaign.lock")
 
 
 def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
@@ -2513,7 +2525,7 @@ def _append_campaign_provenance_attestation_if_missing(
 ) -> bool:
     """Append one current-byte attestation, idempotently under the lock."""
 
-    _assert_campaign_lock_held(manifest_path.parent.parent)
+    lock_token = _assert_campaign_lock_held(manifest_path.parent.parent)
     with _CAMPAIGN_ATTESTATION_APPEND_LOCK:
         rows = load_campaign_log_rows(log_path)
         if rows is None:
@@ -2534,6 +2546,7 @@ def _append_campaign_provenance_attestation_if_missing(
                 manifest=manifest,
                 timestamp=utc_timestamp(),
             ),
+            lock_token=lock_token,
         )
         return True
 
@@ -4402,9 +4415,27 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
-    root = runs_dir.resolve()
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
+    lock_token = acquire_campaign_lock(runs_dir)
+    try:
+        return _run_record_supersession_locked(
+            args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
+        )
+    finally:
+        lock_token.unlink(missing_ok=True)
+
+
+def _run_record_supersession_locked(
+    args: argparse.Namespace,
+    *,
+    runs_dir: Path,
+    log_path: Path,
+    lock_token: Path,
+) -> int:
+    """Construct and append a supersession while ``campaign.lock`` is held."""
+
+    root = runs_dir.resolve()
     policy_binding = load_campaign_policy(args.campaign_policy)
     bundle_id = args.record_supersession
     assert isinstance(bundle_id, str)
@@ -4521,7 +4552,7 @@ def run_record_supersession(args: argparse.Namespace) -> int:
     row["entry_sha256"] = supersession_entry_sha256(row)
     if not validate_occurrence_supersession_entry(row, runs_dir):
         raise ValueError("constructed supersession entry failed validation")
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
     print(json.dumps(row, sort_keys=True))
     return 0
 
@@ -4563,12 +4594,30 @@ def run_derive_neg8_drift_bound(args: argparse.Namespace) -> int:
 def run_whole_window_verdict(args: argparse.Namespace) -> int:
     """Emit the prospective NEG-8 verdict across a completed runs root."""
 
-    evaluation_started_at = utc_timestamp()
     runs_dir = Path(args.runs_dir)
     if not runs_dir.is_dir():
         raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
     _require_external_campaign_log(log_path)
+    lock_token = acquire_campaign_lock(runs_dir)
+    try:
+        return _run_whole_window_verdict_locked(
+            args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
+        )
+    finally:
+        lock_token.unlink(missing_ok=True)
+
+
+def _run_whole_window_verdict_locked(
+    args: argparse.Namespace,
+    *,
+    runs_dir: Path,
+    log_path: Path,
+    lock_token: Path,
+) -> int:
+    """Evaluate and append the whole-window verdict under the campaign lock."""
+
+    evaluation_started_at = utc_timestamp()
     policy_binding = load_campaign_policy(args.campaign_policy)
     neg8_drift_bound = load_neg8_drift_bound_artifact(
         getattr(args, "neg8_drift_bound", None)
@@ -4678,7 +4727,7 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
         bundle_ids=row["bundle_ids"],
         source_manifests=source_descriptors,
     )
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
     print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
     print(f"  decision: {bracket_decision}")
     for condition in core["conditions"]:
@@ -5131,6 +5180,7 @@ def print_verdict(
 def append_verdict(
     log_path: Path,
     *,
+    lock_token: Path,
     collection_verdict: str,
     collection_reasons: list[str],
     categories: dict[str, list[str]],
@@ -5170,12 +5220,13 @@ def append_verdict(
         row["idle_admission_core"] = idle_admission_core
     if warning is not None:
         row["block_order_warning"] = warning
-    append_log(log_path, row)
+    append_log(log_path, row, lock_token=lock_token)
 
 
 def append_environment_preflight_verdict(
     log_path: Path,
     *,
+    lock_token: Path,
     analysis_manifest: AnalysisManifestState | None,
     campaign_provenance_path: Path | None,
     preflight: dict[str, Any],
@@ -5189,6 +5240,7 @@ def append_environment_preflight_verdict(
     categories = {"usable": [], "waived": [], "failed": [], "missing": []}
     append_verdict(
         log_path,
+        lock_token=lock_token,
         collection_verdict="invalid",
         collection_reasons=[reason],
         categories=categories,
@@ -5485,6 +5537,7 @@ def run_axi_spec_campaign(
                 if log_path is not None:
                     append_environment_preflight_verdict(
                         log_path,
+                        lock_token=lock_path,
                         analysis_manifest=state,
                         campaign_provenance_path=campaign_provenance_path,
                         preflight=preflight or {},
@@ -5519,6 +5572,7 @@ def run_axi_spec_campaign(
                 if log_path is not None:
                     append_environment_preflight_verdict(
                         log_path,
+                        lock_token=lock_path,
                         analysis_manifest=state,
                         campaign_provenance_path=campaign_provenance_path,
                         preflight=preflight or {},
@@ -6124,7 +6178,7 @@ def run_axi_spec_campaign(
                 source_manifests=descriptors,
             )
             if log_path is not None:
-                append_log(log_path, whole_row)
+                append_log(log_path, whole_row, lock_token=lock_path)
                 categories = classify_campaign_members(selected_evaluations, [])
                 collection_verdict, collection_reasons = collection_verdict_for(
                     categories
@@ -6140,6 +6194,7 @@ def run_axi_spec_campaign(
                 )
                 append_verdict(
                     log_path,
+                    lock_token=lock_path,
                     collection_verdict=collection_verdict,
                     collection_reasons=collection_reasons,
                     categories=categories,
@@ -6226,19 +6281,24 @@ def run_campaign(args: argparse.Namespace) -> int:
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         if not args.dry_run:
             print_verdict("invalid", collection_reasons, categories, readiness)
-            append_verdict(
-                log_path,
-                collection_verdict="invalid",
-                collection_reasons=collection_reasons,
-                categories=categories,
-                claim_readiness=readiness,
-                analysis_manifest=analysis_manifest,
-                sampling_audit=sampling_audit_for(analysis_manifest),
-                members=[],
-                campaign_provenance_path=None,
-                warning=order_warning,
-                preflight=preflight,
-            )
+            verdict_lock = acquire_campaign_lock(runs_dir)
+            try:
+                append_verdict(
+                    log_path,
+                    lock_token=verdict_lock,
+                    collection_verdict="invalid",
+                    collection_reasons=collection_reasons,
+                    categories=categories,
+                    claim_readiness=readiness,
+                    analysis_manifest=analysis_manifest,
+                    sampling_audit=sampling_audit_for(analysis_manifest),
+                    members=[],
+                    campaign_provenance_path=None,
+                    warning=order_warning,
+                    preflight=preflight,
+                )
+            finally:
+                verdict_lock.unlink(missing_ok=True)
         return 1
     if analysis_manifest is not None and analysis_manifest.is_axi_v2:
         return run_axi_spec_campaign(
@@ -6276,19 +6336,24 @@ def run_campaign(args: argparse.Namespace) -> int:
         collection_reasons = ["analysis manifest validation failed before execution"]
         readiness = claim_readiness_for(analysis_manifest, "invalid", [])
         print_verdict("invalid", collection_reasons, categories, readiness)
-        append_verdict(
-            log_path,
-            collection_verdict="invalid",
-            collection_reasons=collection_reasons,
-            categories=categories,
-            claim_readiness=readiness,
-            analysis_manifest=analysis_manifest,
-            sampling_audit=sampling_audit_for(analysis_manifest),
-            members=[],
-            campaign_provenance_path=None,
-            warning=order_warning,
-            preflight=preflight,
-        )
+        verdict_lock = acquire_campaign_lock(runs_dir)
+        try:
+            append_verdict(
+                log_path,
+                lock_token=verdict_lock,
+                collection_verdict="invalid",
+                collection_reasons=collection_reasons,
+                categories=categories,
+                claim_readiness=readiness,
+                analysis_manifest=analysis_manifest,
+                sampling_audit=sampling_audit_for(analysis_manifest),
+                members=[],
+                campaign_provenance_path=None,
+                warning=order_warning,
+                preflight=preflight,
+            )
+        finally:
+            verdict_lock.unlink(missing_ok=True)
         return 1
 
     counts: Counter[str] = Counter()
@@ -6360,6 +6425,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             )
             append_environment_preflight_verdict(
                 log_path,
+                lock_token=lock_path,
                 analysis_manifest=analysis_manifest,
                 campaign_provenance_path=campaign_provenance_path,
                 preflight=preflight,
@@ -6400,6 +6466,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             )
             append_environment_preflight_verdict(
                 log_path,
+                lock_token=lock_path,
                 analysis_manifest=analysis_manifest,
                 campaign_provenance_path=campaign_provenance_path,
                 preflight=preflight,
@@ -6441,6 +6508,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=None,
                         extra={"error": item.message},
                     ),
+                    lock_token=lock_path,
                 )
                 counts["config_error"] += 1
                 if failures >= args.max_failures:
@@ -6543,7 +6611,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                             f"bundle={exc.bundle_id} detail={exc.detail}",
                             file=sys.stderr,
                         )
-                    append_log(log_path, gate_record)
+                    append_log(log_path, gate_record, lock_token=lock_path)
                 exit_code = None
                 duration_s = None
                 if status != "failed" and state.members_total is None:
@@ -6597,6 +6665,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=duration_s,
                         extra=extra,
                     ),
+                    lock_token=lock_path,
                 )
                 counts[status] += 1
                 if failures >= args.max_failures:
@@ -6667,6 +6736,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         duration_s=duration_s,
                         extra=extra,
                     ),
+                    lock_token=lock_path,
                 )
                 counts[status] += 1
                 if failures >= args.max_failures:
@@ -6757,6 +6827,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                             ),
                         },
                     ),
+                    lock_token=lock_path,
                 )
                 if failures >= args.max_failures:
                     break
@@ -6838,7 +6909,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"detail={exc.detail}",
                         file=sys.stderr,
                     )
-                append_log(log_path, shakedown_record)
+                append_log(
+                    log_path, shakedown_record, lock_token=lock_path
+                )
             if status == "failed":
                 failures += 1
                 if exit_code == 0:
@@ -6892,6 +6965,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     duration_s=duration_s,
                     extra=extra,
                 ),
+                lock_token=lock_path,
             )
             counts[status] += 1
             print(f"{status} {info.run_id}: exit={exit_code} duration_s={duration_s:.3f}")
@@ -6905,54 +6979,50 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             if failures >= args.max_failures:
                 break
-    finally:
-        if lock_path is not None:
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-
-    print("Summary:")
-    for status in STATUSES:
-        if counts[status]:
-            print(f"  {status}: {counts[status]}")
-    if args.dry_run:
-        return 0
-    categories = classify_campaign_members(all_evaluations, missing_members)
-    collection_verdict, collection_reasons = collection_verdict_for(categories)
-    sampling_audit = sampling_audit_for(analysis_manifest)
-    idle_admission_core = idle_admission_core_verdict(
-        all_evaluations,
-        policy_binding,
-        runs_root=runs_dir,
-        neg8_drift_bound=neg8_drift_bound,
-    )
-    extension = policy_binding.idle_admission_extension
-    claim_bearing = bool(
-        analysis_manifest is not None
-        and extension is not None
-        and extension.claim_bearing
-    )
-    claim_readiness = apply_idle_admission_claim_barrier(
-        claim_readiness_for(analysis_manifest, collection_verdict, all_evaluations),
-        idle_admission_core,
-        claim_bearing=claim_bearing,
-    )
-    print_verdict(
-        collection_verdict,
-        collection_reasons,
-        categories,
-        claim_readiness,
-    )
-    print("IDLE-ADMISSION CORE:")
-    if idle_admission_core["conditions"]:
-        for condition in idle_admission_core["conditions"]:
-            print(f"  condition: {condition}")
-    else:
-        print("  conditions: <none>")
-    if not args.dry_run:
+        print("Summary:")
+        for summary_status in STATUSES:
+            if counts[summary_status]:
+                print(f"  {summary_status}: {counts[summary_status]}")
+        if args.dry_run:
+            return 0
+        categories = classify_campaign_members(all_evaluations, missing_members)
+        collection_verdict, collection_reasons = collection_verdict_for(categories)
+        sampling_audit = sampling_audit_for(analysis_manifest)
+        idle_admission_core = idle_admission_core_verdict(
+            all_evaluations,
+            policy_binding,
+            runs_root=runs_dir,
+            neg8_drift_bound=neg8_drift_bound,
+        )
+        extension = policy_binding.idle_admission_extension
+        claim_bearing = bool(
+            analysis_manifest is not None
+            and extension is not None
+            and extension.claim_bearing
+        )
+        claim_readiness = apply_idle_admission_claim_barrier(
+            claim_readiness_for(
+                analysis_manifest, collection_verdict, all_evaluations
+            ),
+            idle_admission_core,
+            claim_bearing=claim_bearing,
+        )
+        print_verdict(
+            collection_verdict,
+            collection_reasons,
+            categories,
+            claim_readiness,
+        )
+        print("IDLE-ADMISSION CORE:")
+        if idle_admission_core["conditions"]:
+            for condition in idle_admission_core["conditions"]:
+                print(f"  condition: {condition}")
+        else:
+            print("  conditions: <none>")
+        assert lock_path is not None
         append_verdict(
             log_path,
+            lock_token=lock_path,
             collection_verdict=collection_verdict,
             collection_reasons=collection_reasons,
             categories=categories,
@@ -6965,14 +7035,18 @@ def run_campaign(args: argparse.Namespace) -> int:
             preflight=preflight,
             idle_admission_core=idle_admission_core,
         )
-    core_blocks_claim = bool(
-        claim_bearing and _idle_admission_claim_barrier_reasons(idle_admission_core)
-    )
-    return 1 if (
-        failures
-        or collection_verdict in {"blocked", "invalid"}
-        or core_blocks_claim
-    ) else 0
+        core_blocks_claim = bool(
+            claim_bearing
+            and _idle_admission_claim_barrier_reasons(idle_admission_core)
+        )
+        return 1 if (
+            failures
+            or collection_verdict in {"blocked", "invalid"}
+            or core_blocks_claim
+        ) else 0
+    finally:
+        if lock_path is not None:
+            lock_path.unlink(missing_ok=True)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
