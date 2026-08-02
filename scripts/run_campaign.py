@@ -1209,16 +1209,24 @@ def _quarantine_torn_campaign_tail(log_path: Path, tail: bytes) -> Path:
     stamp = utc_timestamp().replace("-", "").replace(":", "").replace(".", "")
     digest = hashlib.sha256(tail).hexdigest()[:12]
     sidecar = log_path.with_name(f"{log_path.name}.torn-{stamp}-{digest}")
-    fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        written = os.write(fd, tail)
-        if written != len(tail):
-            raise OSError(
-                f"short torn-tail quarantine write: wrote {written} of {len(tail)} bytes"
-            )
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+        fd = os.open(sidecar, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            written = os.write(fd, tail)
+            if written != len(tail):
+                raise OSError(
+                    f"short torn-tail quarantine write: wrote {written} of {len(tail)} bytes"
+                )
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except BaseException as exc:
+        print(
+            f"warning: FAILED to preserve {len(tail)} torn campaign-log "
+            f"bytes to {sidecar} ({exc!r}); append refused, log untouched",
+            file=sys.stderr,
+        )
+        raise
     print(
         f"warning: preserved {len(tail)} torn campaign-log bytes at {sidecar}",
         file=sys.stderr,

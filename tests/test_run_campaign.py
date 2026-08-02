@@ -62,7 +62,10 @@ def held_campaign_lock(runs_dir: Path):
     lock_path = run_campaign_module.acquire_campaign_lock(runs_dir)
     try:
         yield lock_path
-    finally:
+    except BaseException as exc:
+        run_campaign_module.release_campaign_lock(lock_path, in_flight=exc)
+        raise
+    else:
         run_campaign_module.release_campaign_lock(lock_path)
 
 
@@ -444,17 +447,35 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                             ([], "torn_prefix"),
                         )
 
-    @unittest.expectedFailure
-    def test_r7_non_bmp_key_prefix_known_f1(self) -> None:
-        """C3-RECOGNIZER-EXACT-01: high-surrogate key tear is known F1."""
+    def test_r7_non_bmp_key_prefix_known_f1_exact_set(self) -> None:
+        """C3-RECOGNIZER-EXACT-01: the high-surrogate key tear (registered
+        blocker F1) is pinned as an EXACT misclassification set — every
+        misclassified boundary must fall inside the known surrogate-pair
+        escape span, and every boundary outside it must classify
+        correctly, so ANY second regression is a hard failure while the
+        registered blocker stays documented. When the row closes and F1
+        is fixed, the non-empty assertion below fails deliberately:
+        update this pin to full correctness at closure."""
 
         wire = json.dumps({"\ue000": 1, "😀": 2}, sort_keys=True).encode("ascii")
-        for boundary in range(1, len(wire)):
-            with self.subTest(boundary=boundary):
-                self.assertEqual(
-                    self._parse(wire[:boundary]),
-                    ([], "torn_prefix"),
-                )
+        span_start = wire.index(b"\\ud83d")
+        span_end = span_start + len(b"\\ud83d\\ude00")
+        misclassified = {
+            boundary
+            for boundary in range(1, len(wire))
+            if self._parse(wire[:boundary]) != ([], "torn_prefix")
+        }
+        self.assertTrue(
+            misclassified,
+            "registered blocker F1 appears fixed: close "
+            "C3-RECOGNIZER-EXACT-01 and update this pin",
+        )
+        outside = {b for b in misclassified if not (span_start < b < span_end)}
+        self.assertFalse(
+            outside,
+            f"NEW recognizer regression outside the registered F1 span: "
+            f"boundaries {sorted(outside)}",
+        )
 
     def test_r7_named_prefix_pins(self) -> None:
         for name, prefix in (
