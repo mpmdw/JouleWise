@@ -45,7 +45,77 @@ mint). QA-10A/QA-10B remain registered blockers against the join
 contract — re-scoped, corpus-unreachable today, not downgraded.
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-01 desk session, second checkpoint; resume EXACTLY here)
+## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT — Ed's context-clear + laptop-move checkpoint; resume EXACTLY here)
+
+Successor is FABLE, MAGISTRATE. Main is at `326d05f`+ (D-106 et al.
+pushed). The 2026-08-01→02 runway (~26 h) closed the cooldown-join
+gauntlet and drove both repair branches to CLEAN decisive audits.
+DANGER FIRST: the old session's scratchpad
+(/private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/)
+may NOT survive the laptop move — everything needed was rescued to
+`.desk/runway-20260801-artifacts/` (16 files: all audit reports, fix
+reports, the winB/winC briefs) and BOTH branches are PUSHED to origin.
+The two worktrees there (d100-worktree, mcv3-worktree) are disposable;
+`git worktree prune` + re-create from origin if needed.
+
+RESUME IN ORDER:
+1. **MERGE PR #94** (impl/met-dangler-disposition @ 5f8b4b8+05d99b6...
+   head 05d99b6; the D-100 repair). Its pull_request CI never scheduled
+   (close/reopen tried; GitHub-side). D-072 substance is satisfied
+   far past precedent: THREE independent audits + cold gate D-106 +
+   lead suite Ran 2396 OK EXIT-0-UNMASKED at the audited head + mapping
+   pins hash-identical. RULED FALLBACK: merge; the push-to-main CI run
+   is the verdict; REVERT immediately if it fails. `gh pr merge 94
+   --merge` then watch main CI.
+2. **MERGE PR #95** (impl/manifest-contrast-v3 @ e94d4a7; v3 with the
+   embedded-floor-bytes ruling). Decisive audit CLEAN ZERO FINDINGS;
+   CI was RUNNING 3/5 green at checkpoint — likely finished; verify
+   `gh pr checks 95` then merge under D-072.
+3. **Post-merge kernel batch:** retire MET-DANGLER-DISPOSITION-01,
+   MANIFEST-CONTRAST-01, MEMBERSHIP-READER-FAILOPEN-01 (folded, closes
+   with #94) to the completed table; ADD row **D100-BII-BINDING-01**
+   (P1, agent lane) per **D-106**: (a) telemetry interval containment
+   [run_started event, failure+0.250 s] (~5 lines; cadence clause
+   STRUCK; concurrent-capture residual RECORDED); (b) custody digest
+   freeze (closure artifact records sha256 of EVERY file per b-ii
+   bundle + a root-level quarantine digest manifest, re-verified at
+   license execution); (c) nested-content closure (metadata/event
+   nested workload evidence voids); (d) in-code marker in
+   salvage_dangler.py naming the open row. Window B re-evaluation
+   HARD-BLOCKED on it. Fidelity pins will need updating (currently 60;
+   -3 retirements +1 new = 58).
+4. **D100-BII-BINDING-01 implementation** (Sol xhigh, one commit +
+   focused audit — the fixes are decidable and small; the refuter's
+   writer-level diagnosis is in
+   .desk/runway-20260801-artifacts/... and D-106). Then:
+5. **Window B re-evaluation** per
+   `.desk/runway-20260801-artifacts/winB-reeval-exec-brief.md` +
+   winB-reeval-runbook.md + `.desk/winB-closure-facts.md`. Remember
+   D-106: condition 3 requires RE-RECORDING with the repaired tool;
+   the closure artifact must carry per-file digests (the D-106 freeze).
+   If PASSED: C2 rungs + C4's two complete shapes become licensable —
+   CLAIMS_STATUS refresh + decision entry for Ed.
+6. **Window C** (first quiet window post-move; Ed does fresh §5A):
+   plan prep at .desk/runway-20260801-artifacts/winC-plan-prep.md
+   (incl. the prep-script TM-line fix first). Needs #94 merged (done
+   in step 1) + D100-BII-BINDING closed ONLY if a dangler occurs
+   (D-106: a window-C dangler seeking the b-ii license before the row
+   closes RETURNS TO THE GATE).
+7. **Mint chain** (post-#95): MINT-GENERALIZE-01 (7B mint + the D-095
+   multi-cell artifact) → gated contrast claim. CAL-BRACKET-D079-01 is
+   fully specified (D-102; n=19 corpus tables in the reconstruction
+   transcript summarized at .desk/cal_acceptance_d079/).
+8. **Bookkeeping owed:** final run-report section for the runway's
+   second half (D-106, both branch landings — the report's §8 covers
+   through D-105); consistency sweep after the merges; C-040 already
+   committed; NVIDIA staged plan awaits Ed's ratification
+   (.desk/nvidia-extension/SYNTHESIS.md; queue row NVIDIA-PORTABILITY-01).
+Decisions this runway: D-098..D-106 (+ D-100 addendum, repairs
+disposition note). Standing: verdicts as issued; the D-106 binding
+commitments; proactive polling of delegated runs (memory); README
+banner = the machine-state channel.
+
+## PRIOR RESUME SCRIPT (2026-08-01 desk session, second checkpoint; resume EXACTLY here)
 
 Successor is FABLE, MAGISTRATE. The morning checkpoint's desk queue is
 LARGELY EXECUTED this session (details in the prior section below, now
