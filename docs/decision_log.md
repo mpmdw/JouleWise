@@ -6512,3 +6512,14 @@ gate), or any rider text conflicts with observed writer behavior.
    failure on the tail-classification clause returns to a cold gate.
 
 Revisit when: fix round 4's fresh delta re-audit reports.
+[2026-08-02 magistrate disposition: the round-4 re-audit found two
+blockers that are IMPLEMENTATION INFIDELITIES to this ruling (bare-Path
+tokens aliasing across release/reacquire — the nonce was not bound into
+an unforgeable token object; recognizer grammar missing canonical
+key-ordering and the -0.0 float form), not formulation failures — both
+counterexamples are decided correctly by the ruled formulations. The
+auditor's contrary reading (F1) is recorded as dissent. Round 5 is
+licensed as fidelity repair under this ruling's recognizer-bug clause,
+with a BINDING commitment: any blocker in round 5's re-audit on either
+mechanism, however shaped, returns to a cold gate and opens the descope
+question with Ed — no further formulation-vs-implementation parsing.]
