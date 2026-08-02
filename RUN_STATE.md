@@ -98,6 +98,27 @@ historical). State:
    entries 09934c6b…, contrast 47 entries 9ebeca3a…) → fresh delta
    re-audit → PR (D-072 gate). MANIFEST-CONTRAST v3 (D-095) stays
    SEQUENTIAL AFTER commit 3.
+3a. **POST-MERGE STATE (updated 2026-08-02 ~12:45 PT):** commit 3 MERGED
+   (PR #93 `cb860e1`); gauntlet CLOSED, D-088/D-093 standing scans
+   LIFTED; PR #92 merged. TWO REPAIR BRANCHES at fix-round-1 heads with
+   FRESH DELTA RE-AUDITS IN FLIGHT at checkpoint time:
+   impl/met-dangler-disposition @ 5f8b4b8 (the D-100 repair; first
+   audit FAIL 5 blockers → fix round with inputs.py scope expansion →
+   lead gates PASS: suite 2391 OK unmasked, pins hash-identical) and
+   impl/manifest-contrast-v3 @ 7c03b81 (v3; first audit FAIL 2 D-093
+   blockers → fix round w/ SCOPE-1 grant + RULING-1 [F4 fixture-only,
+   fail-on-base waived] → lead gates PASS: suite 2374 OK, pins
+   hash-identical, v1 blob-identical). ON RE-AUDIT CLEAN: PR + CI +
+   D-072 merge each; then window B re-evaluation per the staged
+   runbook (.desk custody: winB-reeval-runbook + closure facts), then
+   window C prep. D-102 (CAL-BRACKET pins) ready-to-implement after.
+   NVIDIA extension: two-lens consult synthesized, staged plan in
+   .desk/nvidia-extension/SYNTHESIS.md, queue row Ed-gated. New rows:
+   C3-RECOGNIZER-EXACT-01, NVIDIA-RETENTION-FLAKE-01,
+   NVIDIA-PORTABILITY-01. Ed context: runway end = checkpoint for
+   context-clear + laptop move (NOT a deadline); window C moves to the
+   post-move session BY PHYSICS (move invalidates settled-machine
+   conditions).
 3b. **Landed this desk runway (Ed-authorized ~26 h, began ~16:00 PT):**
    D-102 (CAL-BRACKET pins: cap 0.001275166090593858 s / ceiling
    0.012093166090593858 s, identity-epoch freshness, never-zero
