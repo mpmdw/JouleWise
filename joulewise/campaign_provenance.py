@@ -82,15 +82,304 @@ def campaign_manifest_member_shape_valid(
     return "outcome" not in member
 
 
+_PREFIX_COMPLETE = "complete"
+_PREFIX_INCOMPLETE = "incomplete"
+_PREFIX_INVALID = "invalid"
+_JSON_SIMPLE_ESCAPES = frozenset('"\\bfnrt')
+_JSON_LOWER_HEX = frozenset("0123456789abcdef")
+
+
+def _writer_emits_unicode_escape(codepoint: int) -> bool:
+    """Match the escapes emitted by ``ensure_ascii=True`` exactly."""
+
+    return (
+        codepoint < 0x20
+        and codepoint not in {0x08, 0x09, 0x0A, 0x0C, 0x0D}
+    ) or codepoint >= 0x7F
+
+
+def _unicode_escape_prefix_can_complete(digits: str) -> bool:
+    remaining = 4 - len(digits)
+    low = int(digits + ("0" * remaining), 16)
+    high = int(digits + ("f" * remaining), 16)
+    return any(
+        low <= range_high and high >= range_low
+        for range_low, range_high in (
+            (0x00, 0x07),
+            (0x0B, 0x0B),
+            (0x0E, 0x1F),
+            (0x7F, 0xFFFF),
+        )
+    )
+
+
+def _canonical_number(text: str) -> bool:
+    try:
+        value = json.loads(text)
+    except (ValueError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and json.dumps(value) == text
+    )
+
+
+def _python_number_prefix(text: str) -> bool:
+    """Recognize an unfinished number in the grammar emitted by json.dumps."""
+
+    index = 0
+    if text.startswith("-"):
+        index = 1
+        if index == len(text):
+            return True
+    if index == len(text) or not text[index].isdigit():
+        return False
+    if text[index] == "0":
+        index += 1
+        if index < len(text) and text[index].isdigit():
+            return False
+    else:
+        while index < len(text) and text[index].isdigit():
+            index += 1
+    if index == len(text):
+        return False
+    if text[index] == ".":
+        index += 1
+        if index == len(text):
+            return True
+        decimal_start = index
+        while index < len(text) and text[index].isdigit():
+            index += 1
+        if index == decimal_start:
+            return False
+        if index == len(text):
+            # A non-canonical finite decimal can still be a prefix of a
+            # longer shortest-round-trip float spelling.
+            return True
+    if index == len(text) or text[index] != "e":
+        return False
+    index += 1
+    if index == len(text):
+        return True
+    if text[index] not in "+-":
+        return False
+    index += 1
+    if index == len(text):
+        return True
+    exponent_start = index
+    while index < len(text) and text[index].isdigit():
+        index += 1
+    if index != len(text):
+        return False
+    return index - exponent_start < 2 or not _canonical_number(text)
+
+
+class _CanonicalWriterPrefixRecognizer:
+    """Incrementally recognize proper prefixes of the writer's JSON grammar."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.index = 0
+
+    def recognizes_proper_prefix(self) -> bool:
+        if not self.text.startswith("{"):
+            return False
+        status = self._parse_object()
+        return status == _PREFIX_INCOMPLETE and self.index == len(self.text)
+
+    def _expect(self, token: str) -> str:
+        remaining = self.text[self.index :]
+        if remaining.startswith(token):
+            self.index += len(token)
+            return _PREFIX_COMPLETE
+        if token.startswith(remaining):
+            self.index = len(self.text)
+            return _PREFIX_INCOMPLETE
+        return _PREFIX_INVALID
+
+    def _parse_object(self) -> str:
+        self.index += 1  # ``{`` was selected by the caller.
+        if self.index == len(self.text):
+            return _PREFIX_INCOMPLETE
+        if self.text[self.index] == "}":
+            self.index += 1
+            return _PREFIX_COMPLETE
+        while True:
+            if self.text[self.index] != '"':
+                return _PREFIX_INVALID
+            status, _key = self._parse_string()
+            if status != _PREFIX_COMPLETE:
+                return status
+            status = self._expect(": ")
+            if status != _PREFIX_COMPLETE:
+                return status
+            status = self._parse_value()
+            if status != _PREFIX_COMPLETE:
+                return status
+            if self.index == len(self.text):
+                return _PREFIX_INCOMPLETE
+            if self.text[self.index] == "}":
+                self.index += 1
+                return _PREFIX_COMPLETE
+            status = self._expect(", ")
+            if status != _PREFIX_COMPLETE:
+                return status
+            if self.index == len(self.text):
+                return _PREFIX_INCOMPLETE
+
+    def _parse_array(self) -> str:
+        self.index += 1  # ``[`` was selected by the caller.
+        if self.index == len(self.text):
+            return _PREFIX_INCOMPLETE
+        if self.text[self.index] == "]":
+            self.index += 1
+            return _PREFIX_COMPLETE
+        while True:
+            status = self._parse_value()
+            if status != _PREFIX_COMPLETE:
+                return status
+            if self.index == len(self.text):
+                return _PREFIX_INCOMPLETE
+            if self.text[self.index] == "]":
+                self.index += 1
+                return _PREFIX_COMPLETE
+            status = self._expect(", ")
+            if status != _PREFIX_COMPLETE:
+                return status
+            if self.index == len(self.text):
+                return _PREFIX_INCOMPLETE
+
+    def _parse_value(self) -> str:
+        if self.index == len(self.text):
+            return _PREFIX_INCOMPLETE
+        character = self.text[self.index]
+        if character == "{":
+            return self._parse_object()
+        if character == "[":
+            return self._parse_array()
+        if character == '"':
+            status, _value = self._parse_string()
+            return status
+        for literal in ("true", "false", "null", "NaN", "Infinity"):
+            if character == literal[0]:
+                return self._parse_literal(literal)
+        if self.text.startswith("-I", self.index):
+            return self._parse_literal("-Infinity")
+        if character == "-" or character.isdigit():
+            return self._parse_number()
+        return _PREFIX_INVALID
+
+    def _parse_literal(self, literal: str) -> str:
+        remaining = self.text[self.index :]
+        if remaining.startswith(literal):
+            self.index += len(literal)
+            return _PREFIX_COMPLETE
+        if literal.startswith(remaining):
+            self.index = len(self.text)
+            return _PREFIX_INCOMPLETE
+        return _PREFIX_INVALID
+
+    def _parse_number(self) -> str:
+        start = self.index
+        while (
+            self.index < len(self.text)
+            and self.text[self.index] in "-+0123456789.e"
+        ):
+            self.index += 1
+        token = self.text[start : self.index]
+        if self.index < len(self.text):
+            return _PREFIX_COMPLETE if _canonical_number(token) else _PREFIX_INVALID
+        if _canonical_number(token):
+            return _PREFIX_COMPLETE
+        return (
+            _PREFIX_INCOMPLETE
+            if _python_number_prefix(token)
+            else _PREFIX_INVALID
+        )
+
+    def _parse_string(self) -> tuple[str, str | None]:
+        start = self.index
+        self.index += 1
+        while self.index < len(self.text):
+            character = self.text[self.index]
+            if character == '"':
+                self.index += 1
+                token = self.text[start : self.index]
+                try:
+                    value = json.loads(token)
+                except json.JSONDecodeError:
+                    return _PREFIX_INVALID, None
+                if not isinstance(value, str) or json.dumps(value) != token:
+                    return _PREFIX_INVALID, None
+                return _PREFIX_COMPLETE, value
+            if ord(character) < 0x20:
+                return _PREFIX_INVALID, None
+            if character != "\\":
+                self.index += 1
+                continue
+            self.index += 1
+            if self.index == len(self.text):
+                return _PREFIX_INCOMPLETE, None
+            escape = self.text[self.index]
+            if escape in _JSON_SIMPLE_ESCAPES:
+                self.index += 1
+                continue
+            if escape != "u":
+                return _PREFIX_INVALID, None
+            self.index += 1
+            digit_start = self.index
+            while (
+                self.index < len(self.text)
+                and self.index - digit_start < 4
+                and self.text[self.index] in _JSON_LOWER_HEX
+            ):
+                self.index += 1
+            digits = self.text[digit_start : self.index]
+            if len(digits) < 4:
+                if self.index < len(self.text):
+                    return _PREFIX_INVALID, None
+                return (
+                    (_PREFIX_INCOMPLETE, None)
+                    if _unicode_escape_prefix_can_complete(digits)
+                    else (_PREFIX_INVALID, None)
+                )
+            if not _writer_emits_unicode_escape(int(digits, 16)):
+                return _PREFIX_INVALID, None
+        return _PREFIX_INCOMPLETE, None
+
+
+def _canonical_unterminated_mapping(segment: bytes) -> dict[str, Any] | None:
+    if not segment.isascii():
+        return None
+    try:
+        value = json.loads(segment)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    if json.dumps(value, sort_keys=True).encode("ascii") != segment:
+        return None
+    return value
+
+
+def _canonical_writer_proper_prefix(segment: bytes) -> bool:
+    if not segment or not segment.isascii() or segment[:1] != b"{":
+        return False
+    return _CanonicalWriterPrefixRecognizer(
+        segment.decode("ascii")
+    ).recognizes_proper_prefix()
+
+
 def parse_campaign_log_bytes(
     raw: bytes,
 ) -> tuple[list[Mapping[str, Any]] | None, str]:
     """Parse object-only JSONL and classify its final segment.
 
     The writer emits one complete JSON mapping plus LF per append.  Therefore
-    an unterminated final segment is tolerable only when it is either an
-    unparseable prefix of that mapping or a complete mapping missing its LF.
-    A complete non-mapping value is corruption even without the final LF.
+    an unterminated final segment is tolerable only when it is either a proper
+    prefix of the writer's canonical mapping grammar or a byte-exact canonical
+    mapping missing its LF.  Every other final segment is corruption.
     """
 
     terminated = raw.endswith(b"\n")
@@ -103,20 +392,25 @@ def parse_campaign_log_bytes(
         is_unterminated_final = not terminated and index == len(lines) - 1
         if not line.strip():
             if is_unterminated_final and raw:
-                final_segment = "unparseable"
+                return None, "invalid"
             continue
+        if is_unterminated_final:
+            value = _canonical_unterminated_mapping(line)
+            if value is not None:
+                rows.append(value)
+                final_segment = "mapping"
+                continue
+            if _canonical_writer_proper_prefix(line):
+                final_segment = "torn_prefix"
+                continue
+            return None, "invalid"
         try:
             value = json.loads(line.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            if is_unterminated_final:
-                final_segment = "unparseable"
-                continue
             return None, "invalid"
         if not isinstance(value, Mapping):
             return None, "invalid"
         rows.append(value)
-        if is_unterminated_final:
-            final_segment = "mapping"
     return rows, final_segment
 
 

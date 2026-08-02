@@ -26,6 +26,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import shlex
 import subprocess
 import sys
@@ -1205,7 +1206,16 @@ def append_log(
 
     if lock_token is None:
         raise RuntimeError("campaign log append requires a held campaign.lock")
-    _assert_campaign_lock_token(lock_token)
+    ownership = _validated_campaign_lock_ownership(lock_token)
+    resolved_log_parent = Path(log_path).resolve(strict=False).parent
+    if (
+        resolved_log_parent != ownership.runs_root
+        and os.path.lexists(resolved_log_parent / "campaign.lock")
+    ):
+        raise RuntimeError(
+            "campaign log append cannot use a foreign lock token for lockable "
+            f"root {resolved_log_parent}"
+        )
     _require_external_campaign_log(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     prefix = b""
@@ -2444,10 +2454,27 @@ def duplicate_run_id_error(items: list[ConfigInfo | ConfigError]) -> str | None:
     return "duplicate sanitized run_id(s): " + "; ".join(parts)
 
 
+@dataclass(frozen=True)
+class _CampaignLockOwnership:
+    lock_path: Path
+    runs_root: Path
+    st_dev: int
+    st_ino: int
+    nonce: str
+
+
+_CAMPAIGN_LOCK_OWNERSHIP: dict[Path, _CampaignLockOwnership] = {}
+_CAMPAIGN_LOCK_OWNERSHIP_LOCK = threading.Lock()
+
+
 def acquire_campaign_lock(runs_dir: Path) -> Path:
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = runs_dir / "campaign.lock"
-    content = f"pid={os.getpid()} created_at={utc_timestamp()}\n"
+    runs_root = Path(runs_dir).resolve(strict=False)
+    runs_root.mkdir(parents=True, exist_ok=True)
+    lock_path = runs_root / "campaign.lock"
+    nonce = secrets.token_hex(32)
+    content = (
+        f"pid={os.getpid()} nonce={nonce} created_at={utc_timestamp()}\n"
+    )
     try:
         fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError as exc:
@@ -2459,34 +2486,108 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
             f"another campaign appears to be running (lock {lock_path}, created {existing}); "
             "if no campaign is running, delete the lock file and retry"
         ) from exc
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(content)
+    try:
+        acquired_stat = os.fstat(fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    ownership = _CampaignLockOwnership(
+        lock_path=lock_path,
+        runs_root=runs_root,
+        st_dev=acquired_stat.st_dev,
+        st_ino=acquired_stat.st_ino,
+        nonce=nonce,
+    )
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        _CAMPAIGN_LOCK_OWNERSHIP[lock_path] = ownership
     return lock_path
+
+
+def _validated_campaign_lock_ownership(
+    lock_path: Path,
+) -> _CampaignLockOwnership:
+    """Return acquisition identity only for this process's live lock."""
+
+    lock_path = Path(lock_path)
+    if lock_path.name != "campaign.lock":
+        raise RuntimeError("campaign log append requires a campaign.lock token")
+    resolved_lock_path = lock_path.resolve(strict=False)
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        ownership = _CAMPAIGN_LOCK_OWNERSHIP.get(resolved_lock_path)
+    if ownership is None:
+        raise RuntimeError(
+            "campaign provenance log write requires held lock acquired by this process"
+        )
+    if (
+        resolved_lock_path != ownership.lock_path
+        or resolved_lock_path != ownership.runs_root / "campaign.lock"
+    ):
+        raise RuntimeError(
+            "campaign provenance log write requires the registered runs-root lock"
+        )
+    try:
+        current_stat = os.stat(resolved_lock_path)
+        content = resolved_lock_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(
+            f"campaign provenance log write requires held lock {resolved_lock_path}"
+        ) from exc
+    if (
+        (current_stat.st_dev, current_stat.st_ino)
+        != (ownership.st_dev, ownership.st_ino)
+        or not content.startswith(f"pid={os.getpid()} ")
+        or f" nonce={ownership.nonce} " not in content
+    ):
+        raise RuntimeError(
+            "campaign provenance log write requires this process's acquisition "
+            f"identity for {resolved_lock_path}"
+        )
+    return ownership
 
 
 def _assert_campaign_lock_token(lock_path: Path) -> Path:
     """Mechanically prove this process owns the supplied campaign lock."""
 
-    lock_path = Path(lock_path)
-    if lock_path.name != "campaign.lock":
-        raise RuntimeError("campaign log append requires a campaign.lock token")
-    try:
-        content = lock_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise RuntimeError(
-            f"campaign provenance log write requires held lock {lock_path}"
-        ) from exc
-    if not content.startswith(f"pid={os.getpid()} "):
-        raise RuntimeError(
-            f"campaign provenance log write requires this process to own {lock_path}"
-        )
-    return lock_path
+    return _validated_campaign_lock_ownership(lock_path).lock_path
 
 
 def _assert_campaign_lock_held(runs_dir: Path) -> Path:
-    """Mechanically prove this process owns the runs-root campaign lock."""
+    """Assert an acquired lock; never mint ownership from file contents."""
 
     return _assert_campaign_lock_token(Path(runs_dir) / "campaign.lock")
+
+
+def release_campaign_lock(lock_path: Path) -> None:
+    """Idempotently release only the lock identity acquired by this process."""
+
+    supplied_lock_path = Path(lock_path)
+    resolved_lock_path = (
+        supplied_lock_path.parent.resolve(strict=False) / supplied_lock_path.name
+    )
+    with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
+        ownership = _CAMPAIGN_LOCK_OWNERSHIP.pop(resolved_lock_path, None)
+    if ownership is None:
+        return
+    try:
+        current_stat = os.stat(resolved_lock_path)
+    except FileNotFoundError:
+        return
+    if (current_stat.st_dev, current_stat.st_ino) != (
+        ownership.st_dev,
+        ownership.st_ino,
+    ):
+        return
+    resolved_lock_path.unlink(missing_ok=True)
 
 
 def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
@@ -2730,7 +2831,7 @@ def run_repair_campaign_provenance(args: argparse.Namespace) -> int:
         return 0
     finally:
         if lock_path is not None:
-            lock_path.unlink(missing_ok=True)
+            release_campaign_lock(lock_path)
 
 
 def verify_cooldown_raw_provenance(
@@ -4423,7 +4524,7 @@ def run_record_supersession(args: argparse.Namespace) -> int:
             args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
         )
     finally:
-        lock_token.unlink(missing_ok=True)
+        release_campaign_lock(lock_token)
 
 
 def _run_record_supersession_locked(
@@ -4605,7 +4706,7 @@ def run_whole_window_verdict(args: argparse.Namespace) -> int:
             args, runs_dir=runs_dir, log_path=log_path, lock_token=lock_token
         )
     finally:
-        lock_token.unlink(missing_ok=True)
+        release_campaign_lock(lock_token)
 
 
 def _run_whole_window_verdict_locked(
@@ -6218,7 +6319,7 @@ def run_axi_spec_campaign(
         return 0
     finally:
         if lock_path is not None:
-            lock_path.unlink(missing_ok=True)
+            release_campaign_lock(lock_path)
 
 
 def run_campaign(args: argparse.Namespace) -> int:
@@ -6298,7 +6399,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     preflight=preflight,
                 )
             finally:
-                verdict_lock.unlink(missing_ok=True)
+                release_campaign_lock(verdict_lock)
         return 1
     if analysis_manifest is not None and analysis_manifest.is_axi_v2:
         return run_axi_spec_campaign(
@@ -6353,7 +6454,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 preflight=preflight,
             )
         finally:
-            verdict_lock.unlink(missing_ok=True)
+            release_campaign_lock(verdict_lock)
         return 1
 
     counts: Counter[str] = Counter()
@@ -6395,101 +6496,98 @@ def run_campaign(args: argparse.Namespace) -> int:
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-            config_dir, runs_dir, analysis_manifest, policy_binding, log_path
-        )
-        campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
-        campaign_provenance["cooldown_anchor_strategy"] = (
-            "neg8_reference_start_then_first_admission_passing"
-            if neg8_reference_expected
-            else "first_admission_passing"
-        )
-        write_campaign_provenance(
-            campaign_provenance_path, campaign_provenance, log_path
-        )
-        try:
-            environment_preflight = campaign_environment_preflight(
-                policy_binding,
-                arm_quiet_mode=args.arm_quiet_mode,
-                arm_countdown_s=args.arm_countdown_s,
-                override_path=args.environment_override,
+
+    try:
+        if not args.dry_run:
+            campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+                config_dir, runs_dir, analysis_manifest, policy_binding, log_path
             )
-        except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
-            environment_error = {
-                "status": "error",
-                "reason": f"{type(exc).__name__}: {exc}",
-            }
-            campaign_provenance["environment_preflight"] = environment_error
+            campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
+            campaign_provenance["cooldown_anchor_strategy"] = (
+                "neg8_reference_start_then_first_admission_passing"
+                if neg8_reference_expected
+                else "first_admission_passing"
+            )
             write_campaign_provenance(
                 campaign_provenance_path, campaign_provenance, log_path
             )
-            append_environment_preflight_verdict(
-                log_path,
-                lock_token=lock_path,
-                analysis_manifest=analysis_manifest,
-                campaign_provenance_path=campaign_provenance_path,
-                preflight=preflight,
-                environment_guard=environment_error,
-                reason="environment preflight failed before member 1",
-            )
-            print(f"error: environment preflight failed: {exc}", file=sys.stderr)
             try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-            return 2
-        campaign_provenance["environment_preflight"] = environment_preflight
-        write_campaign_provenance(
-            campaign_provenance_path, campaign_provenance, log_path
-        )
-        preflight["environment_guard"] = environment_preflight
-        if not environment_preflight["admitted"]:
-            evaluation = environment_preflight["evaluation"]
-            failed_findings = [
-                finding
-                for finding in evaluation["findings"]
-                if finding["status"] != "pass"
-            ]
-            print(
-                "ENVIRONMENT PREFLIGHT FAILED: "
-                + "; ".join(
-                    f"{row['field']}={row['actual']!r} ({row['status']})"
-                    for row in failed_findings
-                ),
-                file=sys.stderr,
+                environment_preflight = campaign_environment_preflight(
+                    policy_binding,
+                    arm_quiet_mode=args.arm_quiet_mode,
+                    arm_countdown_s=args.arm_countdown_s,
+                    override_path=args.environment_override,
+                )
+            except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
+                environment_error = {
+                    "status": "error",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+                campaign_provenance["environment_preflight"] = environment_error
+                write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance, log_path
+                )
+                append_environment_preflight_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    analysis_manifest=analysis_manifest,
+                    campaign_provenance_path=campaign_provenance_path,
+                    preflight=preflight,
+                    environment_guard=environment_error,
+                    reason="environment preflight failed before member 1",
+                )
+                print(
+                    f"error: environment preflight failed: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            campaign_provenance["environment_preflight"] = environment_preflight
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance, log_path
             )
-            print(
-                "override binding: "
-                f"snapshot_sha256={evaluation['snapshot_sha256']} "
-                f"findings_sha256={evaluation['findings_sha256']}",
-                file=sys.stderr,
-            )
-            append_environment_preflight_verdict(
-                log_path,
-                lock_token=lock_path,
-                analysis_manifest=analysis_manifest,
-                campaign_provenance_path=campaign_provenance_path,
-                preflight=preflight,
-                environment_guard=environment_preflight,
-                reason="environment preflight rejected before member 1",
-            )
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-            return 1
+            preflight["environment_guard"] = environment_preflight
+            if not environment_preflight["admitted"]:
+                evaluation = environment_preflight["evaluation"]
+                failed_findings = [
+                    finding
+                    for finding in evaluation["findings"]
+                    if finding["status"] != "pass"
+                ]
+                print(
+                    "ENVIRONMENT PREFLIGHT FAILED: "
+                    + "; ".join(
+                        f"{row['field']}={row['actual']!r} ({row['status']})"
+                        for row in failed_findings
+                    ),
+                    file=sys.stderr,
+                )
+                print(
+                    "override binding: "
+                    f"snapshot_sha256={evaluation['snapshot_sha256']} "
+                    f"findings_sha256={evaluation['findings_sha256']}",
+                    file=sys.stderr,
+                )
+                append_environment_preflight_verdict(
+                    log_path,
+                    lock_token=lock_path,
+                    analysis_manifest=analysis_manifest,
+                    campaign_provenance_path=campaign_provenance_path,
+                    preflight=preflight,
+                    environment_guard=environment_preflight,
+                    reason="environment preflight rejected before member 1",
+                )
+                return 1
 
-    child_environment = os.environ.copy()
-    child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
-    child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
-    if campaign_provenance is not None:
-        child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
-            campaign_provenance["environment_preflight"],
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        child_environment = os.environ.copy()
+        child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
+        child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
+        if campaign_provenance is not None:
+            child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
+                campaign_provenance["environment_preflight"],
+                sort_keys=True,
+                separators=(",", ":"),
+            )
 
-    try:
         for item in items:
             if isinstance(item, ConfigError):
                 if args.dry_run:
@@ -7046,7 +7144,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         ) else 0
     finally:
         if lock_path is not None:
-            lock_path.unlink(missing_ok=True)
+            release_campaign_lock(lock_path)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
