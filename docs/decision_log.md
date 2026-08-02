@@ -6703,3 +6703,25 @@ the ruling itself.
 Revisit when: D100-BII-BINDING-01's focused audit reports (window B
 re-evaluation unblocks on its closure), or any window-C dangler seeks
 the b-ii license first.
+
+## D-101 addendum (2026-08-02): live-content site tests leave the blocking gate
+
+- Status: accepted (Ed-directed 2026-08-02: the site was ratified as
+  gating nothing, yet a decision-log edit still turned main red)
+- Applies to: `tests/test_build_site_parsers.py`,
+  `.github/workflows/ci.yml`
+
+D-101 clause 1 kept site-module unit tests in the blocking `test` job as
+ordinary code correctness. That boundary missed a subclass: tests that
+render the LIVE repo docs (the two full-build capsule-pack tests). On
+2026-08-02, adding the D-106 entry to `docs/decision_log.md` aged D-100
+out of the bounded site view and failed those tests on main — a governed
+project-record edit acting as a session blocker, which D-101 clause 4
+forbids in substance. Amendment: tests that consume live governed
+records are site-lane and advisory — they default-skip in the blocking
+suite (env guard `JOULEWISE_SITE_CONTENT_TESTS`) and run in the
+advisory `release-chain` job. Synthetic-input parser tests remain
+gating. The anchor-minting defect itself was also fixed on its merits
+(`775fa23`: short anchors mint only from `D-NNN:` entry headings).
+
+Revisit when: Ed changes the site's standing (same trigger as D-101).

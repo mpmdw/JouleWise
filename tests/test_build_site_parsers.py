@@ -3,6 +3,7 @@ import contextlib
 import gzip
 import io
 import json
+import os
 import random
 import re
 import shutil
@@ -14,6 +15,16 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import build_site, pack_capsule
+
+# D-101 addendum (2026-08-02, Ed-directed): tests that render the LIVE repo
+# docs (full site build + capsule pack) are site-lane, advisory-only — an
+# edit to a governed record (e.g. a new decision-log entry) must never fail
+# the blocking test job. They run in CI's advisory release-chain job with
+# this variable set. Synthetic-input parser tests remain gating.
+SITE_CONTENT_TESTS = unittest.skipUnless(
+    os.environ.get("JOULEWISE_SITE_CONTENT_TESTS"),
+    "live-content site test (advisory lane; set JOULEWISE_SITE_CONTENT_TESTS=1)",
+)
 
 
 SESSION_HEADING = "Session History (pointers only \u2014 run reports own the narrative)"
@@ -799,11 +810,13 @@ Text.
                 manifest["renderer"]["markedVersion"], build_site.MARKED_VERSION
             )
 
+    @SITE_CONTENT_TESTS
     def test_production_build_output_packs_below_conservative_lakebed_budget(self):
         self._assert_production_build_output_packs_below_lakebed_budget(
             force_offline_renderer=True
         )
 
+    @SITE_CONTENT_TESTS
     def test_connected_marked_build_output_packs_below_lakebed_budget(self):
         try:
             executable = build_site.discover_marked_executable()
