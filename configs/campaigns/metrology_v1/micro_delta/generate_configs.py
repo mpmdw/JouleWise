@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,16 @@ def write_json(path: Path, value: Any) -> None:
     path.write_bytes(render_json(value))
 
 
-def parse_k_values() -> list[int]:
+def canonicalize_k_values(values: list[int]) -> list[int]:
+    """Validate and canonicalize a set of requested output-token deltas."""
+    if any(value <= 0 for value in values):
+        raise ValueError("every --k value must be a positive integer")
+    if any(BASE_OUTPUT_TOKENS + value > MODEL["context_window"] for value in values):
+        raise ValueError("512+k must not exceed the model context window")
+    return sorted(set(values))
+
+
+def parse_k_values(argv: list[str] | None = None) -> list[int]:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--k",
@@ -65,14 +75,8 @@ def parse_k_values() -> list[int]:
         dest="k_values",
         help="positive output-token delta; repeat for multiple planned slots",
     )
-    values = parser.parse_args().k_values or [64]
-    if any(value <= 0 for value in values):
-        raise ValueError("every --k value must be a positive integer")
-    if len(values) != len(set(values)):
-        raise ValueError("--k values must be unique")
-    if any(BASE_OUTPUT_TOKENS + value > MODEL["context_window"] for value in values):
-        raise ValueError("512+k must not exceed the model context window")
-    return values
+    values = parser.parse_args(argv).k_values or [64]
+    return canonicalize_k_values(values)
 
 
 def family_id(output_tokens: int) -> str:
@@ -261,10 +265,65 @@ def verify_stage(directory: Path) -> None:
         )
 
 
-def main() -> int:
-    k_values = parse_k_values()
+def refuse_stale_outputs(
+    out: Path,
+    stages: list[dict[str, Any]],
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    """Refuse a mixed generation before writing, without deleting user data."""
+    if not out.exists():
+        return
+
+    expected_stage_ids = {stage["subcampaign_id"] for stage in stages}
+    stale: list[Path] = []
+    for path in out.iterdir():
+        if path.is_dir() and re.fullmatch(r"k[0-9]+", path.name):
+            if path.name not in expected_stage_ids:
+                stale.append(path)
+
+    family_dir = out / "condition_families"
+    expected_family_files = {
+        f"condition_family_{condition_family_id.replace('-', '_')}.json"
+        for condition_family_id in definitions
+    }
+    if family_dir.is_dir():
+        for path in family_dir.iterdir():
+            if re.fullmatch(
+                r"condition_family_mt_q15_decode_p0128_o[0-9]+[.]json", path.name
+            ) and path.name not in expected_family_files:
+                stale.append(path)
+
+    stages_by_id = {stage["subcampaign_id"]: stage for stage in stages}
+    for stage_id in sorted(expected_stage_ids):
+        directory = out / stage_id
+        if not directory.is_dir():
+            continue
+        expected_json = {
+            "order_manifest.json",
+            *(run["filename"] for run in stages_by_id[stage_id]["runs"]),
+        }
+        stale.extend(
+            path
+            for path in directory.glob("*.json")
+            if path.name not in expected_json
+        )
+
+    if stale:
+        rendered = ", ".join(str(path.relative_to(out)) for path in sorted(stale))
+        raise ValueError(
+            "refusing to mix requested --k outputs with stale or unexpected "
+            f"k-valued outputs: {rendered}; move them aside and rerun"
+        )
+
+
+def generate_configs(
+    k_values: list[int], out: Path = OUT
+) -> tuple[int, str, dict[str, str]]:
+    k_values = canonicalize_k_values(k_values)
     definitions, definition_hashes = definitions_and_hashes(k_values)
     stages, blocks_by_k = build_assembly(k_values)
+    refuse_stale_outputs(out, stages, definitions)
+    out.mkdir(parents=True, exist_ok=True)
     cells = [
         {
             "cell_id": f"metrology-micro-delta-k{k_value:04d}",
@@ -329,13 +388,15 @@ def main() -> int:
     }
     plan_bytes = render_json(plan)
     plan_sha256 = hashlib.sha256(plan_bytes).hexdigest()
-    (OUT / "calibration_plan.json").write_bytes(plan_bytes)
-    (OUT / "calibration_plan.sha256").write_text(
+    (out / "calibration_plan.json").write_bytes(plan_bytes)
+    (out / "calibration_plan.sha256").write_text(
         f"{plan_sha256}  calibration_plan.json\n", encoding="utf-8"
     )
     for condition_family_id in sorted(definitions):
         write_json(
-            OUT / "condition_families" / f"condition_family_{condition_family_id.replace('-', '_')}.json",
+            out
+            / "condition_families"
+            / f"condition_family_{condition_family_id.replace('-', '_')}.json",
             definitions[condition_family_id],
         )
 
@@ -343,7 +404,7 @@ def main() -> int:
     root_index = 1
     for stage in stages:
         stage_id = stage["subcampaign_id"]
-        directory = OUT / stage_id
+        directory = out / stage_id
         directory.mkdir(parents=True, exist_ok=True)
         local_entries: list[dict[str, Any]] = []
         for local_index, run in enumerate(stage["runs"], start=1):
@@ -368,7 +429,7 @@ def main() -> int:
         verify_stage(directory)
 
     write_json(
-        OUT / "order_manifest.json",
+        out / "order_manifest.json",
         {
             "schema_version": ORDER_SCHEMA,
             "manifest_id": "metrology-v1-micro-delta-order-v1",
@@ -389,8 +450,14 @@ def main() -> int:
             "executed_order": root_entries,
         },
     )
+    return len(root_entries), plan_sha256, definition_hashes
+
+
+def main(argv: list[str] | None = None, out: Path = OUT) -> int:
+    k_values = parse_k_values(argv)
+    config_count, plan_sha256, definition_hashes = generate_configs(k_values, out)
     print(
-        f"generated {len(root_entries)} runnable configs across {len(stages)} "
+        f"generated {config_count} runnable configs across {len(k_values)} "
         f"subcampaigns; calibration_plan_sha256={plan_sha256}"
     )
     for condition_family_id in sorted(definition_hashes):
