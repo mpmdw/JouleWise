@@ -2674,3 +2674,40 @@ system worked precisely because the escalation triggers were honored
 — the opposite of the 2026-07-26/27 failures that motivated rule 11.
 Recorded as evidence that the topology holds when the loop-immersed agent
 actually chooses to stop.
+
+## C-042: Ed-requested pre-ruling debate — 2 Sol xhigh rounds over the D-108/D-109 packets, both packets materially changed (2026-08-03)
+
+Shape: bounded 2-round adversarial consult (MCP discussion lane,
+read-only, thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`), Sol
+instructed to bench-verify packet claims rather than trust them, given
+the magistrate's recorded selective-quotation history. Ed then ruled by
+explicit deferral to the joint position → D-108 + D-109. Full record:
+`.desk/2026-08-03-sol-debate-d108-d109.md`.
+
+Unique catches, by layer:
+- **Sol round 1 (packet audit):** (1) the D-108 packet's "three
+  subjects manually verified" overstated the durable record — full
+  b-ii facts exist for the two r08 attempts only; (2) the packet's
+  A-min formulation was UNSOUND as stated — writer crash-window
+  (capture state created pre-receipt, pre-manifest failure exits)
+  defeats publish-on-return receipts, and baseline-prefix ⊆ current is
+  not anti-rollback; (3) L-A′ "verified" was a summarized result, not
+  a banked executable artifact. All three lead-verified at the bench
+  and adopted (reservation-first + independent head pin now R1 law).
+- **Sol round 2 (code refutation):** the magistrate's two-subject
+  license-surface counter was WRONG — the closure loader requires
+  exactly three D-087 occurrences and inspects every one; evidence
+  surface ≠ exclusion target. Adopted into D-108 clause 2.
+- **Magistrate (context the peer lacked):** schedule pressure LOW
+  (recorded), metrology-centric pivot (instrument is the product), and
+  shared-R2 marginal-cost analysis — flipped Sol's B recommendation to
+  A-min-with-reservation, withdrawn on the record.
+- **Convergence quality:** two Sol catches survived verification, one
+  magistrate counter died to code, one Sol recommendation flipped on
+  supplied context. Both directions of the bridge earned their spend;
+  the consult-before-ruling shape (rule 2 amended default) validated
+  again on a decision-level packet.
+
+Residual Sol dissents preserved in D-108/D-109 text: three-occurrence
+evidence surface; 32/6 dispositions need raw-physics backfill before
+issuance; A-min threat-model honesty clause.

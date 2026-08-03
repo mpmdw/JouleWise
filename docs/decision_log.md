@@ -6913,3 +6913,159 @@ on branch `impl/d100-bii-binding`; nothing this addendum describes is
 landed. Full record: `.desk/coldgate_d100_bii/` (PACKET-3, both cold
 rulings, refuter-3, SYNTHESIS-gate3-FOR-ED). This supersedes D-107's
 "fix round 2 proceeds now" license pending the D-108 ruling.
+
+## D-108: D100-BII-BINDING-01 clause (c) RETIRED as a license precondition — row closes on (a)+(b)+(d), with the clause-(d) three-occurrence re-record carrying the formal load
+
+- Date: 2026-08-03
+- Status: accepted (Ed ruling 2026-08-03: explicit deferral to the
+  joint magistrate + Sol recommendation — "i defer to you and sol's
+  decision". Inputs: cold gate 3 (two cold Fable instances + Opus
+  refuter, all recommending retirement; `.desk/coldgate_d100_bii/`)
+  plus an Ed-requested 2-round adversarial Sol xhigh consult over the
+  decision packet (thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`,
+  record `.desk/2026-08-03-sol-debate-d108-d109.md`), which CONVERGED
+  on retirement while tightening the closure conditions below.)
+- Applies to: row D100-BII-BINDING-01, `joulewise/salvage_dangler.py`
+  b-ii license surfaces, window B re-evaluation gating. Supersedes
+  D-106 clause 3(c) and the D-107 C-A′ obligation AS LICENSE
+  PRECONDITIONS; the D-106 revisit clause survives (clause 5 below).
+
+**Grounds (probe-backed, gate 3):** (i) D-100's "zero workload output
+bytes" predicate is unreachable under any bench content grammar —
+≥195 finite-only numeric leaves ≈1.2 KB free capacity in one real
+subject's metadata (refuter R-5) plus producer-open list cardinalities
+(R-4), which fired D-107 clause 7's second return trigger; (ii) the
+substitution attack clause (c) was ordered against is already closed by
+the LANDED clause (b) hash-sealed closure-manifest pin (R-6 traced the
+only production path); (iii) what a grammar could still add is
+protection against a careless closure AUTHOR — a smaller, partly
+unclosable duty that does not warrant a license precondition.
+
+**Ruling:**
+1. Clause (c) — the nested-content closure — is retired as a license
+   precondition. No further grammar formulation may be benched against
+   the D-100 zero-output-bytes predicate; that predicate is recorded
+   as mechanically unreachable on this surface.
+2. The row closes on: **(a)** telemetry interval containment; **(b)**
+   the hash-sealed closure-manifest pin (landed); **(d)** the
+   repaired-tool, digest-bound re-record executed over ALL THREE D-087
+   closure occurrences, results bound to the exact closure manifest.
+   Consult correction adopted on the evidence surface: the exclusion
+   TARGET is one member (mtadd-p2048o0128-r08, occurrences 2+3), but
+   the authorization EVIDENCE surface is all three occurrences — the
+   closure loader refuses any closure without exactly three and
+   inspects every one (`salvage_dangler.py` exactly-three predicate;
+   b04-b2's valid supersession removes it as the excluded member, not
+   from the closure's evidentiary predicate). The 2026-08-01 manual
+   verification (full b-ii facts for the two r08 attempts only) is
+   CORROBORATION ONLY and carries no formal load.
+3. The derived content grammar (L-A′) is demoted to non-load-bearing
+   hygiene. Decision-record obligation: bank the EXECUTABLE L-A′
+   derivation + full probe transcript (immutable input hashes for the
+   26 b-ii bundles, generated grammar, 26/26 admission results, every
+   carrier mutation INCLUDING why the seventh carrier survives, tool
+   identity) in `.desk/coldgate_d100_bii/` at or before row close. It
+   must never be described as zero-output or substitution closure.
+4. Fix rounds 1+2 held uncommitted on `impl/d100-bii-binding`: the
+   clause-(c) grammar work is discarded or demoted per clause 3; the
+   clause-(a) containment work is salvageable subject to fresh audit
+   of whatever subset is kept.
+5. D-106's revisit clause survives intact: a future (e.g. window-C)
+   dangler seeking the b-ii license RETURNS TO THE GATE. Retirement
+   removes the automated content guard, not the gate.
+6. Window B re-evaluation unblocks when the row closes per clause 2.
+
+## D-109: CAL-BRACKET-D079-01 F3 — A-min-with-reservation adopted (writer-enforced receipt ledger, reservation-first, repo-committed head pin); R1 ledger-authority and R2 prior-observation-set rulings
+
+- Date: 2026-08-03
+- Status: accepted (Ed ruling 2026-08-03: same explicit deferral to the
+  joint magistrate + Sol position, same debate record. Arc: the fix
+  investigation recommended A-min; Sol round 1 BROKE that formulation
+  as stated (writer crash-window; prefix-subset is not anti-rollback)
+  and recommended Option B for the timeline; magistrate round 2
+  supplied the low-schedule-pressure record, the metrology-centric
+  pivot, and the shared-R2 marginal-cost analysis; Sol WITHDREW B and
+  converged on A-min-with-reservation, marginal cost Medium. Both
+  soundness holes were lead-verified at the bench before adoption.)
+- Applies to: `scripts/validate_powermetrics_fiducial.py` (sole
+  production calibration writer), `joulewise/calibration_bracketing.py`,
+  `joulewise/whole_window.py`, `scripts/run_campaign.py`,
+  `configs/calibration/calibration_acceptance_d079_v2.json`, and every
+  consumer construction of `AuthenticatedConsumptionSession`. This is
+  a faithful IMPLEMENTATION of D-102 (no threshold/freshness
+  amendment); it supplies the authority/universe rulings D-102 left
+  silent. Lands with F1 + F2 as the single combined CAL-BRACKET fix
+  round. Option B (signed narrowing amendment) is recorded as REJECTED
+  fallback — coherent and honest, but it weakens the thesis instrument
+  where the project has slack to build the sounder boundary.
+
+**R1 — ledger authority, retention, anti-rollback (7 clauses):**
+1. A canonical observation-receipt ledger and its append API are the
+   SOLE authority for governed calibration observations. An off-ledger
+   calibration artifact is invalid everywhere: as bracket endpoint,
+   trigger evidence, derivation member, or claim evidence. Consumers
+   enumerate ledger entries only, never caller-supplied directories.
+2. RESERVATION-FIRST: every capture appends an authenticated `pending`
+   attempt entry BEFORE hardware capture begins, and must finalize it
+   as valid / systematic-invalid / ordinary-invalid / abandoned. Any
+   unresolved pending, unfinalized, malformed, or conflicting entry
+   causes claim evaluation to REFUSE. (Grounds, bench-verified: the
+   writer creates capture state pre-receipt and has pre-manifest
+   failure exits — a publish-on-return receipt misses exactly the
+   crash/interrupt cases a completeness mechanism exists to catch.)
+3. Receipts are immutable and hash-chained: sequence, predecessor,
+   attempt id, content id, artifact hashes, six-field epoch, full T1,
+   capture time, exact bound lexeme, disposition, custody locator.
+4. The acceptance artifact pins its baseline ledger head. Evaluation
+   ALSO requires the independent current-head pin (clause below),
+   verifies one complete non-forked chain extension from baseline to
+   current, and threads ONE immutable ledger snapshot through every
+   consumer path (session, direct runner path, secondary verifier) —
+   repeated independent loads are a refusal-grade defect.
+   Anti-rollback authority: a REPO-COMMITTED head-pin file
+   `{sequence, head_digest, ledger_schema}` (existing checked-in
+   byte-pin trust model; no second trusted latest-sequence store).
+   Rotation is epoch-bounded — at most one lead-controlled
+   quiet-machine collection session — and NO claim evaluation may
+   occur between ledger advancement and pin commit; a physical head
+   differing from the committed pin refuses.
+5. Ledger history is retained permanently. Referenced evidence remains
+   in authenticated custody; missing or unverifiable required bytes
+   cause refusal, never silent omission.
+6. Version 1 is single-authority, single-machine. Remote/other-machine
+   captures are invalid until imported through an authenticated ledger
+   transaction; direct multi-machine append requires a new ruling.
+7. Threat model, stated honestly and to be stated wherever A-min is
+   described: the mechanism closes workflow omission, unregistered
+   evidence, and rollback/stale-head consumption. It does NOT defend
+   against a malicious trusted writer or an authority that rewrites
+   both Git and ledger history. No stronger claim may be made.
+
+**R2 — prior-observation set and prospective triggers (8 clauses):**
+1. The issuance cutoff is an exact ledger sequence + head digest.
+2. `derivation_corpus` remains exactly the n=19 threshold-producing
+   observations.
+3. `prior_observation_set` = every content-distinct governed
+   observation known at the cutoff — valid, systematic-invalid,
+   ordinary-invalid, blind holdout, and unresolved — with epoch and
+   disposition recorded separately. (The current artifact's two
+   ID-only `blind_exclusions` are insufficient and are superseded.)
+4. Content identity is path-independent, derived from canonical
+   primary-byte hashes; attempt identity is separate; copies do not
+   create new observations.
+5. "New" (trigger population) = current authentic content IDs −
+   `prior_observation_set`, regardless of capture timestamp or source
+   root; a previously unknown historical artifact IS new when
+   discovered. Every new observation is judged under the PRIOR
+   artifact (D-102's prospective rule).
+6. New unresolved or unclassifiable attempts cause refusal; only after
+   trigger disposition may a successor artifact absorb them.
+7. The 32-valid/6-invalid same-epoch inventory is a backfill
+   CANDIDATE, not a ratified classification: identities may seed the
+   backfill, but dispositions require raw-physics + hash verification
+   before issuance, and any unresolved member blocks issuance.
+8. Counting rule for the D-102 corpus-doubling trigger (19→38): 38
+   TOTAL authenticated, content-distinct, VALID same-epoch
+   observations — including previously blind observations once
+   unblinded — not 38 post-cutoff observations. Under the candidate
+   inventory, six further valid observations trigger re-derivation.

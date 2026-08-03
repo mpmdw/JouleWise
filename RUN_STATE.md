@@ -10,64 +10,32 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-03 (desk session during Ed's absence: PR #96
+Last updated: 2026-08-03 evening (Ed returned and RULED both parked
+decisions — D-108 + D-109 minted, both implementation streams
+relaunched; see the RULINGS block. Earlier desk session: PR #96
 MINT-GENERALIZE tooling merged; D-107 ruled; CAL-BRACKET in review;
 codex cache bug fixed. See the DESK-SESSION UPDATE below the resume
 script.).
 
-> **⏸️ ED DECISION PENDING — D100-BII-BINDING-01 (not urgent, not
-> blocking anything time-critical; window B re-eval is what waits).**
-> The nested-content closure (D-106/D-107 clause 3c) went through a
-> third round and a THIRD cold gate. Verdict of the gate (2 cold Fable
-> instances + Opus refuter, all probe-backed): **clause (c) cannot
-> achieve its ruled "zero workload output bytes" predicate under any
-> bench formulation** (unbounded list cardinalities + ~1.2 KB of free
-> numeric-leaf capacity), AND the substitution attack it was ordered
-> to close is **already closed by clause (b)** — the landed hash-sealed
-> closure-manifest pin. The bench loop is STOPPED (rule 11; nothing
-> committed, state preserved). Two options, both need you, full memo at
-> `.desk/coldgate_d100_bii/SYNTHESIS-gate3-FOR-ED.md`:
-> **(ii) [magistrate + refuter recommend] retire clause (c) as a
-> license precondition** — close the row on (a)+(b)+(d) + the recorded
-> 2026-08-01 lead manual verification of the 3 subjects; or
-> **(i) land a mechanically-derived cardinality-closed grammar with the
-> ~1.2 KB residual explicitly ruled** (a prospective window-C guard,
-> but requires amending D-100's predicate). Your call becomes D-108.
-
-> **⏸️ ED DECISION PENDING — CAL-BRACKET-D079-01 F3 (not urgent; no
-> claim rides it yet).** The D-079 acceptance-v2 impl passed its first
-> audit's fixes but the delta re-audit found 3 freshness blockers. A
-> read-only design consult settled them against D-102: **F1** (freshness
-> = 6-field epoch, not full T1) is D-102-determined and fixable; **F2**
-> (the estimator byte-digest module set) I magistrate-RATIFIED as the
-> factual 4-module closure {powermetrics_fiducial, uncertainty_evidence,
-> adapters/powermetrics, reduce}. **F3 needs you:** D-102 mandates
-> cross-root freshness triggers (a same-identity range-expander or
-> corpus-doubling member in ANOTHER runs root must stale the bound) but
-> defines no authoritative universe/registry, and none exists — current
-> code only scans the evaluated window's root, so such an expander is
-> silently unobserved. **UPDATED after your "investigate fixes" ask
-> (2026-08-03):** the fix investigation found a BETTER option than the
-> A/B binary — **A-MIN**, recommended. There is exactly ONE production
-> writer of calibration artifacts (validate_powermetrics_fiducial.py),
-> so completeness is enforceable at that single WRITE boundary (a compact
-> receipt ledger the artifact pins a baseline head of) — the SOUND
-> version of A without the "registry threaded through everything" weight,
-> and a faithful IMPLEMENTATION of D-102 (no amendment). The middle
-> option I'd floated (a caller root-list) does NOT work — it authenticates
-> what's listed, not that nothing's omitted. **You still owe two rulings
-> under A-min (both claim-soundness; D-102 is silent):** (R1) the
-> ledger's authority/retention/anti-rollback boundary + that an off-ledger
-> artifact is invalid; (R2) an authenticated `prior_observation_set`
-> (everything known when D-102 was accepted, distinct from the n=19
-> derivation corpus — "new" = current − prior_set, not − derivation
-> corpus; current artifact's blind_exclusions has only 2 IDs,
-> insufficient). Full refined memo:
-> `.desk/calbracket_d079/F3-RECOMMENDATION-FOR-ED.md` (investigation:
-> `F3-fix-investigation.md`). B (narrow D-102, signed amendment) remains
-> the fallback. Magistrate lean now **A-min** (sound + cheap via the
-> one-writer choke point). F1+F2+F3+A-min land in ONE fix round after you
-> rule R1+R2. Becomes D-109.
+> **✅ RULINGS 2026-08-03 (evening) — both parked decisions RULED by
+> Ed** ("i defer to you and sol's decision"), after an Ed-requested
+> 2-round adversarial Sol xhigh debate over both packets (thread
+> `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`; record
+> `.desk/2026-08-03-sol-debate-d108-d109.md`; council C-042):
+> **D-108** — D100-BII clause (c) RETIRED as a license precondition;
+> row closes on (a) interval containment + (b) landed manifest pin +
+> (d) repaired-tool digest-bound re-record over ALL THREE D-087
+> occurrences (Sol correction adopted: evidence surface = three
+> occurrences; the manual record is corroboration only); L-A′ demoted
+> to banked hygiene. Window B re-eval unblocks on row close.
+> **D-109** — CAL-BRACKET F3 = A-min-with-reservation (Sol's round-1
+> soundness breaks adopted into law: reservation-first pending-entry
+> before capture; repo-committed head pin, not prefix-subset), R1 (7
+> clauses) + R2 (8 clauses incl. 19→38 = 38 total content-distinct
+> valid same-epoch); 32/6 inventory = backfill candidate only; Option
+> B recorded as rejected fallback. Both implementation streams
+> relaunched this session (D100-BII close → window B re-eval;
+> CAL-BRACKET single combined fix round → gauntlet → PR).
 
 ## DESK-SESSION UPDATE (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
 
@@ -119,11 +87,10 @@ sleep-window head; `git log --oneline -20` for the session's commits.
 - Codex models-cache bug FIXED; council **C-040 addendum** + **C-041**;
   kernel pins **59**; all bookkeeping current.
 
-**Two decisions parked for Ed (the ⏸️ blocks above): D-108 (D100-BII
-retire-vs-derive) and D-109 (CAL-BRACKET F3 registry-vs-narrow).** Both
-non-urgent; both hold uncommitted worktree diffs; window B re-eval stays
-blocked on D-108. Nothing else is unblocked-and-actionable by an agent:
-window C needs Ed's fresh §5A; NVIDIA extension awaits Ed ratification.
+**Two decisions were parked for Ed here (D-108 retire-vs-derive, D-109
+registry-vs-narrow) — BOTH RULED 2026-08-03 evening; see the RULINGS
+block at the top.** Still Ed-gated: window C (fresh §5A), NVIDIA
+extension ratification.
 
 **Ed still owes** (from prior scripts, unchanged): network-time restore
 if still off; fresh §5A before any window C; the D-092 wall-meter
