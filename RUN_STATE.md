@@ -33,6 +33,28 @@ script.).
 > **(i) land a mechanically-derived cardinality-closed grammar with the
 > ~1.2 KB residual explicitly ruled** (a prospective window-C guard,
 > but requires amending D-100's predicate). Your call becomes D-108.
+
+> **⏸️ ED DECISION PENDING — CAL-BRACKET-D079-01 F3 (not urgent; no
+> claim rides it yet).** The D-079 acceptance-v2 impl passed its first
+> audit's fixes but the delta re-audit found 3 freshness blockers. A
+> read-only design consult settled them against D-102: **F1** (freshness
+> = 6-field epoch, not full T1) is D-102-determined and fixable; **F2**
+> (the estimator byte-digest module set) I magistrate-RATIFIED as the
+> factual 4-module closure {powermetrics_fiducial, uncertainty_evidence,
+> adapters/powermetrics, reduce}. **F3 needs you:** D-102 mandates
+> cross-root freshness triggers (a same-identity range-expander or
+> corpus-doubling member in ANOTHER runs root must stale the bound) but
+> defines no authoritative universe/registry, and none exists — current
+> code only scans the evaluated window's root, so such an expander is
+> silently unobserved. Two options, full memo at
+> `.desk/calbracket_d079/DISPOSITION-FOR-ED.md`: **(A)** build an
+> authenticated calibration-observation registry (sound, fail-closed, but
+> new infra threaded through every caller); **(B)** narrow D-102 to a
+> bounded authoritative universe with the residual recorded (cheaper;
+> weakens the guarantee; a D-102 amendment you sign). Magistrate lean:
+> (B) for the capstone timeline, but it's a claim-soundness call.
+> F1+F2+F3 land together in ONE fix round after you rule (F3 controls
+> the artifact schema — no partial round now). Becomes D-109.
 Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
