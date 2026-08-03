@@ -6893,3 +6893,23 @@ refuter's F-8 conditions are implemented by clauses 3, 4, and 8.
 Revisit when: the round-2 focused audit reports (window B
 re-evaluation unblocks only on the amended-row closure), or any
 window-C dangler seeks the b-ii license first.
+
+**Addendum (2026-08-03, outcome of the above revisit):** the round-2
+focused audit fired the D-107 clause-7 return trigger — fix round 2
+implemented C-A′ but left open-superset leaves that license workload
+bytes (bench-confirmed). Cold gate 3 (two cold Fable instances + Opus
+refuter) concluded, probe-backed, that clause (c) **cannot achieve its
+"zero workload output bytes" predicate under any bench formulation**
+(the grammar constrains values but not list cardinalities; ~1.2 KB of
+free numeric-leaf capacity remains under any grammar), AND that the
+content-substitution attack (c) was ordered to close is **already
+closed by the landed clause (b)** hash-sealed closure-manifest pin. Per
+rule 11 the bench loop was STOPPED (not a fourth round); the disposition
+is escalated to Ed as **D-108 pending** — retire clause (c) as a license
+precondition [magistrate + refuter recommendation], or land a
+mechanically-derived cardinality-closed grammar with the numeric
+residual explicitly ruled. Fix rounds 1+2 are held UNCOMMITTED/untrusted
+on branch `impl/d100-bii-binding`; nothing this addendum describes is
+landed. Full record: `.desk/coldgate_d100_bii/` (PACKET-3, both cold
+rulings, refuter-3, SYNTHESIS-gate3-FOR-ED). This supersedes D-107's
+"fix round 2 proceeds now" license pending the D-108 ruling.

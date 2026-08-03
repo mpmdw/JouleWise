@@ -3,7 +3,7 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Runway close-out (section 9): PRs #94/#95 merged at audited heads (bc2ab19/200e6db, verdict CI green), D-106 Variant D ruled, D100-BII-BINDING-01 minted (window B re-evaluation hard-blocked on it), D-101 addendum moves live-content site tests to the advisory lane, kernel batch pins 58",
+    "label": "Desk session 2026-08-03 (Ed away): PR #96 MINT-GENERALIZE tooling merged (f3127ed); D-107 ruled (b-ii gate 2); D100-BII gate 3 -> STOP, D-108 pending (Ed); CAL-BRACKET F1/F2 ruled, F3 -> D-109 pending (Ed); TEST-SPEED-01 timing data + design; codex cache bug fixed; council C-041. Kernel pins 59. Two ED-DECISION-PENDING blocks at the top of RUN_STATE.",
     "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
@@ -639,7 +639,17 @@
         "label": "MET-VERDICT-ADJ-01 independent audit group (b): D-079 calibration budget unimplemented in joulewise/calibration_bracketing.py (hard cliff at policy 0.010; no allowance emitted or propagated)",
         "path": "docs/decision_log.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ruling on D-109 F3 (build an authenticated calibration-observation registry, or narrow D-102 to a bounded authoritative universe with the residual recorded) — F1 confirmed + F2 (4-module estimator digest) magistrate-ratified; all three land in one fix round after the F3 ruling",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-109"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -656,7 +666,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 13,
-      "status": "queued",
+      "status": "blocked",
       "status_note": "2026-08-03: impl + fix round 1 done (first-audit blockers closed). Delta re-audit found 3 freshness blockers; design consult (xhigh, read-only) ruled: F1 D-102-determined (freshness=6-field epoch), F2 magistrate-ratified (4-module estimator digest set), F3 ESCALATED TO ED (cross-root trigger observability: build registry vs narrow D-102 — claim-soundness decision). HELD: F1+F2+F3 land in ONE fix round after Ed rules F3 (controls artifact schema). Memo: .desk/calbracket_d079/DISPOSITION-FOR-ED.md. Becomes D-109.",
       "stop_card": null
     },
@@ -754,7 +764,17 @@
         "label": "D-106 b-ii residual synthesis clause 3 (Variant D; refuter's writer-level diagnosis adopted)",
         "path": "docs/decision_log.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ruling on D-108 (retire clause (c) as a license precondition, or land the derived cardinality-closed grammar with the ~1.2KB numeric residual ruled)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-108"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -778,7 +798,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 2,
-      "status": "queued",
+      "status": "blocked",
+      "status_note": "2026-08-03: DECISION PENDING (Ed, D-108). The nested-content closure (clause 3c) failed a third formulation; cold gate 3 (2 cold Fable + Opus refuter) concluded clause (c) cannot meet its 'zero workload output bytes' predicate by any bench formulation, and the substitution attack it targeted is already closed by the landed clause (b) hash-sealed manifest pin. Bench loop STOPPED (rule 11); fix rounds 1+2 held UNCOMMITTED/untrusted on branch impl/d100-bii-binding @ a6ce7af. No further implementation before Ed rules: (ii) retire clause (c) [recommended] or (i) land a derived cardinality-closed grammar with the ~1.2KB residual ruled. Memo: .desk/coldgate_d100_bii/SYNTHESIS-gate3-FOR-ED.md. Window B re-eval stays blocked on the outcome.",
       "stop_card": null
     },
     "DOC-008": {
@@ -2781,5 +2802,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-02"
+  "updated": "2026-08-03"
 }

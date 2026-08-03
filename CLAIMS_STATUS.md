@@ -49,18 +49,25 @@ default consumption. Outcomes per window:
   binds a T1-incompatible power-policy identity (immutable evidence; the
   machinery's rejection was CORRECT), so no calibration bracket can ever
   form. C1 re-collects in a future window.
-- **Window B: re-evaluation HARD-BLOCKED on `D100-BII-BINDING-01`
-  (D-106 clause 3, 2026-08-02).** The D-100 repair itself LANDED
-  (`MET-DANGLER-DISPOSITION-01`, PR #94 at audited head `05d99b6`,
-  three independent audits + verdict CI green), but D-106 ruled the
-  b-ii capture-identity residual DECIDABLE and blocked re-evaluation
-  until its two fixes (interval containment, custody digest freeze,
-  plus nested-content closure and the runbook condition-3 re-record
-  with the repaired tool) close as one audited commit. The 2026-08-01
-  manual (b-ii) verification does NOT satisfy this — D-106 requires
-  re-recording with the repaired tool and per-file digests. Then: the
-  D-093 cl.4 scan; a frozen byte-identical corpus. Any surprise
-  condition returns to a cold gate.
+- **Window B: re-evaluation PARKED on an Ed decision (D-108 pending,
+  2026-08-03) — still non-claim-bearing, no validity state promoted.**
+  The D-100 repair LANDED (`MET-DANGLER-DISPOSITION-01`, PR #94), and
+  D-106 opened `D100-BII-BINDING-01` to close the b-ii residual
+  (interval containment, custody digest freeze, nested-content closure,
+  runbook condition-3 re-record). Interval containment + digest freeze
+  are done; **the nested-content closure (clause 3c) failed three
+  formulations and, at cold gate 3, was found unachievable by any bench
+  formulation** — and the substitution attack it targeted is already
+  closed by the landed digest-freeze pin. The bench loop is STOPPED;
+  the current blocker on window B is therefore the **D-108 decision**
+  (retire clause (c) vs. land a derived grammar with the residual
+  ruled), not an outstanding implementation. The 2026-08-01 manual
+  (b-ii) verification of the three subjects stands on record and
+  underwrites the retire-(c) option. Full memo:
+  `.desk/coldgate_d100_bii/SYNTHESIS-gate3-FOR-ED.md`. On the D-108
+  ruling, re-evaluation still owes the D-093 cl.4 scan, a frozen
+  byte-identical corpus, and (per D-106) re-recording with the repaired
+  tool; any surprise returns to a cold gate.
 
 | Paper claim | Campaign | Collected | State after D-100 |
 |---|---|---|---|

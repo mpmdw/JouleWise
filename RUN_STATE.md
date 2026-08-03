@@ -55,6 +55,42 @@ script.).
 > (B) for the capstone timeline, but it's a claim-soundness call.
 > F1+F2+F3 land together in ONE fix round after you rule (F3 controls
 > the artifact schema — no partial round now). Becomes D-109.
+
+## DESK-SESSION UPDATE (2026-08-03, Ed away ~5h) — read this, then the two ⏸️ blocks above
+
+This session executed the 2026-08-02 checkpoint's resume script and drove
+the open work to its conclusions. **Everything in the "ACTIVE RESUME
+SCRIPT" and "PRIOR RESUME SCRIPT" sections below is now HISTORICAL /
+EXECUTED** — do not re-run those steps; the live state is here + the
+two decision blocks above + the (blocked) kernel rows. Main is at the
+council-C-041 head; `git log --oneline -12` for the session's commits.
+
+**Landed on main this session (all pushed, CI green):**
+- PR #96 merged (`f3127ed`): MINT-GENERALIZE-01 tooling — generalized
+  mint sibling with authenticated per-plan pinsets (full gauntlet).
+  Row stays OPEN on lead-reserved live mint steps (real mint-1 re-mint
+  byte-compare; governed 7B mint, D-085 Q6).
+- **D-107** (`131774d`): b-ii nested-closure cold gate 2 — C-A′
+  producer-derived admission grammar.
+- **TEST-SPEED-01** minted + timing DATA collected + shard/tier DESIGN
+  done (`a14d1fe`, `ed845bb`; `.desk/test-speed-consult/`): suite is a
+  2-module problem; shard-runner + split run_campaign/p2038 → ~87s wall
+  (6.5×); fast tier → 25-40s PR feedback (full suite stays the merge
+  gate). Impl queued (mechanical); Blacksmith (lever 3) needs Ed.
+- Codex models-cache bug FIXED; council **C-040 addendum** + **C-041**;
+  kernel pins **59**; all bookkeeping current.
+
+**Two decisions parked for Ed (the ⏸️ blocks above): D-108 (D100-BII
+retire-vs-derive) and D-109 (CAL-BRACKET F3 registry-vs-narrow).** Both
+non-urgent; both hold uncommitted worktree diffs; window B re-eval stays
+blocked on D-108. Nothing else is unblocked-and-actionable by an agent:
+window C needs Ed's fresh §5A; NVIDIA extension awaits Ed ratification.
+
+**Ed still owes** (from prior scripts, unchanged): network-time restore
+if still off; fresh §5A before any window C; the D-092 wall-meter
+(non-blocking).
+
+---
 Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
@@ -87,7 +123,7 @@ join to a recorded three-check bench scan and barred minting from a
 duplicate-bearing corpus.)
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-3 EXECUTED post-move, step 4 ran to a held protocol failure — see the EXECUTION UPDATE, then steps 5+)
+## EXECUTED RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint — FULLY EXECUTED by the 2026-08-03 desk session; see the DESK-SESSION UPDATE above; retained as historical record)
 
 **CHECKPOINT 2026-08-03 ~01:05 PT (machine move; resume HERE):**
 Everything below through the EXECUTION UPDATE is DONE and pushed
@@ -915,7 +951,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-02). Latest report: [Runway close-out (section 9): PRs #94/#95 merged at audited heads (bc2ab19/200e6db, verdict CI green), D-106 Variant D ruled, D100-BII-BINDING-01 minted (window B re-evaluation hard-blocked on it), D-101 addendum moves live-content site tests to the advisory lane, kernel batch pins 58](docs/run_reports/2026-08-01-desk-adjudication-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-03). Latest report: [Desk session 2026-08-03 (Ed away): PR #96 MINT-GENERALIZE tooling merged (f3127ed); D-107 ruled (b-ii gate 2); D100-BII gate 3 -> STOP, D-108 pending (Ed); CAL-BRACKET F1/F2 ruled, F3 -> D-109 pending (Ed); TEST-SPEED-01 timing data + design; codex cache bug fixed; council C-041. Kernel pins 59. Two ED-DECISION-PENDING blocks at the top of RUN_STATE.](docs/run_reports/2026-08-01-desk-adjudication-session.md).
 
 ### [ED-EXTERNAL]
 
