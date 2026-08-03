@@ -16,6 +16,7 @@ from joulewise.adapters import (
     resolve_telemetry,
     resolve_transport,
 )
+from joulewise.adapters.node_client import NodeWorkerClient
 from joulewise.adapters.mock_telemetry import (
     IDLE_POWER_W,
     MEASURED_POWER_W,
@@ -800,6 +801,26 @@ class DeterminismTests(unittest.TestCase):
 class RegistryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = FakeClock(start=1000.0)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        retention_root = Path(tmp.name) / "node-custody"
+        client_index = 0
+
+        def node_client_factory(*args: Any, **kwargs: Any) -> NodeWorkerClient:
+            nonlocal client_index
+            client_index += 1
+            return NodeWorkerClient(
+                *args,
+                retention_root=retention_root / f"client-{client_index:03d}",
+                **kwargs,
+            )
+
+        client_patch = patch(
+            "joulewise.adapters.node_client.NodeWorkerClient",
+            new=node_client_factory,
+        )
+        client_patch.start()
+        self.addCleanup(client_patch.stop)
 
     def assert_exactly_one(self, pair: tuple[object, object]) -> None:
         self.assertEqual(sum(1 for item in pair if item is not None), 1)

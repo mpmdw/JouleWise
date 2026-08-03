@@ -7,8 +7,11 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 from joulewise.adapters import resolve_runtime, resolve_telemetry, resolve_transport
+from joulewise.adapters.node_client import NodeWorkerClient
 from joulewise.cli import main
 from joulewise.clock import FakeClock
 from joulewise.kv_size import KVSizeError, bytes_per_token, extract_kv_params
@@ -27,17 +30,36 @@ def config_from_example(path: Path = EXAMPLE_CONFIG, **overrides) -> BenchmarkCo
 class CliCoverageGapTests(unittest.TestCase):
     def test_example_backend_resolution_is_structured(self) -> None:
         clock = FakeClock()
-        for path in sorted((ROOT / "configs" / "examples").glob("*.json")):
-            config = config_from_example(path)
-            with self.subTest(config=path.name, adapter="runtime"):
-                adapter, failure = resolve_runtime(config, clock)
-                self.assertEqual((adapter is None) + (failure is None), 1)
-            with self.subTest(config=path.name, adapter="telemetry"):
-                adapter, failure = resolve_telemetry(config, clock)
-                self.assertEqual((adapter is None) + (failure is None), 1)
-            with self.subTest(config=path.name, adapter="transport"):
-                adapter, failure = resolve_transport(config)
-                self.assertEqual((adapter is None) + (failure is None), 1)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            retention_root = Path(tmpdir) / "node-custody"
+            client_index = 0
+
+            def node_client_factory(*args: Any, **kwargs: Any) -> NodeWorkerClient:
+                nonlocal client_index
+                client_index += 1
+                return NodeWorkerClient(
+                    *args,
+                    retention_root=(
+                        retention_root / f"client-{client_index:03d}"
+                    ),
+                    **kwargs,
+                )
+
+            with patch(
+                "joulewise.adapters.node_client.NodeWorkerClient",
+                new=node_client_factory,
+            ):
+                for path in sorted((ROOT / "configs" / "examples").glob("*.json")):
+                    config = config_from_example(path)
+                    with self.subTest(config=path.name, adapter="runtime"):
+                        adapter, failure = resolve_runtime(config, clock)
+                        self.assertEqual((adapter is None) + (failure is None), 1)
+                    with self.subTest(config=path.name, adapter="telemetry"):
+                        adapter, failure = resolve_telemetry(config, clock)
+                        self.assertEqual((adapter is None) + (failure is None), 1)
+                    with self.subTest(config=path.name, adapter="transport"):
+                        adapter, failure = resolve_transport(config)
+                        self.assertEqual((adapter is None) + (failure is None), 1)
 
     def test_schema_output_options_write_json_and_stdout_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

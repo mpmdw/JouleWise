@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import patch
 
 import joulewise.adapters as adapters
+from joulewise.adapters.node_client import NodeWorkerClient
 from joulewise.adapters.nvidia_smi import parse_nvidia_smi_csv
 from joulewise.clock import Clock
 from joulewise.cli import validate_bundle
@@ -407,6 +408,26 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.runs_root = Path(tmp.name) / "runs"
+        self.retention_root = Path(tmp.name) / "node-custody"
+        self.retention_client_index = 0
+
+        def node_client_factory(*args: Any, **kwargs: Any) -> NodeWorkerClient:
+            self.retention_client_index += 1
+            return NodeWorkerClient(
+                *args,
+                retention_root=(
+                    self.retention_root
+                    / f"client-{self.retention_client_index:03d}"
+                ),
+                **kwargs,
+            )
+
+        client_patch = patch(
+            "joulewise.adapters.node_client.NodeWorkerClient",
+            new=node_client_factory,
+        )
+        client_patch.start()
+        self.addCleanup(client_patch.stop)
 
     def run_with_node(self, config: BenchmarkConfig, node: StubNode):
         self.addCleanup(node.cleanup)
@@ -550,6 +571,87 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(set(node.task_run_ids), {generated_run_id})
         self.assertTrue(all(f"/{generated_run_id}/tasks/" in path for path in node.task_paths))
         self.assertTrue(all(f"/{generated_run_id}/artifacts/" in path for path in node.artifact_paths))
+
+    def test_registry_node_clients_do_not_share_retention_manifest(self) -> None:
+        config = load_config("nvidia-node-retention-isolation")
+        node = StubNode()
+        self.addCleanup(node.cleanup)
+
+        def factory(clock: Clock, destination: str, **kwargs: Any) -> StubSshTransport:
+            del kwargs
+            return StubSshTransport(clock, destination, node=node)
+
+        simulated_default = self.runs_root.parent / "simulated-default-custody"
+        with (
+            patch(
+                "joulewise.adapters.node_client.DEFAULT_RETENTION_ROOT",
+                simulated_default,
+            ),
+            patch(
+                "joulewise.adapters.ssh_transport.SshTransport",
+                side_effect=factory,
+            ),
+        ):
+            runtime, runtime_failure = adapters.resolve_runtime(config, AutoClock())
+            telemetry, telemetry_failure = adapters.resolve_telemetry(
+                config, AutoClock()
+            )
+
+        self.assertIsNone(runtime_failure)
+        self.assertIsNone(telemetry_failure)
+        self.assertIsNotNone(runtime)
+        self.assertIsNotNone(telemetry)
+        assert runtime is not None
+        assert telemetry is not None
+        runtime_client = runtime._client
+        telemetry_client = telemetry._client
+
+        token = "retention-isolation-token"
+        task_id = "task-retention-isolation"
+        run_id = "run-retention-isolation"
+        paths = runtime_client._remote_paths_for_run(run_id)
+        prepared_task = {
+            "correlation_token": token,
+            "protocol_version": 1,
+            "task_type": "telemetry",
+            "operation": "measure_idle",
+            "node_role": None,
+        }
+        record = runtime_client._new_retention_record(
+            token=token,
+            task_id=task_id,
+            run_id=run_id,
+            prepared_task=prepared_task,
+            paths=paths,
+            remote_task_path=runtime_client._contained_remote_path(
+                run_id, "tasks", f"{task_id}.json"
+            ),
+            remote_artifacts_path=runtime_client._contained_remote_path(
+                run_id, "artifacts", task_id
+            ),
+            context=None,
+        )
+        runtime_client._register_retention(record)
+
+        telemetry_client._sweep_retained_artifacts()
+        runtime_client._mark_worker_may_have_run(token)
+
+        self.assertNotEqual(
+            runtime_client.retention_root,
+            telemetry_client.retention_root,
+        )
+        for retention_root in (
+            runtime_client.retention_root,
+            telemetry_client.retention_root,
+        ):
+            retention_root.relative_to(self.runs_root.parent)
+        self.assertIn(
+            token,
+            {
+                item["token"]
+                for item in runtime_client._load_retention_records()
+            },
+        )
 
     def test_nvidia_smi_raw_tamper_fails_strict_lineage(self) -> None:
         node = StubNode()
