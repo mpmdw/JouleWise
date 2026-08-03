@@ -56,14 +56,40 @@ script.).
 > F1+F2+F3 land together in ONE fix round after you rule (F3 controls
 > the artifact schema — no partial round now). Becomes D-109.
 
-## DESK-SESSION UPDATE (2026-08-03, Ed away ~5h) — read this, then the two ⏸️ blocks above
+## DESK-SESSION UPDATE (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
 
 This session executed the 2026-08-02 checkpoint's resume script and drove
 the open work to its conclusions. **Everything in the "ACTIVE RESUME
 SCRIPT" and "PRIOR RESUME SCRIPT" sections below is now HISTORICAL /
 EXECUTED** — do not re-run those steps; the live state is here + the
 two decision blocks above + the (blocked) kernel rows. Main is at the
-council-C-041 head; `git log --oneline -12` for the session's commits.
+sleep-window head; `git log --oneline -20` for the session's commits.
+
+**SLEEP-WINDOW ADDITIONS (after the D-108/D-109 parks, non-claim rows):**
+- **PR #97 MERGED** (`a32977e`): NVIDIA-RETENTION-FLAKE-01 — hermetic
+  per-test retention roots close the shared-custody-path flake
+  (test-only; node_client.py untouched; 20× stress clean). Row RETIRED;
+  the production DEFAULT_RETENTION_ROOT hardening deferred as the new
+  row **NODE-CUSTODY-DEFAULT-01** (P3, non-blocking).
+- **PR #98 OPEN — LEFT FOR ED** (impl/test-speed): TEST-SPEED-01 Phase 1
+  — module-atomic shard-runner + CI shard matrix (blocking test job →
+  8 parallel shards, ~15min→~6min proven on the PR's own green CI).
+  Lead-verified (union==2440/94 intact; audit found + fix closed two
+  silent-coverage-loss blockers; guards permanently regressed). Merge is
+  YOURS (it restructures the CI gate). Phase 2 (class-split the two heavy
+  modules) + Lever 2 (fast tier) + Lever 3 (Blacksmith, your call)
+  deferred. Custody `.desk/testspeed/`.
+- Run report for the whole session:
+  `docs/run_reports/2026-08-03-desk-session.md`. Skill-usage log +
+  consistency sweep done; stale worktrees pruned (d100bii + calbracket
+  worktrees KEPT — they hold the pending-decision fix diffs, though
+  those get redone/discarded post-ruling; the durable decision inputs
+  are in `.desk/`).
+- After PR #98, the readily-startable non-claim agent queue is
+  exhausted: the remainder is claim-adjacent (FLOOR-*, MODULARITY),
+  ruling-requiring (SUPERSESSION-DUP-REFUSAL-01 has a "rule on" gate),
+  Ed's personal tooling (TOOL-01), or milestone-gated (AUD-WO-* at
+  2K-live/Phase-3). Left for Ed's direction.
 
 **Landed on main this session (all pushed, CI green):**
 - PR #96 merged (`f3127ed`): MINT-GENERALIZE-01 tooling — generalized
