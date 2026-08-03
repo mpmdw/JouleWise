@@ -46,15 +46,28 @@ script.).
 > corpus-doubling member in ANOTHER runs root must stale the bound) but
 > defines no authoritative universe/registry, and none exists — current
 > code only scans the evaluated window's root, so such an expander is
-> silently unobserved. Two options, full memo at
-> `.desk/calbracket_d079/DISPOSITION-FOR-ED.md`: **(A)** build an
-> authenticated calibration-observation registry (sound, fail-closed, but
-> new infra threaded through every caller); **(B)** narrow D-102 to a
-> bounded authoritative universe with the residual recorded (cheaper;
-> weakens the guarantee; a D-102 amendment you sign). Magistrate lean:
-> (B) for the capstone timeline, but it's a claim-soundness call.
-> F1+F2+F3 land together in ONE fix round after you rule (F3 controls
-> the artifact schema — no partial round now). Becomes D-109.
+> silently unobserved. **UPDATED after your "investigate fixes" ask
+> (2026-08-03):** the fix investigation found a BETTER option than the
+> A/B binary — **A-MIN**, recommended. There is exactly ONE production
+> writer of calibration artifacts (validate_powermetrics_fiducial.py),
+> so completeness is enforceable at that single WRITE boundary (a compact
+> receipt ledger the artifact pins a baseline head of) — the SOUND
+> version of A without the "registry threaded through everything" weight,
+> and a faithful IMPLEMENTATION of D-102 (no amendment). The middle
+> option I'd floated (a caller root-list) does NOT work — it authenticates
+> what's listed, not that nothing's omitted. **You still owe two rulings
+> under A-min (both claim-soundness; D-102 is silent):** (R1) the
+> ledger's authority/retention/anti-rollback boundary + that an off-ledger
+> artifact is invalid; (R2) an authenticated `prior_observation_set`
+> (everything known when D-102 was accepted, distinct from the n=19
+> derivation corpus — "new" = current − prior_set, not − derivation
+> corpus; current artifact's blind_exclusions has only 2 IDs,
+> insufficient). Full refined memo:
+> `.desk/calbracket_d079/F3-RECOMMENDATION-FOR-ED.md` (investigation:
+> `F3-fix-investigation.md`). B (narrow D-102, signed amendment) remains
+> the fallback. Magistrate lean now **A-min** (sound + cheap via the
+> one-writer choke point). F1+F2+F3+A-min land in ONE fix round after you
+> rule R1+R2. Becomes D-109.
 
 ## DESK-SESSION UPDATE (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
 
