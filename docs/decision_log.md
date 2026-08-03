@@ -129,6 +129,7 @@ be re-derived by a future agent gets an entry here.
 | D-104 | C3 residuals cold-gate synthesis (CONVERGENT): acquisition-identity lock tokens (registry + dev/ino + nonce + root binding; log_path.parent candidate rejected), positive writer-grammar tail recognizer with byte-exact canonical round-trip (message-class discrimination ruled out; refuter-discovered whitespace-preservation hole closed), SF1 ruled jointly, R1-R11 regressions, origin-binding fallback not routed | accepted (cold gate + Opus refuter converged; magistrate synthesis 2026-08-02) |
 | D-105 | C3 disposition: LAND via a final custody micro-commit (preserve-then-truncate sidecar, writer-side ASCII key assertion, F3 hygiene, R7-as-ruled) + narrow fresh audit + merge; F1/F2 registered as a NEW ruling (not D-088 precedent) closing via C3-RECOGNIZER-EXACT-01 with the number-grammar exactness STRUCK for a documented decidable superset (D-104 cl.2 amended); three-scan absence evidence recorded; runway-context-in-packet process violation recorded | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
 | D-106 | b-ii residual: Variant D — merge the inert D-100 repair at its audited head, register NOTHING (D-105 guard failure + decidable-closure inversion accepted), window B re-evaluation BLOCKED on D100-BII-BINDING-01 (interval containment + custody digest freeze + nested closure + condition-3 re-record); cold instance overruled on the refuter's bench-verified showing; magistrate packet-hygiene failures recorded | accepted (cold gate + refuter, magistrate synthesis 2026-08-02) |
+| D-107 | D100-BII nested-content closure cold gate 2: C-A′ producer-derived admission grammar with per-leaf value domains (no bare isinstance(str)); derivation obligation corpus-verified (in-kind fence condition recorded); scope expanded to the inventory grammar + guard-phase/node_cleanup false-refusal repairs; row acceptance amended with the over-refusal gate (license 3/3 real subjects); fix round 2 licensed, fresh focused audit; magistrate packet-hygiene failures recorded (third occurrence, standing tightening) | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
 
 ---
 
@@ -6777,3 +6778,118 @@ records. Amendment:
 
 Revisit when: Ed changes the site's standing, or the site gains an
 external consumer whose freshness matters (same triggers as D-101).
+
+## D-107: D100-BII-BINDING-01 nested-content closure — cold-gate synthesis: producer-derived admission grammar with value domains (C-A′), scope expanded to the inventory grammar and the false-refusal repairs, over-refusal gate added to the row
+
+- Date: 2026-08-02 (successor session, post-move)
+- Status: accepted (cold gate 2 of the D100-BII arc: cold Fable ruled
+  the structural diagnosis + closed-grammar shape with a P1–P6
+  acceptance predicate; Opus refuter — probe-required brief — broke the
+  packet's C-A text on the value axis, proved BOTH established-fact
+  errors in the packet, and surfaced two decisive facts outside the
+  packet's frame; magistrate synthesis ADOPTS THE REFUTER'S C-A′
+  merged with the cold instance's predicate. The cold instance is not
+  overruled: its own fallback clause anticipated exactly this
+  decision-level disposition. Ed sees this entry.)
+- Applies to: joulewise/salvage_dangler.py b-ii license surfaces, row
+  D100-BII-BINDING-01 (acceptance amended), window B re-evaluation
+  gating. Custody: `.desk/coldgate_d100_bii/` (packet 2, both
+  instruments, fix-1 + delta reports).
+
+**Trigger record (corrected on the refuter's probe):** formulation 1
+(a6ce7af) and formulation 2 (fix round 1) were THE SAME PREDICATE —
+a key-denylist spelling list; a6ce7af's classifier already recursed
+through mappings and lists, and `generated_text` voided exactly where
+`model_output` licensed. Round 1 added one spelling and hoisted the
+predicate into a raising walk. Two same-signature failures → the
+standing trigger fired; C-B (a third enumeration of the forbidden
+complement) is REJECTED by both instances.
+
+**Decisive refuter facts (bench-relevant, all probe-backed):**
+1. The license tool refuses ALL THREE real window-B quarantine bundles
+   at the artifact-INVENTORY gate at bc2ab19, a6ce7af, and the live
+   diff alike: the expected sets are ≤8 hand-fixture paths vs 22
+   producer-emitted files per real bundle (salvage_dangler.py:34-40,
+   :677-689, :701). Pre-existing; falsifies the row's "window B
+   unblocks on closure" premise as scoped.
+2. Fix-1's classifier over-refuses 769/769 real bundle metadata files
+   (`guard_observations[].phase == "after_attempt_N"` treated as
+   workload evidence; producer emits it at controller.py:1175) and
+   voids the legitimate controller-owned `metadata.extra.node_cleanup`
+   (controller.py:2155-2167; three shipping adapters).
+3. Four grammar-legal string channels carry workload bytes on the live
+   code: `environment_admission.failure`, event/summary
+   `failure_reason`, `events[].message`, `summary.failure_message` —
+   each has a CLOSED producer value domain (7 abort literals; the
+   FailureReason enum), so the value axis closes with zero
+   false-refusal cost.
+
+**Ruling:**
+1. **Shape = C-A′** (refuter's replacement, subsuming the cold
+   instance's P1–P6): producer-derived closed admission grammar over
+   the three b-ii read surfaces (metadata.json, events.jsonl rows,
+   summary_metrics.json) — per-container closed key set (exact raw-key
+   match; any non-member voids, which subsumes the Unicode-confusable
+   case a fortiori) AND a decidable per-leaf value predicate from
+   {CLOSED-ENUM, HASH, NUMBER/TIMESTAMP, BOOL/NULL}; no leaf admits on
+   bare isinstance(str). The workload-evidence spelling list may remain
+   as defense-in-depth but carries no load.
+2. **Derivation obligation (the in-kind discriminator):** every
+   admitted key set and value domain is derived from producer code AND
+   verified to contain every value emitted across the governed corpus
+   (the 24 abort bundles in runs_window_*/ plus the 3 quarantine
+   subjects). A key or value present in a real governed bundle and
+   absent from the grammar is a defect OF THE GRAMMAR. Open containers
+   (none found on this surface) take D-105's documented decidable
+   superset, never claimed exactness.
+3. **Scope expansion, same commit:** (a) the F-1 artifact-inventory
+   grammar is corrected under the same derivation obligation; (b) the
+   guard-observation phase domain admits after_attempt_N; (c)
+   `metadata.extra` admits the six producer scalars PLUS node_cleanup
+   (closed list-of-mappings grammar). These are the same surface and
+   the same duty; splitting them would re-create the vacuous-inertness
+   defect.
+4. **Fence ruling (recorded):** the "no third schema-shaped
+   formulation" fence REACHES this surface. An allowlist differs in
+   kind from the two failed denylists iff (i) membership is decidable
+   over a finite admitted set AND (ii) the set is producer-derived and
+   corpus-verified per clause 2 — D-097's own evidentiary standard.
+   Without (ii) a closed grammar is the third enumeration and the
+   fence bites; with it the fence is satisfied. Capture identity
+   remains bound solely by interval containment + digest freeze
+   (untouched, byte-identical per the audits).
+5. **Row acceptance AMENDED (over-refusal gate):** the row does not
+   close until (i) inspect_salvage_attempt LICENSES all three real
+   quarantine bundles, pinned by a read-only regression against the
+   real bundles or a hash-pinned byte-faithful fixture; (ii)
+   regressions prove all four value channels VOID; (iii) the extra
+   allowlist and (iv) the corrected inventory set are recorded with
+   their derivations. Prior acceptance items stand.
+6. **F2 (recursion):** same commit; explicit depth guard (32; producer
+   maxima are 7/4) raising SalvageAuthorizationError — refuse, never
+   truncate, no RecursionError conversion; the boundary-catch fact
+   (SalvageAuthorizationError subclasses ValueError; run_campaign's
+   handler continues fail-closed) is recorded.
+7. **License:** fix round 2 proceeds NOW under this ruling as one
+   commit + a FRESH focused audit against the merged predicate (cold
+   P1–P6 + clause-5 gate). Return triggers: any grammar-should-void
+   content licensing in that audit = third same-signature failure →
+   return to this gate, no bench round 3; any container that can be
+   neither closed nor supersetted decidably → decision level.
+8. **Packet-hygiene failures recorded against the magistrate (third
+   occurrence):** established fact 2 laundered a bounded trace into
+   "over-refusal clean" (false, 769/769); established fact 3 was
+   uncited and false (and re-leaned on winB-closure-facts.md, the
+   exact artifact D-106 ground (1) faulted); the delta's open flag G1
+   was omitted; two precedent citations mislabelled. STANDING
+   TIGHTENING: every established-fact item in a cold-gate packet
+   carries file:line or a probe transcript, and the source documents'
+   flags sections are quoted IN FULL, never summarized.
+**Dissents:** none unabsorbed — the cold instance's Q3/Q5 position is
+superseded per its own recorded fallback ("the identical fix shape via
+a minimal amendment, and nothing else in this ruling changes"); the
+refuter's F-8 conditions are implemented by clauses 3, 4, and 8.
+
+Revisit when: the round-2 focused audit reports (window B
+re-evaluation unblocks only on the amended-row closure), or any
+window-C dangler seeks the b-ii license first.

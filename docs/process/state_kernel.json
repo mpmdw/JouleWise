@@ -738,14 +738,16 @@
           "Custody digest freeze: the closure artifact records sha256 of every file in each b-ii bundle plus a root-level digest manifest of the quarantine directory, re-verified at license execution; any mismatch voids",
           "Nested-content closure: nested workload evidence under metadata or event metadata voids per the decisive audit's second scenario (unclassifiable means void)",
           "In-code marker in salvage_dangler.py names this row and the D-106 clause-3 gate on the b-ii mechanical license",
-          "Defect-shaped regressions red pre-fix: early-telemetry substitution, digest-freeze tamper, nested workload evidence; focused independent audit at the exact head"
+          "Defect-shaped regressions red pre-fix: early-telemetry substitution, digest-freeze tamper, nested workload evidence; focused independent audit at the exact head",
+          "D-107 over-refusal gate: inspect_salvage_attempt LICENSES all three real window-B quarantine bundles (read-only regression against the real bundles or a hash-pinned byte-faithful fixture); regressions prove all four value channels void; the extra allowlist (six scalars + node_cleanup) and the corrected artifact-inventory set are recorded with their producer derivations",
+          "D-107 shape: producer-derived closed admission grammar with per-leaf value domains over the three b-ii read surfaces, corpus-verified derivation obligation; depth guard raising SalvageAuthorizationError; the nested-content spelling list carries no load"
         ],
         "pointer": {
           "json_pointer": "/tasks/D100-BII-BINDING-01/acceptance",
           "label": "D100-BII-BINDING-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "D-106 clause 3 closes as one audited commit: interval containment, custody digest freeze, nested-content closure, and the open-row marker, with defect-shaped regressions and a focused independent audit; window B re-evaluation unblocks on closure."
+        "summary": "D-106 clause 3 closes as one audited commit: interval containment, custody digest freeze, nested-content closure, and the open-row marker, with defect-shaped regressions and a focused independent audit; window B re-evaluation unblocks on closure; D-107 amends the closure with the over-refusal gate and the producer-derived grammar shape after the second same-signature formulation failure."
       },
       "authority": {
         "label": "D-106 b-ii residual synthesis clause 3 (Variant D; refuter's writer-level diagnosis adopted)",
