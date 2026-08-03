@@ -1,0 +1,46 @@
+{
+  "schema_version": "joulewise.floor_mint_pinset.v1",
+  "mint_tool_version": "joulewise.floor_mint.v1",
+  "plan": {
+    "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
+    "sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+    "declared_calibration_scope": "window_a",
+    "artifact_calibration_scope": "production_window"
+  },
+  "artifact": {
+    "cell_id": "df-ph-decode-floor",
+    "transport_group_id": "tg-df-ph-decode-production-v1",
+    "source_class": "prospective"
+  },
+  "cell": {
+    "condition_family_id": "df-ph-decode",
+    "condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
+    "metric": "phase_energy_j.decode",
+    "window_class": "phase",
+    "target_precheck_path": [
+      "phase",
+      "decode"
+    ],
+    "operative_floor_six_decimal": "7.377086"
+  },
+  "absolute": {
+    "evidence_root_id": "a10",
+    "calibration_cell_id": "df-ph-decode-absolute",
+    "evaluation_basis_sha256": "79c6e8b9211f18a5ad8937f155230a9090706bf1dfc8c3ed767deb53074e053e",
+    "evaluation_basis_members": 37,
+    "extraction_spec_members": 30,
+    "expected_n": 10,
+    "drift_allowance_j": 0.652271753365838,
+    "order_manifest_id": "p2-015-02_phase_absolute-order-v1"
+  },
+  "comparative": {
+    "evidence_root_id": "window_c",
+    "calibration_cell_id": "df-cmp-abba-ph-decode",
+    "evaluation_basis_sha256": "0cf07a5cdc3847e67ba9be9dc50ffda43b7d00ef10d03485faf36c2693418fa6",
+    "evaluation_basis_members": 47,
+    "extraction_spec_members": 40,
+    "expected_n": 10,
+    "drift_allowance_j": 0.5812720449734456,
+    "order_manifest_id": "p2-015-05_phase_decode_abba-order-v1"
+  }
+}
