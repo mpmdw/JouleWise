@@ -264,6 +264,7 @@ class ProtocolShapeAmplificationTests(unittest.TestCase):
                 SequencedClock([10.0, 10.4, 11.0, 11.4, 20.0, 20.2, 21.0, 21.2]),
                 remote_work_root=remote_root,
                 remote_python=sys.executable,
+                retention_root=Path(tmp) / "retention",
             )
             task_literal = {
                 "task_id": "same-task-id",
@@ -494,6 +495,7 @@ class ClockMathAmplificationTests(unittest.TestCase):
                 SequencedClock([10.0, 10.4, 11.0, 11.4]),
                 remote_work_root=remote_root,
                 remote_python=sys.executable,
+                retention_root=Path(tmp) / "retention",
             )
 
             result = client.run_task(

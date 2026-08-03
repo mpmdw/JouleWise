@@ -139,6 +139,7 @@ class NodeWorkerSubprocessTests(unittest.TestCase):
                 SystemClock(),
                 remote_work_root=str(remote_root),
                 remote_python=sys.executable,
+                retention_root=root / "retention",
             )
             run_id = "nv5-localhost-contract"
             server_pid: int | None = None
