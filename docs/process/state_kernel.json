@@ -2733,7 +2733,7 @@
       "priority": "p2_next_slice",
       "rank": 5,
       "status": "queued",
-      "status_note": "Minted 2026-08-02 (successor session) per the checkpoint resume script; the profiling consult's scripts were recovered from .desk/test-speed-consult/ after the codex envelope bug killed the session; timing run pending a quiet bench.",
+      "status_note": "2026-08-03: timing DATA collected (quiet bench, 93 modules, 695s serial; raw in .desk/test-speed-consult/timings-20260803.jsonl) and DESIGN done (.desk/test-speed-consult/DESIGN-from-timing-data.md). Findings: suite is a 2-module problem (run_campaign 182s + p2038 133s = 45%); module-atomic sharding CAPS at 182s so those two must be split by TestCase class; shard-runner + splits -> ~87s wall @8 workers (6.5x); fast tier (drop 11 heavy integ modules) -> 25-40s PR feedback with the full suite still the merge gate. Blacksmith (lever 3) NEEDS ED (account/cost; likely marginal once sharded). Implementation queued: scripts/shard_tests.py + class-split + CI matrix — mechanical, delegatable, zero deletions (D-061).",
       "stop_card": null
     },
     "TOOL-01": {
