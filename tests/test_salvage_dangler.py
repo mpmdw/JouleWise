@@ -273,10 +273,21 @@ class SalvageDanglerTests(unittest.TestCase):
             "".join(json.dumps(row) + "\n" for row in events), encoding="utf-8"
         )
         summary = json.loads(summary_path.read_text())
-        summary["future_nested"] = {"runtime_result": {"value": "hygiene-only"}}
+        summary["measurement_quality"] = {
+            "future_nested": {"runtime_result": {"value": "hygiene-only"}}
+        }
         summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
 
         self.assertTrue(inspect_salvage_attempt(attempt)["licensed"])
+
+    def test_unknown_nonnull_summary_fields_fail_closed(self) -> None:
+        attempt = self.copy_attempt()
+        summary_path = attempt / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["future_measurement"] = {"value": 0.0}
+        summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(SalvageAuthorizationError, "unknown non-null"):
+            inspect_salvage_attempt(attempt)
 
     def test_d107_false_refusal_domains_license(self) -> None:
         attempt = self.copy_attempt()

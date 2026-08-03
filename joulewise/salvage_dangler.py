@@ -166,6 +166,18 @@ _MEASURAND_FIELDS = frozenset(
         "window_evidence_precheck",
     }
 )
+_ALLOWED_FAILED_SUMMARY_NONNULL = frozenset(
+    {
+        "status",
+        "failure_message",
+        "failure_reason",
+        "idle_baseline",
+        "measurement_quality",
+        "summary_provenance",
+    }
+)
+
+
 class SalvageAuthorizationError(ValueError):
     """The supplied evidence does not satisfy the closed D-100 license."""
 
@@ -737,6 +749,16 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError("summary status is not failed")
     if any(summary.get(field) is not None for field in _MEASURAND_FIELDS):
         raise SalvageAuthorizationError("failed attempt contains measurand bytes")
+    unknown_nonnull = {
+        key
+        for key, value in summary.items()
+        if value is not None and key not in _ALLOWED_FAILED_SUMMARY_NONNULL
+    }
+    if unknown_nonnull:
+        raise SalvageAuthorizationError(
+            "unknown non-null failed-summary fields: "
+            + ", ".join(sorted(unknown_nonnull))
+        )
     failure_reason = summary.get("failure_reason")
     event_reason = failures[0].get("metadata")
     event_reason = (
