@@ -6709,7 +6709,7 @@ Revisit when: D100-BII-BINDING-01's focused audit reports (window B
 re-evaluation unblocks on its closure), or any window-C dangler seeks
 the b-ii license first.
 
-## D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
+### D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
 
 D-078's closed-registry rule is amended narrowly to register
 `whole_window_member_terminally_absent_salvage` as the first non-refusing
