@@ -41,6 +41,19 @@ def canonical_sha256(value: object) -> str:
     ).hexdigest()
 
 
+def digest_manifest(root: Path) -> list[dict[str, object]]:
+    return [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size,
+        }
+        for path in sorted(
+            candidate for candidate in root.rglob("*") if candidate.is_file()
+        )
+    ]
+
+
 class SalvageDanglerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -87,8 +100,12 @@ class SalvageDanglerTests(unittest.TestCase):
         )
         return path
 
-    def write_closure(self) -> tuple[Path, Path]:
-        attempts = [self.copy_attempt(f"attempt-{index}") for index in range(3)]
+    def write_closure(self, *, with_siblings: bool = False) -> tuple[Path, Path]:
+        quarantine = self.root / "quarantine"
+        quarantine.mkdir()
+        attempts = [
+            self.copy_attempt(f"quarantine/attempt-{index}") for index in range(3)
+        ]
         for path, bundle_id in zip(
             attempts,
             ("prior-failure-a", "prior-failure-b", "d100-dangler-r5a"),
@@ -100,6 +117,12 @@ class SalvageDanglerTests(unittest.TestCase):
             metadata = json.loads((path / "metadata.json").read_text())
             metadata["run_id"] = bundle_id
             (path / "metadata.json").write_text(json.dumps(metadata) + "\n")
+        if with_siblings:
+            self.copy_attempt("quarantine/sibling-a")
+            sibling_b = self.copy_attempt("quarantine/sibling-b")
+            sibling_config = json.loads((sibling_b / "config.json").read_text())
+            sibling_config["run_id"] = "different-sibling"
+            (sibling_b / "config.json").write_text(json.dumps(sibling_config) + "\n")
         inspected = [inspect_salvage_attempt(path) for path in attempts]
         binding = self.write_binding()
         binding_sha = hashlib.sha256(binding.read_bytes()).hexdigest()
@@ -109,7 +132,9 @@ class SalvageDanglerTests(unittest.TestCase):
             "membership_binding_sha256": binding_sha,
             "opened_at": "2026-08-01T10:00:00Z",
             "closed_at": "2026-08-01T12:00:00Z",
-            "custody_roots": [str(self.root)],
+            "custody_roots": [str(quarantine)],
+            "quarantine_root": str(quarantine),
+            "quarantine_manifest": digest_manifest(quarantine),
             "terminal_occurrence_index": 2,
             "occurrences": [
                 {
@@ -195,6 +220,38 @@ class SalvageDanglerTests(unittest.TestCase):
         with (attempt / "power_trace.csv").open("a", encoding="utf-8") as handle:
             handle.write("100.251,0.1,powermetrics,cpu_power,100.2,100.251\n")
         with self.assertRaisesRegex(SalvageAuthorizationError, "teardown bound"):
+            inspect_salvage_attempt(attempt)
+
+    def test_d106_early_telemetry_substitution_refuses(self) -> None:
+        attempt = self.copy_attempt()
+        telemetry_path = attempt / "rich_telemetry.jsonl"
+        rows = [json.loads(line) for line in telemetry_path.read_text().splitlines()]
+        for index, row in enumerate(rows, start=1):
+            row["timestamp_s"] = float(index)
+        telemetry_path.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(SalvageAuthorizationError, "telemetry interval"):
+            inspect_salvage_attempt(attempt)
+
+    def test_d106_nested_metadata_workload_evidence_refuses(self) -> None:
+        attempt = self.copy_attempt()
+        metadata_path = attempt / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["extra"] = {"model_output": "substituted measured output"}
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(SalvageAuthorizationError, "unclassifiable"):
+            inspect_salvage_attempt(attempt)
+
+        attempt = self.copy_attempt("event-metadata")
+        events_path = attempt / "events.jsonl"
+        events = [json.loads(line) for line in events_path.read_text().splitlines()]
+        failure = next(row for row in events if row["event_type"] == "failure")
+        failure["metadata"]["model_output"] = "substituted measured output"
+        events_path.write_text(
+            "".join(json.dumps(row) + "\n" for row in events), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(SalvageAuthorizationError, "unclassifiable"):
             inspect_salvage_attempt(attempt)
 
     def test_unknown_nonnull_summary_fields_fail_closed(self) -> None:
@@ -313,6 +370,20 @@ class SalvageDanglerTests(unittest.TestCase):
         tampered = dict(payload)
         tampered.pop("payload_sha256")
         self.assertFalse(validate_salvage_exclusion_payload(tampered))
+
+    def test_d106_quarantine_digest_freeze_rejects_sibling_copy(self) -> None:
+        closure_path, binding_path = self.write_closure(with_siblings=True)
+        sibling_a = self.root / "quarantine" / "sibling-a" / "config.json"
+        sibling_b = self.root / "quarantine" / "sibling-b" / "config.json"
+        shutil.copyfile(sibling_a, sibling_b)
+
+        with self.assertRaisesRegex(SalvageAuthorizationError, "quarantine manifest"):
+            authorize_salvage_dangler_exclusion(
+                closure_path,
+                binding_path,
+                campaign_policy_sha256=POLICY_SHA,
+                terminal_absent_bundle_ids=["d100-dangler-r5a"],
+            )
 
     def test_r6_cap_one_and_waivers_refuse(self) -> None:
         closure_path, binding_path = self.write_closure()
