@@ -2587,3 +2587,90 @@ independent audit launched 2026-08-02 evening (successor session) with
 the repaired codex path. Layer scorecard: the probe-required refuter
 brief format remains the project's highest-unique-catch instrument —
 four gates, four material amendments or overrulings.
+
+## C-041: The D100-BII nested-closure arc — two more cold gates, a third-failure STOP, and the CAL-BRACKET consult (2026-08-03, desk session in Ed's absence)
+
+**Shape.** One desk session ran the two open repair branches
+(D100-BII-BINDING-01, CAL-BRACKET-D079-01) and the MINT-GENERALIZE
+tooling to their conclusions, plus two cold gates on the b-ii
+nested-content closure. All delegated; magistrate gates: lead full-suite
++ live bench probes at every disposition. Roles: Fable magistrate;
+Sol xhigh execution/audit/consult; cold Fable instances + Opus refuter
+at the gates.
+
+**D100-BII arc — three formulations, two gates, STOP (full detail:
+`.desk/coldgate_d100_bii/`).** The nested-content closure (D-106 clause
+3(c)) failed three structural formulations:
+- Formulation 1 (position-enumeration) + formulation 2 (key-denylist):
+  cold GATE 2 → **D-107**, adopting the refuter's C-A′ producer-derived
+  admission grammar with per-leaf value domains; scope expanded to the
+  inventory grammar + the 769/769 false-refusal repairs; row acceptance
+  amended with an over-refusal gate (license 3/3 real subjects). The
+  refuter's fifth consecutive material amendment: it proved the license
+  tool refused all three real subjects at the inventory gate at every
+  head, that fix-1 over-refused 769/769, and that four value channels
+  stayed open.
+- Formulation 3 (open-superset leaves): fix-2 implemented C-A′ but left
+  free-text `node_cleanup.error/.path`, the argv superset, and numeric
+  leaves open — bench-confirmed workload text licenses. Cold GATE 3 (two
+  cold Fable instances converged on L-A surface-refusal; Opus refuter
+  DECISIVE): the refuter proved (a) the packet censused the wrong
+  population (telemetry.command 0/26 on the license surface, and L-A's
+  natural implementation false-refuses 772/772 via a second .command[]
+  path), (b) four MORE open carriers, (c) **structurally**, the grammar
+  constrains values but not list CARDINALITIES — an unbounded list over
+  a closed alphabet is an unbounded workload channel (fires D-107 clause
+  7's second return trigger), (d) ~1.2 KB of free numeric-leaf capacity
+  remains under any grammar, the same order as the workload output, so
+  clause (c) **cannot achieve D-100's "zero output bytes" predicate by
+  any bench formulation**, and (e) the substitution attack (c) was
+  ordered to close is **already closed by the landed clause (b)**
+  hash-sealed manifest pin — so (c)'s real residual is against a careless
+  closure author, not substitution.
+- **Magistrate disposition: STOP the bench loop, escalate to Ed
+  (D-108 pending).** Not a fourth round — three formulations + a
+  structural-impossibility finding + a proposal to retire a ratified
+  clause is exactly the sunk-cost pattern rule 11 exists to halt.
+  Nothing committed; fix-2 diff held untrusted; window B stays blocked.
+
+**Per-layer scorecard (this arc):** the Opus refuter layer amended or
+overturned the disposition at BOTH gates (2 and 3) — now the sole
+highest-unique-catch layer across SIX consecutive gates. Cold Fable
+instances: converged correctly on shape both times, but neither reached
+the structural cardinality/capacity finding — the cross-model pairing
+earned its keep again (a fresh Fable shares the magistrate's own
+dispositions). Packet hygiene: the refuter recorded FOUR findings against
+the magistrate's gate-3 packet (selective clause-7 quotation omitting the
+half that decided the gate; flags not quoted in full incl. the blocking
+anti-round-3 disposition; a laundered "769/769 admit" number; wrong-
+population census) — the same classes recorded at D-106/D-107. Standing
+correction adopted (recorded in the gate-3 synthesis): quote governing
+clauses to the period, quote every source flag in full including the ones
+cutting against the proposed disposition, census the license-surface
+population.
+
+**CAL-BRACKET arc — consult over blind round three.** Impl + fix-round-1
+(first-audit blockers cleanly closed) → delta re-audit FAIL, 3 freshness
+blockers, estimator-digest a REPEAT signature. Per the escalation trigger
+the next spend was a read-only Sol xhigh DESIGN CONSULT, not a fix round.
+It resolved each against D-102: F1 (freshness=6-field epoch) determined;
+F2 (4-module estimator digest set) magistrate-ratified from the
+b_fiducial_s dependency graph; **F3 (cross-root trigger observability)
+escalated to Ed (D-109 pending)** — D-102 mandates the triggers but no
+authoritative universe/registry exists; build one vs. narrow D-102 is a
+claim-soundness call. Held for a single combined fix round after Ed rules
+F3 (it controls the artifact schema). Detail: `.desk/calbracket_d079/`.
+
+**MINT-GENERALIZE-01 — landed.** Full gauntlet (impl → audit → fix →
+delta clean → bench fix → lead gates → PR #96 green CI) merged under
+D-072; live 7B mint stays lead-reserved. The clean case of the session.
+
+**Process finding for the skills.** Two claim-machinery closures this
+session hit genuine DECISION-LEVEL gaps (a clause that cannot meet its
+predicate; a mandated trigger with no defined mechanism) that the
+adversarial bench correctly SURFACED rather than papered over. The
+system worked precisely because the escalation triggers were honored
+(consult-not-round-three on CAL-BRACKET; STOP-not-round-four on D100-BII)
+— the opposite of the 2026-07-26/27 failures that motivated rule 11.
+Recorded as evidence that the topology holds when the loop-immersed agent
+actually chooses to stop.
