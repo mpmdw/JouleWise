@@ -2508,3 +2508,82 @@ sessions, 6 independent audits, 3 cold-gate pairs, across ~20 hours of
 the Ed-authorized runway — the most heavily reviewed change in the
 project's history, protecting the machinery every future claim
 consumes.
+
+## C-040 addendum: the b-ii cold gate (D-106), the merge-fallback landings, and the codex envelope bug (2026-08-02/03)
+
+**Shape.** The runway's second half ran both repair branches through
+brief-repair rounds to decisive re-audits: MANIFEST-CONTRAST v3 came
+back CLEAN (zero findings) and merged as PR #95; MET-DANGLER's decisive
+re-audit left ONE blocker (B3-R1), the disposition note's binding
+commitment fired as written — no third formulation round — and the
+question went to the runway's FOURTH cold gate (cold Fable + Opus
+contract refuter), synthesized as **D-106 Variant D**. Full packet and
+re-audit custody: `.desk/coldgate_d100_bii/`.
+
+**Per-layer unique catches (no dead layers):**
+- Decisive re-audit (Sol xhigh, fresh thread): B3-R1 itself — after two
+  formulation rounds, telemetry and nested content remained unbound to
+  the admission-only event account (earlier-capture substitution
+  licensed; negative time deltas accepted; nested `model_output`
+  unrecognized-and-passing). Also re-proved all five regressions red on
+  the parent by code inspection, under a code-inspection-only ruling.
+- Cold instance: Option A + window-B YES on the compensating-control
+  theory; its own stated strongest counterargument (doctrinal fences
+  decay) converged with the refuter's B-1 — recorded as dissent when
+  overruled.
+- Refuter (Opus, contract lens): the gate's decisive layer for the
+  FOURTH consecutive time, all showings bench-verified — the recorded
+  manual verification contains ZERO bundle digests, so Option A's fence
+  binds by path against a content-substitution defect; the packet's
+  condition-3 parenthetical quoted only the half supporting the
+  magistrate's lean; the window's three sibling quarantine bundles are
+  mutually substitutable by one same-name copy, defeating the
+  rider-(ii) exemption; the NEW writer-level fact (powermetrics emits
+  identity-free 8-field rows from one code path, so per-file schema
+  formulations can NEVER bind capture identity) that diagnosed both
+  failed formulations and discriminated the fix in kind; and S-1 — the
+  D-105 registration guard inverted on first contact (it registered
+  the undecidable; this residual is decidable), so NOTHING is
+  registered.
+- Magistrate: Variant D synthesis; two packet-hygiene failures recorded
+  against itself (the Option C runway line; the selective quotation);
+  cold-gate packet authorship moved to MECHANICAL assembly permanently.
+
+**The merge-fallback pattern (twice, ruled):** GitHub could not build or
+schedule merge-ref CI for PR #94 (pull_request runs never scheduled;
+close/reopen tried) or PR #95. Ruled fallback, both times: satisfy
+D-072's substance far past precedent (three independent audits + cold
+gate + lead full suite at the audited head + hash-identical mapping
+pins; for #95, the composed-tree full suite as the lead integration
+gate), merge, and treat the push-to-main verdict CI as the verdict with
+immediate revert on red. Both verdict runs came back green.
+
+**Site failure domain (D-101 addenda I+II):** the D-106 decision-log
+commit itself turned main red through the live-content site pack tests
+— a governed record edit acting as a session blocker, which D-101
+forbids in substance. The defect was fixed on its merits (anchor
+minting), the CLASS closed by Ed's directive (live-content site tests
+advisory-lane, addendum I), and the site observatory then split into
+its own workflow and failure domain (addendum II; separate `site`
+workflow 2/2 green).
+
+**Process finding — the codex envelope bug:** both of the runway's
+final xhigh runs (the D100-BII implementation; the TEST-SPEED consult)
+completed their work but lost the final envelope — protocol failure by
+contract, so the implementation diff was HELD untrusted on its pushed
+branch. Root cause (found 2026-08-03): a codex CLI models-cache schema
+drift — cached entries lacked `supports_reasoning_summaries` and the
+TTL-renewal deserialization killed sessions before the final message.
+FIXED 2026-08-02 evening (stale cache moved aside, fresh refetch
+carries the field, trivial Sol run verified end-to-end). The
+held-untrusted → independent-focused-audit disposition worked exactly
+as the bridge contract intends: no envelope, no trust, regardless of
+how green the work looked.
+
+**Outcome.** PRs #94 and #95 MERGED at audited heads with green verdict
+runs; D100-BII-BINDING-01 minted (P1) carrying D-106 clause 3's four
+parts; window B re-evaluation hard-blocked on it; its focused
+independent audit launched 2026-08-02 evening (successor session) with
+the repaired codex path. Layer scorecard: the probe-required refuter
+brief format remains the project's highest-unique-catch instrument —
+four gates, four material amendments or overrulings.
