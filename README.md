@@ -36,7 +36,7 @@ detection floor, **7.377086 J**, minted and mainline. The Splitwise
 head-to-head contrast (1.5B vs 7B decode) has been collected and passed
 its collection and whole-window verdict gates; its bookkeeping machinery
 landed 2026-08-02, and the generalized mint tooling that the 7B floor
-needs landed 2026-08-03 (PR #96). The headline number stays a
+needs landed 2026-08-03. The headline number stays a
 preliminary observation until the remaining lead-reserved mint gates run
 — the governed 7B floor mint is the last one. The a8 re-verdict path is
 closed. The
