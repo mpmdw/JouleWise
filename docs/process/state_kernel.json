@@ -1254,7 +1254,7 @@
       "priority": "p1_phase_gate",
       "rank": 12,
       "status": "queued",
-      "status_note": "Minted 2026-07-30; UNBLOCKED 2026-08-02 (gauntlet closed PR #93; MANIFEST-CONTRAST v3 merged PR #95) — the last gate on the contrast-claim chain. The 7B mint's remaining scope details (D-085 Q6) ride this row.",
+      "status_note": "Tooling LANDED via PR #96 (merge f3127ed, 2026-08-03): generalized mint sibling with digest-authenticated per-plan pinsets; gauntlet impl->audit(F1 blocker)->fix->delta(blocker-free)->bench D1 fix->lead gates (6 corpus tests, suite 2436 OK, CI 5/5 green). REMAINING (lead-reserved live gates, keep this row OPEN): real-evidence mint-1 full-path re-mint byte compare vs the landed artifact, then the governed 7B mint with a lead-authored pinset (D-085 Q6). Custody: .desk/mintgen/.",
       "stop_card": null
     },
     "MODULARITY-01": {
