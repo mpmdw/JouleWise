@@ -6743,3 +6743,37 @@ gating. The anchor-minting defect itself was also fixed on its merits
 (`775fa23`: short anchors mint only from `D-NNN:` entry headings).
 
 Revisit when: Ed changes the site's standing (same trigger as D-101).
+
+## D-101 addendum II (2026-08-03): the site observatory is a separate failure domain
+
+- Status: accepted (Ed-directed 2026-08-03, verbatim intent: the
+  annoyance was never email volume — it was project CI failing "because
+  of the dumbass site which has nothing to do with the verity of the
+  measurements recorded"; "the site observatory should be completely
+  separate — though it obviously relies on this project")
+- Applies to: `.github/workflows/ci.yml`, `.github/workflows/site.yml`
+  (new), `tests/test_build_site_parsers.py`, `tests/test_pack_capsule.py`
+
+Widens the 2026-08-02 addendum from live-content tests to the WHOLE
+site lane. The criterion is Ed's: project CI fails only for reasons
+bearing on the correctness of the harness, measurements, and governed
+records. Amendment:
+
+1. ALL site-lane tests (`test_build_site_parsers`,
+   `test_pack_capsule` — synthetic-input and live-content alike)
+   default-skip in the blocking suite behind
+   `JOULEWISE_SITE_CONTENT_TESTS` and run in the site workflow. Zero
+   deletions (D-061-clean); full coverage persists in the site lane.
+2. The publication chain (formerly the advisory `release-chain` job)
+   moves to a new `site` workflow (`.github/workflows/site.yml`).
+   Project `ci` contains zero site machinery; site failures surface
+   under the `site` workflow name and are site-lane facts (D-101
+   clause 4), never project CI failures. The SITE-02 "D2 guaranteed in
+   CI" condition is satisfied by the site workflow's esbuild/decoder
+   coverage (the focused step folded into the module run).
+3. Project-record lint (docs-freshness, registry pins, gen-state pins)
+   is NOT site machinery and REMAINS in the blocking gate — those
+   fences protect governed records, which is inside Ed's criterion.
+
+Revisit when: Ed changes the site's standing, or the site gains an
+external consumer whose freshness matters (same triggers as D-101).

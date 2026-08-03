@@ -19,6 +19,14 @@ from scripts import pack_capsule
 
 TS_STRING_RE = r'"(?:\\.|[^"\\])*"'
 
+# D-101 addendum II (2026-08-03, Ed-directed): the site observatory is a
+# separate failure domain — no site-lane test runs in the project's blocking
+# suite. The whole module runs in the site workflow with this variable set.
+SITE_TESTS = unittest.skipUnless(
+    os.environ.get("JOULEWISE_SITE_CONTENT_TESTS"),
+    "site-lane test (site workflow; set JOULEWISE_SITE_CONTENT_TESTS=1)",
+)
+
 
 def decode_gzip_base64(value):
     return gzip.decompress(base64.b64decode(value)).decode("utf-8")
@@ -28,6 +36,7 @@ def decode_ts_string_expression(expression):
     return "".join(json.loads(item) for item in re.findall(TS_STRING_RE, expression))
 
 
+@SITE_TESTS
 class PackCapsuleTests(unittest.TestCase):
     def require_pinned_esbuild(self):
         node_modules = pack_capsule.CAPSULE / "node_modules"

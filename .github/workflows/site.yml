@@ -1,0 +1,40 @@
+# Site observatory — a SEPARATE failure domain from project ci (Ed
+# directive 2026-08-03, D-101 addendum II). The site relies on this
+# project but never gates it: this workflow owns ALL site-lane tests and
+# the publication chain, and its failures are site facts, never project
+# CI failures. Project ci contains zero site machinery.
+name: site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  site-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site_capsule/package-lock.json
+      - name: Install pinned publication build tools (network, no credentials)
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix site_capsule ci --ignore-scripts --no-audit --no-fund
+      - name: Site-lane tests (parsers + capsule pack, incl. live-content)
+        env:
+          JOULEWISE_SITE_CONTENT_TESTS: "1"
+        run: python -m unittest -v tests.test_build_site_parsers tests.test_pack_capsule
+      - name: Exercise non-secret publication chain in a clean temporary snapshot
+        env:
+          JOULEWISE_MARKED_BIN: ${{ github.workspace }}/node_modules/.bin/marked
+          JOULEWISE_LAKEBED_BIN: ${{ github.workspace }}/site_capsule/node_modules/.bin/lakebed
+        run: python scripts/release_check.py --dry-run

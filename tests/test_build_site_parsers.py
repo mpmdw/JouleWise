@@ -16,14 +16,14 @@ from unittest import mock
 
 from scripts import build_site, pack_capsule
 
-# D-101 addendum (2026-08-02, Ed-directed): tests that render the LIVE repo
-# docs (full site build + capsule pack) are site-lane, advisory-only — an
-# edit to a governed record (e.g. a new decision-log entry) must never fail
-# the blocking test job. They run in CI's advisory release-chain job with
-# this variable set. Synthetic-input parser tests remain gating.
+# D-101 addendum II (2026-08-03, Ed-directed; widens the 2026-08-02
+# addendum): the site observatory is a separate failure domain — NO
+# site-lane test, synthetic-input or live-content, runs in the project's
+# blocking suite. The whole module runs in the site workflow with this
+# variable set.
 SITE_CONTENT_TESTS = unittest.skipUnless(
     os.environ.get("JOULEWISE_SITE_CONTENT_TESTS"),
-    "live-content site test (advisory lane; set JOULEWISE_SITE_CONTENT_TESTS=1)",
+    "site-lane test (site workflow; set JOULEWISE_SITE_CONTENT_TESTS=1)",
 )
 
 
@@ -34,6 +34,7 @@ def gzip_decompress_base64(value: str) -> str:
     return gzip.decompress(base64.b64decode(value)).decode("utf-8")
 
 
+@SITE_CONTENT_TESTS
 class BuildSiteParserTests(unittest.TestCase):
     def assert_fail_closed(self, func, *args):
         with self.assertRaises(build_site.SiteBuildError):

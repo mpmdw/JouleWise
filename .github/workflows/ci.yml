@@ -115,37 +115,6 @@ jobs:
           ), errors
           PY
 
-  release-chain:
-    # ADVISORY ONLY (Ed directive 2026-08-01, D-101): the site/publication
-    # chain gates nothing — this job may fail without failing CI. It still
-    # runs to inform (logs, DRIFT context). Code correctness for these
-    # modules is gated by the ordinary test job, not here.
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            site_capsule/package-lock.json
-      - name: Install pinned publication build tools (network, no credentials)
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm --prefix site_capsule ci --ignore-scripts --no-audit --no-fund
-      - name: Verify emitted TypeScript with pinned esbuild
-        run: python -m unittest -v tests.test_pack_capsule -k test_real_server_decoder_roundtrips_emitted_shard_and_rejects_corruption
-      - name: Live-content site tests (advisory; D-101 addendum)
-        env:
-          JOULEWISE_SITE_CONTENT_TESTS: "1"
-        run: python -m unittest -v tests.test_build_site_parsers
-      - name: Exercise non-secret publication chain in a clean temporary snapshot
-        env:
-          JOULEWISE_MARKED_BIN: ${{ github.workspace }}/node_modules/.bin/marked
-          JOULEWISE_LAKEBED_BIN: ${{ github.workspace }}/site_capsule/node_modules/.bin/lakebed
-        run: python scripts/release_check.py --dry-run
+  # The site observatory's publication chain and all site-lane tests
+  # live in .github/workflows/site.yml — a separate failure domain that
+  # never gates project CI (Ed directive 2026-08-03, D-101 addendum II).
