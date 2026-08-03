@@ -48,6 +48,9 @@ EXPECTED_IDS = {
     # e94d4a7) and retired to the completed table.
     "MINT-GENERALIZE-01",
     "SUPERSESSION-DUP-REFUSAL-01",
+    # 2026-08-02 successor session: TEST-SPEED-01 minted per the
+    # checkpoint resume script (Ed-ratified three levers 2026-08-03).
+    "TEST-SPEED-01",
     # COOLDOWN-JOIN-DA1-01 was folded in 2026-07-31 (D-093) as P2-015
     # retired, and closed the same day inside the gauntlet's commit 2
     # (e749c95, PR #91 67d268a); it left the live kernel at close-out.
@@ -239,9 +242,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_58(self):
+    def test_exact_live_id_set_59(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 58)
+        self.assertEqual(len(self.tasks), 59)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

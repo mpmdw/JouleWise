@@ -2694,6 +2694,45 @@
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
     },
+    "TEST-SPEED-01": {
+      "acceptance": {
+        "evidence": [
+          "Per-module timing corpus collected on a quiet bench (the recovered Sol profiling scripts; timings.jsonl + summary.json banked under .desk/) identifying the slow tail by module and by test",
+          "Shard-runner and the ratified PR-fast/full tier split implemented from the data: the fast tier gates PRs, the FULL suite remains the gate for merges, verdicts, and audited heads; zero test deletions",
+          "Blacksmith runner evaluation recorded with an adopt/defer recommendation and measured latency/cost comparison against GitHub-hosted runners"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TEST-SPEED-01/acceptance",
+          "label": "TEST-SPEED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The three Ed-ratified levers land: timing data drives a shard-runner plus PR-fast/full split with the full suite still holding every authoritative gate, and the Blacksmith runner option is evaluated on evidence."
+      },
+      "authority": {
+        "label": "Ed ratification 2026-08-03 (three levers: suite-speed priority, PR-fast/full split, Blacksmith runner evaluation); origin row in the 2026-07-28 report",
+        "path": "docs/run_reports/2026-07-28-floor-mint-implementation.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-061 zero-deletion clearance; the full suite as the authoritative gate",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No test deletions, and the fast tier never substitutes for a required full-suite gate: merges, whole-window verdicts, and audited heads keep the full suite"
+        }
+      ],
+      "flags": [],
+      "goal": "Cut suite wall-clock (three Ed-ratified levers, 2026-08-03): collect per-module timing data with the recovered profiling scripts, implement the shard-runner and the PR-fast/full tier split from the data, and evaluate Blacksmith runners.",
+      "id": "TEST-SPEED-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 5,
+      "status": "queued",
+      "status_note": "Minted 2026-08-02 (successor session) per the checkpoint resume script; the profiling consult's scripts were recovered from .desk/test-speed-consult/ after the codex envelope bug killed the session; timing run pending a quiet bench.",
+      "stop_card": null
+    },
     "TOOL-01": {
       "acceptance": {
         "evidence": [
