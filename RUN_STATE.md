@@ -36,6 +36,19 @@ script.).
 > B recorded as rejected fallback. Both implementation streams
 > relaunched this session (D100-BII close → window B re-eval;
 > CAL-BRACKET single combined fix round → gauntlet → PR).
+>
+> **EXECUTION (same evening, Ed's 16h runway):** D-108 stream DONE —
+> PR #99 merged `32d72fd` (full gauntlet incl. audit blocker F1 fixed +
+> delta ACCEPT; lead suite 2403 OK) and the clause-(d) re-record
+> EXECUTED at merged HEAD (3/3 licensed, digest-bound, banked in
+> `.desk/coldgate_d100_bii/`). **Row D100-BII-BINDING-01 CLOSED;
+> window B re-evaluation UNBLOCKED** (runbook execution next).
+> D-109 stream (Sol) + L-A′ banking in flight. Ed did fresh §5A
+> physicals (network time OFF confirmed; 140W Anker attached but
+> NEGOTIATING ONLY 70W at last check — EPR cable/port question flagged
+> to Ed; battery capped 80% = adjudicate via consult before any
+> window). Quiet window C runs tonight ONLY if adapter identity
+> resolves and all guarded-launcher conditions verify; else desk-only.
 
 ## DESK-SESSION UPDATE (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
 
