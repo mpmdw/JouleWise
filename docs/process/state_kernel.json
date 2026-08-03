@@ -3,7 +3,7 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Desk session: machinery adjudication ruled (D-100 cold-gate synthesis, semantics-dispatch shape), window A permanently non-claim-bearing, window B re-evaluation licensed behind the repair; commit-3 design->implementation; CI shard-budget fix",
+    "label": "Runway close-out (section 9): PRs #94/#95 merged at audited heads (bc2ab19/200e6db, verdict CI green), D-106 Variant D ruled, D100-BII-BINDING-01 minted (window B re-evaluation hard-blocked on it), D-101 addendum moves live-content site tests to the advisory lane, kernel batch pins 58",
     "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
@@ -1252,7 +1252,7 @@
       "priority": "p1_phase_gate",
       "rank": 12,
       "status": "queued",
-      "status_note": "Minted 2026-07-30; BLOCKED on COOLDOWN-JOIN-GAUNTLET-01 by the D-088 no-mint condition. The 7B mint's remaining scope details (D-085 Q6) ride this row.",
+      "status_note": "Minted 2026-07-30; UNBLOCKED 2026-08-02 (gauntlet closed PR #93; MANIFEST-CONTRAST v3 merged PR #95) — the last gate on the contrast-claim chain. The 7B mint's remaining scope details (D-085 Q6) ride this row.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -2739,5 +2739,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-01"
+  "updated": "2026-08-02"
 }

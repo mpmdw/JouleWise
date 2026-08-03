@@ -1,11 +1,11 @@
 # JouleWise
 
-> **🖥️ MACHINE: DESK WORK — agents active, no window in flight.**
-> 2026-08-02 evening: post-move session executing the resume script
-> (PRs #94/#95 merged; a Sol implementation run is active). No
-> measurement window in flight or imminent. Window C launches only
-> after a fresh Ed §5A. This line updates only at defined moments;
-> rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+> **🖥️ MACHINE: DESK WORK — no window in flight, no agents running.**
+> 2026-08-02 late evening: resume script executed (PRs #94/#95 merged,
+> verdict CI green; the D100-BII implementation diff is held untrusted
+> pending its audit). No measurement window in flight or imminent.
+> Window C launches only after a fresh Ed §5A. This line updates only
+> at defined moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
@@ -35,8 +35,9 @@ Five prospective quiet-machine windows have since passed under those rules
 the project published its first floor artifact: the 1.5B model's decode
 detection floor, **7.377086 J**, minted and mainline. The Splitwise
 head-to-head contrast (1.5B vs 7B decode) has been collected and passed
-every gate; its headline number stays a preliminary observation until one
-piece of bookkeeping machinery lands. The a8 re-verdict path is closed. The
+every gate; its bookkeeping machinery landed 2026-08-02 and the headline
+number stays a preliminary observation until the 7B floors get their own
+mint (the last gate). The a8 re-verdict path is closed. The
 project's framing is now metrology-centric (D-091): the measurement
 instrument itself is the product, and model comparisons are demonstrations
 of what it can resolve.
@@ -112,8 +113,8 @@ protocol has now run five times and passed five times — windows C, D, a10, the
 uncertainty-budget rules (D-078 clause 10). Their product is the first minted
 floor artifact (1.5B decode, **7.377086 J**, mainline since 2026-07-30) and the
 7B floors, which remain prose-only until their own mint. The Splitwise contrast
-window collected clean and passed its verdict; the gated claim waits on one
-bookkeeping schema. The a8 retrospective path is closed, and the earlier
+window collected clean and passed its verdict; the bookkeeping schema landed
+2026-08-02 and the gated claim now waits only on the 7B mint. The a8 retrospective path is closed, and the earlier
 222-bundle floor publication remains a caveated historical record. Use the
 generated state kernel—not this summary—to select the next live or agent-lane
 step.

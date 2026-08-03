@@ -122,7 +122,7 @@ be re-derived by a future agent gets an entry here.
 | D-097 | B1 cold-gate synthesis: v2 outcome consumption deferred to gauntlet commit 3 (writer-minted authenticated discriminator required); interim v2-label and outcome-field refusal everywhere (reader accepted set == writer emitted set); merge train held on four release conditions | accepted (unanimous cold gate + refuter, magistrate synthesis 2026-07-31) |
 | D-098 | Metrology window A record: salvage close under the third-failure rule, a10-precedent recorded-deviation post-cal retry, whole-window verdict FAILED as-issued (dangling quarantined slot + refused bracket formation), two checkpoint corrections (additivity 21/24; Anker charger identity); machinery questions registered to MET-VERDICT-ADJ-01, never hand-applied | accepted (magistrate-recorded 2026-08-01) |
 | D-099 | Metrology window B record + doctrine: three-launch arc under the bird-SIGSTOP protocol (once-validated), clock-anchor knife-edge accepted as an instrument-design finding (rate-aware anchor queued), TM attribution retired as a false proxy, operator output streaming during idle gates recorded as a measurement hazard (one-line arm messages binding), verdict FAILED as-issued (membership resolution) with adjudication routed to MET-VERDICT-ADJ-01 | accepted (magistrate-recorded 2026-08-01) |
-| D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions, window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
+| D-100 | Salvage-dangler terminal semantic: cold-gate synthesis — S2-A admission-bounded exclusion (measurand-existence line, cap of one, fail-closed default) landed in the S3 consumption-semantics-dispatch shape so original FAILED rows stand by construction; unanimous machinery repairs (count-uniform path, sibling-discard fix, identity binding, ledger honesty); window B re-evaluation licensed under recorded conditions [since 2026-08-02 HARD-BLOCKED on D100-BII-BINDING-01 per D-106 cl.3], window A unlicensed; refuter dissents recorded | accepted (cold gate + bounded follow-up + Opus refuter, magistrate synthesis 2026-08-01) |
 | D-101 | The site gates nothing: CI release-chain job advisory (continue-on-error), site source docs stay live and session-maintained, DRIFT.md refresh optional, site budgets never reshape governed records | accepted (Ed-directed 2026-08-01) |
 | D-102 | CAL-BRACKET-D079-01 pins: budget cap 0.001275166090593858 s (99% two-draw prediction ceiling 0.012093166090593858 s, blind n=19 derivation), exact-identity-epoch freshness with prospective re-derivation triggers, never-zero allowance max(drift, screen) embedded once, decimal-source numeric semantics with labelled presentation values | accepted (magistrate ratification, lead-replayed arithmetic, 2026-08-01) |
 | D-103 | C3 structural cold-gate synthesis: WAL attestation ordering + torn-tail tolerance + origin-gated operator repair (B1); one authentication predicate with TWO named aggregation policies, cold instance OVERRULED on catalog-global verdicts with recorded dissent (B2); writer-strict/reader-tolerant path discipline, backslash false-malformed corrected (B3); origin-binding redesign registered as fallback; fix-round-2 scope restated | accepted (cold gate + Opus refuter, magistrate synthesis with bench-verified overruling, 2026-08-01) |
@@ -6167,7 +6167,11 @@ regressions; independent read-only audit at the exact head; recorded
 recorded in the packet: no workload stage, admitted false, zero measurand
 fields, both attempts); D-093 cl.4 raw-vs-validated scan on B's corpus;
 frozen byte-identical corpus; deviation-escape (any condition outside the
-audited cascade set returns to a cold gate). **Window A: no license** —
+audited cascade set returns to a cold gate). [Superseding note,
+2026-08-02: D-106 clause 3 HARD-BLOCKS this license on
+D100-BII-BINDING-01 and requires the (b-ii) verification RE-RECORDED
+with the repaired tool plus per-file digests — the 2026-08-01 manual
+bench verification no longer satisfies it.] **Window A: no license** —
 its FAILED verdict rests on the immutable T1-incompatible retry.
 
 **6. Dissents recorded (Ed sees this entry):** the refuter preferred the
@@ -6259,7 +6263,8 @@ the salvage semantic is defined as the COMPOUND
 `salvage_dangler_exclusion_v1` = authenticated max-bracket survivor
 consumption + exactly one D-100 exclusion (one scalar id never carries
 two orthogonal meanings). Window B's re-evaluation stays OUTSIDE the
-repair commit, behind the exact-head audit.
+repair commit, behind the exact-head audit [and, since 2026-08-02,
+behind D100-BII-BINDING-01 per D-106 clause 3].
 
 ## D-102: CAL-BRACKET-D079-01 pins ratified — corpus-derived budget cap, identity-epoch freshness, never-zero allowance, decimal numeric semantics
 
@@ -6704,7 +6709,7 @@ Revisit when: D100-BII-BINDING-01's focused audit reports (window B
 re-evaluation unblocks on its closure), or any window-C dangler seeks
 the b-ii license first.
 
-### D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
+## D-078 registry amendment — 2026-08-02: D-100 semantics-scoped non-refusing disposition
 
 D-078's closed-registry rule is amended narrowly to register
 `whole_window_member_terminally_absent_salvage` as the first non-refusing

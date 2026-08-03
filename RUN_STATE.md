@@ -38,16 +38,15 @@ absolute cell's member mean is 192.38623252628366 J over n=10 — the
 comparative cell has its own, much smaller mean, so always name the cell
 when quoting this). D-083..D-088 are in `docs/decision_log.md`.
 
-**Standing conditions from D-088 (bind until COOLDOWN-JOIN-GAUNTLET-01
-closes):** any claim consumption through the cooldown join carries a
-recorded three-check bench scan (no unlicensed declared duplicates, no
-zero-candidate declarations, no failed/incomplete-existing encounters);
-no mint from a duplicate-bearing corpus (this includes any future 7B
-mint). QA-10A/QA-10B remain registered blockers against the join
-contract — re-scoped, corpus-unreachable today, not downgraded.
+**Standing conditions from D-088: LIFTED 2026-08-02** — the gauntlet
+closed with commit 3 (PR #93 `cb860e1`) and the scans lift per the row
+contract; QA-10A/QA-10B are retired to the completed table. (Historical
+text: the conditions bound any claim consumption through the cooldown
+join to a recorded three-check bench scan and barred minting from a
+duplicate-bearing corpus.)
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-4 EXECUTED post-move — see the EXECUTION UPDATE, then steps 5+)
+## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-3 EXECUTED post-move, step 4 ran to a held protocol failure — see the EXECUTION UPDATE, then steps 5+)
 
 **EXECUTION UPDATE (2026-08-02 evening, post-move session):** Steps 1-3
 are DONE and step 4 is IN FLIGHT. PR #94 MERGED at audited head
@@ -70,8 +69,9 @@ red at the D-106 commit via the live-content site tests — fixed
 `2491760`: those tests are advisory-lane now); run-report §9 has the
 full arc. Ed hand-pushed once past the permission classifier.
 
-Successor is FABLE, MAGISTRATE. Main is at `326d05f`+ (D-106 et al.
-pushed). The 2026-08-01→02 runway (~26 h) closed the cooldown-join
+Successor is FABLE, MAGISTRATE. Main is at `bcbc10b` (post-move
+session's final batch; the checkpoint head `326d05f`+ is historical).
+The 2026-08-01→02 runway (~26 h) closed the cooldown-join
 gauntlet and drove both repair branches to CLEAN decisive audits.
 DANGER FIRST: the old session's scratchpad
 (/private/tmp/claude-501/-Users-edr-code-JouleWise/cbb164b5-3094-4877-a575-425599030f86/)
@@ -837,7 +837,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-01). Latest report: [Desk session: machinery adjudication ruled (D-100 cold-gate synthesis, semantics-dispatch shape), window A permanently non-claim-bearing, window B re-evaluation licensed behind the repair; commit-3 design->implementation; CI shard-budget fix](docs/run_reports/2026-08-01-desk-adjudication-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-02). Latest report: [Runway close-out (section 9): PRs #94/#95 merged at audited heads (bc2ab19/200e6db, verdict CI green), D-106 Variant D ruled, D100-BII-BINDING-01 minted (window B re-evaluation hard-blocked on it), D-101 addendum moves live-content site tests to the advisory lane, kernel batch pins 58](docs/run_reports/2026-08-01-desk-adjudication-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -993,8 +993,8 @@ eliminated.
 | **B** (`04_phase_prefill_abba`) | 40 prefill ABBA members, 59/59 collected clean | **FAILED** | `instrument_calibration_mismatch`, bracket drift 11.581436 ms; preserved, not claim-bearing |
 | **C** (`05_phase_decode_abba`) | 40 decode ABBA members, 59/59 collected | **PASSED** | bracket drift 1.279 ms; first comparative window in project history to pass |
 | **D** (absolute) | 30 claim members, 49/49 collected | **PASSED** | bracket drift 0.484 ms, tightest of the campaign |
-| **7B floor** (`window_7bfloor_20260729`) | Qwen2.5 7B decode floor, collected 2026-07-29 | **PASSED** | CLAIM-BEARING; governed extraction clean (`all_cells_extractable` true). Floors: absolute 6.294380135190098 J, comparative 13.998036715259254 J; absolute-cell member mean 192.38623252628366 J (n=10). NOT yet minted — `MINT-GENERALIZE-01` is blocked by the D-088 no-mint-from-duplicate-bearing-corpus condition, so these figures live only in prose plus the out-of-repo custody extraction |
-| **contrast** (`window_contrast_20260730`) | 40 contrast ABBA members + 7 references, 47 bundles, 1 supersession | **PASSED** | bracket drift 1.281 ms; contrast diagnostic 146.730349 J σ 0.241 (n=10 blocks) UNGATED — claim rides MANIFEST-CONTRAST-01 |
+| **7B floor** (`window_7bfloor_20260729`) | Qwen2.5 7B decode floor, collected 2026-07-29 | **PASSED** | CLAIM-BEARING; governed extraction clean (`all_cells_extractable` true). Floors: absolute 6.294380135190098 J, comparative 13.998036715259254 J; absolute-cell member mean 192.38623252628366 J (n=10). NOT yet minted — `MINT-GENERALIZE-01` is OPEN and unblocked as of 2026-08-02 (gauntlet closed PR #93; D-088 no-mint condition lifted), so these figures live only in prose plus the out-of-repo custody extraction until that mint runs |
+| **contrast** (`window_contrast_20260730`) | 40 contrast ABBA members + 7 references, 47 bundles, 1 supersession | **PASSED** | bracket drift 1.281 ms; contrast diagnostic 146.730349 J σ 0.241 (n=10 blocks) UNGATED — MANIFEST-CONTRAST-01 closed 2026-08-02 (PR #95); the gated claim now rides `MINT-GENERALIZE-01` then the D-095 chain |
 
 Window B's cause is established and is NOT a clock problem: a GPU DVFM
 power ramp that the rectangular-pulse fiducial estimator aliases into an
@@ -1289,8 +1289,12 @@ the top of this file.
 
 ## Current Verification
 
-- **Merged main `67d268a` (2026-07-31, current): canonical `Ran 2305
-  tests`, `OK (skipped=12)`, lead-run post-merge.** This is the PR #91
+- **Merged main at the PR #95 composed tree (2026-08-02, current):
+  full suite `Ran 2418 tests`, `OK (skipped=22)`, lead-run on the
+  exact 94+95 integration tree merged as `200e6db`; verdict CI green
+  on both merge pushes (all five jobs each).**
+- Merged main `67d268a` (2026-07-31, historical): canonical `Ran 2305
+  tests`, `OK (skipped=12)`, lead-run post-merge. This is the PR #91
   (gauntlet commits 1-2, DA-1 closed) merge. Branch verification chain:
   `2301 OK` at `c0adc93`, `2304 OK` at `8880395`, `2305 OK` at
   `a9b9d4a` (all lead-run, worktree skip convention 21); CI green on
@@ -1525,11 +1529,13 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-08-01, CURRENT) `main` and `origin/main` at `df78b53` plus the
-  D-101 batch; working tree clean except the untracked private
-  `CLAUDE.local.md` (Ed's; never commit) and `.desk/` (adjudication
-  custody; never commit). Branch `impl/cooldown-gauntlet-c3` is open in
-  a scratch worktree (commit-3 implementation).
+- (2026-08-02, CURRENT) `main` and `origin/main` at `bcbc10b`; working
+  tree clean except the untracked private `CLAUDE.local.md` (Ed's;
+  never commit) and `.desk/` (adjudication custody; never commit).
+  PR #93 merged (the c3 branch is closed). Branch
+  `impl/d100-bii-binding` exists in the session worktree
+  `scratchpad/d100bii` holding the UNCOMMITTED, audit-pending
+  D100-BII-BINDING-01 diff (envelope protocol failure; see §9).
 - (2026-07-31, historical) `main` and `origin/main` were both at `6ed1625`:
   the PR #89 merge `7ee680c` (D5-J) plus the close-out commits
   `49c1876`, `0d0bd0b`, and `6ed1625`. Branch `impl/mint-tool` is MERGED

@@ -19,7 +19,7 @@ salvage-dangler exclusion under a mechanical measurand-existence
 license, landed in the consumption-semantics-dispatch shape so the
 original FAILED rows stand as issued by construction. Window A is
 permanently non-claim-bearing (immutable T1-incompatible post-cal
-retry); window B's re-evaluation is licensed behind the D-100 repair.
+retry); window B's re-evaluation is licensed behind the D-100 repair [§9 supersession: since D-106 (2026-08-02) it is HARD-BLOCKED on D100-BII-BINDING-01].
 Three repair rows were queued, gauntlet commit 3 went from design
 consult to implementation in one session, and a CI capsule shard-budget
 failure introduced by the session's own queue rows was diagnosed and
@@ -168,7 +168,8 @@ the fix.
 
 - Window A: permanently non-claim-bearing; C1 re-collects; the 40-run
   ramp survives as micro_delta DESIGN input + corroboration diagnostics.
-- Window B: re-evaluation licensed behind the D-100 repair; if it
+- Window B: re-evaluation licensed behind the D-100 repair [§9
+  supersession: hard-blocked on D100-BII-BINDING-01 per D-106]; if it
   passes, C2's two rungs and C4's two complete shapes become
   licensable; the `p2048-o0128` shape re-collects regardless.
 - The deviation-retry procedure gains a fence candidate: retry

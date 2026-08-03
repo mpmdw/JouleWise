@@ -37,12 +37,15 @@ are provided for anyone who wants the full evidence trail.
   because these were the first nights that ended early under the
   campaign's own safety rules (a run is abandoned after three
   environmental interruptions), and the verdict software had never
-  before evaluated a night with that shape. That question has now been adjudicated (decision D-100): the first
-  night's data cannot be promoted — an end-of-night calibration was
-  recorded under a mismatched identity, an unfixable collection-time
-  error — while the second night's data may be re-evaluated once a
-  specific, already-designed software repair lands and passes an
-  independent audit. Two genuine instrument findings also came out of
+  before evaluated a night with that shape. That question has now been adjudicated (decisions D-100 and D-106):
+  the first night's data cannot be promoted — an end-of-night
+  calibration was recorded under a mismatched identity, an unfixable
+  collection-time error — while the second night's data may be
+  re-evaluated later. The main software repair for that re-evaluation
+  landed and passed its audits on 2026-08-02; one further, smaller
+  repair (making the tool prove which capture each telemetry file
+  belongs to) was ruled necessary by a follow-up review and must land
+  and pass its own audit first. Two genuine instrument findings also came out of
   those nights and will appear in the paper: the instrument's internal
   clock-alignment step operates with about a millisecond of margin —
   effectively a coin flip at the current capture length — and needs a
@@ -81,8 +84,10 @@ effect. Against the minted 1.5B floor (7.4 J) and the 7B floor pending its mint 
 this is exactly the demonstration the metrology framing calls for: a
 real effect the instrument resolves with enormous margin, measured under
 frozen, pre-registered rules. (Preliminary observation from the raw
-per-run summaries; it becomes a formal claim once the comparison's
-bookkeeping schema lands.) The same overnight session survived two
+per-run summaries. The comparison's bookkeeping schema landed on
+2026-08-02; it becomes a formal claim once the one remaining
+bookkeeping step — publishing the large model's baseline numbers in
+the same signed format as the small model's — is done.) The same overnight session survived two
 background-process intrusions — macOS's own malware scanner — which the
 admission gates refused on the spot and the written recovery playbook
 turned into a completed window with zero lost science measurements.

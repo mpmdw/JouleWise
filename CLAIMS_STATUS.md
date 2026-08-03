@@ -33,7 +33,7 @@ instrument-tightening program.
 
 | Candidate claim | Value (prose-only until gated) | Window / verdict | Blocker |
 |---|---|---|---|
-| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | `MINT-GENERALIZE-01`: D-088 no-mint-from-duplicate-bearing-corpus condition until the cooldown-join gauntlet fully closes (commit 3 outstanding). |
+| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | `MINT-GENERALIZE-01` (the mint itself): UNBLOCKED 2026-08-02 — the gauntlet closed with commit 3 (PR #93) and the D-088 no-mint condition lifted; the mint run is the remaining step. |
 | **1.5B-vs-7B decode contrast** (demonstration study #1) | 7B−1.5B per-block 146.730349 J, σ 0.241 J, n=10 ABBA blocks (~600× block scatter, ~10–20× the floors) | `window_contrast_20260730`, **PASSED** | The D-095 chain, in order: gauntlet commit 3 (D-097, PR #93 MERGED 2026-08-02) → MANIFEST-CONTRAST v3 (PR #95 MERGED 2026-08-02) → multi-cell mint (`MINT-GENERALIZE-01`, the remaining gate) → gated claim. Diagnostic is quotable as prose, never as a gated claim. |
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
@@ -49,12 +49,18 @@ default consumption. Outcomes per window:
   binds a T1-incompatible power-policy identity (immutable evidence; the
   machinery's rejection was CORRECT), so no calibration bracket can ever
   form. C1 re-collects in a future window.
-- **Window B: re-evaluation LICENSED but not yet performed.** License
-  REQUIRES, in order: the D-100 repair (`MET-DANGLER-DISPOSITION-01`)
-  landing + independent audit + regressions R1-R8/R5a/R5b (none done
-  yet); the recorded (b-ii) license verification (DONE 2026-08-01);
-  the D-093 cl.4 scan; a frozen byte-identical corpus. Any
-  surprise condition returns to a cold gate.
+- **Window B: re-evaluation HARD-BLOCKED on `D100-BII-BINDING-01`
+  (D-106 clause 3, 2026-08-02).** The D-100 repair itself LANDED
+  (`MET-DANGLER-DISPOSITION-01`, PR #94 at audited head `05d99b6`,
+  three independent audits + verdict CI green), but D-106 ruled the
+  b-ii capture-identity residual DECIDABLE and blocked re-evaluation
+  until its two fixes (interval containment, custody digest freeze,
+  plus nested-content closure and the runbook condition-3 re-record
+  with the repaired tool) close as one audited commit. The 2026-08-01
+  manual (b-ii) verification does NOT satisfy this — D-106 requires
+  re-recording with the repaired tool and per-file digests. Then: the
+  D-093 cl.4 scan; a frozen byte-identical corpus. Any surprise
+  condition returns to a cold gate.
 
 | Paper claim | Campaign | Collected | State after D-100 |
 |---|---|---|---|
@@ -96,7 +102,8 @@ default consumption. Outcomes per window:
   time-anchor defect (D-078 soundness gate).
 - Window A/B metrology numbers as claims — see §3 (verdicts FAILED as
   issued; window A permanently dead for claims; window B only via the
-  D-100-licensed re-evaluation, not yet performed).
+  D-100-licensed re-evaluation, which is hard-blocked on
+  `D100-BII-BINDING-01` per D-106 and not yet performed).
 - **Window A C1 linearity figures in any claim context** — the corpus
   is design-input/diagnostic only, permanently (D-100 + the immutable
   T1-incompatible retry).

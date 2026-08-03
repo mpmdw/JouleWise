@@ -1,6 +1,6 @@
 # 🟢 BETWEEN RUNS
 
-**Both metrology windows collected + salvage-closed; both whole-window verdicts FAILED as-issued (machinery questions, not physics); desk adjudication is next**
+**Both metrology windows collected + salvage-closed; both verdicts FAILED as-issued and ADJUDICATED (D-100/D-106): window A permanently non-claim-bearing, window B's re-evaluation hard-blocked on `D100-BII-BINDING-01`; next window (C) awaits a fresh post-move Ed §5A**
 
 | | |
 |---|---|
@@ -13,11 +13,15 @@ One thing: **restore network time** (`sudo systemsetup
 -setusingnetworktime on`) — disabled for last night's §5A and still off.
 Wall-meter purchase (D-092) remains open, nothing blocks on it.
 
-Expectation-setting on the two FAILED verdicts below: the *collections
-are fine* — banked, backed up, bracket clean in window B. What failed is
-the verdict machinery's first-ever encounter with salvage-shaped windows
-(quarantined-never-replaced slots, deviation post-cal, multi-chain
-manifests). That is desk work, not lost data.
+Expectation-setting on the two FAILED verdicts below (adjudicated
+2026-08-01/02, D-100 + D-106): the collected bundles are banked and
+backed up either way, but the two windows differ. **Window A is
+permanently non-claim-bearing** — its deviation retry bound an
+incompatible power policy at collection time (immutable), so C1
+re-collects in window C. **Window B's data remains eligible** for a
+licensed re-evaluation, which is hard-blocked on the
+`D100-BII-BINDING-01` capture-identity fixes (D-106). The machinery
+repairs themselves landed 2026-08-02 (PR #94).
 
 ## Detail
 
@@ -37,9 +41,11 @@ long_holds, one additivity slot) moves to metrology window C.
 
 Both metrology verdicts **FAILED and stand as issued** — window A on the
 dangling quarantined slot + refused deviation post-cal, window B on
-manifest/membership resolution + NEG-8 bracket evaluation. One
-three-part machinery adjudication covers both; it heads the desk queue
-ahead of gauntlet commit 3.
+manifest/membership resolution + NEG-8 bracket evaluation. The
+three-part machinery adjudication is COMPLETE (D-100, 2026-08-01) and
+the repair is mainline (PR #94, 2026-08-02); window B's re-evaluation
+waits only on `D100-BII-BINDING-01` (D-106); window C waits on a fresh
+post-move Ed §5A.
 
 **New standing doc:** `CLAIMS_STATUS.md` (repo root) — the single home
 for what is claimable right now, what is holding, and which numbers must
