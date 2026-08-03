@@ -1318,6 +1318,45 @@
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
       "stop_card": null
     },
+    "NODE-CUSTODY-DEFAULT-01": {
+      "acceptance": {
+        "evidence": [
+          "The production DEFAULT_RETENTION_ROOT no longer collides for genuinely concurrent NodeClients sharing a scope, without breaking next-session custody reclamation (a later process must still locate the manifest it is entitled to reclaim)",
+          "A regression proves two default-constructed clients in one process do not clobber each other AND that the documented reclamation contract still resolves the correct manifest across process boundaries",
+          "No retention/custody assertion is weakened; only root selection changes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NODE-CUSTODY-DEFAULT-01/acceptance",
+          "label": "NODE-CUSTODY-DEFAULT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Harden the production DEFAULT_RETENTION_ROOT against concurrent-client collision while preserving next-session custody reclamation (the NEEDS_RULING tradeoff deferred from NVIDIA-RETENTION-FLAKE-01)."
+      },
+      "authority": {
+        "label": "NVIDIA-RETENTION-FLAKE-01 fix report F1/F3 (PR #97): unique default roots close concurrent collision but conflict with next-session reclamation",
+        "path": "docs/run_reports/2026-08-03-desk-session.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "NVIDIA-RETENTION-FLAKE-01 test-side fix (PR #97) already closed the flake",
+            "path": "docs/run_reports/2026-08-03-desk-session.md"
+          },
+          "rule": "Isolation-only: do not weaken any retention/custody assertion; the reclamation contract's cross-process manifest resolution must survive any default-root change"
+        }
+      ],
+      "flags": [],
+      "goal": "Decide and implement whether the production DEFAULT_RETENTION_ROOT should be process/instance-unique: it currently is a fixed shared temp path (a latent collision hazard for genuinely concurrent clients), but making it unique conflicts with next-session custody reclamation. Resolve the tradeoff or record it as accepted.",
+      "id": "NODE-CUSTODY-DEFAULT-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 51,
+      "status": "queued",
+      "status_note": "Deferred 2026-08-03 from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake); the production hardening is a NEEDS_RULING tradeoff, non-blocking (no current concurrent-client scenario).",
+      "stop_card": null
+    },
     "NVIDIA-PORTABILITY-01": {
       "acceptance": {
         "evidence": [
@@ -1364,36 +1403,6 @@
       "priority": "p3_research_expansion",
       "rank": 50,
       "status": "blocked",
-      "stop_card": null
-    },
-    "NVIDIA-RETENTION-FLAKE-01": {
-      "acceptance": {
-        "evidence": [
-          "test_generated_id_multi_rep_experiment_executes_cooldown passes deterministically in full-suite order under machine load (the retention record's lifecycle no longer races test execution speed)",
-          "Root cause named: either the retention TTL/expiry racing slow execution, cross-test state leakage, or an ordering dependency — with a defect-shaped regression pinning it",
-          "Three prior blocked verification legs (commit-3 implementation, D-100 repair stream, MANIFEST-CONTRAST v3 stream) re-run clean"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/NVIDIA-RETENTION-FLAKE-01/acceptance",
-          "label": "NVIDIA-RETENTION-FLAKE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The load/order-sensitive NVIDIA retention test is made deterministic, unblocking canonical-suite verification under concurrent load."
-      },
-      "authority": {
-        "label": "2026-08-02 runway: the same test blocked three independent streams' canonical verification (passes alone ~340 s; fails under load/order)",
-        "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Fix the test-isolation/load-sensitivity defect in tests/test_nvidia_node_integration.py test_generated_id_multi_rep_experiment_executes_cooldown ('retention record disappeared before state update' when following earlier module tests or under machine load; passes in isolation).",
-      "id": "NVIDIA-RETENTION-FLAKE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 20,
-      "status": "queued",
       "stop_card": null
     },
     "P1-001": {

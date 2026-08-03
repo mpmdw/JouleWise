@@ -68,10 +68,11 @@ EXPECTED_IDS = {
     "D100-BII-BINDING-01",
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
-    # 2026-08-02 runway: load-sensitive NVIDIA test blocked three streams
-    "NVIDIA-RETENTION-FLAKE-01",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
+    # 2026-08-03 sleep-window: production-default custody hardening deferred
+    # from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake).
+    "NODE-CUSTODY-DEFAULT-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -87,7 +88,7 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
-                "MEMBERSHIP-READER-FAILOPEN-01"}
+                "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01"}
 
 
 def load_kernel():
