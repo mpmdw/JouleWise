@@ -1,12 +1,10 @@
 # JouleWise
 
-> **🖥️ MACHINE: DESK WORK — no window in flight, nothing running.**
-> 2026-08-02 late evening: resume script executed (both repair-branch
-> merges landed with green verdict runs; one implementation diff is
-> held untrusted pending its audit). No measurement window in flight or
-> imminent. Window C launches only after a fresh Ed §5A. This line
-> updates only at defined moments; rules in
-> [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+> **🖥️ MACHINE: CHECKPOINTED — safe to move/use.** 2026-08-03 ~01:05
+> PT: session checkpointed for a machine move; no window in flight or
+> imminent, no agents running. Resume script: RUN_STATE.md. Window C
+> launches only after a fresh Ed §5A. This line updates only at
+> defined moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is

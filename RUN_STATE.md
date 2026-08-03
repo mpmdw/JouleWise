@@ -48,6 +48,43 @@ Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
 ## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-3 EXECUTED post-move, step 4 ran to a held protocol failure — see the EXECUTION UPDATE, then steps 5+)
 
+**CHECKPOINT 2026-08-03 ~01:05 PT (machine move; resume HERE):**
+Everything below through the EXECUTION UPDATE is DONE and pushed
+(main `6e3a06e`+). Resume order for the successor:
+1. **Verify the three in-flight ci runs concluded green** (they cover
+   trees already full-suite-verified locally): the H3-revert
+   (30775184401), D-101 addendum II (30775561147), and the actions
+   Node-24 bump (30775660245). `gh run list --branch main`. The new
+   separate `site` workflow is already 2/2 green. If any ci run is red,
+   read the failing test before acting — tonight's pattern was
+   doc-content pins, not code.
+2. **CODEX BUG (flag to Ed FIRST):** both xhigh runs tonight lost their
+   final envelope to a codex CLI bug — logs end with
+   `codex_models_manager ... missing field 'supports_reasoning_summaries'`.
+   Clear/refresh the codex models cache or update codex BEFORE the next
+   long Sol run. Details in the codex-delegation-growth memory.
+3. **D100-BII-BINDING-01 focused audit:** the UNAUDITED implementation
+   is preserved at branch `impl/d100-bii-binding` @ `a6ce7af` (pushed;
+   the commit message carries the held-untrusted disposition). Run the
+   focused independent audit (fresh session, read-only, treat the diff
+   as untrusted; the D-106 refuter diagnosis is in
+   `.desk/coldgate_d100_bii/`), then merge under D-072 and close the
+   row — window B re-evaluation unblocks on it.
+4. **TEST-SPEED-01 (Ed-ratified 2026-08-03, THREE levers):** Ed
+   ratified prioritizing suite speed, the PR-fast/full split, AND
+   evaluating Blacksmith runners. The profiling consult died to the
+   codex bug mid-work, but Sol's per-module timing script is
+   recoverable from `.desk/test-speed-consult/test-speed-consult.log`
+   (the last `+`-prefixed block) — extract, run it (~15 min), then
+   design shard-runner + tier split from the data. Mint the kernel row
+   (pins 58→59) with all three ratifications recorded.
+5. **Mint chain:** MINT-GENERALIZE-01 is the ONLY gate left on the
+   contrast claim (v3 merged, gauntlet closed). Then the D-095 chain.
+6. Bookkeeping owed: council-log addendum for tonight's arc (D-101
+   addenda I+II, the merge-fallback pattern, the codex bug); D-101
+   addendum II is in the decision log, kernel rows current, pins 58.
+Ed owes: fresh §5A before window C; network-time restore if still off.
+
 **EXECUTION UPDATE (2026-08-02 evening, post-move session):** Steps 1-3
 are DONE and step 4 is IN FLIGHT. PR #94 MERGED at audited head
 `05d99b6` (merge `bc2ab19`, docs-only conflict resolved; verdict CI
