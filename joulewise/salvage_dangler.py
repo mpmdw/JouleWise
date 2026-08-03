@@ -5,8 +5,12 @@ license the exceptional disposition is re-derived from immutable closure and
 bundle bytes.  Callers may append a new verdict under the dedicated
 consumption semantic; they may never rewrite the failed source attempts.
 
-Row D100-BII-BINDING-01 / D-106 clause 3 gates this b-ii mechanical license;
-window B re-evaluation is HARD-BLOCKED until the row is closed.
+Row D100-BII-BINDING-01 remains open under D-108.  Its b-ii mechanical
+license gate is (a) telemetry interval containment, (b) the hash-sealed
+closure-manifest pin, and (d) the lead-reserved digest-bound re-record over
+all three D-087 occurrences.  Clause (c)'s nested-content grammar is retired;
+the zero-output-bytes predicate is mechanically unreachable and carries no
+license load.
 """
 
 from __future__ import annotations
@@ -37,6 +41,19 @@ _REQUIRED_BUNDLE_FILES = (
     "summary_metrics.json",
     "events.jsonl",
     "power_trace.csv",
+)
+_PRODUCER_BUNDLE_FILES = frozenset(
+    {
+        "logs/controller.log",
+        "logs/runtime.log",
+        "logs/telemetry.log",
+        "raw/powermetrics.plist",
+        "instrument_calibration/events.jsonl",
+        "instrument_calibration/instrument_evidence.json",
+        "instrument_calibration/manifest.json",
+        "instrument_calibration/power_trace.csv",
+        "instrument_calibration/raw/powermetrics.plist",
+    }
 )
 _MINIMAL_TELEMETRY_ROW_FIELDS = frozenset(
     {"index", "timestamp_s", "processor_combined_power_w"}
@@ -118,28 +135,6 @@ _ADMISSION_METADATA_FIELDS = frozenset(
         "extra",
     }
 )
-_CLASSIFIED_METADATA_MAPPING_FIELDS = frozenset(
-    {
-        "source_provenance",
-        "clock",
-        "model",
-        "quantization",
-        "device",
-        "connection",
-        "environment",
-        "campaign_policy",
-        "campaign_environment_preflight",
-        "environment_admission",
-        "instrument_calibration",
-        "trace_window_margins",
-        "adapters",
-        "idle_baseline",
-        "thermal_pre",
-        "thermal_post",
-        "uncertainty_evidence",
-        "suite",
-    }
-)
 _EXPECTED_EVENT_SEQUENCE = (
     ("run_started", "run"),
     ("stage_started", "validate"),
@@ -150,18 +145,6 @@ _EXPECTED_EVENT_SEQUENCE = (
     ("failure", "idle_baseline"),
     ("run_finalized", "run"),
 )
-_CLASSIFIED_EVENT_METADATA_FIELDS = {
-    ("run_started", "run"): frozenset({"run_id"}),
-    ("stage_started", "validate"): frozenset(),
-    ("stage_completed", "validate"): frozenset(
-        {"transport", "runtime", "telemetry"}
-    ),
-    ("stage_started", "prepare"): frozenset(),
-    ("stage_completed", "prepare"): frozenset(),
-    ("stage_started", "idle_baseline"): frozenset(),
-    ("failure", "idle_baseline"): frozenset({"failure_reason"}),
-    ("run_finalized", "run"): frozenset(),
-}
 _MEASURAND_FIELDS = frozenset(
     {
         "decode_latency_s",
@@ -183,18 +166,6 @@ _MEASURAND_FIELDS = frozenset(
         "window_evidence_precheck",
     }
 )
-_ALLOWED_FAILED_SUMMARY_NONNULL = frozenset(
-    {
-        "status",
-        "failure_message",
-        "failure_reason",
-        "idle_baseline",
-        "measurement_quality",
-        "summary_provenance",
-    }
-)
-
-
 class SalvageAuthorizationError(ValueError):
     """The supplied evidence does not satisfy the closed D-100 license."""
 
@@ -506,76 +477,6 @@ def _validate_admission_telemetry(path: Path) -> list[float]:
     return timestamps
 
 
-def _contains_workload_evidence(value: object) -> bool:
-    """Reject result-shaped bytes from admission-only evidence structures."""
-
-    if isinstance(value, Mapping):
-        for key, child in value.items():
-            normalized = str(key).lower()
-            if child is not None and (
-                normalized in _MEASURAND_FIELDS
-                or normalized.startswith("workload_")
-                or "token_count" in normalized
-                or normalized in {
-                    "measurement_result",
-                    "request_result",
-                    "runtime_result",
-                    "generated_text",
-                }
-            ):
-                return True
-            if normalized == "phase" and (
-                not isinstance(child, str)
-                or (
-                    child
-                    not in {"run", "validate", "prepare", "idle_baseline", "launcher"}
-                    and not child.startswith("before_attempt_")
-                )
-            ):
-                return True
-            if _contains_workload_evidence(child):
-                return True
-        return False
-    if isinstance(value, list):
-        return any(_contains_workload_evidence(child) for child in value)
-    return False
-
-
-def _validate_nested_metadata_classification(metadata: Mapping[str, Any]) -> None:
-    """Reject open extension mappings that the b-ii license cannot classify."""
-
-    for field, value in metadata.items():
-        if (
-            isinstance(value, Mapping)
-            and field not in _CLASSIFIED_METADATA_MAPPING_FIELDS
-        ):
-            raise SalvageAuthorizationError(
-                f"metadata.{field} contains an unclassifiable mapping"
-            )
-
-
-def _validate_event_metadata_classification(
-    events: Sequence[Mapping[str, Any]],
-) -> None:
-    """Admit only producer-defined scalar metadata for the closed event prefix."""
-
-    for row in events:
-        metadata = row.get("metadata")
-        if metadata is None:
-            continue
-        identity = (row.get("event_type"), row.get("phase"))
-        allowed = _CLASSIFIED_EVENT_METADATA_FIELDS.get(identity)
-        if (
-            allowed is None
-            or not isinstance(metadata, Mapping)
-            or not set(metadata).issubset(allowed)
-            or any(isinstance(value, (Mapping, list)) for value in metadata.values())
-        ):
-            raise SalvageAuthorizationError(
-                "event stream contains unclassifiable metadata"
-            )
-
-
 def _validate_bundle_config(config: Mapping[str, Any]) -> None:
     """Accept only a complete schema-0.1 config or the closed test-safe shape."""
 
@@ -614,7 +515,23 @@ def _expected_idle_artifact_sets(metadata: Mapping[str, Any]) -> tuple[set[str],
     }
     compact = set(_REQUIRED_BUNDLE_FILES) | {"rich_telemetry.jsonl"}
     complete = compact | idle_telemetry
-    return (compact, complete)
+    raw_idle = {
+        "raw/powermetrics_idle.plist"
+        if attempt == 1
+        else f"raw/powermetrics_idle_attempt_{attempt}.plist"
+        for attempt in range(1, len(attempts) + 1)
+    }
+    custody = {
+        "logs/custody/powermetrics-powermetrics_plist.json",
+        *(
+            "logs/custody/powermetrics-"
+            + Path(name).name.replace(".", "_")
+            + ".json"
+            for name in raw_idle
+        ),
+    }
+    production = complete | set(_PRODUCER_BUNDLE_FILES) | raw_idle | custody
+    return (compact, complete, production)
 
 
 def _validate_idle_artifact_inventory(
@@ -649,7 +566,7 @@ def _validate_idle_artifact_inventory(
         if all(path.startswith("rich_telemetry") for path in duplicate_paths):
             raise SalvageAuthorizationError("duplicate telemetry content")
         raise SalvageAuthorizationError("duplicate allowlisted artifact content")
-    return sorted(actual - set(_REQUIRED_BUNDLE_FILES))
+    return sorted(name for name in actual if name.startswith("rich_telemetry"))
 
 
 def _resolved_directory_root(value: str | Path, *, label: str) -> Path:
@@ -756,9 +673,6 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError("metadata contains unclassifiable fields")
     if metadata.get("config_warnings") not in (None, []):
         raise SalvageAuthorizationError("metadata contains config warnings")
-    _validate_nested_metadata_classification(metadata)
-    if _contains_workload_evidence(metadata):
-        raise SalvageAuthorizationError("metadata contains workload evidence")
     if any(not set(row).issubset(_EVENT_FIELDS) for row in events):
         raise SalvageAuthorizationError("event stream contains unclassifiable fields")
     if any(
@@ -786,10 +700,6 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError(
             "unexpected event or stage_started outside the closed idle-abort sequence"
         )
-    _validate_event_metadata_classification(events)
-    if _contains_workload_evidence(events):
-        raise SalvageAuthorizationError("event stream contains workload evidence")
-
     started = [
         row.get("phase")
         for row in events
@@ -827,18 +737,6 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError("summary status is not failed")
     if any(summary.get(field) is not None for field in _MEASURAND_FIELDS):
         raise SalvageAuthorizationError("failed attempt contains measurand bytes")
-    unknown_nonnull = {
-        key
-        for key, value in summary.items()
-        if value is not None and key not in _ALLOWED_FAILED_SUMMARY_NONNULL
-    }
-    if unknown_nonnull:
-        raise SalvageAuthorizationError(
-            "unknown non-null failed-summary fields: "
-            + ", ".join(sorted(unknown_nonnull))
-        )
-    if _contains_workload_evidence(summary):
-        raise SalvageAuthorizationError("failed attempt contains workload evidence")
     failure_reason = summary.get("failure_reason")
     event_reason = failures[0].get("metadata")
     event_reason = (

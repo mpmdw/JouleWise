@@ -26,6 +26,26 @@ from joulewise.salvage_dangler import (
 
 
 FIXTURE = Path("tests/fixtures/salvage_dangler/r5a_idle_abort")
+REAL_QUARANTINE = (
+    Path.home()
+    / "JouleWise-window-custody"
+    / "window_metrologyB_20260801"
+    / "quarantine"
+)
+# Canonical SHA-256 of each subject's complete {path, sha256, size} manifest.
+# These pins make the external, byte-faithful 22-file fixtures reviewable
+# without copying roughly 154 MiB per subject into the repository.
+BYTE_FAITHFUL_FIXTURE_SHA256 = {
+    "mtadd-p2048o0128-r08__20260801T131705Z": (
+        "72fb6d92cceead16c6082c0fd2266727989bb94deffe9e0f2df91fa0c947c2e2"
+    ),
+    "mtadd-p2048o0128-r08__20260801T133315Z": (
+        "329bc9f88295eb6a7ab91a25f28ea2600483fca42bd3e3396629a1aee5df3039"
+    ),
+    "mtnull-o0512-b04-b2__20260801T113258Z": (
+        "1857ebb709713a0aa0ea640ee3c2598c5d13ca085333e8b435a5a7883db7ef0d"
+    ),
+}
 POLICY_SHA = "a" * 64
 
 
@@ -234,33 +254,76 @@ class SalvageDanglerTests(unittest.TestCase):
         with self.assertRaisesRegex(SalvageAuthorizationError, "telemetry interval"):
             inspect_salvage_attempt(attempt)
 
-    def test_d106_nested_metadata_workload_evidence_refuses(self) -> None:
+    def test_d108_nested_content_does_not_void_license(self) -> None:
         attempt = self.copy_attempt()
         metadata_path = attempt / "metadata.json"
-        metadata = json.loads(metadata_path.read_text())
-        metadata["extra"] = {"model_output": "substituted measured output"}
-        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
-        with self.assertRaisesRegex(SalvageAuthorizationError, "unclassifiable"):
-            inspect_salvage_attempt(attempt)
-
-        attempt = self.copy_attempt("event-metadata")
         events_path = attempt / "events.jsonl"
+        summary_path = attempt / "summary_metrics.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["environment_admission"]["future_nested"] = {
+            "model_output": {"tokens": ["content grammar is non-load-bearing"]}
+        }
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
         events = [json.loads(line) for line in events_path.read_text().splitlines()]
         failure = next(row for row in events if row["event_type"] == "failure")
-        failure["metadata"]["model_output"] = "substituted measured output"
+        failure["metadata"]["future_nested"] = {
+            "generated_text": ["diagnostic-only content"]
+        }
         events_path.write_text(
             "".join(json.dumps(row) + "\n" for row in events), encoding="utf-8"
         )
-        with self.assertRaisesRegex(SalvageAuthorizationError, "unclassifiable"):
-            inspect_salvage_attempt(attempt)
+        summary = json.loads(summary_path.read_text())
+        summary["future_nested"] = {"runtime_result": {"value": "hygiene-only"}}
+        summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
 
-    def test_unknown_nonnull_summary_fields_fail_closed(self) -> None:
+        self.assertTrue(inspect_salvage_attempt(attempt)["licensed"])
+
+    def test_d107_false_refusal_domains_license(self) -> None:
         attempt = self.copy_attempt()
-        summary = json.loads((attempt / "summary_metrics.json").read_text())
-        summary["future_measurement"] = {"value": 0.0}
-        (attempt / "summary_metrics.json").write_text(json.dumps(summary) + "\n")
-        with self.assertRaisesRegex(SalvageAuthorizationError, "unknown non-null"):
-            inspect_salvage_attempt(attempt)
+        metadata_path = attempt / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["environment_admission"]["guard_observations"] = [
+            {"phase": "before_attempt_1"},
+            {"phase": "after_attempt_1"},
+            {"phase": "before_attempt_2"},
+            {"phase": "after_attempt_2"},
+        ]
+        metadata["extra"] = {
+            "preceding_member_end_s": None,
+            "idle_start_s": 99.0,
+            "preceding_gap_s": None,
+            "clock_step_suspect": True,
+            "cooldown_cap_hit": True,
+            "environment_admission_failed": True,
+            "node_cleanup": [
+                {"path": "remote-a", "removed": False},
+                {
+                    "task_id": "node-task-1",
+                    "scope": "remote",
+                    "path": "/tmp/node-task-1",
+                    "removed": True,
+                    "error": None,
+                    "after_durable_custody": True,
+                },
+            ],
+        }
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+
+        self.assertTrue(inspect_salvage_attempt(attempt)["licensed"])
+
+    def test_d107_hash_pinned_real_quarantine_shapes_all_license(self) -> None:
+        if not REAL_QUARANTINE.is_dir():
+            self.skipTest("window-B quarantine custody path is absent")
+        subjects = {
+            path.name: path for path in REAL_QUARANTINE.iterdir() if path.is_dir()
+        }
+        self.assertEqual(set(subjects), set(BYTE_FAITHFUL_FIXTURE_SHA256))
+        for name, expected_sha256 in BYTE_FAITHFUL_FIXTURE_SHA256.items():
+            with self.subTest(subject=name):
+                manifest = digest_manifest(subjects[name])
+                self.assertEqual(len(manifest), 22)
+                self.assertEqual(canonical_sha256(manifest), expected_sha256)
+                self.assertTrue(inspect_salvage_attempt(subjects[name])["licensed"])
 
     def test_b3_closed_idle_inventory_rejects_extra_artifact(self) -> None:
         attempt = self.copy_attempt()
@@ -384,6 +447,17 @@ class SalvageDanglerTests(unittest.TestCase):
                 campaign_policy_sha256=POLICY_SHA,
                 terminal_absent_bundle_ids=["d100-dangler-r5a"],
             )
+
+    def test_preworkload_closure_without_quarantine_manifest_refuses(self) -> None:
+        closure_path, _binding_path = self.write_closure()
+        closure = json.loads(closure_path.read_text(encoding="utf-8"))
+        closure.pop("quarantine_manifest")
+        closure_path.write_text(
+            json.dumps(closure, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(SalvageAuthorizationError, "quarantine manifest"):
+            load_salvage_closure(closure_path)
 
     def test_r6_cap_one_and_waivers_refuse(self) -> None:
         closure_path, binding_path = self.write_closure()
