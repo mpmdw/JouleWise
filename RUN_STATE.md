@@ -10,10 +10,29 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-02 evening (post-move session: PRs #94/#95
-merged, kernel batch + D100-BII-BINDING-01 minted, site tests
-advisory-lane per the D-101 addendum — see the ACTIVE RESUME SCRIPT
-below).
+Last updated: 2026-08-03 (desk session during Ed's absence: PR #96
+MINT-GENERALIZE tooling merged; D-107 ruled; CAL-BRACKET in review;
+codex cache bug fixed. See the DESK-SESSION UPDATE below the resume
+script.).
+
+> **⏸️ ED DECISION PENDING — D100-BII-BINDING-01 (not urgent, not
+> blocking anything time-critical; window B re-eval is what waits).**
+> The nested-content closure (D-106/D-107 clause 3c) went through a
+> third round and a THIRD cold gate. Verdict of the gate (2 cold Fable
+> instances + Opus refuter, all probe-backed): **clause (c) cannot
+> achieve its ruled "zero workload output bytes" predicate under any
+> bench formulation** (unbounded list cardinalities + ~1.2 KB of free
+> numeric-leaf capacity), AND the substitution attack it was ordered
+> to close is **already closed by clause (b)** — the landed hash-sealed
+> closure-manifest pin. The bench loop is STOPPED (rule 11; nothing
+> committed, state preserved). Two options, both need you, full memo at
+> `.desk/coldgate_d100_bii/SYNTHESIS-gate3-FOR-ED.md`:
+> **(ii) [magistrate + refuter recommend] retire clause (c) as a
+> license precondition** — close the row on (a)+(b)+(d) + the recorded
+> 2026-08-01 lead manual verification of the 3 subjects; or
+> **(i) land a mechanically-derived cardinality-closed grammar with the
+> ~1.2 KB residual explicitly ruled** (a prospective window-C guard,
+> but requires amending D-100's predicate). Your call becomes D-108.
 Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
