@@ -5,11 +5,11 @@
 > tonight; no window in flight. This line updates only at defined
 > moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 >
-> **✅ T3 HANDOFF: READY** — point a NEW t3 Fable thread at the top
-> checkpoint block of [`RUN_STATE.md`](RUN_STATE.md) (the
+> **✅ T3 HANDOFF: READY** — point a NEW t3 thread at the top checkpoint
+> block of [`RUN_STATE.md`](RUN_STATE.md) (the
 > `2026-08-04 early AM — T3 HANDOFF` block) and it takes over as
-> magistrate. PR #100 (CAL-BRACKET) is the one open thread; Ed owes two
-> acks, listed in that block.
+> magistrate. One open review branch and two operator acknowledgements
+> are listed in that block.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
