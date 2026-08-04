@@ -1,107 +1,193 @@
 # Rule-11 gate packet — T3 Code control-plane doctrine ratification
 
-Status: ASSEMBLING (this header is removed when the packet freezes; a
-frozen packet also pins the charter hash in §6). Assembled by the lead
-session MECHANICALLY: every substantive statement is a quotation or a
-checkable fact; lead views are confined to labeled sections. Tracked
-per D-111 from birth.
+Status: ASSEMBLING — freezes after (i) Ed's bootstrap declaration (§7)
+and (ii) exhibit-manifest digests are stamped. Revised 2026-08-03 late
+night per the charter design consult (record:
+`inputs/charter-consult-record.md`); the first draft's admission of a
+whole narrative RUN_STATE block as unscoped "custody input" was itself
+a consult-confirmed laundering defect and is corrected below.
+Assembled by the lead MECHANICALLY; lead views confined to labeled
+sections. Tracked per D-111 from birth.
 
 ## 1. Trigger (mandatory)
 
-Rule-11 trigger #4: "any proposed process rule." Proposed here: the
-rule-11 amendment adopting T3 Code as standing control plane
-(operating orders 1-5), Ed rulings R1-R3 (interim since 2026-08-03
-late night, ratification explicitly deferred to this packet), and the
-standing cold-gate charter. Per the R3 ruling this packet is itself
-the first live use of the new cold-gate mechanism and doubles as the
-cold-packet-handoff acceptance gate.
+Rule-11 trigger #4: "any proposed process rule." Proposed: the rule-11
+amendment adopting T3 Code as standing control plane (operating orders
+1-5), Ed rulings R1-R3 (interim since 2026-08-03, ratification
+explicitly deferred to this packet), and the standing cold-gate
+charter. This packet's judging in a fresh t3 thread doubles as the
+cold-packet-handoff acceptance gate, under the tightened criterion in
+§5.
 
-## 2. Questions presented
+## 2. Questions presented (atomic; verdict per sub-question)
 
-1. Ratify operating orders 1-5 (Full-access prohibition; no
-   pattern-kills; checkpoint-revert rules; native-thread ingestion
-   notes; delegated-run visibility route) as rule-11 text?
-2. Ratify R1: fresh-eyes sweep cadence WORK-CHUNK-ANCHORED with a
-   mechanical materially-consumed-invocation backstop counter (the
-   shape D080-TRIGGER-01 was blocked on)?
-3. Ratify R2: charter-suppression (tracked hash-pinned charter replaces
-   CLAUDE.local.md ingestion for cold instances; validator refuses
-   hash mismatch) + cold Fable judge / Sol contract-lens refuter
-   composition? Ratify the charter text at the §6-pinned hash?
-4. Ratify R3: compressed shadow cutover (six acceptance gates during
-   real work; rollback = pre-t3 mechanism per route) — noting Sol's
-   recorded dissent (full-shadow preference) and the gate results to
-   date (§5)?
-5. Approve folding the `originator` provenance discriminator
-   (`t3code_desktop` vs wrapper) into the bridge-protocol §4/§6
-   amendment as a mechanical native-vs-wrapper session discriminator?
+**Q1 — Operating orders** (each ratified separately as rule-11 text):
+- 1a. t3 "Full access" mode PROHIBITED for this repo (maps to
+  permission-bypass flags; Supervised/Auto only).
+- 1b. No pattern-kills; kill only manifest-recorded PIDs verified by
+  start-time + ancestry.
+- 1c. t3 checkpoint-revert forbidden in the main tree; in a worktree it
+  is a workspace mutation (stop writers, capture manifest/diff, record,
+  re-baseline); a t3 checkpoint ref is never audit evidence; a t3
+  checkmark is never an envelope.
+- 1d. t3-native Codex threads are Ed-direct only; never targets for
+  lead-delegated or gate-bearing work; material consumption of
+  native-thread output requires a lead-authored ingestion note.
+- 1e. Substantial background Sol rounds route through the tracked
+  codex subagent (lifecycle visibility only; envelope/manifest ceremony
+  unchanged underneath).
+
+**Q2 — R1 cadence:** fresh-eyes sweep cadence is WORK-CHUNK-ANCHORED
+(post-consumption of substantial rounds / merge waves / adjudications)
+with a mechanical materially-consumed-invocation backstop counter.
+Sub-question 2b: does this shape, if ratified, unblock D080-TRIGGER-01
+(queue A52) as drawn?
+
+**Q3 — R2 cold-gate mechanism** (split per consult Q6.4):
+- 3a. Charter-suppression: a standing tracked charter replaces
+  operating-doctrine ingestion for cold instances.
+- 3b. Validation: external registry trust anchor
+  (`docs/process/coldgate_charter_registry.md`) + launch-time expected
+  digest independent of the packet + judge-side recompute, fail-closed
+  (REFUSE ALL on mismatch); minimal validator per the registry spec.
+- 3c. Composition: cold Fable judge + Sol contract-lens refuter, same
+  frozen packet and same atomic questions, both outputs sealed
+  (verbatim + hash-pinned) before synthesis; refuter charge =
+  falsification of packet claims / lead disposition / contract
+  application; override only by separately labeled written document
+  citing both sealed outputs, presented to Ed.
+- 3d. Ratify the charter TEXT at the §6-pinned digest.
+- 3e. Effort-cap composition rule: when a standing Ed effort directive
+  (e.g., "Sol high only") conflicts with a ruled gate composition's
+  stated tier (e.g., R2's "Sol xhigh refuter"), which governs, and what
+  must be recorded?
+
+**Q4 — R3 compressed cutover:** ratify the compressed shadow cutover
+(six acceptance gates during real work; rollback = pre-t3 mechanism per
+route; TUI operation remains available), noting Sol's recorded dissent
+(full-shadow preference) and the gate evidence in §5.
+
+**Q5 — Provenance fold-in:** approve folding the rollout
+`session_meta.originator` field (`t3code_desktop` vs wrapper values)
+into the bridge-protocol §4/§6 amendment as the mechanical
+native-vs-wrapper session discriminator.
 
 ## 3. Authority chain (checkable)
 
 - Ed directive (TIER 1, 2026-08-03): T3 Code is the standing control
   plane — PRESENTATION/CONTROL plane only, never the compliance plane;
   envelopes, leases, manifests, WRITE_SCOPE, and every gauntlet layer
-  unchanged.
-- Ed rulings R1-R3 given 2026-08-03 late night with "ratification
-  rides tomorrow's cold-gate packet" (RUN_STATE T3-CUTOVER block,
-  quoted verbatim in inputs/runstate-t3-block.md).
+  unchanged and authoritative.
+- Ed rulings R1-R3, given 2026-08-03 late night, interim-effective,
+  with ratification deferred to this packet. Exact ruling text: exhibit
+  E1.
 
-## 4. Custody inputs (`inputs/`)
+## 4. Exhibits (scoped per charter §4)
 
-| File | What it is |
-|---|---|
-| `runstate-t3-block.md` | Verbatim T3-CUTOVER checkpoint block (operating orders, R1-R3, gate/probe log, night plan) — the ingestion note of record |
-| `final-message-2511-742.md` | Sol design consult final message, thread 019fcac1 (recaps + adopts conclusions of thread 019fca7c, lost to MCP recycle) |
-| `final-message-1f59-7ec.md` | Sol night-plan review final message, thread 019fcafc |
-| `final-message-710c-75d.md` | Native t3 thread final message, thread 019fcb0b (benign gate exchange) |
-| `rollout-pins.txt` | sha256 pins of all three full transcripts (persist in ~/.codex/sessions; loss-insurance copies in .desk/t3-doctrine-gate/) |
+**E1 — `inputs/runstate-t3-block.md`** — verbatim excerpt of the
+RUN_STATE.md T3-CUTOVER checkpoint block at revision `e3612f5`.
+Source: RUN_STATE.md (a narrative state document — forbidden class).
+Admissibility: the operating-orders text, the R1-R3 ruling text, and
+the gate/probe log lines are THEMSELVES the objects of Q1-Q4 (proposed
+rule text being ratified; recorded gate evidence); no other canonical
+home for the proposed text exists yet — that absence is part of what
+this gate cures. LIMITATION: the night-plan paragraphs and any
+narrative/urgency language in the block are contiguous context ONLY —
+not authority, rationale, severity, or disposition evidence for any
+question.
+- E2 — `inputs/final-message-2511-742.md` — Sol design-consult final
+  message, thread 019fcac1 (recaps + adopts the conclusions of thread
+  019fca7c, lost to MCP recycle). Object: the design record behind
+  R2/R3 (Q3, Q4).
+- E3 — `inputs/final-message-1f59-7ec.md` — Sol night-plan review final
+  message, thread 019fcafc. Object: Sol's recorded R3 dissent basis
+  (Q4).
+- E4 — `inputs/final-message-710c-75d.md` — native t3 thread final
+  message, thread 019fcb0b. Object: native-discussion gate evidence
+  (Q4) and originator-field provenance (Q5).
+- E5 — `inputs/rollout-pins.txt` — sha256 pins of the three full
+  transcripts (persist in ~/.codex/sessions; loss-insurance copies in
+  .desk/t3-doctrine-gate/).
+- E6 — `inputs/charter-consult-record.md` — the charter design-consult
+  record incl. Sol's recorded disagreements and the lead's inline
+  adjudications (Q3a-3d).
+- E7 — commit `97d6e3d` (repo history) — isolated-native-write gate
+  exercise (Q4).
+- E8 — rollout
+  `rollout-2026-08-03T21-32-32-019fcb0b-710c-75d2-8aaf-adb69680ea7d.jsonl`,
+  `session_meta` field `originator: "t3code_desktop"` (verified live
+  from the rollout file by the assembling session; cwd
+  /Users/edr/code/JouleWise, cli 0.146.0) (Q5).
 
-Charter under ratification: `docs/process/coldgate_charter.md`
-(hash pinned in §6 at packet freeze, after the bounded Sol design
-consult on the draft concludes).
+## 5. Acceptance-gate evidence (facts; Q4)
 
-## 5. Acceptance-gate evidence to date (facts)
-
-- isolated-native-write ✅ — commit 97d6e3d (small, reviewed, pushed,
-  verified).
-- native-discussion ✅ — rollout 019fcb0b; `session_meta` carries
-  `originator: "t3code_desktop"` (verified live from the rollout file
-  by this session: cwd /Users/edr/code/JouleWise, cli 0.146.0).
+- isolated-native-write ✅ — E7.
+- native-discussion ✅ — E4/E8; ingestion note = the E1 gate-log entry.
 - phone-approval ❌ + A3 FINDING: in t3 "Auto" mode the permission
   classifier SELF-APPROVED a sandbox-disabled home-dir write with no
-  prompt relayed. Auto ≠ human-in-loop; only Supervised guarantees a
-  tap. Gate re-run shape: Supervised thread, one prompt, one tap.
+  prompt relayed (E1 gate log). Auto ≠ human-in-loop; only Supervised
+  guarantees a tap. Re-run shape: Supervised thread, one prompt, one
+  tap.
 - checkpoint-restore: OPEN (scratch-repo probe not yet run).
-- app-death recovery: OPEN (rides next real t3 quit/relaunch vs
-  predeclared criteria).
-- cold-packet-handoff: OPEN — clears when THIS packet is judged in a
-  fresh t3 thread.
-- Probes: CODEX_HOME default (no provider override); CLAUDE.local.md
-  absent in all worktrees (doctrine provably main-checkout-only —
-  charter urgency confirmed); git common-dir writable from worktrees;
-  t3 server single origin 127.0.0.1:3773 but bound 0.0.0.0
-  (LAN-exposed, ticket-auth'd; Ed to check the Network-access toggle).
+- app-death recovery: OPEN (next real t3 quit/relaunch vs predeclared
+  criteria).
+- cold-packet-handoff: OPEN — clears per the consult-tightened
+  criterion: preflight digest validation succeeds AND both instrument
+  outputs are sealed AND the fresh-t3-thread judge returns non-REFUSE
+  on the mechanism (Q3) and on these exact packet bytes. A REFUSE or
+  protocol failure does NOT clear the gate.
+- Probes (E1 gate log): CODEX_HOME default; CLAUDE.local.md absent in
+  all worktrees (doctrine provably main-checkout-only); git common-dir
+  writable from worktrees; t3 server single origin 127.0.0.1:3773 but
+  bound 0.0.0.0 (LAN-exposed, ticket-auth'd; Ed to check the
+  Network-access toggle).
 
 ## 6. Charter pin
 
-PENDING PACKET FREEZE — filled after the charter consult round:
-`sha256(docs/process/coldgate_charter.md) = <pin at freeze>`
+Charter under ratification (Q3d): `docs/process/coldgate_charter.md`
+v2, sha256
+`099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81`.
+Trust anchor: `docs/process/coldgate_charter_registry.md` at the
+freeze revision; the launch-time expected digest is supplied to the
+judge from the registry, independently of this packet.
 
-## 7. Recorded dissent and open conflicts (must reach the judge)
+## 7. Ed actions required before freeze
 
-- Sol's R3 dissent: preference for a full shadow period over the
-  compressed cutover (recorded in RUN_STATE; adopted position was
-  Ed's R3).
-- Ed effort directive 2026-08-03 evening: Sol HIGH only for now — in
-  tension with R2's "Sol xhigh refuter" spelling wherever the two
-  co-occur; the packet asks the judge to rule how standing effort caps
-  compose with ruled gate compositions.
+1. **Bootstrap declaration** (consult Q6, self-referential first
+   packet): Ed authorizes charter digest `099de884…c95d81` solely as
+   the procedural candidate used to evaluate this packet's same exact
+   bytes; bootstrap authorization is not ratification evidence; any
+   post-ruling byte change = new candidate, new gate.
+2. t3 open at judgment time (fresh-t3-thread judge; also the
+   cold-packet-handoff exercise).
 
-## 8. What the gate must return
+## 8. Recorded dissent and open tensions (must reach the judge)
 
-(a) Ratify / amend / refuse each of §2's five questions separately;
-(b) any charter text amendments (by section);
-(c) the ruled composition rule for effort caps vs gate compositions;
-(d) conditions on the remaining three acceptance gates;
-(e) whether the D-080 amendment (R1 cadence) unblocks D080-TRIGGER-01
-    as drawn.
+- Sol R3 dissent: full-shadow preference over compressed cutover (E3);
+  adopted position was Ed's R3.
+- Sol charter-consult disagreements preserved in E6 (v1 suppression
+  inadequacy; anti-lead framing; unstructured synthesis; packet-local
+  hash insufficiency) — v2 adopted the corrections; the judge rules on
+  v2 (Q3d).
+- Ed effort directive (2026-08-03 evening): Sol HIGH only — in tension
+  with R2's "xhigh refuter" spelling; Q3e presents the composition
+  rule.
+
+## 9. What the gate must return
+
+Per-question verdicts AFFIRM / REJECT / REFUSE for Q1a-e, Q2 (+2b),
+Q3a-e, Q4, Q5, with findings tiered BLOCKER / MATERIAL / NIT; any
+charter text amendments by section (a REJECT on Q3d should name the
+minimum cure); conditions on the three open acceptance gates; and the
+Q3e composition rule stated as ratifiable text.
+
+## Lead's disposition (labeled; the gate is free to reject it)
+
+The lead proposes AFFIRM on all questions as presented, with Q3e
+resolved as: Ed's standing effort directives govern over ruled
+composition tiers; the deviation is recorded in the synthesis with the
+judge's tier reasoning preserved, and a failed round under the capped
+tier is the datum that justifies a one-off escalation request to Ed.
+Basis: tonight's live evidence — two Sol-high gate instruments (B1
+refuter, charter consult) both delivered blocker-grade unique catches
+with no observed quality decline.
