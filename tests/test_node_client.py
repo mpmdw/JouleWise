@@ -1114,6 +1114,7 @@ class NodeClientTests(unittest.TestCase):
                 SequencedClock([]),
                 remote_work_root=str(Path(tmp) / "remote"),
                 remote_python=sys.executable,
+                retention_root=Path(tmp) / "retention",
             )
             task = valid_telemetry_task()
             del task["run_id"]

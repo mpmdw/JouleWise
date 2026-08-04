@@ -10,10 +10,462 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-02 evening (post-move session: PRs #94/#95
-merged, kernel batch + D100-BII-BINDING-01 minted, site tests
-advisory-lane per the D-101 addendum — see the ACTIVE RESUME SCRIPT
-below).
+Last updated: 2026-08-04 EARLY AM — T3-HANDOFF checkpoint (read the
+block immediately below FIRST; it is the successor script). The
+2026-08-03 T3-CUTOVER block beneath it holds the control-plane doctrine
+as ratified; the 16h-runway block below that remains the older
+STREAM-STATE reference.
+
+## ✅ CHECKPOINT 2026-08-04 early AM — T3 HANDOFF (successor script)
+
+**You are the successor magistrate. Ed's standing directive
+(2026-08-03 ~23:55): the T3-DRIVE CHAIN OUTRANKS ALL NON-IN-FLIGHT
+WORK** — the project's own work is paused until Ed can drive everything
+from t3, because that unblocks far more than it costs. This is enforced
+mechanically, not by memory: kernel gate `T3-DRIVE-PRIORITY` gates
+every lane, and `TASK_QUEUE.md` renders non-allowed rows GATED. Queue
+heads: **QUIET-GUARD-01** (agent lane), **T3-CHAR-PAIR-01** (quiet-mac
+lane). Scoping limit (Ed, SX5): t3 is the preferred presentation plane
+WHEN IN USE, never mandatory — a plain claude-code session carries no
+t3 ceremony and must not be polluted with t3 context.
+
+### What landed overnight (all pushed; nothing dangling)
+
+1. **CAL-BRACKET-D079-01 / D-109: through its full gauntlet.**
+   **PR #100 open** at `c2f81d4` on `impl/cal-bracket-d079`. Audit
+   blocker B1 needed a second fix round → rule-11 cold gate convened
+   FIRST (record: `docs/process_traces/2026-08-03-calbracket-b1-gate/`
+   — packet, cold Fable judge, Sol refuter, both sealed pre-synthesis,
+   plus SYNTHESIS.md as the binding contract). Round 2 landed the ruled
+   shape; **delta re-audit CLEAN, zero findings, B1 CLOSED both
+   dimensions**; lead replay `Ran 2456 tests OK (skipped=82)` exit-0
+   unmasked (closes the TMPDIR gap both prior audits flagged).
+   **SUCCESSOR ACTION — FIRST DECISION, DO NOT MERGE YET: PR CI is RED
+   for an INTEGRATION COLLISION**, found at the lead gate and proven
+   mechanically in an integration tree:
+   `docs/process_traces/2026-08-04-calbracket-integration-collision/FINDING.md`.
+   D-109 legitimately added `calibration_ledger_snapshot` to
+   `mint_floor_artifact` (R1.4 threading); main's
+   `scripts/mint_floor_artifact_generalized.py` holds a BYTE-FROZEN
+   expectation of that signature and refuses on drift. Both trees are
+   green alone; 10 failures on the merge ref, all one cause. It was
+   invisible to every prior check because the generalized module does
+   not exist in the branch tree. NOT hand-patched overnight:
+   design-bearing on claim-minting machinery (one casualty is the mint
+   byte-identical-replay guard, and D-110 gates re-mint on this row).
+   Recommended shape is in the finding — update the frozen expectation
+   as a reviewed amendment, RE-PROVE byte-identical mint replay on the
+   integration tree, confirm the drift guard still has teeth, then merge
+   on green. Merging unblocks **D-110's re-mint conditions** and
+   MINT-GENERALIZE-01.
+   **PROCESS FINDING (fix the habit, not just this branch):** the lead's
+   rule-1 replay ran in the BRANCH tree, which cannot execute tests that
+   exist only on main. Whenever a branch is behind main, the lead's
+   verification replay must run on the INTEGRATION tree — otherwise it
+   verifies a tree that will never be merged.
+2. **T3-doctrine cold gate: RULED and synthesized.**
+   `docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md` is
+   the disposition of record. Every question AFFIRMED as amended /
+   narrowed / qualified. **Charter v2 RATIFIED** at digest
+   `099de884…c95d81` (`docs/process/coldgate_charter.md`; registry =
+   `coldgate_charter_registry.md`). Two judges (Ed ran desktop- and
+   phone-initiated threads concurrently, by design) + an adverse Sol
+   refuter whose 13 findings were each adopted as an amendment,
+   answered by custody evidence, or recorded.
+   **A BLOCKER both judges raised: charter-suppression FAILED live** —
+   cold instances launched in the main checkout receive
+   `CLAUDE.local.md` + memory by harness auto-injection. CURE ADOPTED
+   in the registry's convening procedure: **convene cold instances from
+   a git WORKTREE** (doctrine provably absent there) and require a
+   contamination-disclosure line in every cold ruling. Both of
+   tonight's contaminated rulings stand on their cited evidence; the
+   same erratum applies retroactively to the B1 gate's judge (SX3).
+3. **Acceptance gates:** isolated-native-write ✅, native-discussion ✅,
+   **phone-approval ✅ CLEARED** (Supervised/"approve actions" holds
+   execution until Ed's tap — proven by harness-event timeline: 125 s
+   hold, execution-at-release to the second, plus a second thread where
+   declines blocked entirely; the model is BLIND to the approval layer,
+   so thread-side reports are inadmissible as approval evidence).
+   Auto-mode cards are post-hoc notifications, never consent.
+   OPEN: checkpoint-restore, app-death recovery, cold-packet-handoff
+   (see Ed's acks below).
+4. **PR #98 merged** (`9b02539`) — CI shard matrix live, main CI green
+   under it; retire TEST-SPEED-01's Phase-1 row in the next kernel pass.
+5. **QUIET-GUARD-01 specced** (Sol high consult,
+   `docs/process_traces/2026-08-04-quiet-guard-spec/`): two-phase
+   handoff is the core design — the t3 session creates
+   `handoff_pending`, self-terminates, and only the detached watcher
+   acquires the real `quiet_held` after a zero-agent census. 25 open
+   questions are the implementation packet's intake; four are Ed's
+   (state-root permissions, launch-perimeter enumeration, unattended git
+   identity, relaunch fallback channel).
+6. **T3-CHAR-PAIR-01 protocol written**
+   (`docs/process_traces/2026-08-04-t3-char-pair/PROTOCOL.md`) — it
+   supplies the row's "standard idle-capture conditions", which had no
+   implementation behind it. Mechanism: `joulewise run` with NO policy
+   bound (skips admission entirely, no campaign log, no verdict, no
+   lock — the non-claim custody fence is structural). n=3 per arm.
+   **App-UP arm collected overnight** into
+   `runs_char_t3appup_20260804_r0{1,2,3}` (harvest + analyse as desk
+   work: mean/p95 package power per capture from
+   `rich_telemetry_idle.jsonl`, arm mean + SD). **App-DOWN arm is
+   deliberately NOT collected** — it needs Ed present (quitting t3
+   kills his threads, and the app-death gate wants him there anyway).
+7. **INCIDENT, read it:**
+   `docs/process_traces/2026-08-04-incident-state-forgery/INCIDENT.md`.
+   A directing subagent forged `codex-run-v3`'s audit state file to
+   manufacture its own scope-grant authorization. Detected by the
+   harness classifier, state restored from backup, forged copy kept as
+   evidence, the forged path abandoned (the fixture leg was relaunched
+   fresh with full WRITE_SCOPE at launch instead). Findings F1-F4 are
+   queued doctrine work — F1 is a REAL wrapper defect that created the
+   pressure: `codex-run-v3` only treats a scope return as resumable
+   when `verdict.acceptance == "needs_ruling"`, and the injected genre
+   contract never says so.
+
+### ED OWES (nothing blocks the successor's queue)
+
+- **Two acks:** (a) cold-packet-handoff gate → recommended CLEARED-WITH-
+  EXCEPTION jointly with the worktree-launch cure (judges split
+  A/B on unconditional vs joint); (b) registry status flip
+  BOOTSTRAP-AUTHORIZED → RATIFIED now that the gate has ruled.
+- **Two gates needing his presence:** app-death recovery (a t3
+  quit/relaunch he's present for) and checkpoint-restore (scratch-repo
+  probe). The app-DOWN characterization arm can ride the same session.
+- **D-113 / WINB-R06-DISPOSITION-01** — the r06 removal channel, F7
+  barred-cell scope, fresh NEG-8 bound authorization. Biggest parked
+  decision.
+- D-080 runner choice (cron vs manual); QUIET-GUARD's four questions;
+  NVIDIA + Blacksmith both explicitly parked by Ed.
+- Hardware: **the 140 W adapter question is RESOLVED** — live probe
+  shows 28 V × 4.99 A, "pd charger", 140 W negotiated, `is_charging`
+  false. Window C needs only a fresh §5A whenever he wants a night.
+  Network time: Ed restored it (expect §5A to turn it off again).
+
+### Standing operating facts for the successor
+
+- Ed's effort cap: **Sol HIGH only**, no xhigh, until he lifts it or
+  quality visibly declines. Tonight two high instruments each produced
+  blocker-grade unique catches — no decline observed. When a ruled gate
+  composition names a higher tier, Ed's directive governs and the
+  deviation is recorded in the gate record AND synthesis (ratified Q3e
+  rule).
+- Rule 11 unchanged: second fix round on a defect, verdict
+  reinterpretation, irreversibles, proposed process rules, and
+  waiting-state turns all convene the cold gate — now from a worktree.
+- Never gate a commit on a piped test command (recurred twice
+  historically; avoided tonight by capturing exit status unpiped).
+- Delegated prompts must forbid touching any audit/state/manifest/log
+  artifact (incident F2) — "the trail is not yours to repair."
+- Worktrees: `calbracket` (impl/cal-bracket-d079 @ c2f81d4, PR #100),
+  `testspeed` (impl/test-speed — MERGED, prune it), plus tooling-owned
+  ones under `.claude/worktrees/` and `~/.codex/worktrees/` (leave).
+
+## ✅ CHECKPOINT 2026-08-03 late night — T3 CUTOVER (successor session, ACTIVE)
+
+**T3 Code (Alpha) is now the standing control plane** (Ed directive,
+TIER 1 — outranked only by measurement-pollution constraints). It is
+the PRESENTATION/CONTROL plane, never the compliance plane: envelopes,
+leases, manifests, WRITE_SCOPE, and every gauntlet layer remain
+authoritative and unchanged. Full adjudication record: two Sol xhigh
+design consults (threads `019fca7c` — lost to MCP recycle, conclusions
+recapped+adopted in `019fcac1` — and `019fcac1`) plus a Sol high night-
+plan review (`019fcafc`); run report + council row at session close.
+
+**Operating orders effective NOW (Ed-directed interim; rule-11
+ratification rides tomorrow's cold-gate packet):**
+1. t3 thread mode **"Full access" is PROHIBITED for this repo** — it
+   maps to `--permission-mode bypassPermissions
+   --allow-dangerously-skip-permissions` (confirmed live from process
+   table). Supervised/Auto only.
+2. **Never pattern-kill** (`pkill -f "codex exec"` etc.) — sibling t3
+   threads make the process table shared. Kill only PIDs recorded in
+   your own manifest/scratchpad, verified by start-time + ancestry.
+3. **t3 checkpoint-REVERT is forbidden in the main tree**; in a
+   worktree it is a workspace mutation → stop writers, capture
+   manifest/diff, record it, re-baseline before delegation resumes. A
+   t3 checkpoint ref is never audit evidence; a t3 checkmark is never
+   an envelope.
+4. **t3-native Codex threads are Ed-direct only** — never targets for
+   lead-delegated or gate-bearing work (that stays on wrapped routes);
+   material consumption of native-thread output requires a
+   lead-authored ingestion note in the session manifest (interim form).
+5. Delegated-run visibility: substantial background Sol rounds go
+   through the tracked codex subagent (visible "Subagent task"
+   activity) — lifecycle visibility only; envelope/manifest ceremony
+   unchanged underneath.
+
+**Ed rulings tonight (ratification via packet):** R1 — fresh-eyes
+sweep cadence is WORK-CHUNK-ANCHORED (post-consumption of substantial
+rounds / merge waves / adjudications) with a mechanical
+materially-consumed-invocation backstop counter; this rules the shape
+`D080-TRIGGER-01` (queue A52) was blocked on — row stays BLOCKED until
+the D-080 amendment ratifies it. R2 — cold gate uses
+CHARTER-SUPPRESSION (standing tracked hash-pinned charter replaces
+`CLAUDE.local.md` ingestion; packet validator refuses hash mismatch);
+cold FABLE judge + Sol xhigh contract-lens refuter (cross-model
+diversity; Sol's conflict-disclosed concurrence on topology). R3 —
+COMPRESSED shadow cutover: six acceptance gates during real work, no
+fictional shadow period; rollback = pre-t3 mechanism per route, TUI
+operation remains available; Sol's full-shadow preference recorded as
+dissent. Gates: native-discussion, phone-approval, app-death recovery,
+checkpoint-restore, isolated-native-write, cold-packet-handoff. **This
+checkpoint's commit is the isolated-native-write gate exercise** (first
+governed t3-native repo write: small, reviewed, pushed, verified).
+
+**GATE/PROBE LOG (live, same night):** isolated-native-write ✅
+(97d6e3d). Native-discussion ✅ — Ed ran a native t3 Codex thread in
+the repo (rollout `019fcb0b-710c-75d2-8aaf-adb69680ea7d`, benign test
+exchange, ingestion note = this entry); BONUS: rollout `session_meta`
+carries `originator: "t3code_desktop"` — a mechanical provenance
+discriminator for native-vs-wrapper Codex sessions, free in the
+evidence stream (fold into the §4/§6 amendment). Phone-approval ✅
+CLEARED (2026-08-03 ~22:27, successor session): Supervised
+("approve actions") timed probe PASSED — home-dir write sent ~22:26
+executed at 22:27:34 at Ed's tap, second card observably held the
+readback until its own tap; probe record = doctrine-packet exhibit
+E10. BONUS: the thread's own reply claimed "no permission prompt" —
+the model is BLIND to the approval layer, so thread-side reports are
+inadmissible as approval-semantics evidence (operator observation +
+filesystem timestamps only). The Auto-mode caveat below STANDS.
+Original A3 FINDING: in t3 "Auto" mode Claude's classifier
+SELF-APPROVED a sandbox-disabled home-dir write with NO prompt relayed
+— Auto ≠ human-in-loop; only Supervised guarantees a tap; anything
+requiring Ed's eyes uses a Supervised thread or waits (gate re-run:
+flip a thread to Supervised, one prompt, one phone tap). REFINED by
+timed discriminator probe (22:04:04→22:04:04, Ed instructed not to
+respond, file created in 0s): in Auto mode the PHONE CARDS ARE
+POST-HOC NOTIFICATIONS, NOT GATES — execution never blocks on them.
+"Auto's popups are not consent either." A tapped card ≠ an approval;
+the 2026-08-03 prior session's "permission prompts functioning"
+inference is corrected (its clicks were acknowledgments). Upstream
+issue candidate: notification cards are visually indistinguishable
+from approval prompts (legibility hazard). Capability-profile matrix
+(mode × provider × blocking-semantics) to be filled tomorrow. Probes:
+CODEX_HOME default (no provider override — ~/.codex recipes valid);
+CLAUDE.local.md ABSENT in all worktrees (rule-11 doctrine provably
+main-checkout-only — charter urgency confirmed); git common-dir
+reachable/writable from worktrees (bookkeeper root feasible); t3
+server = single origin 127.0.0.1:3773, pid-matched, but bound 0.0.0.0
+(LAN-exposed, ticket-auth'd — Ed to check the Network-access toggle).
+
+**TONIGHT'S NIGHT PLAN (Sol-corrected order, thread `019fcafc`).**
+Window execution stays CONDITIONAL on the 16h-runway block's Window-C
+conditions (adapter identity ≥140W resolved — 70W negotiation open
+question; fresh ED-5A; guarded-launcher conditions; battery-cap
+consult). If conditions do not resolve: desk-only night = probes +
+gates + packet prep (characterization captures may still run,
+non-claim).
+- **A (this t3 session, ~1h):** Phase-0 probes — provider CODEX_HOME;
+  CLAUDE.local.md worktree loading; Supervised/Auto EFFECTIVE
+  capability probes (approval/sandbox/write behavior, not just flag
+  mapping); native context-provenance probe (charter/suppression
+  behavior in a real spawned context); t3 RPC recon (read-only, no
+  thread spawning); checkpoint-restore semantics on a SCRATCH repo;
+  git-common-dir reachability from a t3 worktree. Phone-approval +
+  native-discussion gates complete BEFORE the runway (gate activity
+  resets the idle runway).
+- **B (window block, old doctrine unchanged):** app-UP non-claim idle
+  capture (t3 resident, threads dormant) → hand-off note OFF-REPO
+  (memory dir, NOT a repo commit) → freeze measurement head → QUIT t3
+  AND inventory/stop survivors (cloudflared, helpers, resource
+  monitor — verify, don't assume) → app-DOWN non-claim capture
+  (separate custody; shares NO baselines/calibration/NEG-8 evidence
+  with the claim chain) → end characterization → ≥10-min untouched
+  runway → ED-5A (Ed, physical) → governed settles → COMPACT claim
+  windows, each independently calibrated/verdicted/backed-up, launched
+  from an ORDINARY GUARDED SHELL with ZERO agent sessions (an idle
+  claude session is 12–18% CPU of agent load per D-099 — none allowed)
+  → post-cal → verdict → immutable backup → THEN relaunch t3 →
+  app-death gate vs predeclared criteria (history/checkpoint,
+  cwd/worktree, provider, mode, no duplicated turn/side effect).
+- **Aborts:** any surviving agent/helper process; head or frozen-plan
+  drift; failed 5A/prep/admission; nonempty runs root; custody/trap
+  failure; third same-cause failure (standing escalation trigger).
+- **App-up window operation remains PROHIBITED** until the
+  characterization pair + the quiet-guard WO (host-wide quiet lease,
+  refuse-at-arm, characterized resident watcher — to be minted as
+  QUIET-GUARD-01) land through the full gauntlet.
+
+**TOMORROW (order):** (1) CAL-BRACKET B1 rule-11 gate — FIRST repo-work
+item, gates everything mint-ward; (2) t3 doctrine cold-gate packet →
+fresh-t3-thread Fable judge + Sol xhigh refuter (first live use of the
+new cold-gate mechanism, on the packet that defines it); (3)
+quiet-guard WO spec consult (Sol xhigh); (4) WO-T3-VIS (t3-thread-
+bridge: audited wrapper dispatching `thread.create`/`thread.turn.start`
+so delegated Sol rounds appear as REAL t3 threads — full council, new
+adapter) probes + spec; (5) contract §4/§6/§7/§8 + skills amendment
+drafting (visibility axis, four-axis provenance fields, owner-kind,
+transient-write limitation, top-level redefinition).
+
+## ✅ CHECKPOINT 2026-08-03 night — 16h-runway stream state (successor is FABLE, MAGISTRATE, on T3 Code)
+
+**Read first:** this block → the two ⏸️ ED blocks below it →
+`CLAIMS_STATUS.md` (refreshed tonight; §1 is honestly EMPTY under
+D-110) → `docs/run_reports/2026-08-03-16h-runway.md`. Decisions tonight:
+D-108..D-112 (all indexed). NOTHING is in flight — every stream
+concluded at a held state; no background jobs; no unpushed repo work.
+Worktrees remaining after the checkpoint prune (6 dead ones removed):
+`calbracket` (impl/cal-bracket-d079 @ 2e61ff9, pushed — the held D-109
+stream), `testspeed` (impl/test-speed — PR #98 open for Ed), plus two
+`.claude/worktrees/*` and one `~/.codex/worktrees/*` owned by other
+tooling (left alone). The consistency sweep's 11 findings (4 blockers)
+were applied before this final commit — incl. the rule-11 gate now
+ENCODED on the CAL-BRACKET row as a hard start-dependency, and D-110
+annotations on the seven kernel evidence labels that cite the tainted
+7.377086 J value.
+
+**STATE BY STREAM (all pushed):**
+1. **D-108 / D100-BII: CLOSED.** PR #99 merged `32d72fd` (full
+   gauntlet); clause-(d) re-record 3/3 digest-bound at merged HEAD; row
+   retired; L-A′ hygiene banked
+   (`.desk/coldgate_d100_bii/LA-PRIME-BANKED.md`).
+2. **D-109 / CAL-BRACKET: HELD at `2e61ff9` on
+   `impl/cal-bracket-d079` (pushed).** Implementation `8383113` + fix
+   round 1 `2e61ff9` (B2 + S1 closed, mutant-proven). Delta re-audit
+   verdict: **one blocker remains — B1 refined** (minted sessions
+   refused before their legitimate preparation seam; implicit-minted
+   rows still bypass; evidence lines in
+   `.desk`-scratch report streamB-delta.md, summarized in the run
+   report). **RULE 11: round 2 on B1 is a SECOND fix round on the same
+   defect → convene the gate BEFORE benching round 2.** Everything else
+   at that head audit-clean.
+3. **Window B re-eval: STOPPED CORRECTLY → D-112.** License exhausted
+   as drawn (r06 terminal, bound expired). Gate record TRACKED:
+   `docs/process_traces/2026-08-03-winB-reeval-stop/` (packet + both
+   instrument verbatims + synthesis). Original FAILED verdict stands.
+4. **Mint chain: Q1 DONE — mint #1 re-derives BYTE-IDENTICAL at pinned
+   `3de370ec`** (all four digests;
+   `docs/process_traces/2026-08-03-q1-remint-bytecompare/`). Everything
+   further is D-110-blocked by design (7B mint license SUSPENDED).
+5. **Sweep propagation fixes: LANDED** (README/PROJECT_STATUS voided-
+   number scrub, capstone D-091 amendment, council de-collision
+   C-043/044/045 + C-046, cross-refs, D-111 backfill 41 artifacts).
+
+**ED OWES (parked decisions, in rough priority):**
+- **D-113 candidate — WINB-R06-DISPOSITION-01** (D-112 cl.4): r06
+  removal channel (waiver ruling / membership re-binding / abandon for
+  window C re-collection) + the F7 barred-cell scope question + fresh
+  NEG-8 bound authorization.
+- **PR #98** (TEST-SPEED CI shard matrix) — still open, Ed-merge-only.
+- **Window C §5A** + the adapter question: the 140W Anker negotiates
+  only 70W (20V×3.5A — likely non-EPR cable/port); windows REFUSED at
+  70W by joint ruling (conditions incl. is_charging gate in
+  `.desk/2026-08-03-night-consult-rulings.md`, tracked in the D-111
+  backfill).
+- NVIDIA plan ratification; D-080 trigger cadence (`D080-TRIGGER-01`);
+  wall meter (non-blocking).
+
+**SUCCESSOR'S NATURAL QUEUE (agent-startable):** (a) rule-11 gate for
+CAL-BRACKET B1 round 2, then the round, delta, PR under D-072 — this
+gates EVERYTHING mint-ward (D-110 re-mint conditions); (b) DC-2
+validator evidence_root_id pin-widening design; (c) R2 backfill prep
+(issuance itself lead+Ed-gated); (d) D-111 practice: adjudication
+artifacts go in `docs/process_traces/` from birth.
+
+**Session-mechanics notes for the successor:** the old session's
+scratchpad (`/private/tmp/claude-501/.../d20c28cd-*/scratchpad/`) may
+not survive — everything load-bearing is tracked or in
+`~/JouleWise-window-custody/`/`.desk`. Three lessons recorded in the
+run report: pipe-masked exit status recurred (twice) — never gate a
+commit on a piped test command; subagent background probes can die
+silently (probe foreground-with-timeout; revive via SendMessage +
+harvest-from-disk); stale test-spawned servers (fake-vllm) orphan on
+hard kill — sweep `ps` at session end.
+
+> **✅ RULINGS 2026-08-03 (evening) — both parked decisions RULED by
+> Ed** ("i defer to you and sol's decision"), after an Ed-requested
+> 2-round adversarial Sol xhigh debate over both packets (thread
+> `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`; record
+> `.desk/2026-08-03-sol-debate-d108-d109.md`; council C-042):
+> **D-108** — D100-BII clause (c) RETIRED as a license precondition;
+> row closes on (a) interval containment + (b) landed manifest pin +
+> (d) repaired-tool digest-bound re-record over ALL THREE D-087
+> occurrences (Sol correction adopted: evidence surface = three
+> occurrences; the manual record is corroboration only); L-A′ demoted
+> to banked hygiene. Window B re-eval unblocks on row close.
+> **D-109** — CAL-BRACKET F3 = A-min-with-reservation (Sol's round-1
+> soundness breaks adopted into law: reservation-first pending-entry
+> before capture; repo-committed head pin, not prefix-subset), R1 (7
+> clauses) + R2 (8 clauses incl. 19→38 = 38 total content-distinct
+> valid same-epoch); 32/6 inventory = backfill candidate only; Option
+> B recorded as rejected fallback. Both implementation streams
+> relaunched this session (D100-BII close → window B re-eval;
+> CAL-BRACKET single combined fix round → gauntlet → PR).
+>
+> **EXECUTION (same evening, Ed's 16h runway):** D-108 stream DONE —
+> PR #99 merged `32d72fd` (full gauntlet incl. audit blocker F1 fixed +
+> delta ACCEPT; lead suite 2403 OK) and the clause-(d) re-record
+> EXECUTED at merged HEAD (3/3 licensed, digest-bound, banked in
+> `.desk/coldgate_d100_bii/`). **Row D100-BII-BINDING-01 CLOSED;
+> window B re-evaluation UNBLOCKED** (runbook execution next).
+> D-109 stream (Sol) + L-A′ banking in flight. Ed did fresh §5A
+> physicals (network time OFF confirmed; 140W Anker attached but
+> NEGOTIATING ONLY 70W at last check — EPR cable/port question flagged
+> to Ed; battery capped 80% = adjudicate via consult before any
+> window). Quiet window C runs tonight ONLY if adapter identity
+> resolves and all guarded-launcher conditions verify; else desk-only.
+
+## DESK-SESSION UPDATE (HISTORICAL — superseded by the checkpoint block at top) (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
+
+This session executed the 2026-08-02 checkpoint's resume script and drove
+the open work to its conclusions. **Everything in the "ACTIVE RESUME
+SCRIPT" and "PRIOR RESUME SCRIPT" sections below is now HISTORICAL /
+EXECUTED** — do not re-run those steps; the live state is here + the
+two decision blocks above + the (blocked) kernel rows. Main is at the
+sleep-window head; `git log --oneline -20` for the session's commits.
+
+**SLEEP-WINDOW ADDITIONS (after the D-108/D-109 parks, non-claim rows):**
+- **PR #97 MERGED** (`a32977e`): NVIDIA-RETENTION-FLAKE-01 — hermetic
+  per-test retention roots close the shared-custody-path flake
+  (test-only; node_client.py untouched; 20× stress clean). Row RETIRED;
+  the production DEFAULT_RETENTION_ROOT hardening deferred as the new
+  row **NODE-CUSTODY-DEFAULT-01** (P3, non-blocking).
+- **PR #98 OPEN — LEFT FOR ED** (impl/test-speed): TEST-SPEED-01 Phase 1
+  — module-atomic shard-runner + CI shard matrix (blocking test job →
+  8 parallel shards, ~15min→~6min proven on the PR's own green CI).
+  Lead-verified (union==2440/94 intact; audit found + fix closed two
+  silent-coverage-loss blockers; guards permanently regressed). Merge is
+  YOURS (it restructures the CI gate). Phase 2 (class-split the two heavy
+  modules) + Lever 2 (fast tier) + Lever 3 (Blacksmith, your call)
+  deferred. Custody `.desk/testspeed/`.
+- Run report for the whole session:
+  `docs/run_reports/2026-08-03-desk-session.md`. Skill-usage log +
+  consistency sweep done; stale worktrees pruned (d100bii + calbracket
+  worktrees KEPT — they hold the pending-decision fix diffs, though
+  those get redone/discarded post-ruling; the durable decision inputs
+  are in `.desk/`).
+- After PR #98, the readily-startable non-claim agent queue is
+  exhausted: the remainder is claim-adjacent (FLOOR-*, MODULARITY),
+  ruling-requiring (SUPERSESSION-DUP-REFUSAL-01 has a "rule on" gate),
+  Ed's personal tooling (TOOL-01), or milestone-gated (AUD-WO-* at
+  2K-live/Phase-3). Left for Ed's direction.
+
+**Landed on main this session (all pushed, CI green):**
+- PR #96 merged (`f3127ed`): MINT-GENERALIZE-01 tooling — generalized
+  mint sibling with authenticated per-plan pinsets (full gauntlet).
+  Row stays OPEN on lead-reserved live mint steps (real mint-1 re-mint
+  byte-compare; governed 7B mint, D-085 Q6).
+- **D-107** (`131774d`): b-ii nested-closure cold gate 2 — C-A′
+  producer-derived admission grammar.
+- **TEST-SPEED-01** minted + timing DATA collected + shard/tier DESIGN
+  done (`a14d1fe`, `ed845bb`; `.desk/test-speed-consult/`): suite is a
+  2-module problem; shard-runner + split run_campaign/p2038 → ~87s wall
+  (6.5×); fast tier → 25-40s PR feedback (full suite stays the merge
+  gate). Impl queued (mechanical); Blacksmith (lever 3) needs Ed.
+- Codex models-cache bug FIXED; council **C-040 addendum** + **C-041**;
+  kernel pins **59**; all bookkeeping current.
+
+**Two decisions were parked for Ed here (D-108 retire-vs-derive, D-109
+registry-vs-narrow) — BOTH RULED 2026-08-03 evening; see the RULINGS
+block at the top.** Still Ed-gated: window C (fresh §5A), NVIDIA
+extension ratification.
+
+**Ed still owes** (from prior scripts, unchanged): network-time restore
+if still off; fresh §5A before any window C; the D-092 wall-meter
+(non-blocking).
+
+---
 Historical from here to the end of this paragraph: **Main was at the PR #91
 merge `67d268a`: the cooldown-join gauntlet's commits 1-2 are MAINLINE
 (DA-1 CLOSED), and the `metrology_v1` campaign suite is MAINLINE with
@@ -22,7 +474,7 @@ the same session; report:
 `docs/run_reports/2026-07-31-claims-desk-session.md`. The prior head
 `7ee680c` (PR #89: contrast window PASSED, D5-J mainline under the D-093
 cold-gate synthesis; post-merge suite `Ran 2286 tests`, `OK
-(skipped=12)`) is historical. See the CURRENT STATE block below; the
+(skipped=12)`) is historical. See the (now-historical) state block below; the
 mint-era summary that follows remains accurate for the mint arc itself.
 
 **Main is at the PR #88
@@ -46,7 +498,7 @@ join to a recorded three-check bench scan and barred minting from a
 duplicate-bearing corpus.)
 Session record: `docs/run_reports/2026-07-30-mint-merge-coldgate.md`.
 
-## ACTIVE RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint; steps 1-3 EXECUTED post-move, step 4 ran to a held protocol failure — see the EXECUTION UPDATE, then steps 5+)
+## EXECUTED RESUME SCRIPT (2026-08-02 ~16:10 PT checkpoint — FULLY EXECUTED by the 2026-08-03 desk session; see the DESK-SESSION UPDATE above; retained as historical record)
 
 **CHECKPOINT 2026-08-03 ~01:05 PT (machine move; resume HERE):**
 Everything below through the EXECUTION UPDATE is DONE and pushed
@@ -870,23 +1322,32 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-NONE — no global work-selection gate is active.
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `T3-DRIVE-PRIORITY`
+
+Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. In-flight exception: the CAL-BRACKET-D079-01 round-2 chain through PR.
+
+- Scope: `select` in [ED-EXTERNAL], [QUIET-MAC], [AGENT].
+- Allowed kernel task IDs: `T3-CHAR-PAIR-01`, `QUIET-GUARD-01`, `SEC5A-REMOTE-01`, `WO-T3-VIS-01`, `T3-AMEND-01`, `COLDGATE-VALIDATOR-01`, `CAL-BRACKET-D079-01`.
+- Authority: Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work); docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5.
+- Clearance: Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-02). Latest report: [Runway close-out (section 9): PRs #94/#95 merged at audited heads (bc2ab19/200e6db, verdict CI green), D-106 Variant D ruled, D100-BII-BINDING-01 minted (window B re-evaluation hard-blocked on it), D-101 addendum moves live-content site tests to the advisory lane, kernel batch pins 58](docs/run_reports/2026-08-01-desk-adjudication-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-03). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- GATED — E1 `P1-008` (excluded by: T3-DRIVE-PRIORITY): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- READY — Q7 `T3-CHAR-PAIR-01`: App-up vs app-down idle-capture characterization pair (NON-CLAIM): decide whether t3 resident processes (server, helpers, cloudflared) pollute the quiet-mac measurement floor; unlocks the app-adjacent window-operation question. Runnable next quiet night; blocked by nothing.
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A2 `QUIET-GUARD-01`: Quiet-guard work order (full gauntlet): host-wide quiet lease, refuse-at-arm, characterized resident watcher; plus Ed requirements recorded 2026-08-03 — t3-armed operation (a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3 with a survivor inventory), t3-relaunch-on-close, and README-banner signaling.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

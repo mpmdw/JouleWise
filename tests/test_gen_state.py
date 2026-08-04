@@ -32,7 +32,7 @@ EXPECTED_IDS = {
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # D-078 confirmation-round-9 follow-up
     "FLOOR-BIND-01",
-    # C-033 screen+budget gauntlet deferrals (2026-07-25)
+    # C-045 screen+budget gauntlet deferrals (2026-07-25)
     "CUSTODY-HARDEN-01",
     # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
     # 2026-07-27 at 3055315 and left the live kernel)
@@ -63,19 +63,32 @@ EXPECTED_IDS = {
     # MEMBERSHIP-READER-FAILOPEN-01) closed 2026-08-02 with PR #94
     # (audited head 05d99b6) and retired to the completed table.
     "CAL-BRACKET-D079-01",
-    # 2026-08-02 D-106 clause 3: the two decidable b-ii capture-identity
-    # fixes; window B re-evaluation is hard-blocked on this row.
-    "D100-BII-BINDING-01",
+    # 2026-08-02 D-106 clause 3 minted D100-BII-BINDING-01 (b-ii
+    # capture-identity fixes); closed 2026-08-03 under D-108 (PR #99
+    # merged 32d72fd + the clause-(d) three-occurrence re-record) and
+    # retired to the completed table.
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
-    # 2026-08-02 runway: load-sensitive NVIDIA test blocked three streams
-    "NVIDIA-RETENTION-FLAKE-01",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
+    # 2026-08-03 sleep-window: production-default custody hardening deferred
+    # from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake).
+    "NODE-CUSTODY-DEFAULT-01",
+    # 2026-08-03 16h runway: D-112 parked r06 disposition (winB STOP gate)
+    # and the D-080 fresh-eyes trigger wiring (sweep finding + Ed's
+    # concurrent-audit pattern).
+    "WINB-R06-DISPOSITION-01", "D080-TRIGGER-01",
+    # 2026-08-03 t3-drive chain mint (Ed directive ~23:55 + the t3-doctrine
+    # gate synthesis): agent-lane rows.
+    "QUIET-GUARD-01", "SEC5A-REMOTE-01", "WO-T3-VIS-01",
+    "T3-AMEND-01", "COLDGATE-VALIDATOR-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-046B", "P2-047B",
+    # 2026-08-03 t3-drive chain mint: app-up vs app-down characterization
+    # pair (NON-CLAIM), rank 7.
+    "T3-CHAR-PAIR-01",
     # [ED-EXTERNAL]
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
@@ -87,7 +100,7 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
-                "MEMBERSHIP-READER-FAILOPEN-01"}
+                "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01"}
 
 
 def load_kernel():
@@ -242,9 +255,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_59(self):
+    def test_exact_live_id_set_66(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 59)
+        self.assertEqual(len(self.tasks), 66)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -261,16 +274,27 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared_and_audit_gate_cleared(self):
+    def test_stop_card_cleared_and_t3_drive_gate_live(self):
         # The comprehensive-audit gate was removed at close-out (Ed's
         # adoption merge of PR #66, 2026-07-15); gate semantics remain
-        # tested against the frozen fixtures below.
+        # tested against the frozen fixtures below. 2026-08-03: the
+        # T3-DRIVE-PRIORITY gate went live (Ed directive ~23:55 — the
+        # t3-drive chain outranks all non-in-flight work; in-flight
+        # exception CAL-BRACKET-D079-01 through PR).
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        self.assertEqual(self.kernel["active_global_gates"], [])
+        gates = self.kernel["active_global_gates"]
+        self.assertEqual([gate["id"] for gate in gates], ["T3-DRIVE-PRIORITY"])
+        self.assertEqual(set(gates[0]["scope"]["lanes"]), set(gen_state.LANES))
+        self.assertEqual(
+            set(gates[0]["allowed_task_ids"]),
+            {"T3-CHAR-PAIR-01", "QUIET-GUARD-01", "SEC5A-REMOTE-01",
+             "WO-T3-VIS-01", "T3-AMEND-01", "COLDGATE-VALIDATOR-01",
+             "CAL-BRACKET-D079-01"},
+        )
         selected = gen_state.selectable_task_ids(self.kernel)
-        self.assertTrue({"P1-008", "P2-006"} <= selected)
+        self.assertEqual(selected, {"QUIET-GUARD-01", "T3-CHAR-PAIR-01"})
 
     def test_axi_work_program_sequence_authority_and_window_fences(self):
         # AXI-S0 (2026-07-15), AXI-SA and AXI-SB (2026-07-16) completed and
@@ -382,9 +406,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
     def test_quiet_mac_all_lead_only_and_p2_006_is_queued_lane_head(self):
         # P2-015 (rank 1) retired 2026-07-31; MET-WINDOW-C-01 took rank 1
         # on 2026-08-01 but sits BLOCKED behind the D-100 repair + Ed 5A,
-        # so P2-006 remains the queued (selectable) lane head.
+        # so P2-006 remains the queued (selectable) lane head. 2026-08-03:
+        # T3-CHAR-PAIR-01 joined at rank 7 (queued, after P2-006), so the
+        # dependency-rank head is unchanged; the live T3-DRIVE-PRIORITY
+        # gate is what promotes it to the selectable head.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 8)
+        self.assertEqual(len(quiet), 9)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
@@ -730,10 +757,26 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         self.assertNotIn("| READY |", queue)
         self.assertNotIn("PARTIAL; READY", queue)
 
-    def test_cleared_live_kernel_renders_no_gate_and_ready_heads(self):
+    def test_live_kernel_renders_t3_drive_gate_and_cleared_restores_ready(self):
+        # 2026-08-03: T3-DRIVE-PRIORITY is live (Ed directive ~23:55); the
+        # allowed t3-drive chain heads stay READY, everything else renders
+        # GATED, and clearing the gate restores the no-gate rendering.
         kernel = load_kernel()
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
+        for rendered in (run_state, queue):
+            self.assertIn("T3-DRIVE-PRIORITY", rendered)
+            self.assertNotIn(
+                "NONE — no global work-selection gate is active", rendered
+            )
+        self.assertIn("- READY —", run_state)
+        self.assertIn("GATED — T3-DRIVE-PRIORITY", queue)
+
+        cleared = copy.deepcopy(kernel)
+        cleared["active_global_gates"] = []
+        gen_state.validate(cleared)
+        run_state = gen_state.render_run_state(cleared)
+        queue = gen_state.render_queue(cleared)
         for rendered in (run_state, queue):
             self.assertIn("NONE — no global work-selection gate is active", rendered)
             self.assertNotIn("GATED —", rendered)

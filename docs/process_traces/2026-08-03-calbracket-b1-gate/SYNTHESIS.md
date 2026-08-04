@@ -1,0 +1,234 @@
+# Magistrate synthesis — CAL-BRACKET B1 rule-11 gate (2026-08-03, late evening)
+
+Instruments: cold Fable judge (`ruling-cold-fable.md`) + Sol contract-lens
+refuter at effort HIGH (`ruling-sol-refuter.md`; Ed effort cap in force).
+Both ran read-only against `impl/cal-bracket-d079` @ `2e61ff9`; both
+worktree-clean verified. Split verdicts synthesized by the lead per
+rule 9 (never majority-voted).
+
+## Convergent (adopted as ruled, no synthesis needed)
+
+1. **B1 CONFIRMED, both halves**, independently probed by both
+   instruments: the round-1 guard at `whole_window.py:4073-4083` is
+   fail-closed before the preparation seam AND fail-open for
+   implicit/default minted rows (raw-declaration comparison vs the
+   `_row_consumption_semantics_id()` default).
+2. **Round 2 LICENSED** — conditioned on the exact shape below.
+3. **Repair shape (composed, the two rulings agree on substance):**
+   - REMOVE the round-1 pre-flight guard at :4073-4083 entirely; do
+     not amend in place; verify not shadowed.
+   - ENFORCE in `_validate_row_uncached`, immediately after
+     `_current_core_rederivation_reasons()` has had its sole
+     preparation opportunity, consolidated with the existing
+     normalized post-seam readiness block at :4343-4361: normalized
+     `row_semantics == MINTED_CONSUMPTION_SEMANTICS_ID` and
+     (`consumption_session is None or not consumption_session.ready`)
+     → `whole_window_verdict_provenance_invalid`.
+   - Key on the already-computed NORMALIZED `row_semantics` (:4144).
+   - PROHIBITED (refuter D1, adopted): placing the check inside
+     `_prepare()`; calling `_prepare` from consumers; requiring
+     session-semantics == row-semantics (would fail-closed the
+     default-constructed sessions in floor_extraction.py:1616-1631
+     and inputs.py:2815-2824).
+   - Asymmetry (judge b.2, adopted): minted rows may legitimately
+     lack `evaluation_basis` — do NOT refuse minted on `basis is None`.
+4. **Same-signature trigger pre-armed** (both): if the round-2 delta
+   re-audit finds B1 in any placement- or normalization-shaped form,
+   rule 11 fires — consult, never round 3. Also (refuter): if the
+   consolidation unexpectedly requires consumer-call-site changes,
+   STOP — that is new structural evidence, not scope to absorb.
+5. **Legacy/implicit rows: fail-closed wins** (judge b.4; refuter's
+   covered-paths table concurs). Frozen tests that break get updated
+   to supply prepared sessions or explicit non-minted declarations;
+   a genuinely frozen contract conflict is a `NEEDS_RULING` early
+   return, never a weakened guard.
+
+## Regression contract (UNION of both rulings — all mandatory)
+
+Structural constraint (judge c, verbatim into the implementer prompt):
+no B1 regression may call `_prepare()` directly, mock
+`_validate_row_uncached`, or otherwise enter below
+`whole_window_refusal_reasons` (or a higher production consumer). The
+round-1 test pair is REWRITTEN to comply, not deleted.
+
+Five regressions (judge R1-R5; refuter's three are subsumed):
+- R1 explicit minted + fresh valid-snapshot session → accepted;
+  session became ready as a side effect. RED pre-fix at 2e61ff9.
+- R2 same shape, snapshot carries `calibration_ledger_pending` →
+  refused, refusal traceable to preparation (refuter: with that
+  reason).
+- R3 implicit row (no `consumption_semantics_id` anywhere) + None
+  session → refused. RED pre-fix at 2e61ff9.
+- R4 implicit row + fresh valid session → same outcome as R1.
+- R5 explicit minted + None session → refused (round-1 fence widened).
+
+Plus (refuter c, adopted): two mutants — (m1) early-placement (check
+moved back before the seam) and (m2) raw-comparison (normalized →
+raw) — each must make at least one regression fail. Red-pre-fix for
+R1/R3 via the established overlay-on-git-archive method.
+
+## Divergences and lead rulings
+
+**D1 — execution route.** Judge: DELEGATE (deliverable dominated by
+tests; contract already written). Refuter: BENCH (rule 9: change
+smaller than a restated contract). LEAD RULING: **DELEGATE to Sol.**
+The refuter's own premise cuts for delegation — the contract already
+exists (these rulings ARE the spec), so the delegation-contract cost
+rule 9 weighs is ~zero, while the deliverable (5 regressions through
+production entry points + 2 mutants + 2 overlay proofs + round-1 test
+rewrite + probable frozen-test updates) is an implementation session,
+not a bench wrap. Rule 8 economics and rule 11 altitude both point the
+same way. Refuter's bench ruling OVERRULED with this reasoning.
+
+**D2 — implementer effort tier.** Judge ruled xhigh (rule-10
+cost-of-error trigger). OVERRIDDEN BY ED's standing directive
+(2026-08-03 evening: Sol HIGH only for now). Written dissent recorded
+for Ed per rule 11: the magistrate agrees with the judge that this
+round is capability-matched to xhigh; it runs at high solely under
+Ed's cap. Mitigations: the spec is complete (judgment already spent by
+the gate), the delta re-audit conditions are unusually strong, and the
+lead TMPDIR replay is mandatory. If the round fails, that is the
+"significant decline" datum under Ed's own escape clause and round 2′
+re-runs at xhigh after consult.
+
+**WRITE_SCOPE** (judge d, adopted): `joulewise/whole_window.py`,
+`tests/test_whole_window_selection.py` — exhaustive. Frozen-test
+casualties elsewhere → `NEEDS_SCOPE` with enumerated paths.
+`EARLY_RETURN: NEEDS_SCOPE, NEEDS_RULING`.
+
+## Delta re-audit conditions (composed judge e + refuter e)
+
+1. Independent read-only re-audit at the exact final head, implementer-
+   distinct, same lane as `streamB-delta.md`.
+2. Probes UNMOCKED end-to-end through `whole_window_refusal_reasons`
+   with fresh sessions: explicit-valid-fresh → accepted; implicit +
+   None session → refused; pending-snapshot fresh → refused.
+3. Verify: structural test constraint held; no raw-declaration
+   semantics comparison anywhere on the enforcement path; :4073-4083
+   guard removed not shadowed; snapshot object identity / no reload on
+   every named consumer; B2/S1 fences and round-1 snapshot mechanisms
+   (:416-430, :487-494) untouched; both mutants exercised.
+4. TMPDIR gap CLOSES THIS ROUND: the re-audit runs focused + canonical
+   suites with writable TMPDIR, and the LEAD independently replays the
+   focused minted/ledger tests and the full suite at the bench,
+   recording exact counts here (rule 1; also retires the packet's §3
+   suite-provenance ambiguity flagged by the judge).
+5. Same-signature survival → rule-11 consult, no round 3.
+
+## Packet-hygiene erratum (recorded, packet left as-judged)
+
+Refuter P1 (should-fix): the packet's "in full" label was not literally
+verbatim (heading converted to a sentence, punctuation normalized);
+§5's not-in-dispute summary omitted three retained checks (total-38,
+prior-set subtraction, budget boundaries); §4 omitted R1.1
+sole-ledger-authority. Judge flagged the fix-1 suite counts as
+Sol-sandbox, not bench. Both instruments state the gate result is
+unaffected (full D-109 was supplied as authority). The packet is NOT
+edited post-judgment; this erratum is the correction of record, and
+the "verbatim means verbatim" lesson feeds the packet-assembly
+checklist in the charter's validator work.
+
+## Disposition
+
+Round 2 launched per this synthesis (Sol, effort high, worktree
+`calbracket`, single commit citing this gate). Gate record complete
+when: round-2 report + delta re-audit + lead replay counts are
+appended, then PR under D-072.
+
+## Round-2 execution log (appended)
+
+- Round 2 ran delegated Sol HIGH per the D2 deviation (recorded above).
+- Report 1 (`round2-report-needsscope.md`): repair COMPLETE in-scope —
+  guard removed, normalized post-seam enforcement consolidated, R1-R5 +
+  both mutants + both overlay red-pre-fix proofs pass; baseline full
+  suite green pre-fix (2453 OK); post-fix canonical failures confined
+  to exactly three legacy-fixture files (analysis_integration 39F/4E,
+  floor_extraction 4F, whole_window 1F) → NEEDS_SCOPE early return,
+  the gate's pre-authorized shape.
+- LEAD SCOPE GRANT (2026-08-03 ~23:40): the three enumerated test
+  paths added to WRITE_SCOPE (fixture-side only; no enforcement
+  weakening; assertion-purpose conflicts return NEEDS_RULING; full
+  suite green + single gate-citing commit required). Run resumed on
+  the same thread.
+- CONTAMINATION ERRATUM (same class as the doctrine-gate judges'
+  B1 finding): this gate's cold Fable judge was convened in the main
+  checkout pre-charter and received doctrine/memory auto-injection
+  without disclosure. Its ruling stands on its verified file:line
+  evidence (independently corroborated by the Sol refuter at the same
+  head). All future convenings follow the registry clean-launch
+  procedure. Full note: t3-doctrine gate synthesis-exhibits SX3.
+
+## Round-2 completion (appended)
+
+**Incident interlude:** the first attempt to resume the scope-expanded
+round was corrupted by a directing subagent forging the wrapper's audit
+state file. Full record: `docs/process_traces/2026-08-04-incident-state-forgery/INCIDENT.md`.
+The forged path was abandoned, not used. The fixture leg was relaunched
+as a FRESH run with all five paths in WRITE_SCOPE at launch, making the
+scope-approval flow structurally unnecessary.
+
+**Fixture leg** (`round2-fixture-report.md`, Sol high, workspace-write):
+all suites green — analysis_integration 92 OK, floor_extraction 82 OK,
+whole_window 9 OK, whole_window_selection 56 OK,
+calibration_bracketing 24 OK, calibration_ledger 10 OK, R1-R5 5 OK,
+canonical 2456 OK (skipped=85). Commit blocked only by the known
+worktree index.lock sandbox limit → lead committed at the bench.
+A read-only precursor run (launch flag omission, no harm) independently
+corroborated the structural facts: post-seam normalized enforcement
+present, both mutants absent, R1-R5 present with no direct `_prepare`
+and no `_validate_row_uncached` mocking.
+
+**Lead verification (rule 1, condition 4 of the delta conditions):**
+- Production diff read line-by-line at the bench: pre-flight guard
+  removed from `_validate_row`; minted clause added to the existing
+  normalized post-seam readiness block; minted NOT refused on
+  `basis is None`; no raw-declaration comparison remains.
+- Fixture diffs: purely additive (+84/+82/+26); **zero assertion lines
+  removed** across all three files (mechanical grep count = 0).
+- Full canonical suite replayed by the lead at the round-2 head with a
+  writable TMPDIR, unpiped exit status captured:
+  **`Ran 2456 tests` / `OK (skipped=82)` / exit 0.** (Sol's sandbox
+  reported 85 skips; three env-dependent tests run at the bench. The
+  TMPDIR verification gap flagged by both prior audits is CLOSED.)
+
+**Commit:** `c2f81d4` on `impl/cal-bracket-d079`, citing this gate.
+
+**Delta re-audit:** launched independently (read-only, Sol high, effort
+per Ed cap) against `c2f81d4` with all five gate conditions as its
+charge, plus an added adversarial pass over the fixture edits (the
+round's highest-risk surface: a fixture change that silently drops
+coverage). PR under D-072 follows its verdict.
+
+## Delta re-audit verdict — CLEAN (round 2 accepted)
+
+`round2-delta-reaudit.md` (independent, read-only, Sol high) at
+`c2f81d4`: **status clean, completion complete, findings [] — B1
+CLOSED in both the placement and normalization dimensions.**
+
+- **Dynamic unmocked probes** (the round-1 blind spot): explicit minted
+  + fresh valid snapshot → `reasons=()`, `prepared=True`, `ready=True`;
+  implicit/undeclared + `None` session →
+  `whole_window_verdict_provenance_invalid`; pending snapshot + fresh
+  session → `calibration_ledger_pending`, supplied snapshot identity
+  retained.
+- **Ruled shape PASS:** guard deleted (not relocated/shadowed);
+  normalized `row_semantics` after the seam; `basis=None` accepted for
+  minted; no semantics-equality requirement; no consumer `_prepare`
+  call added (`run_campaign.py:5220` is the pre-existing direct-runner
+  path both rulings called conformant).
+- **Regression contract PASS:** R1-R5 all enter via
+  `whole_window_refusal_reasons`; AST audit found no `_prepare` /
+  `_validate_row*` calls in any fence; m1 kills R1+R2, m2 kills R3;
+  both round-1 tests rewritten, not deleted.
+- **Snapshot identity PASS** across every named consumer incl. the
+  allowance/secondary passes. **Preserved fences PASS:** protected
+  B2/S1, writer, ledger, bracketing, runner, F1/F2 paths show ZERO diff
+  from `2e61ff9`.
+- **Fixture audit PASS** (the round's highest-risk surface): no
+  assertion removed; changed tests retain assertion counts (3→3, 7→7,
+  1→1); original authentication/conflict/frozen-replay/incomplete-pair/
+  claim-consumption assertions preserved; no production defect hidden.
+- Suites: focused OK, canonical 2456 OK (skipped=85).
+
+**Same-signature trigger did NOT fire.** Round 2 is ACCEPTED. Gate
+record complete; PR under D-072 follows.

@@ -8947,6 +8947,16 @@ def install_real_salvage_window(
             )
         inspected.append(inspect_salvage_attempt(attempt))
         attempt_paths.append(attempt)
+    quarantine_manifest = [
+        {
+            "path": path.relative_to(quarantine).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size,
+        }
+        for path in sorted(
+            candidate for candidate in quarantine.rglob("*") if candidate.is_file()
+        )
+    ]
     closure_path = root / "d100-salvage-closure.json"
     closure_path.write_text(
         json.dumps(
@@ -8959,6 +8969,8 @@ def install_real_salvage_window(
                 "opened_at": "2026-08-01T10:00:00Z",
                 "closed_at": "2026-08-01T12:00:00Z",
                 "custody_roots": [str(quarantine)],
+                "quarantine_root": str(quarantine),
+                "quarantine_manifest": quarantine_manifest,
                 "terminal_occurrence_index": 2,
                 "occurrences": [
                     {

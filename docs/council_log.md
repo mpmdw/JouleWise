@@ -69,9 +69,15 @@ standing instructions.
 | C-025 | 2026-07-09 | Wave 2 — ultracode workflow build (pointer entry; run report `2026-07-09-spec-fleshing-wave2.md`) — 46-agent workflow (4 impl streams, 8 lenses, severity-tiered refuters) + 2 lead-driven reinforcement streams + 6 final-heads + tail verification + combined-ref check + integration review | PRs #33..#38 merged (D-056..D-059 ratified: order policies + order_row, drift-is-a-bound + stable reason codes, token-normalization contract, claims-lint CI enforcement); refuter layer killed 10 findings pre-triage; final-heads caught 2 live-path defects (MLX position under rotation; linter false-negative regression); mutation testing debuted in the test-audit lens; combined-ref suite check validated the p2029 x p2030 strict-surface interaction pre-merge; suite 877 |
 | C-026 | 2026-07-09 | P2-034 broad campaign packs (pointer entry; run report `2026-07-09-p2034-broad-packs.md`) — design-round-first (memo ratified w/ 3 pins), single worktree stream, dual lenses, final-head CLEAN | PR #39 merged; six packs, pack lint errors=0; compliance lens caught a char-level registry drift the linter cannot see (code-span nesting) + a scorer-leak + P2-022 structure flattening; executability lens caught the external-lab cold-start gap; pre-hardware campaign surface COMPLETE (every pre_hardware_preparable=fully row packed) |
 | C-027 | 2026-07-09 | Whole-project council review with gpt-5.6-sol xhigh (first production session; 7 lenses: topdocs/rigor/stats/meta/reverse/arch/negspace + counterreview + independent Fable-tier final examiner; full record `docs/reviews/2026-07-09-c027-whole-project-review.md`) | 8 blocker clusters confirmed (token-denominator mislabel, superseded D-053 prose, RUN_STATE dual next-action, claim machinery unimplemented+unowned, empty D-050 manifest, four D-031 direct-to-main commits, evidence-integrity trio, protocol blockers); claim surfaces corrected same session; 14 follow-up queue rows + NV-GATE-2 additions to P2-005; D-060 proposed + D-061..D-063 accepted; counterreview reversed the lead twice (legacy-gate framing, restructure staging) |
-| C-031 | 2026-07-22 | D-078 P0 instrument-repair close-out (round-8/8b landing + §C-028 delta re-audit with 3 lenses / 11 refuter runs, round-9 FINAL confirmation, L1 adjudication, PR #79) | Round-8b delta re-audit caught the understated-B_fiducial ClockStamp blocker two audited rounds missed; refuters killed 2 findings, narrowed 1, split 1 (lead-synthesized); CR9-1 adjudicated as registered limitation L1 + FLOOR-BIND-01; failure modes recorded (content-filter refuter kills -> data-quality rephrase; bench-edit-during-enforced-scope false attribution; review-genre null-final recovery) |
-| C-032 | 2026-07-24 | NEG-8 drift-gate estimand debate (Ed-directed pre-ratification cross-model debate; Sol xhigh peer vs lead ruling) | Peer disagreed on inferential role (screen != stability proof) and was adjudicated CORRECT; Ed ratified the amended screen+budget design (option F full) with rigor-spiral + no-invented-physics guardrails; second recorded case of peer design judgment overturning a lead ruling pre-implementation |
 | C-038 | 2026-07-25/26 | FLOOR-LABEL-01 gauntlet close (D-078 cl.11 labelled attribution-limited floors) + quiet-window collection; Ed re-proportioned the instrument mix mid-session (Opus 5 subagents = primary delegated lieutenant, Fable on genuine need, Sol = execution workhorse, lead adjudicates); full entry below | Opus-contract lens verdict COMPARATIVE COVERAGE: COMPLETE with 4 should-fix / 4 nits, incl. the `_combined_floor` key-sniffing misattribution mirrored bug-for-bug into `artifact.py` (so validation recomputes the same wrong answer and ships) and the ratio-unit floor/diagnostic inversion; Sol xhigh audit's 1 blocker (runnable V3 probe: comparative blocks minted WITHOUT admissible half-widths validate clean, floor_gate 5e-324 J vs 2.6484 J) ADJUDICATED DOWN to registered limitation L1 — first concrete demonstration of L1, and FLOOR-LABEL-01 recorded as modestly WIDENING its blast radius; Sol xhigh clock diagnosis root-caused window C to transient wall-vs-monotonic slew over the 5 ms ceiling (7.769 ms verified) and corrected the lead's duration hypothesis; Fable adjudication (zero tool uses, 108 s) OVERTURNED the lead's own self-diagnosis and named the disposition (rigorous on work products, exempts its own premises about the environment) → rules R1/R2/R3, no demotion; window B 59/59 clean (whole-window verdict PENDING), window C failed twice on clock slew, window D not started; FIVE lead errors recorded, incl. the ~10-hour lost quiet window (untracked `nohup` + turn ended with no wake source) and TWO exit-status masking incidents → generalization: EXIT STATUS IS NOT EVIDENCE OF WORK DONE |
+| C-040 | 2026-08-01/02 | Commit-3 cooldown-join gauntlet: five fix rounds and three cold-gate dispositions | PR #93 merged after the custody micro-commit and exact-set pin; D-105 recorded the residual recognizer boundary; every review layer produced unique catches |
+| C-041 | 2026-08-03 | D100-BII nested-closure arc and CAL-BRACKET design consult | Three closure formulations failed and the bench loop stopped for decision-level rulings; CAL-BRACKET F3 escalated; MINT-GENERALIZE tooling merged |
+| C-042 | 2026-08-03 | Ed-requested pre-ruling debate: 2-round adversarial Sol xhigh consult over the D-108/D-109 decision packets (MCP discussion lane, read-only; Sol instructed to bench-verify packet claims; record .desk/2026-08-03-sol-debate-d108-d109.md); Ed then ruled by explicit deferral to the joint position | Both packets materially changed before ruling: Sol caught the overstated three-subject manual-verification claim and broke the original A-min formulation (writer crash-window; prefix-subset is not anti-rollback) — both lead-verified and adopted (reservation-first + repo-committed head pin now D-109 law); Sol's code refutation of the magistrate's two-subject license-surface counter adopted into D-108 clause 2; magistrate context (schedule slack, metrology pivot, shared-R2 marginal cost) flipped Sol's B recommendation to A-min-with-reservation, withdrawn on the record; residual dissents preserved in both decision texts |
+| C-043 | 2026-07-22 | D-078 P0 instrument-repair close-out (round-8/8b landing + §C-028 delta re-audit with 3 lenses / 11 refuter runs, round-9 FINAL confirmation, L1 adjudication, PR #79) | Round-8b delta re-audit caught the understated-B_fiducial ClockStamp blocker two audited rounds missed; refuters killed 2 findings, narrowed 1, split 1 (lead-synthesized); CR9-1 adjudicated as registered limitation L1 + FLOOR-BIND-01; failure modes recorded (content-filter refuter kills -> data-quality rephrase; bench-edit-during-enforced-scope false attribution; review-genre null-final recovery) |
+| C-044 | 2026-07-24 | NEG-8 drift-gate estimand debate (Ed-directed pre-ratification cross-model debate; Sol xhigh peer vs lead ruling) | Peer disagreed on inferential role (screen != stability proof) and was adjudicated CORRECT; Ed ratified the amended screen+budget design (option F full) with rigor-spiral + no-invented-physics guardrails; second recorded case of peer design judgment overturning a lead ruling pre-implementation |
+| C-045 | 2026-07-24/25 | NEG-8 SCREEN+BUDGET audit gauntlet: four audit rounds and paired contract/execution refuters | PR #85 merged after three fix rounds; the paired lenses materially changed triage, and the residual custody-hardening work was queued |
+| C-046 | 2026-07-26 | Retrospective: CAL-REBRACKET-01 max-bracket consumption gauntlet (PR #86) | Governed consumption-time authenticated re-derivation landed after three implementation rounds and three independent audits; a9/a10 replays passed with widened members and unchanged point estimates |
+| C-047 | 2026-08-03 | The 16h runway (Ed-granted; joint Fable+Sol decision authority; concurrent sweep instance mid-flight): D-108/D-109 debate+rulings executed, D-110/D-111 sweep-triggered rulings, winB STOP cold gate -> D-112, two Sol gauntlets, pinned byte-identical mint replay, checkpoint for harness switch | D-108 closed via PR #99 + re-record; CAL-BRACKET held at 2e61ff9 (B1 residual, rule-11 gate owed); winB license exhausted as drawn (r06 disposition parked for Ed); mint chain D-110-blocked; CLAIMS_STATUS section 1 honestly NONE; sweep propagation fixes landed; layer yield in the run report |
 
 ---
 
@@ -1669,7 +1675,7 @@ the two scope violations and one thin-output ultra warning are the
 arc's recorded 5.6-sol failure modes. Sealed A/B remains the gate
 before any delegation-boundary change.
 
-## C-031: D-078 P0 instrument-repair close-out session — round-8 landing, round-9 final confirmation, sign-off (2026-07-22)
+## C-043: D-078 P0 instrument-repair close-out session — round-8 landing, round-9 final confirmation, sign-off (2026-07-22)
 
 Shape: lead resumed the paused arc cold from scratchpad pointers; collected
 the checkpointed Sol round-8 fix wave; §C-028 delta re-audit (3 fresh
@@ -1713,7 +1719,7 @@ lead ruling — frozen-replay doctrine protects computed semantics of
 parsable artifacts, not crash reproduction on impossible inputs; the
 reducer's structured-failure contract governs all protocols.
 
-## C-032: NEG-8 estimand debate — peer disagreement adopted, Ed ratification (2026-07-24)
+## C-044: NEG-8 estimand debate — peer disagreement adopted, Ed ratification (2026-07-24)
 
 Ed directed a formal cross-model debate on the clause-10 ruling before
 ratifying. Shape: lead position paper + explicit license and request to
@@ -1731,7 +1737,7 @@ option, demand failure modes + examiner view) produced markedly higher
 design yield than review-shaped prompts; adopt as the default shape for
 estimand/contract rulings.
 
-## C-033: NEG-8 screen+budget audit gauntlet — a new refuter pairing under A/B, four audit rounds, PR #85 (2026-07-24/25)
+## C-045: NEG-8 screen+budget audit gauntlet — a new refuter pairing under A/B, four audit rounds, PR #85 (2026-07-24/25)
 
 Shape: the Ed-ratified SCREEN + BUDGET wave (D-078 clause 10) was taken
 through four adversarial audit rounds (fresh read-only Sol per round;
@@ -2587,3 +2593,167 @@ independent audit launched 2026-08-02 evening (successor session) with
 the repaired codex path. Layer scorecard: the probe-required refuter
 brief format remains the project's highest-unique-catch instrument —
 four gates, four material amendments or overrulings.
+
+## C-041: The D100-BII nested-closure arc — two more cold gates, a third-failure STOP, and the CAL-BRACKET consult (2026-08-03, desk session in Ed's absence)
+
+**Shape.** One desk session ran the two open repair branches
+(D100-BII-BINDING-01, CAL-BRACKET-D079-01) and the MINT-GENERALIZE
+tooling to their conclusions, plus two cold gates on the b-ii
+nested-content closure. All delegated; magistrate gates: lead full-suite
++ live bench probes at every disposition. Roles: Fable magistrate;
+Sol xhigh execution/audit/consult; cold Fable instances + Opus refuter
+at the gates.
+
+**D100-BII arc — three formulations, two gates, STOP (full detail:
+`.desk/coldgate_d100_bii/`).** The nested-content closure (D-106 clause
+3(c)) failed three structural formulations:
+- Formulation 1 (position-enumeration) + formulation 2 (key-denylist):
+  cold GATE 2 → **D-107**, adopting the refuter's C-A′ producer-derived
+  admission grammar with per-leaf value domains; scope expanded to the
+  inventory grammar + the 769/769 false-refusal repairs; row acceptance
+  amended with an over-refusal gate (license 3/3 real subjects). The
+  refuter's fifth consecutive material amendment: it proved the license
+  tool refused all three real subjects at the inventory gate at every
+  head, that fix-1 over-refused 769/769, and that four value channels
+  stayed open.
+- Formulation 3 (open-superset leaves): fix-2 implemented C-A′ but left
+  free-text `node_cleanup.error/.path`, the argv superset, and numeric
+  leaves open — bench-confirmed workload text licenses. Cold GATE 3 (two
+  cold Fable instances converged on L-A surface-refusal; Opus refuter
+  DECISIVE): the refuter proved (a) the packet censused the wrong
+  population (telemetry.command 0/26 on the license surface, and L-A's
+  natural implementation false-refuses 772/772 via a second .command[]
+  path), (b) four MORE open carriers, (c) **structurally**, the grammar
+  constrains values but not list CARDINALITIES — an unbounded list over
+  a closed alphabet is an unbounded workload channel (fires D-107 clause
+  7's second return trigger), (d) ~1.2 KB of free numeric-leaf capacity
+  remains under any grammar, the same order as the workload output, so
+  clause (c) **cannot achieve D-100's "zero output bytes" predicate by
+  any bench formulation**, and (e) the substitution attack (c) was
+  ordered to close is **already closed by the landed clause (b)**
+  hash-sealed manifest pin — so (c)'s real residual is against a careless
+  closure author, not substitution.
+- **Magistrate disposition: STOP the bench loop, escalate to Ed
+  (D-108 pending).** Not a fourth round — three formulations + a
+  structural-impossibility finding + a proposal to retire a ratified
+  clause is exactly the sunk-cost pattern rule 11 exists to halt.
+  Nothing committed; fix-2 diff held untrusted; window B stays blocked.
+
+**Per-layer scorecard (this arc):** the Opus refuter layer amended or
+overturned the disposition at BOTH gates (2 and 3) — now the sole
+highest-unique-catch layer across SIX consecutive gates. Cold Fable
+instances: converged correctly on shape both times, but neither reached
+the structural cardinality/capacity finding — the cross-model pairing
+earned its keep again (a fresh Fable shares the magistrate's own
+dispositions). Packet hygiene: the refuter recorded FOUR findings against
+the magistrate's gate-3 packet (selective clause-7 quotation omitting the
+half that decided the gate; flags not quoted in full incl. the blocking
+anti-round-3 disposition; a laundered "769/769 admit" number; wrong-
+population census) — the same classes recorded at D-106/D-107. Standing
+correction adopted (recorded in the gate-3 synthesis): quote governing
+clauses to the period, quote every source flag in full including the ones
+cutting against the proposed disposition, census the license-surface
+population.
+
+**CAL-BRACKET arc — consult over blind round three.** Impl + fix-round-1
+(first-audit blockers cleanly closed) → delta re-audit FAIL, 3 freshness
+blockers, estimator-digest a REPEAT signature. Per the escalation trigger
+the next spend was a read-only Sol xhigh DESIGN CONSULT, not a fix round.
+It resolved each against D-102: F1 (freshness=6-field epoch) determined;
+F2 (4-module estimator digest set) magistrate-ratified from the
+b_fiducial_s dependency graph; **F3 (cross-root trigger observability)
+escalated to Ed (D-109 pending)** — D-102 mandates the triggers but no
+authoritative universe/registry exists; build one vs. narrow D-102 is a
+claim-soundness call. Held for a single combined fix round after Ed rules
+F3 (it controls the artifact schema). Detail: `.desk/calbracket_d079/`.
+
+**MINT-GENERALIZE-01 — landed.** Full gauntlet (impl → audit → fix →
+delta clean → bench fix → lead gates → PR #96 green CI) merged under
+D-072; live 7B mint stays lead-reserved. The clean case of the session.
+
+**Process finding for the skills.** Two claim-machinery closures this
+session hit genuine DECISION-LEVEL gaps (a clause that cannot meet its
+predicate; a mandated trigger with no defined mechanism) that the
+adversarial bench correctly SURFACED rather than papered over. The
+system worked precisely because the escalation triggers were honored
+(consult-not-round-three on CAL-BRACKET; STOP-not-round-four on D100-BII)
+— the opposite of the 2026-07-26/27 failures that motivated rule 11.
+Recorded as evidence that the topology holds when the loop-immersed agent
+actually chooses to stop.
+
+## C-042: Ed-requested pre-ruling debate — 2 Sol xhigh rounds over the D-108/D-109 packets, both packets materially changed (2026-08-03)
+
+Shape: bounded 2-round adversarial consult (MCP discussion lane,
+read-only, thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`), Sol
+instructed to bench-verify packet claims rather than trust them, given
+the magistrate's recorded selective-quotation history. Ed then ruled by
+explicit deferral to the joint position → D-108 + D-109. Full record:
+`docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/` (tracked).
+
+Unique catches, by layer:
+- **Sol round 1 (packet audit):** (1) the D-108 packet's "three
+  subjects manually verified" overstated the durable record — full
+  b-ii facts exist for the two r08 attempts only; (2) the packet's
+  A-min formulation was UNSOUND as stated — writer crash-window
+  (capture state created pre-receipt, pre-manifest failure exits)
+  defeats publish-on-return receipts, and baseline-prefix ⊆ current is
+  not anti-rollback; (3) L-A′ "verified" was a summarized result, not
+  a banked executable artifact. All three lead-verified at the bench
+  and adopted (reservation-first + independent head pin now R1 law).
+- **Sol round 2 (code refutation):** the magistrate's two-subject
+  license-surface counter was WRONG — the closure loader requires
+  exactly three D-087 occurrences and inspects every one; evidence
+  surface ≠ exclusion target. Adopted into D-108 clause 2.
+- **Magistrate (context the peer lacked):** schedule pressure LOW
+  (recorded), metrology-centric pivot (instrument is the product), and
+  shared-R2 marginal-cost analysis — flipped Sol's B recommendation to
+  A-min-with-reservation, withdrawn on the record.
+- **Convergence quality:** two Sol catches survived verification, one
+  magistrate counter died to code, one Sol recommendation flipped on
+  supplied context. Both directions of the bridge earned their spend;
+  the consult-before-ruling shape (rule 2 amended default) validated
+  again on a decision-level packet.
+
+Residual Sol dissents preserved in D-108/D-109 text: three-occurrence
+evidence surface; 32/6 dispositions need raw-physics backfill before
+issuance; A-min threat-model honesty clause.
+
+## C-046: Retrospective — CAL-REBRACKET-01 max-bracket consumption gauntlet (2026-07-26)
+
+**Retrospective record, authored 2026-08-03 for CRB-6.** This entry
+reconstructs the missing council row from the completed `CAL-REBRACKET-01`
+table record in `TASK_QUEUE.md` and the durable 2026-07-26 session record at
+`docs/process_traces/RESUME-2026-07-26.md`; it does not invent a
+contemporaneous transcript.
+
+Shape: two parallel independent design consults rejected persisted derived
+summaries and converged on D2+ — authenticated re-derivation at consumption
+time under `max(B_pre, B_post)`. Three implementation rounds and three
+independent adversarial audits then converged clean. Outcome: PR #86 merged as
+`7b12f20`; replayed a9 (7 members) and a10 (37 members) both passed
+consumption with every member widened and point estimates unchanged. The lead
+gate recorded 2164 passed / 21 skipped at the rebased head, with all five CI
+checks green.
+
+## C-047: The 16h runway — two gauntlets, the winB STOP gate, the concurrent-sweep interception (2026-08-03)
+
+Full record: `docs/run_reports/2026-08-03-16h-runway.md` (the ONE
+home); decisions D-108..D-112. Shape: Ed-granted autonomous runway with
+joint Fable+Sol decision authority; a PARALLEL Fable instance delivered
+the two-week soundness sweep mid-runway (Ed-initiated concurrent-audit
+pattern — validated, memorized, D080-TRIGGER-01 queued).
+
+Unique catches by layer: Sol audits — D-108 F1 (retirement
+over-drop), D-109 B1/B2 + four weak fences; Opus contract refuter —
+expired NEG-8 bound, cascade-spelling falsification, F7 barred-cell
+scope question, falsify-by-removal sole-cause proof; cold Fable —
+stage-1-clean control-flow proof, spelling-collision (two producers),
+masking-latency explanation; concurrent sweep — RT-1 (intercepted the
+in-flight 7B-mint license neither in-session consultant could see);
+lead bench — two fix commits, clause-(d) re-record, byte-identical
+pinned replay, exit-status-masking recurrence self-caught. Fix rounds
+introduced defects twice more (data #11, #12). Both gauntlets held;
+the deviation escape and rule-11 gates fired as designed; the night's
+one claim-surface outcome is HONEST SHRINKAGE (CLAIMS_STATUS §1 =
+NONE under D-110) plus a proven-honest toolchain (byte-identical
+replay).

@@ -1,10 +1,15 @@
 # JouleWise
 
-> **🖥️ MACHINE: CHECKPOINTED — safe to move/use.** 2026-08-03 ~01:05
-> PT: session checkpointed for a machine move; no window in flight or
-> imminent, no agents running. Resume script: RUN_STATE.md. Window C
-> launches only after a fresh Ed §5A. This line updates only at
-> defined moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+> **🖥️ MACHINE: OVERNIGHT SESSION WRAPPING — non-claim characterization
+> captures may be running.** 2026-08-04 early AM: no claim window
+> tonight; no window in flight. This line updates only at defined
+> moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+>
+> **✅ T3 HANDOFF: READY** — point a NEW t3 thread at the top checkpoint
+> block of [`RUN_STATE.md`](RUN_STATE.md) (the
+> `2026-08-04 early AM — T3 HANDOFF` block) and it takes over as
+> magistrate. One open review branch and two operator acknowledgements
+> are listed in that block.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
@@ -25,18 +30,19 @@ completed its instrument repair (D-078 phase 0) and the repaired path has
 collected 229 strict members across four bracketed windows, a5-a8. Those
 windows are non-claim-bearing diagnostic, instrument-proving evidence, not
 published floors. The SCREEN+BUDGET rules are ratified and merged
-(D-078 clause 10; council C-033):
+(D-078 clause 10; council C-045):
 they screen gross and idle-subtracted energy separately, retain a nonzero
 drift allowance for each family, require a fresh 24-hour bound, reject
 fallback-clock members from floor cells, and bar mock evidence from claims.
 Five prospective quiet-machine windows have since passed under those rules
-(C, D, a10, the 7B floor window, and the contrast window), and on 2026-07-30
-the project published its first floor artifact: the 1.5B model's decode
-detection floor, **7.377086 J**, minted and mainline. The Splitwise
-head-to-head contrast (1.5B vs 7B decode) has been collected and passed
-every gate; its bookkeeping machinery landed 2026-08-02 and the headline
-number stays a preliminary observation until the 7B floors get their own
-mint (the last gate). The a8 re-verdict path is closed. The
+(C, D, a10, the 7B floor window, and the contrast window). The first floor
+artifact was minted on 2026-07-30, but D-110 has since made that mint
+**NON-CLAIM-BEARING until it is re-derived under the repaired calibration
+selector**. The Splitwise head-to-head contrast (1.5B vs 7B decode) has been
+collected and passed its collection and whole-window verdict gates; its
+bookkeeping machinery and generalized mint tooling are mainline, but D-110
+blocks claim use and the next floor mint until the ruled repair and remint
+conditions are satisfied. The a8 re-verdict path is closed. The
 project's framing is now metrology-centric (D-091): the measurement
 instrument itself is the product, and model comparisons are demonstrations
 of what it can resolve.
@@ -54,23 +60,23 @@ a Phase 5 deliverable.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
-and the project has its first real energy measurements** (2026-07-06). From a
+and the project has proved its live measurement path on real hardware**
+(2026-07-06). From a
 typed config, one command produces a complete, schema-valid, auditable run
 bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 `powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
-Apple M3 Max. **P2-003, gross energy — M3 Max / powermetrics SoC rails:**
-~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max /
-powermetrics SoC rails:** ~44.4 J per request and ~79-90 mJ per generated
-output token (mean 86.8 mJ). Throughput was 257 tok/s. These are legacy L1
-preliminary observations (pre-2M, manual review) under
-`docs/contracts/claims_ladder.md`; metric bases per
-`docs/contracts/token_normalization.md`. The six real corpus bundles pass `validate-bundle --strict`
+Apple M3 Max. The energy values originally reported from that corpus are
+**VOIDED permanently for claim use** because its power trace and workload
+events were joined through the defective pre-repair time anchor (D-078).
+They are not under re-adjudication and must not be quoted. The six real corpus
+bundles pass `validate-bundle --strict`
 read-only and unrewritten: strict re-derives the recorded powermetrics power
 trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
 requires shape-valid provenance for new-era bundles. This validates the
-recorded evidence path; it does not independently rerun the hardware session.
+recorded evidence path; it does not repair the physical time attribution or
+make the voided energy values usable.
 
 Unless a figure explicitly states otherwise, JouleWise uses gross measured
 energy within the named measurement boundary as the headline basis. Gross
@@ -109,35 +115,35 @@ the run-book: mint the drift bound inside the window, then collect a start
 triplet, midpoint reference, and end triplet around the science members. That
 protocol has now run five times and passed five times — windows C, D, a10, the
 7B floor window, and the contrast window — under the merged screening and
-uncertainty-budget rules (D-078 clause 10). Their product is the first minted
-floor artifact (1.5B decode, **7.377086 J**, mainline since 2026-07-30) and the
-7B floors, which remain prose-only until their own mint. The Splitwise contrast
-window collected clean and passed its verdict; the bookkeeping schema landed
-2026-08-02 and the gated claim now waits only on the 7B mint. The a8 retrospective path is closed, and the earlier
-222-bundle floor publication remains a caveated historical record. Use the
+uncertainty-budget rules (D-078 clause 10). Their first minted floor artifact
+is now **NON-CLAIM-BEARING under D-110** pending governed re-derivation and
+remint; the 7B floor mint and any gated contrast consumption wait on the same
+repair chain. The Splitwise contrast window collected clean and passed its
+verdict, but its diagnostic result is not a gated claim. The a8 retrospective path is closed, and the earlier
+222-bundle floor publication is a permanently voided historical record under
+D-078. Use the
 generated state kernel—not this summary—to select the next live or agent-lane
 step.
 
-A separate nine-bundle follow-on is now available as an explicitly
-**exploratory, unmatched, no-claim** observation block. All nine bundles are
-strict-valid and collection-usable but claim-evidence-flagged; each model ran
-three repetitions of the fixed five-item sentinel shape and emitted 1,280
-generated output tokens per bundle.
+A separate nine-bundle follow-on remains as a historical, unmatched
+instrument record. All nine bundles are strict-valid as stored evidence, but
+their energy values are **VOIDED permanently for claim use** by the same
+pre-repair time-anchor defect (D-078), not merely exploratory and not under
+re-adjudication. Each model ran three repetitions of the fixed five-item
+sentinel shape and emitted 1,280 generated output tokens per bundle.
 
-| unmatched configuration | mean gross suite energy — Apple M3 Max / powermetrics SoC rails (CPU + GPU + ANE) | mean gross energy/generated output token — same boundary | runtime-observed output throughput |
-|---|---:|---:|---:|
-| OLMoE-1B-7B BF16 | 229.028 J | 178.928 mJ/token | 122.361 tok/s |
-| Qwen3-4B INT4 | 362.772 J | 283.416 mJ/token | 106.519 tok/s |
-| Qwen3.5-122B-A10B INT4 | 1072.273 J | 837.713 mJ/token | 39.473 tok/s |
+| unmatched configuration | energy disposition | runtime-observed output throughput |
+|---|---|---:|
+| OLMoE-1B-7B BF16 | **VOIDED — time-anchor defect (D-078)** | 122.361 tok/s |
+| Qwen3-4B INT4 | **VOIDED — time-anchor defect (D-078)** | 106.519 tok/s |
+| Qwen3.5-122B-A10B INT4 | **VOIDED — time-anchor defect (D-078)** | 39.473 tok/s |
 
 These points differ in model scale, architecture, tokenizer, and
 quantization, so they do not establish a controlled scaling relation,
-architecture effect, or efficiency comparison. The stored per-generated-token
-field is idle-subtracted
-and appears only as D-067's labeled within-device secondary view in the
-[bundle-cited extraction](docs/process_traces/2026-07-17-exploratory-block/results.md),
-which also records spreads, every repetition, the floor comparison, and the
-Qwen thinking/config caveats.
+architecture effect, or efficiency comparison. The
+[bundle-cited extraction](docs/process_traces/2026-07-17-exploratory-block/results.md)
+preserves the original figures as historical evidence only; D-078 bars their
+quotation or claim use.
 
 Remaining backends plug into the same adapter interfaces: the fixture-first
 2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)

@@ -12,6 +12,7 @@ jobs:
       matrix:
         # 3.11 is the supported floor (pyproject); 3.14 matches local dev.
         python-version: ["3.11", "3.14"]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -26,7 +27,7 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)
-        run: python -m unittest discover -s tests -v
+        run: python scripts/shard_tests.py --shards 4 --index ${{ matrix.shard }}
       - name: CLI smoke - validate example configs
         run: |
           python -m joulewise validate-config configs/examples/mock_local.json

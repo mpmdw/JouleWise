@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1",
+  "run_id": "char-t3appup-20260804-r03",
+  "model": {
+    "name": "mock-null-workload",
+    "family": "mock",
+    "source": "mock://null",
+    "revision": "n/a",
+    "weight_format": "mock",
+    "context_window": 4096
+  },
+  "quantization": {
+    "name": "none",
+    "bits": 16
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mock",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "T3-CHAR-PAIR-01 app-UP arm. NON-CLAIM characterization: mock runtime so no model load perturbs the machine; real powermetrics telemetry so the IDLE window is a genuine instrument capture. The measured window is incidental \u2014 the object of interest is raw/powermetrics_idle.plist."
+  },
+  "workload_profile": {
+    "name": "null_mock_decode_for_idle_characterization",
+    "prompt_text": "characterization null workload",
+    "output_tokens": 3000,
+    "repetitions": 1,
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 300.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "fable-magistrate",
+    "tags": [
+      "characterization",
+      "non-claim",
+      "t3-char-pair-01",
+      "app-up"
+    ]
+  }
+}

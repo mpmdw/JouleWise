@@ -83,7 +83,7 @@ forward and superseded by the 2026-07-31 entry above).
 
 Prior refresh: 2026-07-25 (the then-CURRENT DEPLOYED BASELINE). Ed redeployed the
 capsule from merged main `c3e2647` (plus the same-day bookkeeping
-refresh: gauntlet run report, C-033, refreshed status surfaces, and the
+refresh: gauntlet run report, C-045, refreshed status surfaces, and the
 council-log capsule redirect) as `dep_2I04CG6tQ4t0mzY7`; the capsule
 configuration timestamp is 2026-07-25T02:44Z (the deployed page's own
 copy of this stamp may read one deploy older — stamp-then-deploy
@@ -99,7 +99,7 @@ Since the last deploy the repo gained: the merged repair PRs #79-#84,
 two nights of collection (229 members, four bracketed windows), the
 NEG-8 drift-gate redesign (debated, Ed-ratified, D-078 clauses 8-10),
 a new plain-language PROJECT_STATUS collection-era section, the
-2026-07-23 collection-arc run report, and council entries C-031/C-032.
+2026-07-23 collection-arc run report, and council entries C-043/C-044.
 Historical recommendation (fulfilled by the 2026-07-25 deployment):
 deploy at the next natural point. Ed deployed before the first
 claim-grade floor table because PR #85 and the capsule repair were

@@ -1,13 +1,29 @@
 # Capstone Scope And Headline Contract
 
 Status: binding scope contract for the capstone headline from 2026-07-09
-onward. It narrows reader-facing claims under `docs/contracts/claims_ladder.md`
-and composes with the cut ladder in `docs/risk_register.md` R-012.
+onward, amended 2026-07-30 by D-091. It narrows reader-facing claims under
+`docs/contracts/claims_ladder.md` and composes with the cut ladder in
+`docs/risk_register.md` R-012.
 
 Evidence inputs: `docs/reviews/2026-07-09-scientific-rigor-review.md`
 B4 and Appendix D Part C rows 1, 2, 3, and 10; `PROJECT_STATUS.md`
-two-track framing and Q1-Q6; `docs/contracts/claims_ladder.md`;
+D-091 metrology-centric framing and Q1-Q6; `docs/contracts/claims_ladder.md`;
 `docs/risk_register.md`; `docs/milestones.md`.
+
+## D-091 Amendment — 2026-07-30
+
+D-091 supersedes the original model-contrast-first ordering and every statement
+below that calls a filled benchmark matrix the capstone's end goal or primary
+scientific artifact. The binding scope is now a trustworthy measurement
+instrument plus demonstration studies: the instrument is the product, and the
+paper leads with its linearity, additivity, detection-limit, and drift-control
+evidence. Model contrasts, workload matrices, and split-inference experiments
+are vehicles for demonstrating what the instrument can and cannot resolve;
+they are not the capstone's completion criterion.
+
+The 2026-07-09 contribution-ladder text is retained below as history. Its
+matrix-as-end-goal and matrix-as-primary-artifact sentences are visibly marked
+superseded and carry no current scope authority.
 
 ## Frozen Headline Claim
 
@@ -49,7 +65,8 @@ reading into an auditable evidence pipeline. Its natural claim language is
 L0-L1, with L2 only after the comparison protocol is satisfied. Strict
 validation is artifact consistency, not physical validation.
 
-**Rung 2: scoped empirical coverage contribution.** I agree with Ed's
+**Rung 2: scoped empirical coverage contribution — ORIGINAL 2026-07-09;
+MATRIX-AS-END-GOAL LANGUAGE SUPERSEDED BY D-091.** I agree with Ed's
 2026-07-09 position in substance: once the workload suite expands along
 difficulty axes, the model set spans quantization and size axes, and the
 hardware targets span meaningful local stacks, the filled matrix itself is
@@ -76,10 +93,11 @@ evidence. If nature is boring or the floor absorbs the effects, the honest
 result is a matrix with `not resolvable` cells and a better measurement
 limit, not a failed capstone.
 
-I do not disagree with Ed's core novelty argument. The only correction is
-ordering: the filled matrix is the primary scientific artifact only after
-Rung 1 makes the cells interpretable. Auditability is not a substitute for
-novel empirical coverage; it is the warrant that lets the coverage count.
+**ORIGINAL 2026-07-09 ORDERING — SUPERSEDED BY D-091:** I do not disagree
+with Ed's core novelty argument. The only correction is ordering: the filled
+matrix is the primary scientific artifact only after Rung 1 makes the cells
+interpretable. Auditability is not a substitute for novel empirical coverage;
+it is the warrant that lets the coverage count.
 
 ## Minimum-Viable-Capstone Contract
 

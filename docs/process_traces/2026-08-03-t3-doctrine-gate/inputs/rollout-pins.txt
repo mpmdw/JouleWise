@@ -1,0 +1,5 @@
+# sha256 pins of the full rollout transcripts (persist in ~/.codex/sessions/2026/08/03/;
+# untracked loss-insurance copies in .desk/t3-doctrine-gate/). Final messages extracted alongside.
+16b03d0381747a4599906d100dde4f13d822f4c4fafe086417cc1628b54f7e99  rollout-2026-08-03T20-11-23-019fcac1-2511-7420-b623-a7ffa1950d44.jsonl  # design consult (recaps + adopts lost thread 019fca7c conclusions)
+f22e48da2e2cc8526aa1d16947871ddcd97bb0036822f5e1382debff95bb25bc  rollout-2026-08-03T21-15-48-019fcafc-1f59-7ec1-a814-297b9a5ed779.jsonl  # night-plan review (Sol high)
+7ffe06b2a17deb386a846f666f12987d797d93e87427b2aa7bfd0d1d050b0429  rollout-2026-08-03T21-32-32-019fcb0b-710c-75d2-8aaf-adb69680ea7d.jsonl  # native t3 thread gate exchange (originator: t3code_desktop)

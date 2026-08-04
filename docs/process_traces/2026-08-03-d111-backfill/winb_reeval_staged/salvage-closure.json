@@ -1,0 +1,710 @@
+{
+  "campaign_policy_sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
+  "closed_at": "2026-08-01T13:30:42.089400Z",
+  "custody_roots": [
+    "/Users/edr/code/JouleWise/runs_window_metrologyB_20260801",
+    "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine"
+  ],
+  "membership_binding_sha256": "349d5d260800662976cf38317c6af2a59b6000a55de13d5cf12a9d05484e76c5",
+  "occurrences": [
+    {
+      "evidence_paths": [
+        {
+          "path": "config.json",
+          "sha256": "b01949e79eb3e2f40d8b8071ecdee0cec0d6154781b1e28e068962f98d28ae0a",
+          "size": 1727
+        },
+        {
+          "path": "events.jsonl",
+          "sha256": "e080218b6bb8c12594f9eaf800f425992d3eee2f9798c98647dac3e0c6cf00d0",
+          "size": 1283
+        },
+        {
+          "path": "instrument_calibration/events.jsonl",
+          "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+          "size": 50287
+        },
+        {
+          "path": "instrument_calibration/instrument_evidence.json",
+          "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+          "size": 29958
+        },
+        {
+          "path": "instrument_calibration/manifest.json",
+          "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+          "size": 587
+        },
+        {
+          "path": "instrument_calibration/power_trace.csv",
+          "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+          "size": 432396
+        },
+        {
+          "path": "instrument_calibration/raw/powermetrics.plist",
+          "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+          "size": 87428332
+        },
+        {
+          "path": "logs/controller.log",
+          "sha256": "e354d5c97a9e1a81b28a315f87602f118e98b0d475b09220183fbbbad45496fd",
+          "size": 165
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+          "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+          "size": 161
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json",
+          "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+          "size": 141
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_plist.json",
+          "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+          "size": 131
+        },
+        {
+          "path": "logs/runtime.log",
+          "sha256": "046d6940680aef435b4dabbcce8af883eac52f4fdd95d719aa05119009d0d275",
+          "size": 93
+        },
+        {
+          "path": "logs/telemetry.log",
+          "sha256": "ce644829ded6cb93344e4d3a1255f0ce9dcb4f665036bab0f379d760395f3ead",
+          "size": 60
+        },
+        {
+          "path": "metadata.json",
+          "sha256": "1dafec24453baeac1f65f09d3cf8286e31092d46664dd327e88e8347381f3a85",
+          "size": 27256
+        },
+        {
+          "path": "power_trace.csv",
+          "sha256": "05d1fbe2505834aa92ee39ad06216c22886ee71fd4f55438b861d8a09cc769ee",
+          "size": 164672
+        },
+        {
+          "path": "raw/powermetrics.plist",
+          "sha256": "c9f010bb07901bc040d11f6c60dd021585dc5ecb370c1cf4bd48a6c8a2fc539c",
+          "size": 33603545
+        },
+        {
+          "path": "raw/powermetrics_idle.plist",
+          "sha256": "5bb8ae3aa28fdfc2d7cd7c00049592936c0326fff8bd390f1f77bee4b1a1cc96",
+          "size": 15765857
+        },
+        {
+          "path": "raw/powermetrics_idle_attempt_2.plist",
+          "sha256": "afb8d9d45f9e5687f449a6bceffa49e537f1fc3b0ac94128b1c14bc66655f252",
+          "size": 15786628
+        },
+        {
+          "path": "rich_telemetry.jsonl",
+          "sha256": "444f9a28da1f5eebea1a4189b4028e60159af8616dc93ef6611c6727f902c943",
+          "size": 4290993
+        },
+        {
+          "path": "rich_telemetry_idle.jsonl",
+          "sha256": "512c4cb13ae10fdd354e932af4a88a581005e6043725512219f931c910baa3eb",
+          "size": 2010153
+        },
+        {
+          "path": "rich_telemetry_idle_attempt_2.jsonl",
+          "sha256": "44ed09d474de50a93f4a532088c2c535772d87049f99af4ad6bdb9b4245e256e",
+          "size": 2017402
+        },
+        {
+          "path": "summary_metrics.json",
+          "sha256": "32d66523f5b3275969341a5a9fc8d4baf22223a93f09a1e1229ca1034cc8c01d",
+          "size": 1709
+        }
+      ],
+      "failure_signature_sha256": "9ae545544eb92282a0d28b41eb103ef155e7233c346aae1aaa821157179236a1",
+      "license_branch": "preworkload_environment_admission_abort",
+      "operator_deviations": [],
+      "quarantine_path": "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine/mtnull-o0512-b04-b2__20260801T113258Z",
+      "timestamp": "2026-08-01T11:30:40.330873Z"
+    },
+    {
+      "evidence_paths": [
+        {
+          "path": "config.json",
+          "sha256": "072d4a718f5bb60148fd0c3967352385eb2d76c46937ba0720b71d6dee895f7e",
+          "size": 1773
+        },
+        {
+          "path": "events.jsonl",
+          "sha256": "03b127353d0e8f5529ffc27421eec28ed3bee240c7aeb2f30d9baff1ba363638",
+          "size": 1283
+        },
+        {
+          "path": "instrument_calibration/events.jsonl",
+          "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+          "size": 50287
+        },
+        {
+          "path": "instrument_calibration/instrument_evidence.json",
+          "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+          "size": 29958
+        },
+        {
+          "path": "instrument_calibration/manifest.json",
+          "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+          "size": 587
+        },
+        {
+          "path": "instrument_calibration/power_trace.csv",
+          "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+          "size": 432396
+        },
+        {
+          "path": "instrument_calibration/raw/powermetrics.plist",
+          "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+          "size": 87428332
+        },
+        {
+          "path": "logs/controller.log",
+          "sha256": "7b4d3bc94f807670ec50ed879272ea04ccc59230c5fd5e9226458fabea22e343",
+          "size": 166
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+          "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+          "size": 161
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json",
+          "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+          "size": 141
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_plist.json",
+          "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+          "size": 131
+        },
+        {
+          "path": "logs/runtime.log",
+          "sha256": "56e7a2361da252007313e573ffc26e0f209f8423b2e57d05a8ad8f01e49db906",
+          "size": 93
+        },
+        {
+          "path": "logs/telemetry.log",
+          "sha256": "4931af52613a8f916201864434fc9bd6ee46b2166801095d3abfd3a6d647389e",
+          "size": 60
+        },
+        {
+          "path": "metadata.json",
+          "sha256": "2e79f40d9afafe8bb9d8cf976cb9e23a2bd0c9e2ea9fe7937c62f316c9785cf6",
+          "size": 27305
+        },
+        {
+          "path": "power_trace.csv",
+          "sha256": "81da346b383d8f49026a81cdd576ed64ce192e51595654a2bb6741dcf5ff30ca",
+          "size": 163318
+        },
+        {
+          "path": "raw/powermetrics.plist",
+          "sha256": "0045e609ab4196c78386d405020790e491b4c6ea1a37ae188c9648c01ca8d62a",
+          "size": 33340614
+        },
+        {
+          "path": "raw/powermetrics_idle.plist",
+          "sha256": "d2c2d36c078c964e3b2c32b7eb6baccb0b23022b715d3c77b94e8a2110b4b7e6",
+          "size": 15768564
+        },
+        {
+          "path": "raw/powermetrics_idle_attempt_2.plist",
+          "sha256": "76f56d2464a0faf59d258749d96187c8bb1dbc0842572ca3412aef2076cd080b",
+          "size": 15782793
+        },
+        {
+          "path": "rich_telemetry.jsonl",
+          "sha256": "59fc7afa8a1f33ca56eb882c4534e4e0fc7f4a94058b5f25a428a095e1321383",
+          "size": 4259243
+        },
+        {
+          "path": "rich_telemetry_idle.jsonl",
+          "sha256": "cba44554e6f3ecd7ce88d97613b71d536eecab35c0f72d9a1f84cce6e1813687",
+          "size": 2012536
+        },
+        {
+          "path": "rich_telemetry_idle_attempt_2.jsonl",
+          "sha256": "87319f4b55ac2cbc1267d6d8a5ec8ca9ed4ece707d62e884436837e92af7f3d0",
+          "size": 2016188
+        },
+        {
+          "path": "summary_metrics.json",
+          "sha256": "0ad920082e3082977a60a31d948a2122879ed2d3c63b346b8b9cd0ea4a00c624",
+          "size": 1720
+        }
+      ],
+      "failure_signature_sha256": "9ae545544eb92282a0d28b41eb103ef155e7233c346aae1aaa821157179236a1",
+      "license_branch": "preworkload_environment_admission_abort",
+      "operator_deviations": [],
+      "quarantine_path": "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine/mtadd-p2048o0128-r08__20260801T131705Z",
+      "timestamp": "2026-08-01T13:14:34.990670Z"
+    },
+    {
+      "evidence_paths": [
+        {
+          "path": "config.json",
+          "sha256": "072d4a718f5bb60148fd0c3967352385eb2d76c46937ba0720b71d6dee895f7e",
+          "size": 1773
+        },
+        {
+          "path": "events.jsonl",
+          "sha256": "7ea09d209c25240ada5777757020ec7ccc6a7b456ee79d145d463aeb66b957a2",
+          "size": 1283
+        },
+        {
+          "path": "instrument_calibration/events.jsonl",
+          "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+          "size": 50287
+        },
+        {
+          "path": "instrument_calibration/instrument_evidence.json",
+          "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+          "size": 29958
+        },
+        {
+          "path": "instrument_calibration/manifest.json",
+          "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+          "size": 587
+        },
+        {
+          "path": "instrument_calibration/power_trace.csv",
+          "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+          "size": 432396
+        },
+        {
+          "path": "instrument_calibration/raw/powermetrics.plist",
+          "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+          "size": 87428332
+        },
+        {
+          "path": "logs/controller.log",
+          "sha256": "601b1a9e26174ba1ee51254cbf314828783e9b4b7b982b431e8af6973143a8d1",
+          "size": 166
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+          "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+          "size": 161
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_idle_plist.json",
+          "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+          "size": 141
+        },
+        {
+          "path": "logs/custody/powermetrics-powermetrics_plist.json",
+          "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+          "size": 131
+        },
+        {
+          "path": "logs/runtime.log",
+          "sha256": "69951a229e0ef0a1ece445826424d78f4cfb249f593f5524874d4f4ee14f7e4b",
+          "size": 93
+        },
+        {
+          "path": "logs/telemetry.log",
+          "sha256": "ba11f2274c54271dc3ed221b20a5751ffc78529a26725a5bb175b63fa65f8a33",
+          "size": 60
+        },
+        {
+          "path": "metadata.json",
+          "sha256": "9b9d9a280820867ee5bc288a90668a8edf37c946a57f7da6235cb40c1f4f0b29",
+          "size": 27245
+        },
+        {
+          "path": "power_trace.csv",
+          "sha256": "84e7cd64348bbed5ad4ab98a9aac16556c6ba7d34b91e51465d27adda496a7c6",
+          "size": 165224
+        },
+        {
+          "path": "raw/powermetrics.plist",
+          "sha256": "658d6a6782f8fd5e2b583c93bee657096ac5016650fe02652c29aa601e3586fd",
+          "size": 33671658
+        },
+        {
+          "path": "raw/powermetrics_idle.plist",
+          "sha256": "2fe81dcbc1eeaded30204fca22965a482fdfd35a6f1fb25fda1096b4c4dce852",
+          "size": 15784107
+        },
+        {
+          "path": "raw/powermetrics_idle_attempt_2.plist",
+          "sha256": "08d0d3cefff3d247b0fa506968a490f64df85264fa3051cf23abe688bc13594a",
+          "size": 15782315
+        },
+        {
+          "path": "rich_telemetry.jsonl",
+          "sha256": "dbcb532346218802c7fd06503cfad4dcfb8fa8a2c40e4883efaf18f05e8a52e8",
+          "size": 4303071
+        },
+        {
+          "path": "rich_telemetry_idle.jsonl",
+          "sha256": "3a56cb69746dc04393c8da1f072e8cb6a7c2a0a9436f9a93028d94e8e50a793a",
+          "size": 2016244
+        },
+        {
+          "path": "rich_telemetry_idle_attempt_2.jsonl",
+          "sha256": "af543d4b6dc4fc3f3ca829ea3b9f451fa72fb37c4f9cb5ae65bd193a90bb61b2",
+          "size": 2015689
+        },
+        {
+          "path": "summary_metrics.json",
+          "sha256": "1765b6dc024f2dee35116cfad905b2db01d7acf101b436c66812b51f9b4c1390",
+          "size": 1690
+        }
+      ],
+      "failure_signature_sha256": "9ae545544eb92282a0d28b41eb103ef155e7233c346aae1aaa821157179236a1",
+      "license_branch": "preworkload_environment_admission_abort",
+      "operator_deviations": [
+        "D-099 clause 5: the operating session streamed its own post-arm status output during the member idle gate."
+      ],
+      "quarantine_path": "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine/mtadd-p2048o0128-r08__20260801T133315Z",
+      "timestamp": "2026-08-01T13:30:42.089400Z"
+    }
+  ],
+  "opened_at": "2026-08-01T11:30:40.330873Z",
+  "quarantine_manifest": [
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/config.json",
+      "sha256": "072d4a718f5bb60148fd0c3967352385eb2d76c46937ba0720b71d6dee895f7e",
+      "size": 1773
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/events.jsonl",
+      "sha256": "03b127353d0e8f5529ffc27421eec28ed3bee240c7aeb2f30d9baff1ba363638",
+      "size": 1283
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/instrument_calibration/events.jsonl",
+      "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+      "size": 50287
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/instrument_calibration/instrument_evidence.json",
+      "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+      "size": 29958
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/instrument_calibration/manifest.json",
+      "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+      "size": 587
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/instrument_calibration/power_trace.csv",
+      "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+      "size": 432396
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/instrument_calibration/raw/powermetrics.plist",
+      "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+      "size": 87428332
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/controller.log",
+      "sha256": "7b4d3bc94f807670ec50ed879272ea04ccc59230c5fd5e9226458fabea22e343",
+      "size": 166
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+      "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+      "size": 161
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/custody/powermetrics-powermetrics_idle_plist.json",
+      "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+      "size": 141
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/custody/powermetrics-powermetrics_plist.json",
+      "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+      "size": 131
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/runtime.log",
+      "sha256": "56e7a2361da252007313e573ffc26e0f209f8423b2e57d05a8ad8f01e49db906",
+      "size": 93
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/logs/telemetry.log",
+      "sha256": "4931af52613a8f916201864434fc9bd6ee46b2166801095d3abfd3a6d647389e",
+      "size": 60
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/metadata.json",
+      "sha256": "2e79f40d9afafe8bb9d8cf976cb9e23a2bd0c9e2ea9fe7937c62f316c9785cf6",
+      "size": 27305
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/power_trace.csv",
+      "sha256": "81da346b383d8f49026a81cdd576ed64ce192e51595654a2bb6741dcf5ff30ca",
+      "size": 163318
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/raw/powermetrics.plist",
+      "sha256": "0045e609ab4196c78386d405020790e491b4c6ea1a37ae188c9648c01ca8d62a",
+      "size": 33340614
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/raw/powermetrics_idle.plist",
+      "sha256": "d2c2d36c078c964e3b2c32b7eb6baccb0b23022b715d3c77b94e8a2110b4b7e6",
+      "size": 15768564
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/raw/powermetrics_idle_attempt_2.plist",
+      "sha256": "76f56d2464a0faf59d258749d96187c8bb1dbc0842572ca3412aef2076cd080b",
+      "size": 15782793
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/rich_telemetry.jsonl",
+      "sha256": "59fc7afa8a1f33ca56eb882c4534e4e0fc7f4a94058b5f25a428a095e1321383",
+      "size": 4259243
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/rich_telemetry_idle.jsonl",
+      "sha256": "cba44554e6f3ecd7ce88d97613b71d536eecab35c0f72d9a1f84cce6e1813687",
+      "size": 2012536
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/rich_telemetry_idle_attempt_2.jsonl",
+      "sha256": "87319f4b55ac2cbc1267d6d8a5ec8ca9ed4ece707d62e884436837e92af7f3d0",
+      "size": 2016188
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T131705Z/summary_metrics.json",
+      "sha256": "0ad920082e3082977a60a31d948a2122879ed2d3c63b346b8b9cd0ea4a00c624",
+      "size": 1720
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/config.json",
+      "sha256": "072d4a718f5bb60148fd0c3967352385eb2d76c46937ba0720b71d6dee895f7e",
+      "size": 1773
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/events.jsonl",
+      "sha256": "7ea09d209c25240ada5777757020ec7ccc6a7b456ee79d145d463aeb66b957a2",
+      "size": 1283
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/instrument_calibration/events.jsonl",
+      "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+      "size": 50287
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/instrument_calibration/instrument_evidence.json",
+      "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+      "size": 29958
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/instrument_calibration/manifest.json",
+      "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+      "size": 587
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/instrument_calibration/power_trace.csv",
+      "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+      "size": 432396
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/instrument_calibration/raw/powermetrics.plist",
+      "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+      "size": 87428332
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/controller.log",
+      "sha256": "601b1a9e26174ba1ee51254cbf314828783e9b4b7b982b431e8af6973143a8d1",
+      "size": 166
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+      "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+      "size": 161
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/custody/powermetrics-powermetrics_idle_plist.json",
+      "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+      "size": 141
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/custody/powermetrics-powermetrics_plist.json",
+      "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+      "size": 131
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/runtime.log",
+      "sha256": "69951a229e0ef0a1ece445826424d78f4cfb249f593f5524874d4f4ee14f7e4b",
+      "size": 93
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/logs/telemetry.log",
+      "sha256": "ba11f2274c54271dc3ed221b20a5751ffc78529a26725a5bb175b63fa65f8a33",
+      "size": 60
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/metadata.json",
+      "sha256": "9b9d9a280820867ee5bc288a90668a8edf37c946a57f7da6235cb40c1f4f0b29",
+      "size": 27245
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/power_trace.csv",
+      "sha256": "84e7cd64348bbed5ad4ab98a9aac16556c6ba7d34b91e51465d27adda496a7c6",
+      "size": 165224
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/raw/powermetrics.plist",
+      "sha256": "658d6a6782f8fd5e2b583c93bee657096ac5016650fe02652c29aa601e3586fd",
+      "size": 33671658
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/raw/powermetrics_idle.plist",
+      "sha256": "2fe81dcbc1eeaded30204fca22965a482fdfd35a6f1fb25fda1096b4c4dce852",
+      "size": 15784107
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/raw/powermetrics_idle_attempt_2.plist",
+      "sha256": "08d0d3cefff3d247b0fa506968a490f64df85264fa3051cf23abe688bc13594a",
+      "size": 15782315
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/rich_telemetry.jsonl",
+      "sha256": "dbcb532346218802c7fd06503cfad4dcfb8fa8a2c40e4883efaf18f05e8a52e8",
+      "size": 4303071
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/rich_telemetry_idle.jsonl",
+      "sha256": "3a56cb69746dc04393c8da1f072e8cb6a7c2a0a9436f9a93028d94e8e50a793a",
+      "size": 2016244
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/rich_telemetry_idle_attempt_2.jsonl",
+      "sha256": "af543d4b6dc4fc3f3ca829ea3b9f451fa72fb37c4f9cb5ae65bd193a90bb61b2",
+      "size": 2015689
+    },
+    {
+      "path": "mtadd-p2048o0128-r08__20260801T133315Z/summary_metrics.json",
+      "sha256": "1765b6dc024f2dee35116cfad905b2db01d7acf101b436c66812b51f9b4c1390",
+      "size": 1690
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/config.json",
+      "sha256": "b01949e79eb3e2f40d8b8071ecdee0cec0d6154781b1e28e068962f98d28ae0a",
+      "size": 1727
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/events.jsonl",
+      "sha256": "e080218b6bb8c12594f9eaf800f425992d3eee2f9798c98647dac3e0c6cf00d0",
+      "size": 1283
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/instrument_calibration/events.jsonl",
+      "sha256": "33f78ee6e299643d8f5929fc2e339f3e13959eb6983a7db8b8af4bd936a0700d",
+      "size": 50287
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/instrument_calibration/instrument_evidence.json",
+      "sha256": "c1653f369e05e9186d0c6d06231993575ee23c1fd813b96f1094d74dfbaac0ad",
+      "size": 29958
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/instrument_calibration/manifest.json",
+      "sha256": "7d2967b125324c65e0d57a16950a0e1c2e2946464b7eb89667e8fc2410550149",
+      "size": 587
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/instrument_calibration/power_trace.csv",
+      "sha256": "ecc4c505bf6bd859fa047f4a74bedf6c82f6246946faad6b1706f91d8f5d2dfc",
+      "size": 432396
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/instrument_calibration/raw/powermetrics.plist",
+      "sha256": "f1a9350cbfdb0ec4c0a909b5d2b77798e16f754132499602b426a1068274465f",
+      "size": 87428332
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/controller.log",
+      "sha256": "e354d5c97a9e1a81b28a315f87602f118e98b0d475b09220183fbbbad45496fd",
+      "size": 165
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/custody/powermetrics-powermetrics_idle_attempt_2_plist.json",
+      "sha256": "fde26cc340b169e5c1310cf3ea4f07ca367a41ace4c56748a129b18b8e7b533c",
+      "size": 161
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/custody/powermetrics-powermetrics_idle_plist.json",
+      "sha256": "6c209aa4592a7f73773bc7f54fb401145ebaa293387baab61e11cab71812f672",
+      "size": 141
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/custody/powermetrics-powermetrics_plist.json",
+      "sha256": "be41d6b8ab2c0191037e56eda057272c20f059853f0cee0ec7970b0e74e539e3",
+      "size": 131
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/runtime.log",
+      "sha256": "046d6940680aef435b4dabbcce8af883eac52f4fdd95d719aa05119009d0d275",
+      "size": 93
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/logs/telemetry.log",
+      "sha256": "ce644829ded6cb93344e4d3a1255f0ce9dcb4f665036bab0f379d760395f3ead",
+      "size": 60
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/metadata.json",
+      "sha256": "1dafec24453baeac1f65f09d3cf8286e31092d46664dd327e88e8347381f3a85",
+      "size": 27256
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/power_trace.csv",
+      "sha256": "05d1fbe2505834aa92ee39ad06216c22886ee71fd4f55438b861d8a09cc769ee",
+      "size": 164672
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/raw/powermetrics.plist",
+      "sha256": "c9f010bb07901bc040d11f6c60dd021585dc5ecb370c1cf4bd48a6c8a2fc539c",
+      "size": 33603545
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/raw/powermetrics_idle.plist",
+      "sha256": "5bb8ae3aa28fdfc2d7cd7c00049592936c0326fff8bd390f1f77bee4b1a1cc96",
+      "size": 15765857
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/raw/powermetrics_idle_attempt_2.plist",
+      "sha256": "afb8d9d45f9e5687f449a6bceffa49e537f1fc3b0ac94128b1c14bc66655f252",
+      "size": 15786628
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/rich_telemetry.jsonl",
+      "sha256": "444f9a28da1f5eebea1a4189b4028e60159af8616dc93ef6611c6727f902c943",
+      "size": 4290993
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/rich_telemetry_idle.jsonl",
+      "sha256": "512c4cb13ae10fdd354e932af4a88a581005e6043725512219f931c910baa3eb",
+      "size": 2010153
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/rich_telemetry_idle_attempt_2.jsonl",
+      "sha256": "44ed09d474de50a93f4a532088c2c535772d87049f99af4ad6bdb9b4245e256e",
+      "size": 2017402
+    },
+    {
+      "path": "mtnull-o0512-b04-b2__20260801T113258Z/summary_metrics.json",
+      "sha256": "32d66523f5b3275969341a5a9fc8d4baf22223a93f09a1e1229ca1034cc8c01d",
+      "size": 1709
+    }
+  ],
+  "quarantine_root": "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine",
+  "quarantine_roots": [
+    "/Users/edr/JouleWise-window-custody/window_metrologyB_20260801/quarantine"
+  ],
+  "runs_root": "/Users/edr/code/JouleWise/runs_window_metrologyB_20260801",
+  "schema_version": "joulewise.salvage_closure.v1",
+  "terminal_occurrence_index": 2
+}

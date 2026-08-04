@@ -29,3 +29,5 @@ site_capsule/node_modules/
 /node_modules/
 /runs_recal*/
 /runs_window_*/
+.desk/
+CLAUDE.local.md

@@ -8,20 +8,33 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-02** (gauntlet CLOSED — PR #93; standing scans
-lifted; prior refresh post-D-100; report:
-`docs/run_reports/2026-08-01-desk-adjudication-session.md`; the window
-B collection report remains `2026-08-01-metrology-window-b.md`).
+Last updated: **2026-08-03 night** (16h-runway checkpoint: D-108/D-109
+ruled + executed; **D-110 makes mint #1 retroactively NON-CLAIM-BEARING**;
+window B re-evaluation STOPPED at the deviation escape → D-112 (license
+exhausted as drawn, r06 disposition parked for Ed); mint-1 re-derivability
+proven byte-identical at the pinned commit; report:
+`docs/run_reports/2026-08-03-16h-runway.md`).
 
 ---
 
 ## 1. VALID — minted, mainline, citable
 
-| Claim | Value | Basis | Notes |
-|---|---|---|---|
-| **Operative decode detection floor (Qwen2.5-1.5B MLX)** | **7.377086 J** | Mint #1 `df-ph-decode-floor-mint1.json`, mainline (PR #88, D-088 conditioned license) | Cell composes a10's absolute component with window C's comparative; gate is the **max, never the sum** (W3 rule 8, D-084). Validator clean. |
-| Absolute floor components (a10, LABELLED) | 3.823787 J prefill / 3.592138 J decode | Window a10, verdict PASSED | Components **in isolation**, incl. 0.652272 J drift allowance. 3.592138 is NOT the operative decode floor (D-084). |
-| Comparative floor component (window C) | 7.377086 J decode | Window C, verdict PASSED (first passing comparative window) | Published LABELLED per D-078 cl.11. |
+**NONE at this checkpoint.** D-110 (2026-08-03, sweep finding RT-1)
+made mint #1 and every number derived from it retroactively
+non-claim-bearing: its floors embed a never-zero allowance of ZERO
+where D-102 pin 3 mandates +max(drift, 0.010818 s) (~+43% on the a10
+operative bound). The previously-listed values (operative 7.377086 J;
+a10 components 3.823787 / 3.592138 J; window C comparative 7.377086 J)
+move to §5 until the re-mint. The DERIVATION toolchain itself is
+proven honest: the full pinned replay (2026-08-03) reproduced both
+extraction reports, the artifact, and the statement BYTE-IDENTICAL
+(`docs/process_traces/2026-08-03-q1-remint-bytecompare/`). The taint is
+semantic (the selector the era used), not derivational. Re-mint
+conditions: D-109 implementation lands (branch held at `2e61ff9`, one
+audit blocker outstanding) + acceptance-artifact issuance (verified R2
+backfill) + validator `evidence_root_id` pin widening (DC-2). All four
+PASSED window verdicts remain untainted (sweep RT-5; the 0.010 cliff is
+strictly tighter than the ruled screen).
 
 **Standing measurement fact (D-078 cl.11, Ed-ratified):** the instrument
 is attribution-limited (~1 J), not noise-limited (~0.3 J). Floors
@@ -33,8 +46,8 @@ instrument-tightening program.
 
 | Candidate claim | Value (prose-only until gated) | Window / verdict | Blocker |
 |---|---|---|---|
-| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | `MINT-GENERALIZE-01` (the mint itself): UNBLOCKED 2026-08-02 — the gauntlet closed with commit 3 (PR #93) and the D-088 no-mint condition lifted; the mint run is the remaining step. |
-| **1.5B-vs-7B decode contrast** (demonstration study #1) | 7B−1.5B per-block 146.730349 J, σ 0.241 J, n=10 ABBA blocks (~600× block scatter, ~10–20× the floors) | `window_contrast_20260730`, **PASSED** | The D-095 chain, in order: gauntlet commit 3 (D-097, PR #93 MERGED 2026-08-02) → MANIFEST-CONTRAST v3 (PR #95 MERGED 2026-08-02) → multi-cell mint (`MINT-GENERALIZE-01`, the remaining gate) → gated claim. Diagnostic is quotable as prose, never as a gated claim. |
+| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | **HARD-BLOCKED by D-110** (RT-2 dependency edge): CAL-BRACKET-D079-01 must land (held at `2e61ff9`, one audit blocker B1 outstanding; round 2 needs its rule-11 gate) + acceptance-artifact issuance + validator pin widening — THEN the governed mint. The 2026-08-03 night consult's conditional mint license is SUSPENDED on the record. |
+| **1.5B-vs-7B decode contrast** (demonstration study #1) | **Registered claim metric (frozen v3 manifest): `phase_energy_j.decode`, 7B−1.5B = 141.29 J per block.** The widely-quoted 146.730349 J (σ 0.241 J, n=10 ABBA) is the `idle_subtracted_energy_j` whole-request DIAGNOSTIC — quote it only labelled as such, never as the claim (sweep DC-1; both reproduce byte-exactly from disk). | `window_contrast_20260730`, **PASSED** | The D-095 chain now runs THROUGH the D-110 re-mint: v3 manifest merged (PR #95) → mint #1 re-mint + multi-cell mint under the repaired selector (`MINT-GENERALIZE-01`, D-110-blocked) → gated claim. |
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
 
@@ -49,25 +62,33 @@ default consumption. Outcomes per window:
   binds a T1-incompatible power-policy identity (immutable evidence; the
   machinery's rejection was CORRECT), so no calibration bracket can ever
   form. C1 re-collects in a future window.
-- **Window B: re-evaluation HARD-BLOCKED on `D100-BII-BINDING-01`
-  (D-106 clause 3, 2026-08-02).** The D-100 repair itself LANDED
-  (`MET-DANGLER-DISPOSITION-01`, PR #94 at audited head `05d99b6`,
-  three independent audits + verdict CI green), but D-106 ruled the
-  b-ii capture-identity residual DECIDABLE and blocked re-evaluation
-  until its two fixes (interval containment, custody digest freeze,
-  plus nested-content closure and the runbook condition-3 re-record
-  with the repaired tool) close as one audited commit. The 2026-08-01
-  manual (b-ii) verification does NOT satisfy this — D-106 requires
-  re-recording with the repaired tool and per-file digests. Then: the
-  D-093 cl.4 scan; a frozen byte-identical corpus. Any surprise
-  condition returns to a cold gate.
+- **Window B: re-evaluation ATTEMPTED 2026-08-03 under the full license
+  and STOPPED correctly — still non-claim-bearing; the license is
+  EXHAUSTED AS DRAWN (D-112); the next move is Ed's (parked ruling,
+  `WINB-R06-DISPOSITION-01`).** The whole chain executed: D-108 ruled
+  (clause (c) retired), row `D100-BII-BINDING-01` CLOSED (PR #99 +
+  clause-(d) three-occurrence digest-bound re-record), closure +
+  membership-binding artifacts authored and dry-authorized, D-093 scan
+  clean 1/1, frozen corpus verified byte-identical (210+4 files, zero
+  mismatches). The governed re-evaluation then REFUSED pre-verdict:
+  survivor consumption failed on `mtadd-p2048o0128-r06`'s
+  collection-time clock-anchor failure (`native_intersection_empty`) —
+  the cold gate ruled this CORRECT fail-closed machinery (classification
+  (i), convergent instruments; record
+  `docs/process_traces/2026-08-03-winB-reeval-stop/`). No licensed
+  channel removes r06 (exclusion cap spent on r08; not a dangler;
+  waivers forbidden), and the NEG-8 drift bound expired 2026-08-02, so
+  no PASS path exists under the license as drawn. Original FAILED
+  verdict untouched. Ed owes (D-112 clause 4): the r06 removal channel,
+  the F7 barred-cell scope question, and fresh-bound authorization —
+  or formal abandonment in favor of window C re-collection.
 
 | Paper claim | Campaign | Collected | State after D-100 |
 |---|---|---|---|
 | **C1 — linearity** | `linearity_ramp` | **40/40** (window A) | DEAD for claims (window A permanent FAIL); re-collect (window C/D); data usable as design input (micro_delta slope) + corroboration diagnostics only |
-| **C2 — null ladder** | `null_ladder` | o0128 + o0512 **complete** (window B); o2048 → window C | Licensable IF window B's re-evaluation passes under D-100 (cells min_n=5, complete) |
+| **C2 — null ladder** | `null_ladder` | o0128 + o0512 **complete** (window B); o2048 → window C | BLOCKED on the D-112-parked r06 disposition (WINB-R06-DISPOSITION-01): the re-evaluation license is exhausted as drawn; alternative path = window C re-collection |
 | **C3 — micro-delta** | `micro_delta` | not collected | Plan is draft-pending-slope by design; slope fit may consume window A ramp as DESIGN input (not a claim) |
-| **C4 — additivity** | `additivity_shapes` | **23/24 single-root** (window B) + 21/24 corroborating (window A) | The three `p2048-o0128` cells are BARRED regardless (frozen min_n=8, r08 named, 7 present) — that shape re-collects in window C; the other six cells (two shapes, 8/8) licensable IF the re-evaluation passes |
+| **C4 — additivity** | `additivity_shapes` | **23/24 single-root** (window B) + 21/24 corroborating (window A) | The three `p2048-o0128` cells are BARRED regardless (frozen min_n=8, r08 named, 7 present) — that shape re-collects in window C; the other six cells (two shapes, 8/8) BLOCKED the same way (D-112: one barred-cell member currently voids whole-window consumption — the F7 scope question is part of the parked ruling) |
 | **C5 — long holds** | `long_holds` | not collected → window C | — |
 
 ## 4. Standing gates on EVERY claim consumption
@@ -89,6 +110,18 @@ default consumption. Outcomes per window:
 
 ## 5. DO NOT QUOTE — retired, void, or wrong-as-stated
 
+- **ALL mint #1 floors as claims (D-110, 2026-08-03): operative
+  7.377086 J, a10 components 3.823787 / 3.592138 J, window C
+  comparative 7.377086 J** — retroactively non-claim-bearing (zero
+  allowance where D-102 pin 3 mandates +max(drift, 0.010818 s));
+  citable again only after the ruled re-mint under the repaired
+  selector.
+- **146.730349 J as "the contrast claim"** — it is the
+  idle_subtracted_energy_j whole-request diagnostic; the registered
+  claim metric is phase_energy_j.decode = 141.29 J (sweep DC-1). Either
+  number only as prose with its metric named, neither as a gated claim
+  yet.
+
 - **3.17 / 2.94 J** floors — pre-allowance attribution-width
   diagnostics only (D-079 cl.5).
 - **3.592138 J as "the decode floor"** — it is the isolated absolute
@@ -101,9 +134,7 @@ default consumption. Outcomes per window:
 - All pre-repair (pre-D-078) powermetrics corpora for claim use —
   time-anchor defect (D-078 soundness gate).
 - Window A/B metrology numbers as claims — see §3 (verdicts FAILED as
-  issued; window A permanently dead for claims; window B only via the
-  D-100-licensed re-evaluation, which is hard-blocked on
-  `D100-BII-BINDING-01` per D-106 and not yet performed).
+  issued; window A permanently dead for claims; window B only via a NEW Ed ruling (D-112: the re-evaluation was performed 2026-08-03 and correctly refused; license exhausted as drawn).
 - **Window A C1 linearity figures in any claim context** — the corpus
   is design-input/diagnostic only, permanently (D-100 + the immutable
   T1-incompatible retry).

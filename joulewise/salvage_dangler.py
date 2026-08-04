@@ -4,6 +4,13 @@ This module deliberately does not read the campaign log.  Every fact that can
 license the exceptional disposition is re-derived from immutable closure and
 bundle bytes.  Callers may append a new verdict under the dedicated
 consumption semantic; they may never rewrite the failed source attempts.
+
+Row D100-BII-BINDING-01 remains open under D-108.  Its b-ii mechanical
+license gate is (a) telemetry interval containment, (b) the hash-sealed
+closure-manifest pin, and (d) the lead-reserved digest-bound re-record over
+all three D-087 occurrences.  Clause (c)'s nested-content grammar is retired;
+the zero-output-bytes predicate is mechanically unreachable and carries no
+license load.
 """
 
 from __future__ import annotations
@@ -34,6 +41,19 @@ _REQUIRED_BUNDLE_FILES = (
     "summary_metrics.json",
     "events.jsonl",
     "power_trace.csv",
+)
+_PRODUCER_BUNDLE_FILES = frozenset(
+    {
+        "logs/controller.log",
+        "logs/runtime.log",
+        "logs/telemetry.log",
+        "raw/powermetrics.plist",
+        "instrument_calibration/events.jsonl",
+        "instrument_calibration/instrument_evidence.json",
+        "instrument_calibration/manifest.json",
+        "instrument_calibration/power_trace.csv",
+        "instrument_calibration/raw/powermetrics.plist",
+    }
 )
 _MINIMAL_TELEMETRY_ROW_FIELDS = frozenset(
     {"index", "timestamp_s", "processor_combined_power_w"}
@@ -257,6 +277,38 @@ def _enumerate_artifacts(bundle_path: Path) -> list[dict[str, Any]]:
     return sorted(descriptors, key=lambda row: row["path"])
 
 
+def _validated_digest_manifest(
+    value: object, *, label: str
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise SalvageAuthorizationError(f"{label} is malformed")
+    normalized: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for row in value:
+        if not isinstance(row, Mapping) or set(row) != {"path", "sha256", "size"}:
+            raise SalvageAuthorizationError(f"{label} is malformed")
+        path = row.get("path")
+        size = row.get("size")
+        if (
+            not isinstance(path, str)
+            or not path
+            or Path(path).is_absolute()
+            or ".." in Path(path).parts
+            or path in seen_paths
+            or not _sha256_text(row.get("sha256"))
+            or isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 0
+        ):
+            raise SalvageAuthorizationError(f"{label} is malformed")
+        seen_paths.add(path)
+        normalized.append({key: row[key] for key in ("path", "sha256", "size")})
+    normalized.sort(key=lambda row: row["path"])
+    if value != normalized:
+        raise SalvageAuthorizationError(f"{label} is not canonical")
+    return normalized
+
+
 def _jsonl_rows(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
@@ -437,41 +489,6 @@ def _validate_admission_telemetry(path: Path) -> list[float]:
     return timestamps
 
 
-def _contains_workload_evidence(value: object) -> bool:
-    """Reject result-shaped bytes from admission-only evidence structures."""
-
-    if isinstance(value, Mapping):
-        for key, child in value.items():
-            normalized = str(key).lower()
-            if child is not None and (
-                normalized in _MEASURAND_FIELDS
-                or normalized.startswith("workload_")
-                or "token_count" in normalized
-                or normalized in {
-                    "measurement_result",
-                    "request_result",
-                    "runtime_result",
-                    "generated_text",
-                }
-            ):
-                return True
-            if normalized == "phase" and (
-                not isinstance(child, str)
-                or (
-                    child
-                    not in {"run", "validate", "prepare", "idle_baseline", "launcher"}
-                    and not child.startswith("before_attempt_")
-                )
-            ):
-                return True
-            if _contains_workload_evidence(child):
-                return True
-        return False
-    if isinstance(value, list):
-        return any(_contains_workload_evidence(child) for child in value)
-    return False
-
-
 def _validate_bundle_config(config: Mapping[str, Any]) -> None:
     """Accept only a complete schema-0.1 config or the closed test-safe shape."""
 
@@ -510,7 +527,23 @@ def _expected_idle_artifact_sets(metadata: Mapping[str, Any]) -> tuple[set[str],
     }
     compact = set(_REQUIRED_BUNDLE_FILES) | {"rich_telemetry.jsonl"}
     complete = compact | idle_telemetry
-    return (compact, complete)
+    raw_idle = {
+        "raw/powermetrics_idle.plist"
+        if attempt == 1
+        else f"raw/powermetrics_idle_attempt_{attempt}.plist"
+        for attempt in range(1, len(attempts) + 1)
+    }
+    custody = {
+        "logs/custody/powermetrics-powermetrics_plist.json",
+        *(
+            "logs/custody/powermetrics-"
+            + Path(name).name.replace(".", "_")
+            + ".json"
+            for name in raw_idle
+        ),
+    }
+    production = complete | set(_PRODUCER_BUNDLE_FILES) | raw_idle | custody
+    return (compact, complete, production)
 
 
 def _validate_idle_artifact_inventory(
@@ -545,7 +578,7 @@ def _validate_idle_artifact_inventory(
         if all(path.startswith("rich_telemetry") for path in duplicate_paths):
             raise SalvageAuthorizationError("duplicate telemetry content")
         raise SalvageAuthorizationError("duplicate allowlisted artifact content")
-    return sorted(actual - set(_REQUIRED_BUNDLE_FILES))
+    return sorted(name for name in actual if name.startswith("rich_telemetry"))
 
 
 def _resolved_directory_root(value: str | Path, *, label: str) -> Path:
@@ -577,10 +610,11 @@ def _raw_file_contains_identity(path: Path, identities: Sequence[bytes]) -> bool
             tail = candidate[-overlap:] if overlap else b""
 
 
-def _telemetry_last_timestamp(
+def _telemetry_timestamp_bounds(
     bundle_path: Path, rich_telemetry_names: Sequence[str]
-) -> float:
+) -> tuple[float, float]:
     timestamps: list[float] = []
+    power_row_ends: list[float] = []
     power_path = bundle_path / "power_trace.csv"
     try:
         with power_path.open("r", encoding="utf-8", newline="") as handle:
@@ -626,12 +660,13 @@ def _telemetry_last_timestamp(
             raise SalvageAuthorizationError(
                 "power trace contains non-admission telemetry"
             )
-        timestamps.append(max(timestamp, interval_end))
-    if timestamps != sorted(timestamps):
+        timestamps.extend((timestamp, interval_start, interval_end))
+        power_row_ends.append(max(timestamp, interval_end))
+    if power_row_ends != sorted(power_row_ends):
         raise SalvageAuthorizationError("power trace timestamps are unordered")
     for name in rich_telemetry_names:
         timestamps.extend(_validate_admission_telemetry(bundle_path / name))
-    return max(timestamps)
+    return min(timestamps), max(timestamps)
 
 
 def _inspect_preworkload_abort(
@@ -650,8 +685,6 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError("metadata contains unclassifiable fields")
     if metadata.get("config_warnings") not in (None, []):
         raise SalvageAuthorizationError("metadata contains config warnings")
-    if _contains_workload_evidence(metadata):
-        raise SalvageAuthorizationError("metadata contains workload evidence")
     if any(not set(row).issubset(_EVENT_FIELDS) for row in events):
         raise SalvageAuthorizationError("event stream contains unclassifiable fields")
     if any(
@@ -679,9 +712,6 @@ def _inspect_preworkload_abort(
         raise SalvageAuthorizationError(
             "unexpected event or stage_started outside the closed idle-abort sequence"
         )
-    if _contains_workload_evidence(events):
-        raise SalvageAuthorizationError("event stream contains workload evidence")
-
     started = [
         row.get("phase")
         for row in events
@@ -729,8 +759,6 @@ def _inspect_preworkload_abort(
             "unknown non-null failed-summary fields: "
             + ", ".join(sorted(unknown_nonnull))
         )
-    if _contains_workload_evidence(summary):
-        raise SalvageAuthorizationError("failed attempt contains workload evidence")
     failure_reason = summary.get("failure_reason")
     event_reason = failures[0].get("metadata")
     event_reason = (
@@ -743,11 +771,20 @@ def _inspect_preworkload_abort(
     if event_reason != failure_reason:
         raise SalvageAuthorizationError("event and summary failure reasons disagree")
 
-    telemetry_last = _telemetry_last_timestamp(path, rich_telemetry_names)
+    telemetry_first, telemetry_last = _telemetry_timestamp_bounds(
+        path, rich_telemetry_names
+    )
     teardown_s = telemetry_last - failure_timestamp
-    if teardown_s > TEARDOWN_BOUND_S + 1e-9:
+    run_started_timestamp = float(event_timestamps[0])
+    # Concurrent captures inside this interval remain a recorded limitation;
+    # telemetry rows carry no capture identity, so no cadence heuristic is used.
+    if (
+        telemetry_first < run_started_timestamp - 1e-9
+        or telemetry_last > failure_timestamp + TEARDOWN_BOUND_S + 1e-9
+    ):
         raise SalvageAuthorizationError(
-            f"telemetry exceeds the {TEARDOWN_BOUND_S:.3f} s teardown bound"
+            "telemetry interval falls outside run_started through the "
+            f"{TEARDOWN_BOUND_S:.3f} s teardown bound"
         )
     signature_payload = {
         "license_branch": "preworkload_environment_admission_abort",
@@ -762,6 +799,7 @@ def _inspect_preworkload_abort(
         "terminal_stage": "idle_baseline",
         "failure_reason": failure_reason,
         "failure_timestamp_s": failure_timestamp,
+        "telemetry_first_timestamp_s": telemetry_first,
         "telemetry_last_timestamp_s": telemetry_last,
         "teardown_s": teardown_s,
         "failure_signature_sha256": _canonical_sha256(signature_payload),
@@ -1027,6 +1065,35 @@ def load_salvage_closure(
         and occurrence.get("license_branch") == "launcher_refusal_zero_bytes"
         for occurrence in occurrences
     )
+    has_preworkload_abort = any(
+        isinstance(occurrence, Mapping)
+        and occurrence.get("license_branch")
+        == "preworkload_environment_admission_abort"
+        for occurrence in occurrences
+    )
+    quarantine_root: Path | None = None
+    if has_preworkload_abort:
+        quarantine_root_value = value.get("quarantine_root")
+        if not isinstance(quarantine_root_value, str) or not quarantine_root_value:
+            raise SalvageAuthorizationError("closure quarantine root is malformed")
+        quarantine_root = _resolved_directory_root(
+            quarantine_root_value, label="closure quarantine root"
+        )
+        resolved_custody = [
+            _resolved_directory_root(root, label="closure custody root")
+            for root in custody_roots
+        ]
+        if quarantine_root not in resolved_custody:
+            raise SalvageAuthorizationError(
+                "closure quarantine root is outside the custody universe"
+            )
+        expected_quarantine_manifest = _validated_digest_manifest(
+            value.get("quarantine_manifest"), label="closure quarantine manifest"
+        )
+        if expected_quarantine_manifest != _enumerate_artifacts(quarantine_root):
+            raise SalvageAuthorizationError(
+                "closure quarantine manifest does not match directory bytes"
+            )
     if has_launcher_refusal:
         closure_runs_root = value.get("runs_root")
         quarantine_roots = value.get("quarantine_roots")
@@ -1090,6 +1157,13 @@ def load_salvage_closure(
             if not isinstance(attempt_path, str) or not attempt_path:
                 raise SalvageAuthorizationError("closure attempt path is missing")
             observation = inspect_salvage_attempt(attempt_path)
+            assert quarantine_root is not None
+            try:
+                Path(observation["quarantine_path"]).relative_to(quarantine_root)
+            except (KeyError, TypeError, ValueError):
+                raise SalvageAuthorizationError(
+                    "closure attempt is outside the quarantine root"
+                ) from None
         elif branch == "launcher_refusal_zero_bytes":
             refusal_path_text = occurrence.get("launcher_refusal_path")
             if not isinstance(refusal_path_text, str) or not refusal_path_text:

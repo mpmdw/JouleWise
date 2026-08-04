@@ -129,6 +129,12 @@ be re-derived by a future agent gets an entry here.
 | D-104 | C3 residuals cold-gate synthesis (CONVERGENT): acquisition-identity lock tokens (registry + dev/ino + nonce + root binding; log_path.parent candidate rejected), positive writer-grammar tail recognizer with byte-exact canonical round-trip (message-class discrimination ruled out; refuter-discovered whitespace-preservation hole closed), SF1 ruled jointly, R1-R11 regressions, origin-binding fallback not routed | accepted (cold gate + Opus refuter converged; magistrate synthesis 2026-08-02) |
 | D-105 | C3 disposition: LAND via a final custody micro-commit (preserve-then-truncate sidecar, writer-side ASCII key assertion, F3 hygiene, R7-as-ruled) + narrow fresh audit + merge; F1/F2 registered as a NEW ruling (not D-088 precedent) closing via C3-RECOGNIZER-EXACT-01 with the number-grammar exactness STRUCK for a documented decidable superset (D-104 cl.2 amended); three-scan absence evidence recorded; runway-context-in-packet process violation recorded | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
 | D-106 | b-ii residual: Variant D — merge the inert D-100 repair at its audited head, register NOTHING (D-105 guard failure + decidable-closure inversion accepted), window B re-evaluation BLOCKED on D100-BII-BINDING-01 (interval containment + custody digest freeze + nested closure + condition-3 re-record); cold instance overruled on the refuter's bench-verified showing; magistrate packet-hygiene failures recorded | accepted (cold gate + refuter, magistrate synthesis 2026-08-02) |
+| D-107 | D100-BII nested-content closure cold gate 2: C-A′ producer-derived admission grammar with per-leaf value domains (no bare isinstance(str)); derivation obligation corpus-verified (in-kind fence condition recorded); scope expanded to the inventory grammar + guard-phase/node_cleanup false-refusal repairs; row acceptance amended with the over-refusal gate (license 3/3 real subjects); fix round 2 licensed, fresh focused audit; magistrate packet-hygiene failures recorded (third occurrence, standing tightening) | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
+| D-108 | D100-BII-BINDING-01 clause (c) RETIRED as a license precondition (zero-output-bytes predicate mechanically unreachable; substitution closed by the landed clause-(b) manifest pin); row closes on (a)+(b)+(d) with the repaired-tool digest-bound re-record over ALL THREE D-087 occurrences carrying the formal load (manual record corroboration only); L-A′ demoted to banked non-load-bearing hygiene; window B re-evaluation unblocks on row close | accepted (Ed 2026-08-03, deferral to the joint magistrate+Sol consult; C-042 debate record) |
+| D-109 | CAL-BRACKET-D079-01 F3: A-min-with-reservation — writer-enforced receipt ledger (reservation-first pending entry before capture, mandatory finalization, unresolved-pending refusal), ledger-only consumption, repo-committed head pin, single immutable snapshot threading; R1 authority/retention/anti-rollback (7 clauses) + R2 prior-observation set with the 38-total counting rule (8 clauses); Option B recorded as rejected fallback; lands with F1+F2 as the single combined fix round | accepted (Ed 2026-08-03, same deferral; Sol soundness breaks lead-verified and adopted) |
+| D-110 | Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint, Ed ruling on sweep finding RT-1: floors embed zero allowance where D-102 pin 3 mandates +max(drift, 0.010818 s)); re-mint gated on D-109 landing + artifact issuance + validator pin widening; RT-2 dependency edge minted (MINT-GENERALIZE-01 hard-blocked on CAL-BRACKET-D079-01); night-consult 7B-mint license suspended; RT-5 recorded: all four PASSED window verdicts untainted | accepted (Ed 2026-08-03, sweep-triggered) |
+| D-111 | Adjudication evidence gains tracked custody: load-bearing adjudication artifacts (cold-gate packets, rulings, refuter reports, cited debate records, re-records, decision-input corpora, archive digests) commit under docs/process_traces/ in the producing session; .desk stays working scratch; named backfill set executed this session | accepted (Ed 2026-08-03, sweep-triggered) |
+| D-112 | Window B re-evaluation STOP gate synthesis: refusal = CORRECT fail-closed machinery (sole cause mtadd-p2048o0128-r06 collection-time clock-anchor failure, falsify-by-removal 69/69 + per-bundle attribution); no repair row; D-100 license EXHAUSTED AS DRAWN; original FAILED verdict stands; r06 removal channel + F7 barred-cell-scope question + NEG-8 bound re-mint PARKED FOR ED; standing correction: condition spellings non-unique to producer | accepted (magistrate synthesis of the convergent cold gate, 2026-08-03; record tracked in process_traces) |
 
 ---
 
@@ -6777,3 +6783,414 @@ records. Amendment:
 
 Revisit when: Ed changes the site's standing, or the site gains an
 external consumer whose freshness matters (same triggers as D-101).
+
+## D-107: D100-BII-BINDING-01 nested-content closure — cold-gate synthesis: producer-derived admission grammar with value domains (C-A′), scope expanded to the inventory grammar and the false-refusal repairs, over-refusal gate added to the row
+
+- Date: 2026-08-02 (successor session, post-move)
+- Status: accepted (cold gate 2 of the D100-BII arc: cold Fable ruled
+  the structural diagnosis + closed-grammar shape with a P1–P6
+  acceptance predicate; Opus refuter — probe-required brief — broke the
+  packet's C-A text on the value axis, proved BOTH established-fact
+  errors in the packet, and surfaced two decisive facts outside the
+  packet's frame; magistrate synthesis ADOPTS THE REFUTER'S C-A′
+  merged with the cold instance's predicate. The cold instance is not
+  overruled: its own fallback clause anticipated exactly this
+  decision-level disposition. Ed sees this entry.)
+- Applies to: joulewise/salvage_dangler.py b-ii license surfaces, row
+  D100-BII-BINDING-01 (acceptance amended), window B re-evaluation
+  gating. Custody: `.desk/coldgate_d100_bii/` (packet 2, both
+  instruments, fix-1 + delta reports).
+
+**Trigger record (corrected on the refuter's probe):** formulation 1
+(a6ce7af) and formulation 2 (fix round 1) were THE SAME PREDICATE —
+a key-denylist spelling list; a6ce7af's classifier already recursed
+through mappings and lists, and `generated_text` voided exactly where
+`model_output` licensed. Round 1 added one spelling and hoisted the
+predicate into a raising walk. Two same-signature failures → the
+standing trigger fired; C-B (a third enumeration of the forbidden
+complement) is REJECTED by both instances.
+
+**Decisive refuter facts (bench-relevant, all probe-backed):**
+1. The license tool refuses ALL THREE real window-B quarantine bundles
+   at the artifact-INVENTORY gate at bc2ab19, a6ce7af, and the live
+   diff alike: the expected sets are ≤8 hand-fixture paths vs 22
+   producer-emitted files per real bundle (salvage_dangler.py:34-40,
+   :677-689, :701). Pre-existing; falsifies the row's "window B
+   unblocks on closure" premise as scoped.
+2. Fix-1's classifier over-refuses 769/769 real bundle metadata files
+   (`guard_observations[].phase == "after_attempt_N"` treated as
+   workload evidence; producer emits it at controller.py:1175) and
+   voids the legitimate controller-owned `metadata.extra.node_cleanup`
+   (controller.py:2155-2167; three shipping adapters).
+3. Four grammar-legal string channels carry workload bytes on the live
+   code: `environment_admission.failure`, event/summary
+   `failure_reason`, `events[].message`, `summary.failure_message` —
+   each has a CLOSED producer value domain (7 abort literals; the
+   FailureReason enum), so the value axis closes with zero
+   false-refusal cost.
+
+**Ruling:**
+1. **Shape = C-A′** (refuter's replacement, subsuming the cold
+   instance's P1–P6): producer-derived closed admission grammar over
+   the three b-ii read surfaces (metadata.json, events.jsonl rows,
+   summary_metrics.json) — per-container closed key set (exact raw-key
+   match; any non-member voids, which subsumes the Unicode-confusable
+   case a fortiori) AND a decidable per-leaf value predicate from
+   {CLOSED-ENUM, HASH, NUMBER/TIMESTAMP, BOOL/NULL}; no leaf admits on
+   bare isinstance(str). The workload-evidence spelling list may remain
+   as defense-in-depth but carries no load.
+2. **Derivation obligation (the in-kind discriminator):** every
+   admitted key set and value domain is derived from producer code AND
+   verified to contain every value emitted across the governed corpus
+   (the 24 abort bundles in runs_window_*/ plus the 3 quarantine
+   subjects). A key or value present in a real governed bundle and
+   absent from the grammar is a defect OF THE GRAMMAR. Open containers
+   (none found on this surface) take D-105's documented decidable
+   superset, never claimed exactness.
+3. **Scope expansion, same commit:** (a) the F-1 artifact-inventory
+   grammar is corrected under the same derivation obligation; (b) the
+   guard-observation phase domain admits after_attempt_N; (c)
+   `metadata.extra` admits the six producer scalars PLUS node_cleanup
+   (closed list-of-mappings grammar). These are the same surface and
+   the same duty; splitting them would re-create the vacuous-inertness
+   defect.
+4. **Fence ruling (recorded):** the "no third schema-shaped
+   formulation" fence REACHES this surface. An allowlist differs in
+   kind from the two failed denylists iff (i) membership is decidable
+   over a finite admitted set AND (ii) the set is producer-derived and
+   corpus-verified per clause 2 — D-097's own evidentiary standard.
+   Without (ii) a closed grammar is the third enumeration and the
+   fence bites; with it the fence is satisfied. Capture identity
+   remains bound solely by interval containment + digest freeze
+   (untouched, byte-identical per the audits).
+5. **Row acceptance AMENDED (over-refusal gate):** the row does not
+   close until (i) inspect_salvage_attempt LICENSES all three real
+   quarantine bundles, pinned by a read-only regression against the
+   real bundles or a hash-pinned byte-faithful fixture; (ii)
+   regressions prove all four value channels VOID; (iii) the extra
+   allowlist and (iv) the corrected inventory set are recorded with
+   their derivations. Prior acceptance items stand.
+6. **F2 (recursion):** same commit; explicit depth guard (32; producer
+   maxima are 7/4) raising SalvageAuthorizationError — refuse, never
+   truncate, no RecursionError conversion; the boundary-catch fact
+   (SalvageAuthorizationError subclasses ValueError; run_campaign's
+   handler continues fail-closed) is recorded.
+7. **License:** fix round 2 proceeds NOW under this ruling as one
+   commit + a FRESH focused audit against the merged predicate (cold
+   P1–P6 + clause-5 gate). Return triggers: any grammar-should-void
+   content licensing in that audit = third same-signature failure →
+   return to this gate, no bench round 3; any container that can be
+   neither closed nor supersetted decidably → decision level.
+8. **Packet-hygiene failures recorded against the magistrate (third
+   occurrence):** established fact 2 laundered a bounded trace into
+   "over-refusal clean" (false, 769/769); established fact 3 was
+   uncited and false (and re-leaned on winB-closure-facts.md, the
+   exact artifact D-106 ground (1) faulted); the delta's open flag G1
+   was omitted; two precedent citations mislabelled. STANDING
+   TIGHTENING: every established-fact item in a cold-gate packet
+   carries file:line or a probe transcript, and the source documents'
+   flags sections are quoted IN FULL, never summarized.
+**Dissents:** none unabsorbed — the cold instance's Q3/Q5 position is
+superseded per its own recorded fallback ("the identical fix shape via
+a minimal amendment, and nothing else in this ruling changes"); the
+refuter's F-8 conditions are implemented by clauses 3, 4, and 8.
+
+Revisit when: the round-2 focused audit reports (window B
+re-evaluation unblocks only on the amended-row closure), or any
+window-C dangler seeks the b-ii license first.
+
+**Addendum (2026-08-03, outcome of the above revisit):** the round-2
+focused audit fired the D-107 clause-7 return trigger — fix round 2
+implemented C-A′ but left open-superset leaves that license workload
+bytes (bench-confirmed). Cold gate 3 (two cold Fable instances + Opus
+refuter) concluded, probe-backed, that clause (c) **cannot achieve its
+"zero workload output bytes" predicate under any bench formulation**
+(the grammar constrains values but not list cardinalities; ~1.2 KB of
+free numeric-leaf capacity remains under any grammar), AND that the
+content-substitution attack (c) was ordered to close is **already
+closed by the landed clause (b)** hash-sealed closure-manifest pin. Per
+rule 11 the bench loop was STOPPED (not a fourth round); the disposition
+is escalated to Ed as **D-108 pending** — retire clause (c) as a license
+precondition [magistrate + refuter recommendation], or land a
+mechanically-derived cardinality-closed grammar with the numeric
+residual explicitly ruled. Fix rounds 1+2 are held UNCOMMITTED/untrusted
+on branch `impl/d100-bii-binding`; nothing this addendum describes is
+landed. Full record: `.desk/coldgate_d100_bii/` (PACKET-3, both cold
+rulings, refuter-3, SYNTHESIS-gate3-FOR-ED). This supersedes D-107's
+"fix round 2 proceeds now" license pending the D-108 ruling.
+
+## D-108: D100-BII-BINDING-01 clause (c) RETIRED as a license precondition — row closes on (a)+(b)+(d), with the clause-(d) three-occurrence re-record carrying the formal load
+
+- Date: 2026-08-03
+- Status: accepted (Ed ruling 2026-08-03: explicit deferral to the
+  joint magistrate + Sol recommendation — "i defer to you and sol's
+  decision". Inputs: cold gate 3 (two cold Fable instances + Opus
+  refuter, all recommending retirement; `.desk/coldgate_d100_bii/`)
+  plus an Ed-requested 2-round adversarial Sol xhigh consult over the
+  decision packet (thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`,
+  record `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/` (tracked; scratch original in .desk); tracked copy: `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/`), which CONVERGED
+  on retirement while tightening the closure conditions below.)
+- Applies to: row D100-BII-BINDING-01, `joulewise/salvage_dangler.py`
+  b-ii license surfaces, window B re-evaluation gating. Supersedes
+  D-106 clause 3(c) and the D-107 C-A′ obligation AS LICENSE
+  PRECONDITIONS; the D-106 revisit clause survives (clause 5 below).
+
+**Grounds (probe-backed, gate 3):** (i) D-100's "zero workload output
+bytes" predicate is unreachable under any bench content grammar —
+≥195 finite-only numeric leaves ≈1.2 KB free capacity in one real
+subject's metadata (refuter R-5) plus producer-open list cardinalities
+(R-4), which fired D-107 clause 7's second return trigger; (ii) the
+substitution attack clause (c) was ordered against is already closed by
+the LANDED clause (b) hash-sealed closure-manifest pin (R-6 traced the
+only production path); (iii) what a grammar could still add is
+protection against a careless closure AUTHOR — a smaller, partly
+unclosable duty that does not warrant a license precondition.
+
+**Ruling:**
+1. Clause (c) — the nested-content closure — is retired as a license
+   precondition. No further grammar formulation may be benched against
+   the D-100 zero-output-bytes predicate; that predicate is recorded
+   as mechanically unreachable on this surface.
+2. The row closes on: **(a)** telemetry interval containment; **(b)**
+   the hash-sealed closure-manifest pin (landed); **(d)** the
+   repaired-tool, digest-bound re-record executed over ALL THREE D-087
+   closure occurrences, results bound to the exact closure manifest.
+   Consult correction adopted on the evidence surface: the exclusion
+   TARGET is one member (mtadd-p2048o0128-r08, occurrences 2+3), but
+   the authorization EVIDENCE surface is all three occurrences — the
+   closure loader refuses any closure without exactly three and
+   inspects every one (`salvage_dangler.py` exactly-three predicate;
+   b04-b2's valid supersession removes it as the excluded member, not
+   from the closure's evidentiary predicate). The 2026-08-01 manual
+   verification (full b-ii facts for the two r08 attempts only) is
+   CORROBORATION ONLY and carries no formal load.
+3. The derived content grammar (L-A′) is demoted to non-load-bearing
+   hygiene. Decision-record obligation: bank the EXECUTABLE L-A′
+   derivation + full probe transcript (immutable input hashes for the
+   26 b-ii bundles, generated grammar, 26/26 admission results, every
+   carrier mutation INCLUDING why the seventh carrier survives, tool
+   identity) in `.desk/coldgate_d100_bii/` at or before row close. It
+   must never be described as zero-output or substitution closure.
+4. Fix rounds 1+2 held uncommitted on `impl/d100-bii-binding`: the
+   clause-(c) grammar work is discarded or demoted per clause 3; the
+   clause-(a) containment work is salvageable subject to fresh audit
+   of whatever subset is kept.
+5. D-106's revisit clause survives intact: a future (e.g. window-C)
+   dangler seeking the b-ii license RETURNS TO THE GATE. Retirement
+   removes the automated content guard, not the gate.
+6. Window B re-evaluation unblocks when the row closes per clause 2.
+
+## D-109: CAL-BRACKET-D079-01 F3 — A-min-with-reservation adopted (writer-enforced receipt ledger, reservation-first, repo-committed head pin); R1 ledger-authority and R2 prior-observation-set rulings
+
+- Date: 2026-08-03
+- Status: accepted (Ed ruling 2026-08-03: same explicit deferral to the
+  joint magistrate + Sol position, same debate record. Arc: the fix
+  investigation recommended A-min; Sol round 1 BROKE that formulation
+  as stated (writer crash-window; prefix-subset is not anti-rollback)
+  and recommended Option B for the timeline; magistrate round 2
+  supplied the low-schedule-pressure record, the metrology-centric
+  pivot, and the shared-R2 marginal-cost analysis; Sol WITHDREW B and
+  converged on A-min-with-reservation, marginal cost Medium. Both
+  soundness holes were lead-verified at the bench before adoption.)
+- Applies to: `scripts/validate_powermetrics_fiducial.py` (sole
+  production calibration writer), `joulewise/calibration_bracketing.py`,
+  `joulewise/whole_window.py`, `scripts/run_campaign.py`,
+  `configs/calibration/calibration_acceptance_d079_v2.json`, and every
+  consumer construction of `AuthenticatedConsumptionSession`. This is
+  a faithful IMPLEMENTATION of D-102 (no threshold/freshness
+  amendment); it supplies the authority/universe rulings D-102 left
+  silent. Lands with F1 + F2 as the single combined CAL-BRACKET fix
+  round. Option B (signed narrowing amendment) is recorded as REJECTED
+  fallback — coherent and honest, but it weakens the thesis instrument
+  where the project has slack to build the sounder boundary.
+
+**R1 — ledger authority, retention, anti-rollback (7 clauses):**
+1. A canonical observation-receipt ledger and its append API are the
+   SOLE authority for governed calibration observations. An off-ledger
+   calibration artifact is invalid everywhere: as bracket endpoint,
+   trigger evidence, derivation member, or claim evidence. Consumers
+   enumerate ledger entries only, never caller-supplied directories.
+2. RESERVATION-FIRST: every capture appends an authenticated `pending`
+   attempt entry BEFORE hardware capture begins, and must finalize it
+   as valid / systematic-invalid / ordinary-invalid / abandoned. Any
+   unresolved pending, unfinalized, malformed, or conflicting entry
+   causes claim evaluation to REFUSE. (Grounds, bench-verified: the
+   writer creates capture state pre-receipt and has pre-manifest
+   failure exits — a publish-on-return receipt misses exactly the
+   crash/interrupt cases a completeness mechanism exists to catch.)
+3. Receipts are immutable and hash-chained: sequence, predecessor,
+   attempt id, content id, artifact hashes, six-field epoch, full T1,
+   capture time, exact bound lexeme, disposition, custody locator.
+4. The acceptance artifact pins its baseline ledger head. Evaluation
+   ALSO requires the independent current-head pin (clause below),
+   verifies one complete non-forked chain extension from baseline to
+   current, and threads ONE immutable ledger snapshot through every
+   consumer path (session, direct runner path, secondary verifier) —
+   repeated independent loads are a refusal-grade defect.
+   Anti-rollback authority: a REPO-COMMITTED head-pin file
+   `{sequence, head_digest, ledger_schema}` (existing checked-in
+   byte-pin trust model; no second trusted latest-sequence store).
+   Rotation is epoch-bounded — at most one lead-controlled
+   quiet-machine collection session — and NO claim evaluation may
+   occur between ledger advancement and pin commit; a physical head
+   differing from the committed pin refuses.
+5. Ledger history is retained permanently. Referenced evidence remains
+   in authenticated custody; missing or unverifiable required bytes
+   cause refusal, never silent omission.
+6. Version 1 is single-authority, single-machine. Remote/other-machine
+   captures are invalid until imported through an authenticated ledger
+   transaction; direct multi-machine append requires a new ruling.
+7. Threat model, stated honestly and to be stated wherever A-min is
+   described: the mechanism closes workflow omission, unregistered
+   evidence, and rollback/stale-head consumption. It does NOT defend
+   against a malicious trusted writer or an authority that rewrites
+   both Git and ledger history. No stronger claim may be made.
+
+**R2 — prior-observation set and prospective triggers (8 clauses):**
+1. The issuance cutoff is an exact ledger sequence + head digest.
+2. `derivation_corpus` remains exactly the n=19 threshold-producing
+   observations.
+3. `prior_observation_set` = every content-distinct governed
+   observation known at the cutoff — valid, systematic-invalid,
+   ordinary-invalid, blind holdout, and unresolved — with epoch and
+   disposition recorded separately. (The current artifact's two
+   ID-only `blind_exclusions` are insufficient and are superseded.)
+4. Content identity is path-independent, derived from canonical
+   primary-byte hashes; attempt identity is separate; copies do not
+   create new observations.
+5. "New" (trigger population) = current authentic content IDs −
+   `prior_observation_set`, regardless of capture timestamp or source
+   root; a previously unknown historical artifact IS new when
+   discovered. Every new observation is judged under the PRIOR
+   artifact (D-102's prospective rule).
+6. New unresolved or unclassifiable attempts cause refusal; only after
+   trigger disposition may a successor artifact absorb them.
+7. The 32-valid/6-invalid same-epoch inventory is a backfill
+   CANDIDATE, not a ratified classification: identities may seed the
+   backfill, but dispositions require raw-physics + hash verification
+   before issuance, and any unresolved member blocks issuance.
+8. Counting rule for the D-102 corpus-doubling trigger (19→38): 38
+   TOTAL authenticated, content-distinct, VALID same-epoch
+   observations — including previously blind observations once
+   unblinded — not 38 post-cutoff observations. Under the candidate
+   inventory, six further valid observations trigger re-derivation.
+
+## D-110: Mint 1 retroactively NON-CLAIM-BEARING (taint-and-remint); RT-2 dependency edge minted; the night consult's 7B-mint license SUSPENDED
+
+- Date: 2026-08-03 (Ed ruling, present, option "taint-and-remint" selected
+  from the magistrate's three-option packet during the 16h runway)
+- Status: accepted (trigger: the Ed-ordered two-week read-only soundness
+  sweep — 34 agents, Fable auditors + Sol xhigh second-eyes, run in a
+  parallel session — finding RT-1, Sol-confirmed. Memory record:
+  two-week-soundness-sweep-2026-08-03; full results ephemeral in that
+  session's task outputs.)
+- Applies to: `df-ph-decode-floor-mint1` (absolute 3.592138 /
+  comparative 7.377086 / operative gate 7.377086 J), row
+  MINT-GENERALIZE-01, CLAIMS_STATUS, the D-095 chain.
+
+**Grounds (RT-1):** mint #1's consumed fiducial bounds embed a
+never-zero allowance of ZERO where D-102 pin 3 mandates
++max(drift, 0.010818 s) — for a10 a ~+43% wider operative bound than the
+7.377086 J floor was derived from. The CAL-BRACKET-D079-01 adjudication
+record framed the defect as a non-salvage severity escalator
+(mis-refusals only); the accepted-side, anti-conservative direction was
+never ruled on. RT-5 (recorded): all four PASSED window verdicts are
+UNTAINTED — the 0.010 cliff is strictly tighter than the ruled screen
+(drifts 8-25x below it) and the 10-field identity match supersets the
+D-102 epoch; the taint is confined to floor artifacts.
+
+**Ruling:**
+1. Mint #1 is retroactively NON-CLAIM-BEARING. No consumption, quotation
+   as a claim, or gating use of its floors until re-mint. Per
+   CLAIMS_STATUS no landed claim has consumed it; if any consumption is
+   discovered it voids with it.
+2. RE-MINT CONDITIONS: (a) the D-109 CAL-BRACKET implementation lands
+   (merged + gauntlet-clean); (b) the acceptance artifact is ISSUED
+   (R2 backfill verified, ledger bootstrapped, head pinned); (c) the
+   library validator's evidence_root_id pin is widened by scheduled work
+   (DC-2/FM-3) so minted artifacts authenticate truthfully; then mint #1
+   re-derives under the landed selector with the computed allowance.
+3. RT-2 dependency edge MINTED in the kernel: MINT-GENERALIZE-01 is
+   hard-blocked on CAL-BRACKET-D079-01 landing + this ruling's re-mint
+   conditions. The 2026-08-03 night consult's Q3 license (governed 7B
+   mint after byte-compare) is SUSPENDED as superseded-by-evidence —
+   recorded honestly: the joint consult licensed it without RT-1 in
+   frame because the adjudication record itself understated the defect's
+   direction.
+4. The Q1 mint-1 byte-compare replay REMAINS licensed (verification of
+   tooling parity + the FM-1/FM-2 re-derivability question; it creates
+   no claim). Its result is recorded either way.
+
+## D-111: Adjudication evidence gains tracked custody — docs/process_traces/ is the home; .desk is working scratch only
+
+- Date: 2026-08-03 (Ed ruling, present; option "track adjudication
+  evidence" selected)
+- Status: accepted (trigger: the soundness sweep's strongest structural
+  finding — six domains independently: load-bearing adjudication
+  evidence exists only in untracked `.desk/` — cold-gate packets and
+  rulings, the D-108 debate record, the gate-3 synthesis CLAIMS_STATUS
+  cites, the TEST-SPEED timing corpus, archive manifest digests — while
+  the project's whole pivot is custody and attestation.)
+- Applies to: all future adjudication artifacts; a named backfill set.
+
+**Ruling:**
+1. Going forward, LOAD-BEARING adjudication artifacts — cold-gate
+   packets and rulings, refuter reports, debate/consult records that a
+   decision entry cites, digest-bound re-records, decision-input
+   corpora (e.g. timing data), archive manifest digests — are committed
+   under `docs/process_traces/` (dated subdirectories) in the same
+   session that produces them. A decision entry may not cite a memo as
+   authority unless it is tracked or explicitly declared ephemeral in
+   the entry itself.
+2. `.desk/` remains legitimate working scratch; nothing load-bearing
+   terminates there.
+3. BACKFILL (this session): the D-100/D100-BII cold-gate packets and
+   rulings (`.desk/coldgate_d100_bii/`, `.desk/adjudication_packet_20260801/`),
+   the D-108/D-109 debate record, the night-consult rulings memo, the
+   clause-(d) re-record JSON, the CAL-BRACKET F3 memos
+   (`.desk/calbracket_d079/`), the TEST-SPEED timing corpus
+   (`.desk/test-speed-consult/`, `.desk/testspeed/`), and the archive
+   manifest digests (RS-4). Large or binary members may be represented
+   by a digest manifest with the bytes retained in `.desk` + backup.
+
+## D-112: Window B re-evaluation STOP gate — classification (i) adopted; the D-100 license is EXHAUSTED AS DRAWN; the r06 disposition ruling is PARKED FOR ED
+
+- Date: 2026-08-03 (magistrate synthesis of the night's cold gate; both
+  instruments convergent by independent methods; full verbatim record
+  tracked at `docs/process_traces/2026-08-03-winB-reeval-stop/`)
+- Status: accepted (gate outcome recorded; the successor ruling it
+  parks is NOT decided here)
+- Applies to: window B re-evaluation licensing (D-100 §5 / D-106 /
+  D-108 chain), bundle `mtadd-p2048o0128-r06`, the NEG-8 drift bound,
+  future cascade classifications.
+
+**Ruling:**
+1. The 2026-08-03 governed re-evaluation refusal was CORRECT
+   fail-closed machinery on real evidence state (classification (i)).
+   Sole cause: r06's collection-time clock-anchor failure
+   (`native_intersection_empty`) + downstream environment-admission
+   temporal-binding failure — proven by falsify-by-removal (69/69 clean
+   without it) and per-bundle attribution with a stage-1-clean
+   control-flow proof. No repair row; no corrected command; the
+   deviation-escape STOP was itself correct.
+2. EVIDENCE GAP recorded against `mtadd-p2048o0128-r06` (kernel row
+   WINB-R06-DISPOSITION-01). The `current_environment_refusals`
+   sub-branch remains unpinned (open sub-question in the record).
+3. The D-100 re-evaluation license is EXHAUSTED AS CURRENTLY DRAWN:
+   unreachable while r06 is a member (exclusion cap spent on r08; r06
+   is no dangler; waivers forbidden under salvage). Window B
+   re-evaluation stays BLOCKED; the original FAILED verdict stands as
+   issued; nothing is reinterpreted.
+4. PARKED FOR ED (successor packet; Ed-level because it amends a
+   claim-license shape): the r06 removal channel (per-member waiver
+   ruling / membership re-binding / abandon re-evaluation for window C
+   re-collection), the refuter-F7 scope question (whether one member of
+   an already-barred cell may void the whole window's consumption), and
+   the fresh NEG-8 bound re-mint that any future licensed run needs
+   (the 2026-08-01 bound expired 2026-08-02; recorded against the
+   magistrate's packet as an omission).
+5. STANDING CORRECTION (both instruments): condition spellings are
+   NON-UNIQUE to producer — `environment_admission_missing` has a
+   window-level cascade producer AND a per-bundle reduce-time producer.
+   D-100's cascade classification was correct for the producer it
+   examined; future cascade classifications must name producers.
