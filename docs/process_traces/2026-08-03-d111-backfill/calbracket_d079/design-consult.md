@@ -247,9 +247,9 @@ D-102 does not enumerate modules or say whether “estimator” means a semantic
 
 The complete recommended tuple is therefore:
 
-`joulewise/powermetrics_fiducial.py`  
-`joulewise/uncertainty_evidence.py`  
-`joulewise/adapters/powermetrics.py`  
+`joulewise/powermetrics_fiducial.py`
+`joulewise/uncertainty_evidence.py`
+`joulewise/adapters/powermetrics.py`
 `joulewise/reduce.py`
 
 Current hashes for the two missing leaves are:

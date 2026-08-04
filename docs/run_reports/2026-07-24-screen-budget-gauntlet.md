@@ -75,7 +75,7 @@ reduce-layer blocker (G2A), the authoritative mockness source
 (custody-bound `config().hardware_target.telemetry_backend`), and the
 `mock:*` tagged-source caveat that saved the fixtures. Where the two
 lenses split (G1, G2) the lead synthesized rather than voted. Full
-per-layer catch record in the council log (C-033).
+per-layer catch record in the council log (C-045).
 
 ## Lead gates
 
@@ -156,7 +156,7 @@ session**, correctly — agent sessions were active the whole time.
 The `codex-usage` ledger reads all zeros across both the 5h and 24h
 windows with "local quota signal: unavailable in referenced session
 logs". The feed is suspected broken; no spend snapshot is recorded for
-this arc beyond the session counts in C-033.
+this arc beyond the session counts in C-045.
 
 ## NEXT
 
@@ -168,4 +168,4 @@ this arc beyond the session counts in C-033.
    lead-reviewed pre-audit and held for post-merge reconciliation; it
    should land against merged main before the next window.
 3. **Bookkeeping kernel rows** — RUN_STATE / state kernel refresh for
-   the deferrals above, and the C-033 council entry.
+   the deferrals above, and the C-045 council entry.

@@ -21,8 +21,16 @@ historical).
 `CLAIMS_STATUS.md` (refreshed tonight; §1 is honestly EMPTY under
 D-110) → `docs/run_reports/2026-08-03-16h-runway.md`. Decisions tonight:
 D-108..D-112 (all indexed). NOTHING is in flight — every stream
-concluded at a held state; no background jobs, no unpushed work, all
-worktrees pruned except `calbracket` (holds the branch below).
+concluded at a held state; no background jobs; no unpushed repo work.
+Worktrees remaining after the checkpoint prune (6 dead ones removed):
+`calbracket` (impl/cal-bracket-d079 @ 2e61ff9, pushed — the held D-109
+stream), `testspeed` (impl/test-speed — PR #98 open for Ed), plus two
+`.claude/worktrees/*` and one `~/.codex/worktrees/*` owned by other
+tooling (left alone). The consistency sweep's 11 findings (4 blockers)
+were applied before this final commit — incl. the rule-11 gate now
+ENCODED on the CAL-BRACKET row as a hard start-dependency, and D-110
+annotations on the seven kernel evidence labels that cite the tainted
+7.377086 J value.
 
 **STATE BY STREAM (all pushed):**
 1. **D-108 / D100-BII: CLOSED.** PR #99 merged `32d72fd` (full
@@ -115,7 +123,7 @@ hard kill — sweep `ps` at session end.
 > window). Quiet window C runs tonight ONLY if adapter identity
 > resolves and all guarded-launcher conditions verify; else desk-only.
 
-## DESK-SESSION UPDATE (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
+## DESK-SESSION UPDATE (HISTORICAL — superseded by the checkpoint block at top) (2026-08-03, Ed away — first the cold-gate arc, then a sleep-window of non-claim rows) — read this, then the two ⏸️ blocks above
 
 This session executed the 2026-08-02 checkpoint's resume script and drove
 the open work to its conclusions. **Everything in the "ACTIVE RESUME
@@ -183,7 +191,7 @@ the same session; report:
 `docs/run_reports/2026-07-31-claims-desk-session.md`. The prior head
 `7ee680c` (PR #89: contrast window PASSED, D5-J mainline under the D-093
 cold-gate synthesis; post-merge suite `Ran 2286 tests`, `OK
-(skipped=12)`) is historical. See the CURRENT STATE block below; the
+(skipped=12)`) is historical. See the (now-historical) state block below; the
 mint-era summary that follows remains accurate for the mint arc itself.
 
 **Main is at the PR #88
@@ -1035,7 +1043,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-03). Latest report: [Desk session 2026-08-03 (Ed away): PR #96 MINT-GENERALIZE tooling merged (f3127ed); D-107 ruled (b-ii gate 2); D100-BII gate 3 -> STOP, D-108 pending (Ed); CAL-BRACKET F1/F2 ruled, F3 -> D-109 pending (Ed); TEST-SPEED-01 timing data + design; codex cache bug fixed; council C-041. Kernel pins 59. Two ED-DECISION-PENDING blocks at the top of RUN_STATE.](docs/run_reports/2026-08-01-desk-adjudication-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-03). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
 
 ### [ED-EXTERNAL]
 

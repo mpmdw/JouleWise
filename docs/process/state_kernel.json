@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Desk session 2026-08-03 (Ed away): PR #96 MINT-GENERALIZE tooling merged (f3127ed); D-107 ruled (b-ii gate 2); D100-BII gate 3 -> STOP, D-108 pending (Ed); CAL-BRACKET F1/F2 ruled, F3 -> D-109 pending (Ed); TEST-SPEED-01 timing data + design; codex cache bug fixed; council C-041. Kernel pins 59. Two ED-DECISION-PENDING blocks at the top of RUN_STATE.",
-    "path": "docs/run_reports/2026-08-01-desk-adjudication-session.md"
+    "label": "16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.",
+    "path": "docs/run_reports/2026-08-03-16h-runway.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -530,7 +530,7 @@
       "dependencies": [
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -654,6 +654,15 @@
           "state": "satisfied",
           "strength": "hard",
           "target": "D-109"
+        },
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Rule-11 gate convened and ruled for fix-round 2 on audit blocker B1 (second fix round on the same defect; delta re-audit 2026-08-03 found B1 persists refined at 2e61ff9)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "rule-11-gate-B1"
         }
       ],
       "fallback": null,
@@ -672,8 +681,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 13,
-      "status": "queued",
-      "status_note": "2026-08-03: D-109 RULED (Ed deferral to the joint magistrate+Sol consult; Sol round 1 broke the original A-min formulation [writer crash-window; prefix-subset is not anti-rollback], round 2 flipped B->A-min; both holes lead-verified). Single combined fix round: F1 (freshness = 6-field epoch) + F2 (4-module estimator digest closure) + F3 A-min (reservation-first receipt ledger at the sole production writer, repo-committed head pin {sequence, head_digest, ledger_schema}, epoch-bounded rotation, ONE immutable snapshot through every consumer) + the R2 prior_observation_set schema (19->38 counting rule = 38 total content-distinct valid same-epoch). 32/6 inventory is a backfill CANDIDATE only: raw-physics + hash verification before issuance; unresolved members block issuance. Threat-model statement per R1 clause 7 wherever A-min is described.",
+      "status": "blocked",
+      "status_note": "2026-08-03: D-109 RULED (Ed deferral to the joint magistrate+Sol consult; Sol round 1 broke the original A-min formulation [writer crash-window; prefix-subset is not anti-rollback], round 2 flipped B->A-min; both holes lead-verified). Single combined fix round: F1 (freshness = 6-field epoch) + F2 (4-module estimator digest closure) + F3 A-min (reservation-first receipt ledger at the sole production writer, repo-committed head pin {sequence, head_digest, ledger_schema}, epoch-bounded rotation, ONE immutable snapshot through every consumer) + the R2 prior_observation_set schema (19->38 counting rule = 38 total content-distinct valid same-epoch). 32/6 inventory is a backfill CANDIDATE only: raw-physics + hash verification before issuance; unresolved members block issuance. Threat-model statement per R1 clause 7 wherever A-min is described. 2026-08-03 CHECKPOINT: held at 2e61ff9 (pushed); B2+S1 closed; B1 persists refined — ROUND 2 REQUIRES THE RULE-11 GATE FIRST (do not bench it).",
       "stop_card": null
     },
     "CI-003": {
@@ -1271,7 +1280,7 @@
       "priority": "p1_phase_gate",
       "rank": 12,
       "status": "blocked",
-      "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); this row is HARD-BLOCKED on CAL-BRACKET-D079-01 landing + the D-110 re-mint conditions. The night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay (verification only) remains licensed and in flight.",
+      "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); this row is HARD-BLOCKED on CAL-BRACKET-D079-01 landing + the D-110 re-mint conditions. The night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/).",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -1706,7 +1715,7 @@
         },
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -1763,7 +1772,7 @@
         },
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -2149,7 +2158,7 @@
         },
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -2246,7 +2255,7 @@
       "dependencies": [
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -2404,7 +2413,7 @@
       "dependencies": [
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",
@@ -2455,7 +2464,7 @@
       "dependencies": [
         {
           "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31",
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
             "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
           },
           "kind": "task",

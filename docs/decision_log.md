@@ -6928,7 +6928,7 @@ rulings, refuter-3, SYNTHESIS-gate3-FOR-ED). This supersedes D-107's
   refuter, all recommending retirement; `.desk/coldgate_d100_bii/`)
   plus an Ed-requested 2-round adversarial Sol xhigh consult over the
   decision packet (thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`,
-  record `.desk/2026-08-03-sol-debate-d108-d109.md`), which CONVERGED
+  record `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/` (tracked; scratch original in .desk); tracked copy: `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/`), which CONVERGED
   on retirement while tightening the closure conditions below.)
 - Applies to: row D100-BII-BINDING-01, `joulewise/salvage_dangler.py`
   b-ii license surfaces, window B re-evaluation gating. Supersedes

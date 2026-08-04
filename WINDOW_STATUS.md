@@ -1,6 +1,6 @@
 # 🟢 BETWEEN RUNS
 
-**Both metrology windows collected + salvage-closed; both verdicts FAILED as-issued and ADJUDICATED (D-100/D-106): window A permanently non-claim-bearing, window B's re-evaluation hard-blocked on `D100-BII-BINDING-01`; next window (C) awaits a fresh post-move Ed §5A**
+**Both metrology windows collected + salvage-closed; both verdicts FAILED as-issued and ADJUDICATED (D-100/D-106): window A permanently non-claim-bearing, window B's re-evaluation was EXECUTED 2026-08-03 under the full license and STOPPED correctly — license exhausted as drawn (D-112), r06 disposition parked for Ed; next window (C) awaits a fresh Ed §5A + the 140W adapter identity**
 
 | | |
 |---|---|
@@ -18,10 +18,13 @@ Expectation-setting on the two FAILED verdicts below (adjudicated
 backed up either way, but the two windows differ. **Window A is
 permanently non-claim-bearing** — its deviation retry bound an
 incompatible power policy at collection time (immutable), so C1
-re-collects in window C. **Window B's data remains eligible** for a
-licensed re-evaluation, which is hard-blocked on the
-`D100-BII-BINDING-01` capture-identity fixes (D-106). The machinery
-repairs themselves landed 2026-08-02 (PR #94).
+re-collects in window C. **Window B's re-evaluation ran 2026-08-03** after the
+D-108 gate cleared (`D100-BII-BINDING-01` CLOSED, PR #99): the governed
+run REFUSED correctly pre-verdict on one bundle's collection-time
+clock-anchor failure (r06; cold gate D-112: correct machinery; license
+EXHAUSTED AS DRAWN). The original FAILED verdict stands untouched; the
+next move — r06 removal channel or window-C re-collection — is Ed's
+(`WINB-R06-DISPOSITION-01`).
 
 ## Detail
 
@@ -44,8 +47,9 @@ dangling quarantined slot + refused deviation post-cal, window B on
 manifest/membership resolution + NEG-8 bracket evaluation. The
 three-part machinery adjudication is COMPLETE (D-100, 2026-08-01) and
 the repair is mainline (PR #94, 2026-08-02); window B's re-evaluation
-waits only on `D100-BII-BINDING-01` (D-106); window C waits on a fresh
-post-move Ed §5A.
+EXECUTED and stopped correctly 2026-08-03 (D-112; r06 disposition
+parked for Ed); window C waits on a fresh Ed §5A and the 140W adapter
+identity (the Anker currently negotiates 70W).
 
 **New standing doc:** `CLAIMS_STATUS.md` (repo root) — the single home
 for what is claimable right now, what is holding, and which numbers must

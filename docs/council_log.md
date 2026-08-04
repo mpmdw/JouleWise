@@ -2688,7 +2688,7 @@ read-only, thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`), Sol
 instructed to bench-verify packet claims rather than trust them, given
 the magistrate's recorded selective-quotation history. Ed then ruled by
 explicit deferral to the joint position → D-108 + D-109. Full record:
-`.desk/2026-08-03-sol-debate-d108-d109.md`.
+`docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/` (tracked).
 
 Unique catches, by layer:
 - **Sol round 1 (packet audit):** (1) the D-108 packet's "three

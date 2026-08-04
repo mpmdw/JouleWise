@@ -40,12 +40,15 @@ are provided for anyone who wants the full evidence trail.
   before evaluated a night with that shape. That question has now been adjudicated (decisions D-100 and D-106):
   the first night's data cannot be promoted — an end-of-night
   calibration was recorded under a mismatched identity, an unfixable
-  collection-time error — while the second night's data may be
-  re-evaluated later. The main software repair for that re-evaluation
-  landed and passed its audits on 2026-08-02; one further, smaller
-  repair (making the tool prove which capture each telemetry file
-  belongs to) was ruled necessary by a follow-up review and must land
-  and pass its own audit first. Two genuine instrument findings also came out of
+  collection-time error — while the second night's
+  re-evaluation was actually attempted on 2026-08-03 after every
+  required repair landed — and the software refused, correctly: one
+  measured run from that night has a genuinely unresolvable internal
+  clock alignment, and the fail-closed design will not certify a night
+  containing it. A judge-style review confirmed the refusal was the
+  instrument working as designed, not a bug. Whether that one run can
+  be formally set aside (or the night's remaining questions simply
+  re-measured in the next session) is a pending decision for Ed. Two genuine instrument findings also came out of
   those nights and will appear in the paper: the instrument's internal
   clock-alignment step operates with about a millisecond of margin —
   effectively a coin flip at the current capture length — and needs a
@@ -77,7 +80,7 @@ remain non-claim-bearing, instrument-proving evidence.
 
 **The head-to-head comparison ran on 2026-07-30→31 and passed every
 collection and whole-window gate.** Comparing the small (1.5B) and large (7B)
-model decoding the same text, the large model used **about 147 J more energy per response**
+model decoding the same text, the large model used **about 147 J (whole-request, idle-subtracted — a diagnostic view; the registered per-phase comparison metric gives 141.29 J) more energy per response**
 — and the run-to-run scatter of that difference across ten paired blocks
 was only about **0.24 J**, roughly six hundred times smaller than the
 effect. This is the kind of demonstration the metrology framing calls for: a
