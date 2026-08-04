@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import sys
 import tempfile
@@ -832,7 +833,9 @@ class FullPathTests(unittest.TestCase):
             generalized, "_fresh_original_core", side_effect=load
         )
 
-    def test_mint1_full_path_is_byte_identical_to_byte_frozen_core(self) -> None:
+    def test_mint1_full_path_is_byte_identical_to_review_pinned_mint_core(
+        self,
+    ) -> None:
         plan, absolute, comparative = authenticated_components()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1120,6 +1123,27 @@ class FullPathTests(unittest.TestCase):
 
 
 class CoreCompatibilityTests(unittest.TestCase):
+    def test_mint_floor_artifact_signature_is_review_pinned(self) -> None:
+        expected = (
+            "(*, artifact_id: 'str', floor_path: 'Path', statement_path: 'Path', "
+            "calibration_plan_path: 'Path', "
+            "calibration_plan_relative_path: 'str', "
+            "absolute_paths: 'ComponentPaths', comparative_paths: 'ComponentPaths', "
+            "project_commit: 'str', project_tree_state: 'str', "
+            "strict_validator: 'StrictValidator', "
+            "consumption_semantics_id: 'str | None' = None, "
+            "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None) "
+            "-> 'Mapping[str, Any]'"
+        )
+        self.assertEqual(
+            str(inspect.signature(mint1.mint_floor_artifact)),
+            expected,
+        )
+        self.assertEqual(
+            generalized._CORE_SIGNATURES["mint_floor_artifact"],
+            expected,
+        )
+
     def test_fresh_core_is_removed_from_sys_modules_after_load(self) -> None:
         core = generalized._fresh_original_core()
         self.assertNotIn(core.__name__, sys.modules)

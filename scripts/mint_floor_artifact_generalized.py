@@ -3,9 +3,9 @@
 
 This is the generalized sibling of ``mint_floor_artifact.py``.  It reuses
 that mint's authentication, construction, binding, validation, and exclusive
-write path without changing the byte-frozen mint-1 entry point.  Every value
-that the original tool hard-coded is required in one exact-schema JSON
-pinset, whose exact file bytes must match a separately supplied SHA-256.
+write path through the review-pinned mint-core interface.  Every value that
+the original tool hard-coded is required in one exact-schema JSON pinset,
+whose exact file bytes must match a separately supplied SHA-256.
 """
 
 from __future__ import annotations
@@ -105,9 +105,13 @@ _CORE_SIGNATURES = {
         "absolute_paths: 'ComponentPaths', comparative_paths: 'ComponentPaths', "
         "project_commit: 'str', project_tree_state: 'str', "
         "strict_validator: 'StrictValidator', "
-        "consumption_semantics_id: 'str | None' = None) -> 'Mapping[str, Any]'"
+        "consumption_semantics_id: 'str | None' = None, "
+        "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None) "
+        "-> 'Mapping[str, Any]'"
     ),
 }
+# D-109 R1.4 added the immutable ledger-snapshot parameter. Any future
+# change requires explicit signature-pin review plus parity evidence.
 StrictValidator = Callable[[Path, bool], Sequence[str]]
 
 
@@ -450,14 +454,14 @@ def _assert_core_interface(module: ModuleType) -> None:
     )
     if missing:
         raise MintError(
-            "byte-frozen mint core interface drift: missing or renamed "
+            "review-pinned mint-core interface drift: missing or renamed "
             f"symbols {missing}"
         )
     if not isinstance(module.MintError, type) or not issubclass(
         module.MintError, ValueError
     ):
         raise MintError(
-            "byte-frozen mint core interface drift: MintError is not a "
+            "review-pinned mint-core interface drift: MintError is not a "
             "ValueError type"
         )
     for symbol, expected in _CORE_SIGNATURES.items():
@@ -465,12 +469,12 @@ def _assert_core_interface(module: ModuleType) -> None:
             observed = str(inspect.signature(getattr(module, symbol)))
         except (TypeError, ValueError) as exc:
             raise MintError(
-                "byte-frozen mint core interface drift: cannot inspect "
+                "review-pinned mint-core interface drift: cannot inspect "
                 f"{symbol} signature"
             ) from exc
         if observed != expected:
             raise MintError(
-                "byte-frozen mint core interface drift: "
+                "review-pinned mint-core interface drift: "
                 f"{symbol} signature expected {expected}, observed {observed}"
             )
 
@@ -479,7 +483,7 @@ def _fresh_original_core() -> ModuleType:
     name = f"_joulewise_generalized_floor_mint_core_{next(_CORE_SEQUENCE)}"
     spec = importlib.util.spec_from_file_location(name, _ORIGINAL_MINT_PATH)
     if spec is None or spec.loader is None:
-        raise MintError("cannot load the byte-frozen mint core")
+        raise MintError("cannot load the review-pinned mint-core interface")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     try:
@@ -495,7 +499,7 @@ def _fresh_original_core() -> ModuleType:
 def _artifact_for_legacy_root_validation(
     artifact: Mapping[str, Any], pinset: MintPinset
 ) -> Mapping[str, Any]:
-    """Present only legacy root labels to the byte-frozen schema validator."""
+    """Present legacy root labels to the review-pinned mint-core validator."""
 
     normalized = copy.deepcopy(dict(artifact))
     for cell in normalized.get("cells", []):
