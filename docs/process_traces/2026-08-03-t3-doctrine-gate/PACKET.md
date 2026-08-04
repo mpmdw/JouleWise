@@ -1,13 +1,24 @@
 # Rule-11 gate packet — T3 Code control-plane doctrine ratification
 
-Status: ASSEMBLING — freezes after (i) Ed's bootstrap declaration (§7)
-and (ii) exhibit-manifest digests are stamped. Revised 2026-08-03 late
-night per the charter design consult (record:
-`inputs/charter-consult-record.md`); the first draft's admission of a
-whole narrative RUN_STATE block as unscoped "custody input" was itself
-a consult-confirmed laundering defect and is corrected below.
-Assembled by the lead MECHANICALLY; lead views confined to labeled
-sections. Tracked per D-111 from birth.
+Status: FROZEN 2026-08-03 ~22:45 PT (Ed's bootstrap declaration
+received; exhibit manifest stamped below). Any byte change after this
+freeze = new candidate, new gate. Revised earlier tonight per the
+charter design consult (record: `inputs/charter-consult-record.md`);
+the first draft's admission of a whole narrative RUN_STATE block as
+unscoped "custody input" was itself a consult-confirmed laundering
+defect and is corrected below. Assembled by the lead MECHANICALLY;
+lead views confined to labeled sections. Tracked per D-111 from birth.
+
+## Exhibit manifest (sha256, stamped at freeze)
+
+```
+a2a087a470e879022cc1beae7cf8dc5fb84bb0cf25e453e0af7bcb755e460e6f  inputs/charter-consult-record.md
+756bc8515b3086869073a5380475107af39fcca35ba64db80faef03af41b8a11  inputs/final-message-1f59-7ec.md
+3ed20243c4c39016e70a458834b2f30ac5bc07ef5eff7bd80240bd0144c7bde0  inputs/final-message-2511-742.md
+d303eaf2d9559ee38164b266a06b941d12ef8c87e43395c2466e825d563e9241  inputs/final-message-710c-75d.md
+77dcf6c0efa1c1c5b89fda86246eb3b0027ae710db0f196a61efb032f9f32914  inputs/rollout-pins.txt
+2d1f6fb6ab81eab0913fa38958eb46429e41f024c35eb319ec6732ed4ab75ccd  inputs/runstate-t3-block.md
+```
 
 ## 1. Trigger (mandatory)
 
@@ -180,15 +191,18 @@ Trust anchor: `docs/process/coldgate_charter_registry.md` at the
 freeze revision; the launch-time expected digest is supplied to the
 judge from the registry, independently of this packet.
 
-## 7. Ed actions required before freeze
+## 7. Bootstrap declaration (received; recorded verbatim)
 
-1. **Bootstrap declaration** (consult Q6, self-referential first
-   packet): Ed authorizes charter digest `099de884…c95d81` solely as
-   the procedural candidate used to evaluate this packet's same exact
-   bytes; bootstrap authorization is not ratification evidence; any
-   post-ruling byte change = new candidate, new gate.
-2. t3 open at judgment time (fresh-t3-thread judge; also the
-   cold-packet-handoff exercise).
+Ed, 2026-08-03 ~22:44 PT, in-session, verbatim:
+
+> Bootstrap declaration: I authorize charter digest
+> 099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81
+> solely as the procedural candidate for judging the t3-doctrine
+> packet. Not ratification evidence.
+
+Per the consult's self-referential-first-packet rule: this
+authorization is not ratification evidence; any post-ruling byte
+change = new candidate, new gate.
 
 ## 8. Recorded dissent and open tensions (must reach the judge)
 

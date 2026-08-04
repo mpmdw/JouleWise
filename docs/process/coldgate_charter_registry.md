@@ -14,7 +14,8 @@ independently of the packet.
 | File | `docs/process/coldgate_charter.md` |
 | Version | v2 (post-consult rewrite, 2026-08-03) |
 | sha256 | `099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81` |
-| Status | **BOOTSTRAP-CANDIDATE** — not ratified. Awaiting: Ed's bootstrap declaration (authorizing this digest solely as the procedural candidate used to evaluate the t3-doctrine packet's same exact bytes; bootstrap authorization is not ratification evidence), then the t3-doctrine gate's ruling on the charter text at this digest. |
+| Status | **BOOTSTRAP-AUTHORIZED** (Ed, 2026-08-03 ~22:44 PT, verbatim declaration recorded in the packet §7) — not ratified; awaiting the t3-doctrine gate's ruling on the charter text at this digest. |
+| Frozen packet | `docs/process_traces/2026-08-03-t3-doctrine-gate/PACKET.md`, sha256 `1f027d0714f0669a63405c9e245ad2e98f78034bd6608b4130084593e173b616` |
 | Consult record | `docs/process_traces/2026-08-03-t3-doctrine-gate/inputs/charter-consult-record.md` |
 
 ## History
