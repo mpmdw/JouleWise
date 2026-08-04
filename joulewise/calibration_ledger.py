@@ -174,6 +174,14 @@ class LedgerObservation:
     disposition: str
     custody_locator: str
 
+    @property
+    def classification_disposition(self) -> str:
+        """Map the writer terminal state onto the R2 observation schema."""
+
+        return (
+            "unresolved" if self.disposition == "abandoned" else self.disposition
+        )
+
 
 @dataclass(frozen=True)
 class CalibrationLedgerSnapshot:
@@ -302,16 +310,21 @@ def _valid_receipt_shape(receipt: object) -> bool:
         )
     if disposition not in FINAL_DISPOSITIONS:
         return False
-    if disposition != "abandoned":
-        if (
-            content_id is None
-            or content_id_from_artifact_hashes(artifacts) != content_id
-            or not receipt.get("custody_locator")
-            or any(epoch.get(field) in (None, "") for field in IDENTITY_EPOCH_FIELDS)
-            or any(t1.get(field) in (None, "") for field in T1_FIELDS)
-            or capture is None
-        ):
-            return False
+    if disposition == "abandoned":
+        # R1 retains the terminal writer state as ``abandoned`` while R2
+        # classifies it as unresolved.  When canonical primary bytes exist,
+        # preserve their authentic content identity; a partial/no-content
+        # attempt remains representable with a null content id.
+        return content_id == content_id_from_artifact_hashes(artifacts)
+    if (
+        content_id is None
+        or content_id_from_artifact_hashes(artifacts) != content_id
+        or not receipt.get("custody_locator")
+        or any(epoch.get(field) in (None, "") for field in IDENTITY_EPOCH_FIELDS)
+        or any(t1.get(field) in (None, "") for field in T1_FIELDS)
+        or capture is None
+    ):
+        return False
     return True
 
 
@@ -423,7 +436,11 @@ def _attempts_and_observations(
         epoch = dict(receipt["identity_epoch"])
         if isinstance(content_id, str):
             classification = (
-                str(receipt["disposition"]),
+                (
+                    "unresolved"
+                    if receipt["disposition"] == "abandoned"
+                    else str(receipt["disposition"])
+                ),
                 tuple((field, epoch.get(field)) for field in IDENTITY_EPOCH_FIELDS),
             )
             previous = content_classification.get(content_id)

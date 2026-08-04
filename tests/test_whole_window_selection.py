@@ -45,6 +45,7 @@ from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
     append_pending_receipt,
     artifact_hashes as calibration_artifact_hashes,
     finalize_attempt_receipt,
@@ -1027,6 +1028,53 @@ class WholeWindowSelectionTests(unittest.TestCase):
 
 
 class MaxBracketConsumptionTests(unittest.TestCase):
+    def test_minted_semantics_loads_and_refuses_pending_ledger_snapshot(self) -> None:
+        snapshot = CalibrationLedgerSnapshot(
+            ledger_schema=LEDGER_SCHEMA,
+            ledger_path=Path("fixture-ledger.jsonl"),
+            head_sequence=1,
+            head_digest="a" * 64,
+            receipts=(),
+            observations=(),
+            refusal_reasons=("calibration_ledger_pending",),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            (bundle / "summary_metrics.json").write_text("{}\n", encoding="utf-8")
+            with patch(
+                "joulewise.whole_window.load_calibration_ledger_snapshot",
+                return_value=snapshot,
+            ) as load_snapshot:
+                session = AuthenticatedConsumptionSession(
+                    root,
+                    {"member"},
+                    consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+                )
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+        load_snapshot.assert_called_once()
+        self.assertIs(session.calibration_ledger_snapshot, snapshot)
+        self.assertFalse(session.ready)
+        self.assertEqual(session.refusal_reasons, ("calibration_ledger_pending",))
+
+    def test_minted_secondary_verifier_refuses_missing_session(self) -> None:
+        with patch(
+            "joulewise.whole_window._validate_row_uncached",
+            return_value=(True, ()),
+        ) as validate_uncached:
+            valid, reasons = _validate_row(
+                {"consumption_semantics_id": MINTED_CONSUMPTION_SEMANTICS_ID},
+                Path("/runs-root"),
+                {"member"},
+            )
+        self.assertFalse(valid)
+        self.assertEqual(reasons, ("whole_window_verdict_provenance_invalid",))
+        validate_uncached.assert_not_called()
+
     def test_supplied_ledger_snapshot_object_is_reused_without_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

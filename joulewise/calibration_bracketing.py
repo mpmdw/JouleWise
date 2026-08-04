@@ -881,9 +881,20 @@ def evaluate_calibration_bracket(
         for content_id, observation in sorted(distinct_observations.items())
         if content_id not in prior_ids
     ]
+    new_observations.extend(
+        sorted(
+            (
+                observation
+                for observation in ledger_snapshot.observations
+                if observation.content_id is None
+                and observation.sequence > cutoff["sequence"]
+            ),
+            key=lambda observation: (observation.sequence, observation.attempt_id),
+        )
+    )
     if any(
-        observation.disposition
-        not in {"valid", "systematic-invalid", "ordinary-invalid", "abandoned"}
+        observation.classification_disposition
+        not in {"valid", "systematic-invalid", "ordinary-invalid"}
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)

@@ -413,10 +413,7 @@ class AuthenticatedConsumptionSession:
         self._allow_unissued_calibration_fixture = (
             _allow_unissued_calibration_fixture
         )
-        if (
-            self.calibration_ledger_snapshot is None
-            and consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
-        ):
+        if self.calibration_ledger_snapshot is None:
             acceptance = load_calibration_acceptance_bound()
             cutoff = (
                 acceptance.get("ledger_cutoff")
@@ -487,15 +484,14 @@ class AuthenticatedConsumptionSession:
         self._prepared = True
         self._preparation_identity = identity
         reasons: set[str] = set()
-        if self.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID:
-            if self.calibration_ledger_snapshot is None:
-                self._fail_global({"calibration_ledger_snapshot_required"})
-                return
-            if self.calibration_ledger_snapshot.refusal_reasons:
-                self._fail_global(
-                    set(self.calibration_ledger_snapshot.refusal_reasons)
-                )
-                return
+        if self.calibration_ledger_snapshot is None:
+            self._fail_global({"calibration_ledger_snapshot_required"})
+            return
+        if self.calibration_ledger_snapshot.refusal_reasons:
+            self._fail_global(
+                set(self.calibration_ledger_snapshot.refusal_reasons)
+            )
+            return
         if (
             not self.referenced_bundle_ids.issubset(bundle_paths)
             or not bundle_paths
@@ -4073,6 +4069,18 @@ def _validate_row(
     consumption_session: AuthenticatedConsumptionSession | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
+
+    basis = row.get("evaluation_basis")
+    declared_semantics = (
+        basis.get("consumption_semantics_id")
+        if isinstance(basis, Mapping)
+        else row.get("consumption_semantics_id")
+    )
+    if (
+        declared_semantics == MINTED_CONSUMPTION_SEMANTICS_ID
+        and (consumption_session is None or not consumption_session.ready)
+    ):
+        return False, ("whole_window_verdict_provenance_invalid",)
 
     cache_key: tuple[str, str, tuple[str, ...], str | None] | None = None
     if consumption_session is not None and not consumption_session.ready:

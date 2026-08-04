@@ -9,7 +9,7 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 import tempfile
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +17,7 @@ from joulewise.calibration_bracketing import (
     CalibrationCandidate,
     _canonical_sha256,
     _valid_acceptance_bound,
+    calibration_bracket_for_bundles,
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
     load_calibration_candidate,
@@ -538,7 +539,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_unselected_same_identity_range_expander_stales_artifact(self) -> None:
-        result, reasons = evaluate_calibration_bracket(
+        snapshot, registered = _fixture_snapshot(
             [
                 replace(
                     self.candidate("range-expander", 99.0, "0.022"),
@@ -549,12 +550,35 @@ class CalibrationBracketingTests(unittest.TestCase):
                 ),
                 self.candidate("current-pre", 199.0, "0.025"),
                 self.candidate("current-post", 211.0, "0.026"),
-            ],
-            window_start_s=200.0,
-            window_end_s=210.0,
-            bindings=self.bindings,
-            policy=self.policy,
+            ]
         )
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(start_s=200.0, end_s=210.0),
+            metadata=lambda: {
+                "instrument_calibration": {"bindings": self.bindings}
+            },
+        )
+
+        def discover(source: object) -> tuple[CalibrationCandidate, ...]:
+            return tuple(registered) if source is snapshot else ()
+
+        with (
+            patch(
+                "joulewise.calibration_bracketing.BundleReader",
+                return_value=reader,
+            ),
+            patch(
+                "joulewise.calibration_bracketing.discover_calibration_candidates",
+                side_effect=discover,
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path("/caller-root"),
+                [Path("/caller-root/window-member")],
+                self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
         self.assertEqual(result["status"], "failed")
         self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
         self.assertEqual(result["acceptance"]["freshness"]["status"], "stale")
@@ -623,8 +647,8 @@ class CalibrationBracketingTests(unittest.TestCase):
     def test_prior_set_subtraction_does_not_treat_known_holdout_as_new(self) -> None:
         result, reasons = evaluate_calibration_bracket(
             [
-                self.candidate("pre", 99.0, "0.021"),
-                self.candidate("post", 111.0, "0.026"),
+                self.candidate("pre", 99.0, "0.020"),
+                self.candidate("post", 111.0, "0.020"),
             ],
             window_start_s=100.0,
             window_end_s=110.0,
@@ -641,21 +665,36 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_corpus_doubling_counts_38_total_valid_distinct_observations(self) -> None:
-        candidates = [
-            self.candidate("current-pre", 99.0, "0.025"),
-            self.candidate("current-post", 111.0, "0.026"),
-        ]
-        for index in range(36):
+        artifact = load_calibration_acceptance_bound()
+        self.assertIsNotNone(artifact)
+        candidates = []
+        for index, member in enumerate(artifact["derivation_corpus"]["members"]):
             candidates.append(
                 replace(
                     self.candidate(
-                        f"extra-{index}", 120.0 + index, "0.025"
+                        f"prior-{index}",
+                        (
+                            99.0
+                            if index == 0
+                            else 111.0
+                            if index == 1
+                            else 120.0 + index
+                        ),
+                        "0.025",
                     ),
+                    manifest_sha256=member["manifest_sha256"],
+                    evidence_sha256=member["instrument_evidence_sha256"],
+                )
+            )
+        for index in range(19):
+            candidates.append(
+                replace(
+                    self.candidate(f"new-{index}", 200.0 + index, "0.025"),
                     manifest_sha256=hashlib.sha256(
-                        f"extra-manifest-{index}".encode()
+                        f"new-manifest-{index}".encode()
                     ).hexdigest(),
                     evidence_sha256=hashlib.sha256(
-                        f"extra-evidence-{index}".encode()
+                        f"new-evidence-{index}".encode()
                     ).hexdigest(),
                 )
             )
@@ -676,6 +715,79 @@ class CalibrationBracketingTests(unittest.TestCase):
             ],
             ["corpus_doubles_from_19_to_38"],
         )
+
+    def test_new_abandoned_observation_refuses_with_or_without_content(self) -> None:
+        candidates = [
+            self.candidate("pre", 99.0, "0.025"),
+            self.candidate("post", 111.0, "0.026"),
+        ]
+        content_hashes = {
+            "manifest.json": hashlib.sha256(b"abandoned-manifest").hexdigest(),
+            "instrument_evidence.json": hashlib.sha256(
+                b"abandoned-evidence"
+            ).hexdigest(),
+        }
+        cases = (
+            (
+                "content-bearing",
+                content_hashes,
+                content_id_from_artifact_hashes(content_hashes),
+            ),
+            ("contentless", {}, None),
+        )
+        for label, hashes, content_id in cases:
+            with self.subTest(label=label):
+                abandoned = LedgerObservation(
+                    sequence=6,
+                    receipt_digest=hashlib.sha256(
+                        f"abandoned-receipt-{label}".encode()
+                    ).hexdigest(),
+                    attempt_id=f"abandoned-attempt-{label}",
+                    content_id=content_id,
+                    artifact_sha256=MappingProxyType(hashes),
+                    identity_epoch=MappingProxyType(
+                        {
+                            field: self.bindings.get(field)
+                            for field in (
+                                "os_build",
+                                "hardware_model",
+                                "power_policy",
+                                "sampling_interval_ms",
+                                "estimator_revision",
+                                "pulse_protocol_id",
+                            )
+                        }
+                    ),
+                    t1_bindings=MappingProxyType(
+                        {
+                            field: self.bindings.get(field)
+                            for field in V2_BINDING_FIELDS
+                        }
+                    ),
+                    capture_wall_time_s="105.0",
+                    exact_bound_lexeme_s=None,
+                    disposition="abandoned",
+                    custody_locator=(
+                        f"/authenticated-custody/abandoned-attempt-{label}"
+                    ),
+                )
+                snapshot, registered = _fixture_snapshot(
+                    candidates,
+                    extra_observations=(abandoned,),
+                )
+                result, reasons = _evaluate_calibration_bracket(
+                    registered,
+                    window_start_s=100.0,
+                    window_end_s=110.0,
+                    bindings=self.bindings,
+                    policy=self.policy,
+                    ledger_snapshot=snapshot,
+                    _allow_unissued_fixture=True,
+                )
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(
+                    reasons, ("calibration_observation_unclassifiable",)
+                )
 
     def test_acceptance_artifact_rederives_from_decimal_member_table(self) -> None:
         artifact = load_calibration_acceptance_bound()

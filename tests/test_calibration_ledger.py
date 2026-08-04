@@ -13,6 +13,8 @@ from joulewise.calibration_ledger import (
     CalibrationLedgerError,
     append_pending_receipt,
     artifact_hashes,
+    canonical_json_bytes,
+    canonical_sha256,
     finalize_attempt_receipt,
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
@@ -153,24 +155,44 @@ class CalibrationLedgerTests(unittest.TestCase):
         snapshot = self._snapshot(verify_custody=False)
         self.assertIn("calibration_ledger_head_mismatch", snapshot.refusal_reasons)
 
-    def test_duplicate_or_forked_chain_refuses(self) -> None:
+    def test_true_sibling_fork_refuses_on_predecessor_conflict(self) -> None:
         custody = self._custody("fork")
-        self._reserve("fork", custody)
+        first = self._reserve("fork", custody)
         final = self._finalize("fork", custody)
-        first = self.ledger.read_bytes().splitlines(keepends=True)[0]
-        with self.ledger.open("ab") as handle:
-            handle.write(first)
-        self._write_pin(
-            {
-                "sequence": 3,
-                "head_digest": json.loads(first)["receipt_digest"],
-                "ledger_schema": LEDGER_SCHEMA,
-            }
+        sibling = {
+            **dict(first),
+            "sequence": 3,
+            "predecessor_digest": first["receipt_digest"],
+            "attempt_id": "fork-sibling",
+            "custody_locator": str(self.root / "fork-sibling"),
+        }
+        sibling["receipt_digest"] = canonical_sha256(
+            {key: value for key, value in sibling.items() if key != "receipt_digest"}
         )
+        with self.ledger.open("ab") as handle:
+            handle.write(canonical_json_bytes(sibling) + b"\n")
+        self._write_pin(head_pin_for_receipt(sibling))
         snapshot = self._snapshot(verify_custody=False)
         self.assertIn("calibration_ledger_chain_conflict", snapshot.refusal_reasons)
-        self.assertIn("calibration_ledger_attempt_conflict", snapshot.refusal_reasons)
-        self.assertNotEqual(final["receipt_digest"], snapshot.head_digest)
+        self.assertNotIn(
+            "calibration_ledger_attempt_conflict", snapshot.refusal_reasons
+        )
+        self.assertNotIn("calibration_ledger_head_mismatch", snapshot.refusal_reasons)
+        self.assertEqual(sibling["receipt_digest"], snapshot.head_digest)
+        self.assertNotEqual(final["receipt_digest"], sibling["receipt_digest"])
+
+    def test_content_bearing_abandoned_receipt_is_unresolved_evidence(self) -> None:
+        custody = self._custody("abandoned-content")
+        self._reserve("abandoned-content", custody)
+        final = self._finalize(
+            "abandoned-content", custody, disposition="abandoned"
+        )
+        self._write_pin(head_pin_for_receipt(final))
+        snapshot = self._snapshot()
+        observation = snapshot.observation_by_attempt["abandoned-content"]
+        self.assertIsNotNone(observation.content_id)
+        self.assertEqual(observation.disposition, "abandoned")
+        self.assertEqual(observation.classification_disposition, "unresolved")
 
     def test_finalization_is_single_transition(self) -> None:
         custody = self._custody("single")
