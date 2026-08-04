@@ -118,16 +118,29 @@ question.
   `session_meta` field `originator: "t3code_desktop"` (verified live
   from the rollout file by the assembling session; cwd
   /Users/edr/code/JouleWise, cli 0.146.0) (Q5).
+- E9 — commit `14c9f05` (Ed-authored RUN_STATE refinement, timed
+  discriminator probe): in Auto mode the phone cards are POST-HOC
+  NOTIFICATIONS, NOT GATES — execution never blocks on them
+  (22:04:04→22:04:04, Ed instructed not to respond, file created in
+  0 s); a tapped card ≠ an approval; the prior session's "permission
+  prompts functioning" inference is corrected (its clicks were
+  acknowledgments); notification cards are visually indistinguishable
+  from approval prompts (legibility hazard, upstream-issue candidate);
+  capability-profile matrix (mode × provider × blocking-semantics) to
+  be filled (Q1a, Q4).
 
 ## 5. Acceptance-gate evidence (facts; Q4)
 
 - isolated-native-write ✅ — E7.
 - native-discussion ✅ — E4/E8; ingestion note = the E1 gate-log entry.
-- phone-approval ❌ + A3 FINDING: in t3 "Auto" mode the permission
-  classifier SELF-APPROVED a sandbox-disabled home-dir write with no
-  prompt relayed (E1 gate log). Auto ≠ human-in-loop; only Supervised
-  guarantees a tap. Re-run shape: Supervised thread, one prompt, one
-  tap.
+- phone-approval ❌ + A3 FINDING (E1 gate log), REFINED by E9: in t3
+  "Auto" mode the permission classifier SELF-APPROVED a
+  sandbox-disabled home-dir write with no prompt relayed; Ed's timed
+  discriminator probe then established that Auto-mode phone cards are
+  post-hoc notifications, not gates — a tapped card is not an
+  approval. Only Supervised can gate; the Supervised blocking-semantics
+  cell of the E9 capability matrix is the remaining evidence for this
+  gate.
 - checkpoint-restore: OPEN (scratch-repo probe not yet run).
 - app-death recovery: OPEN (next real t3 quit/relaunch vs predeclared
   criteria).
