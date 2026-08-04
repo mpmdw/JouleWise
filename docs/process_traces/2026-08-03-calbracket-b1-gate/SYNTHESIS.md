@@ -134,3 +134,26 @@ Round 2 launched per this synthesis (Sol, effort high, worktree
 `calbracket`, single commit citing this gate). Gate record complete
 when: round-2 report + delta re-audit + lead replay counts are
 appended, then PR under D-072.
+
+## Round-2 execution log (appended)
+
+- Round 2 ran delegated Sol HIGH per the D2 deviation (recorded above).
+- Report 1 (`round2-report-needsscope.md`): repair COMPLETE in-scope —
+  guard removed, normalized post-seam enforcement consolidated, R1-R5 +
+  both mutants + both overlay red-pre-fix proofs pass; baseline full
+  suite green pre-fix (2453 OK); post-fix canonical failures confined
+  to exactly three legacy-fixture files (analysis_integration 39F/4E,
+  floor_extraction 4F, whole_window 1F) → NEEDS_SCOPE early return,
+  the gate's pre-authorized shape.
+- LEAD SCOPE GRANT (2026-08-03 ~23:40): the three enumerated test
+  paths added to WRITE_SCOPE (fixture-side only; no enforcement
+  weakening; assertion-purpose conflicts return NEEDS_RULING; full
+  suite green + single gate-citing commit required). Run resumed on
+  the same thread.
+- CONTAMINATION ERRATUM (same class as the doctrine-gate judges'
+  B1 finding): this gate's cold Fable judge was convened in the main
+  checkout pre-charter and received doctrine/memory auto-injection
+  without disclosure. Its ruling stands on its verified file:line
+  evidence (independently corroborated by the Sol refuter at the same
+  head). All future convenings follow the registry clean-launch
+  procedure. Full note: t3-doctrine gate synthesis-exhibits SX3.
