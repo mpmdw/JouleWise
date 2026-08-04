@@ -709,7 +709,7 @@
       "priority": "p1_phase_gate",
       "rank": 13,
       "status": "blocked",
-      "status_note": "2026-08-03: D-109 RULED (Ed deferral to the joint magistrate+Sol consult; Sol round 1 broke the original A-min formulation [writer crash-window; prefix-subset is not anti-rollback], round 2 flipped B->A-min; both holes lead-verified). Single combined fix round: F1 (freshness = 6-field epoch) + F2 (4-module estimator digest closure) + F3 A-min (reservation-first receipt ledger at the sole production writer, repo-committed head pin {sequence, head_digest, ledger_schema}, epoch-bounded rotation, ONE immutable snapshot through every consumer) + the R2 prior_observation_set schema (19->38 counting rule = 38 total content-distinct valid same-epoch). 32/6 inventory is a backfill CANDIDATE only: raw-physics + hash verification before issuance; unresolved members block issuance. Threat-model statement per R1 clause 7 wherever A-min is described. 2026-08-03 CHECKPOINT: held at 2e61ff9 (pushed); B2+S1 closed; B1 persists refined — ROUND 2 REQUIRES THE RULE-11 GATE FIRST (do not bench it).",
+      "status_note": "2026-08-03: D-109 RULED (Ed deferral to the joint magistrate+Sol consult; Sol round 1 broke the original A-min formulation [writer crash-window; prefix-subset is not anti-rollback], round 2 flipped B->A-min; both holes lead-verified). Single combined fix round: F1 (freshness = 6-field epoch) + F2 (4-module estimator digest closure) + F3 A-min (reservation-first receipt ledger at the sole production writer, repo-committed head pin {sequence, head_digest, ledger_schema}, epoch-bounded rotation, ONE immutable snapshot through every consumer) + the R2 prior_observation_set schema (19->38 counting rule = 38 total content-distinct valid same-epoch). 32/6 inventory is a backfill CANDIDATE only: raw-physics + hash verification before issuance; unresolved members block issuance. Threat-model statement per R1 clause 7 wherever A-min is described. 2026-08-03 CHECKPOINT: held at 2e61ff9 (pushed); B2+S1 closed; B1 persists refined — ROUND 2 REQUIRES THE RULE-11 GATE FIRST (do not bench it). 2026-08-04: B1 gate RULED and round 2 LANDED (delta re-audit CLEAN, B1 closed both dimensions); integration collision vs the generalized-mint interface guard found at the lead gate and RESOLVED per D-109 addendum II (reviewed signature amendment + guard hardening; parity proven on the integration tree; full suite 2487 OK exit-0 unpiped). PR #100 GATE-COMPLETE, CI GREEN at 4280ebd; MERGE AWAITS ED (harness denies agent self-merge). On merge: retire this row; D-110 re-mint condition (a) is satisfied.",
       "stop_card": null
     },
     "CI-003": {
@@ -1284,7 +1284,7 @@
         "evidence": [
           "A 7B decode-floor artifact mints from qwen25_7b_decode_floor_v1 evidence with its own hard six-decimal operative-floor literal supplied per plan, never derived inside the mint path",
           "The pre-registration gate passes as-embedded and validate_floor_artifact returns no findings",
-          "Mint #1 re-mints byte-identical from the same inputs"
+          "The generalized path mints byte-identical to the reviewed core from the same inputs on the same integration tree (core-vs-wrapper parity per D-109 addendum II; NOT a match against historical mint-1 digests, which D-110's corrected re-mint may legitimately change)"
         ],
         "pointer": {
           "json_pointer": "/tasks/MINT-GENERALIZE-01/acceptance",
@@ -3008,7 +3008,7 @@
       "priority": "p2_next_slice",
       "rank": 5,
       "status": "queued",
-      "status_note": "2026-08-03: timing DATA collected (quiet bench, 93 modules, 695s serial; raw in .desk/test-speed-consult/timings-20260803.jsonl) and DESIGN done (.desk/test-speed-consult/DESIGN-from-timing-data.md). Findings: suite is a 2-module problem (run_campaign 182s + p2038 133s = 45%); module-atomic sharding CAPS at 182s so those two must be split by TestCase class; shard-runner + splits -> ~87s wall @8 workers (6.5x); fast tier (drop 11 heavy integ modules) -> 25-40s PR feedback with the full suite still the merge gate. Blacksmith (lever 3) NEEDS ED (account/cost; likely marginal once sharded). Implementation queued: scripts/shard_tests.py + class-split + CI matrix — mechanical, delegatable, zero deletions (D-061).",
+      "status_note": "2026-08-03: timing DATA collected (quiet bench, 93 modules, 695s serial; raw in .desk/test-speed-consult/timings-20260803.jsonl) and DESIGN done (.desk/test-speed-consult/DESIGN-from-timing-data.md). Findings: suite is a 2-module problem (run_campaign 182s + p2038 133s = 45%); module-atomic sharding CAPS at 182s so those two must be split by TestCase class; shard-runner + splits -> ~87s wall @8 workers (6.5x); fast tier (drop 11 heavy integ modules) -> 25-40s PR feedback with the full suite still the merge gate. Blacksmith (lever 3) NEEDS ED (account/cost; likely marginal once sharded). Implementation queued: scripts/shard_tests.py + class-split + CI matrix — mechanical, delegatable, zero deletions (D-061). 2026-08-04: PHASE 1 LANDED — PR #98 MERGED (9b02539): module-atomic shard-runner + 8-way CI shard matrix, main CI green under it (~15min -> ~6min proven); worktree/branch pruned. Remaining scope: class-split of the two heavy modules (Phase 2), fast PR tier (lever 2), Blacksmith runners (lever 3, NEEDS ED).",
       "stop_card": null
     },
     "TOOL-01": {
@@ -3130,5 +3130,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-03"
+  "updated": "2026-08-04"
 }

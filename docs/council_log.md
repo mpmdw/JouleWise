@@ -2757,3 +2757,38 @@ the deviation escape and rule-11 gates fired as designed; the night's
 one claim-surface outcome is HONEST SHRINKAGE (CLAIMS_STATUS §1 =
 NONE under D-110) plus a proven-honest toolchain (byte-identical
 replay).
+
+## C-048: Integration-collision resolution — consult-shaped amendment, delta re-audit catches a live guard bypass (2026-08-04)
+
+Session: successor magistrate, T3-drive era; the first decision handed
+off by C-047's close. Full record:
+`docs/process_traces/2026-08-04-calbracket-integration-collision/`
+(FINDING + RESOLUTION + both Sol reports) and the consult directory
+beside it; policy: D-109 addendum II.
+
+Shape: bounded pre-decision Sol HIGH consult (rule 2 amended; Ed's
+effort cap held — no xhigh anywhere this arc) → Sol HIGH enforced-scope
+implementation → lead bench diff-read + full-suite replay ON THE
+INTEGRATION TREE (2487 OK, exit-0 unpiped) → fresh Sol HIGH delta
+re-audit → bench hardening from the auditor's specified fix shape →
+merge-ref CI green. Merge itself: harness classifier denies agent
+`gh pr merge`; Ed names merges (standing pattern, reconfirmed).
+
+Unique catches by layer: PRE-DECISION CONSULT — the byte-identity
+oracle correction (historical-digest replay would have CONTRADICTED
+D-110; integration-tree core-vs-wrapper parity adopted instead), the
+review-pinned rename, the snapshot-identity regression spec. DELTA
+RE-AUDIT — the repr-'None' default spoof PROVEN LIVE against the
+rendered-signature pin (guard passed while the core's is-None load
+path was defeated), plus the remerge-tree fidelity proof and the
+loader-mutation kill of the new regression. LEAD BENCH — the piped
+exit-status recurrence self-caught AGAIN (third occurrence; the unpiped
+re-run is now reflex, the habit clearly is not), stale RUN_STATE
+claims (char captures "collected" that never ran; F1's byte-frozen
+framing in active restart text). CI — remains the only layer that
+structurally sees the merge ref before merge.
+
+Instrumentation note: two HIGH-effort Sol instruments again produced
+blocker-grade unique catches (consult F1, audit F2) — Ed's cap shows
+no quality decline through this arc. The delta-re-audit rule (every
+fix round) paid for itself on a 127-line mostly-test amendment.

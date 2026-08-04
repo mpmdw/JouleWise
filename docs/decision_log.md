@@ -7194,3 +7194,42 @@ D-102 epoch; the taint is confined to floor artifacts.
    window-level cascade producer AND a per-bundle reduce-time producer.
    D-100's cascade classification was correct for the producer it
    examined; future cascade classifications must name producers.
+
+## D-109 addendum II: reviewed mint-core interface amendment (integration-collision resolution); D-110 oracle clarification
+
+- Date: 2026-08-04 (successor magistrate ruling after bounded
+  pre-decision Sol high consult, one round; Ed's HIGH effort cap
+  observed)
+- Status: executed (PR #100 gate-complete, CI green at `4280ebd`;
+  merge is Ed's tap — the harness denies agent self-merge)
+- Record: `docs/process_traces/2026-08-04-calbracket-integration-collision/`
+  (FINDING.md, RESOLUTION.md, impl + delta re-audit reports) and
+  `docs/process_traces/2026-08-04-calbracket-collision-consult/`
+
+1. D-109 R1.4's `calibration_ledger_snapshot` threading is a DELIBERATE
+   REVIEWED INTERFACE REVISION of the mint core. The generalized mint's
+   `_CORE_SIGNATURES` pin is amended to the new signature; no adapter
+   shim, no multi-version pin, no core-file digest pin (consult Q1,
+   adopted). Future `_CORE_SIGNATURES` changes require explicit
+   signature-pin review plus parity evidence (noted in-code).
+2. The guard's framing is corrected to REVIEW-PINNED MINT-CORE
+   INTERFACE — it pins selected signatures of a review-controlled core
+   file and is not a byte freeze; "byte-identical" is reserved for
+   observed output comparisons.
+3. D-110 CLARIFICATION (conditions unchanged): tooling byte-identity
+   evidence means INTEGRATION-TREE CORE-VS-WRAPPER PARITY on identical
+   inputs. It does not require any future artifact to match the tainted
+   historical mint-1 digests — D-110's corrected re-mint may
+   legitimately produce different bytes. MINT-GENERALIZE-01's
+   acceptance evidence is reworded accordingly in the kernel.
+4. Guard hardening (delta re-audit F2, proven live): rendered-signature
+   comparison is spoofable by a default whose `repr()` is `None`; the
+   guard now identity-checks the None sentinel defaults structurally,
+   with a regression. Residual honestly held: `__signature__` spoofing
+   remains a property of the approach; the guard is a reviewed-drift
+   tripwire, not a security boundary against an adversarial core file.
+5. PROCESS FINDING (candidate rule, NOT ratified here — rule-11
+   cold-gate packet item): the lead's rule-1 verification replay runs
+   on the INTEGRATION tree whenever the branch is behind main. Recorded
+   with the collision as its motivating catch (CI on the merge ref was
+   the only layer that could see it).

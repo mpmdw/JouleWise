@@ -40,24 +40,29 @@ t3 ceremony and must not be polluted with t3 context.
    shape; **delta re-audit CLEAN, zero findings, B1 CLOSED both
    dimensions**; lead replay `Ran 2456 tests OK (skipped=82)` exit-0
    unmasked (closes the TMPDIR gap both prior audits flagged).
-   **SUCCESSOR ACTION — FIRST DECISION, DO NOT MERGE YET: PR CI is RED
-   for an INTEGRATION COLLISION**, found at the lead gate and proven
-   mechanically in an integration tree:
-   `docs/process_traces/2026-08-04-calbracket-integration-collision/FINDING.md`.
-   D-109 legitimately added `calibration_ledger_snapshot` to
-   `mint_floor_artifact` (R1.4 threading); main's
-   `scripts/mint_floor_artifact_generalized.py` holds a BYTE-FROZEN
-   expectation of that signature and refuses on drift. Both trees are
-   green alone; 10 failures on the merge ref, all one cause. It was
-   invisible to every prior check because the generalized module does
-   not exist in the branch tree. NOT hand-patched overnight:
-   design-bearing on claim-minting machinery (one casualty is the mint
-   byte-identical-replay guard, and D-110 gates re-mint on this row).
-   Recommended shape is in the finding — update the frozen expectation
-   as a reviewed amendment, RE-PROVE byte-identical mint replay on the
-   integration tree, confirm the drift guard still has teeth, then merge
-   on green. Merging unblocks **D-110's re-mint conditions** and
-   MINT-GENERALIZE-01.
+   **INTEGRATION COLLISION: RESOLVED 2026-08-04 (successor session) —
+   PR #100 is GATE-COMPLETE and CI-GREEN at `4280ebd`; MERGE AWAITS
+   ED'S TAP** (the harness classifier denies agent `gh pr merge`; Ed
+   names merges). Disposition of record:
+   `docs/process_traces/2026-08-04-calbracket-integration-collision/RESOLUTION.md`
+   (finding: `FINDING.md` same directory; pre-decision Sol high consult:
+   `../2026-08-04-calbracket-collision-consult/`). Shape executed:
+   main merged into the branch (`341055e`, remerge-proven clean union) →
+   reviewed interface amendment `4c0897a` (the guard's signature pin
+   updated to the D-109 core signature; the dishonest "byte-frozen"
+   framing renamed to review-pinned mint-core interface; literal
+   signature-pin test; snapshot-identity regression) → fresh delta
+   re-audit (two should-fixes, no blockers) → guard hardening `4280ebd`
+   (the audit PROVED a repr-'None' default spoof passes rendered-
+   signature comparison; the guard now identity-checks the None
+   sentinel defaults, with a regression). Byte-identity oracle
+   CORRECTED per the consult: integration-tree core-vs-wrapper PARITY
+   (proven, tests pass), NOT historical mint-1 digest match — D-110's
+   corrected re-mint may legitimately differ. Evidence: lead full-suite
+   replay on the integration tree `Ran 2487 tests OK (skipped=82)`
+   exit-0 unpiped; PR CI fully green at `4280ebd`. ON MERGE: retire the
+   row (D-110 re-mint condition (a) satisfied; MINT-GENERALIZE-01
+   stays blocked on (b) issuance + (c) validator widening).
    **PROCESS FINDING (fix the habit, not just this branch):** the lead's
    rule-1 replay ran in the BRANCH tree, which cannot execute tests that
    exist only on main. Whenever a branch is behind main, the lead's
@@ -105,9 +110,16 @@ t3 ceremony and must not be polluted with t3 context.
    implementation behind it. Mechanism: `joulewise run` with NO policy
    bound (skips admission entirely, no campaign log, no verdict, no
    lock — the non-claim custody fence is structural). n=3 per arm.
-   **App-UP arm collected overnight** into
-   `runs_char_t3appup_20260804_r0{1,2,3}` (harvest + analyse as desk
-   work: mean/p95 package power per capture from
+   **CORRECTION (2026-08-04 successor session): the app-UP arm was
+   NEVER COLLECTED** — this block's original "collected overnight"
+   claim was stale at handoff; the run report
+   (`docs/run_reports/2026-08-03-t3-cutover-night.md` §Handoff) records
+   the driving session stood down rather than contaminate an idle
+   capture with an active agent session. Collection shape when taken:
+   the three `configs/characterization/char-t3appup-r0*.json` captures
+   as ONE background job while the operating session idle-waits with
+   zero output (protocol limitation 1), t3 resident and dormant; then
+   desk analysis (mean/p95 package power per capture from
    `rich_telemetry_idle.jsonl`, arm mean + SD). **App-DOWN arm is
    deliberately NOT collected** — it needs Ed present (quitting t3
    kills his threads, and the app-death gate wants him there anyway).
@@ -1335,7 +1347,7 @@ Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-03). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-04). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
 
 ### [ED-EXTERNAL]
 
