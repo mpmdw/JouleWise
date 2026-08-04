@@ -22,6 +22,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
@@ -35,6 +36,11 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
+from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
+)
 from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION,
@@ -89,6 +95,42 @@ TEST_POLICY_SHA256 = hashlib.sha256(
 EXPLORATORY_POLICY_SHA256 = hashlib.sha256(
     EXPLORATORY_POLICY_PATH.read_bytes()
 ).hexdigest()
+
+
+def fixture_calibration_ledger_snapshot() -> CalibrationLedgerSnapshot:
+    return CalibrationLedgerSnapshot(
+        ledger_schema=LEDGER_SCHEMA,
+        ledger_path=Path("fixture-ledger.jsonl"),
+        head_sequence=0,
+        head_digest=GENESIS_DIGEST,
+        receipts=(),
+        observations=(),
+        refusal_reasons=(),
+    )
+
+
+def prepared_minted_consumption_session(
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    **kwargs: object,
+) -> AuthenticatedConsumptionSession:
+    session = AuthenticatedConsumptionSession(
+        runs_root,
+        referenced_bundle_ids,
+        evaluation_basis_sha256=kwargs.get("evaluation_basis_sha256"),
+        consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+        calibration_ledger_snapshot=fixture_calibration_ledger_snapshot(),
+    )
+    session._prepare(
+        bundle_paths={
+            bundle_id: Path(runs_root) / bundle_id
+            for bundle_id in referenced_bundle_ids
+        },
+        policy=SimpleNamespace(calibration_bracketing=object()),
+    )
+    return session
+
+
 REGISTERED_BRACKET_POLICY = json.loads(REGISTERED_POLICY_PATH.read_text())[
     "idle_admission_extension"
 ]["neg8_bracket"]
@@ -979,7 +1021,15 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                 }
             ],
         }
-        return extract_cells(root, spec, strict_validator=lambda path, strict: [])
+        with mock.patch(
+            "joulewise.floor_extraction.AuthenticatedConsumptionSession",
+            side_effect=prepared_minted_consumption_session,
+        ):
+            return extract_cells(
+                root,
+                spec,
+                strict_validator=lambda path, strict: [],
+            )
 
     def test_floor_requires_campaign_bound_whole_window_and_adapter_evidence(self) -> None:
         # W6 defect shape: valid cells plus cooldowns were extractable with no
@@ -1038,7 +1088,14 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             (root / "campaign_log.jsonl").write_text(
                 json.dumps(failed) + "\n" + json.dumps(passed) + "\n"
             )
-            reasons = whole_window_refusal_reasons(root, {"A", "B"})
+            reasons = whole_window_refusal_reasons(
+                root,
+                {"A", "B"},
+                consumption_session=prepared_minted_consumption_session(
+                    root,
+                    {"A", "B"},
+                ),
+            )
         self.assertEqual(reasons, ("whole_window_verdict_conflict",))
 
     def test_whole_window_core_rejects_duplicate_member_occurrences(self) -> None:
@@ -1370,7 +1427,17 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     return_value=(0.03, None),
                 ),
             ):
-                reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    set(bundle_ids),
+                    consumption_session=AuthenticatedConsumptionSession(
+                        root,
+                        set(bundle_ids),
+                        calibration_ledger_snapshot=(
+                            fixture_calibration_ledger_snapshot()
+                        ),
+                    ),
+                )
         self.assertEqual(reasons, ("whole_window_verdict_conflict",))
 
     def test_current_neg8_manifest_identity_is_rederived(self) -> None:
@@ -1479,7 +1546,14 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             (root / "campaign_log.jsonl").write_text(
                 json.dumps(row) + "\n", encoding="utf-8"
             )
-            reasons = whole_window_refusal_reasons(root, set(bundle_ids))
+            reasons = whole_window_refusal_reasons(
+                root,
+                set(bundle_ids),
+                consumption_session=prepared_minted_consumption_session(
+                    root,
+                    set(bundle_ids),
+                ),
+            )
         self.assertEqual(reasons, ())
 
 

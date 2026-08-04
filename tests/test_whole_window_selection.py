@@ -8,7 +8,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -404,6 +404,20 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     ],
                 },
             }
+            session = AuthenticatedConsumptionSession(
+                root,
+                {"A", "B"},
+                calibration_ledger_snapshot=CalibrationLedgerSnapshot(
+                    ledger_schema=LEDGER_SCHEMA,
+                    ledger_path=Path("fixture-ledger.jsonl"),
+                    head_sequence=0,
+                    head_digest=GENESIS_DIGEST,
+                    receipts=(),
+                    observations=(),
+                    refusal_reasons=(),
+                ),
+            )
+            session._prepared = True
             with (
                 patch(
                     "joulewise.whole_window._validated_evaluation_basis",
@@ -427,7 +441,10 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 ) as derive,
             ):
                 baseline_ok, baseline_reasons = _validate_row(
-                    row, root, {"A", "B"}
+                    row,
+                    root,
+                    {"A", "B"},
+                    consumption_session=session,
                 )
                 self.assertTrue(baseline_ok, baseline_reasons)
                 self.assertTrue(derive.call_args.kwargs["point_drift"])
@@ -441,7 +458,10 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     del stripped["idle_admission_core"]["neg8_bracket"][field]
                     with self.subTest(field=field):
                         ok, reasons = _validate_row(
-                            stripped, root, {"A", "B"}
+                            stripped,
+                            root,
+                            {"A", "B"},
+                            consumption_session=session,
                         )
                         self.assertFalse(ok)
                         self.assertIn(
@@ -1028,52 +1048,178 @@ class WholeWindowSelectionTests(unittest.TestCase):
 
 
 class MaxBracketConsumptionTests(unittest.TestCase):
-    def test_minted_semantics_loads_and_refuses_pending_ledger_snapshot(self) -> None:
-        snapshot = CalibrationLedgerSnapshot(
+    @staticmethod
+    def _b1_public_path_fixture(
+        root: Path,
+        *,
+        explicit_minted_semantics: bool,
+    ) -> tuple[set[str], dict, dict]:
+        from tests.test_floor_extraction import (
+            CpuAndWholeWindowClaimBarrierTests,
+        )
+
+        helper = CpuAndWholeWindowClaimBarrierTests()
+        bundle_ids, _manifest, core = helper._current_core_fixture(root)
+        claim_families = {
+            family: {"drift_allowance_j": 0.1}
+            for family in ("gross_energy", "idle_subtracted_energy")
+        }
+        core["neg8_bracket"]["claim_families"] = claim_families
+        row = helper._whole_window_row(root, bundle_ids)
+        row["idle_admission_core"] = core
+        if explicit_minted_semantics:
+            row["consumption_semantics_id"] = (
+                MINTED_CONSUMPTION_SEMANTICS_ID
+            )
+        (root / "campaign_log.jsonl").write_text(
+            json.dumps(row) + "\n",
+            encoding="utf-8",
+        )
+        return set(bundle_ids), core, row
+
+    @staticmethod
+    @contextmanager
+    def _b1_public_path_dependencies(core: dict):
+        derived_neg8 = {
+            "decision": "passed",
+            "claim_families": core["neg8_bracket"]["claim_families"],
+            "bound_freshness": {},
+        }
+        with (
+            patch(
+                "joulewise.whole_window.current_environment_refusals",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.whole_window.calibration_bracket_for_bundles",
+                return_value=(core["instrument_calibration_bracket"], ()),
+            ),
+            patch(
+                "joulewise.whole_window._verify_instrument_calibration",
+                return_value=(0.03, None),
+            ),
+            patch(
+                "joulewise.whole_window._derived_neg8_decision",
+                return_value=(derived_neg8, None),
+            ),
+        ):
+            yield
+
+    @staticmethod
+    def _b1_snapshot(
+        *, refusal_reasons: tuple[str, ...] = ()
+    ) -> CalibrationLedgerSnapshot:
+        return CalibrationLedgerSnapshot(
             ledger_schema=LEDGER_SCHEMA,
             ledger_path=Path("fixture-ledger.jsonl"),
-            head_sequence=1,
-            head_digest="a" * 64,
+            head_sequence=0,
+            head_digest=GENESIS_DIGEST,
             receipts=(),
             observations=(),
+            refusal_reasons=refusal_reasons,
+        )
+
+    def test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
+            )
+            session = AuthenticatedConsumptionSession(
+                root,
+                bundle_ids,
+                calibration_ledger_snapshot=self._b1_snapshot(),
+            )
+            self.assertFalse(session.ready)
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    bundle_ids,
+                    consumption_session=session,
+                )
+        self.assertEqual(reasons, ())
+        self.assertTrue(session.ready)
+
+    def test_minted_semantics_loads_and_refuses_pending_ledger_snapshot(self) -> None:
+        snapshot = self._b1_snapshot(
             refusal_reasons=("calibration_ledger_pending",),
         )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            bundle = root / "member"
-            bundle.mkdir()
-            (bundle / "summary_metrics.json").write_text("{}\n", encoding="utf-8")
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
+            )
             with patch(
                 "joulewise.whole_window.load_calibration_ledger_snapshot",
                 return_value=snapshot,
             ) as load_snapshot:
                 session = AuthenticatedConsumptionSession(
                     root,
-                    {"member"},
-                    consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+                    bundle_ids,
                 )
-                session._prepare(
-                    bundle_paths={"member": bundle},
-                    policy=SimpleNamespace(calibration_bracketing=object()),
-                )
+                with self._b1_public_path_dependencies(core):
+                    reasons = whole_window_refusal_reasons(
+                        root,
+                        bundle_ids,
+                        consumption_session=session,
+                    )
         load_snapshot.assert_called_once()
         self.assertIs(session.calibration_ledger_snapshot, snapshot)
+        self.assertTrue(session._prepared)
         self.assertFalse(session.ready)
+        self.assertIn("calibration_ledger_pending", reasons)
         self.assertEqual(session.refusal_reasons, ("calibration_ledger_pending",))
 
     def test_minted_secondary_verifier_refuses_missing_session(self) -> None:
-        with patch(
-            "joulewise.whole_window._validate_row_uncached",
-            return_value=(True, ()),
-        ) as validate_uncached:
-            valid, reasons = _validate_row(
-                {"consumption_semantics_id": MINTED_CONSUMPTION_SEMANTICS_ID},
-                Path("/runs-root"),
-                {"member"},
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
             )
-        self.assertFalse(valid)
-        self.assertEqual(reasons, ("whole_window_verdict_provenance_invalid",))
-        validate_uncached.assert_not_called()
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(root, bundle_ids)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_b1_r3_implicit_minted_without_session_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=False,
+            )
+            self.assertNotIn("consumption_semantics_id", json.dumps(row))
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(root, bundle_ids)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_b1_r4_implicit_minted_fresh_valid_session_matches_explicit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=False,
+            )
+            self.assertNotIn("consumption_semantics_id", json.dumps(row))
+            session = AuthenticatedConsumptionSession(
+                root,
+                bundle_ids,
+                calibration_ledger_snapshot=self._b1_snapshot(),
+            )
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    bundle_ids,
+                    consumption_session=session,
+                )
+        self.assertEqual(reasons, ())
+        self.assertTrue(session.ready)
 
     def test_supplied_ledger_snapshot_object_is_reused_without_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

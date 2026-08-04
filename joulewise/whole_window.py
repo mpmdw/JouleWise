@@ -4070,18 +4070,6 @@ def _validate_row(
 ) -> tuple[bool, tuple[str, ...]]:
     """Authenticate a verdict row once per collection-scoped session."""
 
-    basis = row.get("evaluation_basis")
-    declared_semantics = (
-        basis.get("consumption_semantics_id")
-        if isinstance(basis, Mapping)
-        else row.get("consumption_semantics_id")
-    )
-    if (
-        declared_semantics == MINTED_CONSUMPTION_SEMANTICS_ID
-        and (consumption_session is None or not consumption_session.ready)
-    ):
-        return False, ("whole_window_verdict_provenance_invalid",)
-
     cache_key: tuple[str, str, tuple[str, ...], str | None] | None = None
     if consumption_session is not None and not consumption_session.ready:
         consumption_session._row_validation_results.clear()
@@ -4341,20 +4329,29 @@ def _validate_row_uncached(
             )
         )
     if (
-        row_semantics
-        in {
-            MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
-            SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
-        }
-        and (
-            basis is None
-            or consumption_session is None
-            or not consumption_session.ready
-            or not _consumption_provenance_valid(
-                basis,
-                basis.get("member_occurrences", []),
-                runs_root=runs_root,
-                consumption_session=consumption_session,
+        (
+            row_semantics == MINTED_CONSUMPTION_SEMANTICS_ID
+            and (
+                consumption_session is None
+                or not consumption_session.ready
+            )
+        )
+        or (
+            row_semantics
+            in {
+                MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+            }
+            and (
+                basis is None
+                or consumption_session is None
+                or not consumption_session.ready
+                or not _consumption_provenance_valid(
+                    basis,
+                    basis.get("member_occurrences", []),
+                    runs_root=runs_root,
+                    consumption_session=consumption_session,
+                )
             )
         )
     ):
