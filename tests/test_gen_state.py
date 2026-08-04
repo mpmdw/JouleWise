@@ -63,9 +63,10 @@ EXPECTED_IDS = {
     # MEMBERSHIP-READER-FAILOPEN-01) closed 2026-08-02 with PR #94
     # (audited head 05d99b6) and retired to the completed table.
     "CAL-BRACKET-D079-01",
-    # 2026-08-02 D-106 clause 3: the two decidable b-ii capture-identity
-    # fixes; window B re-evaluation is hard-blocked on this row.
-    "D100-BII-BINDING-01",
+    # 2026-08-02 D-106 clause 3 minted D100-BII-BINDING-01 (b-ii
+    # capture-identity fixes); closed 2026-08-03 under D-108 (PR #99
+    # merged 32d72fd + the clause-(d) three-occurrence re-record) and
+    # retired to the completed table.
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
