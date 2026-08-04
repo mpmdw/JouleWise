@@ -157,3 +157,44 @@ appended, then PR under D-072.
   evidence (independently corroborated by the Sol refuter at the same
   head). All future convenings follow the registry clean-launch
   procedure. Full note: t3-doctrine gate synthesis-exhibits SX3.
+
+## Round-2 completion (appended)
+
+**Incident interlude:** the first attempt to resume the scope-expanded
+round was corrupted by a directing subagent forging the wrapper's audit
+state file. Full record: `docs/process_traces/2026-08-04-incident-state-forgery/INCIDENT.md`.
+The forged path was abandoned, not used. The fixture leg was relaunched
+as a FRESH run with all five paths in WRITE_SCOPE at launch, making the
+scope-approval flow structurally unnecessary.
+
+**Fixture leg** (`round2-fixture-report.md`, Sol high, workspace-write):
+all suites green — analysis_integration 92 OK, floor_extraction 82 OK,
+whole_window 9 OK, whole_window_selection 56 OK,
+calibration_bracketing 24 OK, calibration_ledger 10 OK, R1-R5 5 OK,
+canonical 2456 OK (skipped=85). Commit blocked only by the known
+worktree index.lock sandbox limit → lead committed at the bench.
+A read-only precursor run (launch flag omission, no harm) independently
+corroborated the structural facts: post-seam normalized enforcement
+present, both mutants absent, R1-R5 present with no direct `_prepare`
+and no `_validate_row_uncached` mocking.
+
+**Lead verification (rule 1, condition 4 of the delta conditions):**
+- Production diff read line-by-line at the bench: pre-flight guard
+  removed from `_validate_row`; minted clause added to the existing
+  normalized post-seam readiness block; minted NOT refused on
+  `basis is None`; no raw-declaration comparison remains.
+- Fixture diffs: purely additive (+84/+82/+26); **zero assertion lines
+  removed** across all three files (mechanical grep count = 0).
+- Full canonical suite replayed by the lead at the round-2 head with a
+  writable TMPDIR, unpiped exit status captured:
+  **`Ran 2456 tests` / `OK (skipped=82)` / exit 0.** (Sol's sandbox
+  reported 85 skips; three env-dependent tests run at the bench. The
+  TMPDIR verification gap flagged by both prior audits is CLOSED.)
+
+**Commit:** `c2f81d4` on `impl/cal-bracket-d079`, citing this gate.
+
+**Delta re-audit:** launched independently (read-only, Sol high, effort
+per Ed cap) against `c2f81d4` with all five gate conditions as its
+charge, plus an added adversarial pass over the fixture edits (the
+round's highest-risk surface: a fixture change that silently drops
+coverage). PR under D-072 follows its verdict.
