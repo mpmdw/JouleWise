@@ -1176,7 +1176,16 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-NONE — no global work-selection gate is active.
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `T3-DRIVE-PRIORITY`
+
+Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. In-flight exception: the CAL-BRACKET-D079-01 round-2 chain through PR.
+
+- Scope: `select` in [ED-EXTERNAL], [QUIET-MAC], [AGENT].
+- Allowed kernel task IDs: `T3-CHAR-PAIR-01`, `QUIET-GUARD-01`, `SEC5A-REMOTE-01`, `WO-T3-VIS-01`, `T3-AMEND-01`, `COLDGATE-VALIDATOR-01`, `CAL-BRACKET-D079-01`.
+- Authority: Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work); docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5.
+- Clearance: Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause
 
 ## Restart By Machine-State Lane
 
@@ -1184,15 +1193,15 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- GATED — E1 `P1-008` (excluded by: T3-DRIVE-PRIORITY): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- READY — Q7 `T3-CHAR-PAIR-01`: App-up vs app-down idle-capture characterization pair (NON-CLAIM): decide whether t3 resident processes (server, helpers, cloudflared) pollute the quiet-mac measurement floor; unlocks the app-adjacent window-operation question. Runnable next quiet night; blocked by nothing.
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A2 `QUIET-GUARD-01`: Quiet-guard work order (full gauntlet): host-wide quiet lease, refuse-at-arm, characterized resident watcher; plus Ed requirements recorded 2026-08-03 — t3-armed operation (a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3 with a survivor inventory), t3-relaunch-on-close, and README-banner signaling.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

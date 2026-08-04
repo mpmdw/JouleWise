@@ -1,5 +1,32 @@
 {
-  "active_global_gates": [],
+  "active_global_gates": [
+    {
+      "allowed_task_ids": [
+        "T3-CHAR-PAIR-01",
+        "QUIET-GUARD-01",
+        "SEC5A-REMOTE-01",
+        "WO-T3-VIS-01",
+        "T3-AMEND-01",
+        "COLDGATE-VALIDATOR-01",
+        "CAL-BRACKET-D079-01"
+      ],
+      "authority": [
+        "Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work)",
+        "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5"
+      ],
+      "clearance": "Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause",
+      "id": "T3-DRIVE-PRIORITY",
+      "scope": {
+        "lanes": [
+          "ed_external",
+          "quiet_mac",
+          "agent"
+        ],
+        "operation": "select"
+      },
+      "summary": "Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. In-flight exception: the CAL-BRACKET-D079-01 round-2 chain through PR."
+    }
+  ],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
@@ -723,6 +750,37 @@
       "priority": "p3_research_expansion",
       "rank": 27,
       "status": "shelved",
+      "stop_card": null
+    },
+    "COLDGATE-VALIDATOR-01": {
+      "acceptance": {
+        "evidence": [
+          "Validator implements the docs/process/coldgate_charter_registry.md packet spec",
+          "Charter v3 fold-ins honored: convening/disclosure clauses and the line-range relaxation",
+          "Discriminating tests cover accept and refuse paths"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COLDGATE-VALIDATOR-01/acceptance",
+          "label": "COLDGATE-VALIDATOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "scripts/validate_gate_packet.py implements the coldgate charter registry spec including the charter v3 fold-ins, with discriminating tests."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Build scripts/validate_gate_packet.py per the coldgate charter registry spec plus the charter v3 fold-ins (convening/disclosure clauses, line-range relaxation).",
+      "id": "COLDGATE-VALIDATOR-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 14,
+      "status": "queued",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis; spec home is docs/process/coldgate_charter_registry.md.",
       "stop_card": null
     },
     "CUSTODY-HARDEN-01": {
@@ -2693,6 +2751,102 @@
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
+    "QUIET-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "Host-wide quiet lease implemented and enforced",
+          "Refuse-at-arm: arming refuses when the host is not quiet",
+          "Characterized resident watcher running against the characterized resident set",
+          "t3-armed operation: a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3, emitting a survivor inventory",
+          "t3-relaunch-on-close behavior implemented",
+          "README-banner signaling implemented",
+          "Full gauntlet: independent audit, severity-tiered refuters, and delta re-audit of every fix round"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/QUIET-GUARD-01/acceptance",
+          "label": "QUIET-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The quiet guard lands through the full C-028 gauntlet with the host-wide lease, refuse-at-arm, characterized resident watcher, and all three Ed-required t3 behaviors working end to end."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "App-up vs app-down characterization verdict before any app-adjacent guarded operation",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "T3-CHAR-PAIR-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Quiet-guard work order (full gauntlet): host-wide quiet lease, refuse-at-arm, characterized resident watcher; plus Ed requirements recorded 2026-08-03 — t3-armed operation (a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3 with a survivor inventory), t3-relaunch-on-close, and README-banner signaling.",
+      "id": "QUIET-GUARD-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 2,
+      "status": "queued",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Buildable now; app-adjacent USE (live_promotion) gates on the T3-CHAR-PAIR-01 verdict.",
+      "stop_card": null
+    },
+    "SEC5A-REMOTE-01": {
+      "acceptance": {
+        "evidence": [
+          "Amendment drafted against the §5A home document with the physical-presence substitution conditions stated exactly",
+          "Programmatic checks specified and implemented: adapter negotiation, network time, process inventory, display state",
+          "Ed remote attestation step defined; hands required only on check failure",
+          "Ed ruling recorded ratifying the amendment"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SEC5A-REMOTE-01/acceptance",
+          "label": "SEC5A-REMOTE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The §5A amendment is drafted with the four programmatic checks plus Ed remote attestation substituting for physical presence when hardware state is already correct, and is ratified by an Ed ruling before taking effect."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ruling ratifying the §5A remote-attestation amendment before it takes effect",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "SEC5A-remote-ruling"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "QUIET-GUARD-01 lands (the guard supplies the amendment's programmatic substrate)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "QUIET-GUARD-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "§5A remote-attestation amendment (ruling-requiring): programmatic checks (adapter negotiation, network time, process inventory, display state) plus Ed remote attestation replace physical-presence §5A when hardware state is already correct; hands required only on check failure.",
+      "id": "SEC5A-REMOTE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 8,
+      "status": "blocked",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Ruling-requiring; starts only after QUIET-GUARD-01 lands.",
+      "stop_card": null
+    },
     "SUPERSESSION-DUP-REFUSAL-01": {
       "acceptance": {
         "evidence": [
@@ -2729,6 +2883,93 @@
       "rank": 10,
       "status": "queued",
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
+      "stop_card": null
+    },
+    "T3-AMEND-01": {
+      "acceptance": {
+        "evidence": [
+          "Operating orders 1a-1e land as amended/narrowed, including the lease-resolution clause, ingestion-event fields, and route narrowing + two-arc pilot",
+          "Originator provisos land: hint not authority, observed-at-version, fail-closed unknowns, corroborating fields",
+          "Q3e merged effort-cap rule lands",
+          "SX5 scoping lands: t3 is the main driver when in use, never mandatory; no t3 ceremony in plain claude sessions",
+          "Full-access flag-mapping custody artifact capture lands",
+          "D-080 amendment lands: numeric backstop + mechanical definitions",
+          "A cross-check against the synthesis amendment list shows no amendment dropped"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T3-AMEND-01/acceptance",
+          "label": "T3-AMEND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every amendment ratified by the t3-doctrine gate synthesis lands in bridge-protocol §4/§6/§7/§8 and the affected skills, cross-checked against the synthesis amendment list with none dropped."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "In-flight CAL-BRACKET-D079-01 round-2 chain lands through PR; T3-AMEND-01 is the first desk item after",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CAL-BRACKET-D079-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Bridge-protocol §4/§6/§7/§8 + skills amendments carrying EVERY amendment from the t3-doctrine gate synthesis: operating orders 1a-1e as amended/narrowed (incl. lease-resolution clause, ingestion-event fields, route narrowing + two-arc pilot), originator provisos (hint not authority, observed-at-version, fail-closed unknowns, corroborating fields), the Q3e merged effort-cap rule, SX5 scoping (t3 = main driver when in use, never mandatory; no t3 ceremony in plain claude sessions), Full-access flag-mapping custody artifact capture, and the D-080 amendment (numeric backstop + mechanical definitions).",
+      "id": "T3-AMEND-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 11,
+      "status": "blocked",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. First desk item after the in-flight CAL-BRACKET chain lands through PR.",
+      "stop_card": null
+    },
+    "T3-CHAR-PAIR-01": {
+      "acceptance": {
+        "evidence": [
+          "App-down idle capture collected on a quiet night under standard idle-capture conditions",
+          "App-up idle capture collected under matched conditions with the t3 resident processes (server, helpers, cloudflared) running",
+          "Recorded comparison verdict, labelled NON-CLAIM, deciding the app-adjacent window-operation question",
+          "Custody and roots separate from any claim chain; shares no baselines, calibration, or NEG-8 evidence"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T3-CHAR-PAIR-01/acceptance",
+          "label": "T3-CHAR-PAIR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A matched app-up vs app-down idle-capture pair with custody and roots fully separate from any claim chain yields a recorded NON-CLAIM verdict on whether t3 resident processes pollute the measurement floor."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "t3-doctrine gate synthesis: characterization pair is custody-separate from any claim chain",
+            "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+          },
+          "rule": "NON-CLAIM characterization only: outputs enter no claim custody root and share no baselines, calibration, or NEG-8 evidence with any claim chain"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "App-up vs app-down idle-capture characterization pair (NON-CLAIM): decide whether t3 resident processes (server, helpers, cloudflared) pollute the quiet-mac measurement floor; unlocks the app-adjacent window-operation question. Runnable next quiet night; blocked by nothing.",
+      "id": "T3-CHAR-PAIR-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 7,
+      "status": "queued",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Head of the t3-drive chain; its verdict gates QUIET-GUARD-01's app-adjacent (live_promotion) use.",
       "stop_card": null
     },
     "TEST-SPEED-01": {
@@ -2853,6 +3094,39 @@
       "rank": 53,
       "status": "blocked",
       "status_note": "2026-08-03: minted by D-112 (winB STOP gate, classification (i)). r06's collection-time clock-anchor failure (native_intersection_empty) is the sole cause of the salvage-consumption refusal; no licensed channel removes it (exclusion cap spent on r08; not a dangler; waivers forbidden). License EXHAUSTED AS DRAWN; original FAILED verdict stands. Full record docs/process_traces/2026-08-03-winB-reeval-stop/.",
+      "stop_card": null
+    },
+    "WO-T3-VIS-01": {
+      "acceptance": {
+        "evidence": [
+          "Probes establish thread.create and turn.start dispatch semantics before any implementation",
+          "Spec ratified before implementation begins",
+          "Audited wrapper carries the standard audit trail for dispatched rounds",
+          "A delegated Sol round demonstrably appears as a real t3 thread visible from the phone",
+          "Full council convened (new-adapter trigger)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-T3-VIS-01/acceptance",
+          "label": "WO-T3-VIS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An audited t3-thread-bridge wrapper dispatches thread.create and turn.start so delegated Sol rounds appear as real, phone-visible t3 threads, landed probes-then-spec-then-implementation under full council."
+      },
+      "authority": {
+        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
+        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "t3-thread-bridge (full council — new adapter): audited wrapper dispatching thread.create and turn.start so delegated Sol rounds appear as REAL t3 threads (phone-visible fleet). Probes plus spec first, then implementation.",
+      "id": "WO-T3-VIS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 9,
+      "status": "queued",
+      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. New adapter: full council is mandatory.",
       "stop_card": null
     }
   },
