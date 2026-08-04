@@ -67,6 +67,25 @@ checkpoint-restore, isolated-native-write, cold-packet-handoff. **This
 checkpoint's commit is the isolated-native-write gate exercise** (first
 governed t3-native repo write: small, reviewed, pushed, verified).
 
+**GATE/PROBE LOG (live, same night):** isolated-native-write ✅
+(97d6e3d). Native-discussion ✅ — Ed ran a native t3 Codex thread in
+the repo (rollout `019fcb0b-710c-75d2-8aaf-adb69680ea7d`, benign test
+exchange, ingestion note = this entry); BONUS: rollout `session_meta`
+carries `originator: "t3code_desktop"` — a mechanical provenance
+discriminator for native-vs-wrapper Codex sessions, free in the
+evidence stream (fold into the §4/§6 amendment). Phone-approval ❌ NOT
+cleared + A3 FINDING: in t3 "Auto" mode Claude's classifier
+SELF-APPROVED a sandbox-disabled home-dir write with NO prompt relayed
+— Auto ≠ human-in-loop; only Supervised guarantees a tap; anything
+requiring Ed's eyes uses a Supervised thread or waits (gate re-run:
+flip a thread to Supervised, one prompt, one phone tap). Probes:
+CODEX_HOME default (no provider override — ~/.codex recipes valid);
+CLAUDE.local.md ABSENT in all worktrees (rule-11 doctrine provably
+main-checkout-only — charter urgency confirmed); git common-dir
+reachable/writable from worktrees (bookkeeper root feasible); t3
+server = single origin 127.0.0.1:3773, pid-matched, but bound 0.0.0.0
+(LAN-exposed, ticket-auth'd — Ed to check the Network-access toggle).
+
 **TONIGHT'S NIGHT PLAN (Sol-corrected order, thread `019fcafc`).**
 Window execution stays CONDITIONAL on the 16h-runway block's Window-C
 conditions (adapter identity ≥140W resolved — 70W negotiation open
