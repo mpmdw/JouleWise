@@ -7075,7 +7075,7 @@ unclosable duty that does not warrant a license precondition.
    unblinded — not 38 post-cutoff observations. Under the candidate
    inventory, six further valid observations trigger re-derivation.
 
-## D-110: Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint); RT-2 dependency edge minted; the night consult's 7B-mint license SUSPENDED
+## D-110: Mint 1 retroactively NON-CLAIM-BEARING (taint-and-remint); RT-2 dependency edge minted; the night consult's 7B-mint license SUSPENDED
 
 - Date: 2026-08-03 (Ed ruling, present, option "taint-and-remint" selected
   from the magistrate's three-option packet during the 16h runway)
