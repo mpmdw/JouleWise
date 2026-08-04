@@ -78,7 +78,16 @@ cleared + A3 FINDING: in t3 "Auto" mode Claude's classifier
 SELF-APPROVED a sandbox-disabled home-dir write with NO prompt relayed
 — Auto ≠ human-in-loop; only Supervised guarantees a tap; anything
 requiring Ed's eyes uses a Supervised thread or waits (gate re-run:
-flip a thread to Supervised, one prompt, one phone tap). Probes:
+flip a thread to Supervised, one prompt, one phone tap). REFINED by
+timed discriminator probe (22:04:04→22:04:04, Ed instructed not to
+respond, file created in 0s): in Auto mode the PHONE CARDS ARE
+POST-HOC NOTIFICATIONS, NOT GATES — execution never blocks on them.
+"Auto's popups are not consent either." A tapped card ≠ an approval;
+the 2026-08-03 prior session's "permission prompts functioning"
+inference is corrected (its clicks were acknowledgments). Upstream
+issue candidate: notification cards are visually indistinguishable
+from approval prompts (legibility hazard). Capability-profile matrix
+(mode × provider × blocking-semantics) to be filled tomorrow. Probes:
 CODEX_HOME default (no provider override — ~/.codex recipes valid);
 CLAUDE.local.md ABSENT in all worktrees (rule-11 doctrine provably
 main-checkout-only — charter urgency confirmed); git common-dir
