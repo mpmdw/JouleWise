@@ -73,8 +73,16 @@ the repo (rollout `019fcb0b-710c-75d2-8aaf-adb69680ea7d`, benign test
 exchange, ingestion note = this entry); BONUS: rollout `session_meta`
 carries `originator: "t3code_desktop"` — a mechanical provenance
 discriminator for native-vs-wrapper Codex sessions, free in the
-evidence stream (fold into the §4/§6 amendment). Phone-approval ❌ NOT
-cleared + A3 FINDING: in t3 "Auto" mode Claude's classifier
+evidence stream (fold into the §4/§6 amendment). Phone-approval ✅
+CLEARED (2026-08-03 ~22:27, successor session): Supervised
+("approve actions") timed probe PASSED — home-dir write sent ~22:26
+executed at 22:27:34 at Ed's tap, second card observably held the
+readback until its own tap; probe record = doctrine-packet exhibit
+E10. BONUS: the thread's own reply claimed "no permission prompt" —
+the model is BLIND to the approval layer, so thread-side reports are
+inadmissible as approval-semantics evidence (operator observation +
+filesystem timestamps only). The Auto-mode caveat below STANDS.
+Original A3 FINDING: in t3 "Auto" mode Claude's classifier
 SELF-APPROVED a sandbox-disabled home-dir write with NO prompt relayed
 — Auto ≠ human-in-loop; only Supervised guarantees a tap; anything
 requiring Ed's eyes uses a Supervised thread or waits (gate re-run:
