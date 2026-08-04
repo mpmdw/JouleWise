@@ -31,3 +31,4 @@ site_capsule/node_modules/
 /runs_window_*/
 .desk/
 CLAUDE.local.md
+/runs_char_*/
