@@ -1162,6 +1162,25 @@ class CoreCompatibilityTests(unittest.TestCase):
         ):
             generalized._assert_core_interface(core)
 
+    def test_repr_spoofed_sentinel_default_refuses_loudly(self) -> None:
+        class _FauxNone:
+            def __repr__(self) -> str:
+                return "None"
+
+        core = generalized._fresh_original_core()
+        core.mint_floor_artifact.__kwdefaults__[
+            "calibration_ledger_snapshot"
+        ] = _FauxNone()
+        self.assertEqual(
+            str(inspect.signature(core.mint_floor_artifact)),
+            generalized._CORE_SIGNATURES["mint_floor_artifact"],
+        )
+        with self.assertRaisesRegex(
+            generalized.MintError,
+            "calibration_ledger_snapshot default is not the None sentinel",
+        ):
+            generalized._assert_core_interface(core)
+
 
 if __name__ == "__main__":
     unittest.main()

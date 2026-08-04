@@ -477,6 +477,17 @@ def _assert_core_interface(module: ModuleType) -> None:
                 "review-pinned mint-core interface drift: "
                 f"{symbol} signature expected {expected}, observed {observed}"
             )
+    # Rendered-signature equality is spoofable: a default object whose
+    # repr() is "None" renders identically while defeating the core's
+    # `is None` load-on-absent behavior. Identity-check the sentinel
+    # defaults structurally.
+    mint_params = inspect.signature(module.mint_floor_artifact).parameters
+    for name in ("consumption_semantics_id", "calibration_ledger_snapshot"):
+        if mint_params[name].default is not None:
+            raise MintError(
+                "review-pinned mint-core interface drift: mint_floor_artifact "
+                f"parameter {name} default is not the None sentinel"
+            )
 
 
 def _fresh_original_core() -> ModuleType:
