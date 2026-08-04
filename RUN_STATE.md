@@ -10,11 +10,54 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-04 EARLY AM — T3-HANDOFF checkpoint (read the
-block immediately below FIRST; it is the successor script). The
-2026-08-03 T3-CUTOVER block beneath it holds the control-plane doctrine
-as ratified; the 16h-runway block below that remains the older
-STREAM-STATE reference.
+Last updated: 2026-08-04 ~06:30 — STOP-AND-CHECKPOINT (Ed-ordered).
+Read this block first, then the T3-HANDOFF block below (its item 1 and
+item 6 carry this session's in-line corrections).
+
+## ✅ CHECKPOINT 2026-08-04 ~06:30 — Ed-ordered stop (successor script)
+
+**State is CLEAN: nothing in flight, no orphaned processes, all repo
+work pushed.** This session (successor magistrate) executed the
+handoff's first decision end-to-end:
+
+1. **PR #100 / CAL-BRACKET-D079-01: GATE-COMPLETE, CI GREEN at
+   `4280ebd`, MERGE AWAITS ED'S TAP** (harness classifier denies agent
+   `gh pr merge`). Full arc: consult → reviewed interface amendment →
+   lead integration-tree replay (2487 OK, exit-0 unpiped) → delta
+   re-audit (caught a LIVE guard bypass: repr-'None' default spoof) →
+   hardening + regression → CI green. Records:
+   `docs/process_traces/2026-08-04-calbracket-integration-collision/`
+   (FINDING + RESOLUTION + both Sol reports), D-109 addendum II,
+   C-048. ON MERGE: retire the row; D-110 re-mint condition (a)
+   satisfied; MINT-GENERALIZE-01 stays blocked on (b)+(c).
+2. **T3-CHAR-PAIR-01 app-UP arm: 2 of 3 captures BANKED.**
+   `runs_char_t3appup_20260804_r01` (~01:59) and `_r02` (~06:1x) both
+   `status=succeeded` exit-0 with full raw + `rich_telemetry_idle.jsonl`.
+   **r03 is DEAD-PARTIAL** (session process died mid-capture; idle
+   plist exists but the run never finished): DELETE the r03 dir and
+   re-run `configs/characterization/char-t3appup-r03.json` fresh, then
+   do the desk analysis (protocol §Analysis; note the r01-vs-r02/r03
+   time-of-day split under limitation 2). TWICE this session a
+   `run_in_background` capture loop was killed by the harness process
+   exiting — captures that must survive the session need Ed to keep
+   the app alive, or the QUIET-GUARD detached-watcher shape (which is
+   exactly what QUIET-GUARD-01 builds).
+3. **Kernel/bookkeeping current:** TEST-SPEED-01 Phase 1 recorded
+   landed (PR #98 merged, worktree+branch pruned); MINT-GENERALIZE-01
+   acceptance oracle reworded per the D-110 clarification; RUN_STATE
+   stale claims corrected (char captures "collected overnight" was
+   FALSE at handoff; byte-frozen framing). gen_state --check clean.
+4. **Not started:** QUIET-GUARD-01 implementation packet (agent-lane
+   head; spec + 25-question intake ready). Ed's owed items unchanged
+   (two acks, two presence-gates incl. app-DOWN arm, D-113/r06,
+   D-080 runner, QUIET-GUARD's four questions).
+5. Worktrees: `calbracket` (impl/cal-bracket-d079 @ `4280ebd`, PR
+   #100) — keep until merge, then remove; tooling-owned ones left
+   alone.
+
+The 2026-08-03 T3-CUTOVER block beneath the handoff block holds the
+control-plane doctrine as ratified; the 16h-runway block below that
+remains the older STREAM-STATE reference.
 
 ## ✅ CHECKPOINT 2026-08-04 early AM — T3 HANDOFF (successor script)
 
