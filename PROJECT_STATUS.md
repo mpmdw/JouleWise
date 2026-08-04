@@ -12,18 +12,18 @@ are provided for anyone who wants the full evidence trail.
   volatile commit, pull-request, queue, or test-count facts.
 - Repository state: `main` contains the repaired measurement instrument
   (D-078 phase 0), the audited screening and uncertainty-budget rules
-  (D-078 clause 10; council C-033), and — as of 2026-07-30 — the
-  project's **first published floor artifact**: the 1.5B model's decode
-  detection floor, 7.38 J, minted from two passed measurement windows
-  with its acceptance thresholds frozen before the data existed and its
-  validator run clean. A second instrument calibration (the 7B model,
-  floor 14.0 J) passed overnight on 2026-07-29 and awaits its own mint.
+  (D-078 clause 10; council C-045), and the first floor artifact minted
+  on 2026-07-30. D-110 has since made that artifact
+  **NON-CLAIM-BEARING** until it is re-derived under the repaired
+  calibration selector and reminted. A second instrument calibration
+  (the 7B model) passed overnight on 2026-07-29, but its mint is blocked
+  on the same repair chain.
   The pre-registered head-to-head model comparison **collected and
   passed overnight on 2026-07-30→31** (40 paired measurements, every
-  quality gate green); its headline consumption awaits one piece of
-  bookkeeping machinery, so the number is quoted below as a preliminary
-  observation, not yet a gated claim. As of 2026-07-30 the project's
-  framing is **metrology-centric** (advisor-ratified): the measurement
+  collection-quality gate green). Its result remains a preliminary
+  diagnostic, not a gated claim; D-110 blocks formal consumption until the
+  calibration repair and remint chain is complete. As of 2026-07-30 the
+  project's framing is **metrology-centric** (advisor-ratified): the measurement
   instrument itself is the product, and model comparisons serve as
   demonstration studies of what it can resolve. The first two nights of
   the dedicated metrology campaign ran on 2026-07-31 and 2026-08-01:
@@ -63,31 +63,29 @@ are provided for anyone who wants the full evidence trail.
 
 ## Current Repository View — 30-second read
 
-**The first claim-grade floor is published.** The D-078 phase-0 repair
+**The repaired measurement path has produced its first floor artifact, but
+that artifact is not currently claim-bearing.** The D-078 phase-0 repair
 fixed the timing and calibration path on 2026-07-22; the drift-screen
 rules merged on 2026-07-25; the first fully clean measurement windows
 passed on 2026-07-25/26, and on 2026-07-30 the project minted its first
-floor artifact from them: the 1.5B model's decode detection floor,
-**7.38 J** — the smallest energy effect this instrument can honestly
-claim to see for that workload. A second calibration window (the 7B
-model, floor **14.0 J**) passed overnight on 2026-07-29, surviving two
+floor artifact from them. D-110 later made that mint non-claim-bearing
+pending governed re-derivation and remint. A second calibration window
+(the 7B model) passed overnight on 2026-07-29, surviving two
 live contamination events that the admission gates caught and recovered
 from per the written playbook. The earlier a5-a8 windows (229 members)
 remain non-claim-bearing, instrument-proving evidence.
 
 **The head-to-head comparison ran on 2026-07-30→31 and passed every
-gate.** Comparing the small (1.5B) and large (7B) model decoding the
-same text, the large model used **about 147 J more energy per response**
+collection and whole-window gate.** Comparing the small (1.5B) and large (7B)
+model decoding the same text, the large model used **about 147 J more energy per response**
 — and the run-to-run scatter of that difference across ten paired blocks
 was only about **0.24 J**, roughly six hundred times smaller than the
-effect. Against the minted 1.5B floor (7.4 J) and the 7B floor pending its mint (14.0 J)
-this is exactly the demonstration the metrology framing calls for: a
+effect. This is the kind of demonstration the metrology framing calls for: a
 real effect the instrument resolves with enormous margin, measured under
 frozen, pre-registered rules. (Preliminary observation from the raw
 per-run summaries. The comparison's bookkeeping schema landed on
-2026-08-02; it becomes a formal claim once the one remaining
-bookkeeping step — publishing the large model's baseline numbers in
-the same signed format as the small model's — is done.) The same overnight session survived two
+2026-08-02, but D-110 blocks formal consumption until the calibration
+repair and remint chain is complete.) The same overnight session survived two
 background-process intrusions — macOS's own malware scanner — which the
 admission gates refused on the spot and the written recovery playbook
 turned into a completed window with zero lost science measurements.
@@ -101,8 +99,8 @@ This protocol has now run five times — windows C, D, a10, the 7B floor
 window, and the contrast window — each minting its bound inside the
 window and collecting three start references, one midpoint reference,
 and three end references.
-The older 222-bundle floor table below remains visible as a caveated historical
-record, not the current measurement posture.
+The older 222-bundle floor record below remains visible as a permanently
+**VOIDED** historical record, not the current measurement posture.
 
 AXI-SB remains `supported` for native static-batch runtime feasibility with
 request-scoped observability; AXI-SC is
@@ -111,51 +109,35 @@ speculative-decode/MTP observability or execution surface is absent. Neither
 verdict is an energy result. Remote protocol pins remain PROVISIONAL, and the
 generated state kernel remains the work-selection authority.
 
-### Published Window-A floor summary
+### Voided Window-A floor record
 
-> **CAVEAT (2026-07-19 soundness audit):** a trace-time-anchor defect was
-> found in the powermetrics evidence path (power timestamps misaligned with
-> runtime events at the ~0.5–1 s scale). It affects the corpora behind this
-> table; every row below is **under re-adjudication** and none should be
-> cited as a promoted floor until the instrument is repaired and the rows
-> re-extracted. Record: `docs/reviews/2026-07-19-measurement-soundness-audit.md`.
+> **VOIDED PERMANENTLY FOR CLAIM USE (D-078):** the 2026-07-19 soundness
+> audit found that the powermetrics trace timestamps and runtime events were
+> joined through a defective time anchor. Every energy and floor value from
+> this pre-repair corpus is void, must not be quoted, and is **not under
+> re-adjudication**. The rows are retained only as a record of why the
+> instrument repair was necessary. Record:
+> `docs/reviews/2026-07-19-measurement-soundness-audit.md`.
 
-Every energy value below is a false-effect guard floor in joules on the **Apple
-M3 Max / powermetrics SoC-rail boundary (CPU + GPU + ANE)**. Gross is the D-067
-headline basis; idle-subtracted values are labeled within-device secondary
-views. Absolute rows use repeated identical conditions; comparative rows use
-same-condition ABBA blocks. Each primary row uses `n=10` strict-valid bundles
-or ABBA blocks.
+| historical evidence group | disposition |
+|---|---|
+| request, phase, item, and suite absolute floors | **VOIDED — time-anchor defect (D-078)** |
+| request, phase, item, and suite comparative floors | **VOIDED — time-anchor defect (D-078)** |
+| start/end NEG-8 energy diagnostic | **VOIDED — time-anchor defect (D-078)** |
 
-| window / basis | absolute floor | comparative floor | computed `floor_gate_j` / disposition |
-|---|---:|---:|---:|
-| mid request, gross — M3 Max / powermetrics SoC rails | 0.527 J | 0.909 J | 0.909 J |
-| mid request, idle-subtracted — M3 Max / powermetrics SoC rails | 0.537 J | 0.894 J | 0.894 J; within-device secondary |
-| short request, gross — M3 Max / powermetrics SoC rails | 0.052 J | — | absolute floor only |
-| short request, idle-subtracted — M3 Max / powermetrics SoC rails | 0.059 J | — | absolute floor only; within-device secondary |
-| prefill phase, gross — M3 Max / powermetrics SoC rails | 1.477 J | 1.739 J | 1.739 J |
-| decode phase, gross — M3 Max / powermetrics SoC rails | 0.786 J | 1.027 J | 1.027 J |
-| short-prefill stress, gross — M3 Max / powermetrics SoC rails | 0.027 J | — | smoke-only; `not_resolvable_sample_count` |
-| suite item, gross — M3 Max / powermetrics SoC rails | 0.333 J | 4.923 J | 4.923 J; drift review required |
-| suite level, gross — M3 Max / powermetrics SoC rails | 1.664 J | 24.619 J | 24.619 J; drift review required |
-
-The start/end NEG-8 reference pair is an `n=2` drift diagnostic, not a campaign
-floor. Its gross request energy moved by 7.659 J; the idle-subtracted
-within-device secondary view moved by 6.608 J (same boundary). Verified extraction:
+The original table and reference-pair values remain preserved in the immutable
+evidence trail, but they carry no claim, comparison, or guard-floor meaning. Verified extraction:
 `docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json`;
 reader deliverable: `docs/advisor_briefs/2026-07-17-window-a-brief.html`.
 
-### 2026-07-19 re-calibration under the environment guard — PRELIMINARY
+### 2026-07-19 re-calibration under the environment guard — VOIDED
 
-The caveated suite rows were re-measured in two bracketed windows under
+The now-voided suite rows were re-measured in two bracketed windows under
 the D-077 guard: **94 strict-valid bundles**, all admission predicates
-satisfied. Reviewed readout: suite gross **147.96 ± 0.39 J**
-clean (contaminated cells were ~+30%);
-frozen-estimator provisional comparative floor **≈ 1.13 J (~0.77%)**
-from 5 of 10 planned ABBA blocks (~22× tighter, same estimator, than
-the caveated figure); long-decode **83.9 mJ/output-token**,
-matching the 07-17 decode cell to ~0.1%. That corpus was
-claim-ineligible on source provenance (dirty collection tree); details:
+satisfied. Its energy readout and provisional floor are **VOIDED permanently
+for claim use** by the same pre-repair time-anchor defect (D-078), regardless
+of their apparent repeatability. That corpus was also claim-ineligible on
+source provenance (dirty collection tree); details:
 `docs/advisor_briefs/2026-07-19-recalibration-update.html`.
 
 UPDATE (2026-07-19 night): the clean re-run is done — 288 strict-valid
@@ -169,10 +151,9 @@ In plain terms: the power meter and the workload log time on two
 different clocks, and our alignment between them could be off by up to
 ~1 second. Energy is computed by summing meter samples inside the
 workload's start/stop window, so a misaligned window integrates the
-wrong slice of the recording — dramatic for sub-second test runs (one
-0.37 s run read 0.27 J when its true consumption, plainly present in
-the recording, was ~8 J), and a meaningful hidden uncertainty (~±10 J)
-even on 60-second runs. Nothing measured negative; the recordings are
+wrong slice of the recording — dramatic for short test runs and still a
+meaningful hidden uncertainty on longer ones. Those numerical examples are
+**VOIDED**, not corrected measurements. Nothing measured negative; the recordings are
 intact and self-consistent; long-run repeatability (~0.3% across
 nights) shows the platform is stable. Very short workloads are simply
 below this instrument's resolution and will not be claimed — by
@@ -234,7 +215,7 @@ replication experiments. Records:
 D-078 clauses 8-10.
 
 **SCREENING RULES BUILT, AUDITED, AND MERGED (2026-07-25; council
-C-033).**
+C-045).**
 The redesigned stability screen described above is now implemented and
 on main: both energy families are screened separately, every passing
 window carries an explicit drift allowance into its error bars, drift
@@ -249,36 +230,30 @@ silently bypassed. The step-by-step measurement procedure for the next
 collection session is written up in
 `docs/phase_2/window_runbook.md`. Records:
 `docs/run_reports/2026-07-24-screen-budget-gauntlet.md`, council log
-C-033.
+C-045.
 
-### Exploratory follow-on — not a promoted claim
+### Historical exploratory follow-on — energy values voided
 
 Nine additional strict-valid, collection-usable bundles cover three
 repetitions each of unmatched OLMoE-1B-7B BF16, Qwen3-4B INT4, and
 Qwen3.5-122B-A10B INT4 configurations on the fixed five-item
 `jw_mixed_v1_sentinel` shape. Every bundle is claim-evidence-flagged, the
 model/config points differ in architecture, scale, tokenizer, and
-quantization, and the repetition count is below the headline protocol. The
-values are therefore descriptive **EXPLORATORY / L1-legacy observations
-only**.
+quantization, and the repetition count is below the headline protocol. More
+fundamentally, every energy value is **VOIDED permanently for claim use** by
+the pre-repair time-anchor defect (D-078); this is not a pending
+re-adjudication.
 
-| unmatched configuration | mean gross suite energy — Apple M3 Max / powermetrics SoC rails (CPU + GPU + ANE) | mean gross energy/generated output token — same boundary | runtime-observed output throughput |
-|---|---:|---:|---:|
-| OLMoE-1B-7B BF16 | 229.028 J (227.141–231.790 J) | 178.928 mJ/token (177.454–181.086 mJ/token) | 122.361 tok/s (122.261–122.481 tok/s) |
-| Qwen3-4B INT4 | 362.772 J (362.642–362.903 J) | 283.416 mJ/token (283.314–283.518 mJ/token) | 106.519 tok/s (106.470–106.545 tok/s) |
-| Qwen3.5-122B-A10B INT4 | 1072.273 J (1061.722–1085.144 J) | 837.713 mJ/token (829.471–847.769 mJ/token) | 39.473 tok/s (39.349–39.569 tok/s) |
+| unmatched configuration | energy disposition | runtime-observed output throughput |
+|---|---|---:|
+| OLMoE-1B-7B BF16 | **VOIDED — time-anchor defect (D-078)** | 122.361 tok/s (122.261–122.481 tok/s) |
+| Qwen3-4B INT4 | **VOIDED — time-anchor defect (D-078)** | 106.519 tok/s (106.470–106.545 tok/s) |
+| Qwen3.5-122B-A10B INT4 | **VOIDED — time-anchor defect (D-078)** | 39.473 tok/s (39.349–39.569 tok/s) |
 
-Each bundle emitted 1,280 generated output tokens. Gross per-output-token
-values above are derived from the gross suite numerator; the stored
-`energy_output_token_j` field instead uses the idle-subtracted numerator and
-is retained as a labeled within-device secondary view in the full extraction.
-For the like-for-like suite-level gross window on the Apple M3 Max /
-powermetrics SoC-rail boundary, the exploratory OLMoE-versus-Qwen3-4B mean gap
-is 133.720 J, above the published 24.619 J suite-level gross
-`floor_gate_j`. That only says the descriptive gap exceeds the measurement
-guard: unmatched configurations, evidence flags, drift review, and the lack of
-a prospective contrast still prohibit efficiency or architecture claims.
-Every aggregate and raw repetition is bundle-cited in
+Each bundle emitted 1,280 generated output tokens. The archived extraction
+preserves the old energy fields, aggregates, and floor comparison as historical
+evidence only; none may be quoted or used to support an efficiency or
+architecture claim. Every raw repetition is bundle-cited in
 `docs/process_traces/2026-07-17-exploratory-block/results.md`.
 
 ## Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
@@ -290,14 +265,15 @@ docs, the scientific claims, the statistics implementation, the
 architecture, and the operating loop itself. Verdict: the evidence
 discipline and instrument core are sound, but reader-facing claims had
 drifted from the evidence (the 1.5B per-token headline used the wrong
-denominator — now corrected as **P2-003, idle-subtracted energy — M3 Max /
-powermetrics SoC rails:** ~79-90 mJ per generated output token), the D-053
+denominator; that correction remains part of the audit history, but the
+underlying energy value is now **VOIDED under D-078**), the D-053
 contrast-CI machinery exists as binding
 specs but not yet as code (now owned as queue rows P2-037..P2-042 and
 gating Window-A interpretation), and the loop's own audit trail and the
 capstone-critical path (grading rubric, report skeleton, off-machine
 backup, one data-to-figure slice) need attention before any new breadth.
-All measured values above remain legacy L1 preliminary observations.
+All pre-repair energy values discussed in this historical update are
+permanently void for claim use.
 Full adjudicated record: `docs/reviews/2026-07-09-c027-whole-project-review.md`.
 
 ## Previous Update (as of 2026-07-09, advisor status cockpit) — 30-second read
@@ -350,9 +326,8 @@ P2-015-SMOKE.)* Five parallel work streams landed (PRs #2-#6):
 (1) **statistical uncertainty** — every multi-repetition experiment now
 carries per-metric 95% confidence intervals with outlier detection and
 explicit below-protocol flags, re-derivable byte-identically from the
-raw evidence bundles (verified on a live 3-repetition run as **D-014
-verification workload, idle-subtracted energy — M3 Max / powermetrics SoC
-rails:** 99.19 ± 1.36 mJ/output-token); (2) **contamination detection** — an
+raw evidence bundles (the live verification energy value is now **VOIDED
+under D-078**); (2) **contamination detection** — an
 idle-window quality gate that mechanically flags runs taken on a
 non-quiet machine (it caught its first real contamination during
 verification); (3) **deep telemetry** — per-sample GPU/CPU-cluster
@@ -369,24 +344,14 @@ baseline matrix on a quiet machine.
 
 ## Previous Update (2026-07-07, fourth update) — 30-second read
 
-**A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
+**A flagship-class model was exercised through the live harness.** Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
 reasoning model) ran through the identical harness and workload on the M3
-Max. **FLAGSHIP-001, gross energy — M3 Max / powermetrics SoC rails:**
-~304.0 J per 512-token request. **FLAGSHIP-001, idle-subtracted energy — M3
-Max / powermetrics SoC rails:** ~298.7 J per request and ~583 mJ per generated
-output token. Throughput was 46 tokens/s, and the gross-energy sample CV was
-0.3% across three sequential repetitions in one warm-cache session. The
-earlier model recorded **P2-003, gross energy — M3 Max / powermetrics SoC
-rails:** ~47.2 J per request and **P2-003, idle-subtracted energy — M3 Max /
-powermetrics SoC rails:** ~87 mJ per generated output token at 257 tok/s.
-*(Metric bases and CV wording corrected 2026-07-09, C-027.)* First cross-model finding:
-the two measured points differ in size, architecture, and quantization,
-so they are not a demonstrated scaling law. They are, however,
-consistent with the fixed-vs-marginal structure Q4 models: **unsubtracted
-decode-window mean power — M3 Max / powermetrics SoC rails:** ~23.5 W for
-P2-003 and ~27.5 W for FLAGSHIP-001, while the bigger model's cost showed up
-mostly as time. Also this update: the
+Max. The reported P2-003 and FLAGSHIP-001 energy values and their derived
+cross-model interpretation are **VOIDED permanently for claim use** by the
+pre-repair time-anchor defect (D-078); they are not under re-adjudication.
+The runs remain evidence that both workloads traversed the live adapter and
+bundle path. Also this update: the
 research agenda grew to six named questions (Q4-Q6) after a
 multi-model review council, with a curated question bank
 (`docs/research_question_bank.md`) and an instrument roadmap (richer
@@ -398,19 +363,19 @@ implementing the statistical-uncertainty protocol) queued.
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
 | 2026-07-31 | Contrast window + D5-J merge (PR #89) | The 1.5B-vs-7B decode comparison window collected and passed every gate (47 bundles, ~147 J difference as a preliminary observation); the cooldown-evidence join redesign merged under a cold-gate ruling; the project's framing was adopted as metrology-centric — the instrument is the product. | `docs/run_reports/2026-07-31-contrast-window-collection.md` |
-| 2026-07-30 | First published floor artifact (PR #88) | Mint #1 landed on main: the 1.5B decode floor **7.377086 J** is now a signed, validated artifact rather than prose, after a ten-round fix gauntlet and a cold-gate escalation ruling. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
-| 2026-07-29 | 7B floor window passed | The second calibration window (Qwen2.5 7B decode) passed its bracket and verdict, surviving two live contamination events; floors absolute 6.294380135190098 J / comparative 13.998036715259254 J, prose-only pending their mint. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
+| 2026-07-30 | First floor artifact minted (PR #88; later tainted by D-110) | Mint #1 landed as a signed, validated artifact after a ten-round fix gauntlet and a cold-gate escalation ruling; D-110 later made it **NON-CLAIM-BEARING** pending governed re-derivation and remint. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
+| 2026-07-29 | 7B floor window passed | The second calibration window (Qwen2.5 7B decode) passed its bracket and verdict, surviving two live contamination events; its floor mint is blocked by D-110's repair chain. | `docs/run_reports/2026-07-30-mint-merge-coldgate.md` |
 | 2026-07-25 | SCREEN+BUDGET rules merged (PR #85) | D-078 clause 10 landed: separate gross and idle-subtracted screens, a nonzero drift allowance in every passing window's budget, a 24-hour bound expiry, and mock evidence barred from claims. | `docs/run_reports/2026-07-24-screen-budget-gauntlet.md` |
 | 2026-07-22 | Instrument repair merged (PR #79) | The trace-time-anchor defect that voided claim use of the earlier corpora was repaired and confirmed end to end, reopening the path to claim-bearing measurement. | `docs/run_reports/2026-07-20-p0-instrument-repair.md` |
-| 2026-07-19 | Measurement-soundness audit (Ed-directed) | VERDICT: unsound for claim-bearing use as recorded — trace-time-anchor defect misattributes request/phase energies (all four P0s lead-verified); metric-level prechecks already failed 238/288 request metrics; four cooldown cap hits unjoined; analysis-engine wire incompat. Corpora demoted to instrument evidence; published 07-17 floor table caveated; instrument-repair path defined. | `docs/reviews/2026-07-19-measurement-soundness-audit.md` |
+| 2026-07-19 | Measurement-soundness audit (Ed-directed) | VERDICT: unsound for claim-bearing use as recorded — trace-time-anchor defect misattributes request/phase energies (all four P0s lead-verified); metric-level prechecks already failed 238/288 request metrics; four cooldown cap hits unjoined; analysis-engine wire incompatibility. Pre-repair energies permanently **VOIDED** for claim use; instrument-repair path defined. | `docs/reviews/2026-07-19-measurement-soundness-audit.md` |
 | 2026-07-19 | Extended clean-provenance re-collection | 266/266 strict-valid bundles with clean SOURCE provenance from clean main (288 total with the completion window); all planned cells except DF-TELEM executed at planned n; one unlock abort quarantined (guard's 4th live catch); Sol recompute audit PASS on arithmetic. See the superseding soundness-audit row above for claim status. | `docs/run_reports/2026-07-19-recal456-extended-window.md` |
-| 2026-07-19 | Suite re-calibration under the guard (preliminary, review-corrected) | 94 strict-valid bundles; suite 147.96 ± 0.39 J clean; provisional comparative floor ≈ 1.13 J (~0.77%, 5/10 blocks); claim-ineligible on provenance pending clean re-run; three-lens review corrected two over-promoted claims. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
-| 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); suite comparative cells caveated pending re-run; the D-077 guard (preflight, idle admission, cooldown v2, claim barrier, anchor custody) was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
-| 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles re-validated and extracted as unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake folded in without promoting evidence; Ed's manual site deployment recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
-| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative verdict; 222 strict-valid floor bundles extracted and independently verified, claim-readiness caveats retained; advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (LEAD-ACCEPTED) |
+| 2026-07-19 | Suite re-calibration under the guard | 94 strict-valid bundles; energy readout and provisional floor permanently **VOIDED** by the D-078 time-anchor defect; the corpus also failed the then-operative source-provenance gate. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
+| 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation was attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); those pre-repair energies were later permanently **VOIDED** by D-078. The D-077 guard was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
+| 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles were re-validated and extracted as unmatched observations; their energy values are now permanently **VOIDED** by D-078. DSpark/DFlash smokes and D-075's ranked extension-axis intake folded in without promoting evidence. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
+| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative verdict; 222 strict-valid bundles were extracted, but every reported energy and floor is now permanently **VOIDED** by D-078. | `docs/run_reports/2026-07-17-window-a-floors.md` (LEAD-ACCEPTED) |
 | 2026-07-16 | audit close + no-hardware resumption batch | PR #66 closed the comprehensive audit; PRs #67-#70 landed AXI-SA, SITE-02 D1/D2, the SPLIT-AP Part I freeze, and the AXI-SB `supported` verdict with its Mac C5-2.2 leg. Window A is software-unblocked but still needs Ed + quiet Mac; no new energy measurement is claimed. | `docs/run_reports/2026-07-16-resumption-nohw-batch.md` |
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
-| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
+| 2026-07-06 | third update / first live hardware path | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max bundles, proving the live adapter and evidence path. Every energy value originally reported from this pre-repair corpus is permanently **VOIDED** by D-078 and not under re-adjudication. | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
 | 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
 | 2026-07-06 | third update / pre-hardware hardening | Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction. | `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md` |
 | 2026-06-12 | first/second updates / mock vertical slice | The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report. | `docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md` |
@@ -423,16 +388,16 @@ JouleWise combines a reusable, typed measurement harness with a benchmark
 defined by its frozen workload suite, run rules, and strict validator. It
 measures the energy of LLM inference across heterogeneous local hardware. The
 name nods to JouleSort and Splitwise: energy measurement is the spine of the
-system; disaggregated ("split") inference - running prefill and decode on
-different machines with the KV cache transferred between them - is the
-validating research study, not the whole architecture.
+system. Under D-091, the capstone product is the trustworthy measurement
+instrument itself: the paper leads with what the instrument can establish
+about linearity, additivity, detection limits, and drift control.
 
-The capstone now has two explicit claim tracks. The guaranteed capstone is
-auditable local LLM energy measurement: the harness plus the Apple-Silicon
-characterization it can already execute on the M3 Max. Split
-(disaggregated) inference remains the differentiating validating study;
-when Phase 3 hardware and feasibility gates land, it upgrades the capstone
-from local characterization to a split-energy crossover study.
+Model comparisons, workload matrices, and disaggregated ("split") inference
+studies demonstrate the instrument; they do not define whether the capstone
+succeeds. Split inference — running prefill and decode on different machines
+with the KV cache transferred between them — remains a valuable optional
+demonstration when its hardware and feasibility gates clear. A crossover study
+adds evidence, but it does not upgrade the capstone into a different product.
 
 The frozen capstone headline, fallback claims, contribution ladder, and
 minimum-viable stop-lines are now recorded in
@@ -507,8 +472,8 @@ commitment and ordering authority under D-070.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** — the Phase 1 exit checklist owns exact completion and external gates |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** — Mac vertical slice and analysis software are implemented; remote protocol pins remain PROVISIONAL; the state kernel and quiet-machine rules own execution eligibility |
-| 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable instrument, live measurement path, per-target characterization | **in progress** — Mac vertical slice and analysis software are implemented; remote protocol pins remain PROVISIONAL; the state kernel and quiet-machine rules own execution eligibility |
+| 3. Disaggregation, KV replay, interconnect sweep | optional split-energy demonstration study | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
 
@@ -519,9 +484,9 @@ commitment and ordering authority under D-070.
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
 | Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed | live execution eligibility comes from the state kernel; quiet-machine work also requires Ed and the clean hardware lane |
-| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | Window A open; production shakedown closed and first floors published; quiet-Mac execution remains | P2-037 claim adjudication and the live state kernel govern the next baseline step; needs Ed + quiet Mac |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | Window A open; production shakedown closed and the first floor artifact minted but non-claim-bearing under D-110; quiet-Mac execution remains | P2-037 claim adjudication and the live state kernel govern the next baseline step; needs Ed + quiet Mac |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
-| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented; Window-A calibration data exist | the floor corpus is strict-valid but claim-evidence-flagged; P2-037 adjudication must preserve the published caveats before any claim promotion |
+| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented; governed calibration data exist | D-110's non-claim-bearing bar and remint conditions must be satisfied before any floor or downstream claim promotion |
 
 Complete so far (all verifiable in the repository):
 
@@ -559,17 +524,11 @@ Complete so far (all verifiable in the repository):
   `powermetrics` telemetry adapter (2H, parser pinned to a captured
   privileged sample, raw plists preserved verbatim in every bundle), and
   the flagship integration (2I) — three strict-valid repetition bundles
-  of real energy measurements on the M3 Max. **P2-003, gross energy — M3
-  Max / powermetrics SoC rails:** ~47.2 J per 512-token request.
-  **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:**
-  ~44.4 J per request and ~79-90 mJ per generated output token. TTFT was
-  ~94 ms at 257 tokens/s; these are legacy L1 preliminary observations for
-  provisional model Qwen2.5-1.5B-Instruct-4bit, mirrored locally. The
-  separately recorded **FLAGSHIP-001, gross energy — M3 Max / powermetrics
-  SoC rails:** ~304.0 J per 512-token request; **FLAGSHIP-001,
-  idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~298.7 J per
-  request and ~583 mJ per generated output token. These historical values
-  are basis labels on the recorded results, not a new reduction.
+  from the M3 Max. Those bundles prove the live MLX, powermetrics, and
+  evidence-custody path, but every P2-003 and FLAGSHIP-001 energy value is
+  **VOIDED permanently for claim use** by the pre-repair time-anchor defect
+  (D-078). They remain immutable instrument-history records, not preliminary
+  results awaiting re-adjudication.
 - The P2-042 frozen analysis manifest, P2-041 campaign verdict split,
   P2-037 contrast/claim engine, P2-040 reducer/gate remainder, P2-038
   production-uncertainty software path, and NV-GATE-2 code-now hardening.
@@ -612,7 +571,8 @@ AXI-SB's `supported` static-batch verdict with its Mac C5-2.2 leg; P2-038's
 production-shaped live gate; and AXI-SC's `unsupported_for_joulewise` pinned-
 runtime verdict. The later DSpark/DFlash MLX feasibility smokes and D-075
 extension-axis intake are recorded without promoting an energy claim, and the
-nine-bundle OLMoE/Qwen follow-on remains explicitly exploratory.
+nine-bundle OLMoE/Qwen follow-on remains historical instrument evidence with
+its energy values voided under D-078.
 Window A's software gates are
 satisfied, its first floor corpus is published, and the window remains open.
 The floors are calibration thresholds rather than claim promotion: P2-037
@@ -819,9 +779,10 @@ Top risks (full register with triggers and fallbacks in
 
 Minimum viable outcome (worst-case floor; still a complete, defensible
 capstone if reached):
-the reusable harness + Mac vertical slice + homogeneous baselines +
-synthetic interconnect sweep + an analytical split-energy model - honest,
-measured, reproducible.
+the trustworthy measurement instrument + a governed Apple-Silicon
+characterization + demonstration studies that clear their own gates — honest,
+measured, and reproducible. Split and interconnect work may add a demonstration
+without becoming a completion requirement.
 
 ## Timeline
 
@@ -844,9 +805,9 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
   guide, README quickstart that a new user can run in minutes.
 - The dataset: raw run bundles + hash manifest, frozen and tagged, with
   every figure regenerable by script.
-- The study: where splitting wins, loses, and why - with uncertainty,
-  limitations, and hardware-applicability findings (including negative
-  verdicts).
+- Demonstration studies showing what the instrument can and cannot resolve,
+  with uncertainty, limitations, and hardware-applicability findings
+  (including negative verdicts); split inference is one optional study.
 - Final report and colloquium presentation, every quantitative claim
   traceable to raw data.
 
@@ -956,13 +917,11 @@ tests encoded the same wrong assumption as the code.
 "measure LLM inference energy on edge hardware." Contracts-first
 engineering turned that into an auditable instrument: typed configs,
 self-contained evidence bundles, a strict re-reduction validator. The
-mock vertical slice proved the math without hardware; the Mac slice
-produced the first real joules; the flagship run put a 122-billion-
-parameter mixture-of-experts model through the identical harness and
-yielded the first real cross-model observation: two confounded points
-that differ in size, architecture, and quantization, with energy/token
-behavior consistent with the fixed-vs-marginal model while decode power
-stays nearly flat — the big model costs time, not watts. This week the
+mock vertical slice proved the math without hardware; the Mac slice then
+proved the live adapter and evidence path. Its pre-repair energy values,
+including the flagship comparison, are **VOIDED under D-078**; discovering
+and repairing that attribution failure became part of the instrument's
+story rather than a result to defend. This week the
 instrument gained the statistical and
 forensic machinery above, and a steelmanned, devil's-advocated research
 agenda of 31 tiered questions — 16 answerable on the current hardware
