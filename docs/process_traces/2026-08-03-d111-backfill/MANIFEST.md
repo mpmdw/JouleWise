@@ -45,4 +45,6 @@ sha256 of every member at backfill time; digest-only rows keep bytes in `.desk` 
 | test-speed-consult | timings-20260803.jsonl | 142df5b37a1dc6268e476b7f37af3fdf15cfd0c59fa018ee6e7cb6b18e53dbc4 | digest-only (39116B) |
 | testspeed | testspeed-audit-report.md | ebf900a3a64c06495b29b4a8d52eed1948ae19db20fbbcbbe5f35a606f5254c2 | tracked |
 | testspeed | testspeed-impl-report.md | 214a31ac21ed6332b8e6adf1bd8c55bca5e9749b617f8e76e4f3ef80eadc80fc | tracked |
-| winb_reeval_staged | .desk/winb_reeval | MISSING | - |
+| winb_reeval_staged | membership-binding.json | 349d5d260800662976cf38317c6af2a59b6000a55de13d5cf12a9d05484e76c5 | tracked |
+| winb_reeval_staged | reeval-evidence.md | 8967107a8823999171e4ac624a7131456b5a63e6b6148d9b1c75449ef29c440e | tracked |
+| winb_reeval_staged | salvage-closure.json | 385bc45181df3af3a7e36e8bb44789b5864d32c189670bea9b05a4b7edff2024 | tracked |
