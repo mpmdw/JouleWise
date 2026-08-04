@@ -39,9 +39,30 @@ t3 ceremony and must not be polluted with t3 context.
    plus SYNTHESIS.md as the binding contract). Round 2 landed the ruled
    shape; **delta re-audit CLEAN, zero findings, B1 CLOSED both
    dimensions**; lead replay `Ran 2456 tests OK (skipped=82)` exit-0
-   unmasked (closes the TMPDIR gap both prior audits flagged). SUCCESSOR
-   ACTION: if CI is green, merge under D-072 and retire the row; that
-   unblocks **D-110's re-mint conditions** and MINT-GENERALIZE-01.
+   unmasked (closes the TMPDIR gap both prior audits flagged).
+   **SUCCESSOR ACTION — FIRST DECISION, DO NOT MERGE YET: PR CI is RED
+   for an INTEGRATION COLLISION**, found at the lead gate and proven
+   mechanically in an integration tree:
+   `docs/process_traces/2026-08-04-calbracket-integration-collision/FINDING.md`.
+   D-109 legitimately added `calibration_ledger_snapshot` to
+   `mint_floor_artifact` (R1.4 threading); main's
+   `scripts/mint_floor_artifact_generalized.py` holds a BYTE-FROZEN
+   expectation of that signature and refuses on drift. Both trees are
+   green alone; 10 failures on the merge ref, all one cause. It was
+   invisible to every prior check because the generalized module does
+   not exist in the branch tree. NOT hand-patched overnight:
+   design-bearing on claim-minting machinery (one casualty is the mint
+   byte-identical-replay guard, and D-110 gates re-mint on this row).
+   Recommended shape is in the finding — update the frozen expectation
+   as a reviewed amendment, RE-PROVE byte-identical mint replay on the
+   integration tree, confirm the drift guard still has teeth, then merge
+   on green. Merging unblocks **D-110's re-mint conditions** and
+   MINT-GENERALIZE-01.
+   **PROCESS FINDING (fix the habit, not just this branch):** the lead's
+   rule-1 replay ran in the BRANCH tree, which cannot execute tests that
+   exist only on main. Whenever a branch is behind main, the lead's
+   verification replay must run on the INTEGRATION tree — otherwise it
+   verifies a tree that will never be merged.
 2. **T3-doctrine cold gate: RULED and synthesized.**
    `docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md` is
    the disposition of record. Every question AFFIRMED as amended /
