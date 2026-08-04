@@ -1,7 +1,7 @@
 # 2026-07-24/25 — NEG-8 screen+budget: four audit rounds, a new refuter pairing, PR #85, and the capsule CI unblock
 
 Continuation of the collection-arc report (2026-07-23). The Ed-ratified
-SCREEN + BUDGET design (D-078 clause 10, C-032 debate) was implemented,
+SCREEN + BUDGET design (D-078 clause 10, C-044 debate) was implemented,
 put through an adversarial gauntlet that ran until dry, landed as
 PR #85, and then forced a site-capsule repair before CI would go green.
 This report records the arc, the numbers, and what was deliberately

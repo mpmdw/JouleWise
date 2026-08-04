@@ -32,7 +32,7 @@ EXPECTED_IDS = {
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # D-078 confirmation-round-9 follow-up
     "FLOOR-BIND-01",
-    # C-033 screen+budget gauntlet deferrals (2026-07-25)
+    # C-045 screen+budget gauntlet deferrals (2026-07-25)
     "CUSTODY-HARDEN-01",
     # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
     # 2026-07-27 at 3055315 and left the live kernel)

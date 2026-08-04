@@ -790,7 +790,7 @@ Text.
             self.assertEqual(pack_stderr.getvalue(), "")
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
             # AUD-WO-039: measured mode is authoritative; the conservative
-            # estimator is a fallback-only guard. Since the C-033 council-log
+            # estimator is a fallback-only guard. Since the C-045 council-log
             # capsule redirect, production-shaped input fits even the
             # estimator's fallback budget; the estimator must never exceed
             # the invariant 1 MiB cap regardless.

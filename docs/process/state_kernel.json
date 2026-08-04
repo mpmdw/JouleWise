@@ -732,7 +732,7 @@
         "summary": "Close the PR #85 gauntlet's deferred custody-hardening seams: config-derived mockness reaches the reduce-layer barriers, the drift-bound seal stops being self-certifying, and two diagnostic nits are resolved."
       },
       "authority": {
-        "label": "C-033 gauntlet deferrals (council log; detail in docs/run_reports/2026-07-24-screen-budget-gauntlet.md)",
+        "label": "C-045 gauntlet deferrals (council log; detail in docs/run_reports/2026-07-24-screen-budget-gauntlet.md)",
         "path": "docs/council_log.md"
       },
       "dependencies": [],
