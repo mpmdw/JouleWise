@@ -24,6 +24,29 @@ independently of the packet.
 |---|---|---|
 | v1 (2026-08-03) | `2a738630e5bd780b4664ad47d058e93e7241595064b9d0d2dbd223b4bbc8acaa` | Superseded pre-ratification — Sol consult found five seams (bias leakage, missing doctrine, §4 laundering channel, §5 composition holes, hash-pin trust anchor); never used in a live gate. |
 
+## Convening procedure (ADOPTED 2026-08-03 late night — cure for the
+## doctrine-gate judges' BLOCKER B1: suppression failed via harness
+## auto-injection on the mechanism's first live use)
+
+1. **Clean launch environment:** cold instances are convened from a
+   git WORKTREE (where `CLAUDE.local.md` is provably absent — E1
+   probe, 2026-08-03) or an equivalently verified doctrine-free
+   context. The convener verifies before launch that the instance's
+   environment will not auto-load: `CLAUDE.local.md`, session memory
+   (path-keyed to the main checkout), or any narrative process/state
+   document.
+2. **Contamination disclosure duty:** every cold ruling opens with a
+   disclosure of any doctrine/memory material present at launch. A
+   contaminated ruling is not void per se — it stands or falls on
+   whether its conclusions cite verified evidence — but an undisclosed
+   contamination discovered later voids the ruling.
+3. **Trust anchors at launch:** the expected charter digest (and
+   frozen-packet digest) are supplied to the judge from this registry
+   at an immutable revision, independently of the packet, by the
+   operator or the convening session.
+4. Fold items 1-2 into charter v3 at the next byte-change opportunity
+   (new candidate, new gate per the bootstrap rule).
+
 ## Minimal validator (queued; spec from the consult)
 
 `scripts/validate_gate_packet.py` (to be built): accepts `--packet`,
