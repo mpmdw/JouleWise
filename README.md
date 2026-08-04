@@ -1,16 +1,15 @@
 # JouleWise
 
-> **🖥️ MACHINE: OVERNIGHT SESSION ACTIVE — leave untouched.** 2026-08-04
-> ~00:15 PT: agents running (B1 chain + consults); non-claim
-> characterization captures may run in the dead hours (t3 app will be
-> quit and relaunched once). No claim window tonight. This line
-> updates only at defined moments; rules in
-> [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+> **🖥️ MACHINE: OVERNIGHT SESSION WRAPPING — non-claim characterization
+> captures may be running.** 2026-08-04 early AM: no claim window
+> tonight; no window in flight. This line updates only at defined
+> moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 >
-> **🔴 T3 HANDOFF: NOT READY** — successor checkpoint pending. When
-> this line reads ✅ READY, point a NEW t3 Fable thread at the top
-> checkpoint block of [`RUN_STATE.md`](RUN_STATE.md) and it takes over
-> as magistrate.
+> **✅ T3 HANDOFF: READY** — point a NEW t3 Fable thread at the top
+> checkpoint block of [`RUN_STATE.md`](RUN_STATE.md) (the
+> `2026-08-04 early AM — T3 HANDOFF` block) and it takes over as
+> magistrate. PR #100 (CAL-BRACKET) is the one open thread; Ed owes two
+> acks, listed in that block.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is

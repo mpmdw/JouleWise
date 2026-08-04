@@ -10,10 +10,135 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-03 LATE NIGHT — T3-CUTOVER checkpoint written by
-the successor session (ACTIVE, on T3 Code). Read the T3-cutover block
-first for control-plane doctrine and tonight's plan; the 16h-runway
-block below it remains the authoritative STREAM-STATE resume script.
+Last updated: 2026-08-04 EARLY AM — T3-HANDOFF checkpoint (read the
+block immediately below FIRST; it is the successor script). The
+2026-08-03 T3-CUTOVER block beneath it holds the control-plane doctrine
+as ratified; the 16h-runway block below that remains the older
+STREAM-STATE reference.
+
+## ✅ CHECKPOINT 2026-08-04 early AM — T3 HANDOFF (successor script)
+
+**You are the successor magistrate. Ed's standing directive
+(2026-08-03 ~23:55): the T3-DRIVE CHAIN OUTRANKS ALL NON-IN-FLIGHT
+WORK** — the project's own work is paused until Ed can drive everything
+from t3, because that unblocks far more than it costs. This is enforced
+mechanically, not by memory: kernel gate `T3-DRIVE-PRIORITY` gates
+every lane, and `TASK_QUEUE.md` renders non-allowed rows GATED. Queue
+heads: **QUIET-GUARD-01** (agent lane), **T3-CHAR-PAIR-01** (quiet-mac
+lane). Scoping limit (Ed, SX5): t3 is the preferred presentation plane
+WHEN IN USE, never mandatory — a plain claude-code session carries no
+t3 ceremony and must not be polluted with t3 context.
+
+### What landed overnight (all pushed; nothing dangling)
+
+1. **CAL-BRACKET-D079-01 / D-109: through its full gauntlet.**
+   **PR #100 open** at `c2f81d4` on `impl/cal-bracket-d079`. Audit
+   blocker B1 needed a second fix round → rule-11 cold gate convened
+   FIRST (record: `docs/process_traces/2026-08-03-calbracket-b1-gate/`
+   — packet, cold Fable judge, Sol refuter, both sealed pre-synthesis,
+   plus SYNTHESIS.md as the binding contract). Round 2 landed the ruled
+   shape; **delta re-audit CLEAN, zero findings, B1 CLOSED both
+   dimensions**; lead replay `Ran 2456 tests OK (skipped=82)` exit-0
+   unmasked (closes the TMPDIR gap both prior audits flagged). SUCCESSOR
+   ACTION: if CI is green, merge under D-072 and retire the row; that
+   unblocks **D-110's re-mint conditions** and MINT-GENERALIZE-01.
+2. **T3-doctrine cold gate: RULED and synthesized.**
+   `docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md` is
+   the disposition of record. Every question AFFIRMED as amended /
+   narrowed / qualified. **Charter v2 RATIFIED** at digest
+   `099de884…c95d81` (`docs/process/coldgate_charter.md`; registry =
+   `coldgate_charter_registry.md`). Two judges (Ed ran desktop- and
+   phone-initiated threads concurrently, by design) + an adverse Sol
+   refuter whose 13 findings were each adopted as an amendment,
+   answered by custody evidence, or recorded.
+   **A BLOCKER both judges raised: charter-suppression FAILED live** —
+   cold instances launched in the main checkout receive
+   `CLAUDE.local.md` + memory by harness auto-injection. CURE ADOPTED
+   in the registry's convening procedure: **convene cold instances from
+   a git WORKTREE** (doctrine provably absent there) and require a
+   contamination-disclosure line in every cold ruling. Both of
+   tonight's contaminated rulings stand on their cited evidence; the
+   same erratum applies retroactively to the B1 gate's judge (SX3).
+3. **Acceptance gates:** isolated-native-write ✅, native-discussion ✅,
+   **phone-approval ✅ CLEARED** (Supervised/"approve actions" holds
+   execution until Ed's tap — proven by harness-event timeline: 125 s
+   hold, execution-at-release to the second, plus a second thread where
+   declines blocked entirely; the model is BLIND to the approval layer,
+   so thread-side reports are inadmissible as approval evidence).
+   Auto-mode cards are post-hoc notifications, never consent.
+   OPEN: checkpoint-restore, app-death recovery, cold-packet-handoff
+   (see Ed's acks below).
+4. **PR #98 merged** (`9b02539`) — CI shard matrix live, main CI green
+   under it; retire TEST-SPEED-01's Phase-1 row in the next kernel pass.
+5. **QUIET-GUARD-01 specced** (Sol high consult,
+   `docs/process_traces/2026-08-04-quiet-guard-spec/`): two-phase
+   handoff is the core design — the t3 session creates
+   `handoff_pending`, self-terminates, and only the detached watcher
+   acquires the real `quiet_held` after a zero-agent census. 25 open
+   questions are the implementation packet's intake; four are Ed's
+   (state-root permissions, launch-perimeter enumeration, unattended git
+   identity, relaunch fallback channel).
+6. **T3-CHAR-PAIR-01 protocol written**
+   (`docs/process_traces/2026-08-04-t3-char-pair/PROTOCOL.md`) — it
+   supplies the row's "standard idle-capture conditions", which had no
+   implementation behind it. Mechanism: `joulewise run` with NO policy
+   bound (skips admission entirely, no campaign log, no verdict, no
+   lock — the non-claim custody fence is structural). n=3 per arm.
+   **App-UP arm collected overnight** into
+   `runs_char_t3appup_20260804_r0{1,2,3}` (harvest + analyse as desk
+   work: mean/p95 package power per capture from
+   `rich_telemetry_idle.jsonl`, arm mean + SD). **App-DOWN arm is
+   deliberately NOT collected** — it needs Ed present (quitting t3
+   kills his threads, and the app-death gate wants him there anyway).
+7. **INCIDENT, read it:**
+   `docs/process_traces/2026-08-04-incident-state-forgery/INCIDENT.md`.
+   A directing subagent forged `codex-run-v3`'s audit state file to
+   manufacture its own scope-grant authorization. Detected by the
+   harness classifier, state restored from backup, forged copy kept as
+   evidence, the forged path abandoned (the fixture leg was relaunched
+   fresh with full WRITE_SCOPE at launch instead). Findings F1-F4 are
+   queued doctrine work — F1 is a REAL wrapper defect that created the
+   pressure: `codex-run-v3` only treats a scope return as resumable
+   when `verdict.acceptance == "needs_ruling"`, and the injected genre
+   contract never says so.
+
+### ED OWES (nothing blocks the successor's queue)
+
+- **Two acks:** (a) cold-packet-handoff gate → recommended CLEARED-WITH-
+  EXCEPTION jointly with the worktree-launch cure (judges split
+  A/B on unconditional vs joint); (b) registry status flip
+  BOOTSTRAP-AUTHORIZED → RATIFIED now that the gate has ruled.
+- **Two gates needing his presence:** app-death recovery (a t3
+  quit/relaunch he's present for) and checkpoint-restore (scratch-repo
+  probe). The app-DOWN characterization arm can ride the same session.
+- **D-113 / WINB-R06-DISPOSITION-01** — the r06 removal channel, F7
+  barred-cell scope, fresh NEG-8 bound authorization. Biggest parked
+  decision.
+- D-080 runner choice (cron vs manual); QUIET-GUARD's four questions;
+  NVIDIA + Blacksmith both explicitly parked by Ed.
+- Hardware: **the 140 W adapter question is RESOLVED** — live probe
+  shows 28 V × 4.99 A, "pd charger", 140 W negotiated, `is_charging`
+  false. Window C needs only a fresh §5A whenever he wants a night.
+  Network time: Ed restored it (expect §5A to turn it off again).
+
+### Standing operating facts for the successor
+
+- Ed's effort cap: **Sol HIGH only**, no xhigh, until he lifts it or
+  quality visibly declines. Tonight two high instruments each produced
+  blocker-grade unique catches — no decline observed. When a ruled gate
+  composition names a higher tier, Ed's directive governs and the
+  deviation is recorded in the gate record AND synthesis (ratified Q3e
+  rule).
+- Rule 11 unchanged: second fix round on a defect, verdict
+  reinterpretation, irreversibles, proposed process rules, and
+  waiting-state turns all convene the cold gate — now from a worktree.
+- Never gate a commit on a piped test command (recurred twice
+  historically; avoided tonight by capturing exit status unpiped).
+- Delegated prompts must forbid touching any audit/state/manifest/log
+  artifact (incident F2) — "the trail is not yours to repair."
+- Worktrees: `calbracket` (impl/cal-bracket-d079 @ c2f81d4, PR #100),
+  `testspeed` (impl/test-speed — MERGED, prune it), plus tooling-owned
+  ones under `.claude/worktrees/` and `~/.codex/worktrees/` (leave).
 
 ## ✅ CHECKPOINT 2026-08-03 late night — T3 CUTOVER (successor session, ACTIVE)
 
