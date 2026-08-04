@@ -132,6 +132,8 @@ be re-derived by a future agent gets an entry here.
 | D-107 | D100-BII nested-content closure cold gate 2: C-A′ producer-derived admission grammar with per-leaf value domains (no bare isinstance(str)); derivation obligation corpus-verified (in-kind fence condition recorded); scope expanded to the inventory grammar + guard-phase/node_cleanup false-refusal repairs; row acceptance amended with the over-refusal gate (license 3/3 real subjects); fix round 2 licensed, fresh focused audit; magistrate packet-hygiene failures recorded (third occurrence, standing tightening) | accepted (cold gate + Opus refuter, magistrate synthesis 2026-08-02) |
 | D-108 | D100-BII-BINDING-01 clause (c) RETIRED as a license precondition (zero-output-bytes predicate mechanically unreachable; substitution closed by the landed clause-(b) manifest pin); row closes on (a)+(b)+(d) with the repaired-tool digest-bound re-record over ALL THREE D-087 occurrences carrying the formal load (manual record corroboration only); L-A′ demoted to banked non-load-bearing hygiene; window B re-evaluation unblocks on row close | accepted (Ed 2026-08-03, deferral to the joint magistrate+Sol consult; C-042 debate record) |
 | D-109 | CAL-BRACKET-D079-01 F3: A-min-with-reservation — writer-enforced receipt ledger (reservation-first pending entry before capture, mandatory finalization, unresolved-pending refusal), ledger-only consumption, repo-committed head pin, single immutable snapshot threading; R1 authority/retention/anti-rollback (7 clauses) + R2 prior-observation set with the 38-total counting rule (8 clauses); Option B recorded as rejected fallback; lands with F1+F2 as the single combined fix round | accepted (Ed 2026-08-03, same deferral; Sol soundness breaks lead-verified and adopted) |
+| D-110 | Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint, Ed ruling on sweep finding RT-1: floors embed zero allowance where D-102 pin 3 mandates +max(drift, 0.010818 s)); re-mint gated on D-109 landing + artifact issuance + validator pin widening; RT-2 dependency edge minted (MINT-GENERALIZE-01 hard-blocked on CAL-BRACKET-D079-01); night-consult 7B-mint license suspended; RT-5 recorded: all four PASSED window verdicts untainted | accepted (Ed 2026-08-03, sweep-triggered) |
+| D-111 | Adjudication evidence gains tracked custody: load-bearing adjudication artifacts (cold-gate packets, rulings, refuter reports, cited debate records, re-records, decision-input corpora, archive digests) commit under docs/process_traces/ in the producing session; .desk stays working scratch; named backfill set executed this session | accepted (Ed 2026-08-03, sweep-triggered) |
 
 ---
 
@@ -7071,3 +7073,81 @@ unclosable duty that does not warrant a license precondition.
    observations — including previously blind observations once
    unblinded — not 38 post-cutoff observations. Under the candidate
    inventory, six further valid observations trigger re-derivation.
+
+## D-110: Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint); RT-2 dependency edge minted; the night consult's 7B-mint license SUSPENDED
+
+- Date: 2026-08-03 (Ed ruling, present, option "taint-and-remint" selected
+  from the magistrate's three-option packet during the 16h runway)
+- Status: accepted (trigger: the Ed-ordered two-week read-only soundness
+  sweep — 34 agents, Fable auditors + Sol xhigh second-eyes, run in a
+  parallel session — finding RT-1, Sol-confirmed. Memory record:
+  two-week-soundness-sweep-2026-08-03; full results ephemeral in that
+  session's task outputs.)
+- Applies to: `df-ph-decode-floor-mint1` (absolute 3.592138 /
+  comparative 7.377086 / operative gate 7.377086 J), row
+  MINT-GENERALIZE-01, CLAIMS_STATUS, the D-095 chain.
+
+**Grounds (RT-1):** mint #1's consumed fiducial bounds embed a
+never-zero allowance of ZERO where D-102 pin 3 mandates
++max(drift, 0.010818 s) — for a10 a ~+43% wider operative bound than the
+7.377086 J floor was derived from. The CAL-BRACKET-D079-01 adjudication
+record framed the defect as a non-salvage severity escalator
+(mis-refusals only); the accepted-side, anti-conservative direction was
+never ruled on. RT-5 (recorded): all four PASSED window verdicts are
+UNTAINTED — the 0.010 cliff is strictly tighter than the ruled screen
+(drifts 8-25x below it) and the 10-field identity match supersets the
+D-102 epoch; the taint is confined to floor artifacts.
+
+**Ruling:**
+1. Mint #1 is retroactively NON-CLAIM-BEARING. No consumption, quotation
+   as a claim, or gating use of its floors until re-mint. Per
+   CLAIMS_STATUS no landed claim has consumed it; if any consumption is
+   discovered it voids with it.
+2. RE-MINT CONDITIONS: (a) the D-109 CAL-BRACKET implementation lands
+   (merged + gauntlet-clean); (b) the acceptance artifact is ISSUED
+   (R2 backfill verified, ledger bootstrapped, head pinned); (c) the
+   library validator's evidence_root_id pin is widened by scheduled work
+   (DC-2/FM-3) so minted artifacts authenticate truthfully; then mint #1
+   re-derives under the landed selector with the computed allowance.
+3. RT-2 dependency edge MINTED in the kernel: MINT-GENERALIZE-01 is
+   hard-blocked on CAL-BRACKET-D079-01 landing + this ruling's re-mint
+   conditions. The 2026-08-03 night consult's Q3 license (governed 7B
+   mint after byte-compare) is SUSPENDED as superseded-by-evidence —
+   recorded honestly: the joint consult licensed it without RT-1 in
+   frame because the adjudication record itself understated the defect's
+   direction.
+4. The Q1 mint-1 byte-compare replay REMAINS licensed (verification of
+   tooling parity + the FM-1/FM-2 re-derivability question; it creates
+   no claim). Its result is recorded either way.
+
+## D-111: Adjudication evidence gains tracked custody — docs/process_traces/ is the home; .desk is working scratch only
+
+- Date: 2026-08-03 (Ed ruling, present; option "track adjudication
+  evidence" selected)
+- Status: accepted (trigger: the soundness sweep's strongest structural
+  finding — six domains independently: load-bearing adjudication
+  evidence exists only in untracked `.desk/` — cold-gate packets and
+  rulings, the D-108 debate record, the gate-3 synthesis CLAIMS_STATUS
+  cites, the TEST-SPEED timing corpus, archive manifest digests — while
+  the project's whole pivot is custody and attestation.)
+- Applies to: all future adjudication artifacts; a named backfill set.
+
+**Ruling:**
+1. Going forward, LOAD-BEARING adjudication artifacts — cold-gate
+   packets and rulings, refuter reports, debate/consult records that a
+   decision entry cites, digest-bound re-records, decision-input
+   corpora (e.g. timing data), archive manifest digests — are committed
+   under `docs/process_traces/` (dated subdirectories) in the same
+   session that produces them. A decision entry may not cite a memo as
+   authority unless it is tracked or explicitly declared ephemeral in
+   the entry itself.
+2. `.desk/` remains legitimate working scratch; nothing load-bearing
+   terminates there.
+3. BACKFILL (this session): the D-100/D100-BII cold-gate packets and
+   rulings (`.desk/coldgate_d100_bii/`, `.desk/adjudication_packet_20260801/`),
+   the D-108/D-109 debate record, the night-consult rulings memo, the
+   clause-(d) re-record JSON, the CAL-BRACKET F3 memos
+   (`.desk/calbracket_d079/`), the TEST-SPEED timing corpus
+   (`.desk/test-speed-consult/`, `.desk/testspeed/`), and the archive
+   manifest digests (RS-4). Large or binary members may be represented
+   by a digest manifest with the bytes retained in `.desk` + backup.

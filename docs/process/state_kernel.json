@@ -1192,6 +1192,15 @@
       },
       "dependencies": [
         {
+          "evidence": null,
+          "kind": "task",
+          "required": "CAL-BRACKET-D079-01 lands (D-109 implementation merged + gauntlet-clean) AND the D-110 re-mint conditions hold (acceptance artifact ISSUED after verified R2 backfill; evidence_root_id validator pin widened) before ANY further mint, including the governed 7B mint",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CAL-BRACKET-D079-01"
+        },
+        {
           "evidence": {
             "label": "Gauntlet closed 2026-08-02: commit 3 merged as PR #93 (cb860e1)",
             "path": "docs/decision_log.md"
@@ -1221,8 +1230,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 12,
-      "status": "queued",
-      "status_note": "Tooling LANDED via PR #96 (merge f3127ed, 2026-08-03): generalized mint sibling with digest-authenticated per-plan pinsets; gauntlet impl->audit(F1 blocker)->fix->delta(blocker-free)->bench D1 fix->lead gates (6 corpus tests, suite 2436 OK, CI 5/5 green). REMAINING (lead-reserved live gates, keep this row OPEN): real-evidence mint-1 full-path re-mint byte compare vs the landed artifact, then the governed 7B mint with a lead-authored pinset (D-085 Q6). Custody: .desk/mintgen/.",
+      "status": "blocked",
+      "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); this row is HARD-BLOCKED on CAL-BRACKET-D079-01 landing + the D-110 re-mint conditions. The night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay (verification only) remains licensed and in flight.",
       "stop_card": null
     },
     "MODULARITY-01": {
