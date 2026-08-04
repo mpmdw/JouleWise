@@ -69,3 +69,44 @@ Sol refuter at the same head. Disposition: the B1 gate's outcome
 stands on its evidence; the contamination is disclosed here and in an
 erratum note in that gate's synthesis; all future cold convenings
 follow the registry's clean-launch procedure adopted tonight.
+
+## SX4 — Phone-gate custody cure (answers refuter BLOCKER "keep the phone-approval gate open")
+
+Harness-event timelines extracted by the lead from the probe threads'
+transcripts (the exact "custody-pinned harness event and filesystem
+timeline" the refuter required):
+
+APPROVED thread `9e9707d1-7165-4e15-b84c-27107d5b83e9`
+(sha256 f86a4cb526b87661075af111a1674eb994fa7c81205cebd46630de62428f7614):
+- 05:25:25Z user probe prompt; 05:25:29Z model tool_use (the write)
+- 05:27:34Z tool_result exit=0 — a 125 s HOLD between call and
+  execution; file mtime 22:27:34 local == 05:27:34Z: execution at
+  release, to the second. Resolves the refuter's "write ~11 s before
+  tap" reading — Ed's 22:27:45 was clock-reading lag; the harness
+  event is authoritative.
+- 05:27:37Z second tool_use (stat); 05:28:24Z result — 47 s hold
+  (the second card).
+
+DECLINED thread `c8b0cf1c-b48f-452c-932f-eca40f6dd38e`
+(sha256 1efb640bd1f44645a7fc50b80e6b96b7b7c9ce1a8fd0fb3a59eb18bcfe83a08b):
+- Two probe attempts, both writes REFUSED by Ed's decline; harness
+  returned "user doesn't want to proceed"/"User declined tool
+  execution" to the model; no file write occurred from this thread.
+
+Together: Supervised ("approve actions") holds execution until tap,
+declines block entirely, and the model remains blind to the layer
+(its own reply claimed "no permission prompt"). Two-sided,
+custody-pinned, operator+filesystem+harness triangulated.
+
+## SX5 — Ed operator ruling (2026-08-03 ~23:20, in-session, binding on amendment drafting)
+
+Verbatim: "when im running t3 i want it to be my main driver but dont
+codify it past that like if i happen to be using claude code doing be
+like polluting context with t3 stuff."
+
+Effect: the rule-11 amendment frames t3 as the PREFERRED PRESENTATION
+PLANE WHEN IN USE — not a mandatory or exclusive plane. Plain
+claude-code sessions remain first-class; t3-specific ceremony
+(ingestion notes, thread-mode rules) binds only t3-mediated activity.
+Converges with the refuter's rejection of over-broad codification
+(Q1e narrowing, Q4 qualifier).
