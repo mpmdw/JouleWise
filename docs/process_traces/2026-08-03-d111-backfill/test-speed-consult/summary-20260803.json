@@ -1,0 +1,148 @@
+{
+  "event": "complete",
+  "modules": 93,
+  "failures": 0,
+  "sum_seconds": 694.965911,
+  "slowest": [
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_run_campaign.log",
+      "module": "tests.test_run_campaign",
+      "seconds": 181.757096,
+      "tail": [
+        "WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.",
+        "Config files to execute:",
+        "  /private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/tmp/tmpdgjdn35w/configs/one.json",
+        "WARNING: This campaign needs a quiet machine with no other workloads.",
+        "WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap."
+      ],
+      "tests": 203
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_p2038_production_path.log",
+      "module": "tests.test_p2038_production_path",
+      "seconds": 133.363856,
+      "tail": [
+        ".......",
+        "----------------------------------------------------------------------",
+        "Ran 7 tests in 132.868s",
+        "",
+        "OK"
+      ],
+      "tests": 7
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_reduce.log",
+      "module": "tests.test_reduce",
+      "seconds": 48.386488,
+      "tail": [
+        "..........................................................................................................................",
+        "----------------------------------------------------------------------",
+        "Ran 122 tests in 47.877s",
+        "",
+        "OK"
+      ],
+      "tests": 122
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_bridge.log",
+      "module": "tests.test_bridge",
+      "seconds": 47.073401,
+      "tail": [
+        "..............................................................",
+        "----------------------------------------------------------------------",
+        "Ran 62 tests in 46.828s",
+        "",
+        "OK"
+      ],
+      "tests": 62
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_powermetrics_fiducial.log",
+      "module": "tests.test_powermetrics_fiducial",
+      "seconds": 29.557107,
+      "tail": [
+        "...............",
+        "----------------------------------------------------------------------",
+        "Ran 37 tests in 29.239s",
+        "",
+        "OK"
+      ],
+      "tests": 37
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_controller.log",
+      "module": "tests.test_controller",
+      "seconds": 27.120634,
+      "tail": [
+        "......................................................................",
+        "----------------------------------------------------------------------",
+        "Ran 70 tests in 26.656s",
+        "",
+        "OK"
+      ],
+      "tests": 70
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_analysis_integration.log",
+      "module": "tests.test_analysis_integration",
+      "seconds": 25.284235,
+      "tail": [
+        "............................................................................................",
+        "----------------------------------------------------------------------",
+        "Ran 92 tests in 24.692s",
+        "",
+        "OK"
+      ],
+      "tests": 92
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_cli_run.log",
+      "module": "tests.test_cli_run",
+      "seconds": 23.72607,
+      "tail": [
+        "...............................................................................................",
+        "----------------------------------------------------------------------",
+        "Ran 95 tests in 23.218s",
+        "",
+        "OK"
+      ],
+      "tests": 95
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_determinism_gate.log",
+      "module": "tests.test_determinism_gate",
+      "seconds": 18.490569,
+      "tail": [
+        "........................................",
+        "----------------------------------------------------------------------",
+        "Ran 40 tests in 17.994s",
+        "",
+        "OK"
+      ],
+      "tests": 40
+    },
+    {
+      "exit_code": 0,
+      "log": "/private/tmp/claude-501/-Users-edr-code-JouleWise/eaafcc6f-e4c3-4661-b903-3333270ce728/scratchpad/test-speed-timing/logs/tests.test_powermetrics.log",
+      "module": "tests.test_powermetrics",
+      "seconds": 9.926479,
+      "tail": [
+        "..........................................................",
+        "----------------------------------------------------------------------",
+        "Ran 58 tests in 9.463s",
+        "",
+        "OK"
+      ],
+      "tests": 58
+    }
+  ]
+}
