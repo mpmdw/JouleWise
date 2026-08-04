@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import math
 import re
@@ -57,6 +58,11 @@ from joulewise.whole_window import (
     supersession_selected_occurrence_identity,
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
+)
+from joulewise.calibration_bracketing import load_calibration_acceptance_bound
+from joulewise.calibration_ledger import (
+    CalibrationLedgerSnapshot,
+    load_calibration_ledger_snapshot,
 )
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
@@ -1242,9 +1248,25 @@ def bind_floor_artifact_evidence(
     consumption_semantics_id: str | None = None,
     evaluation_basis_sha256: str | None = None,
     _authenticated_floor: AuthenticatedFloorArtifact | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> FloorEvidenceBinding:
     """Bind v2 component values to their named strict evidence roots."""
 
+    if calibration_ledger_snapshot is None:
+        acceptance = load_calibration_acceptance_bound()
+        cutoff = (
+            acceptance.get("ledger_cutoff")
+            if isinstance(acceptance, Mapping)
+            else None
+        )
+        calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            baseline_sequence=(
+                cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+            ),
+            baseline_digest=(
+                cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+            ),
+        )
     floor_path = Path(floor_path)
     if _authenticated_floor is not None:
         authenticated_floor = _authenticated_floor
@@ -1345,6 +1367,7 @@ def bind_floor_artifact_evidence(
                         member_ids,
                         evaluation_basis_sha256=basis,
                         consumption_semantics_id=consumption_semantics_id,
+                        calibration_ledger_snapshot=calibration_ledger_snapshot,
                     )
                     reasons = whole_window_refusal_reasons(
                         root,
@@ -2637,6 +2660,7 @@ def load_analysis_inputs(
     evidence_roots: Mapping[str, Path] | None = None,
     consumption_semantics_id: str | None = None,
     evaluation_basis_sha256: str | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> LoadedAnalysisInputs:
     """Load analysis-corpus inputs and independently bind floor evidence.
 
@@ -2650,6 +2674,21 @@ def load_analysis_inputs(
     authenticated_floor = _load_authenticated_floor_artifact(
         Path(floor_artifact_path)
     )
+    if calibration_ledger_snapshot is None:
+        acceptance = load_calibration_acceptance_bound()
+        cutoff = (
+            acceptance.get("ledger_cutoff")
+            if isinstance(acceptance, Mapping)
+            else None
+        )
+        calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            baseline_sequence=(
+                cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+            ),
+            baseline_digest=(
+                cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+            ),
+        )
     floor_artifact = authenticated_floor.value
     floor_sha = authenticated_floor.file_sha256
     runs_root = Path(runs_root)
@@ -2710,6 +2749,7 @@ def load_analysis_inputs(
         consumption_semantics_id=consumption_semantics_id,
         evaluation_basis_sha256=evaluation_basis_sha256,
         _authenticated_floor=authenticated_floor,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     cleanup_records = _campaign_claim_records(
         runs_root, str(manifest["manifest_id"])
@@ -2765,10 +2805,17 @@ def load_analysis_inputs(
         if verdict_basis_sha256 is not None
         else {}
     )
+    session_kwargs: dict[str, Any] = dict(basis_kwargs)
+    if "calibration_ledger_snapshot" in inspect.signature(
+        AuthenticatedConsumptionSession
+    ).parameters:
+        session_kwargs["calibration_ledger_snapshot"] = (
+            calibration_ledger_snapshot
+        )
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         effective_bundle_ids,
-        **basis_kwargs,
+        **session_kwargs,
     )
     whole_window_reasons = whole_window_refusal_reasons(
         runs_root,

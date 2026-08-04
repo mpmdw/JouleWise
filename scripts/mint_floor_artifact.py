@@ -55,6 +55,13 @@ from joulewise.whole_window import (  # noqa: E402
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
+from joulewise.calibration_bracketing import (  # noqa: E402
+    load_calibration_acceptance_bound,
+)
+from joulewise.calibration_ledger import (  # noqa: E402
+    CalibrationLedgerSnapshot,
+    load_calibration_ledger_snapshot,
+)
 
 
 MINT_TOOL_VERSION = "joulewise.floor_mint.v1"
@@ -506,6 +513,7 @@ def _authenticated_consumption_summaries(
     *,
     target_bundle_ids: set[str],
     consumption_semantics_id: str | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -516,6 +524,7 @@ def _authenticated_consumption_summaries(
         consumption_semantics_id=(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         ),
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     reasons = whole_window_refusal_reasons(
         runs_root,
@@ -1011,7 +1020,23 @@ def _authenticate_component(
     ),
     allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
     expected_consumption_semantics_id: str | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> AuthenticatedComponent:
+    if calibration_ledger_snapshot is None:
+        acceptance = load_calibration_acceptance_bound()
+        cutoff = (
+            acceptance.get("ledger_cutoff")
+            if isinstance(acceptance, Mapping)
+            else None
+        )
+        calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            baseline_sequence=(
+                cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+            ),
+            baseline_digest=(
+                cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+            ),
+        )
     report, report_raw = _load_json_object(paths.report_path, "extraction report")
     spec, spec_raw = _load_json_object(paths.spec_path, "extraction spec")
     if (
@@ -1063,6 +1088,7 @@ def _authenticate_component(
         expected_basis_sha256,
         target_bundle_ids=target_ids,
         consumption_semantics_id=expected_consumption_semantics_id,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     if semantics != actual_semantics:
         raise MintError(
@@ -1127,6 +1153,7 @@ def _authenticate_component(
                 expected_consumption_semantics_id
                 or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
             ),
+            calibration_ledger_snapshot=calibration_ledger_snapshot,
         )
         allowance_result = allowance_deriver(
             paths.evidence_root,
@@ -1640,6 +1667,7 @@ def bind_floor_artifact_evidence(
     evidence_roots: Mapping[str, Path],
     *,
     strict_validator: StrictValidator,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
     """Rebind a constructed artifact to plan, campaign, and bundle bytes.
 
@@ -1648,6 +1676,21 @@ def bind_floor_artifact_evidence(
     the root selected by that component's ``evidence_root_id``.
     """
 
+    if calibration_ledger_snapshot is None:
+        acceptance = load_calibration_acceptance_bound()
+        cutoff = (
+            acceptance.get("ledger_cutoff")
+            if isinstance(acceptance, Mapping)
+            else None
+        )
+        calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            baseline_sequence=(
+                cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+            ),
+            baseline_digest=(
+                cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+            ),
+        )
     validator_errors = validate_floor_artifact(artifact)
     if validator_errors:
         raise MintError(f"cannot bind invalid floor artifact: {validator_errors[0]}")
@@ -1729,6 +1772,7 @@ def bind_floor_artifact_evidence(
                             for row in record_rows
                         },
                         consumption_semantics_id=semantics,
+                        calibration_ledger_snapshot=calibration_ledger_snapshot,
                     )
                 )
                 if actual_semantics != semantics:
@@ -1906,17 +1950,34 @@ def mint_floor_artifact(
     project_tree_state: str,
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, rebind, validate, and write mint #1."""
 
     plan, plan_raw = _load_json_object(calibration_plan_path, "calibration plan")
     plan_sha256 = _sha256(plan_raw)
+    if calibration_ledger_snapshot is None:
+        acceptance = load_calibration_acceptance_bound()
+        cutoff = (
+            acceptance.get("ledger_cutoff")
+            if isinstance(acceptance, Mapping)
+            else None
+        )
+        calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            baseline_sequence=(
+                cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+            ),
+            baseline_digest=(
+                cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+            ),
+        )
     absolute = _authenticate_component(
         absolute_paths,
         expected_cell_id=A10_CELL_ID,
         expected_basis_sha256=A10_EVALUATION_BASIS_SHA256,
         strict_validator=strict_validator,
         expected_consumption_semantics_id=consumption_semantics_id,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     comparative = _authenticate_component(
         comparative_paths,
@@ -1924,6 +1985,7 @@ def mint_floor_artifact(
         expected_basis_sha256=WINDOW_C_EVALUATION_BASIS_SHA256,
         strict_validator=strict_validator,
         expected_consumption_semantics_id=consumption_semantics_id,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     artifact = mint_authenticated_artifact(
         artifact_id=artifact_id,
@@ -1960,6 +2022,7 @@ def mint_floor_artifact(
                 comparative.evidence_root_id: comparative_paths.evidence_root,
             },
             strict_validator=strict_validator,
+            calibration_ledger_snapshot=calibration_ledger_snapshot,
         )
     finally:
         for cache_key in cache_keys:

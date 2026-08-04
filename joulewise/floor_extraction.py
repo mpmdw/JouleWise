@@ -95,6 +95,7 @@ from joulewise.whole_window import (
     whole_window_drift_allowances,
     whole_window_refusal_reasons,
 )
+from joulewise.calibration_ledger import CalibrationLedgerSnapshot
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.environment_admission import (
     current_environment_refusals,
@@ -1581,6 +1582,7 @@ def extract_cells(
     consumption_semantics_id: str | None = None,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> dict[str, Any]:
     """Extract every cell in a spec document into one fail-closed report."""
 
@@ -1618,6 +1620,7 @@ def extract_cells(
         consumption_semantics_id=(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         ),
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     whole_window_refusals = _whole_window_extraction_refusals(
         runs_root,

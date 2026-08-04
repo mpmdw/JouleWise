@@ -152,6 +152,11 @@ from joulewise.salvage_dangler import (  # noqa: E402
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
+    load_calibration_acceptance_bound,
+)
+from joulewise.calibration_ledger import (  # noqa: E402
+    CalibrationLedgerSnapshot,
+    load_calibration_ledger_snapshot,
 )
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
 from joulewise.environment_admission import (  # noqa: E402
@@ -4062,6 +4067,30 @@ def _neg8_reference_scientific_config_sha256(
     return observed
 
 
+def _load_calibration_snapshot_for_evaluation() -> CalibrationLedgerSnapshot:
+    """Load the one D-109 snapshot shared by a complete runner evaluation.
+
+    This closes workflow omission, unregistered evidence, and rollback or
+    stale-head consumption; it does not defend against a malicious trusted
+    writer or a rewrite of both Git and the full ledger history.
+    """
+
+    acceptance = load_calibration_acceptance_bound()
+    cutoff = (
+        acceptance.get("ledger_cutoff")
+        if isinstance(acceptance, Mapping)
+        else None
+    )
+    return load_calibration_ledger_snapshot(
+        baseline_sequence=(
+            cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+        ),
+        baseline_digest=(
+            cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+        ),
+    )
+
+
 def idle_admission_core_verdict(
     evaluations: Sequence[MemberEvaluation],
     policy_binding: CampaignPolicyBinding,
@@ -4070,6 +4099,7 @@ def idle_admission_core_verdict(
     runs_root: Path | None = None,
     neg8_drift_bound: Mapping[str, Any] | None = None,
     evaluation_timestamp_s: float | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> dict[str, Any]:
     """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
 
@@ -4282,6 +4312,7 @@ def idle_admission_core_verdict(
             else Path("."),
             [evaluation.bundle_path for evaluation in evaluations],
             policy_binding.policy.calibration_bracketing,
+            ledger_snapshot=calibration_ledger_snapshot,
         )
         section["instrument_calibration_bracket"] = calibration_bracket
         if extension.claim_bearing:
@@ -5227,6 +5258,11 @@ def _run_whole_window_verdict_locked(
         whole_window=True,
         runs_root=runs_dir,
         neg8_drift_bound=neg8_drift_bound,
+        calibration_ledger_snapshot=(
+            consumption_session.calibration_ledger_snapshot
+            if consumption_session is not None
+            else _load_calibration_snapshot_for_evaluation()
+        ),
     )
     core_conditions = set(core.get("conditions", []))
     core_conditions.update(selection_conditions)
@@ -6715,12 +6751,16 @@ def run_axi_spec_campaign(
                     replace(evaluation, bundle_id=physical_id)
                 )
             evaluation_started_at = utc_timestamp()
+            calibration_ledger_snapshot = (
+                _load_calibration_snapshot_for_evaluation()
+            )
             core = idle_admission_core_verdict(
                 selected_evaluations,
                 policy_binding,
                 whole_window=True,
                 runs_root=runs_dir,
                 neg8_drift_bound=neg8_drift_bound,
+                calibration_ledger_snapshot=calibration_ledger_snapshot,
             )
             extension = policy_binding.idle_admission_extension
             core_reasons = _idle_admission_claim_barrier_reasons(core)

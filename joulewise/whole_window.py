@@ -39,7 +39,14 @@ from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
 )
-from joulewise.calibration_bracketing import calibration_bracket_for_bundles
+from joulewise.calibration_bracketing import (
+    calibration_bracket_for_bundles,
+    load_calibration_acceptance_bound,
+)
+from joulewise.calibration_ledger import (
+    CalibrationLedgerSnapshot,
+    load_calibration_ledger_snapshot,
+)
 # Pinned verdict descriptors are pointwise dereferences, not catalog discovery.
 from joulewise.campaign_provenance import load_authenticated_campaign_manifest
 from joulewise.reduce import (
@@ -118,6 +125,20 @@ class WholeWindowDriftAllowanceResult:
 
 _REDERIVATION_LEAF_REASONS = frozenset(
     {
+        "calibration_ledger_missing",
+        "calibration_ledger_malformed",
+        "calibration_ledger_chain_conflict",
+        "calibration_ledger_attempt_conflict",
+        "calibration_ledger_content_conflict",
+        "calibration_ledger_pending",
+        "calibration_ledger_head_uncommitted",
+        "calibration_ledger_head_mismatch",
+        "calibration_ledger_rollback",
+        "calibration_ledger_baseline_missing",
+        "calibration_ledger_custody_invalid",
+        "calibration_ledger_snapshot_required",
+        "calibration_ledger_off_ledger_artifact",
+        "calibration_observation_unclassifiable",
         "post_window_trace_tail_shorter_than_anchor_bound",
         "nonpositive_window_duration",
         "insufficient_in_window_samples",
@@ -136,6 +157,7 @@ _REDERIVATION_LEAF_REASONS = frozenset(
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
         "instrument_calibration_stale",
+        "calibration_acceptance_bound_stale",
         "negative_power_sample",
     }
 )
@@ -356,9 +378,13 @@ def _complete_envelope_record(value: object) -> dict[str, Any] | None:
 class AuthenticatedConsumptionSession:
     """One collection-scoped authenticated max-bracket consumption session.
 
-    The session owns bracket authentication, computes the operative fiducial
+    The session owns one immutable D-109 ledger snapshot and bracket
+    authentication, computes the operative fiducial
     bound from primary evidence, and memoizes every in-memory member
     re-reduction.  It never persists or substitutes a summary artifact.
+    The ledger boundary closes workflow omission, unregistered evidence, and
+    rollback/stale-head consumption; it does not defend against a malicious
+    trusted writer or a rewrite of both Git and full ledger history.
     """
 
     def __init__(
@@ -368,6 +394,8 @@ class AuthenticatedConsumptionSession:
         *,
         evaluation_basis_sha256: str | None = None,
         consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+        _allow_unissued_calibration_fixture: bool = False,
     ) -> None:
         if consumption_semantics_id not in {
             MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -381,6 +409,28 @@ class AuthenticatedConsumptionSession:
         self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
         self.evaluation_basis_sha256 = evaluation_basis_sha256
         self.consumption_semantics_id = consumption_semantics_id
+        self.calibration_ledger_snapshot = calibration_ledger_snapshot
+        self._allow_unissued_calibration_fixture = (
+            _allow_unissued_calibration_fixture
+        )
+        if (
+            self.calibration_ledger_snapshot is None
+            and consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
+        ):
+            acceptance = load_calibration_acceptance_bound()
+            cutoff = (
+                acceptance.get("ledger_cutoff")
+                if isinstance(acceptance, Mapping)
+                else None
+            )
+            self.calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+                baseline_sequence=(
+                    cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+                ),
+                baseline_digest=(
+                    cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+                ),
+            )
         self.calibration_bracket: Mapping[str, Any] | None = None
         self.operative_fiducial_bound_s: float | None = None
         self.refusal_reasons: tuple[str, ...] = ()
@@ -437,6 +487,15 @@ class AuthenticatedConsumptionSession:
         self._prepared = True
         self._preparation_identity = identity
         reasons: set[str] = set()
+        if self.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID:
+            if self.calibration_ledger_snapshot is None:
+                self._fail_global({"calibration_ledger_snapshot_required"})
+                return
+            if self.calibration_ledger_snapshot.refusal_reasons:
+                self._fail_global(
+                    set(self.calibration_ledger_snapshot.refusal_reasons)
+                )
+                return
         if (
             not self.referenced_bundle_ids.issubset(bundle_paths)
             or not bundle_paths
@@ -461,6 +520,8 @@ class AuthenticatedConsumptionSession:
             self.runs_root,
             [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
             policy.calibration_bracketing,
+            ledger_snapshot=self.calibration_ledger_snapshot,
+            _allow_unissued_fixture=self._allow_unissued_calibration_fixture,
         )
         self.calibration_bracket = bracket
         reasons.update(bracket_reasons)
@@ -649,17 +710,11 @@ class AuthenticatedConsumptionSession:
                 "minted_bound_dominated": dominated,
                 "minted_fiducial_bound_s": minted_bound,
                 "operative_fiducial_bound_s": operative_bound,
-                "calibration_bracket": {
-                    "pre": (
-                        dict(bracket["pre"])
-                        if isinstance(bracket.get("pre"), Mapping)
-                        else None
-                    ),
-                    "post": (
-                        dict(bracket["post"])
-                        if isinstance(bracket.get("post"), Mapping)
-                        else None
-                    ),
+                "calibration_bracket": _calibration_bracket_basis(bracket),
+                "calibration_ledger_snapshot": {
+                    "ledger_schema": self.calibration_ledger_snapshot.ledger_schema,
+                    "sequence": self.calibration_ledger_snapshot.head_sequence,
+                    "head_digest": self.calibration_ledger_snapshot.head_digest,
                 },
                 "operative_envelopes": complete,
             }
@@ -1856,6 +1911,48 @@ def build_row_provenance(
     }
 
 
+def _calibration_bracket_basis(
+    calibration_bracket: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Persist the selected endpoints plus D-102 acceptance evaluation."""
+
+    result = {
+        "pre": (
+            dict(calibration_bracket["pre"])
+            if isinstance(calibration_bracket, Mapping)
+            and isinstance(calibration_bracket.get("pre"), Mapping)
+            else None
+        ),
+        "post": (
+            dict(calibration_bracket["post"])
+            if isinstance(calibration_bracket, Mapping)
+            and isinstance(calibration_bracket.get("post"), Mapping)
+            else None
+        ),
+    }
+    acceptance = (
+        calibration_bracket.get("acceptance")
+        if isinstance(calibration_bracket, Mapping)
+        else None
+    )
+    if isinstance(acceptance, Mapping):
+        result.update(
+            {
+                "acceptance": dict(acceptance),
+                "endpoint_max_b_fiducial_s": calibration_bracket.get(
+                    "endpoint_max_b_fiducial_s"
+                ),
+                "calibration_drift_allowance_s": calibration_bracket.get(
+                    "calibration_drift_allowance_s"
+                ),
+                "operative_b_fiducial_s": calibration_bracket.get(
+                    "b_fiducial_s"
+                ),
+            }
+        )
+    return result
+
+
 def build_evaluation_basis(
     *,
     policy_sha256: str,
@@ -1893,20 +1990,7 @@ def build_evaluation_basis(
             str(value.get("bundle_path")),
         ),
     )
-    bracket_set = {
-        "pre": (
-            dict(calibration_bracket["pre"])
-            if isinstance(calibration_bracket, Mapping)
-            and isinstance(calibration_bracket.get("pre"), Mapping)
-            else None
-        ),
-        "post": (
-            dict(calibration_bracket["post"])
-            if isinstance(calibration_bracket, Mapping)
-            and isinstance(calibration_bracket.get("post"), Mapping)
-            else None
-        ),
-    }
+    bracket_set = _calibration_bracket_basis(calibration_bracket)
     payload = {
         "schema_version": WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA,
         "policy_sha256": policy_sha256,
@@ -3401,6 +3485,10 @@ def _current_core_rederivation_reasons(
             )
             calibration_reasons = consumption_session.refusal_reasons
         else:
+            # Frozen/pre-D-109 row-verifier tests retain their historical
+            # pointwise seam. Current D-109 consumers always supply the
+            # session above, which is the sole route that can validate a v2
+            # acceptance record and its recorded ledger head.
             calibration_bracket, calibration_reasons = (
                 calibration_bracket_for_bundles(
                     runs_root,
@@ -3566,24 +3654,14 @@ def _consumption_provenance_valid(
         return False
     bracket_set = basis.get("calibration_bracket_set")
     authenticated_bracket = (
-        consumption_session.calibration_bracket
+        _calibration_bracket_basis(consumption_session.calibration_bracket)
         if session_ready
         else bracket_set
     )
     if (
         not isinstance(bracket_set, Mapping)
         or not isinstance(authenticated_bracket, Mapping)
-        or (
-            session_ready
-            and {
-                "pre": bracket_set.get("pre"),
-                "post": bracket_set.get("post"),
-            }
-            != {
-                "pre": authenticated_bracket.get("pre"),
-                "post": authenticated_bracket.get("post"),
-            }
-        )
+        or (session_ready and dict(bracket_set) != dict(authenticated_bracket))
     ):
         return False
     pre_bound = _finite_number(
@@ -3600,25 +3678,78 @@ def _consumption_provenance_valid(
         if isinstance(authenticated_bracket.get("post"), Mapping)
         else None
     )
-    persisted_bracket_max = (
+    endpoint_max = (
         max(pre_bound, post_bound)
         if pre_bound is not None and post_bound is not None
         else None
     )
+    acceptance = authenticated_bracket.get("acceptance")
+    allowance = _finite_number(
+        authenticated_bracket.get("calibration_drift_allowance_s")
+    )
+    persisted_endpoint_max = _finite_number(
+        authenticated_bracket.get("endpoint_max_b_fiducial_s")
+    )
+    persisted_operative = _finite_number(
+        authenticated_bracket.get("operative_b_fiducial_s")
+    )
+    if isinstance(acceptance, Mapping):
+        allowance_record = acceptance.get("allowance")
+        allowance_decimal = (
+            allowance_record.get("value_s")
+            if isinstance(allowance_record, Mapping)
+            else None
+        )
+        try:
+            recorded_allowance = float(allowance_decimal)
+        except (TypeError, ValueError):
+            return False
+        if (
+            endpoint_max is None
+            or allowance is None
+            or allowance <= 0.0
+            or persisted_endpoint_max is None
+            or persisted_operative is None
+            or not math.isclose(
+                persisted_endpoint_max,
+                endpoint_max,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+            or not math.isclose(
+                recorded_allowance,
+                allowance,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+            or not math.isclose(
+                persisted_operative,
+                endpoint_max + allowance,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+            or allowance_record.get("embedding_count") != 1
+            or allowance_record.get("embedded_in") != "b_fiducial_s"
+        ):
+            return False
+        expected_operative = persisted_operative
+    else:
+        expected_operative = endpoint_max
     authenticated_operative = _finite_number(
         consumption_session.operative_fiducial_bound_s
         if session_ready
-        else persisted_bracket_max
+        else expected_operative
     )
     if (
         pre_bound is None
         or pre_bound < 0.0
         or post_bound is None
         or post_bound < 0.0
+        or expected_operative is None
         or authenticated_operative is None
         or not math.isclose(
             authenticated_operative,
-            max(pre_bound, post_bound),
+            expected_operative,
             rel_tol=0.0,
             abs_tol=1e-12,
         )
@@ -3660,14 +3791,7 @@ def _consumption_provenance_valid(
             or operative < minted - 1e-12
             or dominated != (operative > minted + 1e-12)
             or not isinstance(calibration, Mapping)
-            or {
-                "pre": calibration.get("pre"),
-                "post": calibration.get("post"),
-            }
-            != {
-                "pre": bracket_set.get("pre"),
-                "post": bracket_set.get("post"),
-            }
+            or dict(calibration) != dict(bracket_set)
             or not isinstance(envelopes, Mapping)
             or not envelopes
         ):
@@ -3733,20 +3857,9 @@ def _validated_evaluation_basis(
         if isinstance(core, Mapping)
         else None
     )
-    expected_bracket_set = {
-        "pre": (
-            dict(stored_bracket["pre"])
-            if isinstance(stored_bracket, Mapping)
-            and isinstance(stored_bracket.get("pre"), Mapping)
-            else None
-        ),
-        "post": (
-            dict(stored_bracket["post"])
-            if isinstance(stored_bracket, Mapping)
-            and isinstance(stored_bracket.get("post"), Mapping)
-            else None
-        ),
-    }
+    expected_bracket_set = _calibration_bracket_basis(
+        stored_bracket if isinstance(stored_bracket, Mapping) else None
+    )
     if (
         basis.get("schema_version") != WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA
         or basis.get("policy_sha256") != policy_sha

@@ -10,11 +10,19 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise.bundle_read import BundleReadError, BundleReader
+from joulewise.calibration_ledger import (
+    IDENTITY_EPOCH_FIELDS,
+    LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
+    LedgerObservation,
+    content_id_from_artifact_hashes,
+)
 from joulewise.powermetrics_fiducial import (
     CAPTURE_TIME_FIELD,
     MAX_AGE_S,
@@ -31,6 +39,31 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import CalibrationBracketingPolicy
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
+ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2.fixture.v1"
+ACCEPTANCE_EVALUATION_SCHEMA = "joulewise.calibration_acceptance_evaluation.v2"
+DEFAULT_ACCEPTANCE_BOUND_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "configs"
+    / "calibration"
+    / "calibration_acceptance_d079_v2.json"
+)
+DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
+    "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
+)
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+ESTIMATOR_CODE_PATHS = (
+    "joulewise/powermetrics_fiducial.py",
+    "joulewise/uncertainty_evidence.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/reduce.py",
+)
+ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
+_D102_OPERATIVE_VALUES = {
+    "bracket_screen_s": "0.010818",
+    "preflight_level_screen_s": "0.033558756679900",
+    "max_budgetable_excess_s": "0.001275166090593858",
+    "maximum_budgetable_drift_s": "0.012093166090593858",
+}
 
 
 @dataclass(frozen=True)
@@ -40,18 +73,332 @@ class CalibrationCandidate:
     evidence_sha256: str
     protocol_id: str
     capture_wall_time_s: float
-    b_fiducial_s: float
+    # Production authentication stores the source decimal lexeme here.  Float
+    # remains accepted only for backwards-compatible synthetic callers; the
+    # authenticated loader below never takes that branch.
+    b_fiducial_s: Decimal | str | float
     bindings: Mapping[str, Any]
+    attempt_id: str | None = None
+    content_id: str | None = None
+    ledger_receipt_digest: str | None = None
 
     def descriptor(self) -> dict[str, Any]:
+        bound = _candidate_decimal(self)
         return {
             "relative_path": self.relative_path,
             "manifest_sha256": self.manifest_sha256,
             "evidence_sha256": self.evidence_sha256,
             "protocol_id": self.protocol_id,
             "capture_wall_time_s": self.capture_wall_time_s,
-            "b_fiducial_s": self.b_fiducial_s,
+            # This descriptor is the recorded reducer boundary.  Keep both the
+            # exact acceptance lexeme and its explicit binary64 projection.
+            "b_fiducial_s": float(bound) if bound is not None else self.b_fiducial_s,
+            "b_fiducial_decimal_s": str(bound) if bound is not None else None,
+            "attempt_id": self.attempt_id,
+            "content_id": self.content_id,
+            "ledger_receipt_digest": self.ledger_receipt_digest,
         }
+
+
+def _canonical_sha256(value: Mapping[str, Any]) -> str:
+    raw = json.dumps(
+        dict(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        result = Decimal(value)
+    except InvalidOperation:
+        return None
+    return result if result.is_finite() else None
+
+
+def _candidate_decimal(candidate: CalibrationCandidate) -> Decimal | None:
+    value = candidate.b_fiducial_s
+    if isinstance(value, Decimal):
+        result = value
+    elif isinstance(value, str):
+        result = _decimal(value)
+        if result is None:
+            return None
+    elif (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    ):
+        # Compatibility for synthetic callers that predate D-102. Production
+        # candidates carry strings from authenticated evidence bytes instead.
+        result = Decimal(str(value))
+    else:
+        return None
+    return result if result.is_finite() else None
+
+
+def _current_estimator_code_sha256() -> dict[str, str] | None:
+    try:
+        return {
+            relative: hashlib.sha256((_REPO_ROOT / relative).read_bytes()).hexdigest()
+            for relative in ESTIMATOR_CODE_PATHS
+        }
+    except OSError:
+        return None
+
+
+def _valid_acceptance_bound(value: Any) -> bool:
+    """Validate the D-102 artifact from its decimal-source member table."""
+
+    if not isinstance(value, Mapping):
+        return False
+    core = {key: item for key, item in value.items() if key != "derivation_sha256"}
+    identity = value.get("identity_epoch")
+    prospective = value.get("prospective_rederivation")
+    corpus = value.get("derivation_corpus")
+    prior = value.get("prior_observation_set")
+    cutoff = value.get("ledger_cutoff")
+    issuance = value.get("issuance")
+    backfill = value.get("backfill_candidate")
+    derivation = value.get("decimal_derivation")
+    if (
+        value.get("schema_version") != ACCEPTANCE_BOUND_SCHEMA
+        or value.get("acceptance_id") != "d079_calibration_acceptance_v2_n19"
+        or value.get("decision_ids") != ["D-102", "D-109"]
+        or value.get("artifact_role") != "schema_fixture_unissued"
+        or not isinstance(issuance, Mapping)
+        or issuance.get("status") != "unratified_fixture"
+        or issuance.get("claim_eligible") is not False
+        or value.get("derivation_sha256") != _canonical_sha256(core)
+        or not isinstance(identity, Mapping)
+        or set(identity) != set(ACCEPTANCE_IDENTITY_FIELDS)
+        or any(identity.get(field) in (None, "") for field in ACCEPTANCE_IDENTITY_FIELDS)
+        or not isinstance(prospective, Mapping)
+        or prospective.get("calendar_expiry") is not None
+        or prospective.get("trigger_observation_rule")
+        != "judge_under_prior_artifact_never_self_fit"
+        or prospective.get("protocol_sha256") != protocol_sha256(PROTOCOL_ID)
+        or not isinstance(prospective.get("estimator_code_sha256"), Mapping)
+        or set(prospective["estimator_code_sha256"]) != set(ESTIMATOR_CODE_PATHS)
+        or any(
+            not _valid_sha256(item)
+            for item in prospective["estimator_code_sha256"].values()
+        )
+        or not isinstance(prospective.get("triggers"), list)
+        or set(prospective["triggers"])
+        != {
+            "identity_field_change",
+            "protocol_or_estimator_byte_change",
+            "new_valid_same_identity_capture_expands_observed_range",
+            "corpus_doubles_from_19_to_38",
+            "new_systematic_failure_challenges_preflight_screen",
+        }
+        or not isinstance(corpus, Mapping)
+        or corpus.get("n") != 19
+        or not isinstance(corpus.get("members"), list)
+        or len(corpus["members"]) != 19
+        or not isinstance(cutoff, Mapping)
+        or cutoff.get("ledger_schema") != LEDGER_SCHEMA
+        or cutoff.get("sequence") != 0
+        or cutoff.get("head_digest") != "0" * 64
+        or not isinstance(prior, Mapping)
+        or prior.get("cutoff")
+        != {
+            "sequence": cutoff.get("sequence"),
+            "head_digest": cutoff.get("head_digest"),
+            "ledger_schema": cutoff.get("ledger_schema"),
+        }
+        or not isinstance(prior.get("epoch_catalog"), Mapping)
+        or prior["epoch_catalog"].get("d079_epoch") != identity
+        or not isinstance(prior.get("observations"), list)
+        or not isinstance(backfill, Mapping)
+        or backfill.get("status") != "unratified_candidate_only"
+        or backfill.get("production_issuance_blocked") is not True
+        or not isinstance(derivation, Mapping)
+        or derivation.get("numeric_semantics") != "decimal_source_lexemes"
+    ):
+        return False
+    member_ids: list[str] = []
+    values: list[Decimal] = []
+    for member in corpus["members"]:
+        if (
+            not isinstance(member, Mapping)
+            or set(member)
+            != {
+                "member_id",
+                "source_directory",
+                "b_fiducial_s",
+                "manifest_sha256",
+                "instrument_evidence_sha256",
+            }
+            or not isinstance(member.get("member_id"), str)
+            or not isinstance(member.get("source_directory"), str)
+            or not _valid_sha256(member.get("manifest_sha256"))
+            or not _valid_sha256(member.get("instrument_evidence_sha256"))
+        ):
+            return False
+        bound = _decimal(member.get("b_fiducial_s"))
+        if bound is None or bound < 0:
+            return False
+        member_ids.append(member["member_id"])
+        values.append(bound)
+    if len(set(member_ids)) != 19 or member_ids != sorted(member_ids):
+        return False
+
+    prior_ids: list[str] = []
+    prior_member_ids: set[str] = set()
+    for observation in prior["observations"]:
+        if (
+            not isinstance(observation, Mapping)
+            or set(observation)
+            != {"content_id", "epoch_id", "disposition", "attempt_id"}
+            or not _valid_sha256(observation.get("content_id"))
+            or observation.get("epoch_id") != "d079_epoch"
+            or observation.get("disposition")
+            not in {
+                "valid",
+                "systematic-invalid",
+                "ordinary-invalid",
+                "blind-holdout",
+                "unresolved",
+            }
+            or not isinstance(observation.get("attempt_id"), str)
+            or not observation.get("attempt_id")
+        ):
+            return False
+        prior_ids.append(observation["content_id"])
+        if observation["attempt_id"] in member_ids:
+            prior_member_ids.add(observation["attempt_id"])
+    if len(prior_ids) != len(set(prior_ids)) or prior_member_ids != set(member_ids):
+        return False
+    member_content_ids = {
+        content_id_from_artifact_hashes(
+            {
+                "manifest.json": member["manifest_sha256"],
+                "instrument_evidence.json": member[
+                    "instrument_evidence_sha256"
+                ],
+            }
+        )
+        for member in corpus["members"]
+    }
+    if None in member_content_ids or not member_content_ids.issubset(set(prior_ids)):
+        return False
+
+    statistics = derivation.get("source_statistics")
+    rounding = derivation.get("rounding")
+    operatives = derivation.get("ratified_operatives")
+    if not all(isinstance(item, Mapping) for item in (statistics, rounding, operatives)):
+        return False
+    with localcontext() as context:
+        context.prec = 80
+        count = Decimal(len(values))
+        mean = sum(values, Decimal(0)) / count
+        sample_sd = (
+            sum((item - mean) ** 2 for item in values) / Decimal(len(values) - 1)
+        ).sqrt()
+        quantum = Decimal("0.000000000000000001")
+        expected_statistics = {
+            "minimum_s": str(min(values)),
+            "maximum_s": str(max(values)),
+            "range_s": str(max(values) - min(values)),
+            "mean_presentation_s": str(
+                mean.quantize(quantum, rounding=ROUND_HALF_EVEN)
+            ),
+            "sample_sd_presentation_s": str(
+                sample_sd.quantize(quantum, rounding=ROUND_HALF_EVEN)
+            ),
+        }
+    minimum_id = member_ids[values.index(min(values))]
+    maximum_id = member_ids[values.index(max(values))]
+    if (
+        statistics.get("minimum_s") != expected_statistics["minimum_s"]
+        or statistics.get("maximum_s") != expected_statistics["maximum_s"]
+        or statistics.get("range_s") != expected_statistics["range_s"]
+        or statistics.get("minimum_member_id") != minimum_id
+        or statistics.get("maximum_member_id") != maximum_id
+        or not isinstance(statistics.get("mean_presentation_s"), Mapping)
+        or statistics["mean_presentation_s"].get("value")
+        != expected_statistics["mean_presentation_s"]
+        or statistics["mean_presentation_s"].get("label")
+        != "rounded_presentation"
+        or not isinstance(statistics.get("sample_sd_presentation_s"), Mapping)
+        or statistics["sample_sd_presentation_s"].get("value")
+        != expected_statistics["sample_sd_presentation_s"]
+        or statistics["sample_sd_presentation_s"].get("label")
+        != "rounded_presentation"
+        or statistics.get("prediction_95_two_draw_s")
+        != "0.008826584887500717"
+        or statistics.get("prediction_99_two_draw_s")
+        != "0.012093166090593858"
+        or rounding.get("mode") != "ROUND_HALF_EVEN"
+        or not isinstance(rounding.get("operative_bracket_screen"), Mapping)
+        or rounding["operative_bracket_screen"].get("quantum_s") != "0.000001"
+        or rounding["operative_bracket_screen"].get("value_s")
+        != _D102_OPERATIVE_VALUES["bracket_screen_s"]
+        or not isinstance(rounding.get("preflight_level_screen"), Mapping)
+        or rounding["preflight_level_screen"].get("quantum_s")
+        != "0.000000000000001"
+        or rounding["preflight_level_screen"].get("value_s")
+        != _D102_OPERATIVE_VALUES["preflight_level_screen_s"]
+        or any(operatives.get(key) != item for key, item in _D102_OPERATIVE_VALUES.items())
+        or operatives.get("allowance_rule")
+        != "max(observed_drift_s,bracket_screen_s)"
+        or operatives.get("operative_bound_rule")
+        != "max(pre_b_fiducial_s,post_b_fiducial_s)+calibration_drift_allowance_s"
+        or operatives.get("embedding_count") != 1
+    ):
+        return False
+    screen = Decimal(_D102_OPERATIVE_VALUES["bracket_screen_s"])
+    maximum = Decimal(_D102_OPERATIVE_VALUES["maximum_budgetable_drift_s"])
+    excess = Decimal(_D102_OPERATIVE_VALUES["max_budgetable_excess_s"])
+    return (
+        (max(values) - min(values)).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
+        )
+        == screen
+        and max(values).quantize(
+            Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
+        )
+        == Decimal(_D102_OPERATIVE_VALUES["preflight_level_screen_s"])
+        and screen + excess == maximum
+    )
+
+
+def load_calibration_acceptance_bound(
+    path: Path = DEFAULT_ACCEPTANCE_BOUND_PATH,
+) -> dict[str, Any] | None:
+    """Load the file-pinned D-102 acceptance artifact fail-closed."""
+
+    try:
+        raw = Path(path).read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    # Any file route is authenticated by byte equality with the checked-in
+    # artifact.  A caller cannot turn an alternate self-consistent document
+    # into authority merely by choosing another path.
+    if hashlib.sha256(raw).hexdigest() != DEFAULT_ACCEPTANCE_BOUND_SHA256:
+        return None
+    if not _valid_acceptance_bound(value):
+        return None
+    return dict(value)
+
+
+def _authenticated_explicit_acceptance_bound(
+    value: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Authenticate an in-memory artifact against the checked-in byte pin."""
+
+    pinned = load_calibration_acceptance_bound()
+    if pinned is None or dict(value) != pinned:
+        return None
+    return pinned
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -193,29 +540,112 @@ def load_calibration_candidate(
         return None
     if abs(float(capture) - authenticated_capture) > 1.0:
         return None
+    try:
+        decimal_evidence = json.loads(
+            evidence_raw,
+            parse_float=str,
+            parse_int=str,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    stored_lexeme = (
+        decimal_evidence.get("b_fiducial_s")
+        if isinstance(decimal_evidence, Mapping)
+        else None
+    )
+    stored_decimal = _decimal(stored_lexeme)
+    if (
+        stored_decimal is not None
+        and float(stored_decimal) == float(effective_bound)
+    ):
+        effective_bound_lexeme = stored_lexeme
+    else:
+        # A physical re-fit can widen beyond the stored scalar. Its returned
+        # representation becomes the re-derivation source lexeme; no later
+        # acceptance comparison converts that value through binary64 again.
+        effective_bound_lexeme = str(float(effective_bound))
     return CalibrationCandidate(
         relative_path=relative,
         manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
         evidence_sha256=hashlib.sha256(evidence_raw).hexdigest(),
         protocol_id=str(protocol_id),
         capture_wall_time_s=float(capture),
-        b_fiducial_s=float(effective_bound),
+        b_fiducial_s=effective_bound_lexeme,
         bindings=dict(bindings),
     )
 
 
-def discover_calibration_candidates(runs_root: Path) -> tuple[CalibrationCandidate, ...]:
-    validation_root = Path(runs_root) / "instrument_validation"
-    try:
-        directories = sorted(path.parent for path in validation_root.glob("*/manifest.json"))
-    except OSError:
-        return ()
-    return tuple(
-        candidate
-        for directory in directories
-        if (candidate := load_calibration_candidate(directory, runs_root=Path(runs_root)))
-        is not None
+def _candidate_from_observation(
+    observation: LedgerObservation,
+) -> CalibrationCandidate | None:
+    """Authenticate one valid ledger observation from its custody locator."""
+
+    if observation.disposition != "valid" or observation.content_id is None:
+        return None
+    custody = Path(observation.custody_locator)
+    candidate = load_calibration_candidate(
+        custody,
+        runs_root=custody.parent.parent,
     )
+    if candidate is None:
+        return None
+    bound = _candidate_decimal(candidate)
+    receipt_bound = _decimal(observation.exact_bound_lexeme_s)
+    try:
+        receipt_capture = float(observation.capture_wall_time_s)
+    except (TypeError, ValueError):
+        return None
+    if (
+        candidate.manifest_sha256
+        != observation.artifact_sha256.get("manifest.json")
+        or candidate.evidence_sha256
+        != observation.artifact_sha256.get("instrument_evidence.json")
+        or content_id_from_artifact_hashes(observation.artifact_sha256)
+        != observation.content_id
+        or bound is None
+        or receipt_bound is None
+        or bound != receipt_bound
+        or candidate.capture_wall_time_s != receipt_capture
+        or any(
+            candidate.bindings.get(field) != observation.t1_bindings.get(field)
+            for field in V2_BINDING_FIELDS
+        )
+        or any(
+            candidate.bindings.get(field) != observation.identity_epoch.get(field)
+            for field in ACCEPTANCE_IDENTITY_FIELDS
+        )
+    ):
+        return None
+    return replace(
+        candidate,
+        relative_path=observation.custody_locator,
+        attempt_id=observation.attempt_id,
+        content_id=observation.content_id,
+        ledger_receipt_digest=observation.receipt_digest,
+    )
+
+
+def discover_calibration_candidates(
+    ledger_snapshot: CalibrationLedgerSnapshot,
+) -> tuple[CalibrationCandidate, ...]:
+    """Enumerate valid endpoints from the sole ledger authority.
+
+    The mechanism closes workflow omission, unregistered evidence, and
+    rollback/stale-head consumption; it does not defend against a malicious
+    trusted writer or a rewrite of both Git and full ledger history.
+    """
+
+    if not isinstance(ledger_snapshot, CalibrationLedgerSnapshot) or not ledger_snapshot.valid:
+        return ()
+    candidates: list[CalibrationCandidate] = []
+    for observation in ledger_snapshot.observations:
+        if observation.disposition != "valid":
+            continue
+        candidate = _candidate_from_observation(observation)
+        if candidate is None:
+            return ()
+        candidates.append(candidate)
+    return tuple(candidates)
 
 
 def evaluate_calibration_bracket(
@@ -225,8 +655,11 @@ def evaluate_calibration_bracket(
     window_end_s: float,
     bindings: Mapping[str, Any],
     policy: CalibrationBracketingPolicy,
+    acceptance_bound: Mapping[str, Any] | None = None,
+    ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Select a causal bracket and consume the larger authenticated bound."""
+    """Select a causal bracket and apply the provenance-bound D-079 budget."""
 
     result: dict[str, Any] = {
         "schema_version": BRACKET_SCHEMA,
@@ -240,8 +673,11 @@ def evaluate_calibration_bracket(
         "window_end_s": window_end_s,
         "pre": None,
         "post": None,
+        "endpoint_max_b_fiducial_s": None,
+        "calibration_drift_allowance_s": None,
         "b_fiducial_s": None,
         "drift_s": None,
+        "acceptance": None,
         "status": "not_required" if not policy.require_bracket else "failed",
     }
     if not policy.require_bracket:
@@ -252,6 +688,158 @@ def evaluate_calibration_bracket(
         or window_start_s >= window_end_s
     ):
         return result, ("instrument_calibration_bracket_missing",)
+
+    using_default_bound = acceptance_bound is None
+    artifact = (
+        load_calibration_acceptance_bound()
+        if using_default_bound
+        else _authenticated_explicit_acceptance_bound(acceptance_bound)
+    )
+    if artifact is None:
+        result["acceptance"] = {
+            "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
+            "artifact": None,
+            "freshness": {
+                "status": "stale",
+                "reason": "acceptance_artifact_missing_or_invalid",
+            },
+        }
+        return result, ("calibration_acceptance_bound_stale",)
+    if not _allow_unissued_fixture:
+        result["acceptance"] = {
+            "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
+            "artifact": {
+                "acceptance_id": artifact["acceptance_id"],
+                "artifact_sha256": DEFAULT_ACCEPTANCE_BOUND_SHA256,
+                "authentication": "checked_in_byte_sha256_pin",
+            },
+            "freshness": {
+                "status": "stale",
+                "reason": "acceptance_artifact_unissued_fixture",
+            },
+        }
+        return result, ("calibration_acceptance_bound_stale",)
+    cutoff = artifact["ledger_cutoff"]
+    if ledger_snapshot is None:
+        return result, ("calibration_ledger_snapshot_required",)
+    if ledger_snapshot.refusal_reasons:
+        return result, tuple(ledger_snapshot.refusal_reasons)
+    if (
+        ledger_snapshot.baseline_sequence != cutoff["sequence"]
+        or ledger_snapshot.baseline_digest != cutoff["head_digest"]
+        or ledger_snapshot.ledger_schema != cutoff["ledger_schema"]
+    ):
+        return result, ("calibration_ledger_baseline_missing",)
+    identity_epoch = artifact["identity_epoch"]
+    prospective = artifact["prospective_rederivation"]
+    result["policy"].update(
+        {
+            "calibration_bracket_max_drift_s_role": (
+                "legacy_obsolete_not_an_acceptance_comparator"
+            ),
+            "acceptance_bound_id": artifact["acceptance_id"],
+            "operative_bracket_screen_decimal_s": (
+                artifact["decimal_derivation"]["ratified_operatives"][
+                    "bracket_screen_s"
+                ]
+            ),
+        }
+    )
+    observed_identity = {
+        field: bindings.get(field) for field in ACCEPTANCE_IDENTITY_FIELDS
+    }
+    stale_fields = [
+        field
+        for field in ACCEPTANCE_IDENTITY_FIELDS
+        if observed_identity.get(field) != identity_epoch.get(field)
+    ]
+    freshness_status = "stale" if stale_fields else "fresh"
+    result["acceptance"] = {
+        "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
+        "artifact": {
+            "acceptance_id": artifact["acceptance_id"],
+            "artifact_sha256": DEFAULT_ACCEPTANCE_BOUND_SHA256,
+            "authentication": "checked_in_byte_sha256_pin",
+            "derivation_sha256": artifact["derivation_sha256"],
+        },
+        "freshness": {
+            "status": freshness_status,
+            "basis": "exact_identity_epoch",
+            "expected_identity_epoch": dict(identity_epoch),
+            "observed_identity_epoch": observed_identity,
+            "trigger_guard_protocol_sha256": prospective["protocol_sha256"],
+            "trigger_guard_estimator_code_sha256": dict(
+                prospective["estimator_code_sha256"]
+            ),
+            "stale_fields": stale_fields,
+            "calendar_expiry": None,
+        },
+        "prospective_rederivation": {
+            "observation_rule": prospective["trigger_observation_rule"],
+            "candidate_set_boundary": (
+                "authenticated_calibration_ledger_snapshot_only"
+            ),
+            "global_runs_root_scan": False,
+            "mandatory_triggers": list(prospective["triggers"]),
+            "observed_triggers": [],
+        },
+        "numeric_semantics": {
+            "comparisons": "decimal",
+            "reducer_boundary": "binary64_recorded_below",
+        },
+        "ledger_snapshot": {
+            "ledger_schema": ledger_snapshot.ledger_schema,
+            "sequence": ledger_snapshot.head_sequence,
+            "head_digest": ledger_snapshot.head_digest,
+            "baseline_sequence": ledger_snapshot.baseline_sequence,
+            "baseline_digest": ledger_snapshot.baseline_digest,
+            "load_count": 1,
+        },
+        "preflight": None,
+        "drift": None,
+    }
+    if stale_fields:
+        return result, ("calibration_acceptance_bound_stale",)
+    observations_by_attempt = ledger_snapshot.observation_by_attempt
+    registered_valid = {
+        (
+            observation.attempt_id,
+            observation.content_id,
+            observation.receipt_digest,
+        )
+        for observation in ledger_snapshot.observations
+        if observation.disposition == "valid"
+    }
+    supplied_valid = {
+        (
+            candidate.attempt_id,
+            candidate.content_id,
+            candidate.ledger_receipt_digest,
+        )
+        for candidate in candidates
+    }
+    # Even the low-level evaluator requires the complete ledger enumeration.
+    # This prevents a caller from narrowing the registered universe to a
+    # favorable subset while still passing per-candidate membership checks.
+    if supplied_valid != registered_valid or len(candidates) != len(supplied_valid):
+        return result, ("calibration_ledger_off_ledger_artifact",)
+    for candidate in candidates:
+        observation = (
+            observations_by_attempt.get(candidate.attempt_id)
+            if isinstance(candidate.attempt_id, str)
+            else None
+        )
+        if (
+            observation is None
+            or observation.disposition != "valid"
+            or candidate.content_id != observation.content_id
+            or candidate.ledger_receipt_digest != observation.receipt_digest
+            or candidate.manifest_sha256
+            != observation.artifact_sha256.get("manifest.json")
+            or candidate.evidence_sha256
+            != observation.artifact_sha256.get("instrument_evidence.json")
+        ):
+            return result, ("calibration_ledger_off_ledger_artifact",)
     # v2 remains an authenticated validation/reduction artifact, but only the
     # 59-pulse v3 protocol carries the governed 95/95 claim calibration.
     matching = [
@@ -263,6 +851,72 @@ def evaluate_calibration_bracket(
             for field in V2_BINDING_FIELDS
         )
     ]
+    matching_decimals: dict[int, Decimal] = {}
+    for candidate in matching:
+        candidate_decimal = _candidate_decimal(candidate)
+        if candidate_decimal is None or candidate_decimal < 0:
+            return result, ("instrument_calibration_invalid",)
+        matching_decimals[id(candidate)] = candidate_decimal
+    corpus_members = artifact["derivation_corpus"]["members"]
+    observed_triggers = result["acceptance"]["prospective_rederivation"][
+        "observed_triggers"
+    ]
+    if (
+        protocol_sha256(PROTOCOL_ID) != prospective.get("protocol_sha256")
+        or _current_estimator_code_sha256()
+        != dict(prospective["estimator_code_sha256"])
+    ):
+        observed_triggers.append("protocol_or_estimator_byte_change")
+    prior_ids = {
+        observation["content_id"]
+        for observation in artifact["prior_observation_set"]["observations"]
+    }
+    distinct_observations = {
+        observation.content_id: observation
+        for observation in ledger_snapshot.observations
+        if observation.content_id is not None
+    }
+    new_observations = [
+        observation
+        for content_id, observation in sorted(distinct_observations.items())
+        if content_id not in prior_ids
+    ]
+    if any(
+        observation.disposition
+        not in {"valid", "systematic-invalid", "ordinary-invalid", "abandoned"}
+        for observation in new_observations
+    ):
+        return result, ("calibration_observation_unclassifiable",)
+    valid_same_epoch = [
+        observation
+        for observation in distinct_observations.values()
+        if observation.disposition == "valid"
+        and dict(observation.identity_epoch) == dict(identity_epoch)
+    ]
+    if len(valid_same_epoch) >= 38:
+        observed_triggers.append("corpus_doubles_from_19_to_38")
+    corpus_values = [
+        Decimal(member["b_fiducial_s"]) for member in corpus_members
+    ]
+    new_valid_values = [
+        value
+        for observation in new_observations
+        if observation.disposition == "valid"
+        and dict(observation.identity_epoch) == dict(identity_epoch)
+        and (value := _decimal(observation.exact_bound_lexeme_s)) is not None
+    ]
+    if any(value < min(corpus_values) or value > max(corpus_values) for value in new_valid_values):
+        observed_triggers.append(
+            "new_valid_same_identity_capture_expands_observed_range"
+        )
+    if any(
+        observation.disposition == "systematic-invalid"
+        and dict(observation.identity_epoch) == dict(identity_epoch)
+        for observation in new_observations
+    ):
+        observed_triggers.append(
+            "new_systematic_failure_challenges_preflight_screen"
+        )
     causal_pre = [
         candidate for candidate in matching if candidate.capture_wall_time_s <= window_start_s
     ]
@@ -288,17 +942,127 @@ def evaluate_calibration_bracket(
         return result, (reason,)
     pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
     post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
-    drift_s = abs(pre.b_fiducial_s - post.b_fiducial_s)
+    pre_decimal = matching_decimals[id(pre)]
+    post_decimal = matching_decimals[id(post)]
+    if (
+        not pre_decimal.is_finite()
+        or not post_decimal.is_finite()
+        or pre_decimal < 0
+        or post_decimal < 0
+    ):
+        return result, ("instrument_calibration_invalid",)
+    if isinstance(pre.b_fiducial_s, float) and isinstance(
+        post.b_fiducial_s, float
+    ):
+        # Old synthetic probes supplied only binary64 endpoints. Preserve their
+        # source arithmetic without applying Decimal after a second rounding;
+        # authenticated production candidates always use the exact branch.
+        drift_decimal = Decimal(
+            str(abs(pre.b_fiducial_s - post.b_fiducial_s))
+        )
+    else:
+        drift_decimal = abs(pre_decimal - post_decimal)
+    endpoint_max_decimal = max(pre_decimal, post_decimal)
+    operatives = artifact["decimal_derivation"]["ratified_operatives"]
+    screen = Decimal(operatives["bracket_screen_s"])
+    preflight_screen = Decimal(operatives["preflight_level_screen_s"])
+    maximum_drift = Decimal(operatives["maximum_budgetable_drift_s"])
+    maximum_excess = Decimal(operatives["max_budgetable_excess_s"])
     result.update(
         {
             "pre": pre.descriptor(),
             "post": post.descriptor(),
-            "b_fiducial_s": max(pre.b_fiducial_s, post.b_fiducial_s),
-            "drift_s": drift_s,
+            "endpoint_max_b_fiducial_s": float(endpoint_max_decimal),
+            "drift_s": float(drift_decimal),
         }
     )
-    if drift_s > policy.calibration_bracket_max_drift_s:
+    result["acceptance"]["numeric_semantics"].update(
+        {
+            "pre_b_fiducial_binary64_s": float(pre_decimal),
+            "pre_b_fiducial_decimal_s": str(pre_decimal),
+            "post_b_fiducial_binary64_s": float(post_decimal),
+            "post_b_fiducial_decimal_s": str(post_decimal),
+            "observed_drift_decimal_s": str(drift_decimal),
+        }
+    )
+    preflight_status = "passed" if pre_decimal <= preflight_screen else "failed"
+    result["acceptance"]["preflight"] = {
+        "status": preflight_status,
+        "observed_pre_b_fiducial_s": str(pre_decimal),
+        "level_screen_s": str(preflight_screen),
+        "failure_class": (
+            None if preflight_status == "passed" else "systematic_not_budgetable"
+        ),
+    }
+    if pre_decimal > preflight_screen:
+        observed_triggers.append(
+            "new_systematic_failure_challenges_preflight_screen"
+        )
+        result["acceptance"]["drift"] = {
+            "status": "not_evaluated_systematic_preflight_failure",
+            "observed_s": str(drift_decimal),
+            "screen_s": str(screen),
+            "maximum_budgetable_drift_s": str(maximum_drift),
+        }
         return result, ("instrument_calibration_mismatch",)
+
+    stale_triggers = [
+        trigger
+        for trigger in observed_triggers
+        if trigger
+        in {
+            "protocol_or_estimator_byte_change",
+            "corpus_doubles_from_19_to_38",
+            "new_valid_same_identity_capture_expands_observed_range",
+            "new_systematic_failure_challenges_preflight_screen",
+        }
+    ]
+    if stale_triggers:
+        result["acceptance"]["freshness"].update(
+            {
+                "status": "stale",
+                "reason": "prospective_rederivation_required",
+                "stale_triggers": stale_triggers,
+            }
+        )
+        return result, ("calibration_acceptance_bound_stale",)
+
+    excess = max(drift_decimal - screen, Decimal(0))
+    drift_status = (
+        "budget_exceeded"
+        if drift_decimal > maximum_drift
+        else "passed_budgeted"
+        if drift_decimal > screen
+        else "passed_screen"
+    )
+    result["acceptance"]["drift"] = {
+        "status": drift_status,
+        "observed_s": str(drift_decimal),
+        "screen_s": str(screen),
+        "excess_s": str(excess),
+        "max_budgetable_excess_s": str(maximum_excess),
+        "maximum_budgetable_drift_s": str(maximum_drift),
+    }
+    if drift_decimal > maximum_drift:
+        return result, ("instrument_calibration_mismatch",)
+
+    allowance = max(drift_decimal, screen)
+    operative_bound = endpoint_max_decimal + allowance
+    result.update(
+        {
+            "calibration_drift_allowance_s": float(allowance),
+            "b_fiducial_s": float(operative_bound),
+        }
+    )
+    result["acceptance"]["allowance"] = {
+        "rule": "max(observed_drift_s,bracket_screen_s)",
+        "value_s": str(allowance),
+        "embedding_count": 1,
+        "embedded_in": "b_fiducial_s",
+        "endpoint_max_b_fiducial_s": str(endpoint_max_decimal),
+        "operative_b_fiducial_decimal_s": str(operative_bound),
+        "operative_b_fiducial_binary64_s": float(operative_bound),
+    }
     result["status"] = "passed"
     return result, ()
 
@@ -307,8 +1071,11 @@ def calibration_bracket_for_bundles(
     runs_root: Path,
     bundle_paths: Sequence[Path],
     policy: CalibrationBracketingPolicy,
+    *,
+    ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Derive the collection window and binding vector from member custody."""
+    """Use the runs root only for the evaluated window's T1/endpoints."""
 
     if not bundle_paths:
         empty, _ = evaluate_calibration_bracket(
@@ -317,6 +1084,8 @@ def calibration_bracket_for_bundles(
             window_end_s=0.0,
             bindings={},
             policy=policy,
+            ledger_snapshot=ledger_snapshot,
+            _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
     windows = []
@@ -339,6 +1108,8 @@ def calibration_bracket_for_bundles(
             window_end_s=0.0,
             bindings={},
             policy=policy,
+            ledger_snapshot=ledger_snapshot,
+            _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_bracket_missing",)
     expected = bindings[0]
@@ -352,22 +1123,48 @@ def calibration_bracket_for_bundles(
             window_end_s=max(window.end_s for window in windows),
             bindings=expected,
             policy=policy,
+            ledger_snapshot=ledger_snapshot,
+            _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
+    if ledger_snapshot is None:
+        candidates: tuple[CalibrationCandidate, ...] = ()
+    else:
+        candidates = discover_calibration_candidates(ledger_snapshot)
+        registered_valid = sum(
+            observation.disposition == "valid"
+            for observation in ledger_snapshot.observations
+        )
+        if ledger_snapshot.valid and len(candidates) != registered_valid:
+            empty, _ = evaluate_calibration_bracket(
+                (),
+                window_start_s=min(window.start_s for window in windows),
+                window_end_s=max(window.end_s for window in windows),
+                bindings=expected,
+                policy=policy,
+                ledger_snapshot=ledger_snapshot,
+                _allow_unissued_fixture=_allow_unissued_fixture,
+            )
+            return empty, ("calibration_ledger_custody_invalid",)
     return evaluate_calibration_bracket(
-        discover_calibration_candidates(runs_root),
+        candidates,
         window_start_s=min(window.start_s for window in windows),
         window_end_s=max(window.end_s for window in windows),
         bindings=expected,
         policy=policy,
+        ledger_snapshot=ledger_snapshot,
+        _allow_unissued_fixture=_allow_unissued_fixture,
     )
 
 
 __all__ = [
+    "ACCEPTANCE_BOUND_SCHEMA",
+    "ACCEPTANCE_EVALUATION_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",
     "evaluate_calibration_bracket",
+    "load_calibration_acceptance_bound",
     "load_calibration_candidate",
 ]
