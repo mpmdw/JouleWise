@@ -198,3 +198,37 @@ per Ed cap) against `c2f81d4` with all five gate conditions as its
 charge, plus an added adversarial pass over the fixture edits (the
 round's highest-risk surface: a fixture change that silently drops
 coverage). PR under D-072 follows its verdict.
+
+## Delta re-audit verdict — CLEAN (round 2 accepted)
+
+`round2-delta-reaudit.md` (independent, read-only, Sol high) at
+`c2f81d4`: **status clean, completion complete, findings [] — B1
+CLOSED in both the placement and normalization dimensions.**
+
+- **Dynamic unmocked probes** (the round-1 blind spot): explicit minted
+  + fresh valid snapshot → `reasons=()`, `prepared=True`, `ready=True`;
+  implicit/undeclared + `None` session →
+  `whole_window_verdict_provenance_invalid`; pending snapshot + fresh
+  session → `calibration_ledger_pending`, supplied snapshot identity
+  retained.
+- **Ruled shape PASS:** guard deleted (not relocated/shadowed);
+  normalized `row_semantics` after the seam; `basis=None` accepted for
+  minted; no semantics-equality requirement; no consumer `_prepare`
+  call added (`run_campaign.py:5220` is the pre-existing direct-runner
+  path both rulings called conformant).
+- **Regression contract PASS:** R1-R5 all enter via
+  `whole_window_refusal_reasons`; AST audit found no `_prepare` /
+  `_validate_row*` calls in any fence; m1 kills R1+R2, m2 kills R3;
+  both round-1 tests rewritten, not deleted.
+- **Snapshot identity PASS** across every named consumer incl. the
+  allowance/secondary passes. **Preserved fences PASS:** protected
+  B2/S1, writer, ledger, bracketing, runner, F1/F2 paths show ZERO diff
+  from `2e61ff9`.
+- **Fixture audit PASS** (the round's highest-risk surface): no
+  assertion removed; changed tests retain assertion counts (3→3, 7→7,
+  1→1); original authentication/conflict/frozen-replay/incomplete-pair/
+  claim-consumption assertions preserved; no production defect hidden.
+- Suites: focused OK, canonical 2456 OK (skipped=85).
+
+**Same-signature trigger did NOT fire.** Round 2 is ACCEPTED. Gate
+record complete; PR under D-072 follows.
