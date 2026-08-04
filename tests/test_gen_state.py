@@ -74,6 +74,10 @@ EXPECTED_IDS = {
     # 2026-08-03 sleep-window: production-default custody hardening deferred
     # from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake).
     "NODE-CUSTODY-DEFAULT-01",
+    # 2026-08-03 16h runway: D-112 parked r06 disposition (winB STOP gate)
+    # and the D-080 fresh-eyes trigger wiring (sweep finding + Ed's
+    # concurrent-audit pattern).
+    "WINB-R06-DISPOSITION-01", "D080-TRIGGER-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -244,9 +248,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_58(self):
+    def test_exact_live_id_set_60(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 58)
+        self.assertEqual(len(self.tasks), 60)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

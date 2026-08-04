@@ -77,6 +77,7 @@ standing instructions.
 | C-044 | 2026-07-24 | NEG-8 drift-gate estimand debate (Ed-directed pre-ratification cross-model debate; Sol xhigh peer vs lead ruling) | Peer disagreed on inferential role (screen != stability proof) and was adjudicated CORRECT; Ed ratified the amended screen+budget design (option F full) with rigor-spiral + no-invented-physics guardrails; second recorded case of peer design judgment overturning a lead ruling pre-implementation |
 | C-045 | 2026-07-24/25 | NEG-8 SCREEN+BUDGET audit gauntlet: four audit rounds and paired contract/execution refuters | PR #85 merged after three fix rounds; the paired lenses materially changed triage, and the residual custody-hardening work was queued |
 | C-046 | 2026-07-26 | Retrospective: CAL-REBRACKET-01 max-bracket consumption gauntlet (PR #86) | Governed consumption-time authenticated re-derivation landed after three implementation rounds and three independent audits; a9/a10 replays passed with widened members and unchanged point estimates |
+| C-047 | 2026-08-03 | The 16h runway (Ed-granted; joint Fable+Sol decision authority; concurrent sweep instance mid-flight): D-108/D-109 debate+rulings executed, D-110/D-111 sweep-triggered rulings, winB STOP cold gate -> D-112, two Sol gauntlets, pinned byte-identical mint replay, checkpoint for harness switch | D-108 closed via PR #99 + re-record; CAL-BRACKET held at 2e61ff9 (B1 residual, rule-11 gate owed); winB license exhausted as drawn (r06 disposition parked for Ed); mint chain D-110-blocked; CLAIMS_STATUS section 1 honestly NONE; sweep propagation fixes landed; layer yield in the run report |
 
 ---
 
@@ -2733,3 +2734,26 @@ independent adversarial audits then converged clean. Outcome: PR #86 merged as
 consumption with every member widened and point estimates unchanged. The lead
 gate recorded 2164 passed / 21 skipped at the rebased head, with all five CI
 checks green.
+
+## C-047: The 16h runway — two gauntlets, the winB STOP gate, the concurrent-sweep interception (2026-08-03)
+
+Full record: `docs/run_reports/2026-08-03-16h-runway.md` (the ONE
+home); decisions D-108..D-112. Shape: Ed-granted autonomous runway with
+joint Fable+Sol decision authority; a PARALLEL Fable instance delivered
+the two-week soundness sweep mid-runway (Ed-initiated concurrent-audit
+pattern — validated, memorized, D080-TRIGGER-01 queued).
+
+Unique catches by layer: Sol audits — D-108 F1 (retirement
+over-drop), D-109 B1/B2 + four weak fences; Opus contract refuter —
+expired NEG-8 bound, cascade-spelling falsification, F7 barred-cell
+scope question, falsify-by-removal sole-cause proof; cold Fable —
+stage-1-clean control-flow proof, spelling-collision (two producers),
+masking-latency explanation; concurrent sweep — RT-1 (intercepted the
+in-flight 7B-mint license neither in-session consultant could see);
+lead bench — two fix commits, clause-(d) re-record, byte-identical
+pinned replay, exit-status-masking recurrence self-caught. Fix rounds
+introduced defects twice more (data #11, #12). Both gauntlets held;
+the deviation escape and rule-11 gates fired as designed; the night's
+one claim-surface outcome is HONEST SHRINKAGE (CLAIMS_STATUS §1 =
+NONE under D-110) plus a proven-honest toolchain (byte-identical
+replay).

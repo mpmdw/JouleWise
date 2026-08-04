@@ -10,12 +10,77 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-03 evening (Ed returned and RULED both parked
-decisions — D-108 + D-109 minted, both implementation streams
-relaunched; see the RULINGS block. Earlier desk session: PR #96
-MINT-GENERALIZE tooling merged; D-107 ruled; CAL-BRACKET in review;
-codex cache bug fixed. See the DESK-SESSION UPDATE below the resume
-script.).
+Last updated: 2026-08-03 NIGHT — 16h-runway CHECKPOINT (Ed-ordered
+clean stop; successor resumes from a DIFFERENT HARNESS — T3 Code. This
+checkpoint block is the resume script; everything below it is
+historical).
+
+## ✅ CHECKPOINT 2026-08-03 night — resume HERE (successor is FABLE, MAGISTRATE, on T3 Code)
+
+**Read first:** this block → the two ⏸️ ED blocks below it →
+`CLAIMS_STATUS.md` (refreshed tonight; §1 is honestly EMPTY under
+D-110) → `docs/run_reports/2026-08-03-16h-runway.md`. Decisions tonight:
+D-108..D-112 (all indexed). NOTHING is in flight — every stream
+concluded at a held state; no background jobs, no unpushed work, all
+worktrees pruned except `calbracket` (holds the branch below).
+
+**STATE BY STREAM (all pushed):**
+1. **D-108 / D100-BII: CLOSED.** PR #99 merged `32d72fd` (full
+   gauntlet); clause-(d) re-record 3/3 digest-bound at merged HEAD; row
+   retired; L-A′ hygiene banked
+   (`.desk/coldgate_d100_bii/LA-PRIME-BANKED.md`).
+2. **D-109 / CAL-BRACKET: HELD at `2e61ff9` on
+   `impl/cal-bracket-d079` (pushed).** Implementation `8383113` + fix
+   round 1 `2e61ff9` (B2 + S1 closed, mutant-proven). Delta re-audit
+   verdict: **one blocker remains — B1 refined** (minted sessions
+   refused before their legitimate preparation seam; implicit-minted
+   rows still bypass; evidence lines in
+   `.desk`-scratch report streamB-delta.md, summarized in the run
+   report). **RULE 11: round 2 on B1 is a SECOND fix round on the same
+   defect → convene the gate BEFORE benching round 2.** Everything else
+   at that head audit-clean.
+3. **Window B re-eval: STOPPED CORRECTLY → D-112.** License exhausted
+   as drawn (r06 terminal, bound expired). Gate record TRACKED:
+   `docs/process_traces/2026-08-03-winB-reeval-stop/` (packet + both
+   instrument verbatims + synthesis). Original FAILED verdict stands.
+4. **Mint chain: Q1 DONE — mint #1 re-derives BYTE-IDENTICAL at pinned
+   `3de370ec`** (all four digests;
+   `docs/process_traces/2026-08-03-q1-remint-bytecompare/`). Everything
+   further is D-110-blocked by design (7B mint license SUSPENDED).
+5. **Sweep propagation fixes: LANDED** (README/PROJECT_STATUS voided-
+   number scrub, capstone D-091 amendment, council de-collision
+   C-043/044/045 + C-046, cross-refs, D-111 backfill 41 artifacts).
+
+**ED OWES (parked decisions, in rough priority):**
+- **D-113 candidate — WINB-R06-DISPOSITION-01** (D-112 cl.4): r06
+  removal channel (waiver ruling / membership re-binding / abandon for
+  window C re-collection) + the F7 barred-cell scope question + fresh
+  NEG-8 bound authorization.
+- **PR #98** (TEST-SPEED CI shard matrix) — still open, Ed-merge-only.
+- **Window C §5A** + the adapter question: the 140W Anker negotiates
+  only 70W (20V×3.5A — likely non-EPR cable/port); windows REFUSED at
+  70W by joint ruling (conditions incl. is_charging gate in
+  `.desk/2026-08-03-night-consult-rulings.md`, tracked in the D-111
+  backfill).
+- NVIDIA plan ratification; D-080 trigger cadence (`D080-TRIGGER-01`);
+  wall meter (non-blocking).
+
+**SUCCESSOR'S NATURAL QUEUE (agent-startable):** (a) rule-11 gate for
+CAL-BRACKET B1 round 2, then the round, delta, PR under D-072 — this
+gates EVERYTHING mint-ward (D-110 re-mint conditions); (b) DC-2
+validator evidence_root_id pin-widening design; (c) R2 backfill prep
+(issuance itself lead+Ed-gated); (d) D-111 practice: adjudication
+artifacts go in `docs/process_traces/` from birth.
+
+**Session-mechanics notes for the successor:** the old session's
+scratchpad (`/private/tmp/claude-501/.../d20c28cd-*/scratchpad/`) may
+not survive — everything load-bearing is tracked or in
+`~/JouleWise-window-custody/`/`.desk`. Three lessons recorded in the
+run report: pipe-masked exit status recurred (twice) — never gate a
+commit on a piped test command; subagent background probes can die
+silently (probe foreground-with-timeout; revive via SendMessage +
+harvest-from-disk); stale test-spawned servers (fake-vllm) orphan on
+hard kill — sweep `ps` at session end.
 
 > **✅ RULINGS 2026-08-03 (evening) — both parked decisions RULED by
 > Ed** ("i defer to you and sol's decision"), after an Ed-requested

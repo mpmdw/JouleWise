@@ -748,6 +748,46 @@
       "status_note": "Minted 2026-07-25 from PR #85 gauntlet deferrals; triangle-agreement enforcement (merged) already raises these seams to three-file forgery cost.",
       "stop_card": null
     },
+    "D080-TRIGGER-01": {
+      "acceptance": {
+        "evidence": [
+          "A ratified trigger exists (cron routine or PR-count hook) and has fired at least once",
+          "D-080 clause 4(ii)'s stale citation is reconciled by amendment"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D080-TRIGGER-01/acceptance",
+          "label": "D080-TRIGGER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fresh-eyes sweep fires without anyone remembering it, on a ratified cadence, as a concurrent read-only instance."
+      },
+      "authority": {
+        "label": "D-080 + the 2026-08-03 sweep finding (never fired) + Ed's concurrent-audit validation",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ratifies the trigger cadence and the runner (cron routine vs manual)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-080-amendment"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Wire D-080's standing fresh-eyes sweep to a REAL trigger (calendar cron or every-N-merged-PRs), run as a separate concurrent read-only instance per the Ed-validated 2026-08-03 pattern, findings delivered mid-flight; reconcile D-080 clause 4(ii)'s stale zero-unique-catch citation.",
+      "id": "D080-TRIGGER-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 52,
+      "status": "blocked",
+      "status_note": "2026-08-03: minted from the two-week soundness sweep's finding that D-080 has never fired, plus Ed's validated concurrent-audit pattern (memory: concurrent-fable-audit-pattern). Non-blocking hardening.",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
@@ -2763,6 +2803,47 @@
       "rank": 34,
       "status": "queued",
       "status_note": "lead personal tooling, non-repo",
+      "stop_card": null
+    },
+    "WINB-R06-DISPOSITION-01": {
+      "acceptance": {
+        "evidence": [
+          "Ed ruling recorded as a decision entry covering: removal channel, F7 scope, fresh NEG-8 bound",
+          "If a waiver/re-binding channel is ruled: implemented + audited + a fresh governed re-evaluation run under the ruled shape; if abandonment: window C plan absorbs the C2/C4 remainder and CLAIMS_STATUS reflects it",
+          "The unpinned current_environment_refusals sub-branch for r06 is pinned in the evidence-gap record"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WINB-R06-DISPOSITION-01/acceptance",
+          "label": "WINB-R06-DISPOSITION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Window B re-evaluation is reachable under a ruled r06 disposition, or formally abandoned in favor of window C re-collection, with the ruling recorded."
+      },
+      "authority": {
+        "label": "D-112 clause 4 (parked ruling) + the winB STOP gate record",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "Ed ruling on the r06 removal channel + the F7 scope question + fresh NEG-8 bound authorization (D-112 clause 4)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-113"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Dispose of the mtadd-p2048o0128-r06 evidence gap so window B re-evaluation becomes reachable or is formally abandoned: Ed rules the removal channel (per-member waiver / membership re-binding / abandon for window C re-collection), the D-112-parked F7 barred-cell scope question, and the fresh NEG-8 bound re-mint any future licensed run needs.",
+      "id": "WINB-R06-DISPOSITION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 53,
+      "status": "blocked",
+      "status_note": "2026-08-03: minted by D-112 (winB STOP gate, classification (i)). r06's collection-time clock-anchor failure (native_intersection_empty) is the sole cause of the salvage-consumption refusal; no licensed channel removes it (exclusion cap spent on r08; not a dangler; waivers forbidden). License EXHAUSTED AS DRAWN; original FAILED verdict stands. Full record docs/process_traces/2026-08-03-winB-reeval-stop/.",
       "stop_card": null
     }
   },

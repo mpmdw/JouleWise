@@ -134,6 +134,7 @@ be re-derived by a future agent gets an entry here.
 | D-109 | CAL-BRACKET-D079-01 F3: A-min-with-reservation — writer-enforced receipt ledger (reservation-first pending entry before capture, mandatory finalization, unresolved-pending refusal), ledger-only consumption, repo-committed head pin, single immutable snapshot threading; R1 authority/retention/anti-rollback (7 clauses) + R2 prior-observation set with the 38-total counting rule (8 clauses); Option B recorded as rejected fallback; lands with F1+F2 as the single combined fix round | accepted (Ed 2026-08-03, same deferral; Sol soundness breaks lead-verified and adopted) |
 | D-110 | Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint, Ed ruling on sweep finding RT-1: floors embed zero allowance where D-102 pin 3 mandates +max(drift, 0.010818 s)); re-mint gated on D-109 landing + artifact issuance + validator pin widening; RT-2 dependency edge minted (MINT-GENERALIZE-01 hard-blocked on CAL-BRACKET-D079-01); night-consult 7B-mint license suspended; RT-5 recorded: all four PASSED window verdicts untainted | accepted (Ed 2026-08-03, sweep-triggered) |
 | D-111 | Adjudication evidence gains tracked custody: load-bearing adjudication artifacts (cold-gate packets, rulings, refuter reports, cited debate records, re-records, decision-input corpora, archive digests) commit under docs/process_traces/ in the producing session; .desk stays working scratch; named backfill set executed this session | accepted (Ed 2026-08-03, sweep-triggered) |
+| D-112 | Window B re-evaluation STOP gate synthesis: refusal = CORRECT fail-closed machinery (sole cause mtadd-p2048o0128-r06 collection-time clock-anchor failure, falsify-by-removal 69/69 + per-bundle attribution); no repair row; D-100 license EXHAUSTED AS DRAWN; original FAILED verdict stands; r06 removal channel + F7 barred-cell-scope question + NEG-8 bound re-mint PARKED FOR ED; standing correction: condition spellings non-unique to producer | accepted (magistrate synthesis of the convergent cold gate, 2026-08-03; record tracked in process_traces) |
 
 ---
 
@@ -7151,3 +7152,45 @@ D-102 epoch; the taint is confined to floor artifacts.
    (`.desk/test-speed-consult/`, `.desk/testspeed/`), and the archive
    manifest digests (RS-4). Large or binary members may be represented
    by a digest manifest with the bytes retained in `.desk` + backup.
+
+## D-112: Window B re-evaluation STOP gate — classification (i) adopted; the D-100 license is EXHAUSTED AS DRAWN; the r06 disposition ruling is PARKED FOR ED
+
+- Date: 2026-08-03 (magistrate synthesis of the night's cold gate; both
+  instruments convergent by independent methods; full verbatim record
+  tracked at `docs/process_traces/2026-08-03-winB-reeval-stop/`)
+- Status: accepted (gate outcome recorded; the successor ruling it
+  parks is NOT decided here)
+- Applies to: window B re-evaluation licensing (D-100 §5 / D-106 /
+  D-108 chain), bundle `mtadd-p2048o0128-r06`, the NEG-8 drift bound,
+  future cascade classifications.
+
+**Ruling:**
+1. The 2026-08-03 governed re-evaluation refusal was CORRECT
+   fail-closed machinery on real evidence state (classification (i)).
+   Sole cause: r06's collection-time clock-anchor failure
+   (`native_intersection_empty`) + downstream environment-admission
+   temporal-binding failure — proven by falsify-by-removal (69/69 clean
+   without it) and per-bundle attribution with a stage-1-clean
+   control-flow proof. No repair row; no corrected command; the
+   deviation-escape STOP was itself correct.
+2. EVIDENCE GAP recorded against `mtadd-p2048o0128-r06` (kernel row
+   WINB-R06-DISPOSITION-01). The `current_environment_refusals`
+   sub-branch remains unpinned (open sub-question in the record).
+3. The D-100 re-evaluation license is EXHAUSTED AS CURRENTLY DRAWN:
+   unreachable while r06 is a member (exclusion cap spent on r08; r06
+   is no dangler; waivers forbidden under salvage). Window B
+   re-evaluation stays BLOCKED; the original FAILED verdict stands as
+   issued; nothing is reinterpreted.
+4. PARKED FOR ED (successor packet; Ed-level because it amends a
+   claim-license shape): the r06 removal channel (per-member waiver
+   ruling / membership re-binding / abandon re-evaluation for window C
+   re-collection), the refuter-F7 scope question (whether one member of
+   an already-barred cell may void the whole window's consumption), and
+   the fresh NEG-8 bound re-mint that any future licensed run needs
+   (the 2026-08-01 bound expired 2026-08-02; recorded against the
+   magistrate's packet as an omission).
+5. STANDING CORRECTION (both instruments): condition spellings are
+   NON-UNIQUE to producer — `environment_admission_missing` has a
+   window-level cascade producer AND a per-bundle reduce-time producer.
+   D-100's cascade classification was correct for the producer it
+   examined; future cascade classifications must name producers.
