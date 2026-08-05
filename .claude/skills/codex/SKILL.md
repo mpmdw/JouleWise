@@ -39,24 +39,18 @@ All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
 sequence, not the contract.
 
-T3 is the preferred presentation plane when it is in use, not a mandatory or
-exclusive plane. Apply the contract §4 t3-mediated sequence only when t3
-actually mediates the activity; do not add t3 ceremony to a plain Claude Code
-session.
+Apply contract §4's t3 applicability and preferred-presentation-plane rule.
 
 1. Read root `AGENTS.md`; run Mission M0 for substantial work.
-2. Choose the transport using contract §4. For a substantial background or
-   parallel Sol round that needs operator-visible lifecycle state, use the
-   tracked Codex subagent route around `scripts/codex-bridge`; the steward is
-   presentation-only and the audited child remains authoritative. Use the
-   audited CLI directly for a single foreground evidence-heavy run, and MCP
-   for quick direct interaction when native pet visibility is not required.
-   Follow contract §4 for the two-arc pilot record and D-080 accounting.
+2. Choose the transport and apply the tracked-subagent limits, pilot record,
+   and accounting rule by reference to contract §4.
 3. Build the applicable contract §1 header. For writes, open the session with
    `scripts/bridge session-open` and use its returned header fragment.
-4. For the preferred background route, set `CODEX_REASONING_EFFORT` to the
-   selected tier and call `scripts/codex-bridge new` or
-   `scripts/codex-bridge review`. For MCP, call project tool `codex` with the
+4. For a substantial background or parallel Sol round that needs
+   operator-visible lifecycle state, use the preferred background route: set
+   `CODEX_REASONING_EFFORT` to the selected tier and call
+   `scripts/codex-bridge new` or `scripts/codex-bridge review`. For MCP, call
+   project tool `codex` with the
    Git-root `cwd`, model `gpt-5.6-sol`, config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
@@ -73,14 +67,13 @@ owed Full-access mapping amendment exhibit before citing any UI-to-flag mapping
 as evidence. Bind one observation to the t3 and CLI versions, selected UI mode,
 timestamp, full child argv, and a process-table record containing PID, start
 time, and ancestry; store the capture at a tracked process-trace location. The
-contract §4 prohibition already binds independently of this exhibit. Auto
-cards never satisfy an approval requirement, and any step needing Ed's eyes
-uses Supervised with harness-event evidence.
+contract §4 prohibition already binds independently of this exhibit. Apply
+contract §4's approval-evidence rules.
 
 These enforcement boundaries remain explicit:
 
 - `WRITE_SCOPE` is exhaustive; never infer additional scope from tests, generated files, repository instructions, or work believed necessary for completion.
-- Never start or continue a `[QUIET-MAC]` measurement while an agent session is active.
+- Apply contract §4's `[QUIET-MAC]` exclusion without restating it here.
 - Never use `danger-full-access` or sandbox/approval bypass flags.
 - Bridge depth is one hop: a Claude-originated Sol session must not call Claude by MCP, `claude -p`, or any other launcher.
 - A missing, duplicated, malformed, or non-final required envelope is protocol failure, never success.
@@ -95,8 +88,11 @@ explicit per-task selection remains mandatory.
 ## Audited path
 
 For D-050/D-064 runs, prefer `~/.local/bin/codex-run-v3` with model, selected
-effort, genre, and exhaustive write scope. If unavailable, set
-`CODEX_REASONING_EFFORT` to the selected tier and use `scripts/codex-bridge`.
+effort, genre, and exhaustive write scope. If it is unavailable, use
+`scripts/codex-bridge` only for a substantial background or parallel Sol round
+that needs operator-visible lifecycle state; set `CODEX_REASONING_EFFORT` to
+the selected tier. Otherwise return to contract §4 and select the matching
+foreground route.
 
 ## Session observability + recovery (WO-027)
 

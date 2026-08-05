@@ -12,8 +12,14 @@ itself started by Claude.
 
 ## Guardrails
 
-1. Do not use this skill if the current prompt contains
-   `BRIDGE_ORIGIN: claude`. A legitimate top-level reverse call identifies its
+1. Eligibility follows contract §8 (the one normative home, including its
+   transitional clause). In practice: do not use this skill if the current
+   prompt contains `BRIDGE_ORIGIN: claude`, or if this session is marked or
+   otherwise known to be DELEGATED (delegated sessions are ineligible by
+   default). A present but unknown or contradictory origin/`originator`
+   marker fails closed; the mere absence of an `originator` hint does not by
+   itself disqualify a session — the authoritative launch route and
+   `owner_kind` control. A legitimate top-level reverse call identifies its
    origin as Codex and sets its remaining hop count to zero.
 2. Call the project Claude MCP `consult_fable` tool exactly once. Pass the
    optional `effort` parameter: `high` (default) for ordinary consults,

@@ -55,6 +55,10 @@ Required fields:
 large files. Inline context SHOULD contain only the current ruling, unstable
 facts, and small controlling excerpts.
 
+Future gate packets MUST give source line ranges for their citations. Text
+labelled `verbatim` MUST be reproduced verbatim; paraphrase, ellipsis, or other
+editing MUST be labelled as such rather than presented as a verbatim excerpt.
+
 `ROLE` MUST NOT combine implementation, independent review, and final
 adjudication.
 
@@ -241,16 +245,20 @@ plane. These t3-specific rules apply only to t3-mediated activity. A plain
 Claude Code session remains first-class and carries no t3-specific ceremony.
 
 For a t3-mediated invocation, the tracked provenance record MUST distinguish
-four axes: `control_plane`, `transport`, `authority_class`, and `governance`.
+four axes: `control_plane`, `transport`, `authority_class`, and `governance`
+(implementation follow-on: `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`).
 The selected task-shape route in the table above is the authoritative
 transport record. A rollout's `session_meta.originator` MAY be recorded beside
 that set only as a provenance hint. It is never the sole discriminator and
 never authority-bearing. The observed values `t3code_desktop` and
 `codex_cli_rs` are version-bound observations from CLI version `0.146.0`, not
-a closed enum or a compatibility promise. An unknown value fails closed: it
-does not establish native, wrapped, delegated, top-level, approval, or gate
-status. The hint MUST be corroborated by the task-shape launch route and the
-lease event's §6 `owner_kind` before any route classification is consumed.
+a closed enum or a compatibility promise. Classification authority comes from
+the §4 launch route and the lease event's §6 `owner_kind`. Absence of the
+optional hint never disables a route or classification. If the hint is present,
+an unknown value or a value contradictory to those authoritative fields fails
+closed: it does not establish native, wrapped, delegated, top-level, approval,
+or gate status.
 
 T3 `Full access` mode is prohibited for this repository; t3-mediated work uses
 only Supervised or Auto. The prohibition does not depend on an asserted
@@ -264,8 +272,10 @@ account.
 T3-native Codex threads are Ed-direct only. They MUST NOT receive
 lead-delegated or gate-bearing work. If their output is materially consumed,
 the lead MUST append a tracked ingestion event that binds the native session
-identity, output digest, lead disposition, and tracked process-trace location.
-A t3 activity marker or thread transcript alone is not that event.
+identity, output digest, lead disposition, and tracked process-trace location
+(implementation follow-on: `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`). A t3 activity
+marker or thread transcript alone is not that event.
 
 The tracked Codex subagent route is limited to substantial background or
 parallel Sol rounds that require operator-visible lifecycle state. It is a
@@ -363,7 +373,9 @@ Lease events MUST include:
 - `baseline_manifest`
 - `baseline_digest`
 - `task`, `role`, and optional `thread_id`
-- `host` and optional caller-supplied `pid`
+- `host`
+- Optional process-identity fields `pid`, `process_start_time`, and
+  `process_ancestry` (an ordered ancestry record)
 - Event timestamp
 - Optional `expires_at`
 - Optional `note`
@@ -372,9 +384,10 @@ Lease events MUST include:
 
 `owner_kind` is an authoritative launch-route field, not a value inferred from
 rollout metadata. When a t3-mediated record also carries §4 `originator`, the
-two fields MUST be retained separately. A missing, unknown, or contradictory
-hint cannot override `owner_kind` and fails closed for any classification that
-would confer authority.
+two fields MUST be retained separately. Absence of the optional hint never
+disables a route or classification. A present unknown or contradictory hint
+cannot override `owner_kind` and fails closed for any classification that would
+confer authority.
 
 Conflict detection and acquisition MUST occur under the exclusive
 `.codex-bridge/bridge.lock`, held via a Python standard-library `fcntl.flock`.
@@ -564,7 +577,11 @@ write. Its evidence MUST bind the native session identity and authoritative
 launch route to the governing manifest, baseline digest, declared scope,
 output digest, and resulting artifact or commit. A later narrative or
 retroactive route designation cannot establish the gate. This requirement is
-forward-looking; it does not reopen the one previously accepted exercise.
+forward-looking; it does not reopen the one previously accepted exercise:
+commit `97d6e3d`, the isolated one-file `RUN_STATE.md` native-write gate exercise
+recorded in `RUN_STATE.md`'s T3 gate/probe log and accepted in
+`docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md` under
+“Acceptance-gate dispositions.”
 
 `scope-check` MUST receive the prompt-supplied digest through the required
 `--expect-digest sha256:...` argument, verify the manifest self-digest, and
@@ -627,11 +644,20 @@ protocol boundary, not filesystem enforcement.
 `consult_fable` is available only to a top-level Codex lead for one bounded,
 read-only peer judgment.
 
-For this section, top-level status is established only by the authoritative
-launch route recorded under §4 and corroborated by §6 `owner_kind`. The §4
-`originator` hint cannot establish or elevate top-level status. Missing,
-unknown, or contradictory provenance fails closed and the reverse consult is
-unavailable.
+In the represented steady state, top-level status is established by the
+authoritative §4 launch route and §6 `owner_kind`; the optional §4 `originator`
+hint cannot establish or elevate that status. Its absence never disables a
+consult, while a present unknown or contradictory value fails closed.
+
+**TRANSITIONAL —** Until the four-axis provenance record, including its
+`authority_class` field, is representable through the implementation follow-on
+`T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, an unleased
+read-only consult uses the existing §8 origin test: the current Codex session is
+not Claude-originated or marked delegated, and the consult request supplies
+`BRIDGE_ORIGIN: codex` with `BRIDGE_HOPS_REMAINING: 0`. A session marked or
+otherwise known to be delegated is ineligible by default. Once that follow-on
+lands, the authoritative §4/§6 record supersedes this transitional test.
 
 The caller's prompt MUST begin with:
 
@@ -777,7 +803,7 @@ Surface disposition is therefore:
 | `.claude/agents/codex.md` | Agent role and handoff | Contract/skill pointers plus canonical enforcement snippets |
 | `.claude/commands/codex.md` | Slash-command dispatch | Contract/skill pointers plus canonical enforcement snippets |
 | `.claude/skills/codex/SKILL.md` | Effort policy and operating sequence | Operating home; wire details remain contract pointers; canonical enforcement snippets stay local |
-| `.agents/skills/claude-consult/SKILL.md` | Reverse-consult invocation | Current receiver prose inventoried but unchanged; excluded from WO-020 edits by lead ruling |
+| `.agents/skills/claude-consult/SKILL.md` | Reverse-consult invocation | Receiver boundary pointing to contract §8; previously excluded from WO-020 edits by lead ruling, then amended by T3-AMEND-01 |
 
 ### Canonical enforcement snippets
 
@@ -803,7 +829,7 @@ normative home.
     "AGENTS.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
     ".claude/agents/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
     ".claude/commands/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
-    ".claude/skills/codex/SKILL.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"]
+    ".claude/skills/codex/SKILL.md": ["scope_authority", "no_bypass", "one_hop", "envelope_failure"]
   }
 }
 ```
