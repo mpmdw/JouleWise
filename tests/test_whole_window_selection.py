@@ -8,7 +8,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -42,6 +42,16 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
+    append_pending_receipt,
+    artifact_hashes as calibration_artifact_hashes,
+    finalize_attempt_receipt,
+    head_pin_for_receipt,
+    load_calibration_ledger_snapshot,
+)
 from joulewise.floor_extraction import (
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     CELL_REFUSAL_CODES,
@@ -51,6 +61,7 @@ from joulewise.analysis_engine.registry import (
     render_dispatch_receipt,
     sha256_bytes,
 )
+from joulewise.schemas import CalibrationBracketingPolicy
 from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 from tests.test_run_campaign import (
     d100_real_salvage_leaf_patches,
@@ -393,6 +404,20 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     ],
                 },
             }
+            session = AuthenticatedConsumptionSession(
+                root,
+                {"A", "B"},
+                calibration_ledger_snapshot=CalibrationLedgerSnapshot(
+                    ledger_schema=LEDGER_SCHEMA,
+                    ledger_path=Path("fixture-ledger.jsonl"),
+                    head_sequence=0,
+                    head_digest=GENESIS_DIGEST,
+                    receipts=(),
+                    observations=(),
+                    refusal_reasons=(),
+                ),
+            )
+            session._prepared = True
             with (
                 patch(
                     "joulewise.whole_window._validated_evaluation_basis",
@@ -416,7 +441,10 @@ class WholeWindowSelectionTests(unittest.TestCase):
                 ) as derive,
             ):
                 baseline_ok, baseline_reasons = _validate_row(
-                    row, root, {"A", "B"}
+                    row,
+                    root,
+                    {"A", "B"},
+                    consumption_session=session,
                 )
                 self.assertTrue(baseline_ok, baseline_reasons)
                 self.assertTrue(derive.call_args.kwargs["point_drift"])
@@ -430,7 +458,10 @@ class WholeWindowSelectionTests(unittest.TestCase):
                     del stripped["idle_admission_core"]["neg8_bracket"][field]
                     with self.subTest(field=field):
                         ok, reasons = _validate_row(
-                            stripped, root, {"A", "B"}
+                            stripped,
+                            root,
+                            {"A", "B"},
+                            consumption_session=session,
                         )
                         self.assertFalse(ok)
                         self.assertIn(
@@ -1017,6 +1048,214 @@ class WholeWindowSelectionTests(unittest.TestCase):
 
 
 class MaxBracketConsumptionTests(unittest.TestCase):
+    @staticmethod
+    def _b1_public_path_fixture(
+        root: Path,
+        *,
+        explicit_minted_semantics: bool,
+    ) -> tuple[set[str], dict, dict]:
+        from tests.test_floor_extraction import (
+            CpuAndWholeWindowClaimBarrierTests,
+        )
+
+        helper = CpuAndWholeWindowClaimBarrierTests()
+        bundle_ids, _manifest, core = helper._current_core_fixture(root)
+        claim_families = {
+            family: {"drift_allowance_j": 0.1}
+            for family in ("gross_energy", "idle_subtracted_energy")
+        }
+        core["neg8_bracket"]["claim_families"] = claim_families
+        row = helper._whole_window_row(root, bundle_ids)
+        row["idle_admission_core"] = core
+        if explicit_minted_semantics:
+            row["consumption_semantics_id"] = (
+                MINTED_CONSUMPTION_SEMANTICS_ID
+            )
+        (root / "campaign_log.jsonl").write_text(
+            json.dumps(row) + "\n",
+            encoding="utf-8",
+        )
+        return set(bundle_ids), core, row
+
+    @staticmethod
+    @contextmanager
+    def _b1_public_path_dependencies(core: dict):
+        derived_neg8 = {
+            "decision": "passed",
+            "claim_families": core["neg8_bracket"]["claim_families"],
+            "bound_freshness": {},
+        }
+        with (
+            patch(
+                "joulewise.whole_window.current_environment_refusals",
+                return_value=(),
+            ),
+            patch(
+                "joulewise.whole_window.calibration_bracket_for_bundles",
+                return_value=(core["instrument_calibration_bracket"], ()),
+            ),
+            patch(
+                "joulewise.whole_window._verify_instrument_calibration",
+                return_value=(0.03, None),
+            ),
+            patch(
+                "joulewise.whole_window._derived_neg8_decision",
+                return_value=(derived_neg8, None),
+            ),
+        ):
+            yield
+
+    @staticmethod
+    def _b1_snapshot(
+        *, refusal_reasons: tuple[str, ...] = ()
+    ) -> CalibrationLedgerSnapshot:
+        return CalibrationLedgerSnapshot(
+            ledger_schema=LEDGER_SCHEMA,
+            ledger_path=Path("fixture-ledger.jsonl"),
+            head_sequence=0,
+            head_digest=GENESIS_DIGEST,
+            receipts=(),
+            observations=(),
+            refusal_reasons=refusal_reasons,
+        )
+
+    def test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
+            )
+            session = AuthenticatedConsumptionSession(
+                root,
+                bundle_ids,
+                calibration_ledger_snapshot=self._b1_snapshot(),
+            )
+            self.assertFalse(session.ready)
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    bundle_ids,
+                    consumption_session=session,
+                )
+        self.assertEqual(reasons, ())
+        self.assertTrue(session.ready)
+
+    def test_minted_semantics_loads_and_refuses_pending_ledger_snapshot(self) -> None:
+        snapshot = self._b1_snapshot(
+            refusal_reasons=("calibration_ledger_pending",),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
+            )
+            with patch(
+                "joulewise.whole_window.load_calibration_ledger_snapshot",
+                return_value=snapshot,
+            ) as load_snapshot:
+                session = AuthenticatedConsumptionSession(
+                    root,
+                    bundle_ids,
+                )
+                with self._b1_public_path_dependencies(core):
+                    reasons = whole_window_refusal_reasons(
+                        root,
+                        bundle_ids,
+                        consumption_session=session,
+                    )
+        load_snapshot.assert_called_once()
+        self.assertIs(session.calibration_ledger_snapshot, snapshot)
+        self.assertTrue(session._prepared)
+        self.assertFalse(session.ready)
+        self.assertIn("calibration_ledger_pending", reasons)
+        self.assertEqual(session.refusal_reasons, ("calibration_ledger_pending",))
+
+    def test_minted_secondary_verifier_refuses_missing_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, _row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=True,
+            )
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(root, bundle_ids)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_b1_r3_implicit_minted_without_session_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=False,
+            )
+            self.assertNotIn("consumption_semantics_id", json.dumps(row))
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(root, bundle_ids)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+    def test_b1_r4_implicit_minted_fresh_valid_session_matches_explicit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_ids, core, row = self._b1_public_path_fixture(
+                root,
+                explicit_minted_semantics=False,
+            )
+            self.assertNotIn("consumption_semantics_id", json.dumps(row))
+            session = AuthenticatedConsumptionSession(
+                root,
+                bundle_ids,
+                calibration_ledger_snapshot=self._b1_snapshot(),
+            )
+            with self._b1_public_path_dependencies(core):
+                reasons = whole_window_refusal_reasons(
+                    root,
+                    bundle_ids,
+                    consumption_session=session,
+                )
+        self.assertEqual(reasons, ())
+        self.assertTrue(session.ready)
+
+    def test_supplied_ledger_snapshot_object_is_reused_without_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pin = root / "head.json"
+            pin.write_text(
+                json.dumps(
+                    {
+                        "sequence": 0,
+                        "head_digest": GENESIS_DIGEST,
+                        "ledger_schema": LEDGER_SCHEMA,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            snapshot = load_calibration_ledger_snapshot(
+                root / "absent-ledger.jsonl",
+                pin,
+                baseline_sequence=0,
+                baseline_digest=GENESIS_DIGEST,
+                require_committed_pin=False,
+            )
+            first = AuthenticatedConsumptionSession(
+                root,
+                {"a"},
+                calibration_ledger_snapshot=snapshot,
+            )
+            secondary = AuthenticatedConsumptionSession(
+                root,
+                {"b"},
+                calibration_ledger_snapshot=snapshot,
+            )
+            self.assertIs(first.calibration_ledger_snapshot, snapshot)
+            self.assertIs(secondary.calibration_ledger_snapshot, snapshot)
+
     """Defect-shaped CAL-REBRACKET-01 reducer/session regressions."""
 
     EXPECTED_MINTED_ANCHOR_BOUND_S = 0.07799298220062004
@@ -1027,6 +1266,8 @@ class MaxBracketConsumptionTests(unittest.TestCase):
     def _build_v052_bundle(
         cls,
         fixture_root: Path,
+        *,
+        protocol_id: str | None = None,
     ) -> tuple[Path, dict, float, float]:
         """Construct an independent real reducer fixture for one defect shape."""
 
@@ -1034,7 +1275,9 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         from tests.test_reduce import D078R01RegressionTests
 
         helper = D078R01RegressionTests()
-        evidence = helper._valid_instrument_evidence()
+        evidence = helper._valid_instrument_evidence(
+            **({"protocol_id": protocol_id} if protocol_id is not None else {})
+        )
         minted_fiducial_bound_s = float(evidence["b_fiducial_s"])
         operative_fiducial_bound_s = minted_fiducial_bound_s + 0.001
 
@@ -1052,6 +1295,15 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         ).to_dict()
         (bundle / "summary_metrics.json").write_text(
             json.dumps(minted, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["instrument_calibration"][
+            "verified_effective_b_fiducial_s"
+        ] = minted_fiducial_bound_s
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         return (
@@ -1143,6 +1395,56 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _write_real_v3_candidate(
+        runs_root: Path,
+        name: str,
+        *,
+        first_endpoint_s: float,
+        stored_bound_s: float,
+    ) -> Path:
+        """Install one primary-byte-authenticated protocol-v3 candidate."""
+
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration(
+            first_endpoint_s=first_endpoint_s,
+            protocol_id=PROTOCOL_ID,
+        )
+        evidence["validation_id"] = name
+        evidence["b_fiducial_s"] = stored_bound_s
+        evidence["artifact_sha256"] = {
+            "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
+            "events.jsonl": hashlib.sha256(events).hexdigest(),
+        }
+        directory = runs_root / "instrument_validation" / name
+        (directory / "raw").mkdir(parents=True)
+        (directory / "raw" / "powermetrics.plist").write_bytes(raw)
+        (directory / "events.jsonl").write_bytes(events)
+        evidence_raw = (
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        (directory / "instrument_evidence.json").write_bytes(evidence_raw)
+        manifest = {
+            "schema_version": "joulewise.instrument_validation_manifest.v1",
+            "validation_id": name,
+            "protocol_id": evidence["protocol_id"],
+            "pulse_count": evidence["pulse_count"],
+            "artifacts": {
+                "events.jsonl": hashlib.sha256(events).hexdigest(),
+                "instrument_evidence.json": hashlib.sha256(
+                    evidence_raw
+                ).hexdigest(),
+                "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
+            },
+        }
+        (directory / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return directory
 
     @staticmethod
     def _install_axi_shape(
@@ -1275,6 +1577,34 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 "manifest_sha256": "c" * 64,
                 "evidence_sha256": "d" * 64,
                 "b_fiducial_s": bound_s,
+            },
+        }
+
+    @staticmethod
+    def _d079_bracket() -> dict:
+        return {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "endpoint_max_b_fiducial_s": 0.031,
+            "calibration_drift_allowance_s": 0.011,
+            "b_fiducial_s": 0.042,
+            "pre": {
+                "manifest_sha256": "a" * 64,
+                "evidence_sha256": "b" * 64,
+                "b_fiducial_s": 0.020,
+            },
+            "post": {
+                "manifest_sha256": "c" * 64,
+                "evidence_sha256": "d" * 64,
+                "b_fiducial_s": 0.031,
+            },
+            "acceptance": {
+                "schema_version": "joulewise.calibration_acceptance_evaluation.v2",
+                "allowance": {
+                    "value_s": "0.011",
+                    "embedding_count": 1,
+                    "embedded_in": "b_fiducial_s",
+                },
             },
         }
 
@@ -1802,6 +2132,284 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             ],
             "d" * 64,
         )
+
+    def test_d079_allowance_drives_reduction_and_evaluation_basis_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "member"
+            bundle.mkdir()
+            minted = self._summary(40.0, 0.02, 0.1)
+            widened = self._summary(40.0, 0.042, 0.3)
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(minted) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "instrument_calibration": {
+                            "verified_effective_b_fiducial_s": 0.02
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            bracket = self._d079_bracket()
+            session = AuthenticatedConsumptionSession(root, {"member"})
+            with (
+                patch(
+                    "joulewise.whole_window.calibration_bracket_for_bundles",
+                    return_value=(bracket, ()),
+                ),
+                patch(
+                    "joulewise.whole_window._current_strict_summary",
+                    return_value=True,
+                ),
+                patch(
+                    "joulewise.whole_window._verify_instrument_calibration",
+                    return_value=(0.02, None),
+                ),
+                patch(
+                    "joulewise.whole_window."
+                    "_rederive_summary_for_authenticated_fiducial_bound",
+                    return_value=widened,
+                ) as rederive,
+            ):
+                session._prepare(
+                    bundle_paths={"member": bundle},
+                    policy=SimpleNamespace(calibration_bracketing=object()),
+                )
+
+            self.assertTrue(session.ready, session.refusal_reasons)
+            self.assertEqual(
+                rederive.call_args.kwargs[
+                    "authenticated_fiducial_bound_s"
+                ],
+                0.042,
+            )
+            provenance = session.provenance_by_bundle()
+            self.assertEqual(
+                provenance["member"]["calibration_bracket"][
+                    "calibration_drift_allowance_s"
+                ],
+                0.011,
+            )
+            basis = build_evaluation_basis(
+                policy_sha256="e" * 64,
+                member_occurrences=[
+                    {"bundle_id": "member", "bundle_path": "member"}
+                ],
+                calibration_bracket=bracket,
+                consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                consumption_provenance=provenance,
+            )
+            self.assertEqual(
+                basis["calibration_bracket_set"][
+                    "calibration_drift_allowance_s"
+                ],
+                0.011,
+            )
+            self.assertEqual(
+                basis["calibration_bracket_set"][
+                    "operative_b_fiducial_s"
+                ],
+                0.042,
+            )
+
+    def test_legacy_bracket_basis_hash_is_byte_identical(self) -> None:
+        bracket = {
+            "pre": {
+                "manifest_sha256": "a" * 64,
+                "evidence_sha256": "b" * 64,
+                "b_fiducial_s": 0.02,
+            },
+            "post": {
+                "manifest_sha256": "c" * 64,
+                "evidence_sha256": "d" * 64,
+                "b_fiducial_s": 0.021,
+            },
+            "b_fiducial_s": 0.021,
+            "status": "passed",
+        }
+        basis = build_evaluation_basis(
+            policy_sha256="e" * 64,
+            member_occurrences=[{"bundle_id": "m", "bundle_path": "m"}],
+            calibration_bracket=bracket,
+        )
+        self.assertEqual(
+            basis["sha256"],
+            "e1e93a54eb17a7d9eeb3766659d879dc388c4bbe4a90694c668b12860b4ee959",
+        )
+        self.assertEqual(
+            set(basis["calibration_bracket_set"]), {"pre", "post"}
+        )
+
+    def test_d079_real_selector_to_real_reducer_embeds_allowance_once(self) -> None:
+        from joulewise.bundle_read import BundleReader
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+        from joulewise.reduce import reduce_bundle
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle, minted, minted_bound, _old_operative = (
+                self._build_v052_bundle(root, protocol_id=PROTOCOL_ID)
+            )
+            window = BundleReader(bundle).measured_window()
+            self.assertIsNotNone(window)
+            # This retained powermetrics fixture predates current environment-
+            # admission custody. Neutralize only that unrelated gate while the
+            # selector, candidate authentication, calibration verification, and
+            # complete reducer/re-reducer remain production implementations.
+            with (
+                patch(
+                    "joulewise.reduce.current_environment_refusals",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.reduce.environment_admission_refusals",
+                    return_value=(),
+                ),
+            ):
+                minted = reduce_bundle(
+                    bundle,
+                    reducer_version="0.5.2",
+                    _instrument_calibration_physics_cache=self._physics_cache,
+                ).to_dict()
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(minted, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                pre_candidate = self._write_real_v3_candidate(
+                    root,
+                    "real-pre",
+                    first_endpoint_s=window.start_s - 400.0,
+                    stored_bound_s=0.024,
+                )
+                post_candidate = self._write_real_v3_candidate(
+                    root,
+                    "real-post",
+                    first_endpoint_s=window.end_s + 5.0,
+                    stored_bound_s=0.025,
+                )
+                ledger_path = root / "calibration_ledger.jsonl"
+                head_pin_path = root / "calibration_head.json"
+                head_pin_path.write_text(
+                    json.dumps(
+                        {
+                            "sequence": 0,
+                            "head_digest": GENESIS_DIGEST,
+                            "ledger_schema": LEDGER_SCHEMA,
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                for candidate_path in (pre_candidate, post_candidate):
+                    evidence = json.loads(
+                        (candidate_path / "instrument_evidence.json").read_text(
+                            encoding="utf-8"
+                        ),
+                        parse_float=str,
+                    )
+                    bindings = evidence["bindings"]
+                    epoch = {
+                        field: bindings[field]
+                        for field in (
+                            "os_build",
+                            "hardware_model",
+                            "power_policy",
+                            "sampling_interval_ms",
+                            "estimator_revision",
+                            "pulse_protocol_id",
+                        )
+                    }
+                    append_pending_receipt(
+                        ledger_path,
+                        attempt_id=candidate_path.name,
+                        custody_locator=str(candidate_path),
+                        identity_epoch=epoch,
+                        t1_bindings=bindings,
+                        head_pin_path=head_pin_path,
+                        require_committed_pin=False,
+                    )
+                    final = finalize_attempt_receipt(
+                        ledger_path,
+                        attempt_id=candidate_path.name,
+                        disposition="valid",
+                        custody_locator=str(candidate_path),
+                        artifact_sha256=calibration_artifact_hashes(
+                            candidate_path
+                        ),
+                        identity_epoch=epoch,
+                        t1_bindings=bindings,
+                        capture_wall_time_s=str(
+                            evidence["capture_wall_time_s"]
+                        ),
+                        exact_bound_lexeme_s=str(evidence["b_fiducial_s"]),
+                    )
+                    head_pin_path.write_text(
+                        json.dumps(head_pin_for_receipt(final)) + "\n",
+                        encoding="utf-8",
+                    )
+                calibration_snapshot = load_calibration_ledger_snapshot(
+                    ledger_path,
+                    head_pin_path,
+                    baseline_sequence=0,
+                    baseline_digest=GENESIS_DIGEST,
+                    require_committed_pin=False,
+                )
+                session = AuthenticatedConsumptionSession(
+                    root,
+                    {bundle.name},
+                    calibration_ledger_snapshot=calibration_snapshot,
+                    _allow_unissued_calibration_fixture=True,
+                )
+                session._prepare(
+                    bundle_paths={bundle.name: bundle},
+                    policy=SimpleNamespace(
+                        calibration_bracketing=CalibrationBracketingPolicy(
+                            require_bracket=True,
+                            calibration_bracket_max_drift_s=0.010,
+                        )
+                    ),
+                )
+
+            self.assertTrue(session.ready, session.refusal_reasons)
+            bracket = session.calibration_bracket
+            self.assertEqual(bracket["status"], "passed")
+            self.assertEqual(
+                bracket["pre"]["b_fiducial_decimal_s"], "0.024"
+            )
+            self.assertEqual(
+                bracket["post"]["b_fiducial_decimal_s"], "0.025"
+            )
+            self.assertEqual(
+                bracket["acceptance"]["allowance"]["value_s"],
+                "0.010818",
+            )
+            self.assertEqual(
+                bracket["acceptance"]["allowance"]["embedding_count"],
+                1,
+            )
+            self.assertAlmostEqual(bracket["b_fiducial_s"], 0.035818)
+            provenance = session.provenance_for(bundle.name)
+            self.assertAlmostEqual(
+                provenance["operative_fiducial_bound_s"],
+                bracket["b_fiducial_s"],
+            )
+            operative = session.summary_for(bundle.name)
+            pointer = "/gross_energy_j"
+            minted_anchor = minted["energy_anchor_shift_envelopes"][pointer][
+                "anchor_bound_s"
+            ]
+            operative_anchor = operative["energy_anchor_shift_envelopes"][
+                pointer
+            ]["anchor_bound_s"]
+            self.assertAlmostEqual(
+                operative_anchor - minted_anchor,
+                bracket["b_fiducial_s"] - minted_bound,
+                places=12,
+            )
 
     def test_session_retains_widening_introduced_metric_local_refusal(
         self,

@@ -60,11 +60,16 @@ def self_consistent_calibration(
     *,
     first_endpoint_s: float | None = None,
     commanded_edges: list[tuple[float, float]] | None = None,
+    protocol_id: str | None = None,
 ) -> tuple[dict, bytes, bytes]:
-    """Build one cached 40-pulse plist/event calibration for reducer tests."""
+    """Build a physically consistent protocol calibration for reducer tests."""
 
     global _SELF_CONSISTENT_CALIBRATION
-    use_cache = first_endpoint_s is None and commanded_edges is None
+    use_cache = (
+        first_endpoint_s is None
+        and commanded_edges is None
+        and protocol_id is None
+    )
     if use_cache and _SELF_CONSISTENT_CALIBRATION is not None:
         evidence, raw, events = _SELF_CONSISTENT_CALIBRATION
         return json.loads(json.dumps(evidence)), raw, events
@@ -76,9 +81,15 @@ def self_consistent_calibration(
     from joulewise.clock import ClockStamp
     from joulewise.powermetrics_fiducial import (
         LEGACY_PULSE_COUNT,
+        PROTOCOL_ID,
+        PROTOCOL_V2_ID,
+        PROTOCOL_V2_SHA256,
+        PROTOCOL_V3_SHA256,
+        RESIDUAL_REGION_METHOD,
         CommandedPulse,
         instrument_evidence,
         LEGACY_PROTOCOL_ID,
+        protocol_pulse_count,
         pulse_schedule,
         rederive_detection_from_artifacts,
     )
@@ -88,6 +99,7 @@ def self_consistent_calibration(
     # D-078 measuring bundle.  Freshness now covers the measured-window end,
     # so a calibration living near epoch 1000 would be correctly stale for a
     # 2026 bundle even though its relative pulse geometry is self-consistent.
+    protocol_id = protocol_id or LEGACY_PROTOCOL_ID
     if first_endpoint_s is None:
         first_endpoint_s = 1_784_490_850.05
     cadence_s = 0.1
@@ -98,7 +110,8 @@ def self_consistent_calibration(
     ]
     if commanded_edges is None:
         commanded_edges = pulse_schedule(
-            LEGACY_PULSE_COUNT, start_s=first_endpoint_s + 14.95
+            protocol_pulse_count(protocol_id),
+            start_s=first_endpoint_s + 14.95,
         )
     true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
     capture_end_s = true_edges[-1][1] + 5.0
@@ -187,7 +200,7 @@ def self_consistent_calibration(
         json.dumps(row, sort_keys=True) + "\n" for row in event_rows
     ).encode("utf-8")
     detection = rederive_detection_from_artifacts(
-        raw, events, clock_anchor, protocol_id=LEGACY_PROTOCOL_ID
+        raw, events, clock_anchor, protocol_id=protocol_id
     )
     bindings = {
         "hardware_model": "Mac15,9",
@@ -198,9 +211,20 @@ def self_consistent_calibration(
             "powermetrics_native_second_censored_intersection_v1"
         ),
         "mlx_version": "0.31.2",
-        "pulse_protocol_id": "powermetrics_pulse_fiducial_v1",
+        "pulse_protocol_id": protocol_id,
         "power_policy": "ac_high_power",
     }
+    if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
+        bindings.update(
+            {
+                "estimator_revision": RESIDUAL_REGION_METHOD,
+                "protocol_sha256": (
+                    PROTOCOL_V2_SHA256
+                    if protocol_id == PROTOCOL_V2_ID
+                    else PROTOCOL_V3_SHA256
+                ),
+            }
+        )
     evidence = instrument_evidence(
         detection,
         bindings=bindings,
@@ -209,8 +233,13 @@ def self_consistent_calibration(
             "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
             "events.jsonl": hashlib.sha256(events).hexdigest(),
         },
-        protocol_id=LEGACY_PROTOCOL_ID,
-        protocol_pulse_count=LEGACY_PULSE_COUNT,
+        protocol_id=protocol_id,
+        protocol_pulse_count=protocol_pulse_count(protocol_id),
+        capture_wall_time_s=(
+            min(float(row["timestamp_s"]) for row in event_rows)
+            if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
+            else None
+        ),
     )
     evidence["clock_anchor"] = clock_anchor
     evidence["clock_anchor_resolved"] = True
@@ -2737,8 +2766,10 @@ class D078R01RegressionTests(unittest.TestCase):
             RESIDUAL_REGION_METHOD,
         )
 
-        evidence, _raw, calibration_events = self_consistent_calibration()
         protocol_id = overrides.pop("protocol_id", PROTOCOL_V2_ID)
+        evidence, _raw, calibration_events = self_consistent_calibration(
+            protocol_id=protocol_id if protocol_id == PROTOCOL_ID else None
+        )
         if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
             event_rows = [
                 json.loads(line) for line in calibration_events.splitlines()
@@ -2810,8 +2841,16 @@ class D078R01RegressionTests(unittest.TestCase):
         bundle = Path(tmp) / "bundle"
         shutil.copytree(self.FIXTURE, bundle)
         evidence = json.loads(json.dumps(evidence))
+        evidence_protocol_id = evidence.get("protocol_id")
         _canonical_evidence, calibration_raw, calibration_events = (
-            self_consistent_calibration()
+            self_consistent_calibration(
+                protocol_id=(
+                    evidence_protocol_id
+                    if evidence_protocol_id
+                    == "powermetrics_pulse_fiducial_v3"
+                    else None
+                )
+            )
         )
         if calibration_events_override is not None:
             calibration_events = calibration_events_override

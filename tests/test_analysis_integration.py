@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_engine import AnalysisInputError, analyze_claims
@@ -48,9 +49,16 @@ from joulewise.analysis_engine.inputs import (
     window_evidence_precheck,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
+from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
+)
 from joulewise.whole_window import (
+    AuthenticatedConsumptionSession,
     CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
+    MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
@@ -111,6 +119,51 @@ PRODUCTION_TELEMETRY_IDENTITY = CustodyTelemetryIdentity(
     summary_backend_class="powermetrics",
     triangle_agrees=True,
 )
+
+
+def fixture_calibration_ledger_snapshot() -> CalibrationLedgerSnapshot:
+    return CalibrationLedgerSnapshot(
+        ledger_schema=LEDGER_SCHEMA,
+        ledger_path=Path("fixture-ledger.jsonl"),
+        head_sequence=0,
+        head_digest=GENESIS_DIGEST,
+        receipts=(),
+        observations=(),
+        refusal_reasons=(),
+    )
+
+
+def prepared_minted_consumption_session(
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    **kwargs: object,
+) -> AuthenticatedConsumptionSession:
+    declared_semantics = kwargs.get("consumption_semantics_id")
+    if isinstance(declared_semantics, str):
+        return AuthenticatedConsumptionSession(
+            runs_root,
+            referenced_bundle_ids,
+            evaluation_basis_sha256=kwargs.get("evaluation_basis_sha256"),
+            consumption_semantics_id=declared_semantics,
+            calibration_ledger_snapshot=kwargs.get(
+                "calibration_ledger_snapshot"
+            ),
+        )
+    session = AuthenticatedConsumptionSession(
+        runs_root,
+        referenced_bundle_ids,
+        evaluation_basis_sha256=kwargs.get("evaluation_basis_sha256"),
+        consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+        calibration_ledger_snapshot=fixture_calibration_ledger_snapshot(),
+    )
+    session._prepare(
+        bundle_paths={
+            bundle_id: Path(runs_root) / bundle_id
+            for bundle_id in referenced_bundle_ids
+        },
+        policy=SimpleNamespace(calibration_bracketing=object()),
+    )
+    return session
 
 
 def install_explicit_mock_sampler(bundle: Path) -> None:
@@ -468,6 +521,12 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         source_patch.start()
         self.addCleanup(source_patch.stop)
+        session_patch = mock.patch(
+            "joulewise.analysis_engine.inputs.AuthenticatedConsumptionSession",
+            side_effect=prepared_minted_consumption_session,
+        )
+        session_patch.start()
+        self.addCleanup(session_patch.stop)
 
     def _salvage_floor_dispatch_fixture(self, root: Path) -> tuple[dict, dict[str, Path]]:
         artifact = make_artifact()
@@ -1223,7 +1282,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                whole_window_refusal_reasons(runs, set(bundle_ids)),
+                whole_window_refusal_reasons(
+                    runs,
+                    set(bundle_ids),
+                    consumption_session=prepared_minted_consumption_session(
+                        runs,
+                        set(bundle_ids),
+                    ),
+                ),
                 (),
             )
             artifact = analyze_claims(
@@ -3444,10 +3510,20 @@ class AnalysisIntegrationTests(unittest.TestCase):
             and entry["planned_rep_index"] == 1
             and entry["condition_id"] == "cond-2m-short_short"
         )
+        prepared_session = prepared_minted_consumption_session(
+            runs,
+            {entry["run_id"] for entry in manifest["entries"]},
+        )
         shutil.rmtree(runs / target["run_id"])
-        with mock.patch(
-            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
-            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        with (
+            mock.patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=PRODUCTION_TELEMETRY_IDENTITY,
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.inputs.AuthenticatedConsumptionSession",
+                return_value=prepared_session,
+            ),
         ):
             artifact = analyze_claims(
                 self.manifest_path,

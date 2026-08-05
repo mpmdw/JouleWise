@@ -16,6 +16,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_LIMIT_CLASS,
     attribution_single_count_discipline,
 )
+from joulewise.calibration_ledger import REFUSAL_TAXONOMY
 
 
 CLAIM_OUTCOMES = frozenset(
@@ -58,6 +59,7 @@ REDUCER_REASON_CODES = frozenset(
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
         "instrument_calibration_stale",
+        "calibration_acceptance_bound_stale",
         "instrument_calibration_bracket_missing",
         "thermal_pressure_elevated_in_window",
         "negative_power_sample",
@@ -71,6 +73,10 @@ REDUCER_REASON_CODES = frozenset(
 
 ENGINE_REASON_CODES = frozenset(
     {
+        # These originate at the D-109 authenticated-consumer boundary, not
+        # in reducer wire output. Preserve the exact ledger taxonomy without
+        # misclassifying it as reducer vocabulary.
+        *REFUSAL_TAXONOMY,
         "analysis_manifest_invalid",
         "analysis_manifest_not_frozen",
         "order_manifest_hash_mismatch",
@@ -182,7 +188,7 @@ _NOT_RESOLVABLE = frozenset(
         "ratio_floor_conversion_undefined",
         "equivalence_margin_not_above_floor",
     }
-) | REDUCER_REASON_CODES
+) | REDUCER_REASON_CODES | set(REFUSAL_TAXONOMY)
 
 _UNRESOLVED = frozenset(
     {

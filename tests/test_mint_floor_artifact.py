@@ -1055,6 +1055,94 @@ class AuthenticationTests(unittest.TestCase):
             inspect.getsource(mint.mint_floor_artifact),
         )
 
+    def test_mint_loads_one_snapshot_and_threads_object_identity(self) -> None:
+        _plan, absolute, comparative = authenticated_components()
+        snapshot = object()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = root / "calibration_plan.json"
+            plan_path.write_bytes(PLAN_SOURCE.read_bytes())
+            absolute_paths = mint.ComponentPaths(
+                evidence_root_id="a10",
+                evidence_root=root / "a10",
+                report_path=root / "a10-report.json",
+                spec_path=root / "a10-spec.json",
+                order_manifest_path=root / "a10-order.json",
+                calibration_cell_id=mint.A10_CELL_ID,
+                expected_kind="absolute",
+            )
+            comparative_paths = mint.ComponentPaths(
+                evidence_root_id="window_c",
+                evidence_root=root / "window-c",
+                report_path=root / "window-c-report.json",
+                spec_path=root / "window-c-spec.json",
+                order_manifest_path=root / "window-c-order.json",
+                calibration_cell_id=mint.WINDOW_C_CELL_ID,
+                expected_kind="comparative",
+            )
+            with (
+                mock.patch.object(
+                    mint,
+                    "load_calibration_acceptance_bound",
+                    return_value={
+                        "ledger_cutoff": {
+                            "sequence": 7,
+                            "head_digest": "a" * 64,
+                        }
+                    },
+                ),
+                mock.patch.object(
+                    mint,
+                    "load_calibration_ledger_snapshot",
+                    return_value=snapshot,
+                ) as snapshot_loader,
+                mock.patch.object(
+                    mint,
+                    "_authenticate_component",
+                    side_effect=(absolute, comparative),
+                ) as authenticate,
+                mock.patch.object(
+                    mint,
+                    "bind_floor_artifact_evidence",
+                    return_value={},
+                ) as rebind,
+            ):
+                mint.mint_floor_artifact(
+                    artifact_id="snapshot-identity",
+                    floor_path=root / "floor.json",
+                    statement_path=root / "single-count.txt",
+                    calibration_plan_path=plan_path,
+                    calibration_plan_relative_path="calibration_plan.json",
+                    absolute_paths=absolute_paths,
+                    comparative_paths=comparative_paths,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                    strict_validator=lambda _path, _strict: (),
+                )
+
+        snapshot_loader.assert_called_once_with(
+            baseline_sequence=7,
+            baseline_digest="a" * 64,
+        )
+        self.assertEqual(authenticate.call_count, 2)
+        self.assertEqual(
+            [
+                call.kwargs["expected_cell_id"]
+                for call in authenticate.call_args_list
+            ],
+            [mint.A10_CELL_ID, mint.WINDOW_C_CELL_ID],
+        )
+        for call in authenticate.call_args_list:
+            self.assertIs(
+                call.kwargs["calibration_ledger_snapshot"],
+                snapshot,
+            )
+        rebind.assert_called_once()
+        self.assertIs(
+            rebind.call_args.kwargs["calibration_ledger_snapshot"],
+            snapshot,
+        )
+
     def test_report_spec_and_source_bytes_authenticate_before_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = self._a10_tree(tmp)

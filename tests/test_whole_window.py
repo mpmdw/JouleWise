@@ -12,6 +12,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from joulewise.floor_extraction import extract_absolute_cell
+from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    CalibrationLedgerSnapshot,
+)
 from joulewise.whole_window import AuthenticatedConsumptionSession
 from joulewise.whole_window import (
     ADAPTER_CONTINUITY_SCHEMA,
@@ -142,6 +147,20 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
         return row
 
     def _validate(self, row: dict, root: Path) -> tuple[bool, tuple[str, ...]]:
+        session = AuthenticatedConsumptionSession(
+            root,
+            {"member"},
+            calibration_ledger_snapshot=CalibrationLedgerSnapshot(
+                ledger_schema=LEDGER_SCHEMA,
+                ledger_path=Path("fixture-ledger.jsonl"),
+                head_sequence=0,
+                head_digest=GENESIS_DIGEST,
+                receipts=(),
+                observations=(),
+                refusal_reasons=(),
+            ),
+        )
+        session._prepared = True
         with (
             patch(
                 "joulewise.whole_window._current_core_rederivation_reasons",
@@ -156,7 +175,12 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
                 return_value=("passed", None),
             ),
         ):
-            return _validate_row(row, root, {"member"})
+            return _validate_row(
+                row,
+                root,
+                {"member"},
+                consumption_session=session,
+            )
 
     def test_attested_v2_source_passes_beside_poisoned_sibling(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

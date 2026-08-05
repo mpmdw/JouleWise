@@ -23,6 +23,7 @@ NEVER run this while another agent session is active on the machine
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import math
@@ -31,6 +32,7 @@ import sys
 import time
 import uuid
 from dataclasses import asdict, replace
+from decimal import Decimal
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +46,13 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
     samples_from_records,
 )
 from joulewise.clock import SystemClock  # noqa: E402
+from joulewise.calibration_ledger import (  # noqa: E402
+    DEFAULT_LEDGER_PATH,
+    append_pending_receipt,
+    artifact_hashes as ledger_artifact_hashes,
+    finalize_attempt_receipt,
+    head_pin_for_receipt,
+)
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
     LEGACY_PROTOCOL_ID,
@@ -69,6 +78,7 @@ from joulewise.powermetrics_fiducial import (  # noqa: E402
     rederive_detection_from_artifacts,
 )
 from joulewise.uncertainty_evidence import (  # noqa: E402
+    CLOCK_METHOD_V2,
     derive_powermetrics_clock_evidence_v2,
 )
 
@@ -79,10 +89,26 @@ PROTOCOL_V2_PATH = (
     REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v2.json"
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
+PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
 
 
 def sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _sysctl_identity(name: str) -> str:
+    """Read a reservation-time macOS identity before capture begins."""
+
+    value = subprocess.run(
+        ["/usr/sbin/sysctl", "-n", name],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    if not value:
+        raise RuntimeError(f"empty reservation identity: {name}")
+    return value
 
 
 def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
@@ -307,6 +333,69 @@ def main() -> int:
     clock = SystemClock()
     validation_id = time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
     out_dir = args.output_root / validation_id
+    custody_locator = str(out_dir.resolve())
+    planned_epoch = {
+        "os_build": _sysctl_identity("kern.osversion"),
+        "hardware_model": _sysctl_identity("hw.model"),
+        "power_policy": args.power_policy,
+        "sampling_interval_ms": SAMPLING_INTERVAL_MS,
+        "estimator_revision": RESIDUAL_REGION_METHOD,
+        "pulse_protocol_id": PROTOCOL_ID,
+    }
+    planned_t1 = {
+        **planned_epoch,
+        "powermetrics_sha256": sha256_path(Path(POWER_METRICS)),
+        "anchor_method_version": CLOCK_METHOD_V2,
+        "mlx_version": getattr(mx, "__version__", None),
+        "protocol_sha256": sha256_path(PROTOCOL_PATH),
+    }
+    # D-109 reservation-first: this authenticated receipt precedes directory
+    # creation, sampler launch, and all hardware capture.  The mechanism
+    # closes workflow omission, unregistered evidence, and rollback/stale-head
+    # consumption; it does not resist a malicious trusted writer or a rewrite
+    # of both Git and complete ledger history.
+    append_pending_receipt(
+        DEFAULT_LEDGER_PATH,
+        attempt_id=validation_id,
+        custody_locator=custody_locator,
+        identity_epoch=planned_epoch,
+        t1_bindings=planned_t1,
+    )
+    finalization_state: dict[str, object] = {
+        "finalized": False,
+        "identity_epoch": planned_epoch,
+        "t1_bindings": planned_t1,
+        "capture_wall_time_s": None,
+        "exact_bound_lexeme_s": None,
+    }
+
+    def finalize_abandoned() -> None:
+        """Best effort on ruled failures; a failed append leaves pending refusal."""
+
+        if finalization_state["finalized"]:
+            return
+        try:
+            finalize_attempt_receipt(
+                DEFAULT_LEDGER_PATH,
+                attempt_id=validation_id,
+                disposition="abandoned",
+                custody_locator=custody_locator,
+                artifact_sha256=ledger_artifact_hashes(out_dir),
+                identity_epoch=finalization_state["identity_epoch"],
+                t1_bindings=finalization_state["t1_bindings"],
+                capture_wall_time_s=finalization_state["capture_wall_time_s"],
+                exact_bound_lexeme_s=finalization_state[
+                    "exact_bound_lexeme_s"
+                ],
+            )
+        except Exception:  # noqa: BLE001 - pending is the mandatory fail-closed state
+            return
+        finalization_state["finalized"] = True
+
+    # An actual interpreter-level uncaught exception/interrupt finalizes when
+    # possible. A hard crash between these two appends intentionally leaves
+    # ``pending``, which every downstream snapshot refuses.
+    atexit.register(finalize_abandoned)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
@@ -364,6 +453,7 @@ def main() -> int:
         time.sleep(0.05)
     if first_parse is None:
         process.terminate()
+        finalize_abandoned()
         print("powermetrics never became ready", file=sys.stderr)
         return 1
     # D-078: wait for a native whole-second rollover before any workload.
@@ -371,6 +461,7 @@ def main() -> int:
         wait_for_preworkload_rollover(capture_path, process)
     except RuntimeError as exc:
         events.close()
+        finalize_abandoned()
         print(f"refusing: {exc}", file=sys.stderr)
         return 1
     sampling_started = clock.stamp()
@@ -508,6 +599,19 @@ def main() -> int:
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
     }
+    finalization_state["identity_epoch"] = {
+        field: bindings.get(field)
+        for field in (
+            "os_build",
+            "hardware_model",
+            "power_policy",
+            "sampling_interval_ms",
+            "estimator_revision",
+            "pulse_protocol_id",
+        )
+    }
+    finalization_state["t1_bindings"] = bindings
+    finalization_state["capture_wall_time_s"] = str(sampling_started.epoch_s)
     evidence_payload = instrument_evidence(
         detection,
         bindings=bindings,
@@ -548,13 +652,45 @@ def main() -> int:
     (out_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    serialized_evidence = json.loads(
+        json.dumps(evidence_payload, sort_keys=True),
+        parse_float=str,
+        parse_int=str,
+    )
+    bound_lexeme = serialized_evidence.get("b_fiducial_s")
+    finalization_state["exact_bound_lexeme_s"] = (
+        bound_lexeme if isinstance(bound_lexeme, str) else None
+    )
+    disposition = "ordinary-invalid"
+    if evidence_payload["status"] == "valid":
+        disposition = (
+            "systematic-invalid"
+            if isinstance(bound_lexeme, str)
+            and Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S
+            else "valid"
+        )
+    final_receipt = finalize_attempt_receipt(
+        DEFAULT_LEDGER_PATH,
+        attempt_id=validation_id,
+        disposition=disposition,
+        custody_locator=custody_locator,
+        artifact_sha256=ledger_artifact_hashes(out_dir),
+        identity_epoch=finalization_state["identity_epoch"],
+        t1_bindings=finalization_state["t1_bindings"],
+        capture_wall_time_s=finalization_state["capture_wall_time_s"],
+        exact_bound_lexeme_s=finalization_state["exact_bound_lexeme_s"],
+    )
+    finalization_state["finalized"] = True
+    atexit.unregister(finalize_abandoned)
     print(json.dumps({
         "validation_id": validation_id,
         "status": evidence_payload["status"],
         "b_fiducial_s": evidence_payload["b_fiducial_s"],
         "output": str(out_dir),
+        "ledger_head_pin_candidate": head_pin_for_receipt(final_receipt),
+        "claim_evaluation_blocked_until_pin_commit": True,
     }, indent=2))
-    return 0 if evidence_payload["status"] == "valid" else 1
+    return 0 if disposition == "valid" else 1
 
 
 if __name__ == "__main__":
