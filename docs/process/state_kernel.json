@@ -7,8 +7,7 @@
         "SEC5A-REMOTE-01",
         "WO-T3-VIS-01",
         "T3-AMEND-01",
-        "COLDGATE-VALIDATOR-01",
-        "CAL-BRACKET-D079-01"
+        "COLDGATE-VALIDATOR-01"
       ],
       "authority": [
         "Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work)",
@@ -24,7 +23,7 @@
         ],
         "operation": "select"
       },
-      "summary": "Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. In-flight exception: the CAL-BRACKET-D079-01 round-2 chain through PR."
+      "summary": "Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. The former in-flight exception (CAL-BRACKET-D079-01 round-2 chain) RESOLVED: PR #100 merged 2026-08-05 (f75d12b)."
     }
   ],
   "active_stop_card": null,
@@ -648,70 +647,6 @@
       "status": "queued",
       "stop_card": null
     },
-    "CAL-BRACKET-D079-01": {
-      "acceptance": {
-        "evidence": [
-          "The calibration-bracket selector implements the D-079 acceptance-v2 semantics: provenance-bound derived screen, freshness refusal, budgeted excess allowance for ordinary repeatability excess, evaluation-basis recording, and propagation of the calibration-drift allowance into floor/claim consumption",
-          "Candidate authentication and latest-valid-pre / earliest-valid-post selection are preserved unchanged, including exact T1 binding-field matching",
-          "Defect-shaped regressions: a bracket slightly above the obsolete 0.010 hard value but within the derived screen + budget PASSES with the allowance recorded; a bracket beyond budget REFUSES; T1-mismatched candidates remain ineligible",
-          "F3/A-min (D-109 R1): reservation-first receipt ledger enforced at the sole production writer (authenticated pending entry BEFORE hardware capture; mandatory finalization as valid/systematic-invalid/ordinary-invalid/abandoned; unresolved-pending refusal); ledger-only consumption (an off-ledger calibration artifact is invalid everywhere); repo-committed current-head pin with refusal on physical-head mismatch and no claim evaluation between ledger advancement and pin commit; ONE immutable ledger snapshot threaded through the session, the direct runner path, and the secondary verifier",
-          "R2 (D-109): the acceptance artifact carries an authenticated prior_observation_set (every content-distinct governed observation known at the exact ledger-sequence cutoff, with epoch + disposition), distinct from the n=19 derivation corpus; trigger population = current authentic content IDs minus prior set, judged under the PRIOR artifact; new unresolved attempts refuse; the corpus-doubling trigger counts 38 TOTAL authenticated content-distinct valid same-epoch observations",
-          "F1+F2 (D-109 preamble): freshness comparison uses the 6-field identity epoch; the estimator byte-digest closure is exactly the ratified 4-module set {powermetrics_fiducial, uncertainty_evidence, adapters/powermetrics, reduce}"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CAL-BRACKET-D079-01/acceptance",
-          "label": "CAL-BRACKET-D079-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The bracket selector stops hard-refusing at the obsolete 0.010 policy cliff and implements the D-079 derived screen plus budgeted allowance with propagation, without weakening candidate authentication or T1 exact matching."
-      },
-      "authority": {
-        "label": "MET-VERDICT-ADJ-01 independent audit group (b): D-079 calibration budget unimplemented in joulewise/calibration_bracketing.py (hard cliff at policy 0.010; no allowance emitted or propagated)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "D-109 ruled 2026-08-03 (Ed deferral to the joint magistrate+Sol consult): A-min-with-reservation adopted — writer-enforced receipt ledger (reservation-first), repo-committed head pin, R1 (7 clauses) + R2 (8 clauses); Option B recorded as rejected fallback",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "external",
-          "required": "Ed ruling on D-109 F3 (build an authenticated calibration-observation registry, or narrow D-102 to a bounded authoritative universe with the residual recorded) — F1 confirmed + F2 (4-module estimator digest) magistrate-ratified; all three land in one fix round after the F3 ruling",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "D-109"
-        },
-        {
-          "evidence": null,
-          "kind": "external",
-          "required": "Rule-11 gate convened and ruled for fix-round 2 on audit blocker B1 (second fix round on the same defect; delta re-audit 2026-08-03 found B1 persists refined at 2e61ff9)",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "rule-11-gate-B1"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "MET-VERDICT-ADJ-01 audit: retry rejection is CORRECT under T1 exact stationarity; relaxing exact matching would be contract-false",
-            "path": "docs/contracts/powermetrics_fiducial.md"
-          },
-          "rule": "Do not relax T1 exact binding-field matching or candidate authentication as part of this repair; window A's bracket remains unformable and its FAILED verdict untouched"
-        }
-      ],
-      "flags": [],
-      "goal": "Implement D-079 calibration acceptance v2 in the bracket selector (non-salvage severity escalator: every ordinary complete window slightly above the obsolete 0.010 hard cliff is currently mis-ruled): derived screen, freshness refusal, excess allowance, evaluation-basis recording, floor/claim propagation. ~5-8 files, delegated claim-semantics commit with independent review.",
-      "id": "CAL-BRACKET-D079-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 13,
-      "status": "blocked",
-      "status_note": "2026-08-03: D-109 RULED (Ed deferral to the joint magistrate+Sol consult; Sol round 1 broke the original A-min formulation [writer crash-window; prefix-subset is not anti-rollback], round 2 flipped B->A-min; both holes lead-verified). Single combined fix round: F1 (freshness = 6-field epoch) + F2 (4-module estimator digest closure) + F3 A-min (reservation-first receipt ledger at the sole production writer, repo-committed head pin {sequence, head_digest, ledger_schema}, epoch-bounded rotation, ONE immutable snapshot through every consumer) + the R2 prior_observation_set schema (19->38 counting rule = 38 total content-distinct valid same-epoch). 32/6 inventory is a backfill CANDIDATE only: raw-physics + hash verification before issuance; unresolved members block issuance. Threat-model statement per R1 clause 7 wherever A-min is described. 2026-08-03 CHECKPOINT: held at 2e61ff9 (pushed); B2+S1 closed; B1 persists refined — ROUND 2 REQUIRES THE RULE-11 GATE FIRST (do not bench it). 2026-08-04: B1 gate RULED and round 2 LANDED (delta re-audit CLEAN, B1 closed both dimensions); integration collision vs the generalized-mint interface guard found at the lead gate and RESOLVED per D-109 addendum II (reviewed signature amendment + guard hardening; parity proven on the integration tree; full suite 2487 OK exit-0 unpiped). PR #100 GATE-COMPLETE, CI GREEN at 4280ebd; MERGE AWAITS ED (harness denies agent self-merge). On merge: retire this row; D-110 re-mint condition (a) is satisfied.",
-      "stop_card": null
-    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -1300,12 +1235,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
-          "required": "CAL-BRACKET-D079-01 lands (D-109 implementation merged + gauntlet-clean) AND the D-110 re-mint conditions hold (acceptance artifact ISSUED after verified R2 backfill; evidence_root_id validator pin widened) before ANY further mint, including the governed 7B mint",
+          "kind": "decision",
+          "required": "The D-110 re-mint conditions hold before ANY further mint, including the governed 7B mint: (b) acceptance artifact ISSUED after verified R2 backfill; (c) evidence_root_id validator pin widened. Condition (a) — CAL-BRACKET-D079-01 lands merged + gauntlet-clean — was SATISFIED 2026-08-05 (PR #100 merged, f75d12b).",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "CAL-BRACKET-D079-01"
+          "target": "D-110"
         },
         {
           "evidence": {
@@ -2909,11 +2844,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #100 merged 2026-08-05 (f75d12b) under D-072 with Ed's explicit go; T3-AMEND-01 is the first desk item after",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "required": "In-flight CAL-BRACKET-D079-01 round-2 chain lands through PR; T3-AMEND-01 is the first desk item after",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "CAL-BRACKET-D079-01"
         }
@@ -2926,7 +2864,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 11,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. First desk item after the in-flight CAL-BRACKET chain lands through PR.",
       "stop_card": null
     },
@@ -3130,5 +3068,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-04"
+  "updated": "2026-08-05"
 }

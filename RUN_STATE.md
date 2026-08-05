@@ -10,9 +10,52 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-04 ~06:30 — STOP-AND-CHECKPOINT (Ed-ordered).
-Read this block first, then the T3-HANDOFF block below (its item 1 and
-item 6 carry this session's in-line corrections).
+Last updated: 2026-08-05 — Ed ratification batch + PR #100 MERGED.
+Read the 2026-08-05 block first, then the 2026-08-04 checkpoint and
+T3-HANDOFF blocks below (items 1 and 6 there carry in-line corrections).
+
+## ✅ 2026-08-05 — Ed's decision batch executed (PR #100 merged; acks recorded; quiet-guard ruled)
+
+Ed answered the checkpoint's owed decisions in one sitting; this
+session executed them:
+
+1. **PR #100 / CAL-BRACKET-D079-01: MERGED** (`f75d12b`, 2026-08-05
+   ~17:00 UTC) under D-072 with Ed's explicit go. Row RETIRED from the
+   kernel (Completed table has the full evidence cell); **D-110
+   re-mint condition (a) is SATISFIED**; MINT-GENERALIZE-01 stays
+   blocked on (b) issuance + (c) validator widening; **T3-AMEND-01 is
+   UNBLOCKED** (first desk item, per the queue). The T3-DRIVE-PRIORITY
+   gate's in-flight exception is spent.
+   **Merge plumbing fixed:** Ed added the harness permission rules
+   (`gh pr merge`, `gh run *`) to `.claude/settings.local.json` — the
+   D-072 standing self-merge authority is MECHANICAL again; "Ed names
+   merges" is retired as a forced pattern (Ed can still flag
+   Ed-merge-only per the memory note).
+2. **Both cold-gate acks RECORDED (Ed, 2026-08-05):** (a) the
+   cold-packet-handoff acceptance gate is CLEARED-WITH-EXCEPTION
+   jointly with the worktree-launch cure, per the judges' recommended
+   disposition; (b) the coldgate charter registry status flipped
+   BOOTSTRAP-AUTHORIZED → **RATIFIED**
+   (`docs/process/coldgate_charter_registry.md`). Remaining t3
+   acceptance gates OPEN: checkpoint-restore, app-death recovery
+   (both need Ed present).
+3. **QUIET-GUARD-01 Ed rulings banked** (recorded in the spec trace
+   `docs/process_traces/2026-08-04-quiet-guard-spec/CONSULT-RECORD.md`):
+   Q10 = dedicated guard git identity WITH unattended push licensed;
+   Q13 = README status-section projection as the closed_degraded
+   channel (rides the Q10 push license; phone push optional later).
+   Q2 (state root) and Q3 (launch perimeter) proceed on lead defaults
+   subject to Ed veto: one-time sudo setup script for the root-owned
+   state dir; lead-drafted perimeter enumeration for Ed confirmation.
+   The implementation packet is fully unblocked.
+4. **Site-lane fix:** the advisory `site` workflow was failing on main
+   (C-048 detailed heading missing from the council-log index table —
+   predates the merge); index row added this commit.
+5. Still Ed's, unchanged: D-113/WINB-R06 (biggest parked decision),
+   the two presence gates + app-DOWN characterization arm (one
+   Ed-present sitting), r03 app-UP re-capture needs the app kept
+   alive (or waits for QUIET-GUARD), D-080 runner choice, NVIDIA +
+   Blacksmith parked.
 
 ## ✅ CHECKPOINT 2026-08-04 ~06:30 — Ed-ordered stop (successor script)
 
@@ -22,7 +65,7 @@ handoff's first decision end-to-end:
 
 1. **PR #100 / CAL-BRACKET-D079-01: GATE-COMPLETE, CI GREEN at
    `4280ebd`, MERGE AWAITS ED'S TAP** (harness classifier denies agent
-   `gh pr merge`). Full arc: consult → reviewed interface amendment →
+   `gh pr merge`). [MERGED 2026-08-05 `f75d12b` — see the top block.] Full arc: consult → reviewed interface amendment →
    lead integration-tree replay (2487 OK, exit-0 unpiped) → delta
    re-audit (caught a LIVE guard bypass: repr-'None' default spoof) →
    hardening + regression → CI green. Records:
@@ -184,6 +227,7 @@ t3 ceremony and must not be polluted with t3 context.
   EXCEPTION jointly with the worktree-launch cure (judges split
   A/B on unconditional vs joint); (b) registry status flip
   BOOTSTRAP-AUTHORIZED → RATIFIED now that the gate has ruled.
+  [BOTH ACKED by Ed 2026-08-05 and recorded — see the top block.]
 - **Two gates needing his presence:** app-death recovery (a t3
   quit/relaunch he's present for) and checkpoint-restore (scratch-repo
   probe). The app-DOWN characterization arm can ride the same session.
@@ -1381,16 +1425,16 @@ Selection is conjunctive: every lane-matching gate and every ordinary dependency
 
 ### `T3-DRIVE-PRIORITY`
 
-Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. In-flight exception: the CAL-BRACKET-D079-01 round-2 chain through PR.
+Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. The former in-flight exception (CAL-BRACKET-D079-01 round-2 chain) RESOLVED: PR #100 merged 2026-08-05 (f75d12b).
 
 - Scope: `select` in [ED-EXTERNAL], [QUIET-MAC], [AGENT].
-- Allowed kernel task IDs: `T3-CHAR-PAIR-01`, `QUIET-GUARD-01`, `SEC5A-REMOTE-01`, `WO-T3-VIS-01`, `T3-AMEND-01`, `COLDGATE-VALIDATOR-01`, `CAL-BRACKET-D079-01`.
+- Allowed kernel task IDs: `T3-CHAR-PAIR-01`, `QUIET-GUARD-01`, `SEC5A-REMOTE-01`, `WO-T3-VIS-01`, `T3-AMEND-01`, `COLDGATE-VALIDATOR-01`.
 - Authority: Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work); docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5.
 - Clearance: Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-04). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-05). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
 
 ### [ED-EXTERNAL]
 
