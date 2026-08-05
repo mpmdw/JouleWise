@@ -95,6 +95,8 @@ class ValidateGatePacketTests(unittest.TestCase):
         expected_charter: str | None = None,
         expected_packet: str | None = None,
         receipt_out: Path | None = None,
+        launch_environment_attestation: str | None = None,
+        contamination_disclosure: str | None = None,
     ) -> tuple[subprocess.CompletedProcess[bytes], dict[str, object]]:
         command = [
             sys.executable,
@@ -110,6 +112,12 @@ class ValidateGatePacketTests(unittest.TestCase):
         ]
         if receipt_out is not None:
             command.extend(["--receipt-out", str(receipt_out)])
+        if launch_environment_attestation is not None:
+            command.extend(
+                ["--launch-environment-attestation", launch_environment_attestation]
+            )
+        if contamination_disclosure is not None:
+            command.extend(["--contamination-disclosure", contamination_disclosure])
         completed = subprocess.run(
             command,
             cwd=REPO_ROOT,
@@ -231,13 +239,25 @@ class ValidateGatePacketTests(unittest.TestCase):
 
     def test_unexpected_exception_becomes_internal_error_refusal(self) -> None:
         captured = mock.Mock(buffer=io.BytesIO())
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
         with (
             mock.patch.object(
-                VALIDATOR_MODULE, "_run", side_effect=RuntimeError("fixture")
+                VALIDATOR_MODULE, "validate", side_effect=RuntimeError("fixture")
             ),
             mock.patch.object(VALIDATOR_MODULE.sys, "stdout", captured),
         ):
-            returncode = VALIDATOR_MODULE.main([])
+            returncode = VALIDATOR_MODULE.main(
+                [
+                    "--packet",
+                    str(packet),
+                    "--charter",
+                    str(self.charter),
+                    "--expected-packet-sha256",
+                    sha256(packet_bytes),
+                    "--expected-charter-sha256",
+                    self.charter_sha,
+                ]
+            )
         receipt = json.loads(captured.buffer.getvalue().decode("utf-8"))
         self.assertEqual(returncode, 2)
         self.assertEqual(receipt["result"], "REFUSE")
@@ -317,7 +337,9 @@ class ValidateGatePacketTests(unittest.TestCase):
         completed, receipt = self.run_validator(packet)
         self.assert_refusal(completed, receipt, "exhibit_custody_invalid")
 
-    def test_refuses_traversal_via_symlinked_directory(self) -> None:
+    def test_refuses_symlinked_intermediate_directory(self) -> None:
+        # A deterministic race test is not possible; this proves the dirfd walk's
+        # intermediate-component O_NOFOLLOW mechanism.
         outside = self.root / "outside"
         outside.mkdir()
         (outside / "evidence.txt").write_bytes(self.exhibit_bytes)
@@ -360,7 +382,9 @@ class ValidateGatePacketTests(unittest.TestCase):
     def test_refuses_receipt_out_inside_packet_directory(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)
         receipt_path = self.packet_directory / "new-receipt.json"
-        completed, receipt = self.run_validator(packet, receipt_out=receipt_path)
+        completed, receipt = self.run_validator(
+            packet, expected_packet="0" * 64, receipt_out=receipt_path
+        )
         self.assert_refusal(completed, receipt, "receipt_out_unsafe")
         self.assertFalse(receipt_path.exists())
 
@@ -371,6 +395,86 @@ class ValidateGatePacketTests(unittest.TestCase):
         completed, receipt = self.run_validator(packet, receipt_out=receipt_path)
         self.assert_refusal(completed, receipt, "receipt_out_exists")
         self.assertEqual(receipt_path.read_bytes(), b"preserve me\n")
+
+    def test_receipt_write_failure_turns_pass_into_refusal(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        receipt_path = self.root / "receipt.json"
+        captured = mock.Mock(buffer=io.BytesIO())
+        with (
+            mock.patch.object(
+                VALIDATOR_MODULE,
+                "_write_receipt_exclusive",
+                side_effect=OSError("fixture"),
+            ),
+            mock.patch.object(VALIDATOR_MODULE.sys, "stdout", captured),
+        ):
+            returncode = VALIDATOR_MODULE.main(
+                [
+                    "--packet",
+                    str(packet),
+                    "--charter",
+                    str(self.charter),
+                    "--expected-packet-sha256",
+                    sha256(packet_bytes),
+                    "--expected-charter-sha256",
+                    self.charter_sha,
+                    "--receipt-out",
+                    str(receipt_path),
+                ]
+            )
+        receipt = json.loads(captured.buffer.getvalue().decode("utf-8"))
+        self.assertEqual(returncode, 2)
+        self.assertEqual(receipt["result"], "REFUSE")
+        self.assertEqual(receipt["reason"], "receipt_write_failed")
+
+    def test_receipt_write_failure_preserves_validation_refusal(self) -> None:
+        packet, _, _ = self.write_packet(pin=self.charter_sha)
+        receipt_path = self.root / "receipt.json"
+        captured = mock.Mock(buffer=io.BytesIO())
+        with (
+            mock.patch.object(
+                VALIDATOR_MODULE,
+                "_write_receipt_exclusive",
+                side_effect=OSError("fixture"),
+            ),
+            mock.patch.object(VALIDATOR_MODULE.sys, "stdout", captured),
+        ):
+            returncode = VALIDATOR_MODULE.main(
+                [
+                    "--packet",
+                    str(packet),
+                    "--charter",
+                    str(self.charter),
+                    "--expected-packet-sha256",
+                    "0" * 64,
+                    "--expected-charter-sha256",
+                    self.charter_sha,
+                    "--receipt-out",
+                    str(receipt_path),
+                ]
+            )
+        receipt = json.loads(captured.buffer.getvalue().decode("utf-8"))
+        self.assertEqual(returncode, 2)
+        self.assertEqual(receipt["result"], "REFUSE")
+        self.assertEqual(receipt["reason"], "packet_digest_mismatch")
+        self.assertEqual(
+            receipt["receipt_out_error"],
+            {"path": "receipt.json", "reason": "receipt_write_failed"},
+        )
+
+    def test_refuses_absolute_path_in_convening_attestation(self) -> None:
+        packet, _, _ = self.write_packet(pin=self.charter_sha)
+        for field in (
+            "launch_environment_attestation",
+            "contamination_disclosure",
+        ):
+            with self.subTest(field=field):
+                completed, receipt = self.run_validator(
+                    packet,
+                    **{field: str(self.root / "launch-context")},
+                )
+                self.assert_refusal(completed, receipt, "attestation_invalid")
+                self.assertNotIn(str(self.root).encode("utf-8"), completed.stdout)
 
     def test_receipt_is_byte_deterministic(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)

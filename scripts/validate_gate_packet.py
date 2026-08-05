@@ -30,14 +30,15 @@ validated as the charter come only from ``--charter``; their independent trust
 anchor comes only from ``--expected-charter-sha256``.  Packet bytes are
 independently anchored by the required ``--expected-packet-sha256`` argument.
 
-Exit status zero is reserved for a validated ``PASS``.  Help, usage errors,
-and every other non-validation termination are therefore nonzero; help emits
-its ordinary help text but no JSON receipt.
+Exit status zero is reserved for a validated ``PASS``.  Usage and argument
+errors emit a machine-readable refusal receipt and exit nonzero.  ``--help``
+alone emits its ordinary help text, no receipt, and also exits nonzero.
 """
 
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -67,6 +68,9 @@ MANIFEST_TITLE_RE = re.compile(
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})  ([^\r\n]+)$")
 FENCE_RE = re.compile(r"^[ \t]*```[ \t]*$")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+ABSOLUTE_PATH_RE = re.compile(
+    r"(?:^|(?<=[\s'\"([{]))(?:/[^\s]*|[A-Za-z]:[\\/][^\s]*)"
+)
 
 
 class CliError(Exception):
@@ -119,6 +123,14 @@ def _normalized_digest(value: str | None) -> str | None:
     return value
 
 
+def _contains_absolute_path(value: str | None) -> bool:
+    return value is not None and ABSOLUTE_PATH_RE.search(value) is not None
+
+
+def _receipt_attestation(value: str | None) -> str | None:
+    return None if _contains_absolute_path(value) else value
+
+
 def _base_receipt(
     *,
     packet_arg: str | None,
@@ -130,8 +142,12 @@ def _base_receipt(
 ) -> dict[str, Any]:
     return {
         "convening_attestations": {
-            "contamination_disclosure": contamination_disclosure,
-            "launch_environment": launch_environment_attestation,
+            "contamination_disclosure": _receipt_attestation(
+                contamination_disclosure
+            ),
+            "launch_environment": _receipt_attestation(
+                launch_environment_attestation
+            ),
         },
         "details": [],
         "digests": {
@@ -298,15 +314,19 @@ def _is_within(path: Path, directory: Path) -> bool:
 
 
 def _receipt_out_reason(
-    receipt_out_arg: str | None, packet_path: Path, charter_path: Path
+    receipt_out_arg: str | None,
+    packet_arg: str | None,
+    charter_arg: str | None,
 ) -> str | None:
     if receipt_out_arg is None:
         return None
+    if packet_arg is None or charter_arg is None:
+        return "receipt_out_unsafe"
     try:
         target = Path(receipt_out_arg)
         resolved_target = target.resolve(strict=False)
-        packet_directory = packet_path.parent.resolve(strict=True)
-        resolved_charter = charter_path.resolve(strict=True)
+        packet_directory = Path(packet_arg).parent.resolve(strict=True)
+        resolved_charter = Path(charter_arg).resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         return "receipt_out_unsafe"
     if _is_within(resolved_target, packet_directory) or resolved_target == resolved_charter:
@@ -320,44 +340,40 @@ def _receipt_out_reason(
 
 
 def _open_exhibit(
-    packet_directory: Path, exhibit_path: str
+    packet_directory_fd: int, exhibit_path: str
 ) -> tuple[str | None, tuple[int, int] | None, str | None]:
-    candidate = packet_directory.joinpath(*PurePosixPath(exhibit_path).parts)
-    current = packet_directory
-    leaf_lstat: os.stat_result | None = None
+    components = PurePosixPath(exhibit_path).parts
+    directory_fd: int | None = None
     try:
-        for index, component in enumerate(PurePosixPath(exhibit_path).parts):
-            current = current / component
-            component_stat = os.lstat(current)
-            if stat.S_ISLNK(component_stat.st_mode):
-                return None, None, "exhibit_custody_invalid"
-            if index < len(PurePosixPath(exhibit_path).parts) - 1:
-                if not stat.S_ISDIR(component_stat.st_mode):
-                    return None, None, "exhibit_custody_invalid"
-            else:
-                leaf_lstat = component_stat
-        resolved_candidate = candidate.resolve(strict=True)
-        if not _is_within(resolved_candidate, packet_directory):
-            return None, None, "exhibit_custody_invalid"
-        if leaf_lstat is None or not stat.S_ISREG(leaf_lstat.st_mode):
-            return None, None, "exhibit_custody_invalid"
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(candidate, flags)
+        directory_fd = os.dup(packet_directory_fd)
+        directory_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
+        for component in components[:-1]:
+            next_directory_fd = os.open(
+                component, directory_flags, dir_fd=directory_fd
+            )
+            os.close(directory_fd)
+            directory_fd = next_directory_fd
+
+        leaf_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(components[-1], leaf_flags, dir_fd=directory_fd)
         with os.fdopen(descriptor, "rb") as handle:
             opened_stat = os.fstat(handle.fileno())
-            if (
-                not stat.S_ISREG(opened_stat.st_mode)
-                or opened_stat.st_dev != leaf_lstat.st_dev
-                or opened_stat.st_ino != leaf_lstat.st_ino
-            ):
+            if not stat.S_ISREG(opened_stat.st_mode):
                 return None, None, "exhibit_custody_invalid"
             return (
                 _sha256_handle(handle),
                 (opened_stat.st_dev, opened_stat.st_ino),
                 None,
             )
-    except (OSError, RuntimeError, ValueError):
+    except OSError as error:
+        if error.errno in {errno.EISDIR, errno.ELOOP, errno.ENOTDIR}:
+            return None, None, "exhibit_custody_invalid"
         return None, None, "exhibit_unreadable"
+    except (RuntimeError, ValueError):
+        return None, None, "exhibit_unreadable"
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 def validate(
@@ -366,10 +382,10 @@ def validate(
     charter_arg: str | None,
     expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
-    receipt_out_arg: str | None,
     launch_environment_attestation: str | None,
     contamination_disclosure: str | None,
 ) -> dict[str, Any]:
+    """Validate arguments and sealed inputs; this is the programmatic boundary."""
     receipt = _base_receipt(
         packet_arg=packet_arg,
         charter_arg=charter_arg,
@@ -390,6 +406,20 @@ def validate(
     ]
     if missing:
         return _refuse(receipt, "cli_invalid", [{"missing": missing}])
+    invalid_attestations = [
+        field
+        for field, value in (
+            ("launch_environment", launch_environment_attestation),
+            ("contamination_disclosure", contamination_disclosure),
+        )
+        if _contains_absolute_path(value)
+    ]
+    if invalid_attestations:
+        return _refuse(
+            receipt,
+            "attestation_invalid",
+            [{"field": field} for field in invalid_attestations],
+        )
     if not HEX_RE.fullmatch(expected_packet_sha256):
         return _refuse(receipt, "expected_packet_sha256_invalid")
     if not HEX_RE.fullmatch(expected_charter_sha256):
@@ -433,14 +463,6 @@ def validate(
     if mismatch_reason is not None:
         return _refuse(receipt, mismatch_reason)
 
-    receipt_out_reason = _receipt_out_reason(receipt_out_arg, packet_path, charter_path)
-    if receipt_out_reason is not None:
-        return _refuse(
-            receipt,
-            receipt_out_reason,
-            [{"path": _basename(receipt_out_arg)}],
-        )
-
     manifest_body, manifest_lines, manifest_error = _manifest_block(
         raw_lines, text_lines
     )
@@ -457,36 +479,45 @@ def validate(
     except (OSError, RuntimeError, ValueError):
         return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
 
-    unreadable: list[dict[str, Any]] = []
-    custody_invalid: list[dict[str, Any]] = []
-    mismatches: list[dict[str, Any]] = []
-    aliases: list[dict[str, Any]] = []
-    exhibit_receipts: list[dict[str, Any]] = []
-    seen_identities: dict[tuple[int, int], str] = {}
-    for exhibit_expected, exhibit_path in manifest:
-        exhibit_name = Path(exhibit_path).name
-        exhibit_observed, identity, exhibit_error = _open_exhibit(
-            packet_directory, exhibit_path
-        )
-        exhibit_receipts.append(
-            {
-                "expected_sha256": exhibit_expected,
-                "observed_sha256": exhibit_observed,
-                "path": exhibit_name,
-            }
-        )
-        if exhibit_error == "exhibit_unreadable":
-            unreadable.append({"path": exhibit_name})
-        elif exhibit_error == "exhibit_custody_invalid":
-            custody_invalid.append({"path": exhibit_name})
-        elif identity is not None and identity in seen_identities:
-            aliases.append(
-                {"path": exhibit_name, "aliases": seen_identities[identity]}
+    packet_directory_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
+    try:
+        packet_directory_fd = os.open(packet_directory, packet_directory_flags)
+    except OSError:
+        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+
+    try:
+        unreadable: list[dict[str, Any]] = []
+        custody_invalid: list[dict[str, Any]] = []
+        mismatches: list[dict[str, Any]] = []
+        aliases: list[dict[str, Any]] = []
+        exhibit_receipts: list[dict[str, Any]] = []
+        seen_identities: dict[tuple[int, int], str] = {}
+        for exhibit_expected, exhibit_path in manifest:
+            exhibit_name = Path(exhibit_path).name
+            exhibit_observed, identity, exhibit_error = _open_exhibit(
+                packet_directory_fd, exhibit_path
             )
-        elif identity is not None:
-            seen_identities[identity] = exhibit_name
-        if exhibit_observed is not None and exhibit_observed != exhibit_expected:
-            mismatches.append({"path": exhibit_name})
+            exhibit_receipts.append(
+                {
+                    "expected_sha256": exhibit_expected,
+                    "observed_sha256": exhibit_observed,
+                    "path": exhibit_name,
+                }
+            )
+            if exhibit_error == "exhibit_unreadable":
+                unreadable.append({"path": exhibit_name})
+            elif exhibit_error == "exhibit_custody_invalid":
+                custody_invalid.append({"path": exhibit_name})
+            elif identity is not None and identity in seen_identities:
+                aliases.append(
+                    {"path": exhibit_name, "aliases": seen_identities[identity]}
+                )
+            elif identity is not None:
+                seen_identities[identity] = exhibit_name
+            if exhibit_observed is not None and exhibit_observed != exhibit_expected:
+                mismatches.append({"path": exhibit_name})
+    finally:
+        os.close(packet_directory_fd)
     receipt["digests"]["exhibits"] = exhibit_receipts
 
     if unreadable:
@@ -550,32 +581,50 @@ def _run(argv: Sequence[str] | None) -> int:
         sys.stdout.buffer.write(_canonical_json(_cli_refusal()))
         return REFUSAL_EXIT
 
+    receipt_out_reason = _receipt_out_reason(
+        args.receipt_out, args.packet, args.charter
+    )
+    if receipt_out_reason is not None:
+        receipt = _refuse(
+            _base_receipt(
+                packet_arg=args.packet,
+                charter_arg=args.charter,
+                expected_packet_sha256=args.expected_packet_sha256,
+                expected_charter_sha256=args.expected_charter_sha256,
+                launch_environment_attestation=args.launch_environment_attestation,
+                contamination_disclosure=args.contamination_disclosure,
+            ),
+            receipt_out_reason,
+            [{"path": _basename(args.receipt_out)}],
+        )
+        sys.stdout.buffer.write(_canonical_json(receipt))
+        return REFUSAL_EXIT
+
     receipt = validate(
         packet_arg=args.packet,
         charter_arg=args.charter,
         expected_packet_sha256=args.expected_packet_sha256,
         expected_charter_sha256=args.expected_charter_sha256,
-        receipt_out_arg=args.receipt_out,
         launch_environment_attestation=args.launch_environment_attestation,
         contamination_disclosure=args.contamination_disclosure,
     )
     output = _canonical_json(receipt)
     if args.receipt_out is not None:
-        receipt_target_reason = _receipt_out_reason(
-            args.receipt_out,
-            Path(args.packet) if args.packet is not None else Path(""),
-            Path(args.charter) if args.charter is not None else Path(""),
-        )
-        if receipt_target_reason is None:
-            try:
-                _write_receipt_exclusive(Path(args.receipt_out), output)
-            except (OSError, ValueError):
+        try:
+            _write_receipt_exclusive(Path(args.receipt_out), output)
+        except (OSError, ValueError):
+            if receipt["result"] == "PASS":
                 receipt = _refuse(
                     receipt,
                     "receipt_write_failed",
                     [{"path": _basename(args.receipt_out)}],
                 )
-                output = _canonical_json(receipt)
+            else:
+                receipt["receipt_out_error"] = {
+                    "path": _basename(args.receipt_out),
+                    "reason": "receipt_write_failed",
+                }
+            output = _canonical_json(receipt)
     sys.stdout.buffer.write(output)
     return 0 if receipt["result"] == "PASS" else REFUSAL_EXIT
 
