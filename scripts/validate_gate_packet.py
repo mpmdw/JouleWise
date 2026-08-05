@@ -15,16 +15,24 @@ Packet grammar (intentionally strict and fail-closed):
   Its section must contain exactly one bare triple-backtick fenced block.
   Every block line must be exactly ``<64 hex><two spaces><path>``.
   Paths are unique, lexical POSIX paths relative to the packet directory;
-  absolute paths, empty/dot/dot-dot components, and backslashes are refused.
+  absolute paths, Windows drive-qualified paths, empty/dot/dot-dot components,
+  and backslashes are refused.
 * The exhibit-manifest digest is SHA-256 over the exact packet bytes between
   the opening and closing fence lines (including their original line endings,
   excluding the fence lines).  Packet, charter, and exhibit digests are over
   the complete file bytes read once.  There is deliberately no line-range or
   partial-file exhibit hashing rule in this validator.
 
-The packet's charter path is documentary and is recorded in the receipt.  The
-bytes validated as the charter come only from ``--charter``; their independent
-trust anchor comes only from ``--expected-charter-sha256``.
+Digest comparisons use semantic hexadecimal equality: accepted upper- or
+lowercase input is normalized to lowercase in the canonical receipt.  The
+packet's charter path is documentary and is recorded by basename.  The bytes
+validated as the charter come only from ``--charter``; their independent trust
+anchor comes only from ``--expected-charter-sha256``.  Packet bytes are
+independently anchored by the required ``--expected-packet-sha256`` argument.
+
+Exit status zero is reserved for a validated ``PASS``.  Help, usage errors,
+and every other non-validation termination are therefore nonzero; help emits
+its ordinary help text but no JSON receipt.
 """
 
 from __future__ import annotations
@@ -32,17 +40,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
-from pathlib import PurePosixPath
+import os
+from pathlib import Path, PurePosixPath
 import re
+import stat
 import sys
-from typing import Any, Sequence
+from typing import Any, BinaryIO, Sequence
 
 
 RECEIPT_SCHEMA = "coldgate-validator-receipt/v1"
 REFUSAL_EXIT = 2
 HEX_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-HEX_TOKEN_RE = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{64})(?![0-9a-fA-F])")
+HEX_TOKEN_RE = re.compile(r"(?<!\w)([0-9a-fA-F]{64})(?!\w)")
 SHA_LABEL_RE = re.compile(r"(?i)(?<![A-Za-z0-9])sha-?256(?![A-Za-z0-9])")
 PATH_DECL_RE = re.compile(
     r"(?im)^[ \t]*Charter(?:[ \t]+[^:\r\n]*)?:[ \t]*`([^`\r\n]+)`[ \t]*$"
@@ -57,19 +66,38 @@ MANIFEST_TITLE_RE = re.compile(
 )
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})  ([^\r\n]+)$")
 FENCE_RE = re.compile(r"^[ \t]*```[ \t]*$")
+WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
 class CliError(Exception):
-    """Raised instead of argparse terminating without a JSON receipt."""
+    """Raised instead of argparse terminating without a refusal receipt."""
+
+
+class NonValidationExit(Exception):
+    """Raised for help or another argparse exit that must remain nonzero."""
 
 
 class ReceiptArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise CliError(message)
 
+    def exit(self, status: int = 0, message: str | None = None) -> None:
+        if message:
+            self._print_message(message, sys.stderr)
+        raise NonValidationExit
+
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_handle(handle: BinaryIO) -> str:
+    digest = hashlib.sha256()
+    while True:
+        chunk = handle.read(1024 * 1024)
+        if not chunk:
+            return digest.hexdigest()
+        digest.update(chunk)
 
 
 def _read_once(path: Path) -> bytes | None:
@@ -79,17 +107,27 @@ def _read_once(path: Path) -> bytes | None:
         return None
 
 
+def _basename(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return Path(value).name
+
+
+def _normalized_digest(value: str | None) -> str | None:
+    if value is not None and HEX_RE.fullmatch(value):
+        return value.lower()
+    return value
+
+
 def _base_receipt(
     *,
     packet_arg: str | None,
     charter_arg: str | None,
+    expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
     launch_environment_attestation: str | None,
     contamination_disclosure: str | None,
 ) -> dict[str, Any]:
-    expected = expected_charter_sha256
-    if expected is not None and HEX_RE.fullmatch(expected):
-        expected = expected.lower()
     return {
         "convening_attestations": {
             "contamination_disclosure": contamination_disclosure,
@@ -102,10 +140,11 @@ def _base_receipt(
             "exhibits": [],
             "packet_sha256": None,
         },
-        "expected_charter_sha256": expected,
+        "expected_charter_sha256": _normalized_digest(expected_charter_sha256),
+        "expected_packet_sha256": _normalized_digest(expected_packet_sha256),
         "inputs": {
-            "charter": charter_arg,
-            "packet": packet_arg,
+            "charter": _basename(charter_arg),
+            "packet": _basename(packet_arg),
         },
         "packet_charter_path": None,
         "packet_charter_pin_sha256": None,
@@ -174,7 +213,23 @@ def _parse_charter_pin(lines: list[str]) -> tuple[str, str, str | None]:
         or PurePosixPath(charter_path).is_absolute()
     ):
         return "", "", "charter_pin_ambiguous"
-    return charter_path, digest_match.group(1).lower(), None
+    return Path(charter_path).name, digest_match.group(1).lower(), None
+
+
+def _charter_mismatch_reason(trusted: str, packet_pin: str, observed: str) -> str | None:
+    if trusted == packet_pin == observed:
+        return None
+    if packet_pin == observed and trusted != observed:
+        return "charter_trusted_observed_mismatch"
+    if trusted == observed and trusted != packet_pin:
+        return "charter_trusted_packet_pin_mismatch"
+    if trusted == packet_pin and packet_pin != observed:
+        return "charter_packet_pin_observed_mismatch"
+    if trusted != packet_pin:
+        return "charter_trusted_packet_pin_mismatch"
+    if packet_pin != observed:
+        return "charter_packet_pin_observed_mismatch"
+    return "charter_trusted_observed_mismatch"
 
 
 def _manifest_block(
@@ -220,6 +275,7 @@ def _parse_manifest_lines(
             not path_text
             or path_text != path_text.strip()
             or path_text.startswith("/")
+            or WINDOWS_DRIVE_RE.match(path_text)
             or "\\" in path_text
             or any(component in {"", ".", ".."} for component in components)
             or PurePosixPath(path_text).is_absolute()
@@ -233,17 +289,91 @@ def _parse_manifest_lines(
     return entries, None
 
 
+def _is_within(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def _receipt_out_reason(
+    receipt_out_arg: str | None, packet_path: Path, charter_path: Path
+) -> str | None:
+    if receipt_out_arg is None:
+        return None
+    try:
+        target = Path(receipt_out_arg)
+        resolved_target = target.resolve(strict=False)
+        packet_directory = packet_path.parent.resolve(strict=True)
+        resolved_charter = charter_path.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return "receipt_out_unsafe"
+    if _is_within(resolved_target, packet_directory) or resolved_target == resolved_charter:
+        return "receipt_out_unsafe"
+    try:
+        if target.is_symlink() or target.exists():
+            return "receipt_out_exists"
+    except OSError:
+        return "receipt_out_unsafe"
+    return None
+
+
+def _open_exhibit(
+    packet_directory: Path, exhibit_path: str
+) -> tuple[str | None, tuple[int, int] | None, str | None]:
+    candidate = packet_directory.joinpath(*PurePosixPath(exhibit_path).parts)
+    current = packet_directory
+    leaf_lstat: os.stat_result | None = None
+    try:
+        for index, component in enumerate(PurePosixPath(exhibit_path).parts):
+            current = current / component
+            component_stat = os.lstat(current)
+            if stat.S_ISLNK(component_stat.st_mode):
+                return None, None, "exhibit_custody_invalid"
+            if index < len(PurePosixPath(exhibit_path).parts) - 1:
+                if not stat.S_ISDIR(component_stat.st_mode):
+                    return None, None, "exhibit_custody_invalid"
+            else:
+                leaf_lstat = component_stat
+        resolved_candidate = candidate.resolve(strict=True)
+        if not _is_within(resolved_candidate, packet_directory):
+            return None, None, "exhibit_custody_invalid"
+        if leaf_lstat is None or not stat.S_ISREG(leaf_lstat.st_mode):
+            return None, None, "exhibit_custody_invalid"
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(candidate, flags)
+        with os.fdopen(descriptor, "rb") as handle:
+            opened_stat = os.fstat(handle.fileno())
+            if (
+                not stat.S_ISREG(opened_stat.st_mode)
+                or opened_stat.st_dev != leaf_lstat.st_dev
+                or opened_stat.st_ino != leaf_lstat.st_ino
+            ):
+                return None, None, "exhibit_custody_invalid"
+            return (
+                _sha256_handle(handle),
+                (opened_stat.st_dev, opened_stat.st_ino),
+                None,
+            )
+    except (OSError, RuntimeError, ValueError):
+        return None, None, "exhibit_unreadable"
+
+
 def validate(
     *,
     packet_arg: str | None,
     charter_arg: str | None,
+    expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
+    receipt_out_arg: str | None,
     launch_environment_attestation: str | None,
     contamination_disclosure: str | None,
 ) -> dict[str, Any]:
     receipt = _base_receipt(
         packet_arg=packet_arg,
         charter_arg=charter_arg,
+        expected_packet_sha256=expected_packet_sha256,
         expected_charter_sha256=expected_charter_sha256,
         launch_environment_attestation=launch_environment_attestation,
         contamination_disclosure=contamination_disclosure,
@@ -253,26 +383,34 @@ def validate(
         for name, value in (
             ("packet", packet_arg),
             ("charter", charter_arg),
+            ("expected_packet_sha256", expected_packet_sha256),
             ("expected_charter_sha256", expected_charter_sha256),
         )
         if value is None
     ]
     if missing:
         return _refuse(receipt, "cli_invalid", [{"missing": missing}])
+    if not HEX_RE.fullmatch(expected_packet_sha256):
+        return _refuse(receipt, "expected_packet_sha256_invalid")
     if not HEX_RE.fullmatch(expected_charter_sha256):
         return _refuse(receipt, "expected_charter_sha256_invalid")
 
-    expected_charter_sha256 = expected_charter_sha256.lower()
+    trusted_packet_sha256 = expected_packet_sha256.lower()
+    trusted_charter_sha256 = expected_charter_sha256.lower()
     packet_path = Path(packet_arg)
     charter_path = Path(charter_arg)
+
     packet_bytes = _read_once(packet_path)
     if packet_bytes is None:
-        return _refuse(receipt, "packet_unreadable", [{"path": packet_arg}])
-    receipt["digests"]["packet_sha256"] = _sha256(packet_bytes)
+        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+    observed_packet_sha256 = _sha256(packet_bytes)
+    receipt["digests"]["packet_sha256"] = observed_packet_sha256
+    if observed_packet_sha256 != trusted_packet_sha256:
+        return _refuse(receipt, "packet_digest_mismatch")
 
     charter_bytes = _read_once(charter_path)
     if charter_bytes is None:
-        return _refuse(receipt, "charter_unreadable", [{"path": charter_arg}])
+        return _refuse(receipt, "charter_unreadable", [{"path": charter_path.name}])
     observed_charter_sha256 = _sha256(charter_bytes)
     receipt["digests"]["charter_sha256"] = observed_charter_sha256
 
@@ -289,6 +427,20 @@ def validate(
     receipt["packet_charter_path"] = packet_charter_path
     receipt["packet_charter_pin_sha256"] = packet_pin
 
+    mismatch_reason = _charter_mismatch_reason(
+        trusted_charter_sha256, packet_pin, observed_charter_sha256
+    )
+    if mismatch_reason is not None:
+        return _refuse(receipt, mismatch_reason)
+
+    receipt_out_reason = _receipt_out_reason(receipt_out_arg, packet_path, charter_path)
+    if receipt_out_reason is not None:
+        return _refuse(
+            receipt,
+            receipt_out_reason,
+            [{"path": _basename(receipt_out_arg)}],
+        )
+
     manifest_body, manifest_lines, manifest_error = _manifest_block(
         raw_lines, text_lines
     )
@@ -300,31 +452,49 @@ def validate(
     if manifest_error is not None or manifest is None:
         return _refuse(receipt, "manifest_parse_error")
 
+    try:
+        packet_directory = packet_path.parent.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+
     unreadable: list[dict[str, Any]] = []
+    custody_invalid: list[dict[str, Any]] = []
     mismatches: list[dict[str, Any]] = []
+    aliases: list[dict[str, Any]] = []
     exhibit_receipts: list[dict[str, Any]] = []
+    seen_identities: dict[tuple[int, int], str] = {}
     for exhibit_expected, exhibit_path in manifest:
-        exhibit_bytes = _read_once(packet_path.parent / PurePosixPath(exhibit_path))
-        exhibit_observed = None if exhibit_bytes is None else _sha256(exhibit_bytes)
+        exhibit_name = Path(exhibit_path).name
+        exhibit_observed, identity, exhibit_error = _open_exhibit(
+            packet_directory, exhibit_path
+        )
         exhibit_receipts.append(
             {
                 "expected_sha256": exhibit_expected,
                 "observed_sha256": exhibit_observed,
-                "path": exhibit_path,
+                "path": exhibit_name,
             }
         )
-        if exhibit_bytes is None:
-            unreadable.append({"path": exhibit_path})
-        elif exhibit_observed != exhibit_expected:
-            mismatches.append({"path": exhibit_path})
+        if exhibit_error == "exhibit_unreadable":
+            unreadable.append({"path": exhibit_name})
+        elif exhibit_error == "exhibit_custody_invalid":
+            custody_invalid.append({"path": exhibit_name})
+        elif identity is not None and identity in seen_identities:
+            aliases.append(
+                {"path": exhibit_name, "aliases": seen_identities[identity]}
+            )
+        elif identity is not None:
+            seen_identities[identity] = exhibit_name
+        if exhibit_observed is not None and exhibit_observed != exhibit_expected:
+            mismatches.append({"path": exhibit_name})
     receipt["digests"]["exhibits"] = exhibit_receipts
 
     if unreadable:
         return _refuse(receipt, "exhibit_unreadable", unreadable)
-    if not (
-        expected_charter_sha256 == packet_pin == observed_charter_sha256
-    ):
-        return _refuse(receipt, "charter_digest_mismatch")
+    if custody_invalid:
+        return _refuse(receipt, "exhibit_custody_invalid", custody_invalid)
+    if aliases:
+        return _refuse(receipt, "exhibit_alias_duplicate", aliases)
     if mismatches:
         return _refuse(receipt, "exhibit_digest_mismatch", mismatches)
 
@@ -345,6 +515,7 @@ def _parser() -> ReceiptArgumentParser:
     parser = ReceiptArgumentParser(description=__doc__)
     parser.add_argument("--packet")
     parser.add_argument("--charter")
+    parser.add_argument("--expected-packet-sha256", required=True)
     parser.add_argument("--expected-charter-sha256")
     parser.add_argument("--receipt-out")
     parser.add_argument("--launch-environment-attestation")
@@ -352,43 +523,74 @@ def _parser() -> ReceiptArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _write_receipt_exclusive(path: Path, output: bytes) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(output)
+
+
+def _cli_refusal() -> dict[str, Any]:
+    return _refuse(
+        _base_receipt(
+            packet_arg=None,
+            charter_arg=None,
+            expected_packet_sha256=None,
+            expected_charter_sha256=None,
+            launch_environment_attestation=None,
+            contamination_disclosure=None,
+        ),
+        "cli_invalid",
+    )
+
+
+def _run(argv: Sequence[str] | None) -> int:
     try:
         args = _parser().parse_args(argv)
     except CliError:
-        receipt = _refuse(
-            _base_receipt(
-                packet_arg=None,
-                charter_arg=None,
-                expected_charter_sha256=None,
-                launch_environment_attestation=None,
-                contamination_disclosure=None,
-            ),
-            "cli_invalid",
-        )
-        sys.stdout.buffer.write(_canonical_json(receipt))
+        sys.stdout.buffer.write(_canonical_json(_cli_refusal()))
         return REFUSAL_EXIT
 
     receipt = validate(
         packet_arg=args.packet,
         charter_arg=args.charter,
+        expected_packet_sha256=args.expected_packet_sha256,
         expected_charter_sha256=args.expected_charter_sha256,
+        receipt_out_arg=args.receipt_out,
         launch_environment_attestation=args.launch_environment_attestation,
         contamination_disclosure=args.contamination_disclosure,
     )
     output = _canonical_json(receipt)
     if args.receipt_out is not None:
-        try:
-            Path(args.receipt_out).write_bytes(output)
-        except (OSError, ValueError):
-            receipt = _refuse(
-                receipt,
-                "receipt_write_failed",
-                [{"path": args.receipt_out}],
-            )
-            output = _canonical_json(receipt)
+        receipt_target_reason = _receipt_out_reason(
+            args.receipt_out,
+            Path(args.packet) if args.packet is not None else Path(""),
+            Path(args.charter) if args.charter is not None else Path(""),
+        )
+        if receipt_target_reason is None:
+            try:
+                _write_receipt_exclusive(Path(args.receipt_out), output)
+            except (OSError, ValueError):
+                receipt = _refuse(
+                    receipt,
+                    "receipt_write_failed",
+                    [{"path": _basename(args.receipt_out)}],
+                )
+                output = _canonical_json(receipt)
     sys.stdout.buffer.write(output)
     return 0 if receipt["result"] == "PASS" else REFUSAL_EXIT
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        return _run(argv)
+    except NonValidationExit:
+        return REFUSAL_EXIT
+    except SystemExit:
+        return REFUSAL_EXIT
+    except Exception:
+        receipt = _refuse(_cli_refusal(), "internal_error")
+        sys.stdout.buffer.write(_canonical_json(receipt))
+        return REFUSAL_EXIT
 
 
 if __name__ == "__main__":
