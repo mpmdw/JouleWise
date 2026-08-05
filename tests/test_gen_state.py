@@ -62,7 +62,6 @@ EXPECTED_IDS = {
     # left the live kernel. MET-DANGLER-DISPOSITION-01 (+ folded
     # MEMBERSHIP-READER-FAILOPEN-01) closed 2026-08-02 with PR #94
     # (audited head 05d99b6) and retired to the completed table.
-    "CAL-BRACKET-D079-01",
     # 2026-08-02 D-106 clause 3 minted D100-BII-BINDING-01 (b-ii
     # capture-identity fixes); closed 2026-08-03 under D-108 (PR #99
     # merged 32d72fd + the clause-(d) three-occurrence re-record) and
@@ -100,7 +99,8 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "COOLDOWN-JOIN-GAUNTLET-01", "QA-10A-JOIN-OMISSION",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
-                "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01"}
+                "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
+                "CAL-BRACKET-D079-01"}
 
 
 def load_kernel():
@@ -255,9 +255,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_66(self):
+    def test_exact_live_id_set_65(self):
+        # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
+        # merged f75d12b; Completed table owns the record).
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 66)
+        self.assertEqual(len(self.tasks), 65)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -279,8 +281,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # adoption merge of PR #66, 2026-07-15); gate semantics remain
         # tested against the frozen fixtures below. 2026-08-03: the
         # T3-DRIVE-PRIORITY gate went live (Ed directive ~23:55 — the
-        # t3-drive chain outranks all non-in-flight work; in-flight
-        # exception CAL-BRACKET-D079-01 through PR).
+        # t3-drive chain outranks all non-in-flight work; the in-flight
+        # exception CAL-BRACKET-D079-01 landed via PR #100 2026-08-05
+        # and left the allowlist with its retirement).
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
@@ -290,8 +293,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(
             set(gates[0]["allowed_task_ids"]),
             {"T3-CHAR-PAIR-01", "QUIET-GUARD-01", "SEC5A-REMOTE-01",
-             "WO-T3-VIS-01", "T3-AMEND-01", "COLDGATE-VALIDATOR-01",
-             "CAL-BRACKET-D079-01"},
+             "WO-T3-VIS-01", "T3-AMEND-01", "COLDGATE-VALIDATOR-01"},
         )
         selected = gen_state.selectable_task_ids(self.kernel)
         self.assertEqual(selected, {"QUIET-GUARD-01", "T3-CHAR-PAIR-01"})
