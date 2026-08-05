@@ -233,6 +233,54 @@ Reasoning effort does not determine transport. Interaction shape does.
 An xhigh discussion MAY use MCP. A long high-effort mechanical run SHOULD use
 CLI.
 
+### T3-mediated presentation, routing, and provenance
+
+T3 is the preferred presentation plane when it is in use. It is neither a
+mandatory nor an exclusive bridge plane, and it never becomes the compliance
+plane. These t3-specific rules apply only to t3-mediated activity. A plain
+Claude Code session remains first-class and carries no t3-specific ceremony.
+
+For a t3-mediated invocation, the tracked provenance record MUST distinguish
+four axes: `control_plane`, `transport`, `authority_class`, and `governance`.
+The selected task-shape route in the table above is the authoritative
+transport record. A rollout's `session_meta.originator` MAY be recorded beside
+that set only as a provenance hint. It is never the sole discriminator and
+never authority-bearing. The observed values `t3code_desktop` and
+`codex_cli_rs` are version-bound observations from CLI version `0.146.0`, not
+a closed enum or a compatibility promise. An unknown value fails closed: it
+does not establish native, wrapped, delegated, top-level, approval, or gate
+status. The hint MUST be corroborated by the task-shape launch route and the
+lease event's §6 `owner_kind` before any route classification is consumed.
+
+T3 `Full access` mode is prohibited for this repository; t3-mediated work uses
+only Supervised or Auto. The prohibition does not depend on an asserted
+UI-to-CLI flag mapping. In Auto, phone cards are post-hoc notifications and
+never approval evidence. Thread-side reports are inadmissible on approval
+semantics because the model is blind to the harness approval layer. Anything
+requiring Ed's eyes uses Supervised, and a claim that Supervised held or
+blocked an action requires harness-event evidence rather than the thread's own
+account.
+
+T3-native Codex threads are Ed-direct only. They MUST NOT receive
+lead-delegated or gate-bearing work. If their output is materially consumed,
+the lead MUST append a tracked ingestion event that binds the native session
+identity, output digest, lead disposition, and tracked process-trace location.
+A t3 activity marker or thread transcript alone is not that event.
+
+The tracked Codex subagent route is limited to substantial background or
+parallel Sol rounds that require operator-visible lifecycle state. It is a
+thin dispatch and presentation steward, not an implementation or adjudication
+authority, and the audited child ceremony remains controlling. Each wrapper
+invocation counts as a subagent invocation for D-080 accounting and MUST NOT be
+silently deduplicated from the child run. This conditional route is a two-arc
+pilot; each arc records whether Ed used the activity view, wrapper failures,
+latency, and Fable overhead before the default is retained or changed through
+its owning process.
+
+TUI operation remains available only outside `[QUIET-MAC]` work. Claim-bearing
+runs use an ordinary guarded shell with zero agent sessions; t3 availability
+does not relax the repository's zero-agent doctrine.
+
 If MCP work expands beyond a short bounded turn, the worker SHOULD stop at a
 safe boundary and return:
 
@@ -322,6 +370,12 @@ Lease events MUST include:
 - For overrides: conflicting lease ids, approver, reason, and resulting
   attribution policy
 
+`owner_kind` is an authoritative launch-route field, not a value inferred from
+rollout metadata. When a t3-mediated record also carries §4 `originator`, the
+two fields MUST be retained separately. A missing, unknown, or contradictory
+hint cannot override `owner_kind` and fails closed for any classification that
+would confer authority.
+
 Conflict detection and acquisition MUST occur under the exclusive
 `.codex-bridge/bridge.lock`, held via a Python standard-library `fcntl.flock`.
 The inner critical section reads active events, resolves stale state, checks
@@ -374,6 +428,16 @@ missing recorded process may be marked `abandoned` under the bridge lock.
 Human leases and leases without a process require explicit lead abandonment.
 
 Stale leases become `abandoned`, never silently `released`.
+
+No pattern-kills; kill only manifest-recorded PIDs verified by start-time + ancestry.
+
+A t3 checkpoint revert is forbidden in the main tree. In a worktree it is a
+workspace mutation: stop writers; capture the current manifest and diff;
+record the intended revert; resolve every active bridge lease by explicit
+release or abandonment; and perform the revert. Delegation MUST NOT resume
+until a fresh invocation has acquired a fresh lease and captured a fresh
+baseline. A t3 checkpoint reference is never audit evidence, and a t3
+checkmark is never a bridge return envelope.
 
 Lease and thread events use separate logs and join through `invocation_id`.
 
@@ -495,6 +559,13 @@ arbitrary records remain lossless.
 The prompt MUST provide `BASE_HEAD`, `BASELINE_MANIFEST`, and
 `BASELINE_DIGEST`.
 
+A future native-write acceptance-gate exercise MUST be predeclared before the
+write. Its evidence MUST bind the native session identity and authoritative
+launch route to the governing manifest, baseline digest, declared scope,
+output digest, and resulting artifact or commit. A later narrative or
+retroactive route designation cannot establish the gate. This requirement is
+forward-looking; it does not reopen the one previously accepted exercise.
+
 `scope-check` MUST receive the prompt-supplied digest through the required
 `--expect-digest sha256:...` argument, verify the manifest self-digest, and
 verify equality with that external anchor before using the manifest. A missing
@@ -555,6 +626,12 @@ protocol boundary, not filesystem enforcement.
 
 `consult_fable` is available only to a top-level Codex lead for one bounded,
 read-only peer judgment.
+
+For this section, top-level status is established only by the authoritative
+launch route recorded under §4 and corroborated by §6 `owner_kind`. The §4
+`originator` hint cannot establish or elevate top-level status. Missing,
+unknown, or contradictory provenance fails closed and the reverse consult is
+unavailable.
 
 The caller's prompt MUST begin with:
 

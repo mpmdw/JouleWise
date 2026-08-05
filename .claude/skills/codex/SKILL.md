@@ -23,18 +23,35 @@ Choose before launch and always pass the choice explicitly:
 When uncertain between `high` and `xhigh`, start `high`; escalate a fresh or
 continued session only when the task actually exhibits an xhigh trigger.
 
+A standing Ed effort directive controls over a ruled gate composition's
+stated tier, which is a default unless expressly marked mandatory. Every
+deviation is recorded at launch, in the gate record, and in synthesis — ruled
+tier, applied tier, directive cited, original reasoning preserved — visible to
+Ed. If an expressly mandatory tier conflicts with a standing directive, do not
+launch or consume the instrument until Ed prospectively rules. A failed or
+materially degraded round under a capped tier is supporting datum for
+escalation, never a prerequisite for requesting it. The lead may not raise or
+lower a ruled tier on its own authority.
+
 ## Transport selection
 
 All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
 sequence, not the contract.
 
+T3 is the preferred presentation plane when it is in use, not a mandatory or
+exclusive plane. Apply the contract §4 t3-mediated sequence only when t3
+actually mediates the activity; do not add t3 ceremony to a plain Claude Code
+session.
+
 1. Read root `AGENTS.md`; run Mission M0 for substantial work.
-2. Choose the transport using contract §4. For background or delegated work,
-   prefer `scripts/codex-bridge`: on Ed's configured desktop it sends the real
-   Sol turn to an app-owned bridge task, so the native Codex pet sees the task
-   as running, while retaining the audited CLI files. Use MCP for quick direct
-   interaction when native pet visibility is not required.
+2. Choose the transport using contract §4. For a substantial background or
+   parallel Sol round that needs operator-visible lifecycle state, use the
+   tracked Codex subagent route around `scripts/codex-bridge`; the steward is
+   presentation-only and the audited child remains authoritative. Use the
+   audited CLI directly for a single foreground evidence-heavy run, and MCP
+   for quick direct interaction when native pet visibility is not required.
+   Follow contract §4 for the two-arc pilot record and D-080 accounting.
 3. Build the applicable contract §1 header. For writes, open the session with
    `scripts/bridge session-open` and use its returned header fragment.
 4. For the preferred background route, set `CODEX_REASONING_EFFORT` to the
@@ -50,6 +67,15 @@ sequence, not the contract.
    §6. Keep primitives for recovery or adjudicated overrides.
 7. Inspect every diff, replay the required lead checks, and adjudicate the
    worker's result. The lead owns final verification.
+
+At the next t3-mediated session after the 2026-08-03 doctrine gate, capture the
+owed Full-access mapping amendment exhibit before citing any UI-to-flag mapping
+as evidence. Bind one observation to the t3 and CLI versions, selected UI mode,
+timestamp, full child argv, and a process-table record containing PID, start
+time, and ancestry; store the capture at a tracked process-trace location. The
+contract §4 prohibition already binds independently of this exhibit. Auto
+cards never satisfy an approval requirement, and any step needing Ed's eyes
+uses Supervised with harness-event evidence.
 
 These enforcement boundaries remain explicit:
 

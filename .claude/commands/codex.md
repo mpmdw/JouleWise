@@ -6,8 +6,8 @@ argument-hint: <task, review request, or follow-up>
 Delegate `$ARGUMENTS` through `.claude/agents/codex.md` and return an
 adjudicated summary.
 
-Run `.claude/skills/codex/SKILL.md` for effort selection and the launch
-sequence. The ONE home for wire policy is
+Run `.claude/skills/codex/SKILL.md` for effort selection, the launch sequence,
+and its t3-only applicability boundary. The ONE home for wire policy is
 `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`). Preserve the
 returned thread for same-objective continuations; always inspect the diff,
 replay the lead checks, and adjudicate before reporting.
