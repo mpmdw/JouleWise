@@ -3,15 +3,17 @@
 
 Packet grammar (intentionally strict and fail-closed):
 
-* Exactly one ATX heading, at any level, has the title ``Charter pin``
+* Exactly one outside-fence ATX heading, at any level, has the title
+  ``Charter pin``
   after an optional numeric section prefix (for example,
   ``## 6. Charter pin``).  Its Markdown section extends to the next heading
   of the same or a higher level.  The section must contain exactly one
   single-line ``Charter ...: `path` `` declaration using a nonempty relative
   POSIX path, exactly one ``sha256`` label, and exactly one standalone 64-hex
   digest, in that order.  Digest text elsewhere in the packet is irrelevant.
-* Exactly one ATX heading, at any level, has the title ``Exhibit manifest``
-  after an optional numeric prefix and before an optional parenthetical.
+* Exactly one outside-fence ATX heading, at any level, has the title
+  ``Exhibit manifest`` after an optional numeric prefix and before an optional
+  parenthetical.
   Its section must contain exactly one bare triple-backtick fenced block.
   Every block line must be exactly ``<64 hex><two spaces><path>``.
   Paths are unique, lexical POSIX paths relative to the packet directory;
@@ -32,7 +34,12 @@ independently anchored by the required ``--expected-packet-sha256`` argument.
 
 Exit status zero is reserved for a validated ``PASS``.  Usage and argument
 errors emit a machine-readable refusal receipt and exit nonzero.  ``--help``
-alone emits its ordinary help text, no receipt, and also exits nonzero.
+alone is an informational path: it emits ordinary help text, no receipt, and
+exits zero.
+
+A ``PASS`` means only that the bytes observed by this invocation matched the
+supplied anchors and manifest at validation time.  It is not launch
+authorization and does not bind a later judge handoff to those bytes.
 """
 
 from __future__ import annotations
@@ -49,7 +56,7 @@ import sys
 from typing import Any, BinaryIO, Sequence
 
 
-RECEIPT_SCHEMA = "coldgate-validator-receipt/v1"
+RECEIPT_SCHEMA = "coldgate-validator-receipt/v2"
 REFUSAL_EXIT = 2
 HEX_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 HEX_TOKEN_RE = re.compile(r"(?<!\w)([0-9a-fA-F]{64})(?!\w)")
@@ -67,28 +74,17 @@ MANIFEST_TITLE_RE = re.compile(
 )
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})  ([^\r\n]+)$")
 FENCE_RE = re.compile(r"^[ \t]*```[ \t]*$")
+MARKDOWN_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*$")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
-# Lexical privacy invariant: deliberately fail closed for controlled attestations.
-# Embedded slashes (for example input/output or 3/4) are refused by design.
-ABSOLUTE_PATH_RE = re.compile(r"/(?=\S)|(?:~|[A-Za-z]:)[\\/]|\\\\(?=\S)")
 
 
 class CliError(Exception):
     """Raised instead of argparse terminating without a refusal receipt."""
 
 
-class NonValidationExit(Exception):
-    """Raised for help or another argparse exit that must remain nonzero."""
-
-
 class ReceiptArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise CliError(message)
-
-    def exit(self, status: int = 0, message: str | None = None) -> None:
-        if message:
-            self._print_message(message, sys.stderr)
-        raise NonValidationExit
 
 
 def _sha256(data: bytes) -> str:
@@ -123,32 +119,15 @@ def _normalized_digest(value: str | None) -> str | None:
     return value
 
 
-def _contains_absolute_path(value: str | None) -> bool:
-    return value is not None and ABSOLUTE_PATH_RE.search(value) is not None
-
-
-def _receipt_attestation(value: str | None) -> str | None:
-    return None if _contains_absolute_path(value) else value
-
-
 def _base_receipt(
     *,
     packet_arg: str | None,
     charter_arg: str | None,
     expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
-    launch_environment_attestation: str | None,
-    contamination_disclosure: str | None,
 ) -> dict[str, Any]:
     return {
-        "convening_attestations": {
-            "contamination_disclosure": _receipt_attestation(
-                contamination_disclosure
-            ),
-            "launch_environment": _receipt_attestation(
-                launch_environment_attestation
-            ),
-        },
+        "binding_scope": "validation_time_observation_only",
         "details": [],
         "digests": {
             "charter_sha256": None,
@@ -162,6 +141,7 @@ def _base_receipt(
             "charter": _basename(charter_arg),
             "packet": _basename(packet_arg),
         },
+        "judge_handoff_bound": False,
         "packet_charter_path": None,
         "packet_charter_pin_sha256": None,
         "reason": None,
@@ -186,17 +166,52 @@ def _heading(line: str) -> tuple[int, str] | None:
     return len(match.group(1)), match.group(2).strip()
 
 
-def _section_end(lines: list[str], heading_index: int, level: int) -> int:
+def _outside_fence_mask(lines: list[str]) -> list[bool]:
+    """Return a raw-line-indexed mask from one Markdown fence-state scan."""
+    outside: list[bool] = []
+    marker: str | None = None
+    opening_length = 0
+    for line in lines:
+        if marker is None:
+            opening = MARKDOWN_FENCE_OPEN_RE.fullmatch(line)
+            if opening is None:
+                outside.append(True)
+                continue
+            fence = opening.group(1)
+            marker = fence[0]
+            opening_length = len(fence)
+            outside.append(False)
+            continue
+
+        outside.append(False)
+        closing = re.fullmatch(
+            rf" {{0,3}}{re.escape(marker)}{{{opening_length},}}[ \t]*", line
+        )
+        if closing is not None:
+            marker = None
+            opening_length = 0
+    return outside
+
+
+def _section_end(
+    lines: list[str], outside_fence: list[bool], heading_index: int, level: int
+) -> int:
     for index in range(heading_index + 1, len(lines)):
+        if not outside_fence[index]:
+            continue
         parsed = _heading(lines[index])
         if parsed is not None and parsed[0] <= level:
             return index
     return len(lines)
 
 
-def _parse_charter_pin(lines: list[str]) -> tuple[str, str, str | None]:
+def _parse_charter_pin(
+    lines: list[str], outside_fence: list[bool]
+) -> tuple[str, str, str | None]:
     headings: list[tuple[int, int]] = []
     for index, line in enumerate(lines):
+        if not outside_fence[index]:
+            continue
         parsed = _heading(line)
         if parsed is not None and CHARTER_TITLE_RE.fullmatch(parsed[1]):
             headings.append((index, parsed[0]))
@@ -207,7 +222,9 @@ def _parse_charter_pin(lines: list[str]) -> tuple[str, str, str | None]:
         return "", "", "charter_pin_duplicate"
 
     index, level = headings[0]
-    section = "\n".join(lines[index + 1 : _section_end(lines, index, level)])
+    section = "\n".join(
+        lines[index + 1 : _section_end(lines, outside_fence, index, level)]
+    )
     path_matches = list(PATH_DECL_RE.finditer(section))
     sha_labels = list(SHA_LABEL_RE.finditer(section))
     digest_matches = list(HEX_TOKEN_RE.finditer(section))
@@ -249,10 +266,12 @@ def _charter_mismatch_reason(trusted: str, packet_pin: str, observed: str) -> st
 
 
 def _manifest_block(
-    raw_lines: list[bytes], text_lines: list[str]
+    raw_lines: list[bytes], text_lines: list[str], outside_fence: list[bool]
 ) -> tuple[bytes | None, list[str] | None, str | None]:
     headings: list[tuple[int, int]] = []
     for index, line in enumerate(text_lines):
+        if not outside_fence[index]:
+            continue
         parsed = _heading(line)
         if parsed is not None and MANIFEST_TITLE_RE.fullmatch(parsed[1]):
             headings.append((index, parsed[0]))
@@ -260,7 +279,7 @@ def _manifest_block(
         return None, None, "manifest_parse_error"
 
     index, level = headings[0]
-    end = _section_end(text_lines, index, level)
+    end = _section_end(text_lines, outside_fence, index, level)
     fence_indexes = [
         candidate
         for candidate in range(index + 1, end)
@@ -303,40 +322,6 @@ def _parse_manifest_lines(
     if not entries:
         return None, "manifest_parse_error"
     return entries, None
-
-
-def _is_within(path: Path, directory: Path) -> bool:
-    try:
-        path.relative_to(directory)
-    except ValueError:
-        return False
-    return True
-
-
-def _receipt_out_reason(
-    receipt_out_arg: str | None,
-    packet_arg: str | None,
-    charter_arg: str | None,
-) -> str | None:
-    if receipt_out_arg is None:
-        return None
-    if packet_arg is None or charter_arg is None:
-        return "receipt_out_unsafe"
-    try:
-        target = Path(receipt_out_arg)
-        resolved_target = target.resolve(strict=False)
-        packet_directory = Path(packet_arg).parent.resolve(strict=True)
-        resolved_charter = Path(charter_arg).resolve(strict=True)
-    except (OSError, RuntimeError, ValueError):
-        return "receipt_out_unsafe"
-    if _is_within(resolved_target, packet_directory) or resolved_target == resolved_charter:
-        return "receipt_out_unsafe"
-    try:
-        if target.is_symlink() or target.exists():
-            return "receipt_out_exists"
-    except OSError:
-        return "receipt_out_unsafe"
-    return None
 
 
 def _open_exhibit(
@@ -382,8 +367,6 @@ def validate(
     charter_arg: str | None,
     expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
-    launch_environment_attestation: str | None,
-    contamination_disclosure: str | None,
 ) -> dict[str, Any]:
     """Validate arguments and sealed inputs; this is the programmatic boundary."""
     receipt = _base_receipt(
@@ -391,8 +374,6 @@ def validate(
         charter_arg=charter_arg,
         expected_packet_sha256=expected_packet_sha256,
         expected_charter_sha256=expected_charter_sha256,
-        launch_environment_attestation=launch_environment_attestation,
-        contamination_disclosure=contamination_disclosure,
     )
     missing = [
         name
@@ -406,20 +387,6 @@ def validate(
     ]
     if missing:
         return _refuse(receipt, "cli_invalid", [{"missing": missing}])
-    invalid_attestations = [
-        field
-        for field, value in (
-            ("launch_environment", launch_environment_attestation),
-            ("contamination_disclosure", contamination_disclosure),
-        )
-        if _contains_absolute_path(value)
-    ]
-    if invalid_attestations:
-        return _refuse(
-            receipt,
-            "attestation_invalid",
-            [{"field": field} for field in invalid_attestations],
-        )
     if not HEX_RE.fullmatch(expected_packet_sha256):
         return _refuse(receipt, "expected_packet_sha256_invalid")
     if not HEX_RE.fullmatch(expected_charter_sha256):
@@ -450,8 +417,11 @@ def validate(
         return _refuse(receipt, "packet_not_utf8")
     raw_lines = packet_bytes.splitlines(keepends=True)
     text_lines = [line.decode("utf-8").rstrip("\r\n") for line in raw_lines]
+    outside_fence = _outside_fence_mask(text_lines)
 
-    packet_charter_path, packet_pin, pin_error = _parse_charter_pin(text_lines)
+    packet_charter_path, packet_pin, pin_error = _parse_charter_pin(
+        text_lines, outside_fence
+    )
     if pin_error is not None:
         return _refuse(receipt, pin_error)
     receipt["packet_charter_path"] = packet_charter_path
@@ -464,7 +434,7 @@ def validate(
         return _refuse(receipt, mismatch_reason)
 
     manifest_body, manifest_lines, manifest_error = _manifest_block(
-        raw_lines, text_lines
+        raw_lines, text_lines, outside_fence
     )
     if manifest_body is not None:
         receipt["digests"]["exhibit_manifest_sha256"] = _sha256(manifest_body)
@@ -543,21 +513,19 @@ def _canonical_json(receipt: dict[str, Any]) -> bytes:
 
 
 def _parser() -> ReceiptArgumentParser:
-    parser = ReceiptArgumentParser(description=__doc__)
+    parser = ReceiptArgumentParser(
+        description=__doc__,
+        epilog=(
+            "PASS means only that this invocation observed bytes matching the "
+            "supplied anchors and manifest at validation time. PASS is not launch "
+            "authorization and does not bind a judge handoff."
+        ),
+    )
     parser.add_argument("--packet")
     parser.add_argument("--charter")
     parser.add_argument("--expected-packet-sha256", required=True)
     parser.add_argument("--expected-charter-sha256")
-    parser.add_argument("--receipt-out")
-    parser.add_argument("--launch-environment-attestation")
-    parser.add_argument("--contamination-disclosure")
     return parser
-
-
-def _write_receipt_exclusive(path: Path, output: bytes) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as handle:
-        handle.write(output)
 
 
 def _cli_refusal() -> dict[str, Any]:
@@ -567,79 +535,13 @@ def _cli_refusal() -> dict[str, Any]:
             charter_arg=None,
             expected_packet_sha256=None,
             expected_charter_sha256=None,
-            launch_environment_attestation=None,
-            contamination_disclosure=None,
         ),
         "cli_invalid",
     )
 
 
-def _receipt_preflight_reason(receipt: dict[str, Any]) -> str | None:
-    attestations = receipt.get("convening_attestations")
-    if isinstance(attestations, dict):
-        for field in ("contamination_disclosure", "launch_environment"):
-            value = attestations.get(field)
-            if isinstance(value, str) and _contains_absolute_path(value):
-                return "attestation_invalid"
-
-    path_values: list[Any] = [receipt.get("packet_charter_path")]
-    inputs = receipt.get("inputs")
-    if isinstance(inputs, dict):
-        path_values.extend((inputs.get("charter"), inputs.get("packet")))
-    digests = receipt.get("digests")
-    if isinstance(digests, dict):
-        exhibits = digests.get("exhibits")
-        if isinstance(exhibits, list):
-            path_values.extend(
-                exhibit.get("path")
-                for exhibit in exhibits
-                if isinstance(exhibit, dict)
-            )
-    details = receipt.get("details")
-    if isinstance(details, list):
-        for detail in details:
-            if isinstance(detail, dict):
-                path_values.extend((detail.get("path"), detail.get("aliases")))
-    receipt_out_error = receipt.get("receipt_out_error")
-    if isinstance(receipt_out_error, dict):
-        path_values.append(receipt_out_error.get("path"))
-
-    if any(
-        isinstance(value, str) and _contains_absolute_path(value)
-        for value in path_values
-    ):
-        return "internal_error"
-    return None
-
-
-def _preflight_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
-    reason = _receipt_preflight_reason(receipt)
-    if reason is None:
-        return receipt
-    return _refuse(_cli_refusal(), reason)
-
-
-def _emit_receipt(receipt: dict[str, Any], receipt_out: str | None = None) -> int:
-    # PASS is provisional until the schema-aware serialization preflight succeeds.
-    receipt = _preflight_receipt(receipt)
+def _emit_receipt(receipt: dict[str, Any]) -> int:
     output = _canonical_json(receipt)
-    if receipt_out is not None:
-        try:
-            _write_receipt_exclusive(Path(receipt_out), output)
-        except (OSError, ValueError):
-            if receipt["result"] == "PASS":
-                receipt = _refuse(
-                    receipt,
-                    "receipt_write_failed",
-                    [{"path": _basename(receipt_out)}],
-                )
-            else:
-                receipt["receipt_out_error"] = {
-                    "path": _basename(receipt_out),
-                    "reason": "receipt_write_failed",
-                }
-            receipt = _preflight_receipt(receipt)
-            output = _canonical_json(receipt)
     sys.stdout.buffer.write(output)
     return 0 if receipt["result"] == "PASS" else REFUSAL_EXIT
 
@@ -650,42 +552,22 @@ def _run(argv: Sequence[str] | None) -> int:
     except CliError:
         return _emit_receipt(_cli_refusal())
 
-    receipt_out_reason = _receipt_out_reason(
-        args.receipt_out, args.packet, args.charter
-    )
-    if receipt_out_reason is not None:
-        receipt = _refuse(
-            _base_receipt(
-                packet_arg=args.packet,
-                charter_arg=args.charter,
-                expected_packet_sha256=args.expected_packet_sha256,
-                expected_charter_sha256=args.expected_charter_sha256,
-                launch_environment_attestation=args.launch_environment_attestation,
-                contamination_disclosure=args.contamination_disclosure,
-            ),
-            receipt_out_reason,
-            [{"path": _basename(args.receipt_out)}],
-        )
-        return _emit_receipt(receipt)
-
     receipt = validate(
         packet_arg=args.packet,
         charter_arg=args.charter,
         expected_packet_sha256=args.expected_packet_sha256,
         expected_charter_sha256=args.expected_charter_sha256,
-        launch_environment_attestation=args.launch_environment_attestation,
-        contamination_disclosure=args.contamination_disclosure,
     )
-    return _emit_receipt(receipt, args.receipt_out)
+    return _emit_receipt(receipt)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         return _run(argv)
-    except NonValidationExit:
-        return REFUSAL_EXIT
-    except SystemExit:
-        return REFUSAL_EXIT
+    except SystemExit as error:
+        if error.code == 0:
+            return 0
+        return _emit_receipt(_cli_refusal())
     except Exception:
         receipt = _refuse(_cli_refusal(), "internal_error")
         return _emit_receipt(receipt)
