@@ -114,6 +114,43 @@ it sequences with the re-mint, not standalone.
   (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
   personal wrapper without his word).
 
+### D-079 ISSUANCE HELD by cold gate (recorded ~03:30 2026-08-06) — issuance is IMPLEMENTATION, not an edit
+
+Rule-11 cold gate on the irreversible issuance SPLIT: fresh Fable
+instance PROCEED (ledger/head/disposition all verified correct — head
+`08456d50…@76` independently reproduced, B1 ruling confirmed vs D-102);
+Sol xhigh contract-lens HOLD (two real blockers). Magistrate upholds
+HOLD — the gate caught that my issuance packet was underscoped:
+- **F1:** `calibration_bracketing.py` has NO consumer path for an
+  ISSUED acceptance artifact (only the genesis fixture; production
+  unconditionally refuses anything else). A JSON flip makes it
+  unloadable.
+- **F2:** `derivation_sha256` is over the whole artifact core, not just
+  n=19 — flipping `artifact_role` changes it `3cece3b2…`→`a0b98acf…`
+  (lead-reproduced). "n=19 preserved ⇒ digest preserved" is FALSE.
+- F3: real ledger path is `runs/calibration_observation_ledger.jsonl`.
+  F4: all 38 custody locators are iCloud (packet said 22).
+Full synthesis + both verdicts custodied:
+`docs/process_traces/2026-08-06-d079-issuance-coldgate/`.
+**Issuance now = a design-bearing consumer implementation** (issued-
+artifact loader authenticating cutoff vs the committed ledger head +
+prefix; deterministic issued-artifact emission with recomputed digest)
+→ gauntlet → re-cold-review of exact final bytes → THEN the irreversible
+`--execute` → D-116. The re-mint (task 8) stays blocked on issuance
+COMPLETING. D-110(c) is landed (PR #105); Sol's "not on main" was wrong.
+**This is the gate working: it prevented an irreversible ledger write
+paired with a production-refused artifact.**
+
+### SYLLABUS ANCHOR (Ed, 2026-08-06) — the overarching goal
+Phase 1: develop/justify/demonstrate an LLM-inference energy measurement
+system — SUBSTANTIALLY DONE (repaired+validated instrument; metrology
+framing). Phase 2: detailed CSCSU paper outline + related-work draft —
+DONE (outline v1 + related_work_draft.md). **Phase 3 (LIVE TARGET):
+draft >=1 experimental section INCLUDING MEASURED DATA** — this is the
+re-mint's phase-floor/contrast output; issuance→re-mint is the critical
+path to it. Phase 4: draft the full paper. Front-load the issuance→
+re-mint chain and the experimental-section draft above all else.
+
 ### QG census — magistrate stop-condition set (recorded ~02:40 2026-08-06)
 
 The Option C redesign delta audit (qg-deltaC, xhigh) found the
