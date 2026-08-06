@@ -40,6 +40,8 @@ class CodexBridgeObserverTests(unittest.TestCase):
         delay: float = 0,
         exit_code: int = 0,
         session_id: str = "019f0000-0000-7000-8000-000000000123",
+        service_tier: str | None = None,
+        args_log: Path | None = None,
     ) -> tuple[subprocess.Popen[str], Path, Path]:
         fake_codex = tmp_path / "fake_codex.py"
         fake_codex.write_text(FAKE_CODEX, encoding="utf-8")
@@ -51,18 +53,24 @@ class CodexBridgeObserverTests(unittest.TestCase):
             encoding="utf-8",
         )
         fake_bin.chmod(0o755)
+        environment = {
+            **os.environ,
+            "CODEX_BIN": str(fake_bin),
+            "CODEX_BRIDGE_DIR": str(bridge_dir),
+            "CODEX_OBSERVER_DIR": str(observer_dir),
+            "FAKE_DELAY": str(delay),
+            "FAKE_EXIT": str(exit_code),
+            "FAKE_SESSION_ID": session_id,
+        }
+        environment.pop("CODEX_SERVICE_TIER", None)
+        if service_tier is not None:
+            environment["CODEX_SERVICE_TIER"] = service_tier
+        if args_log is not None:
+            environment["FAKE_ARGS_LOG"] = str(args_log)
         process = subprocess.Popen(
             [str(BRIDGE), *bridge_args],
             cwd=REPO_ROOT,
-            env={
-                **os.environ,
-                "CODEX_BIN": str(fake_bin),
-                "CODEX_BRIDGE_DIR": str(bridge_dir),
-                "CODEX_OBSERVER_DIR": str(observer_dir),
-                "FAKE_DELAY": str(delay),
-                "FAKE_EXIT": str(exit_code),
-                "FAKE_SESSION_ID": session_id,
-            },
+            env=environment,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -109,8 +117,13 @@ class CodexBridgeObserverTests(unittest.TestCase):
 
     def test_background_run_is_observable_before_bridge_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            args_log = Path(tmp) / "args.json"
             process, index, bridge_dir = self.launch(
-                Path(tmp), "new", "background observer proof", delay=1.5
+                Path(tmp),
+                "new",
+                "background observer proof",
+                delay=1.5,
+                args_log=args_log,
             )
             events = self.wait_for_event(index, "SESSION_READY")
             self.assertIsNone(process.poll())
@@ -141,6 +154,48 @@ class CodexBridgeObserverTests(unittest.TestCase):
             manifest = json.loads((bridge_dir / "invocation_manifest.jsonl").read_text())
             self.assertEqual(manifest["observer_index"], str(index))
             self.assertEqual(manifest["observer_file"], str(observer_files[0]))
+            self.assertEqual(manifest["service_tier"], "default")
+            arguments = json.loads(args_log.read_text(encoding="utf-8"))
+            tier_index = arguments.index("service_tier=default")
+            self.assertEqual(arguments[tier_index - 1], "-c")
+
+    def test_fast_service_tier_reaches_standalone_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            args_log = Path(tmp) / "args.json"
+            process, _, _ = self.launch(
+                Path(tmp),
+                "new",
+                "fast service tier proof",
+                service_tier="fast",
+                args_log=args_log,
+            )
+            _, stderr = process.communicate(timeout=5)
+
+            self.assertEqual(process.returncode, 0, stderr)
+            arguments = json.loads(args_log.read_text(encoding="utf-8"))
+            self.assertIn("service_tier=fast", arguments)
+            tier_index = arguments.index("service_tier=fast")
+            self.assertEqual(arguments[tier_index - 1], "-c")
+
+    def test_invalid_service_tier_fails_closed_before_codex_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            args_log = Path(tmp) / "args.json"
+            process, _, bridge_dir = self.launch(
+                Path(tmp),
+                "new",
+                "invalid service tier proof",
+                service_tier="priority",
+                args_log=args_log,
+            )
+            _, stderr = process.communicate(timeout=5)
+
+            self.assertEqual(process.returncode, 64, stderr)
+            self.assertIn(
+                "Invalid CODEX_SERVICE_TIER: priority (expected default or fast)",
+                stderr,
+            )
+            self.assertFalse(args_log.exists())
+            self.assertFalse((bridge_dir / "invocation_manifest.jsonl").exists())
 
     def test_failed_codex_run_emits_terminal_failed_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

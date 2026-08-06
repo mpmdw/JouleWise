@@ -139,8 +139,8 @@ class CodexAppBridgeTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def command(self, sandbox="read-only"):
-        return [
+    def command(self, sandbox="read-only", service_tier=None):
+        command = [
             "node",
             str(HELPER),
             "--thread-id",
@@ -162,6 +162,9 @@ class CodexAppBridgeTests(unittest.TestCase):
             "--timeout-ms",
             "5000",
         ]
+        if service_tier is not None:
+            command.extend(("--service-tier", service_tier))
+        return command
 
     def environment(self):
         return {**os.environ, "CODEX_HOME": str(self.codex_home)}
@@ -188,8 +191,30 @@ class CodexAppBridgeTests(unittest.TestCase):
         params = start["params"]["turnStartParams"]
         self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["effort"], "high")
+        self.assertEqual(params["serviceTier"], "default")
         self.assertEqual(params["sandboxPolicy"]["type"], "readOnly")
         self.assertEqual(start["version"], 1)
+
+    def test_fast_service_tier_reaches_turn_start_params(self):
+        router = FakeDesktopRouter(self.socket_path, self.rollout)
+        router.start()
+        result = subprocess.run(
+            self.command(service_tier="fast"),
+            cwd=REPO_ROOT,
+            env=self.environment(),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        start = next(
+            item
+            for item in router.requests
+            if item["method"] == "thread-follower-start-turn"
+        )
+        self.assertEqual(start["params"]["turnStartParams"]["serviceTier"], "fast")
 
     def test_termination_interrupts_app_owned_turn_and_removes_lock(self):
         router = FakeDesktopRouter(self.socket_path, self.rollout, complete=False)
