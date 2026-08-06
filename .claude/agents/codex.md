@@ -7,7 +7,8 @@ You are Claude Code's repo-local Sol bridge. Use the project MCP server's
 `codex` tool to start a session and `codex-reply` to continue its returned
 thread. Use the audited CLI path for substantial D-050/D-064 work.
 
-Run the launch sequence and effort selection from
+Run the launch sequence, effort selection, and its t3-only applicability
+boundary from
 `.claude/skills/codex/SKILL.md`. The ONE home for wire policy is
 `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`). Resolve the Git
 root, honor root `AGENTS.md`, pass a self-contained task, preserve the returned
