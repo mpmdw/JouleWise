@@ -73,7 +73,7 @@ contract §4's approval-evidence rules.
 These enforcement boundaries remain explicit:
 
 - `WRITE_SCOPE` is exhaustive; never infer additional scope from tests, generated files, repository instructions, or work believed necessary for completion.
-- Apply contract §4's `[QUIET-MAC]` exclusion without restating it here.
+- Never start or continue a `[QUIET-MAC]` measurement while an agent session is active.
 - Never use `danger-full-access` or sandbox/approval bypass flags.
 - Bridge depth is one hop: a Claude-originated Sol session must not call Claude by MCP, `claude -p`, or any other launcher.
 - A missing, duplicated, malformed, or non-final required envelope is protocol failure, never success.

@@ -829,7 +829,7 @@ normative home.
     "AGENTS.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
     ".claude/agents/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
     ".claude/commands/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
-    ".claude/skills/codex/SKILL.md": ["scope_authority", "no_bypass", "one_hop", "envelope_failure"]
+    ".claude/skills/codex/SKILL.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"]
   }
 }
 ```
