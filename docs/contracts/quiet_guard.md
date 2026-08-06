@@ -227,6 +227,10 @@ invocation is the availability boundary: its new accepted table can positively
 prove absence, or can show a different start time and record `PID_REUSED` with
 both the expected and newly observed complete identities. Same PID with a
 different start time, executable, argv digest, or ancestry is never a match.
+`PID_REUSED` is reserved strictly for a different table-anchored start time.
+When the accepted row retains the expected start time but the fully observed
+executable, argv digest, or ancestry differs, recovery refuses with
+`process_observation_unavailable` and preserves byte-identical custody.
 This refuse-and-rerun rule supersedes and revokes the former round-2 rule that
 allowed an internal replacement census to drop an unobservable PID. Family
 discovery and later adapters remain exact-identity based; process-name patterns
@@ -248,7 +252,8 @@ append only guard-local recovery evidence. Clearing requires all of:
    `I acknowledge quiet-guard recovery and exact-identity abandonment`;
 2. a nonempty Ed/lead operator identity;
 3. every custody root classifies against the accepted snapshot as absent or
-   PID-reused, never as a match or unobservable; and
+   PID-reused by a different table-anchored start time, never as a match or
+   unobservable; and
 4. the accepted snapshot contains zero exactly observed candidate descendants.
 
 Only then may recovery record each exact abandoned identity, clear custody

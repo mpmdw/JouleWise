@@ -788,6 +788,57 @@ class StaleRecoveryTests(EngineTestCase):
         self.assertEqual(retained["lease"]["lease_id"], lease_id)
         self.assertEqual(self.engine.paths.state.read_bytes(), before)
 
+    def test_recovery_refuses_same_start_complete_identity_churn(self) -> None:
+        recovery = self.recovery_with_stale_owner()
+        lease_id = recovery["lease"]["lease_id"]
+        before = self.engine.paths.state.read_bytes()
+        variants = {
+            "executable": identity(
+                self.owner.pid,
+                start=self.owner.start_time,
+                executable="/Applications/Replaced.app/Contents/MacOS/replaced",
+            ),
+            "argv": identity(
+                self.owner.pid,
+                start=self.owner.start_time,
+                argv=("t3", "--thread", "changed"),
+            ),
+            "ancestry": identity(
+                self.owner.pid,
+                start=self.owner.start_time,
+                ancestry=(
+                    AncestorIdentity(
+                        2,
+                        "boot+0",
+                        "/sbin/launchd",
+                        argv_digest(("launchd",)),
+                    ),
+                ),
+            ),
+        }
+
+        for field, changed in variants.items():
+            with self.subTest(field=field):
+                source = SnapshotProcessSource((changed,))
+                self.engine._process_source = source
+                with self.assertRaises(GuardError) as caught:
+                    self.engine.recover(
+                        acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                        acknowledged_by="Ed",
+                    )
+                self.assertEqual(
+                    caught.exception.cause, "process_observation_unavailable"
+                )
+                retained = self.engine.read_state()
+                self.assertEqual(retained["state"], "recovery_required")
+                self.assertEqual(
+                    retained["custody_roots"]["entries"],
+                    recovery["custody_roots"]["entries"],
+                )
+                self.assertEqual(retained["lease"]["lease_id"], lease_id)
+                self.assertEqual(self.engine.paths.state.read_bytes(), before)
+                self.assertEqual(source.inventory_calls, 1)
+
     def test_custody_root_lease_owner_survives_empty_registry_and_blocks_recovery(self) -> None:
         pending = self.pending(entries=())
         held = self.engine.transition(
@@ -816,25 +867,25 @@ class StaleRecoveryTests(EngineTestCase):
         self.assertEqual(unobservable.exception.cause, "process_observation_unavailable")
         self.assertEqual(self.engine.paths.state.read_bytes(), before)
 
-        reused = identity(self.owner.pid, executable="/app/reused")
+        changed = identity(self.owner.pid, executable="/app/reused")
         child = identity(
             202,
             ancestry=(
                 AncestorIdentity(
-                    reused.pid,
-                    reused.start_time,
-                    reused.executable,
-                    reused.argv_digest,
+                    changed.pid,
+                    changed.start_time,
+                    changed.executable,
+                    changed.argv_digest,
                 ),
             ),
         )
-        self.engine._process_source = SnapshotProcessSource((reused, child))
-        with self.assertRaises(GuardError) as descendant:
+        self.engine._process_source = SnapshotProcessSource((changed, child))
+        with self.assertRaises(GuardError) as churn:
             self.engine.recover(
                 acknowledgment=RECOVERY_ACKNOWLEDGMENT,
                 acknowledged_by="Ed",
             )
-        self.assertEqual(descendant.exception.cause, "independent_census_nonzero")
+        self.assertEqual(churn.exception.cause, "process_observation_unavailable")
         self.assertEqual(self.engine.paths.state.read_bytes(), before)
         self.assertEqual(self.engine.read_state()["lease"]["lease_id"], lease_id)
 

@@ -1128,11 +1128,16 @@ class GuardEngine:
                 verdict, observed = Revalidation.ABSENT, None
             else:
                 observed = observed_by_pid[root.pid]
-                verdict = (
-                    Revalidation.MATCH
-                    if observed == root
-                    else Revalidation.PID_REUSED
-                )
+                if observed == root:
+                    verdict = Revalidation.MATCH
+                elif row.start_time != root.start_time:
+                    verdict = Revalidation.PID_REUSED
+                else:
+                    raise GuardError(
+                        "process_observation_unavailable",
+                        f"custody root PID {root.pid} retained its start-time "
+                        "anchor but changed complete identity",
+                    )
             if verdict == Revalidation.MATCH:
                 matching_roots.append(root.pid)
             abandoned.append(
@@ -1154,8 +1159,8 @@ class GuardEngine:
                 "independent_census_nonzero",
                 f"snapshot contains custody descendant PID(s): {rendered}",
             )
-        # Active roots that did not match their full exact identities are
-        # PID_REUSED classifications, not family survivors.
+        # Active roots either matched or refused above. Only roots with a
+        # different table-anchored start time can be PID_REUSED.
         del active_root_pids
         return abandoned, 0
 
