@@ -11,6 +11,7 @@ head pin separately.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -62,6 +63,17 @@ _D079_ISSUANCE_INVENTORY = {
     "systematic-invalid": 2,
     "valid": 30,
 }
+
+
+@dataclass(frozen=True)
+class PreparedIssuedAcceptanceArtifact:
+    """Immutable, fully serialized issued-artifact reporting payload."""
+
+    artifact_file_bytes: bytes
+    artifact_file_sha256: str
+    derivation_sha256: str
+    output_record_bytes: bytes
+    summary_fields: tuple[tuple[str, str], ...]
 
 
 def _json_object_bytes(path: Path) -> tuple[bytes, Mapping[str, Any]]:
@@ -260,7 +272,7 @@ def _prepare_issued_acceptance_artifact(
     source_artifact: Mapping[str, Any],
     *,
     source_artifact_raw: bytes | None = None,
-) -> tuple[dict[str, Any], bytes]:
+) -> PreparedIssuedAcceptanceArtifact:
     """Build and fully validate the exact artifact bytes before any commit."""
 
     artifact = _issued_acceptance_artifact(
@@ -313,9 +325,28 @@ def _prepare_issued_acceptance_artifact(
     ):
         raise ValueError("issued prior set is not the complete import prefix")
     raw = _issued_artifact_bytes(artifact)
-    if hashlib.sha256(raw).hexdigest() != ISSUED_ACCEPTANCE_BOUND_SHA256:
+    artifact_file_sha256 = hashlib.sha256(raw).hexdigest()
+    if artifact_file_sha256 != ISSUED_ACCEPTANCE_BOUND_SHA256:
         raise ValueError("issued artifact bytes do not match the reviewed byte pin")
-    return artifact, raw
+    derivation_sha256 = artifact["derivation_sha256"]
+    output_record = {
+        "schema_version": ISSUED_ARTIFACT_OUTPUT_SCHEMA,
+        "record": "issued-acceptance-artifact",
+        "artifact": artifact,
+        "derivation_sha256": derivation_sha256,
+        "artifact_file_sha256": artifact_file_sha256,
+        "artifact_file_content": raw.decode("utf-8"),
+    }
+    return PreparedIssuedAcceptanceArtifact(
+        artifact_file_bytes=raw,
+        artifact_file_sha256=artifact_file_sha256,
+        derivation_sha256=derivation_sha256,
+        output_record_bytes=canonical_json_bytes(output_record) + b"\n",
+        summary_fields=(
+            ("issued_artifact_derivation_sha256", derivation_sha256),
+            ("issued_artifact_file_sha256", artifact_file_sha256),
+        ),
+    )
 
 
 def _emit(
@@ -323,24 +354,14 @@ def _emit(
     *,
     executed: bool,
     outcome: str,
-    issued_artifact: Mapping[str, Any] | None = None,
+    prepared_issued_artifact: PreparedIssuedAcceptanceArtifact | None = None,
 ) -> None:
     for receipt in plan.receipts:
         sys.stdout.buffer.write(
             canonical_json_bytes({"record": "receipt", "receipt": receipt}) + b"\n"
         )
-    issued_raw: bytes | None = None
-    if issued_artifact is not None:
-        issued_raw = _issued_artifact_bytes(issued_artifact)
-        issued_record = {
-            "schema_version": ISSUED_ARTIFACT_OUTPUT_SCHEMA,
-            "record": "issued-acceptance-artifact",
-            "artifact": issued_artifact,
-            "derivation_sha256": issued_artifact["derivation_sha256"],
-            "artifact_file_sha256": hashlib.sha256(issued_raw).hexdigest(),
-            "artifact_file_content": issued_raw.decode("utf-8"),
-        }
-        sys.stdout.buffer.write(canonical_json_bytes(issued_record) + b"\n")
+    if prepared_issued_artifact is not None:
+        sys.stdout.buffer.write(prepared_issued_artifact.output_record_bytes)
     summary = {
         "schema_version": OUTPUT_SCHEMA,
         "record": "bootstrap-summary",
@@ -354,17 +375,8 @@ def _emit(
         "head_pin": plan.head_pin,
         "head_pin_content": _pin_content(plan.head_pin),
     }
-    if issued_artifact is not None and issued_raw is not None:
-        summary.update(
-            {
-                "issued_artifact_derivation_sha256": issued_artifact[
-                    "derivation_sha256"
-                ],
-                "issued_artifact_file_sha256": hashlib.sha256(
-                    issued_raw
-                ).hexdigest(),
-            }
-        )
+    if prepared_issued_artifact is not None:
+        summary.update(dict(prepared_issued_artifact.summary_fields))
     sys.stdout.buffer.write(canonical_json_bytes(summary) + b"\n")
     sys.stdout.buffer.flush()
 
@@ -438,7 +450,7 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
-    issued_artifact: Mapping[str, Any] | None = None
+    prepared_issued_artifact: PreparedIssuedAcceptanceArtifact | None = None
     try:
         table_raw = args.disposition_table.read_bytes()
         if args.emit_custody_manifest:
@@ -490,7 +502,7 @@ def main() -> int:
             source_raw, source_artifact = _json_object_bytes(
                 args.acceptance_artifact
             )
-            issued_artifact, issued_raw = _prepare_issued_acceptance_artifact(
+            prepared_issued_artifact = _prepare_issued_acceptance_artifact(
                 plan,
                 source_artifact,
                 source_artifact_raw=source_raw,
@@ -498,7 +510,7 @@ def main() -> int:
             if args.emit_issued_artifact is not None:
                 _atomic_emit_issued_artifact(
                     args.emit_issued_artifact,
-                    issued_raw,
+                    prepared_issued_artifact.artifact_file_bytes,
                 )
         if args.execute:
             # Keep this as the final state-changing operation. Nothing in the
@@ -523,7 +535,7 @@ def main() -> int:
             exc.plan,
             executed=True,
             outcome=exc.outcome,
-            issued_artifact=issued_artifact,
+            prepared_issued_artifact=prepared_issued_artifact,
         )
         print(
             "committed: parent-directory durability remains uncertain after "
@@ -539,7 +551,7 @@ def main() -> int:
         plan,
         executed=args.execute,
         outcome="committed" if args.execute else "planned",
-        issued_artifact=issued_artifact,
+        prepared_issued_artifact=prepared_issued_artifact,
     )
     return 0
 

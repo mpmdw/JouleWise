@@ -544,6 +544,40 @@ class CalibrationLedgerTests(unittest.TestCase):
             _ISSUED_D079_FILE_SHA256,
         )
 
+        class BinaryOutput:
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+        success_stdout = BinaryOutput()
+        with mock.patch.object(
+            bootstrap_cli,
+            "_issued_artifact_bytes",
+            wraps=bootstrap_cli._issued_artifact_bytes,
+        ) as serialize:
+            prepared = bootstrap_cli._prepare_issued_acceptance_artifact(
+                plan, source
+            )
+            with mock.patch.object(bootstrap_cli.sys, "stdout", success_stdout):
+                bootstrap_cli._emit(
+                    plan,
+                    executed=True,
+                    outcome="committed",
+                    prepared_issued_artifact=prepared,
+                )
+        self.assertEqual(serialize.call_count, 1)
+        success_rows = [
+            json.loads(line)
+            for line in success_stdout.buffer.getvalue().splitlines()
+        ]
+        self.assertEqual(
+            success_rows[-2]["artifact_file_sha256"],
+            _ISSUED_D079_FILE_SHA256,
+        )
+        self.assertEqual(
+            success_rows[-1]["issued_artifact_file_sha256"],
+            _ISSUED_D079_FILE_SHA256,
+        )
+
         emit_command = [
             argument
             for argument in command
@@ -962,6 +996,30 @@ class CalibrationLedgerTests(unittest.TestCase):
         emitted_path = self.root / "uncertain-issued.json"
         issued_artifact = {"derivation_sha256": "d" * 64}
         issued_raw = bootstrap_cli._issued_artifact_bytes(issued_artifact)
+        issued_file_sha256 = hashlib.sha256(issued_raw).hexdigest()
+        issued_record = {
+            "schema_version": bootstrap_cli.ISSUED_ARTIFACT_OUTPUT_SCHEMA,
+            "record": "issued-acceptance-artifact",
+            "artifact": issued_artifact,
+            "derivation_sha256": issued_artifact["derivation_sha256"],
+            "artifact_file_sha256": issued_file_sha256,
+            "artifact_file_content": issued_raw.decode("utf-8"),
+        }
+        prepared_issued_artifact = (
+            bootstrap_cli.PreparedIssuedAcceptanceArtifact(
+                artifact_file_bytes=issued_raw,
+                artifact_file_sha256=issued_file_sha256,
+                derivation_sha256=issued_artifact["derivation_sha256"],
+                output_record_bytes=canonical_json_bytes(issued_record) + b"\n",
+                summary_fields=(
+                    (
+                        "issued_artifact_derivation_sha256",
+                        issued_artifact["derivation_sha256"],
+                    ),
+                    ("issued_artifact_file_sha256", issued_file_sha256),
+                ),
+            )
+        )
         argv = [
             "calibration_ledger_bootstrap.py",
             "--disposition-table",
@@ -993,15 +1051,23 @@ class CalibrationLedgerTests(unittest.TestCase):
             mock.patch.object(
                 bootstrap_cli,
                 "_prepare_issued_acceptance_artifact",
-                return_value=(issued_artifact, issued_raw),
+                return_value=prepared_issued_artifact,
             ),
             mock.patch.object(
                 bootstrap_cli,
                 "bootstrap_historical_import",
                 side_effect=HistoricalImportDurabilityUncertain(plan),
             ),
+            mock.patch.object(
+                bootstrap_cli,
+                "_issued_artifact_bytes",
+                side_effect=ValueError(
+                    "injected post-commit artifact serialization"
+                ),
+            ) as serialize,
         ):
             exit_code = bootstrap_cli.main()
+        serialize.assert_not_called()
         self.assertEqual(exit_code, bootstrap_cli.DURABILITY_UNCERTAIN_EXIT)
         self.assertNotEqual(exit_code, 2)
         rows = [json.loads(line) for line in stdout.buffer.getvalue().splitlines()]
@@ -1020,6 +1086,9 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertEqual(
             rows[-1]["custody_manifest_sha256"],
             plan.custody_manifest_sha256,
+        )
+        self.assertEqual(
+            rows[-1]["issued_artifact_file_sha256"], issued_file_sha256
         )
         self.assertEqual(emitted_path.read_bytes(), issued_raw)
         self.assertIn("rerun the identical --execute invocation", stderr.getvalue())
