@@ -1,51 +1,66 @@
-"""Tests for exact quiet-guard process identities and census primitives."""
+"""Tests for snapshot-bound quiet-guard process identity and kernel census."""
 
 from __future__ import annotations
 
 import ctypes
+import errno
+import inspect
+import os
+from pathlib import Path
 import struct
-import subprocess
+import sys
 import unittest
 
 from joulewise.quiet_guard_process import (
     AncestorIdentity,
     DarwinProcessRecord,
+    DarwinProcessSource,
+    KINFO_PROC_PID_OFFSET,
+    KINFO_PROC_PPID_OFFSET,
+    KINFO_PROC_SIZE,
+    KernelProcessRecord,
+    KernelProcessTable,
     ProcessIdentity,
     ProcessIdentityError,
     ProcessObservationError,
-    PsProcessSource,
     Revalidation,
     SnapshotProcessSource,
     SysctlDarwinProcessReader,
     argv_digest,
-    descends_from,
-    independent_census,
+    custody_candidate_pids,
     revalidate_identity,
     validate_identity_mapping,
 )
 
 
-class SequenceReader:
-    def __init__(self, rows):
-        self.rows = {pid: list(values) for pid, values in rows.items()}
-        self.last = {}
-
-    def read(self, pid):
-        values = self.rows.get(pid, [])
-        if values:
-            self.last[pid] = values.pop(0)
-        return self.last.get(pid)
-
-
 def identity(
     pid: int = 42,
     *,
-    start_time: str = "boot+10.000001",
+    start_time: str = "1785940800.000001",
     executable: str = "/Applications/T3 Code (Alpha).app/Contents/MacOS/t3",
     argv: tuple[str, ...] = ("t3", "--session", "abc"),
     ancestry: tuple[AncestorIdentity, ...] = (),
 ) -> ProcessIdentity:
     return ProcessIdentity(pid, start_time, executable, argv_digest(argv), ancestry)
+
+
+def kinfo_proc_row(
+    pid: int,
+    ppid: int,
+    seconds: int,
+    microseconds: int,
+) -> bytes:
+    """Build one byte-accurate 64-bit Darwin SDK ``struct kinfo_proc``."""
+
+    class Timeval(ctypes.Structure):
+        _fields_ = (("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_int))
+
+    payload = bytearray(KINFO_PROC_SIZE)
+    encoded_time = bytes(Timeval(seconds, microseconds))
+    payload[: len(encoded_time)] = encoded_time
+    struct.pack_into("=i", payload, KINFO_PROC_PID_OFFSET, pid)
+    struct.pack_into("=i", payload, KINFO_PROC_PPID_OFFSET, ppid)
+    return bytes(payload)
 
 
 class ArgvDigestTests(unittest.TestCase):
@@ -81,161 +96,248 @@ class IdentitySchemaTests(unittest.TestCase):
         with self.assertRaises(ProcessIdentityError):
             validate_identity_mapping(raw)
 
-    def test_bad_digest_is_rejected(self) -> None:
+    def test_bad_digest_and_ancestry_cycle_are_rejected(self) -> None:
         raw = identity().to_mapping()
         raw["argv_digest"] = "sha256:nope"
         with self.assertRaises(ProcessIdentityError):
             validate_identity_mapping(raw)
-
-    def test_ancestry_cycle_is_rejected(self) -> None:
-        ancestor = AncestorIdentity(42, "older", "/bin/a", argv_digest(("a",)))
         with self.assertRaises(ProcessIdentityError):
-            identity(42, ancestry=(ancestor,))
+            identity(
+                42,
+                ancestry=(
+                    AncestorIdentity(42, "older", "/bin/a", argv_digest(("a",))),
+                ),
+            )
 
 
-class RevalidationTests(unittest.TestCase):
-    def test_exact_match_requires_all_fields(self) -> None:
+class SnapshotRevalidationTests(unittest.TestCase):
+    def test_exact_match_absence_and_pid_reuse_use_one_snapshot(self) -> None:
         expected = identity()
-        verdict, observed = revalidate_identity(
-            expected, SnapshotProcessSource((expected,))
+        matching = SnapshotProcessSource((expected,))
+        snapshot = matching.inventory()
+        self.assertEqual(
+            revalidate_identity(expected, matching, snapshot),
+            (Revalidation.MATCH, expected),
         )
-        self.assertEqual(verdict, Revalidation.MATCH)
-        self.assertEqual(observed, expected)
 
-    def test_absent_pid_is_stale(self) -> None:
-        verdict, observed = revalidate_identity(identity(), SnapshotProcessSource())
-        self.assertEqual(verdict, Revalidation.ABSENT)
-        self.assertIsNone(observed)
+        absent = SnapshotProcessSource()
+        self.assertEqual(
+            revalidate_identity(expected, absent, absent.inventory()),
+            (Revalidation.ABSENT, None),
+        )
+
+        reused = identity(start_time="1785940800.900101", argv=("t3", "--two"))
+        reused_source = SnapshotProcessSource((reused,))
+        self.assertEqual(
+            revalidate_identity(expected, reused_source, reused_source.inventory()),
+            (Revalidation.PID_REUSED, reused),
+        )
 
     def test_observation_failure_is_not_absence(self) -> None:
-        class UnobservableSource:
-            def observe(self, pid):
-                raise ProcessObservationError(f"cannot observe {pid}")
-
-            def census(self):
-                return ()
-
-        verdict, observed = revalidate_identity(identity(), UnobservableSource())
-        self.assertEqual(verdict, Revalidation.UNOBSERVABLE)
-        self.assertIsNone(observed)
-
-    def test_reused_pid_start_time_is_not_a_match(self) -> None:
         expected = identity()
-        reused = identity(start_time="boot+99")
-        verdict, observed = revalidate_identity(
-            expected, SnapshotProcessSource((reused,))
+        source = SnapshotProcessSource((expected,), unobservable_pids=(expected.pid,))
+        self.assertEqual(
+            revalidate_identity(expected, source, source.inventory()),
+            (Revalidation.UNOBSERVABLE, None),
         )
-        self.assertEqual(verdict, Revalidation.PID_REUSED)
-        self.assertEqual(observed, reused)
 
-    def test_executable_change_is_pid_reuse(self) -> None:
+    def test_every_exact_field_discriminates_pid_reuse(self) -> None:
         expected = identity()
-        changed = identity(executable="/tmp/not-t3")
-        self.assertEqual(
-            revalidate_identity(expected, SnapshotProcessSource((changed,)))[0],
-            Revalidation.PID_REUSED,
-        )
-
-    def test_argv_change_is_pid_reuse(self) -> None:
-        expected = identity()
-        changed = identity(argv=("t3", "--different"))
-        self.assertEqual(
-            revalidate_identity(expected, SnapshotProcessSource((changed,)))[0],
-            Revalidation.PID_REUSED,
-        )
-
-    def test_ancestry_change_is_pid_reuse(self) -> None:
-        expected = identity()
-        parent = AncestorIdentity(2, "boot+1", "/sbin/launchd", argv_digest(("launchd",)))
-        changed = identity(ancestry=(parent,))
-        self.assertEqual(
-            revalidate_identity(expected, SnapshotProcessSource((changed,)))[0],
-            Revalidation.PID_REUSED,
-        )
-
-    def test_same_second_pid_reuse_is_rejected_by_microsecond_identity(self) -> None:
-        expected = identity(start_time="1785940800.000101", argv=("t3", "--one"))
-        reused = identity(start_time="1785940800.900101", argv=("t3", "--two"))
-        self.assertEqual(expected.start_time.split(".")[0], reused.start_time.split(".")[0])
-        self.assertEqual(
-            revalidate_identity(expected, SnapshotProcessSource((reused,)))[0],
-            Revalidation.PID_REUSED,
-        )
-
-
-class CensusTests(unittest.TestCase):
-    def test_independent_census_filters_and_sorts(self) -> None:
-        source = SnapshotProcessSource((identity(8), identity(3), identity(5)))
-        rows = independent_census(source, lambda row: row.pid != 5)
-        self.assertEqual([row.pid for row in rows], [3, 8])
-
-    def test_descendant_requires_exact_ancestor(self) -> None:
-        parent = identity(7, start_time="parent-start", argv=("parent",))
-        child = identity(
-            8,
-            ancestry=(
-                AncestorIdentity(
-                    parent.pid,
-                    parent.start_time,
-                    parent.executable,
-                    parent.argv_digest,
-                ),
+        variants = (
+            identity(executable="/tmp/not-t3"),
+            identity(argv=("t3", "--different")),
+            identity(
+                ancestry=(
+                    AncestorIdentity(
+                        2, "1785940000.1", "/sbin/launchd", argv_digest(("launchd",))
+                    ),
+                )
             ),
         )
-        self.assertTrue(descends_from(child, parent))
-        self.assertFalse(descends_from(child, identity(7, start_time="reused")))
+        for changed in variants:
+            with self.subTest(changed=changed):
+                source = SnapshotProcessSource((changed,))
+                self.assertEqual(
+                    revalidate_identity(expected, source, source.inventory())[0],
+                    Revalidation.PID_REUSED,
+                )
 
 
-class PsProcessSourceTests(unittest.TestCase):
-    def test_observer_builds_full_ancestry_and_rechecks_entire_chain(self) -> None:
-        child = DarwinProcessRecord(10, 1, "1785940800.123456", "/app/t3", ("t3", "--session", "abc"))
-        parent = DarwinProcessRecord(1, 0, "1785940000.000001", "/sbin/launchd", ("/sbin/launchd",))
-        reader = SequenceReader({10: (child, child), 1: (parent, parent)})
-        observed = PsProcessSource(reader=reader).observe(10)
+class KernelTableAndStateSchemaPrimitiveTests(unittest.TestCase):
+    """KERNEL-TABLE-AND-STATE-SCHEMA process-table half."""
+
+    def test_pid_zero_kernel_fixture_decodes_inventories_and_derives_candidates(self) -> None:
+        self.assertEqual(
+            (KINFO_PROC_SIZE, KINFO_PROC_PID_OFFSET, KINFO_PROC_PPID_OFFSET),
+            (648, 40, 560),
+        )
+        payload = b"".join(
+            (
+                kinfo_proc_row(0, 0, 1_785_939_000, 999_999),
+                kinfo_proc_row(1, 0, 1_785_940_000, 1),
+                kinfo_proc_row(321, 1, 1_785_940_800, 654_321),
+                kinfo_proc_row(322, 321, 1_785_940_801, 123_456),
+            )
+        )
+        decoded = SysctlDarwinProcessReader.decode_kernel_table(payload)
+
+        class PayloadReader(SysctlDarwinProcessReader):
+            def _sysctl_size(self, mib):
+                self.size_mib = tuple(mib)
+                return len(payload)
+
+            def _sysctl_capacity(self, mib, capacity):
+                self.capacity_mib = tuple(mib)
+                self.asserted_capacity = capacity
+                return payload
+
+        reader = PayloadReader(platform_name="darwin")
+        table = reader.inventory()
+        self.assertEqual(table, decoded)
+        self.assertEqual(
+            reader.size_mib,
+            (reader.CTL_KERN, reader.KERN_PROC, reader.KERN_PROC_ALL, 0),
+        )
+        self.assertEqual(
+            reader.capacity_mib,
+            (reader.CTL_KERN, reader.KERN_PROC, reader.KERN_PROC_ALL, 0),
+        )
+        self.assertGreater(reader.asserted_capacity, len(payload))
+        self.assertEqual(
+            table.rows,
+            (
+                KernelProcessRecord(0, 0, "1785939000.999999"),
+                KernelProcessRecord(1, 0, "1785940000.000001"),
+                KernelProcessRecord(321, 1, "1785940800.654321"),
+                KernelProcessRecord(322, 321, "1785940801.123456"),
+            ),
+        )
+        active, descendants = custody_candidate_pids(
+            table, (identity(321, start_time="1785940800.654321"),)
+        )
+        self.assertEqual(active, {321})
+        self.assertEqual(descendants, {322})
+
+    def test_pid_zero_is_inventory_only_not_a_custody_root_or_candidate(self) -> None:
+        table = KernelProcessTable(
+            (
+                KernelProcessRecord(0, 0, "1785939000.999999"),
+                KernelProcessRecord(1, 0, "1785940000.000001"),
+            )
+        )
+        with self.assertRaises(ProcessIdentityError):
+            identity(0)
+        with self.assertRaises(ProcessObservationError):
+            table.descendants(0)
+        with self.assertRaises(ProcessObservationError):
+            DarwinProcessSource().observe(0, table)
+
+    def test_malformed_duplicate_missing_parent_and_cyclic_tables_refuse(self) -> None:
+        malformed_payloads = (
+            b"",
+            b"short",
+            kinfo_proc_row(1, 0, 1_785_940_000, 1)
+            + kinfo_proc_row(1, 0, 1_785_940_001, 2),
+            kinfo_proc_row(2, 99, 1_785_940_000, 1),
+            kinfo_proc_row(2, 3, 1_785_940_000, 1)
+            + kinfo_proc_row(3, 2, 1_785_940_001, 2),
+        )
+        for payload in malformed_payloads:
+            with self.subTest(size=len(payload)), self.assertRaises(
+                ProcessObservationError
+            ):
+                SysctlDarwinProcessReader.decode_kernel_table(payload)
+
+    def test_candidate_derivation_requires_root_pid_and_microsecond_start(self) -> None:
+        table = KernelProcessTable(
+            (
+                KernelProcessRecord(1, 0, "1785940000.000001"),
+                KernelProcessRecord(10, 1, "1785940800.000101"),
+                KernelProcessRecord(11, 10, "1785940801.000001"),
+                KernelProcessRecord(20, 1, "1785940802.000001"),
+            )
+        )
+        active, descendants = custody_candidate_pids(
+            table, (identity(10, start_time="1785940800.000101"),)
+        )
+        self.assertEqual(active, {10})
+        self.assertEqual(descendants, {11})
+        reused_active, reused_descendants = custody_candidate_pids(
+            table, (identity(10, start_time="1785940800.900101"),)
+        )
+        self.assertFalse(reused_active)
+        self.assertFalse(reused_descendants)
+
+    def test_ps_self_row_failure_mode_is_removed(self) -> None:
+        source = Path("joulewise/quiet_guard_process.py").read_text()
+        self.assertNotIn("/bin/ps", source)
+        self.assertNotIn("subprocess", source)
+        self.assertNotIn("protected_identities", source)
+        self.assertEqual(
+            tuple(inspect.signature(DarwinProcessSource.inventory).parameters),
+            ("self",),
+        )
+
+
+class DarwinProcessSourceTests(unittest.TestCase):
+    def test_targeted_observer_builds_full_snapshot_bound_ancestry(self) -> None:
+        table = KernelProcessTable(
+            (
+                KernelProcessRecord(1, 0, "1785940000.000001"),
+                KernelProcessRecord(10, 1, "1785940800.123456"),
+            )
+        )
+        exact = {
+            1: DarwinProcessRecord(
+                1, 0, "1785940000.000001", "/sbin/launchd", ("/sbin/launchd",)
+            ),
+            10: DarwinProcessRecord(
+                10, 1, "1785940800.123456", "/app/t3", ("t3", "--session", "abc")
+            ),
+        }
+
+        class Reader:
+            def __init__(self) -> None:
+                self.calls: list[int] = []
+
+            def inventory(self):
+                return table
+
+            def read_exact(self, expected):
+                self.calls.append(expected.pid)
+                return exact[expected.pid]
+
+        reader = Reader()
+        source = DarwinProcessSource(reader=reader)
+        snapshot = source.inventory()
+        observed = source.observe(10, snapshot)
         self.assertIsNotNone(observed)
         assert observed is not None
-        self.assertEqual(observed.pid, 10)
         self.assertEqual([row.pid for row in observed.ancestry], [1])
-        self.assertEqual(observed.start_time, "1785940800.123456")
-        self.assertEqual(observed.executable, "/app/t3")
+        self.assertEqual(observed.argv_digest, argv_digest(("t3", "--session", "abc")))
+        self.assertEqual(reader.calls, [10, 1, 10, 1])
 
-    def test_child_change_during_ancestry_traversal_is_torn(self) -> None:
-        child = DarwinProcessRecord(10, 1, "1785940800.123456", "/app/t3", ("t3", "--one"))
-        changed_child = DarwinProcessRecord(10, 99, "1785940800.123456", "/app/t3", ("t3", "--one"))
-        parent = DarwinProcessRecord(1, 0, "1785940000.000001", "/sbin/launchd", ("launchd",))
-        reader = SequenceReader({10: (child, changed_child), 1: (parent,)})
-        with self.assertRaises(ProcessObservationError):
-            PsProcessSource(reader=reader).observe(10)
+    def test_candidate_disappearance_is_not_absence(self) -> None:
+        table = KernelProcessTable((KernelProcessRecord(10, 0, "1785940800.1"),))
 
-    def test_true_argv_ambiguity_changes_identity_despite_same_display(self) -> None:
-        display_command = "t3 --token REDACTED"
-        first = DarwinProcessRecord(10, 0, "1785940800.123456", "/app/t3", ("t3", "--token", "one"))
-        second = DarwinProcessRecord(10, 0, "1785940800.123456", "/app/t3", ("t3", "--token", "two"))
-        first_identity = PsProcessSource(reader=SequenceReader({10: (first, first)})).observe(10)
-        second_identity = PsProcessSource(reader=SequenceReader({10: (second, second)})).observe(10)
-        self.assertIsNotNone(first_identity)
-        self.assertIsNotNone(second_identity)
-        assert first_identity is not None
-        self.assertEqual(first_identity.argv_digest, argv_digest(first.argv))
-        self.assertNotEqual(
-            first_identity.argv_digest,
-            argv_digest(tuple(display_command.split())),
-        )
-        self.assertNotEqual(first_identity, second_identity)
+        class Reader:
+            def inventory(self):
+                return table
 
-    def test_sysctl_decoder_preserves_subseconds_and_true_argv_boundaries(self) -> None:
-        """Discriminate decoder mutants that truncate usecs or flatten argv."""
+            def read_exact(self, expected):
+                del expected
+                return None
 
+        source = DarwinProcessSource(reader=Reader())
+        self.assertIsNone(source.observe(10, source.inventory()))
+
+
+class SysctlExactReaderTests(unittest.TestCase):
+    def test_exact_decoder_preserves_true_argv_boundaries(self) -> None:
         pid = 321
-        seconds = 1_785_940_800
-        microseconds = 654_321
+        row_payload = kinfo_proc_row(pid, 0, 1_785_940_800, 654_321)
         executable = "/Applications/T3 Code (Alpha).app/Contents/MacOS/t3"
         arguments = ("t3", "--label=alpha beta", "", "tail value")
-
-        class Timeval(ctypes.Structure):
-            _fields_ = (("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_int))
-
-        start_payload = bytes(Timeval(seconds, microseconds)) + (b"\0" * 512)
         argv_payload = (
             struct.pack("=i", len(arguments))
             + executable.encode()
@@ -244,10 +346,6 @@ class PsProcessSourceTests(unittest.TestCase):
             + b"\0PATH=/not-an-argument\0"
         )
 
-        def runner(command, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(command, 0, stdout=f"{pid} 0\n".encode(), stderr=b"")
-
         class PayloadReader(SysctlDarwinProcessReader):
             def _sysctl(self, mib, capacity=None):
                 del capacity
@@ -255,182 +353,59 @@ class PsProcessSourceTests(unittest.TestCase):
                 if key == (self.CTL_KERN, self.KERN_ARGMAX):
                     return struct.pack("=i", 4096)
                 if key == (self.CTL_KERN, self.KERN_PROC, self.KERN_PROC_PID, pid):
-                    return start_payload
+                    return row_payload
                 if key == (self.CTL_KERN, self.KERN_PROCARGS2, pid):
                     return argv_payload
                 raise AssertionError(key)
 
-        reader = PayloadReader(runner, platform_name="darwin")
-        decoded = reader.read(pid)
+        reader = PayloadReader(platform_name="darwin")
+        expected = KernelProcessRecord(pid, 0, "1785940800.654321")
         self.assertEqual(
-            decoded,
+            reader.read_exact(expected),
             DarwinProcessRecord(
-                pid,
-                0,
-                f"{seconds}.{microseconds:06d}",
-                executable,
-                arguments,
+                pid, 0, "1785940800.654321", executable, arguments
             ),
         )
-        observed = PsProcessSource(runner, reader=reader).observe(pid)
-        self.assertIsNotNone(observed)
-        assert observed is not None
-        self.assertEqual(observed.start_time, "1785940800.654321")
-        self.assertEqual(observed.argv_digest, argv_digest(arguments))
 
-    def test_non_darwin_sysctl_reader_is_unobservable_not_absent(self) -> None:
-        reader = SysctlDarwinProcessReader(platform_name="linux")
+    def test_non_darwin_and_esrch_are_fail_closed(self) -> None:
         with self.assertRaises(ProcessObservationError):
-            reader.read(99)
+            SysctlDarwinProcessReader(platform_name="linux").read_exact(
+                KernelProcessRecord(99, 0, "1.000001")
+            )
 
-    def test_sysctl_esrch_is_the_only_initial_absence_signal(self) -> None:
         class AbsentReader(SysctlDarwinProcessReader):
             def _sysctl(self, mib, capacity=None):
                 del mib, capacity
-                raise ProcessObservationError("gone", error_number=3)
+                raise ProcessObservationError("gone", error_number=errno.ESRCH)
 
-        self.assertIsNone(AbsentReader(platform_name="darwin").read(99))
-
-    def test_failed_census_is_refusal_not_false_zero(self) -> None:
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 1, stdout=b"", stderr=b"gone")
-
-        with self.assertRaises(ProcessIdentityError):
-            PsProcessSource(runner, reader=SequenceReader({})).census()
-
-    def test_census_refuses_when_a_listed_pid_is_unobservable(self) -> None:
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 0, stdout=b"123\n", stderr=b"")
-
-        class FailingReader:
-            def read(self, pid):
-                raise ProcessObservationError(f"sysctl failed for listed PID {pid}")
-
-        with self.assertRaisesRegex(ProcessObservationError, "listed PID 123"):
-            PsProcessSource(runner, reader=FailingReader()).census()
-
-    def test_census_resnapshots_after_transient_unobservability(self) -> None:
-        snapshots = [b"123\n456\n", b"456\n"]
-        stable = DarwinProcessRecord(456, 0, "1785940800.123456", "/bin/stable", ("stable",))
-
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
-
-        class ChurnReader:
-            def __init__(self):
-                self.calls = []
-
-            def read(self, pid):
-                self.calls.append(pid)
-                if pid == 123:
-                    raise ProcessObservationError("transiently unobservable PID 123")
-                return stable
-
-        reader = ChurnReader()
-        rows = PsProcessSource(runner, reader=reader).census()
-        self.assertEqual([row.pid for row in rows], [456])
-        self.assertEqual(reader.calls, [123, 456, 456])
-        self.assertEqual(snapshots, [])
-
-    def test_protected_unobservable_pid_cannot_retry_into_absence(self) -> None:
-        snapshots = [b"123\n456\n", b"456\n"]
-        stable = DarwinProcessRecord(456, 0, "1785940800.123456", "/bin/stable", ("stable",))
-
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
-
-        class ChurnReader:
-            def read(self, pid):
-                if pid == 123:
-                    raise ProcessObservationError("protected PID 123 is unobservable")
-                return stable
-
-        with self.assertRaisesRegex(
-            ProcessObservationError,
-            "protected PID\\(s\\) became absent after an unobservable census observation: 123",
-        ):
-            PsProcessSource(runner, reader=ChurnReader()).census(
-                protected_identities=(identity(123),)
+        self.assertIsNone(
+            AbsentReader(platform_name="darwin").read_exact(
+                KernelProcessRecord(99, 0, "1.000001")
             )
-        self.assertEqual(snapshots, [])
-
-    def test_protected_unobservable_pid_may_retry_into_observable_identity(self) -> None:
-        snapshots = [b"123\n", b"123\n"]
-        stable = DarwinProcessRecord(123, 0, "1785940800.123456", "/bin/stable", ("stable",))
-
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
-
-        class RecoveringReader:
-            def __init__(self):
-                self.calls = 0
-
-            def read(self, pid):
-                self.calls += 1
-                if self.calls == 1:
-                    raise ProcessObservationError(f"protected PID {pid} is transiently unobservable")
-                return stable
-
-        reader = RecoveringReader()
-        rows = PsProcessSource(runner, reader=reader).census(
-            protected_identities=(identity(123),)
         )
-        self.assertEqual([row.pid for row in rows], [123])
-        self.assertEqual(reader.calls, 3)
-        self.assertEqual(snapshots, [])
 
-    def test_protected_unobservable_pid_cannot_retry_into_listed_absence(self) -> None:
-        snapshots = [b"123\n", b"123\n"]
 
-        def runner(arguments, **kwargs):
-            del kwargs
-            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
+@unittest.skipUnless(
+    sys.platform == "darwin" and os.environ.get("QG_LIVE_DARWIN") == "1",
+    "requires Darwin and explicit QG_LIVE_DARWIN=1 real-acquisition opt-in",
+)
+class LiveDarwinKernelInventoryTests(unittest.TestCase):
+    def test_real_inventory_contains_self_and_parent_with_exact_linkage(self) -> None:
+        table = SysctlDarwinProcessReader().inventory()
+        by_pid = table.by_pid
+        own_pid = os.getpid()
+        parent_pid = os.getppid()
 
-        class VanishingReader:
-            def __init__(self):
-                self.calls = 0
-
-            def read(self, pid):
-                self.calls += 1
-                if self.calls == 1:
-                    raise ProcessObservationError(f"protected PID {pid} is unobservable")
-                return None
-
-        with self.assertRaisesRegex(
-            ProcessObservationError,
-            "protected PID\\(s\\) became absent after an unobservable census observation: 123",
-        ):
-            PsProcessSource(runner, reader=VanishingReader()).census(
-                protected_identities=(identity(123),)
-            )
-
-    def test_census_persistent_unobservability_refuses_after_bound(self) -> None:
-        snapshots = 0
-
-        def runner(arguments, **kwargs):
-            nonlocal snapshots
-            del kwargs
-            snapshots += 1
-            return subprocess.CompletedProcess(arguments, 0, stdout=b"123\n", stderr=b"")
-
-        class FailingReader:
-            def __init__(self):
-                self.calls = 0
-
-            def read(self, pid):
-                self.calls += 1
-                raise ProcessObservationError(f"persistently unobservable PID {pid}")
-
-        reader = FailingReader()
-        with self.assertRaisesRegex(ProcessObservationError, "persistently unobservable PID 123"):
-            PsProcessSource(runner, reader=reader).census()
-        self.assertEqual(snapshots, 2)
-        self.assertEqual(reader.calls, 2)
+        self.assertIn(0, by_pid)
+        self.assertIn(own_pid, by_pid)
+        self.assertIn(parent_pid, by_pid)
+        self.assertEqual(by_pid[own_pid].ppid, parent_pid)
+        self.assertEqual(by_pid[parent_pid].pid, parent_pid)
+        for row in (by_pid[own_pid], by_pid[parent_pid]):
+            seconds, microseconds = row.start_time.split(".", 1)
+            self.assertGreater(int(seconds), 0)
+            self.assertEqual(len(microseconds), 6)
+            self.assertTrue(microseconds.isdigit())
 
 
 if __name__ == "__main__":

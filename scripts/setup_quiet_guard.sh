@@ -10,9 +10,9 @@ CREDENTIAL_ROOT="/Library/Application Support/JouleWise/quiet-guard-credentials"
 LIB_ROOT="$INSTALL_ROOT/lib/joulewise"
 HELPER="/usr/local/libexec/joulewise-quiet-guard"
 SUDOERS_PATH="/etc/sudoers.d/joulewise-quiet-guard"
-QUIET_GUARD_SHA256="932d383f9e2ec05f6e32015800c266c0ed2c6d5078c026d0e0420421e23ce27c"
-QUIET_GUARD_PROCESS_SHA256="b2c31563c4c0bf76f293ada905e9c524356aab0a1daf2fd311ed1a2c4674a78d"
-QUIET_GUARD_PRIVILEGED_SHA256="bcc3c0de964193acb84b83276ec5b5518c48b32079097174a313232ffa681bcc"
+QUIET_GUARD_SHA256="b27f6d4438cfd7b4e564b2620f92500c6677138b5e2481103266e253bf472120"
+QUIET_GUARD_PROCESS_SHA256="5ac34ec9f1873858957d4d26fee87332053749576006b3c6e4d1db43e865b4ef"
+QUIET_GUARD_PRIVILEGED_SHA256="94c6d10d39fabe5d5b70ff9df18ee3cc2ce89d66231d2fa485cbb88873f45116"
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "Run this setup as the intended unprivileged operator, not as root." >&2

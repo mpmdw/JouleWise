@@ -48,14 +48,6 @@ from joulewise.quiet_guard import (  # noqa: E402
     RECOVERY_ACKNOWLEDGMENT,
     failure_mapping,
 )
-from joulewise.quiet_guard_process import (  # noqa: E402
-    ProcessIdentityError,
-    PsProcessSource,
-    descends_from,
-    validate_identity_mapping,
-)
-
-
 ALLOWED_COMMANDS = ("install-inactive", "status", "recover")
 SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 EXIT_REFUSED = 2
@@ -148,28 +140,6 @@ def _emit(value: object) -> None:
     print(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
 
-def _recovery_inputs(engine: GuardEngine) -> tuple[PsProcessSource, tuple]:
-    """Enumerate independently, then select the exact registered family.
-
-    The later T3-family commit will broaden this census with its dynamically
-    derived family manifest.  Commit 1 has no production registration path,
-    so the exact registry is the complete inactive-installation census basis.
-    """
-
-    source = PsProcessSource()
-    state = engine.status()["state"]
-    registered = tuple(
-        validate_identity_mapping(raw) for raw in state["registry"]["entries"]
-    )
-    enumerated = source.census(protected_identities=registered)
-    family = tuple(
-        row
-        for row in enumerated
-        if row in registered or any(descends_from(row, owner) for owner in registered)
-    )
-    return source, family
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser().parse_args(argv)
     if arguments.command not in ALLOWED_COMMANDS:
@@ -189,20 +159,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if arguments.ack != RECOVERY_ACKNOWLEDGMENT:
             raise GuardError("recovery_acknowledgment_missing", "exact acknowledgment required")
-        source, census = _recovery_inputs(engine)
         state = engine.recover(
             acknowledgment=arguments.ack,
             acknowledged_by=os.environ.get("SUDO_USER", "operator"),
-            source=source,
-            independent_census_rows=census,
         )
         _emit(state)
         return 0
     except GuardError as exc:
         _emit(exc.to_mapping())
-        return EXIT_REFUSED
-    except ProcessIdentityError as exc:
-        _emit(failure_mapping("process_observation_unavailable", str(exc)))
         return EXIT_REFUSED
     except OSError as exc:
         _emit(failure_mapping("privileged_command_refused", str(exc)))

@@ -24,10 +24,13 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 import uuid
 
 from joulewise.quiet_guard_process import (
+    DarwinProcessSource,
+    KernelProcessTable,
     ProcessIdentity,
     ProcessIdentityError,
     ProcessSource,
     Revalidation,
+    custody_candidate_pids,
     revalidate_identity,
     validate_identity_mapping,
 )
@@ -37,11 +40,28 @@ PRODUCTION_STATE_ROOT = Path("/Library/Application Support/JouleWise/quiet-guard
 TEST_STATE_ROOT_PREFIX = "joulewise-quiet-guard-test-"
 
 CONFIG_SCHEMA = "joulewise.quiet_guard.config/v1"
-STATE_SCHEMA = "joulewise.quiet_guard.state/v1"
+STATE_SCHEMA = "joulewise.quiet_guard.state/v2"
+CUSTODY_ROOTS_SCHEMA = "joulewise.quiet_guard.custody_roots/v1"
 REGISTRY_SCHEMA = "joulewise.quiet_guard.registry/v1"
 LEASE_SCHEMA = "joulewise.quiet_guard.lease/v1"
-EVENT_SCHEMA = "joulewise.quiet_guard.event/v1"
+EVENT_SCHEMA = "joulewise.quiet_guard.event/v2"
 FAILURE_SCHEMA = "joulewise.quiet_guard.failure/v1"
+
+# The state validator consumes this map as its exact field authority.  Every
+# future state field therefore needs an explicit non-identity classification
+# or an identity-to-custody-root rule alongside the schema change.
+STATE_FIELD_ROOT_RULES = {
+    "schema": "non_identity",
+    "host_id": "non_identity",
+    "boot_id": "non_identity",
+    "epoch": "non_identity",
+    "state": "non_identity",
+    "custody_roots": "identity:authoritative_append_only_while_lease_retained",
+    "registry": "identity:every_entry_is_exact_custody_root",
+    "lease": "identity:owner_is_exact_custody_root",
+    "events": "identity:each_event_records_resulting_custody_roots",
+}
+STATE_FIELDS = frozenset(STATE_FIELD_ROOT_RULES)
 
 POWERMETRICS_PROBE = (
     "/usr/bin/sudo",
@@ -104,6 +124,7 @@ FAILURE_CAUSES = (
     "lock_unavailable",
     "invalid_transition",
     "epoch_regression",
+    "custody_roots_invalid",
     "registry_invalid",
     "lease_invalid",
     "identity_mismatch",
@@ -302,6 +323,47 @@ def _validate_config(value: Any, host_id: str) -> dict[str, Any]:
     return dict(raw)
 
 
+def _validate_identity_list(value: Any, cause: str, label: str) -> list[ProcessIdentity]:
+    if not isinstance(value, list):
+        raise GuardError(cause, f"{label} entries must be a list")
+    try:
+        identities = [validate_identity_mapping(item) for item in value]
+    except ProcessIdentityError as exc:
+        raise GuardError(cause, str(exc)) from exc
+    if len(set(identities)) != len(identities):
+        raise GuardError(cause, f"{label} contains duplicate exact identities")
+    return identities
+
+
+def _validate_custody_roots(
+    value: Any, host_id: str, boot_id: str, epoch: int
+) -> dict[str, Any]:
+    raw = _require_exact_fields(
+        value,
+        {"schema", "host_id", "boot_id", "epoch", "entries"},
+        "custody_roots_invalid",
+        "custody roots",
+    )
+    if raw["schema"] != CUSTODY_ROOTS_SCHEMA:
+        raise GuardError("schema_mismatch", "custody-roots schema mismatch")
+    if raw["host_id"] != host_id:
+        raise GuardError("host_mismatch", "custody roots belong to another host")
+    if raw["boot_id"] != boot_id:
+        raise GuardError("boot_mismatch", "custody roots belong to another boot")
+    if _nonnegative_epoch(raw["epoch"]) != epoch:
+        raise GuardError("epoch_regression", "custody-roots epoch differs from state")
+    identities = _validate_identity_list(
+        raw["entries"], "custody_roots_invalid", "custody roots"
+    )
+    return {
+        "schema": CUSTODY_ROOTS_SCHEMA,
+        "host_id": host_id,
+        "boot_id": boot_id,
+        "epoch": epoch,
+        "entries": [identity.to_mapping() for identity in identities],
+    }
+
+
 def _validate_registry(value: Any, host_id: str, boot_id: str, epoch: int) -> dict[str, Any]:
     raw = _require_exact_fields(
         value,
@@ -317,13 +379,7 @@ def _validate_registry(value: Any, host_id: str, boot_id: str, epoch: int) -> di
         raise GuardError("boot_mismatch", "registry belongs to another boot")
     if _nonnegative_epoch(raw["epoch"]) != epoch:
         raise GuardError("epoch_regression", "registry epoch differs from state")
-    if not isinstance(raw["entries"], list):
-        raise GuardError("registry_invalid", "registry entries must be a list")
-    identities: list[ProcessIdentity] = []
-    try:
-        identities = [validate_identity_mapping(item) for item in raw["entries"]]
-    except ProcessIdentityError as exc:
-        raise GuardError("registry_invalid", str(exc)) from exc
+    identities = _validate_identity_list(raw["entries"], "registry_invalid", "registry")
     if len({identity.pid for identity in identities}) != len(identities):
         raise GuardError("registry_invalid", "registry contains duplicate PIDs")
     return {
@@ -389,6 +445,7 @@ def _validate_event(value: Any, host_id: str, boot_id: str, epoch: int) -> dict[
             "actor",
             "cause",
             "lease_id",
+            "custody_roots",
             "evidence",
         },
         "schema_mismatch",
@@ -411,9 +468,16 @@ def _validate_event(value: Any, host_id: str, boot_id: str, epoch: int) -> dict[
     _plain_string(raw["cause"], "schema_mismatch", "event.cause")
     if raw["lease_id"] is not None:
         _plain_string(raw["lease_id"], "lease_invalid", "event.lease_id")
+    custody_roots = _validate_identity_list(
+        raw["custody_roots"], "custody_roots_invalid", "event custody roots"
+    )
     if not isinstance(raw["evidence"], Mapping):
         raise GuardError("schema_mismatch", "event evidence must be an object")
-    return dict(raw)
+    return {
+        **dict(raw),
+        "custody_roots": [root.to_mapping() for root in custody_roots],
+        "evidence": dict(raw["evidence"]),
+    }
 
 
 def validate_state(value: Any, host_id: str, boot_id: str) -> dict[str, Any]:
@@ -421,7 +485,7 @@ def validate_state(value: Any, host_id: str, boot_id: str) -> dict[str, Any]:
 
     raw = _require_exact_fields(
         value,
-        {"schema", "host_id", "boot_id", "epoch", "state", "registry", "lease", "events"},
+        set(STATE_FIELDS),
         "schema_mismatch",
         "state",
     )
@@ -435,10 +499,33 @@ def validate_state(value: Any, host_id: str, boot_id: str) -> dict[str, Any]:
     state = raw["state"]
     if state not in STATES:
         raise GuardError("schema_mismatch", "unknown guard state")
+    custody_roots = _validate_custody_roots(
+        raw["custody_roots"], host_id, boot_id, epoch
+    )
     registry = _validate_registry(raw["registry"], host_id, boot_id, epoch)
     lease = _validate_lease(raw["lease"], host_id, boot_id, epoch, state)
     if state == "idle" and registry["entries"]:
         raise GuardError("registry_invalid", "idle requires an empty registry")
+    if state == "idle" and custody_roots["entries"]:
+        raise GuardError("custody_roots_invalid", "idle requires empty custody roots")
+    custody_identities = {
+        validate_identity_mapping(item) for item in custody_roots["entries"]
+    }
+    registry_identities = {
+        validate_identity_mapping(item) for item in registry["entries"]
+    }
+    if not registry_identities.issubset(custody_identities):
+        raise GuardError(
+            "custody_roots_invalid",
+            "every registry identity must be an exact custody root",
+        )
+    if lease is not None:
+        lease_owner = validate_identity_mapping(lease["owner"])
+        if lease_owner not in custody_identities:
+            raise GuardError(
+                "custody_roots_invalid",
+                "the lease owner must be an exact custody root",
+            )
     if not isinstance(raw["events"], list) or len(raw["events"]) != epoch:
         raise GuardError("epoch_regression", "event count must equal state epoch")
     events = [
@@ -450,14 +537,40 @@ def validate_state(value: Any, host_id: str, boot_id: str) -> dict[str, Any]:
     for previous, current in zip(events, events[1:]):
         if current["from_state"] != previous["to_state"]:
             raise GuardError("epoch_regression", "event history is discontinuous")
+    previous_roots: set[ProcessIdentity] = set()
+    for event in events:
+        event_roots = {
+            validate_identity_mapping(item) for item in event["custody_roots"]
+        }
+        rule = TRANSITION_TABLE[
+            (event["from_state"], event["to_state"], event["actor"])
+        ]
+        if rule.lease_action == "clear":
+            if event_roots:
+                raise GuardError(
+                    "custody_roots_invalid",
+                    "lease clearance must clear every custody root",
+                )
+        elif not previous_roots.issubset(event_roots):
+            raise GuardError(
+                "custody_roots_invalid",
+                "custody roots cannot shrink while custody is retained",
+            )
+        previous_roots = event_roots
     if events and events[-1]["to_state"] != state:
         raise GuardError("epoch_regression", "last event does not name current state")
+    if events and previous_roots != custody_identities:
+        raise GuardError(
+            "custody_roots_invalid",
+            "current custody roots differ from the final event",
+        )
     return {
         "schema": STATE_SCHEMA,
         "host_id": host_id,
         "boot_id": boot_id,
         "epoch": epoch,
         "state": state,
+        "custody_roots": custody_roots,
         "registry": registry,
         "lease": lease,
         "events": events,
@@ -471,6 +584,13 @@ def initial_state(host_id: str, boot_id: str) -> dict[str, Any]:
         "boot_id": boot_id,
         "epoch": 0,
         "state": "idle",
+        "custody_roots": {
+            "schema": CUSTODY_ROOTS_SCHEMA,
+            "host_id": host_id,
+            "boot_id": boot_id,
+            "epoch": 0,
+            "entries": [],
+        },
         "registry": {
             "schema": REGISTRY_SCHEMA,
             "host_id": host_id,
@@ -544,6 +664,7 @@ class GuardEngine:
         host_id: str | None = None,
         boot_id: str | None = None,
         test_mode: bool = False,
+        process_source: ProcessSource | None = None,
     ) -> None:
         root = Path(state_root).expanduser().resolve()
         production_root = PRODUCTION_STATE_ROOT.resolve()
@@ -555,6 +676,7 @@ class GuardEngine:
         self.host_id = host_id or current_host_id()
         self.boot_id = boot_id or current_boot_id()
         self.test_mode = test_mode
+        self._process_source = process_source or DarwinProcessSource()
 
     def initialize_inactive(self, *, privileged_setup: bool = False) -> dict[str, Any]:
         self._require_inactive_installation_authority(privileged_setup)
@@ -735,6 +857,7 @@ class GuardEngine:
         cause: str,
         evidence: Mapping[str, Any],
         lease_id: str | None,
+        custody_roots: Sequence[ProcessIdentity],
     ) -> dict[str, Any]:
         return {
             "schema": EVENT_SCHEMA,
@@ -746,6 +869,7 @@ class GuardEngine:
             "actor": actor,
             "cause": cause,
             "lease_id": lease_id,
+            "custody_roots": [root.to_mapping() for root in custody_roots],
             "evidence": dict(evidence),
         }
 
@@ -777,7 +901,7 @@ class GuardEngine:
             )
         epoch = state["epoch"] + 1
         entries = [
-            identity.to_mapping()
+            identity
             for identity in (
                 registry_entries
                 if registry_entries is not None
@@ -789,9 +913,21 @@ class GuardEngine:
                 "processes_remain", "quiet_held requires a zero-entry registry"
             )
         lease = state["lease"]
+        roots = [
+            validate_identity_mapping(item)
+            for item in state["custody_roots"]["entries"]
+        ]
+
+        def retain_root(identity: ProcessIdentity) -> None:
+            if identity not in roots:
+                roots.append(identity)
+
         if rule.lease_action == "create":
             if new_owner is None:
                 raise GuardError("lease_invalid", "handoff_pending requires an exact owner")
+            retain_root(new_owner)
+            for identity in entries:
+                retain_root(identity)
             lease = {
                 "schema": LEASE_SCHEMA,
                 "host_id": self.host_id,
@@ -805,25 +941,38 @@ class GuardEngine:
             if lease is not None:
                 lease = dict(lease)
                 lease["epoch"] = epoch
+                retain_root(validate_identity_mapping(lease["owner"]))
+            for identity in entries:
+                retain_root(identity)
         elif rule.lease_action == "clear":
             lease = None
             entries = []
+            roots = []
         lease_id = lease["lease_id"] if lease is not None else (
             state["lease"]["lease_id"] if state["lease"] is not None else None
         )
-        event = self._event(state, target, actor, cause, evidence, lease_id)
+        event = self._event(
+            state, target, actor, cause, evidence, lease_id, roots
+        )
         updated = {
             "schema": STATE_SCHEMA,
             "host_id": self.host_id,
             "boot_id": self.boot_id,
             "epoch": epoch,
             "state": target,
+            "custody_roots": {
+                "schema": CUSTODY_ROOTS_SCHEMA,
+                "host_id": self.host_id,
+                "boot_id": self.boot_id,
+                "epoch": epoch,
+                "entries": [root.to_mapping() for root in roots],
+            },
             "registry": {
                 "schema": REGISTRY_SCHEMA,
                 "host_id": self.host_id,
                 "boot_id": self.boot_id,
                 "epoch": epoch,
-                "entries": entries,
+                "entries": [identity.to_mapping() for identity in entries],
             },
             "lease": lease,
             "events": list(state["events"]) + [event],
@@ -858,22 +1007,55 @@ class GuardEngine:
                 independent_census_zero=independent_census_zero,
             )
 
-    def audit_registry(
-        self,
+    @staticmethod
+    def _inventory(source: ProcessSource) -> KernelProcessTable:
+        try:
+            return source.inventory()
+        except ProcessIdentityError as exc:
+            raise GuardError("process_observation_unavailable", str(exc)) from exc
+
+    @staticmethod
+    def _observe_snapshot_pid(
         source: ProcessSource,
-        independent_census_rows: Sequence[ProcessIdentity],
-    ) -> dict[str, Any]:
-        """Detect stale/reused registered identities and retain custody."""
+        snapshot: KernelProcessTable,
+        pid: int,
+    ) -> ProcessIdentity:
+        try:
+            observed = source.observe(pid, snapshot)
+        except ProcessIdentityError as exc:
+            raise GuardError("process_observation_unavailable", str(exc)) from exc
+        if observed is None:
+            raise GuardError(
+                "process_observation_unavailable",
+                f"snapshot candidate PID {pid} disappeared before exact observation",
+            )
+        return observed
+
+    def audit_registry(self, source: ProcessSource | None = None) -> dict[str, Any]:
+        """Detect stale/reused registry identities using one accepted table."""
 
         with self.locked():
             state = self.read_state()
+            selected_source = source or self._process_source
+            try:
+                snapshot = self._inventory(selected_source)
+            except GuardError as exc:
+                if state["state"] == "recovery_required":
+                    return state
+                return self._write_transition(
+                    state,
+                    target="recovery_required",
+                    actor="engine",
+                    cause=exc.cause,
+                    evidence={"revalidation": [], "inventory_error": exc.detail},
+                )
             results: list[dict[str, Any]] = []
             cause = ""
-            registered_identities: list[ProcessIdentity] = []
             for raw in state["registry"]["entries"]:
                 expected = validate_identity_mapping(raw)
-                registered_identities.append(expected)
-                verdict, observed = revalidate_identity(expected, source)
+                verdict, observed = revalidate_identity(
+                    expected, selected_source, snapshot
+                )
                 results.append(
                     {
                         "expected": expected.to_mapping(),
@@ -890,11 +1072,6 @@ class GuardEngine:
                     cause = "pid_reuse_detected"
                 elif verdict == Revalidation.ABSENT and not cause:
                     cause = "stale_registry"
-            unknown_census = [
-                row for row in independent_census_rows if row not in registered_identities
-            ]
-            if unknown_census and not cause:
-                cause = "stale_registry"
             if not cause:
                 return state
             if state["state"] == "recovery_required":
@@ -904,33 +1081,98 @@ class GuardEngine:
                 target="recovery_required",
                 actor="engine",
                 cause=cause,
-                evidence={
-                    "revalidation": results,
-                    "independent_census_count": len(independent_census_rows),
-                    "unknown_census_count": len(unknown_census),
-                },
+                evidence={"revalidation": results},
             )
+
+    def _recovery_proof(
+        self,
+        state: Mapping[str, Any],
+        source: ProcessSource,
+        *,
+        prior_boot_changed: bool = False,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Prove custody absence against exactly one accepted snapshot."""
+
+        snapshot = self._inventory(source)
+        roots = [
+            validate_identity_mapping(raw)
+            for raw in state["custody_roots"]["entries"]
+        ]
+        if prior_boot_changed:
+            return (
+                [
+                    {
+                        "expected": root.to_mapping(),
+                        "result": Revalidation.ABSENT.value,
+                        "observed": None,
+                    }
+                    for root in roots
+                ],
+                0,
+            )
+
+        active_root_pids, descendant_pids = custody_candidate_pids(snapshot, roots)
+        by_pid = snapshot.by_pid
+        root_pids_present = {root.pid for root in roots if root.pid in by_pid}
+        observation_pids = root_pids_present | set(descendant_pids)
+        observed_by_pid = {
+            pid: self._observe_snapshot_pid(source, snapshot, pid)
+            for pid in sorted(observation_pids)
+        }
+
+        abandoned: list[dict[str, Any]] = []
+        matching_roots: list[int] = []
+        for root in roots:
+            row = by_pid.get(root.pid)
+            if row is None:
+                verdict, observed = Revalidation.ABSENT, None
+            else:
+                observed = observed_by_pid[root.pid]
+                verdict = (
+                    Revalidation.MATCH
+                    if observed == root
+                    else Revalidation.PID_REUSED
+                )
+            if verdict == Revalidation.MATCH:
+                matching_roots.append(root.pid)
+            abandoned.append(
+                {
+                    "expected": root.to_mapping(),
+                    "result": verdict.value,
+                    "observed": observed.to_mapping() if observed else None,
+                }
+            )
+
+        if matching_roots:
+            rendered = ", ".join(str(pid) for pid in sorted(set(matching_roots)))
+            raise GuardError(
+                "processes_remain", f"custody root PID(s) still match: {rendered}"
+            )
+        if descendant_pids:
+            rendered = ", ".join(str(pid) for pid in sorted(descendant_pids))
+            raise GuardError(
+                "independent_census_nonzero",
+                f"snapshot contains custody descendant PID(s): {rendered}",
+            )
+        # Active roots that did not match their full exact identities are
+        # PID_REUSED classifications, not family survivors.
+        del active_root_pids
+        return abandoned, 0
 
     def recover(
         self,
         *,
         acknowledgment: str,
         acknowledged_by: str,
-        source: ProcessSource,
-        independent_census_rows: Sequence[ProcessIdentity],
     ) -> dict[str, Any]:
-        """Clear recovery only after acknowledgment and two zero proofs.
+        """Own state read, inventory, exact observation, and clear under one lock."""
 
-        No timeout or TTL participates.  Registered entries are abandoned only
-        after their exact identities are absent; PID reuse is recorded rather
-        than mistaken for a match.
-        """
-
-        if acknowledgment != RECOVERY_ACKNOWLEDGMENT or not acknowledged_by:
-            raise GuardError(
-                "recovery_acknowledgment_missing", "the exact recovery acknowledgment is required"
-            )
         with self.locked():
+            if acknowledgment != RECOVERY_ACKNOWLEDGMENT or not acknowledged_by:
+                raise GuardError(
+                    "recovery_acknowledgment_missing",
+                    "the exact recovery acknowledgment is required",
+                )
             config, state = self._read_persisted_bindings()
             binding_changed = (
                 config["host_id"] != self.host_id
@@ -943,34 +1185,12 @@ class GuardEngine:
                     state=state,
                     acknowledgment=acknowledgment,
                     acknowledged_by=acknowledged_by,
-                    source=source,
-                    independent_census_rows=independent_census_rows,
                 )
             if state["state"] != "recovery_required":
                 raise GuardError("invalid_transition", "guard is not in recovery_required")
-            abandoned: list[dict[str, Any]] = []
-            for raw in state["registry"]["entries"]:
-                expected = validate_identity_mapping(raw)
-                verdict, observed = revalidate_identity(expected, source)
-                if verdict == Revalidation.MATCH:
-                    raise GuardError("processes_remain", f"registered PID {expected.pid} still matches")
-                if verdict == Revalidation.UNOBSERVABLE:
-                    raise GuardError(
-                        "process_observation_unavailable",
-                        f"registered PID {expected.pid} could not be observed",
-                    )
-                abandoned.append(
-                    {
-                        "expected": expected.to_mapping(),
-                        "result": verdict.value,
-                        "observed": observed.to_mapping() if observed else None,
-                    }
-                )
-            if independent_census_rows:
-                raise GuardError(
-                    "independent_census_nonzero",
-                    f"independent census contains {len(independent_census_rows)} process(es)",
-                )
+            abandoned, census_count = self._recovery_proof(
+                state, self._process_source
+            )
             epoch = state["epoch"] + 1
             lease_id = state["lease"]["lease_id"] if state["lease"] else None
             event = self._event(
@@ -982,9 +1202,10 @@ class GuardEngine:
                     "acknowledged_by": acknowledged_by,
                     "acknowledgment": acknowledgment,
                     "abandoned_exact_identities": abandoned,
-                    "independent_census_count": 0,
+                    "independent_census_count": census_count,
                 },
                 lease_id,
+                (),
             )
             updated = {
                 "schema": STATE_SCHEMA,
@@ -992,6 +1213,13 @@ class GuardEngine:
                 "boot_id": self.boot_id,
                 "epoch": epoch,
                 "state": "idle",
+                "custody_roots": {
+                    "schema": CUSTODY_ROOTS_SCHEMA,
+                    "host_id": self.host_id,
+                    "boot_id": self.boot_id,
+                    "epoch": epoch,
+                    "entries": [],
+                },
                 "registry": {
                     "schema": REGISTRY_SCHEMA,
                     "host_id": self.host_id,
@@ -1013,8 +1241,6 @@ class GuardEngine:
         state: Mapping[str, Any],
         acknowledgment: str,
         acknowledged_by: str,
-        source: ProcessSource,
-        independent_census_rows: Sequence[ProcessIdentity],
     ) -> dict[str, Any]:
         """Re-bind an acknowledged stale installation to this host/boot.
 
@@ -1025,35 +1251,12 @@ class GuardEngine:
         contain a lease.
         """
 
-        if independent_census_rows:
-            raise GuardError(
-                "independent_census_nonzero",
-                f"independent census contains {len(independent_census_rows)} process(es)",
-            )
         boot_changed = state["boot_id"] != self.boot_id
-        abandoned: list[dict[str, Any]] = []
-        for raw in state["registry"]["entries"]:
-            expected = validate_identity_mapping(raw)
-            if boot_changed:
-                verdict, observed = Revalidation.ABSENT, None
-            else:
-                verdict, observed = revalidate_identity(expected, source)
-                if verdict == Revalidation.MATCH:
-                    raise GuardError(
-                        "processes_remain", f"registered PID {expected.pid} still matches"
-                    )
-                if verdict == Revalidation.UNOBSERVABLE:
-                    raise GuardError(
-                        "process_observation_unavailable",
-                        f"registered PID {expected.pid} could not be observed",
-                    )
-            abandoned.append(
-                {
-                    "expected": expected.to_mapping(),
-                    "result": verdict.value,
-                    "observed": observed.to_mapping() if observed else None,
-                }
-            )
+        abandoned, census_count = self._recovery_proof(
+            state,
+            self._process_source,
+            prior_boot_changed=boot_changed,
+        )
         old_binding = {
             "config_host_id": config["host_id"],
             "state_host_id": state["host_id"],
@@ -1070,11 +1273,13 @@ class GuardEngine:
             "binding_change_detected",
             {"prior_binding": old_binding},
             None,
+            (),
         )
         recovering = {
             **fresh,
             "epoch": 1,
             "state": "recovery_required",
+            "custody_roots": {**fresh["custody_roots"], "epoch": 1},
             "registry": {**fresh["registry"], "epoch": 1},
             "events": [recovery_event],
         }
@@ -1087,15 +1292,17 @@ class GuardEngine:
                 "acknowledged_by": acknowledged_by,
                 "acknowledgment": acknowledgment,
                 "abandoned_exact_identities": abandoned,
-                "independent_census_count": 0,
+                "independent_census_count": census_count,
                 "prior_binding": old_binding,
             },
             None,
+            (),
         )
         recovered = {
             **recovering,
             "epoch": 2,
             "state": "idle",
+            "custody_roots": {**recovering["custody_roots"], "epoch": 2},
             "registry": {**recovering["registry"], "epoch": 2},
             "events": [recovery_event, recovered_event],
         }

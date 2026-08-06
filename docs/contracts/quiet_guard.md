@@ -95,18 +95,36 @@ The optional verdict reference, when a later lead-owned installation path
 exists, must use `joulewise.t3_char_pair_verdict_ref/v1`, task id
 `T3-CHAR-PAIR-01`, verdict `passed`, and a `sha256:<64 lowercase hex>` digest.
 
-`state.json` uses `joulewise.quiet_guard.state/v1` and contains:
+`state.json` uses `joulewise.quiet_guard.state/v2` and contains:
 
 ```text
-schema, host_id, boot_id, epoch, state, registry, lease, events
+schema, host_id, boot_id, epoch, state, custody_roots, registry, lease, events
 ```
 
-It is one crash-atomic document: the current state, registry, lease, and event
-history cannot be committed at different epochs. `epoch` is a nonnegative,
-strictly increasing integer. The event array length equals the epoch, event
-epochs are exactly `1..epoch`, the first event begins at `idle`, every event
-begins at the prior event's target, and the final event target equals the
-current state.
+It is one crash-atomic document: the current state, custody roots, registry,
+lease, and event history cannot be committed at different epochs. `epoch` is a
+nonnegative, strictly increasing integer. The event array length equals the
+epoch, event epochs are exactly `1..epoch`, the first event begins at `idle`,
+every event begins at the prior event's target, and the final event target
+equals the current state.
+
+The first-class custody collection uses
+`joulewise.quiet_guard.custody_roots/v1`:
+
+```text
+schema, host_id, boot_id, epoch, entries
+```
+
+Every entry is a complete exact process identity. The lease owner and every
+registry entry are exact members. Custody roots are append-only for the life of
+a retained lease: create adds the owner and registry entries, retained
+transitions preserve every prior root and add any new registry identity, and
+only a lease-clearing transition may empty the collection. Each event records
+the resulting exact root list, so validation rejects a spliced history in which
+roots shrink before lease clearance. `idle` requires empty custody roots. The
+state validator's exact field-rule map classifies every identity-bearing state
+field; a future such field requires a state-schema version and an explicit
+custody-root rule instead of an implicit recovery-code union.
 
 The embedded registry uses `joulewise.quiet_guard.registry/v1`:
 
@@ -128,20 +146,20 @@ No lease schema admits an expiry or TTL. The semantic invariant for `idle` is
 strict: its registry is empty and its lease is null; persisted bytes that
 violate either half refuse canonically as `registry_invalid` or `lease_invalid`.
 
-Each event uses `joulewise.quiet_guard.event/v1`:
+Each event uses `joulewise.quiet_guard.event/v2`:
 
 ```text
 schema, host_id, boot_id, epoch, from_state, to_state, actor, cause,
-lease_id, evidence
+lease_id, custody_roots, evidence
 ```
 
 The transition triple must exist in the table above. Recovery evidence keeps
 the acknowledgment, acknowledger, exact abandoned identities, their absent or
 PID-reused classifications, and the independent census count.
 
-Config is host-bound. State, registry, lease, and every event are host- and
-boot-bound. A schema, host, boot, event-sequence, registry epoch, or lease epoch
-mismatch refuses every normal path. `status` strictly validates persisted
+Config is host-bound. State, custody roots, registry, lease, and every event are
+host- and boot-bound. A schema, host, boot, event-sequence, custody-root epoch,
+registry epoch, or lease epoch mismatch refuses every normal path. `status` strictly validates persisted
 bytes against their original bindings and reports a current-binding mismatch
 as recoverable. Only `recover` with the exact acknowledgment, a nonempty
 operator, and zero-process proofs may re-bind. It replaces stale state with a
@@ -176,34 +194,43 @@ schema, pid, start_time, executable, argv_digest, ancestry
 ```
 
 `argv_digest` is SHA-256 over a domain-separated, length-prefixed true argument
-vector. On Darwin, start time is the microsecond-resolution
-`kinfo_proc.kp_proc.p_starttime` returned by `KERN_PROC_PID`; executable and the
-true argv vector come from `KERN_PROCARGS2`. Display-oriented `ps comm` and
-`command` values never define identity. `/bin/ps` supplies only parent linkage
-and the PID list for census. Ancestry is ordered nearest-parent first; every
-link contains its PID, start time, executable, and argv digest. Duplicate or
-cyclic PIDs are invalid.
+vector. On Darwin, one accepted `KERN_PROC_ALL` payload is the presence and
+topology snapshot. Each decoded 64-bit SDK `kinfo_proc` row contributes PID,
+parent PID, and the microsecond-resolution `kp_proc.p_starttime`. Kernel-table
+rows permit nonnegative PIDs and parent PIDs so the real PID-0 `kernel_task`
+row and launchd's parent-PID-0 edge remain represented. PID 0 is a topology
+sentinel, not a walkable custody root or candidate; complete process identities
+and every custody identity remain strictly positive. Payload size, start times,
+PID uniqueness, parent closure, and global acyclicity are validated before the
+table is accepted; malformed, duplicate, missing-parent, or cyclic tables
+refuse. `/bin/ps` and subprocess enumeration have no census role.
+Bounded `EINTR` retries and `ENOMEM` resize/retry are permitted only while
+acquiring one payload. Once a payload is accepted it is never replaced or
+reinterpreted in that invocation.
 
-The production observer reads every kernel-backed row twice and, after walking
-ancestry, re-reads the child and every collected link. A positively absent PID
-is `ABSENT`; interface failure, malformed payload, failed parent linkage, or a
-torn/changed ancestry observation is `UNOBSERVABLE`. Neither produces a partial
-identity, and `UNOBSERVABLE` is never reinterpreted as absence. On non-Darwin
-or when required sysctls are unavailable observation refuses. Census enumerates
-independently and refuses if any listed PID is unobservable rather than
-silently omitting it and reporting a false zero. The recovery caller passes
-the exact registered identities as the protected set. A transient unobservable
-unprotected PID restarts the complete PID snapshot once and may be dropped if
-it is positively absent from the replacement snapshot. A protected PID that
-was unobservable may never be smoothed into absence: it must become observable
-on the bounded retry or the complete census refuses. A second unobservable
-attempt also refuses, so protected observation failure never becomes absence.
-Before action, callers compare the complete durable identity. Same PID with a
-different start time, executable, argv digest, or ancestry is `pid_reused`,
-never a match. Family discovery and the later T3 adapter must derive identities
-from the exact bundle/session ancestry on every request; process-name patterns
-and shared-helper exceptions are forbidden. An unlinked helper or
-`cloudflared` is an unknown survivor that blocks promotion and is never killed.
+Recovery derives active custody roots by exact PID plus microsecond start time,
+then walks only their descendant edges in the accepted table. Exact
+`KERN_PROC_PID`/`KERN_PROCARGS2` reads are performed only for roots, candidate
+descendants, and ancestry links required to construct those complete
+identities. Unrelated table rows are not fully observed, so unrelated churn
+cannot block or contribute to the family result. Executable and the true argv
+vector come from `KERN_PROCARGS2`; display-oriented command strings never
+define identity. Ancestry is ordered nearest-parent first and every link
+contains PID, start time, executable, and argv digest.
+
+Each targeted row is checked against the accepted PID/start/parent row before,
+during, and after two agreeing true-argv observations. A candidate
+disappearance, exec, PID reuse, reparent, malformed payload, or observation
+failure is `UNOBSERVABLE` for this invocation and refuses with byte-identical
+custody. No semantic re-snapshot or same-PID retry exists. A fresh `recover`
+invocation is the availability boundary: its new accepted table can positively
+prove absence, or can show a different start time and record `PID_REUSED` with
+both the expected and newly observed complete identities. Same PID with a
+different start time, executable, argv digest, or ancestry is never a match.
+This refuse-and-rerun rule supersedes and revokes the former round-2 rule that
+allowed an internal replacement census to drop an unobservable PID. Family
+discovery and later adapters remain exact-identity based; process-name patterns
+and shared-helper exceptions are forbidden.
 
 ## Stale recovery
 
@@ -220,16 +247,19 @@ append only guard-local recovery evidence. Clearing requires all of:
 1. the exact acknowledgment text
    `I acknowledge quiet-guard recovery and exact-identity abandonment`;
 2. a nonempty Ed/lead operator identity;
-3. every registered exact identity revalidates as absent or PID-reused, never
-   as a match or unobservable; and
-4. the independently observed family census is zero.
+3. every custody root classifies against the accepted snapshot as absent or
+   PID-reused, never as a match or unobservable; and
+4. the accepted snapshot contains zero exactly observed candidate descendants.
 
-Only then may recovery record each exact abandoned identity, clear registry
-and lease, increment the epoch, and return to `idle`. The privileged helper
-performs its own full PID enumeration; it does not accept caller-supplied census
-rows. Commit 1 selects exact registered identities and their descendants from
-that enumeration. The later T3-family commit must broaden the family derivation
-before live promotion can be enabled.
+Only then may recovery record each exact abandoned identity, clear custody
+roots, registry, and lease, increment the epoch, and return to `idle`. The privileged helper
+supplies only the fixed acknowledgment and the required operator identity. It
+does not pre-read state, derive protection, enumerate processes, or pass census
+rows. `GuardEngine.recover()` holds one `control.lock` acquisition continuously
+across strict persisted-state validation, kernel-table acquisition, candidate
+derivation, exact observation, and the custody-clearing write. Commit 1 derives
+the family from first-class custody roots; a later adapter must add new exact
+roots at the owning transition before live promotion can be enabled.
 
 Watcher supervision loss in the later commit is not a safe completion signal:
 the exact chain/process group must be terminated when identity remains
@@ -247,8 +277,9 @@ t3_char_pair_verdict_missing     live_promotion_disabled
 schema_mismatch                  host_mismatch
 boot_mismatch                    malformed_json
 lock_unavailable                 invalid_transition
-epoch_regression                 registry_invalid
-lease_invalid                    identity_mismatch
+epoch_regression                 custody_roots_invalid
+registry_invalid                 lease_invalid
+identity_mismatch
 stale_registry                   pid_reuse_detected
 recovery_acknowledgment_missing  processes_remain
 independent_census_nonzero       privileged_command_refused

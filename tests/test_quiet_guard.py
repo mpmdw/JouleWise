@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import importlib.util
@@ -21,6 +22,8 @@ import joulewise.quiet_guard as guard_module
 from joulewise.quiet_guard import (
     ACTORS,
     CONFIG_SCHEMA,
+    CUSTODY_ROOTS_SCHEMA,
+    EVENT_SCHEMA,
     FAILURE_CAUSES,
     FAILURE_SCHEMA,
     FAILURE_SIGNATURES,
@@ -31,6 +34,9 @@ from joulewise.quiet_guard import (
     RECOVERY_ACKNOWLEDGMENT,
     LEASE_SCHEMA,
     SETUP_AUTHORITY_DECISION,
+    STATE_FIELDS,
+    STATE_FIELD_ROOT_RULES,
+    STATE_SCHEMA,
     STATES,
     TRANSITION_TABLE,
     _atomic_write_json,
@@ -42,9 +48,8 @@ from joulewise.quiet_guard import (
 )
 from joulewise.quiet_guard_process import (
     AncestorIdentity,
-    DarwinProcessRecord,
+    KernelProcessRecord,
     ProcessIdentity,
-    ProcessObservationError,
     SnapshotProcessSource,
     argv_digest,
 )
@@ -85,6 +90,7 @@ EXPECTED_FAILURE_CAUSES = {
     "lock_unavailable",
     "invalid_transition",
     "epoch_regression",
+    "custody_roots_invalid",
     "registry_invalid",
     "lease_invalid",
     "identity_mismatch",
@@ -107,6 +113,7 @@ EXPECTED_FAILURE_SIGNATURES = {
     "lock_unavailable": "quiet_guard/lock_unavailable/v1",
     "invalid_transition": "quiet_guard/invalid_transition/v1",
     "epoch_regression": "quiet_guard/epoch_regression/v1",
+    "custody_roots_invalid": "quiet_guard/custody_roots_invalid/v1",
     "registry_invalid": "quiet_guard/registry_invalid/v1",
     "lease_invalid": "quiet_guard/lease_invalid/v1",
     "identity_mismatch": "quiet_guard/identity_mismatch/v1",
@@ -148,7 +155,11 @@ class EngineTestCase(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name) / "guard-state"
         self.engine = GuardEngine(
-            self.root, host_id="host-A", boot_id="boot-A", test_mode=True
+            self.root,
+            host_id="host-A",
+            boot_id="boot-A",
+            test_mode=True,
+            process_source=SnapshotProcessSource(),
         )
         self.engine.initialize_inactive()
         self.owner = identity()
@@ -163,7 +174,7 @@ class EngineTestCase(unittest.TestCase):
 
     def recovery_with_stale_owner(self) -> dict:
         self.pending(entries=(self.owner,))
-        return self.engine.audit_registry(SnapshotProcessSource(), ())
+        return self.engine.audit_registry(SnapshotProcessSource())
 
 
 class InstallationTests(EngineTestCase):
@@ -302,7 +313,7 @@ class InstallationTests(EngineTestCase):
 
     def test_install_preflight_refuses_noninitial_recovery_history(self) -> None:
         self.pending(entries=(self.owner,))
-        self.engine.audit_registry(SnapshotProcessSource(), ())
+        self.engine.audit_registry(SnapshotProcessSource())
         with self.assertRaises(GuardError) as caught:
             self.engine.validate_inactive_installation()
         self.assertEqual(caught.exception.cause, "schema_mismatch")
@@ -430,6 +441,9 @@ class TransitionTableTests(EngineTestCase):
         self.assertEqual((pending["epoch"], held["epoch"], idle["epoch"]), (1, 2, 3))
         self.assertEqual([event["epoch"] for event in idle["events"]], [1, 2, 3])
         self.assertEqual(idle["registry"]["epoch"], 3)
+        self.assertEqual(pending["custody_roots"]["entries"], [self.owner.to_mapping()])
+        self.assertEqual(held["custody_roots"]["entries"], [self.owner.to_mapping()])
+        self.assertEqual(idle["custody_roots"]["entries"], [])
 
     def test_no_ttl_release_exists(self) -> None:
         pending = self.pending()
@@ -450,6 +464,63 @@ class ValidationTests(EngineTestCase):
         with self.assertRaises(GuardError) as caught:
             self.engine.read_state()
         self.assertEqual(caught.exception.cause, "schema_mismatch")
+
+    def test_kernel_table_and_state_schema_root_rules_are_explicit(self) -> None:
+        state = initial_state("host-A", "boot-A")
+        self.assertEqual(STATE_SCHEMA, "joulewise.quiet_guard.state/v2")
+        self.assertEqual(EVENT_SCHEMA, "joulewise.quiet_guard.event/v2")
+        self.assertEqual(
+            state["custody_roots"]["schema"], CUSTODY_ROOTS_SCHEMA
+        )
+        self.assertEqual(set(STATE_FIELD_ROOT_RULES), set(STATE_FIELDS))
+        self.assertEqual(
+            {
+                field
+                for field, rule in STATE_FIELD_ROOT_RULES.items()
+                if rule.startswith("identity:")
+            },
+            {"custody_roots", "registry", "lease", "events"},
+        )
+        state["future_identity"] = self.owner.to_mapping()
+        with self.assertRaises(GuardError) as caught:
+            validate_state(state, "host-A", "boot-A")
+        self.assertEqual(caught.exception.cause, "schema_mismatch")
+
+    def test_custody_roots_cannot_shrink_while_lease_is_retained(self) -> None:
+        registered = identity(202)
+        self.pending(entries=(registered,))
+        self.engine.transition(
+            "quiet_held",
+            "watcher",
+            registry_entries=(),
+            independent_census_zero=True,
+        )
+
+        def shrink(raw):
+            retained = [self.owner.to_mapping()]
+            raw["custody_roots"]["entries"] = retained
+            raw["events"][-1]["custody_roots"] = retained
+
+        self.rewrite_state(shrink)
+        with self.assertRaises(GuardError) as caught:
+            self.engine.read_state()
+        self.assertEqual(caught.exception.cause, "custody_roots_invalid")
+
+    def test_lease_owner_and_registry_entries_must_be_exact_roots(self) -> None:
+        registered = identity(202)
+        pending = self.pending(entries=(registered,))
+        self.assertEqual(
+            pending["custody_roots"]["entries"],
+            [self.owner.to_mapping(), registered.to_mapping()],
+        )
+        self.rewrite_state(
+            lambda raw: raw["custody_roots"]["entries"].remove(
+                registered.to_mapping()
+            )
+        )
+        with self.assertRaises(GuardError) as caught:
+            self.engine.read_state()
+        self.assertEqual(caught.exception.cause, "custody_roots_invalid")
 
     def test_host_mismatch_refuses(self) -> None:
         self.rewrite_state(lambda raw: raw.__setitem__("host_id", "host-B"))
@@ -643,19 +714,12 @@ class LockAndAtomicityTests(EngineTestCase):
 
 
 class StaleRecoveryTests(EngineTestCase):
-    class UnobservableSource:
-        def observe(self, pid):
-            raise ProcessObservationError(f"cannot observe {pid}")
-
-        def census(self):
-            raise ProcessObservationError("census unavailable")
-
     def test_matching_registry_stays_pending(self) -> None:
         self.pending(entries=(self.owner,))
-        state = self.engine.audit_registry(
-            SnapshotProcessSource((self.owner,)), (self.owner,)
-        )
+        source = SnapshotProcessSource((self.owner,))
+        state = self.engine.audit_registry(source)
         self.assertEqual(state["state"], "handoff_pending")
+        self.assertEqual(source.inventory_calls, 1)
 
     def test_absent_registered_identity_enters_recovery_required(self) -> None:
         state = self.recovery_with_stale_owner()
@@ -666,7 +730,7 @@ class StaleRecoveryTests(EngineTestCase):
     def test_pid_reuse_enters_recovery_and_records_observation(self) -> None:
         self.pending(entries=(self.owner,))
         reused = identity(self.owner.pid, start="boot+99")
-        state = self.engine.audit_registry(SnapshotProcessSource((reused,)), ())
+        state = self.engine.audit_registry(SnapshotProcessSource((reused,)))
         self.assertEqual(state["events"][-1]["cause"], "pid_reuse_detected")
         evidence = state["events"][-1]["evidence"]["revalidation"][0]
         self.assertEqual(evidence["result"], "pid_reused")
@@ -674,7 +738,11 @@ class StaleRecoveryTests(EngineTestCase):
 
     def test_unobservable_registry_enters_recovery_and_retains_lease(self) -> None:
         self.pending(entries=(self.owner,))
-        state = self.engine.audit_registry(self.UnobservableSource(), ())
+        state = self.engine.audit_registry(
+            SnapshotProcessSource(
+                (self.owner,), unobservable_pids=(self.owner.pid,)
+            )
+        )
         self.assertEqual(state["state"], "recovery_required")
         self.assertEqual(
             state["events"][-1]["cause"], "process_observation_unavailable"
@@ -687,48 +755,88 @@ class StaleRecoveryTests(EngineTestCase):
             self.engine.recover(
                 acknowledgment="yes",
                 acknowledged_by="Ed",
-                source=SnapshotProcessSource(),
-                independent_census_rows=(),
             )
         self.assertEqual(caught.exception.cause, "recovery_acknowledgment_missing")
 
     def test_recovery_refuses_while_exact_registered_process_remains(self) -> None:
         self.recovery_with_stale_owner()
+        source = SnapshotProcessSource((self.owner,))
+        self.engine._process_source = source
         with self.assertRaises(GuardError) as caught:
             self.engine.recover(
                 acknowledgment=RECOVERY_ACKNOWLEDGMENT,
                 acknowledged_by="Ed",
-                source=SnapshotProcessSource((self.owner,)),
-                independent_census_rows=(),
             )
         self.assertEqual(caught.exception.cause, "processes_remain")
+        self.assertEqual(source.inventory_calls, 1)
 
     def test_recovery_refuses_unobservable_identity_without_releasing_custody(self) -> None:
         recovery = self.recovery_with_stale_owner()
         lease_id = recovery["lease"]["lease_id"]
+        before = self.engine.paths.state.read_bytes()
+        self.engine._process_source = SnapshotProcessSource(
+            (self.owner,), unobservable_pids=(self.owner.pid,)
+        )
         with self.assertRaises(GuardError) as caught:
             self.engine.recover(
                 acknowledgment=RECOVERY_ACKNOWLEDGMENT,
                 acknowledged_by="Ed",
-                source=self.UnobservableSource(),
-                independent_census_rows=(),
             )
         self.assertEqual(caught.exception.cause, "process_observation_unavailable")
         retained = self.engine.read_state()
         self.assertEqual(retained["state"], "recovery_required")
         self.assertEqual(retained["lease"]["lease_id"], lease_id)
+        self.assertEqual(self.engine.paths.state.read_bytes(), before)
 
-    def test_recovery_refuses_nonzero_independent_census(self) -> None:
-        self.recovery_with_stale_owner()
-        unknown = identity(202)
-        with self.assertRaises(GuardError) as caught:
+    def test_custody_root_lease_owner_survives_empty_registry_and_blocks_recovery(self) -> None:
+        pending = self.pending(entries=())
+        held = self.engine.transition(
+            "quiet_held",
+            "watcher",
+            registry_entries=(),
+            independent_census_zero=True,
+        )
+        recovery = self.engine.transition("recovery_required", "watcher")
+        for state in (pending, held, recovery):
+            self.assertEqual(
+                state["custody_roots"]["entries"], [self.owner.to_mapping()]
+            )
+        self.assertEqual(recovery["registry"]["entries"], [])
+        lease_id = recovery["lease"]["lease_id"]
+        before = self.engine.paths.state.read_bytes()
+
+        self.engine._process_source = SnapshotProcessSource(
+            (self.owner,), unobservable_pids=(self.owner.pid,)
+        )
+        with self.assertRaises(GuardError) as unobservable:
             self.engine.recover(
                 acknowledgment=RECOVERY_ACKNOWLEDGMENT,
-                acknowledged_by="lead",
-                source=SnapshotProcessSource(),
-                independent_census_rows=(unknown,),
+                acknowledged_by="Ed",
             )
-        self.assertEqual(caught.exception.cause, "independent_census_nonzero")
+        self.assertEqual(unobservable.exception.cause, "process_observation_unavailable")
+        self.assertEqual(self.engine.paths.state.read_bytes(), before)
+
+        reused = identity(self.owner.pid, executable="/app/reused")
+        child = identity(
+            202,
+            ancestry=(
+                AncestorIdentity(
+                    reused.pid,
+                    reused.start_time,
+                    reused.executable,
+                    reused.argv_digest,
+                ),
+            ),
+        )
+        self.engine._process_source = SnapshotProcessSource((reused, child))
+        with self.assertRaises(GuardError) as descendant:
+            self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="Ed",
+            )
+        self.assertEqual(descendant.exception.cause, "independent_census_nonzero")
+        self.assertEqual(self.engine.paths.state.read_bytes(), before)
+        self.assertEqual(self.engine.read_state()["lease"]["lease_id"], lease_id)
 
     def test_acknowledged_zero_proof_clears_and_records_exact_abandonment(self) -> None:
         recovery = self.recovery_with_stale_owner()
@@ -736,11 +844,10 @@ class StaleRecoveryTests(EngineTestCase):
         state = self.engine.recover(
             acknowledgment=RECOVERY_ACKNOWLEDGMENT,
             acknowledged_by="Ed",
-            source=SnapshotProcessSource(),
-            independent_census_rows=(),
         )
         self.assertEqual(state["state"], "idle")
         self.assertEqual(state["registry"]["entries"], [])
+        self.assertEqual(state["custody_roots"]["entries"], [])
         self.assertIsNone(state["lease"])
         event = state["events"][-1]
         self.assertEqual(event["lease_id"], lease_id)
@@ -753,22 +860,159 @@ class StaleRecoveryTests(EngineTestCase):
     def test_pid_reuse_can_clear_only_after_zero_census_and_is_preserved(self) -> None:
         self.pending(entries=(self.owner,))
         reused = identity(self.owner.pid, start="boot+99")
-        self.engine.audit_registry(SnapshotProcessSource((reused,)), ())
+        self.engine.audit_registry(SnapshotProcessSource((reused,)))
+        source = SnapshotProcessSource((reused,))
+        self.engine._process_source = source
         state = self.engine.recover(
             acknowledgment=RECOVERY_ACKNOWLEDGMENT,
             acknowledged_by="lead",
-            source=SnapshotProcessSource((reused,)),
-            independent_census_rows=(),
         )
         abandoned = state["events"][-1]["evidence"]["abandoned_exact_identities"][0]
         self.assertEqual(abandoned["result"], "pid_reused")
         self.assertEqual(abandoned["observed"], reused.to_mapping())
+        self.assertEqual(source.inventory_calls, 1)
+
+    def test_recover_owns_entire_proof_under_one_control_lock(self) -> None:
+        self.recovery_with_stale_owner()
+        active = False
+        acquisitions = 0
+        real_locked = self.engine.locked
+        real_read = self.engine._read_persisted_bindings
+        real_write = guard_module._atomic_write_json
+        reused = identity(self.owner.pid, start="boot+99")
+
+        class LockAwareSource(SnapshotProcessSource):
+            def inventory(source_self):
+                self.assertTrue(active)
+                return super().inventory()
+
+            def observe(source_self, pid, snapshot):
+                self.assertTrue(active)
+                return super().observe(pid, snapshot)
+
+        source = LockAwareSource((reused,))
+        self.engine._process_source = source
+
+        @contextmanager
+        def tracked_lock(*args, **kwargs):
+            nonlocal active, acquisitions
+            acquisitions += 1
+            with real_locked(*args, **kwargs):
+                active = True
+                try:
+                    yield
+                finally:
+                    active = False
+
+        def tracked_read():
+            self.assertTrue(active)
+            return real_read()
+
+        def tracked_write(path, value):
+            self.assertTrue(active)
+            return real_write(path, value)
+
+        with mock.patch.object(self.engine, "locked", side_effect=tracked_lock), mock.patch.object(
+            self.engine, "_read_persisted_bindings", side_effect=tracked_read
+        ), mock.patch.object(
+            guard_module, "_atomic_write_json", side_effect=tracked_write
+        ):
+            state = self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="lead",
+            )
+        self.assertEqual(state["state"], "idle")
+        self.assertEqual(acquisitions, 1)
+        self.assertEqual(source.inventory_calls, 1)
+
+    def test_pid_reuse_snapshot_boundary_refuses_then_fresh_invocation_clears(self) -> None:
+        recovery = self.recovery_with_stale_owner()
+        lease_id = recovery["lease"]["lease_id"]
+        before = self.engine.paths.state.read_bytes()
+        reused = identity(self.owner.pid, start="boot+99")
+        first = SnapshotProcessSource(
+            (reused,),
+            inventory_rows=(
+                KernelProcessRecord(self.owner.pid, 0, self.owner.start_time),
+            ),
+        )
+        self.engine._process_source = first
+        with self.assertRaises(GuardError) as caught:
+            self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="lead",
+            )
+        self.assertEqual(caught.exception.cause, "process_observation_unavailable")
+        self.assertEqual(first.inventory_calls, 1)
+        self.assertEqual(self.engine.paths.state.read_bytes(), before)
+        self.assertEqual(self.engine.read_state()["lease"]["lease_id"], lease_id)
+
+        fresh = SnapshotProcessSource((reused,))
+        self.engine._process_source = fresh
+        state = self.engine.recover(
+            acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+            acknowledged_by="lead",
+        )
+        abandoned = state["events"][-1]["evidence"]["abandoned_exact_identities"]
+        self.assertEqual(abandoned[0]["expected"], self.owner.to_mapping())
+        self.assertEqual(abandoned[0]["result"], "pid_reused")
+        self.assertEqual(abandoned[0]["observed"], reused.to_mapping())
+        self.assertEqual(fresh.inventory_calls, 1)
+
+    def test_clean_exit_requires_fresh_recover_invocation(self) -> None:
+        self.recovery_with_stale_owner()
+        before = self.engine.paths.state.read_bytes()
+        listed_then_gone = SnapshotProcessSource(
+            (),
+            inventory_rows=(
+                KernelProcessRecord(self.owner.pid, 0, self.owner.start_time),
+            ),
+        )
+        self.engine._process_source = listed_then_gone
+        with self.assertRaises(GuardError) as caught:
+            self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="Ed",
+            )
+        self.assertEqual(caught.exception.cause, "process_observation_unavailable")
+        self.assertEqual(self.engine.paths.state.read_bytes(), before)
+        self.assertEqual(listed_then_gone.inventory_calls, 1)
+
+        fresh_absence = SnapshotProcessSource()
+        self.engine._process_source = fresh_absence
+        self.assertEqual(
+            self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="Ed",
+            )["state"],
+            "idle",
+        )
+        self.assertEqual(fresh_absence.inventory_calls, 1)
+
+    def test_unrelated_churn_is_never_exactly_observed(self) -> None:
+        self.recovery_with_stale_owner()
+        unrelated = identity(303)
+        source = SnapshotProcessSource(
+            (unrelated,), unobservable_pids=(unrelated.pid,)
+        )
+        self.engine._process_source = source
+        state = self.engine.recover(
+            acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+            acknowledged_by="Ed",
+        )
+        self.assertEqual(state["state"], "idle")
+        self.assertEqual(source.inventory_calls, 1)
+        self.assertEqual(source.observed_pids, [])
 
 
 class BindingRecoveryTests(EngineTestCase):
     def test_cross_reboot_status_reports_and_acknowledged_recovery_rebinds(self) -> None:
         rebooted = GuardEngine(
-            self.root, host_id="host-A", boot_id="boot-B", test_mode=False
+            self.root,
+            host_id="host-A",
+            boot_id="boot-B",
+            test_mode=False,
+            process_source=SnapshotProcessSource(),
         )
         status = rebooted.status()
         self.assertEqual(status["binding"]["status"], "recovery_required")
@@ -776,8 +1020,6 @@ class BindingRecoveryTests(EngineTestCase):
         state = rebooted.recover(
             acknowledgment=RECOVERY_ACKNOWLEDGMENT,
             acknowledged_by="Ed",
-            source=SnapshotProcessSource(),
-            independent_census_rows=(),
         )
         self.assertEqual((state["host_id"], state["boot_id"], state["state"]), ("host-A", "boot-B", "idle"))
         self.assertIsNone(state["lease"])
@@ -786,14 +1028,16 @@ class BindingRecoveryTests(EngineTestCase):
 
     def test_hostname_drift_acknowledged_recovery_rebinds(self) -> None:
         renamed = GuardEngine(
-            self.root, host_id="host-B", boot_id="boot-A", test_mode=False
+            self.root,
+            host_id="host-B",
+            boot_id="boot-A",
+            test_mode=False,
+            process_source=SnapshotProcessSource(),
         )
         self.assertEqual(renamed.status()["binding"]["causes"], ["host_mismatch"])
         state = renamed.recover(
             acknowledgment=RECOVERY_ACKNOWLEDGMENT,
             acknowledged_by="lead",
-            source=SnapshotProcessSource(),
-            independent_census_rows=(),
         )
         self.assertEqual((state["host_id"], state["boot_id"], state["state"]), ("host-B", "boot-A", "idle"))
         self.assertEqual([event["from_state"] for event in state["events"]], ["idle", "recovery_required"])
@@ -904,104 +1148,37 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
             ("install-inactive", "status", "recover"),
         )
 
-    def test_privileged_recovery_enumerates_independently(self) -> None:
-        owner = identity()
-        child = identity(
-            202,
-            ancestry=(
-                AncestorIdentity(
-                    owner.pid,
-                    owner.start_time,
-                    owner.executable,
-                    owner.argv_digest,
-                ),
-            ),
-        )
-        unrelated = identity(303)
-
-        class CensusSource:
-            def __init__(self):
-                self.calls = 0
-                self.protected = ()
-
-            def census(self, protected_identities=()):
-                self.calls += 1
-                self.protected = tuple(protected_identities)
-                return (unrelated, child, owner)
-
-            def observe(self, pid):
-                raise AssertionError(f"registry-only observation used for {pid}")
-
-        source = CensusSource()
+    def test_privileged_recovery_supplies_acknowledgment_only(self) -> None:
         engine = mock.Mock()
-        engine.status.return_value = {
-            "state": {"registry": {"entries": [owner.to_mapping()]}}
-        }
-        with mock.patch.object(self.helper, "PsProcessSource", return_value=source):
-            returned_source, rows = self.helper._recovery_inputs(engine)
-        self.assertIs(returned_source, source)
-        self.assertEqual(source.calls, 1)
-        self.assertEqual(source.protected, (owner,))
-        self.assertEqual(rows, (child, owner))
-
-    def test_privileged_recovery_retains_custody_when_protected_pid_vanishes_after_error(self) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix=guard_module.TEST_STATE_ROOT_PREFIX
-        ) as temporary:
-            root = Path(temporary) / "state"
-            engine = GuardEngine(
-                root, host_id="host-A", boot_id="boot-A", test_mode=True
+        engine.recover.return_value = {"state": "idle"}
+        with mock.patch.object(self.helper.os, "geteuid", return_value=0), mock.patch.object(
+            self.helper, "GuardEngine", return_value=engine
+        ), mock.patch.dict(self.helper.os.environ, {"SUDO_USER": "Ed"}, clear=False), mock.patch.object(
+            self.helper, "_emit"
+        ):
+            exit_code = self.helper.main(
+                ("recover", "--ack", RECOVERY_ACKNOWLEDGMENT)
             )
-            engine.initialize_inactive()
-            owner = identity(123)
-            engine.transition(
-                "handoff_pending",
-                "initiating_session",
-                owner=owner,
-                registry_entries=(owner,),
-            )
-            recovery = engine.audit_registry(SnapshotProcessSource(), ())
-            lease_id = recovery["lease"]["lease_id"]
-            snapshots = [b"123\n456\n", b"456\n"]
-            stable = DarwinProcessRecord(
-                456, 0, "1785940800.123456", "/bin/stable", ("stable",)
-            )
+        self.assertEqual(exit_code, 0)
+        engine.status.assert_not_called()
+        engine.recover.assert_called_once_with(
+            acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+            acknowledged_by="Ed",
+        )
 
-            def runner(arguments, **kwargs):
-                del kwargs
-                return subprocess.CompletedProcess(
-                    arguments, 0, stdout=snapshots.pop(0), stderr=b""
-                )
-
-            class ChurnReader:
-                def __init__(self):
-                    self.owner_calls = 0
-
-                def read(self, pid):
-                    if pid == owner.pid:
-                        self.owner_calls += 1
-                        if self.owner_calls == 1:
-                            raise ProcessObservationError(
-                                "protected registry PID is unobservable"
-                            )
-                        return None
-                    return stable
-
-            source = self.helper.PsProcessSource(runner, reader=ChurnReader())
-            with mock.patch.object(self.helper, "PsProcessSource", return_value=source):
-                try:
-                    returned_source, rows = self.helper._recovery_inputs(engine)
-                    engine.recover(
-                        acknowledgment=RECOVERY_ACKNOWLEDGMENT,
-                        acknowledged_by="Ed",
-                        source=returned_source,
-                        independent_census_rows=rows,
-                    )
-                except ProcessObservationError:
-                    pass
-            retained = engine.read_state()
-            self.assertEqual(retained["state"], "recovery_required")
-            self.assertEqual(retained["lease"]["lease_id"], lease_id)
+    def test_protected_pid_and_caller_census_machinery_no_longer_exists(self) -> None:
+        engine_source = (REPO_ROOT / "joulewise/quiet_guard.py").read_text()
+        process_source = (
+            REPO_ROOT / "joulewise/quiet_guard_process.py"
+        ).read_text()
+        helper_source = (
+            REPO_ROOT / "scripts/quiet_guard_privileged.py"
+        ).read_text()
+        combined = engine_source + process_source + helper_source
+        self.assertNotIn("protected_identities", combined)
+        self.assertNotIn("protected_pids", combined)
+        self.assertNotIn("_recovery_inputs", combined)
+        self.assertNotIn("independent_census_rows", combined)
 
     def test_privileged_parser_rejects_non_allowlisted_command(self) -> None:
         with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
