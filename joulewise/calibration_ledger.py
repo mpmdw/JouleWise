@@ -347,13 +347,27 @@ _RECEIPT_KEYS = frozenset(
         "receipt_digest",
     }
 )
+_HISTORICAL_IMPORT_INPUT_SHA256_KEY = "historical_import_input_sha256"
+_HISTORICAL_IMPORT_INPUT_SHA256_KEYS = frozenset(
+    {"disposition_table", "custody_manifest"}
+)
+_HISTORICAL_IMPORT_RESERVATION_KEYS = (
+    _RECEIPT_KEYS | {_HISTORICAL_IMPORT_INPUT_SHA256_KEY}
+)
 
 
 def _valid_receipt_shape(receipt: object) -> bool:
-    if not isinstance(receipt, Mapping) or set(receipt) != _RECEIPT_KEYS:
+    if not isinstance(receipt, Mapping):
         return False
     sequence = receipt.get("sequence")
     event = receipt.get("event")
+    expected_keys = (
+        _HISTORICAL_IMPORT_RESERVATION_KEYS
+        if event == HISTORICAL_IMPORT_RESERVATION_EVENT
+        else _RECEIPT_KEYS
+    )
+    if set(receipt) != expected_keys:
+        return False
     disposition = receipt.get("disposition")
     artifacts = receipt.get("artifact_sha256")
     epoch = receipt.get("identity_epoch")
@@ -397,6 +411,9 @@ def _valid_receipt_shape(receipt: object) -> bool:
     if content_id is not None and not _is_sha256(content_id):
         return False
     if event in {"reservation", HISTORICAL_IMPORT_RESERVATION_EVENT}:
+        historical_input_sha256 = receipt.get(
+            _HISTORICAL_IMPORT_INPUT_SHA256_KEY
+        )
         return (
             disposition == "pending"
             and content_id is None
@@ -408,6 +425,16 @@ def _valid_receipt_shape(receipt: object) -> bool:
                 for field in IDENTITY_EPOCH_FIELDS
             )
             and all(t1.get(field) not in (None, "") for field in T1_FIELDS)
+            and (
+                event != HISTORICAL_IMPORT_RESERVATION_EVENT
+                or isinstance(historical_input_sha256, Mapping)
+                and set(historical_input_sha256)
+                == _HISTORICAL_IMPORT_INPUT_SHA256_KEYS
+                and all(
+                    _is_sha256(historical_input_sha256.get(name))
+                    for name in _HISTORICAL_IMPORT_INPUT_SHA256_KEYS
+                )
+            )
         )
     if disposition not in FINAL_DISPOSITIONS:
         return False
@@ -725,6 +752,7 @@ def _new_receipt(
     exact_bound_lexeme_s: str | None,
     disposition: str,
     custody_locator: str,
+    historical_import_input_sha256: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     receipt: dict[str, Any] = {
         "schema_version": RECEIPT_SCHEMA,
@@ -742,6 +770,10 @@ def _new_receipt(
         "disposition": disposition,
         "custody_locator": custody_locator,
     }
+    if historical_import_input_sha256 is not None:
+        receipt[_HISTORICAL_IMPORT_INPUT_SHA256_KEY] = dict(
+            sorted(historical_import_input_sha256.items())
+        )
     receipt["receipt_digest"] = _receipt_digest(receipt)
     return receipt
 
@@ -1288,6 +1320,10 @@ def prepare_historical_import(
             exact_bound_lexeme_s=None,
             disposition="pending",
             custody_locator=candidate.custody_locator,
+            historical_import_input_sha256={
+                "disposition_table": expected_disposition_table_sha256,
+                "custody_manifest": expected_custody_manifest_sha256,
+            },
         )
         if not _valid_receipt_shape(reservation):
             raise CalibrationLedgerError("historical reservation is malformed")
@@ -1367,6 +1403,46 @@ def _require_genesis_bootstrap_state(
 def _ledger_lock_path(ledger_path: Path) -> Path:
     ledger = Path(ledger_path)
     return ledger.with_name(f"{ledger.name}.lock")
+
+
+def _open_ledger_lock(ledger_path: Path) -> int:
+    """Open one dedicated, non-aliased regular lock inode for a writer."""
+
+    ledger = Path(ledger_path)
+    try:
+        descriptor = os.open(
+            _ledger_lock_path(ledger),
+            os.O_NOFOLLOW | os.O_CREAT | os.O_RDWR,
+            0o600,
+        )
+    except OSError as exc:
+        raise CalibrationLedgerError("ledger lock cannot be opened safely") from exc
+    try:
+        lock_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
+            raise CalibrationLedgerError(
+                "ledger lock must be a dedicated regular file"
+            )
+        try:
+            ledger_stat = os.stat(ledger)
+        except FileNotFoundError:
+            ledger_stat = None
+        except OSError as exc:
+            raise CalibrationLedgerError(
+                "physical ledger identity is unreadable"
+            ) from exc
+        if ledger_stat is not None and (
+            lock_stat.st_dev,
+            lock_stat.st_ino,
+        ) == (ledger_stat.st_dev, ledger_stat.st_ino):
+            raise CalibrationLedgerError("ledger lock aliases the physical ledger")
+        return descriptor
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise
 
 
 def _fsync_parent_directory(path: Path) -> None:
@@ -1463,8 +1539,7 @@ def bootstrap_historical_import(
 
     payload = plan.ledger_bytes
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = _ledger_lock_path(ledger)
-    lock_descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    lock_descriptor = _open_ledger_lock(ledger)
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
         ledger_descriptor = os.open(
@@ -1533,9 +1608,7 @@ def _locked_append(
 ) -> Mapping[str, Any]:
     ledger_path = Path(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_descriptor = os.open(
-        _ledger_lock_path(ledger_path), os.O_RDWR | os.O_CREAT, 0o600
-    )
+    lock_descriptor = _open_ledger_lock(ledger_path)
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
         descriptor = os.open(

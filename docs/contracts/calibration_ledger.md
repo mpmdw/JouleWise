@@ -36,10 +36,14 @@ ordinary capture route. Version 1 has the following fixed decisions.
    `historical-import-v1-reservation` immediately followed by
    `historical-import-v1-finalization`. There is no summary receipt. The
    versioned event marker distinguishes these rows from live capture and binds
-   this ordering/custody contract into every receipt digest. The terminal
-   digest transitively binds the complete ordered member set. Omitting a
-   summary keeps the existing two-transition attempt model and yields sequence
-   `2 * member_count`.
+   this ordering/custody contract into every receipt digest. Every reservation
+   also carries `historical_import_input_sha256`, whose exact
+   `disposition_table` and `custody_manifest` digests bind the authenticated
+   raw input bytes into the chain. The terminal digest therefore transitively
+   binds the complete ordered member set and the exact input-digest pair;
+   semantically identical reserialization produces a different chain.
+   Omitting a summary keeps the existing two-transition attempt model and
+   yields sequence `2 * member_count`.
 
 Consumers must not treat an import-marked finalization as a fresh post-cutoff
 observation or bracket endpoint. Production candidate discovery checks the
@@ -136,7 +140,11 @@ Every ledger writer locks the dedicated adjacent
 replaced. A writer acquires it before opening or re-opening the ledger path,
 and holds it through every append or replacement. The replaceable ledger inode
 is never the lock object, so a writer that waited during replacement cannot
-resume against an old, unlinked ledger inode.
+resume against an old, unlinked ledger inode. Both append and bootstrap open
+the lock through the same audited helper with `O_NOFOLLOW|O_CREAT|O_RDWR`, then
+`fstat` the descriptor and refuse unless it is a regular file with link count
+one. If the ledger exists, the lock's `(st_dev, st_ino)` must also differ from
+the ledger's. Symlinked locks and hardlink aliases therefore fail closed.
 
 Execution prepares and canonicalizes the entire chain in memory, obtains the
 stable lock, rechecks the genesis pin and physical ledger by path, and
@@ -162,9 +170,11 @@ rules. Under the stable lock, it compares the physical ledger byte-for-byte
 with `plan.ledger_bytes`; matching bytes enter the idempotent confirm path,
 which re-fsyncs the parent directory without replacing or appending and emits
 the same receipt chain and head/input-digest summary with `outcome=committed`.
-Any other nonempty ledger refuses with the ordinary empty-ledger error. Once
-the reviewed head pin is updated away from genesis, a further invocation
-refuses at the normal genesis-pin gate.
+Because the input-digest pair is inside the reservation bytes, reserializing
+either authenticated input makes this byte comparison fail. Any other nonempty
+ledger refuses with the ordinary empty-ledger error. Once the reviewed head
+pin is updated away from genesis, a further invocation refuses at the normal
+genesis-pin gate.
 
 The importer never writes the head pin. After execution, claim evaluation is
 expected to refuse until the lead has reviewed and committed the exact printed

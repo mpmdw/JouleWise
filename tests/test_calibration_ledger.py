@@ -9,6 +9,7 @@ import hashlib
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -436,6 +437,110 @@ class CalibrationLedgerTests(unittest.TestCase):
         )
         self.assertFalse(dry_ledger.exists())
 
+    def test_historical_input_digest_pair_changes_committed_chain(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        original = prepare_historical_import(
+            roots=[root], checkout_root=checkout, **import_args
+        )
+
+        compact_table_raw = canonical_json_bytes(table)
+        self.assertEqual(json.loads(compact_table_raw), json.loads(
+            import_args["disposition_table_raw"]
+        ))
+        self.assertNotEqual(
+            hashlib.sha256(compact_table_raw).hexdigest(),
+            import_args["expected_disposition_table_sha256"],
+        )
+        table_reformatted = prepare_historical_import(
+            roots=[root],
+            checkout_root=checkout,
+            **{
+                **import_args,
+                "disposition_table_raw": compact_table_raw,
+                "expected_disposition_table_sha256": hashlib.sha256(
+                    compact_table_raw
+                ).hexdigest(),
+            },
+        )
+
+        compact_manifest_raw = canonical_json_bytes(
+            json.loads(import_args["custody_manifest_raw"])
+        )
+        self.assertNotEqual(
+            hashlib.sha256(compact_manifest_raw).hexdigest(),
+            import_args["expected_custody_manifest_sha256"],
+        )
+        manifest_reformatted = prepare_historical_import(
+            roots=[root],
+            checkout_root=checkout,
+            **{
+                **import_args,
+                "custody_manifest_raw": compact_manifest_raw,
+                "expected_custody_manifest_sha256": hashlib.sha256(
+                    compact_manifest_raw
+                ).hexdigest(),
+            },
+        )
+
+        self.assertNotEqual(original.ledger_bytes, table_reformatted.ledger_bytes)
+        self.assertNotEqual(original.head_digest, table_reformatted.head_digest)
+        self.assertNotEqual(original.ledger_bytes, manifest_reformatted.ledger_bytes)
+        self.assertNotEqual(original.head_digest, manifest_reformatted.head_digest)
+        for receipt in original.receipts[::2]:
+            self.assertEqual(
+                dict(receipt["historical_import_input_sha256"]),
+                {
+                    "disposition_table": import_args[
+                        "expected_disposition_table_sha256"
+                    ],
+                    "custody_manifest": import_args[
+                        "expected_custody_manifest_sha256"
+                    ],
+                },
+            )
+
+    def test_reformatted_table_cannot_confirm_or_execute_existing_chain(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        original = prepare_historical_import(
+            roots=[root], checkout_root=checkout, **import_args
+        )
+        self.ledger.write_bytes(original.ledger_bytes)
+        compact_table_raw = canonical_json_bytes(table)
+        reformatted_args = {
+            **import_args,
+            "disposition_table_raw": compact_table_raw,
+            "expected_disposition_table_sha256": hashlib.sha256(
+                compact_table_raw
+            ).hexdigest(),
+        }
+        reformatted = prepare_historical_import(
+            roots=[root], checkout_root=checkout, **reformatted_args
+        )
+
+        with self.assertRaisesRegex(CalibrationLedgerError, "empty ledger"):
+            calibration_ledger._require_genesis_bootstrap_state(
+                self.ledger,
+                self.pin,
+                require_committed_pin=False,
+                repo_root=checkout,
+                expected_payload=reformatted.ledger_bytes,
+            )
+        with self.assertRaisesRegex(CalibrationLedgerError, "empty ledger"):
+            bootstrap_historical_import(
+                self.ledger,
+                head_pin_path=self.pin,
+                roots=[root],
+                checkout_root=checkout,
+                **reformatted_args,
+                execute=True,
+                require_committed_pin=False,
+            )
+        self.assertEqual(self.ledger.read_bytes(), original.ledger_bytes)
+
     def test_historical_import_refuses_nonimportable_disposition(self) -> None:
         _checkout, _root, custodies, table = self._historical_fixture()
         table["members"][0]["disposition"] = "abandoned"
@@ -778,6 +883,44 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertTrue(lock_path.exists())
         self.assertEqual(lock_path.stat().st_ino, lock_inode_before)
 
+    def test_hostile_lock_identity_refuses_and_ordinary_lockfile_proceeds(
+        self,
+    ) -> None:
+        self.ledger.write_bytes(b"")
+        lock_path = calibration_ledger._ledger_lock_path(self.ledger)
+
+        lock_path.symlink_to(self.ledger)
+        with self.assertRaisesRegex(CalibrationLedgerError, "opened safely"):
+            self._reserve("symlink-lock", self.root / "symlink-lock-custody")
+        lock_path.unlink()
+
+        os_link = getattr(calibration_ledger.os, "link")
+        os_link(self.ledger, lock_path)
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        with self.assertRaisesRegex(CalibrationLedgerError, "dedicated regular"):
+            bootstrap_historical_import(
+                self.ledger,
+                head_pin_path=self.pin,
+                roots=[root],
+                checkout_root=checkout,
+                **import_args,
+                execute=True,
+                require_committed_pin=False,
+            )
+        lock_path.unlink()
+
+        receipt = self._reserve("ordinary-lock", self.root / "ordinary-custody")
+        lock_status = lock_path.stat()
+        ledger_status = self.ledger.stat()
+        self.assertEqual(receipt["event"], "reservation")
+        self.assertTrue(stat.S_ISREG(lock_status.st_mode))
+        self.assertEqual(lock_status.st_nlink, 1)
+        self.assertNotEqual(
+            (lock_status.st_dev, lock_status.st_ino),
+            (ledger_status.st_dev, ledger_status.st_ino),
+        )
+
     def test_sigkill_mid_import_leaves_retryable_genesis(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
         import_args = self._historical_import_args(table, custodies)
@@ -971,21 +1114,38 @@ module.bootstrap_historical_import(
         import_args = self._historical_import_args(table, custodies)
         inspect_candidate = calibration_ledger._inspect_historical_candidate
 
-        def stable_vector_candidate(*args, **kwargs):
-            content_id, candidate, error = inspect_candidate(*args, **kwargs)
+        manifest = json.loads(import_args["custody_manifest_raw"])
+        manifest["members"] = {
+            content_id: (
+                "/fixture-checkout/"
+                f"{Path(locator).relative_to(checkout.resolve())}"
+            )
+            for content_id, locator in manifest["members"].items()
+        }
+        manifest_raw = custody_manifest_bytes(manifest)
+        import_args["custody_manifest_raw"] = manifest_raw
+        import_args["expected_custody_manifest_sha256"] = hashlib.sha256(
+            manifest_raw
+        ).hexdigest()
+
+        def stable_vector_candidate(locator, *args, **kwargs):
+            actual = checkout.resolve() / Path(locator).relative_to(
+                "/fixture-checkout"
+            )
+            content_id, candidate, error = inspect_candidate(
+                actual, *args, **kwargs
+            )
             if candidate is not None:
                 candidate = replace(
                     candidate,
-                    custody_locator=(
-                        "/fixture-checkout/"
-                        f"{Path(candidate.custody_locator).relative_to(checkout.resolve())}"
-                    ),
+                    custody_locator=str(locator),
                 )
             return content_id, candidate, error
 
-        # Normalize only the machine-specific absolute custody prefix so this
-        # remains a literal cross-checkout wire vector. File authentication,
-        # ordering, receipt construction, and chaining all remain production.
+        # Normalize the machine-specific absolute custody prefix in both the
+        # manifest digest and receipt bytes so this remains a literal
+        # cross-checkout wire vector. File authentication, input-digest
+        # binding, ordering, receipt construction, and chaining remain live.
         with mock.patch.object(
             calibration_ledger,
             "_inspect_historical_candidate",
@@ -997,7 +1157,7 @@ module.bootstrap_historical_import(
         self.assertEqual(plan.final_sequence, 6)
         self.assertEqual(
             plan.head_digest,
-            "01027fdfa3b2991693ffb25e4165573c0521e2ebe7b41b7ecd69abb9a7197f28",
+            "ac4426e4bbc961256116221f1fad7b9580968f072209bda14e875df897ea19e0",
         )
 
 
