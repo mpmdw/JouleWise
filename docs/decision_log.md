@@ -7233,3 +7233,72 @@ D-102 epoch; the taint is confined to floor artifacts.
    on the INTEGRATION tree whenever the branch is behind main. Recorded
    with the collision as its motivating catch (CI on the merge ref was
    the only layer that could see it).
+
+## D-114: T3-CHAIN DESCOPE — t3 stays the interactive control plane; t3-resident-during-measurement-windows is DROPPED (Ed directive, supersedes the 2026-08-03 T3-DRIVE priority)
+
+**Date:** 2026-08-05 (Ed, in-thread, during the desk session).
+**Status:** RATIFIED by the directive's own author. This reverses Ed's
+2026-08-03 ~23:55 T3-DRIVE-PRIORITY directive. Under rule 11 a
+lieutenant may not self-exempt from a standing priority; that
+constraint does not bind Ed reversing his own instruction, so no cold
+gate was convened. The lead proposed the descope shape; Ed ruled.
+
+**Question.** The t3-drive chain (host-wide quiet lease, refuse-at-arm,
+resident watcher, t3 handoff/relaunch, README banner projection, plus
+an app-up/app-down characterization pair to decide app-adjacent window
+admissibility) had grown a root-owned, sudo-capable, credential-bearing
+surface — a 7-blocker focused audit on commit 1 alone, and a design
+consult showing the credential could not be honestly removed without
+also revising Q10/Q11/Q13/Q19/Q24 as a set. Ed: "is the juice worth the
+squeeze for a UX improvement of using t3 as a control plane?" and "I am
+tired of wasting time on this control plane stuff and want to get back
+to the project."
+
+**Ruling.**
+1. **KEEP — t3 as the INTERACTIVE control plane.** Ed drives sessions
+   from t3, including remotely and away from the measurement machine.
+   This costs nothing and requires no guard machinery.
+2. **DROP — t3 resident during measurement windows.** Claim windows
+   return to the proven path: quit t3, ordinary guarded shell, zero
+   agent sessions, fresh §5A, walk away. Every successful claim window
+   to date used exactly this path. The app-up admissibility question is
+   therefore MOOT, not answered.
+3. **QUIET-GUARD-01 re-scoped to COMMIT 1 ONLY** — the host-wide quiet
+   lease and process census, installed-INACTIVE. Retained on non-t3
+   merit: it gives the ordinary guarded-shell launcher a MECHANICAL
+   refuse-at-arm census, replacing today's procedural eyeballing. Its
+   seven audit blockers are still fixed to the safety bar before it
+   lands (it is root-adjacent regardless of who calls it).
+4. **SHELVED:** QUIET-GUARD commits 2-4 (launcher interception, t3
+   handoff + resident watcher, t3-relaunch + banner projection + all
+   credential handling); T3-CHAR-PAIR-01 (BOTH arms — the r03 re-capture
+   and the app-DOWN arm); WO-T3-VIS-01; SEC5A-REMOTE-01 (its
+   programmatic substrate lived in the dropped scope).
+5. **T3-DRIVE-PRIORITY gate LIFTED** (`active_global_gates: []`); the
+   project queue is ungated. The two in-flight t3-adjacent desk items
+   (T3-AMEND-01 doctrine bookkeeping, COLDGATE-VALIDATOR-01) finish
+   because both are cheap, near-complete, and independently useful.
+6. **Q13's degraded tail is ACCEPTED as an edge case** (Ed, explicit):
+   if a relaunch fails and no session returns, there is no remote
+   signal. A failed relaunch requires physical presence anyway, so
+   local discovery at next login is sufficient. This retires the
+   requirement that motivated the unattended-push credential.
+7. **Q10 (guard git identity WITH unattended push) is SUPERSEDED** —
+   moot under the descope; no credential enters any guard path.
+
+**Design record preserved for any future revival** (from the 2026-08-05
+credential consult, before the descope was ruled): a credentialed
+network pusher running DURING a quiet window contradicts the window's
+defining property. The correct shape is credentials only at the
+unprivileged interactive boundary (pre-arm and post-window pushes), a
+PRE-ARMED SERVER-SIDE DEAD-MAN ALARM for the no-return case (which also
+catches total host death), a dedicated non-login service UID rather
+than HOME-restore env scrubbing (root is otherwise ambiently
+credential-reachable via git helpers / SSH / Keychain), and a banner
+that can only truthfully say ARMING_REQUESTED pre-window.
+
+**Consequences.** The successor's queue is the science queue: the two
+open soundness-sweep blockers (RT-1 mint-floor understatement; voided
+numbers on README/PROJECT_STATUS), the a10 phase-floor extraction, and
+MINT-GENERALIZE-01 — whose D-110 condition (a) was satisfied the same
+day by the CAL-BRACKET merge (PR #100, `f75d12b`).
