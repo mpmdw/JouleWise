@@ -67,6 +67,31 @@ relaunched before any output was consumed.
 **Unchanged queue after these land:** a10 phase-floor extraction, then
 MINT-GENERALIZE-01 (b)+(c) — the D-110 re-mint embedding
 `max(drift, 0.010818 s)`, clause (c) = last sweep blocker DC-2/FM-3.
+Scout correction (this session): the a10 extraction must run in the
+SAME custody session as re-mint consumption (FLOOR-BIND-01 fence), so
+it sequences with the re-mint, not standalone.
+
+### Ed directive batch (2026-08-05 ~22:00, in-thread; 12-hour autonomous window)
+
+1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
+   restored); prior HIGH-only directive retired by its author.
+2. **Codex Fast Mode (service tier)**: 1.5x speed / 2.5x credits;
+   Ed specified the exact bridge implementation (per-call opt-in via
+   `CODEX_SERVICE_TIER=fast`, never a standing default) — being
+   implemented on `impl/codex-fast-tier`. License: use fast on xhigh
+   runs by default, fast-on-high when other streams block on the
+   result.
+3. **D-113 RULED (c) by Ed**: Window B re-evaluation ABANDONED; Window
+   C will be collected fresh. Prerogative, Ed verbatim: "the rigor of
+   the data collected matters, i have ample time — soundness and
+   quality of the project and claims above all." Sol xhigh consult on
+   managing that prerogative is in flight; the magistrate transcribes
+   D-113 after synthesis.
+4. **Acceptance-artifact issuance AUTHORIZED overnight** (MINT-
+   GENERALIZE-01 clause (b)), conditional on the D-079 backfill
+   verification (in flight) coming back fully resolved and passing the
+   lead review gate; full record for Ed's morning review.
+5. Workflow/fan-out standing license re-confirmed for this push.
 
 ## ✅ CHECKPOINT 2026-08-05 night — Ed model-switch stop (successor is FABLE; read this, then the EVENING queue)
 
