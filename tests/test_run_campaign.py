@@ -30,6 +30,10 @@ from joulewise.whole_window import (
     NEG8_DRIFT_BOUND_MAX_AGE_S,
     canonical_sha256,
 )
+from tests.test_calibration_bracketing import (
+    _fixture_snapshot,
+    _unissued_acceptance_fixture,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2027,6 +2031,7 @@ class RunCampaignTests(unittest.TestCase):
             "override": None,
             "admitted": True,
         }
+        calibration_snapshot, _candidates = _fixture_snapshot([])
         with tempfile.TemporaryDirectory() as tmp:
             runs_dir = Path(tmp) / "runs"
             log_path = runs_dir / "campaign_log.jsonl"
@@ -2057,6 +2062,16 @@ class RunCampaignTests(unittest.TestCase):
                     run_campaign_module,
                     "campaign_cooldown_before_member",
                     return_value={"result": "recovered"},
+                ),
+                patch.object(
+                    run_campaign_module,
+                    "_load_calibration_snapshot_for_evaluation",
+                    return_value=calibration_snapshot,
+                ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "load_calibration_acceptance_bound",
+                    return_value=_unissued_acceptance_fixture(),
                 ),
             ):
                 result = run_campaign_module.run_axi_spec_campaign(
@@ -8697,6 +8712,7 @@ def d100_real_salvage_leaf_patches():
     """Stub only hardware/strict leaves, preserving every D-100 constructor."""
 
     bracket = _d100_authenticated_bracket()
+    calibration_snapshot, _candidates = _fixture_snapshot([])
 
     class StoredSummaryReduction:
         def __init__(self, bundle_path: Path):
@@ -8719,6 +8735,22 @@ def d100_real_salvage_leaf_patches():
         patch(
             "joulewise.whole_window.calibration_bracket_for_bundles",
             return_value=(bracket, ()),
+        ),
+        patch(
+            "joulewise.whole_window.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ),
+        patch(
+            "joulewise.whole_window.load_calibration_ledger_snapshot",
+            return_value=calibration_snapshot,
+        ),
+        patch(
+            "joulewise.analysis_engine.inputs.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ),
+        patch(
+            "joulewise.analysis_engine.inputs.load_calibration_ledger_snapshot",
+            return_value=calibration_snapshot,
         ),
         patch(
             "joulewise.whole_window._verify_instrument_calibration",

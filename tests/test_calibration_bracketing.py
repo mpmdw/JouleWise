@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
@@ -13,9 +14,12 @@ import tempfile
 from types import MappingProxyType, SimpleNamespace
 import unittest
 from unittest.mock import patch
+import zlib
 
 from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
+    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ISSUED_ACCEPTANCE_BOUND_SHA256,
     CalibrationCandidate,
     _canonical_sha256,
     _valid_acceptance_bound,
@@ -26,6 +30,7 @@ from joulewise.calibration_bracketing import (
     load_calibration_candidate,
 )
 from joulewise.calibration_ledger import (
+    DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
     CalibrationLedgerSnapshot,
@@ -61,13 +66,114 @@ _REAL_D079_TABLE_SHA256 = (
 _REAL_D079_CUSTODY_MANIFEST_SHA256 = (
     "99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078"
 )
+_UNISSUED_ACCEPTANCE_FIXTURE_SHA256 = (
+    "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
+)
+_UNISSUED_ACCEPTANCE_FIXTURE_B85 = b"""
+c-qZd*={3Ac75-!AoSD?7pr4m#!oh827a(-fI-_YMk8?};zlXExoDWAstb+!cc0)+i4;Y(3UC2cDv_BPH}1L1Igt^+e>WQ44f&p@
+)IIWI=;yP$KaK8wnXe}NxgYprrb(X`w8R%3<;)LDnq}_Nd^IZ{AJxa&|F&E$_~WCz`_P_sbWLB{ql)mcyYQ4p)y-tw+*mmGZFt-
+^;J*LGXZZBbV=2`7g6%Ky4*&moGt^?)SIWz7F`sZ7YCDguN!@DJ55tPf=K1aaZBShJ`{r@Ol9sDB*4=8>Y^yz&-
+Oalp^Mv|o$CLh3pVos^nhd=Ca=|og{I#}h^ba+{^{atLezf3!uKEQJqX|<P!L@jNUOQkkucHNh9zEQD8TveoXjVq|G~DCb#C5*l(
+Zgb1R(XBx-
+fE2abv=&>mruOt@@hG+^=L8}k2lj3Tl4NQa##9KJS>}y;t&4Wxnyg=#@UyHWu69JJZ}EKxn&n4&2wACc2Ird84vx?&F0IFy2Jdt-
+TZg+-
+MgVLJX`k5FC9P3^ZmgO^Px+tezFcdW&aw?ZpeFDl+T2*rt`v+_Vs^Jmi9y3UGOmfjA=d0Cw>0XzNXyW_n+>&_2;{b2AV!h`q`(hp
+Do+;Cf&3}kQ6(o!`c0mmh(lo;K%-
+uPq@CD%!i>HRtTg=o*bS4kInKul3{Pj3NhBau$<@lWSd88Gp4*;AZEJF6}5+(dOYD#9~^_*h6jfC9vLPS1l|UOgNuL?&k8L%{_UY
+(w7Je!lgV~$JpWUJ_ZYs#YJ=7<E5L}fD$P%e9&_BM;0#kjOz@<_s^#73!w&g;3>?yJQo4LkvroHp+nB$ZHJ*O(W%{z@XP3_Sa|i$
+Rr2{Ih+-x75>0upIm>zO#*iHqxy*Rx;&leA?p)2!-$k5freA>y_E$5vMr=tvCh9!c1+2^iOKWPt#F%!5E$pu$%MS-
+|qA}1Eiv%B@JKkvZYO=!3$WnJ@QWU5isV5N4fw8_>n=~|06Ix6xyYpIJN5mlyCwFuQ#OH^wlEz>@W4*toA>B9iO?`+>^=8q@Qvx}
+RL59>fzlC$*LCnaTM8@*(ga@Da!6=jLSm!yrS<cOS((Iu%VXr~1m?MWYebr^4joLwvlF^&v<Y|v!h4(Gj*s>o<kGCKQOv-
+Vm?silpQrIKD~FH6wH31cGXR3vE*KIRxg_UDG90?ZL;C-dBmr-
+NXoU@I4utrXf&E~$E%3X$<9hmwu3x@JW(1xLYTVUrfH(Puh09ujM{pOBR@1QSc4SaQ-XnX0p`<XjcfJMXf~M#7~=IHgF{0@qnpwU
+p90X*comb)Uh9ob5ItdR*lvoVVG0w~qbMF22T(dbExFeIr@k^N4@TlU3m|`rOaT{PXzVN9#1kjnpqb;A^DsXqP*qO*P%dR~tpf?J
+rZFrqfj3h1vegZKYB|IpLN1Ng8Xl9dk4?2POB8Y!jKU7O3h4Eixm3*M3~AW<$5J5=~(Dlpp)quw1OBFmRLYYtQ`nnnBW`Lay7q_$
+UBshyih>oYhL1<IATs>nn2VC{r29S+a}~aT2vNrIu`UOd9!Xh-
+;3~S6?|7CbC5rFPu;T!4()u;*TGHG>=_I9E~JRAfF7v#&TuExkL8Zj5NzBW{KQz$P|gxiB43fOhA&BfCx&Olc&4wKwm$+8Xb5{hB
+0DRctr0_=&0Ajb9t0A@F--4aB#IU0<Mkj3O*uORY+1vqKHzI(I{d@rQ&=+t#Va4jLXa@HZ`%VJ_4HTz4S&2BVUhC@=mkGbA?vc7S
+Ab3cpr)Ga?XW96d|Qp5L=OwQQ(8xYGJAsl~CMo$EQt1iLq?ODrIpKKKj-
+8yfDhS^wClY6fGT$cHXON>BDfgq~O^SfT=bMqu2l_bd-
+={LN8E&g)<R(6lmm*sAxqNRnn##;L#}XH5ym6RjROYNl1#KsF;Lts!EOY638)%u2iiPWgo4G1#>}<p|`+erSfCMR&`F&P4Ji-
+;JG-;x%5%!twMP1g*6WIzJgB#x$vPT6tfgvt|16%6MR?$S~97|HWWN&g9k0~0r>-
+J;ziBYvLO3<e1x;eyr|l}<SL<R$1G&7K2eZPYYqAlax2LRq`*qlQ~Y0M@(2mk>D%#9N^3Qa7{q3&zZE{0M>(557Ou1o6)r^lxt2c
+F8&1VmL10THtPc*&2x;O%VqJ@m-WpX(EIu>HQ7JxITV-+_vNf-Vhmkls6f2ypqDo~$F+SCdZYFAy)!0DJgGWVcfQC>49MF-
+bY*P)D-vAHFsEFgBoKaT#o8YlKc=T0xE{}39eZ0f;&{85Ox6#2~!N-E`kut2k7pN@)q!s<EWc-HWg655W!J<?^q_lSqT$5{H4>zW
+YA2;CB61zexlw5Id^s0g+qZ>g$WFJan(5T;jTmOU(G9(lM3S^8a{#JbSPeOsChB4{@xO$G?1fLg2Ifsw&R%?Sa5)xHW`78Kjw0#|
+%BT%VIBC#X3S(N~`R#0UOG!@%gtXD}Tsj5<$UDF}nqs*1p<Ku!ua#-jV78!!rK)|s9{f~iFq!MB>-
+d6|CX1pjaK;J1So*EjHl=%(#SS73+7qE<w1AQxeE{}2!ACT0>4O~R4z~8Ivtu{B*fcB$^grf{!v<wL%M||1RsB$Hc>D(l-
+jJAT~Q}Jl)EYuD7fD#6d4mGW~3PC10;Ag1WC=YQIBjO<=tia@Ta-gBsOCd!Ho(#VQ9~ls(Zfp=xQ6+N|KJL}{yfDhy`lg(cPJ|Gw
+u}WUcpF~wwR2rnF^2D*CvXM42X#i~rZ34_GS_%H^!Pbj&s+eG0ChG#ld`tdBV_l(S8OewYw52B0OrwFBG>s3U<$&R#>?znG)tcc$
+jyWJ#${X+jSw!P5!Z4~Oe=B@0k8-xYStuW;W0Oi2C|$z`@Y@XXB%M@HI_zb#35-
+g5lssEdBV}X|2lQ)*l~}=w!KYC5(5evXug9lqBqk<MMJQ;E)~@vqCWYj2HZhY)Y;-
+ooO6%Detw8lt(?n53a&N)MdM(B&gZM~uTYd94;B#@5v-
+Pd5+u&9OGGUFmh7S}7qm?)S5gd3@($!bZLZ%3zN{o`Eye+1*UM5*tj*_5>G;>ly+(56r%&5FoXDBP3qZ1_taJhsb@o>;hVnRvN(L
+<xceu7p-gR+j3Y0C$<<D(!PO&l|x>>&oe5k4=Ba<;yCU=)H15`;q7Yy1re7A;WB5Cs`R$Q1<^=SrwLlCd6-
+gO)GJzzB41TU7*G0o}%ptYy4Gp5mDSxtFpIkU-jiz>z5#WFaU{&Vm#A&?+88a<Zy1hc!>srsk^XE%<;axv`d}x)N{0C)|L~#Zk_#
+?f@5OCDc+|Jh1u-
+KBei=9I{9`%Vbo{ma`Jj!qnOj3+NRnNE4xZBjkt?kyUm%8Bj1^`38QiV~v`?)RbZ&gl_A7##f;rZoo)@kBU)>j8+IDE~G}KgDyp$
+niPb-6(94HkWlJz3`vJ#Y1KEu=fzRZ);Dxo2d&o@;iS4IPfacYj&?#biAE1m&8mT-
+N4jcCRRADDLN!HI(FW0y+WI$(CThvu0uO^Rm*~Mq94IsDXF)JjYpT)CMeq&C(U2OavCv}~V4)f!RRudn$lVH${R!1qqHz;6o0RD`
+c^Y@{n3v&sag=lLXl0}g63SGy8?MpotWfX0Z9Li{Uz~)*uNjiG_=KtlMXYOyNk&K>@L-
+DwY44mYR0%pszM;I~K2%+*$;;wEn}ZV;dNeo%Di9JHkw!U1rs!5nvjjL1It-
+dvmMRm!0Us$L1;+w}F?*lC6+V|oIfqXO5ljq)Lj<UOeXae-Bv5zOpvd-iPg@<qs>y<CgV~u>3{_~6nuP}wW=P8H6=EH7B|y*KK(7
+I`PG~zIXRR*=bTVbZouh}*Nm-E%R|E21BifJmV5|5SstElG+4Tl|P?Dt@3&;bsF#E0Wxjf1_d?G}tLasqm;D@+I-
+?Gku+Y$jpddi>&wggBNG8&i}i@!qU_AWCS!JvguA~84zX%z|pyn()fQ(KT{(2<f2>Zg<$%vk^x*_Pj2B+Rd9DxmS0td}ksNT#Y#)
+3q)127JI|5!ppo;T_+Gj}$wA>{Wm+4|7)k1P_c*!y#u-
+wy!N;SFm0P4+X*t85Gc<+pi3_L6?GO*!IE);T@Vh@#G828iaqVxvb6Ua>ljwH?$qD2@0qtN0?PEwup$j1|h6;a)CvAu@RwxjTN4w
+%d)J4q|t;o0OZhu{W$t;b0YW60J=QPS%M%SQ6bee*f=8a8i9+!qy&e9JS$3u92IVBI2MWoDX3j>s%<S`>w-
+gX4<3cHX?}7pd2z!6HmI4FfTfD2qBF*+x<C#?UX@fE88A=<QhHw~6jV};E1VXAL9{EWJwThi8%Mio+BTQt%`gKmkG9gB?!r2|59^
+!l#QLLqvA#Qs$h$nBEt_xmyJ)7oyq~XQa^vOiGtK6+9*^yQ8RoO^e?J4r$M(&KT_CJ~`#NfScSf6M3_tv^-@DQ_8g!YKG?{-
+ocHnxy;OVBW7dLjjYIE1CH+a2jlh=D~^!g*4y$-
+>;L+}XXlU*7|&~8{E88j_s?`u(63Ia=n$TFx01$qkXx+;hIi8>caQISZ=l0h0}Va4$14!ooNo!f0A_^lrv=0kt7MWuaC%Oy`Ame+
+QO9O~l}tI@m(R;RX%mN^7ubFHZ5(C^R{qT-
+2yQNjf17nltB_9{!)idq9Y%ly7pKiSi8(P}6(l`Fw<5kf>pQ0#)P9?=VBFw9EBHbc@El~B8ydIC7Lt>rY4S>M&_r*HZ%TU|Vd7^D
+yEn~*k8URqPz`k*C94)~1^mQr$Fk}9UHSEA>D@t9a`d+qqHR-
+e8Azi2fG14CrG6sRpkrU<8&XtdAF!DuB+2qjxc`CN4>;OAi3E?W)30-
+gWPzJBsr_@dQTM1?E_qnE0pS3ywwCL%aMxN;Ic3+S`zp!+OA1_&zzDNsb?3Vfa4*Xk#4OD|_*V^jj!=CV^!fR|dd>=;M{p+SRE&E
+N@A2`yE7c?{j^BI_Uuv<_nG9j$);4)LPZOt7|EMv{34H&#S&2}&W3JqWx7FC<3!z*m-
+A;Zs>45pqq?Owg(CYxR>iYZt9<n_)uns=YtXt?FrHFDf8Ya%_aNus1aZTvav3!&nr`QW5QyDAw|>RzH2;bU8v=rpc&dB8Vvb^cqn
+Sj5CaohS*_~WFbKwu>>va6d^hgB|;c>CBCoKPu{{@t|5dl@S55Sc8<C2^Fzmh8$+=uC(a_ylMPXTwOUSX;TSp^1zu!{E5kcmefn<
+VqSZ!*(zbn&)1{zFBx1=askV7H;8~EBRa<yBMFTYp3?O6?bqK+>7dOAF)lXOKFIo+Lo=nQxXfVUv+-
+?Zno6yKZgbtP#lR`ig=Tj@E)?sdKEhMruC^GMC_31kHMXR+XMt6ov_mC~YIvImvB(Rr|nTjQ$uiL!dBgoD%`g|fQjkK6s$@(3we!
+jYU(dtxvR?@e%^I8dV2LYR`Mw2N?u=AiL6=pNlOy0-R-
+WQ?t39oagKE0>a&lf!}S}jFok!nSWMvGJsoK<C{LyKOHH35cHyao+3goJIay}c-gRtH%WoZr{#Crg2s;~Ejf2xAl5Qnf+h6T(-
+WwY5oSRSL+5_8h&C2~{cK!YE9YZ2_yjdw5@~pDd7F<{`2wQ_;_}1s5TUKCP`WAgCs_r6>eQ+d9L6QMnoQC`9M+HwZuygLz-
+8pR5{Pv>Lr7W)wEzDgv0G2oNJuRsa-
+{e`H)xMcdL&G+;hKWpJzLJ!({>^$PcUTK!}x<)ye@@1=~WkisCqAtJo<nGAST+hd7zR4F5hQCdn{qBqJ|L&kyvpbFk(b%KyB<NNu
+f%va0j)^87BjeniZKhO4;JzWJs6aTgLlL_?tth6<xYp3Y;*LCyR<jejr-Tu>l_6UD$)~<fvdiGBvtv<AMp53qR>){B^v-
+4nSGS9zqyKK2w9S-EJ58ajS_`F>+tsTM}V}@MX(Yx{S(YxIdrg1xicXCkgU-A8y5oX21eDa7}H!F3c_0YrNXx{E<*y@270~ZY6m-
+W26we!3635?;1EZ@bA`>Czy=r}e}f=<+<(=>-GK%<o!v&gJ<-
+LA&}d~{wU_fwj5=gxY~R#SYMyMd=PTVl@ZfZ5)#T}YhpZ#?B;Kab6)4cC6y-m+hvnf9}Ox|+UX$MOEs+qO^NP3gCj5iahT-Cudz{
+@=UxDX{(HrGU^y0_ydCeXEX6eodKX?QqwCP~EQmoi0fsP*=Qvw;dtP^!kmP23bGZyFQ_`S(RF}W3vd5<EI{9xc<JaJnfF${p0Wd{
+kK1N|M74C`Pc3*|MQo>jh6G#KM{4y)pUeGpZ<}f;n_;_W;F{FF0Y=8Q0PvWf_7Gm_QL4@&0H{6={J=i+HU!I-
+WBBY9!wFSU2TB&L1h*GXoK6yo$>jd(5g{O=R_1XYOv$e)zK5rtz9)dTeIB6l~mosgfb5=Iru2(&bszwxOFAj9E{EL=>sj=qT{<b`
+q;%M)7?GsB=hIx+`|tZo}>KH`q*h&pkMI*IOK^NHr3_03LVPU$7iMI<1Sf`rn{ZW0rWPL;|tcFK1uMCH+{R3xI2S<u=~ip=OS-
+=$aAx(`wnwERJtp(I{<chnnz_a3i0Ooo`%7$o$qfsiTYERFF5>y<F47=ihGyZLB%DdNjuAnlo}3RLGQ39>H4fI9Nk>d)0Z!#`u<*
+;Oy-~0^kSDvc-r^-
+^TXTce0VzXAI>I0%b}C!z!Tl^OSKQ+Y0HyOe)yN;w>F#M4mKU)<gRtRvd;O8VcJV2dHE3O(KfUU`mU48K|*~wlt~o%3{}$JY|Eww
+xssE@c(^y)B&{zRG*l=P+v(Q3@4kNbfA+zM4g
+"""
+
+
+def _unissued_acceptance_fixture_bytes() -> bytes:
+    """Return the exact pre-issuance fixture bytes, independent of repo state."""
+
+    encoded = b"".join(_UNISSUED_ACCEPTANCE_FIXTURE_B85.split())
+    raw = zlib.decompress(base64.b85decode(encoded))
+    assert hashlib.sha256(raw).hexdigest() == _UNISSUED_ACCEPTANCE_FIXTURE_SHA256
+    return raw
+
+
+def _unissued_acceptance_fixture() -> dict:
+    artifact = json.loads(_unissued_acceptance_fixture_bytes())
+    assert _valid_acceptance_bound(artifact)
+    return artifact
 
 
 def _synthetic_issued_artifact() -> dict:
     """Return a schema-valid issued artifact for isolated consumer tests."""
 
-    artifact = json.loads(json.dumps(load_calibration_acceptance_bound()))
-    assert artifact is not None
+    artifact = _unissued_acceptance_fixture()
     prior = artifact["prior_observation_set"]
     observations = [
         row for row in prior["observations"] if row["disposition"] == "valid"
@@ -248,11 +354,24 @@ def _fixture_snapshot(
     )
 
 
+def _evaluate_with_unissued_acceptance(
+    candidates: list[CalibrationCandidate] | tuple[CalibrationCandidate, ...],
+    **kwargs: object,
+) -> tuple[dict, tuple[str, ...]]:
+    """Evaluate against the exact genesis fixture, never the live anchor."""
+
+    with patch(
+        "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+        return_value=_unissued_acceptance_fixture(),
+    ):
+        return _evaluate_calibration_bracket(candidates, **kwargs)
+
+
 def evaluate_calibration_bracket(
     candidates: list[CalibrationCandidate], **kwargs: object
 ) -> tuple[dict, tuple[str, ...]]:
     snapshot, normalized = _fixture_snapshot(list(candidates))
-    return _evaluate_calibration_bracket(
+    return _evaluate_with_unissued_acceptance(
         normalized,
         ledger_snapshot=snapshot,
         _allow_unissued_fixture=True,
@@ -279,26 +398,57 @@ class CalibrationBracketingTests(unittest.TestCase):
             calibration_bracket_max_drift_s=0.010,
         )
 
-    def test_unissued_fixture_cannot_license_default_claim_evaluation(self) -> None:
+    def test_explicit_unissued_fixture_cannot_license_claim_evaluation(self) -> None:
         snapshot, candidates = _fixture_snapshot(
             [
                 self.candidate("pre", 99.0, "0.025"),
                 self.candidate("post", 111.0, "0.026"),
             ]
         )
-        result, reasons = _evaluate_calibration_bracket(
-            candidates,
-            window_start_s=1_000.0,
-            window_end_s=1_100.0,
-            bindings=self.bindings,
-            policy=self.policy,
-            ledger_snapshot=snapshot,
-        )
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=1_000.0,
+                window_end_s=1_100.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+            )
 
         self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
         self.assertEqual(
             result["acceptance"]["freshness"]["reason"],
             "acceptance_artifact_unissued_fixture",
+        )
+
+    def test_live_issued_anchor_authenticates_and_matches_committed_head_pin(
+        self,
+    ) -> None:
+        raw = DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes()
+        artifact = load_calibration_acceptance_bound()
+        pin = json.loads(DEFAULT_HEAD_PIN_PATH.read_bytes())
+
+        self.assertIsNotNone(artifact)
+        self.assertEqual(artifact["artifact_role"], "issued")
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(), ISSUED_ACCEPTANCE_BOUND_SHA256
+        )
+        self.assertTrue(_valid_acceptance_bound(artifact))
+        self.assertTrue(artifact["issuance"]["claim_eligible"])
+        self.assertEqual(
+            {
+                key: artifact["ledger_cutoff"][key]
+                for key in ("sequence", "head_digest", "ledger_schema")
+            },
+            pin,
+        )
+        self.assertEqual(pin["sequence"], 76)
+        self.assertEqual(
+            pin["head_digest"],
+            "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
         )
 
     def test_issued_artifact_authenticates_and_becomes_claim_eligible(self) -> None:
@@ -493,9 +643,13 @@ class CalibrationBracketingTests(unittest.TestCase):
                 require_committed_pin=False,
                 repo_root=repo,
             )
-            source = load_calibration_acceptance_bound()
-            self.assertIsNotNone(source)
-            issued = _issued_acceptance_artifact(plan, source)
+            source_raw = _unissued_acceptance_fixture_bytes()
+            source = _unissued_acceptance_fixture()
+            issued = _issued_acceptance_artifact(
+                plan,
+                source,
+                source_artifact_raw=source_raw,
+            )
             self.assertEqual(
                 issued["derivation_corpus"], source["derivation_corpus"]
             )
@@ -617,7 +771,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             [call.args[0].attempt_id for call in authenticate.call_args_list],
         )
 
-        result, reasons = _evaluate_calibration_bracket(
+        result, reasons = _evaluate_with_unissued_acceptance(
             discovered,
             window_start_s=100.0,
             window_end_s=110.0,
@@ -633,7 +787,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_acceptance_prior_set_must_equal_import_marked_cutoff_prefix(self) -> None:
-        artifact = json.loads(json.dumps(load_calibration_acceptance_bound()))
+        artifact = _unissued_acceptance_fixture()
         snapshot, registered = _fixture_snapshot(
             [
                 self.candidate("pre", 99.0, "0.025"),
@@ -1065,6 +1219,10 @@ class CalibrationBracketingTests(unittest.TestCase):
                 "joulewise.calibration_bracketing.discover_calibration_candidates",
                 side_effect=discover,
             ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=_unissued_acceptance_fixture(),
+            ),
         ):
             result, reasons = calibration_bracket_for_bundles(
                 Path("/caller-root"),
@@ -1112,7 +1270,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             content_id="f" * 64,
             ledger_receipt_digest="e" * 64,
         )
-        result, reasons = _evaluate_calibration_bracket(
+        result, reasons = _evaluate_with_unissued_acceptance(
             [*registered, off_ledger],
             window_start_s=100.0,
             window_end_s=110.0,
@@ -1124,7 +1282,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertEqual(reasons, ("calibration_ledger_off_ledger_artifact",))
 
-        _result, omitted_reasons = _evaluate_calibration_bracket(
+        _result, omitted_reasons = _evaluate_with_unissued_acceptance(
             registered[:1],
             window_start_s=100.0,
             window_end_s=110.0,
@@ -1159,8 +1317,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_corpus_doubling_counts_38_total_valid_distinct_observations(self) -> None:
-        artifact = load_calibration_acceptance_bound()
-        self.assertIsNotNone(artifact)
+        artifact = _unissued_acceptance_fixture()
         candidates = []
         for index, member in enumerate(artifact["derivation_corpus"]["members"]):
             candidates.append(
@@ -1193,7 +1350,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
             )
         snapshot, registered = _fixture_snapshot(candidates)
-        result, reasons = _evaluate_calibration_bracket(
+        result, reasons = _evaluate_with_unissued_acceptance(
             registered,
             window_start_s=100.0,
             window_end_s=110.0,
@@ -1269,7 +1426,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                     candidates,
                     extra_observations=(abandoned,),
                 )
-                result, reasons = _evaluate_calibration_bracket(
+                result, reasons = _evaluate_with_unissued_acceptance(
                     registered,
                     window_start_s=100.0,
                     window_end_s=110.0,

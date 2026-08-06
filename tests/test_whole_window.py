@@ -30,6 +30,7 @@ from joulewise.campaign_provenance import (
     campaign_provenance_attestation,
     load_authenticated_campaign_catalog,
 )
+from tests.test_calibration_bracketing import _fixture_snapshot
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
@@ -343,8 +344,11 @@ class TwoScopeRefusalTests(unittest.TestCase):
             )
             bundle_paths[bundle_id] = bundle
 
+        calibration_snapshot, _candidates = _fixture_snapshot([])
         session = AuthenticatedConsumptionSession(
-            root, set(widened_by_bundle)
+            root,
+            set(widened_by_bundle),
+            calibration_ledger_snapshot=calibration_snapshot,
         )
 
         def rederive(path: Path, **_kwargs: object) -> dict:
