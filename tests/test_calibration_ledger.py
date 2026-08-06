@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import io
 import json
 import hashlib
 from pathlib import Path
@@ -11,10 +12,12 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
 import joulewise.calibration_ledger as calibration_ledger
+from scripts import calibration_ledger_bootstrap as bootstrap_cli
 from joulewise.calibration_ledger import (
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
@@ -25,6 +28,7 @@ from joulewise.calibration_ledger import (
     HISTORICAL_IMPORT_TABLE_SCHEMA,
     LEDGER_SCHEMA,
     CalibrationLedgerError,
+    HistoricalImportDurabilityUncertain,
     append_pending_receipt,
     artifact_hashes,
     bootstrap_historical_import,
@@ -393,6 +397,7 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertEqual(len(rows), 7)
         self.assertEqual(rows[-1]["record"], "bootstrap-summary")
         self.assertFalse(rows[-1]["executed"])
+        self.assertEqual(rows[-1]["outcome"], "planned")
         self.assertEqual(rows[-1]["final_sequence"], 6)
         self.assertEqual(
             rows[-1]["disposition_table_sha256"],
@@ -534,6 +539,244 @@ class CalibrationLedgerTests(unittest.TestCase):
                     require_committed_pin=False,
                 )
         self.assertEqual(self.ledger.read_bytes(), b"")
+
+    def test_post_replace_dir_fsync_fault_is_committed_and_retry_confirms(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        real_fsync = calibration_ledger.os.fsync
+        fsync_calls = 0
+
+        def fail_both_directory_fsyncs(descriptor):
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls >= 2:
+                raise OSError("injected post-replace directory fsync")
+            return real_fsync(descriptor)
+
+        with mock.patch.object(
+            calibration_ledger.os,
+            "fsync",
+            side_effect=fail_both_directory_fsyncs,
+        ):
+            with self.assertRaises(HistoricalImportDurabilityUncertain) as raised:
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        plan = raised.exception.plan
+        self.assertEqual(
+            raised.exception.outcome, "committed_durability_uncertain"
+        )
+        self.assertEqual(fsync_calls, 3)
+        self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes)
+
+        with mock.patch.object(calibration_ledger.os, "replace") as replace_mock:
+            confirmed = bootstrap_historical_import(
+                self.ledger,
+                head_pin_path=self.pin,
+                roots=[root],
+                checkout_root=checkout,
+                **import_args,
+                execute=True,
+                require_committed_pin=False,
+            )
+        replace_mock.assert_not_called()
+        self.assertEqual(confirmed.head_digest, plan.head_digest)
+        self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes)
+
+        self._write_pin(dict(plan.head_pin))
+        with self.assertRaisesRegex(CalibrationLedgerError, "genesis head pin"):
+            bootstrap_historical_import(
+                self.ledger,
+                head_pin_path=self.pin,
+                roots=[root],
+                checkout_root=checkout,
+                **import_args,
+                execute=True,
+                require_committed_pin=False,
+            )
+
+    def test_durability_uncertain_cli_emits_full_summary_and_distinct_exit(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        plan = prepare_historical_import(
+            roots=[root], checkout_root=checkout, **import_args
+        )
+        table_path = self.root / "uncertain-dispositions.json"
+        table_path.write_bytes(import_args["disposition_table_raw"])
+        manifest_path = self.root / "uncertain-custody-manifest.json"
+        manifest_path.write_bytes(import_args["custody_manifest_raw"])
+
+        class BinaryOutput:
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+        stdout = BinaryOutput()
+        stderr = io.StringIO()
+        argv = [
+            "calibration_ledger_bootstrap.py",
+            "--disposition-table",
+            str(table_path),
+            "--expected-table-sha256",
+            import_args["expected_disposition_table_sha256"],
+            "--custody-manifest",
+            str(manifest_path),
+            "--expected-custody-manifest-sha256",
+            import_args["expected_custody_manifest_sha256"],
+            "--ledger",
+            str(self.ledger),
+            "--head-pin",
+            str(self.pin),
+            "--execute",
+            str(root),
+        ]
+        with (
+            mock.patch.object(bootstrap_cli.sys, "argv", argv),
+            mock.patch.object(bootstrap_cli.sys, "stdout", stdout),
+            mock.patch.object(bootstrap_cli.sys, "stderr", stderr),
+            mock.patch.object(
+                bootstrap_cli,
+                "bootstrap_historical_import",
+                side_effect=HistoricalImportDurabilityUncertain(plan),
+            ),
+        ):
+            exit_code = bootstrap_cli.main()
+        self.assertEqual(exit_code, bootstrap_cli.DURABILITY_UNCERTAIN_EXIT)
+        self.assertNotEqual(exit_code, 2)
+        rows = [json.loads(line) for line in stdout.buffer.getvalue().splitlines()]
+        self.assertEqual(len(rows), len(plan.receipts) + 1)
+        self.assertEqual(rows[-1]["record"], "bootstrap-summary")
+        self.assertTrue(rows[-1]["executed"])
+        self.assertEqual(
+            rows[-1]["outcome"], "committed_durability_uncertain"
+        )
+        self.assertEqual(rows[-1]["head_digest"], plan.head_digest)
+        self.assertEqual(
+            rows[-1]["disposition_table_sha256"],
+            plan.disposition_table_sha256,
+        )
+        self.assertEqual(
+            rows[-1]["custody_manifest_sha256"],
+            plan.custody_manifest_sha256,
+        )
+        self.assertIn("rerun the identical --execute invocation", stderr.getvalue())
+
+    def test_tampered_nonempty_ledger_never_enters_confirm_path(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        plan = prepare_historical_import(
+            roots=[root], checkout_root=checkout, **import_args
+        )
+        self.ledger.write_bytes(plan.ledger_bytes + b"tampered\n")
+        with mock.patch.object(calibration_ledger, "_fsync_parent_directory") as sync:
+            with self.assertRaisesRegex(CalibrationLedgerError, "empty ledger"):
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        sync.assert_not_called()
+        self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes + b"tampered\n")
+
+    def test_stable_lock_serializes_replace_against_waiting_old_writer(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        self.ledger.write_bytes(b"")
+        lock_path = calibration_ledger._ledger_lock_path(self.ledger)
+        bootstrap_locked = threading.Event()
+        allow_replace = threading.Event()
+        writer_waiting = threading.Event()
+        real_reauthenticate = calibration_ledger._reauthenticate_historical_import_plan
+        real_flock = calibration_ledger.fcntl.flock
+        bootstrap_results = []
+        bootstrap_errors = []
+        writer_results = []
+        writer_errors = []
+
+        def pause_with_bootstrap_lock(plan):
+            bootstrap_locked.set()
+            if not allow_replace.wait(timeout=5):
+                raise RuntimeError("test timed out before replace release")
+            real_reauthenticate(plan)
+
+        def observe_writer_lock(descriptor, operation):
+            if threading.current_thread().name == "stale-ledger-writer":
+                writer_waiting.set()
+            return real_flock(descriptor, operation)
+
+        def run_bootstrap():
+            try:
+                bootstrap_results.append(
+                    bootstrap_historical_import(
+                        self.ledger,
+                        head_pin_path=self.pin,
+                        roots=[root],
+                        checkout_root=checkout,
+                        **import_args,
+                        execute=True,
+                        require_committed_pin=False,
+                    )
+                )
+            except Exception as exc:  # pragma: no cover - asserted below
+                bootstrap_errors.append(exc)
+
+        def run_writer():
+            try:
+                writer_results.append(self._reserve("stale-writer", self.root / "x"))
+            except Exception as exc:
+                writer_errors.append(exc)
+
+        with (
+            mock.patch.object(
+                calibration_ledger,
+                "_reauthenticate_historical_import_plan",
+                side_effect=pause_with_bootstrap_lock,
+            ),
+            mock.patch.object(
+                calibration_ledger.fcntl,
+                "flock",
+                side_effect=observe_writer_lock,
+            ),
+        ):
+            bootstrap_thread = threading.Thread(target=run_bootstrap)
+            bootstrap_thread.start()
+            self.assertTrue(bootstrap_locked.wait(timeout=5))
+            lock_inode_before = lock_path.stat().st_ino
+            writer_thread = threading.Thread(
+                target=run_writer, name="stale-ledger-writer"
+            )
+            writer_thread.start()
+            self.assertTrue(writer_waiting.wait(timeout=5))
+            allow_replace.set()
+            bootstrap_thread.join(timeout=5)
+            writer_thread.join(timeout=5)
+        self.assertFalse(bootstrap_thread.is_alive())
+        self.assertFalse(writer_thread.is_alive())
+        self.assertEqual(bootstrap_errors, [])
+        self.assertEqual(len(bootstrap_results), 1)
+        self.assertEqual(writer_results, [])
+        self.assertEqual(len(writer_errors), 1)
+        self.assertIn("head differs", str(writer_errors[0]))
+        self.assertEqual(
+            self.ledger.read_bytes(), bootstrap_results[0].ledger_bytes
+        )
+        self.assertTrue(lock_path.exists())
+        self.assertEqual(lock_path.stat().st_ino, lock_inode_before)
 
     def test_sigkill_mid_import_leaves_retryable_genesis(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()

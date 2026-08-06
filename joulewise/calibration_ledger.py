@@ -288,6 +288,18 @@ class HistoricalImportPlan:
         return b"".join(canonical_json_bytes(row) + b"\n" for row in self.receipts)
 
 
+class HistoricalImportDurabilityUncertain(CalibrationLedgerError):
+    """The import committed, but its parent-directory fsync did not confirm."""
+
+    outcome = "committed_durability_uncertain"
+
+    def __init__(self, plan: HistoricalImportPlan) -> None:
+        super().__init__(
+            "historical import committed but parent-directory durability is uncertain"
+        )
+        self.plan = plan
+
+
 @dataclass(frozen=True)
 class _HistoricalCandidate:
     attempt_id: str
@@ -1323,7 +1335,9 @@ def _require_genesis_bootstrap_state(
     *,
     require_committed_pin: bool,
     repo_root: Path,
-) -> None:
+    expected_payload: bytes | None = None,
+    allow_nonempty_pending_plan: bool = False,
+) -> bool:
     try:
         pin_raw = Path(head_pin_path).read_bytes()
         pin_value = json.loads(pin_raw)
@@ -1342,7 +1356,42 @@ def _require_genesis_bootstrap_state(
     except OSError as exc:
         raise CalibrationLedgerError("physical ledger is unreadable") from exc
     if raw:
+        if expected_payload is not None and raw == expected_payload:
+            return True
+        if allow_nonempty_pending_plan:
+            return False
         raise CalibrationLedgerError("historical import requires an empty ledger")
+    return False
+
+
+def _ledger_lock_path(ledger_path: Path) -> Path:
+    ledger = Path(ledger_path)
+    return ledger.with_name(f"{ledger.name}.lock")
+
+
+def _fsync_parent_directory(path: Path) -> None:
+    """Confirm a directory entry, retrying the complete fsync operation once."""
+
+    failure: OSError | None = None
+    for _attempt in range(2):
+        descriptor = -1
+        try:
+            descriptor = os.open(
+                Path(path),
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+            )
+            os.fsync(descriptor)
+            return
+        except OSError as exc:
+            failure = exc
+        finally:
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+    assert failure is not None
+    raise failure
 
 
 def _write_bootstrap_payload(handle: BinaryIO, payload: bytes) -> None:
@@ -1399,6 +1448,7 @@ def bootstrap_historical_import(
         pin,
         require_committed_pin=require_committed_pin,
         repo_root=Path(repo_root),
+        allow_nonempty_pending_plan=execute,
     )
     plan = prepare_historical_import(
         roots=roots,
@@ -1413,53 +1463,67 @@ def bootstrap_historical_import(
 
     payload = plan.ledger_bytes
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    lock_path = _ledger_lock_path(ledger)
+    lock_descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        with os.fdopen(descriptor, "r+b", closefd=False) as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            _require_genesis_bootstrap_state(
-                ledger,
-                pin,
-                require_committed_pin=require_committed_pin,
-                repo_root=Path(repo_root),
-            )
-            _reauthenticate_historical_import_plan(plan)
-            staging_descriptor = -1
-            staging_path: Path | None = None
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        ledger_descriptor = os.open(
+            ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
+        )
+        os.close(ledger_descriptor)
+        already_committed = _require_genesis_bootstrap_state(
+            ledger,
+            pin,
+            require_committed_pin=require_committed_pin,
+            repo_root=Path(repo_root),
+            expected_payload=payload,
+        )
+        _reauthenticate_historical_import_plan(plan)
+        if already_committed:
+            try:
+                _fsync_parent_directory(ledger.parent)
+            except OSError as exc:
+                raise HistoricalImportDurabilityUncertain(plan) from exc
+            return plan
+
+        staging_descriptor = -1
+        staging_path: Path | None = None
+        try:
             try:
                 staging_descriptor, staging_name = tempfile.mkstemp(
                     prefix=f".{ledger.name}.bootstrap-",
                     dir=ledger.parent,
                 )
                 staging_path = Path(staging_name)
-                with os.fdopen(staging_descriptor, "wb", closefd=False) as staging:
+                staging = os.fdopen(staging_descriptor, "wb")
+                staging_descriptor = -1
+                with staging:
                     _write_bootstrap_payload(staging, payload)
                     staging.flush()
                     os.fsync(staging.fileno())
                 os.replace(staging_path, ledger)
                 staging_path = None
-                parent_descriptor = os.open(
-                    ledger.parent,
-                    os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
-                )
-                try:
-                    os.fsync(parent_descriptor)
-                finally:
-                    os.close(parent_descriptor)
             except Exception as exc:
                 raise CalibrationLedgerError(
                     "historical import append failed atomically"
                 ) from exc
-            finally:
-                if staging_descriptor >= 0:
-                    os.close(staging_descriptor)
-                if staging_path is not None:
-                    try:
-                        staging_path.unlink()
-                    except FileNotFoundError:
-                        pass
+            try:
+                _fsync_parent_directory(ledger.parent)
+            except OSError as exc:
+                raise HistoricalImportDurabilityUncertain(plan) from exc
+        finally:
+            if staging_descriptor >= 0:
+                os.close(staging_descriptor)
+            if staging_path is not None:
+                try:
+                    staging_path.unlink()
+                except FileNotFoundError:
+                    pass
     finally:
-        os.close(descriptor)
+        try:
+            os.close(lock_descriptor)
+        except OSError:
+            pass
     return plan
 
 
@@ -1469,26 +1533,36 @@ def _locked_append(
 ) -> Mapping[str, Any]:
     ledger_path = Path(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    lock_descriptor = os.open(
+        _ledger_lock_path(ledger_path), os.O_RDWR | os.O_CREAT, 0o600
+    )
     try:
-        with os.fdopen(descriptor, "r+b", closefd=False) as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            handle.seek(0)
-            raw = handle.read()
-            receipts, reasons = _parse_ledger(raw)
-            if reasons:
-                raise CalibrationLedgerError(", ".join(sorted(reasons)))
-            receipt = build(receipts)
-            if not _valid_receipt_shape(receipt):
-                raise CalibrationLedgerError("writer constructed a malformed receipt")
-            payload = canonical_json_bytes(receipt) + b"\n"
-            handle.seek(0, os.SEEK_END)
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-            return _frozen_mapping(receipt)
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        descriptor = os.open(
+            ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
+        )
+        try:
+            with os.fdopen(descriptor, "r+b", closefd=False) as handle:
+                handle.seek(0)
+                raw = handle.read()
+                receipts, reasons = _parse_ledger(raw)
+                if reasons:
+                    raise CalibrationLedgerError(", ".join(sorted(reasons)))
+                receipt = build(receipts)
+                if not _valid_receipt_shape(receipt):
+                    raise CalibrationLedgerError(
+                        "writer constructed a malformed receipt"
+                    )
+                payload = canonical_json_bytes(receipt) + b"\n"
+                handle.seek(0, os.SEEK_END)
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+                return _frozen_mapping(receipt)
+        finally:
+            os.close(descriptor)
     finally:
-        os.close(descriptor)
+        os.close(lock_descriptor)
 
 
 def append_pending_receipt(
@@ -1649,6 +1723,7 @@ __all__ = [
     "REFUSAL_TAXONOMY",
     "CalibrationLedgerError",
     "CalibrationLedgerSnapshot",
+    "HistoricalImportDurabilityUncertain",
     "HistoricalImportPlan",
     "LedgerObservation",
     "append_pending_receipt",

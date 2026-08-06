@@ -25,6 +25,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
     CalibrationLedgerError,
+    HistoricalImportDurabilityUncertain,
     bootstrap_historical_import,
     canonical_json_bytes,
     custody_manifest_bytes,
@@ -33,6 +34,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
 
 
 OUTPUT_SCHEMA = "joulewise.calibration_historical_import_dry_run.v1"
+DURABILITY_UNCERTAIN_EXIT = 3
 
 
 def _json_object(path: Path) -> Mapping[str, Any]:
@@ -51,7 +53,7 @@ def _pin_content(pin: Mapping[str, Any]) -> str:
     return json.dumps(ordered, indent=2, ensure_ascii=False) + "\n"
 
 
-def _emit(plan: Any, *, executed: bool) -> None:
+def _emit(plan: Any, *, executed: bool, outcome: str) -> None:
     for receipt in plan.receipts:
         sys.stdout.buffer.write(
             canonical_json_bytes({"record": "receipt", "receipt": receipt}) + b"\n"
@@ -60,6 +62,7 @@ def _emit(plan: Any, *, executed: bool) -> None:
         "schema_version": OUTPUT_SCHEMA,
         "record": "bootstrap-summary",
         "executed": executed,
+        "outcome": outcome,
         "receipt_count": len(plan.receipts),
         "final_sequence": plan.final_sequence,
         "head_digest": plan.head_digest,
@@ -158,10 +161,23 @@ def main() -> int:
             execute=args.execute,
             repo_root=REPO_ROOT,
         )
+    except HistoricalImportDurabilityUncertain as exc:
+        _emit(exc.plan, executed=True, outcome=exc.outcome)
+        print(
+            "committed: parent-directory durability remains uncertain after "
+            "one retry; rerun the identical --execute invocation to confirm "
+            "durability before updating the head pin",
+            file=sys.stderr,
+        )
+        return DURABILITY_UNCERTAIN_EXIT
     except (CalibrationLedgerError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"refusing: {exc}", file=sys.stderr)
         return 2
-    _emit(plan, executed=args.execute)
+    _emit(
+        plan,
+        executed=args.execute,
+        outcome="committed" if args.execute else "planned",
+    )
     return 0
 
 

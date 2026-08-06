@@ -121,22 +121,50 @@ hash-complete custody copy refuses.
 
 ### Genesis and atomicity gates
 
-Both dry-run and execution require:
+Dry-run requires:
 
 - an empty physical ledger (an absent or zero-byte file), and
 - a well-formed repository-committed head pin at sequence `0` with the
   all-zero genesis digest.
 
+Execution requires the same genesis pin. It normally also requires an absent
+or empty physical ledger. Its sole nonempty exception is the idempotent
+durability-confirm path described below.
+
+Every ledger writer locks the dedicated adjacent
+`<ledger-filename>.lock` file. That lock file is created if absent and is never
+replaced. A writer acquires it before opening or re-opening the ledger path,
+and holds it through every append or replacement. The replaceable ledger inode
+is never the lock object, so a writer that waited during replacement cannot
+resume against an old, unlinked ledger inode.
+
 Execution prepares and canonicalizes the entire chain in memory, obtains the
-exclusive ledger lock, rechecks both genesis conditions, and immediately
-re-opens all five artifacts for every member through contained no-follow
-descriptors. Every hash must still equal the prepared plan. It then writes and
-fsyncs the complete payload to a sibling staging file and atomically replaces
-the empty ledger. Until replacement, readers see only genesis; after
-replacement, readers see only the complete chain. A write, fsync, or
-reauthentication failure leaves zero reader-visible receipts. Process death
-mid-stage likewise leaves a retryable genesis ledger. Retrying after a
-successful replacement refuses because the ledger is nonempty.
+stable lock, rechecks the genesis pin and physical ledger by path, and
+immediately re-opens all five artifacts for every member through contained
+no-follow descriptors. Every hash must still equal the prepared plan. It then
+writes and fsyncs the complete payload to a sibling staging file and atomically
+replaces the empty ledger. Until replacement, readers see only genesis; after
+replacement, readers see only the complete chain. A write, staging-file fsync,
+reauthentication, or replacement failure leaves zero reader-visible receipts.
+Process death mid-stage likewise leaves a retryable genesis ledger.
+
+`os.replace` is the transaction commit point. After replacement, the importer
+fsyncs the parent directory and retries that directory fsync once if it fails.
+If both attempts fail, the chain is **committed with durability uncertain**;
+it is never reported as an atomic-append failure. The CLI still emits every
+canonical receipt and the full summary, whose machine-readable `outcome` is
+`committed_durability_uncertain`, then exits `3`. The operator must rerun the
+identical `--execute` invocation before updating the head pin.
+
+While the committed pin remains genesis, such a rerun recomputes the complete
+plan from the authenticated table, manifest, and custody bytes under the same
+rules. Under the stable lock, it compares the physical ledger byte-for-byte
+with `plan.ledger_bytes`; matching bytes enter the idempotent confirm path,
+which re-fsyncs the parent directory without replacing or appending and emits
+the same receipt chain and head/input-digest summary with `outcome=committed`.
+Any other nonempty ledger refuses with the ordinary empty-ledger error. Once
+the reviewed head pin is updated away from genesis, a further invocation
+refuses at the normal genesis-pin gate.
 
 The importer never writes the head pin. After execution, claim evaluation is
 expected to refuse until the lead has reviewed and committed the exact printed
@@ -163,5 +191,15 @@ Dry-run creates no ledger or pin. Standard output is byte-stable NDJSON: one
 canonical `receipt` record for every receipt, followed by one
 `bootstrap-summary` containing both input digests, the receipt count, final
 sequence/head, head-pin object, and exact pretty-printed head-pin file content.
+The summary also carries `outcome`: `planned` for dry-run, `committed` for a
+successful initial execution or idempotent durability confirmation, and
+`committed_durability_uncertain` for the post-commit condition above.
 `--execute` prints the same chain after the single atomic append, with
 `executed=true`; it still does not write the pin.
+
+CLI exit codes are distinct transaction outcomes: `0` means planned or
+committed as reported in the summary; `2` means refusal or a failure before
+the commit point; and `3` means the ledger committed but parent-directory
+durability remains uncertain after the one retry. Exit `3` is not permission
+to repeat the import as a new transaction: only the byte-exact idempotent
+confirm invocation described above is permitted.
