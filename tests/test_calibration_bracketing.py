@@ -18,6 +18,7 @@ from joulewise.calibration_bracketing import (
     _canonical_sha256,
     _valid_acceptance_bound,
     calibration_bracket_for_bundles,
+    discover_calibration_candidates,
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
     load_calibration_candidate,
@@ -172,6 +173,114 @@ class CalibrationBracketingTests(unittest.TestCase):
             result["acceptance"]["freshness"]["reason"],
             "acceptance_artifact_unissued_fixture",
         )
+
+    def test_import_marker_is_excluded_by_discovery_and_trigger_paths(self) -> None:
+        candidates = [
+            self.candidate("pre", 99.0, "0.025"),
+            self.candidate("post", 111.0, "0.026"),
+        ]
+        snapshot, registered = _fixture_snapshot(candidates)
+        imported_hashes = {
+            "manifest.json": "12" * 32,
+            "instrument_evidence.json": "34" * 32,
+        }
+        imported = LedgerObservation(
+            sequence=snapshot.head_sequence + 2,
+            receipt_digest="56" * 32,
+            attempt_id="historical-range-expander",
+            content_id=content_id_from_artifact_hashes(imported_hashes),
+            artifact_sha256=MappingProxyType(imported_hashes),
+            identity_epoch=MappingProxyType(
+                {
+                    field: self.bindings[field]
+                    for field in (
+                        "os_build",
+                        "hardware_model",
+                        "power_policy",
+                        "sampling_interval_ms",
+                        "estimator_revision",
+                        "pulse_protocol_id",
+                    )
+                }
+            ),
+            t1_bindings=MappingProxyType(
+                {field: self.bindings[field] for field in V2_BINDING_FIELDS}
+            ),
+            capture_wall_time_s="105.0",
+            exact_bound_lexeme_s="9.0",
+            disposition="valid",
+            custody_locator="/reviewed/historical-range-expander",
+            observation_kind="historical-import",
+        )
+        snapshot = replace(
+            snapshot,
+            observations=(*snapshot.observations, imported),
+            head_sequence=imported.sequence,
+            head_digest=imported.receipt_digest,
+        )
+        by_attempt = {
+            candidate.attempt_id: candidate for candidate in registered
+        }
+        with patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation: by_attempt.get(observation.attempt_id),
+        ) as authenticate:
+            discovered = discover_calibration_candidates(snapshot)
+        self.assertEqual(discovered, tuple(registered))
+        self.assertNotIn(
+            imported.attempt_id,
+            [call.args[0].attempt_id for call in authenticate.call_args_list],
+        )
+
+        result, reasons = _evaluate_calibration_bracket(
+            discovered,
+            window_start_s=100.0,
+            window_end_s=110.0,
+            bindings=self.bindings,
+            policy=self.policy,
+            ledger_snapshot=snapshot,
+            _allow_unissued_fixture=True,
+        )
+        self.assertEqual(reasons, ())
+        self.assertNotIn(
+            "new_valid_same_identity_capture_expands_observed_range",
+            result["acceptance"]["prospective_rederivation"]["observed_triggers"],
+        )
+
+    def test_acceptance_prior_set_must_equal_import_marked_cutoff_prefix(self) -> None:
+        artifact = json.loads(json.dumps(load_calibration_acceptance_bound()))
+        snapshot, registered = _fixture_snapshot(
+            [
+                self.candidate("pre", 99.0, "0.025"),
+                self.candidate("post", 111.0, "0.026"),
+            ]
+        )
+        imported = replace(
+            snapshot.observations[0],
+            observation_kind="historical-import",
+        )
+        artifact["ledger_cutoff"]["sequence"] = imported.sequence
+        artifact["ledger_cutoff"]["head_digest"] = imported.receipt_digest
+        snapshot = replace(
+            snapshot,
+            observations=(imported, *snapshot.observations[1:]),
+            baseline_sequence=imported.sequence,
+            baseline_digest=imported.receipt_digest,
+        )
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            _result, reasons = _evaluate_calibration_bracket(
+                registered[1:],
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("calibration_ledger_baseline_missing",))
 
     def candidate(
         self,
