@@ -71,6 +71,49 @@ Scout correction (this session): the a10 extraction must run in the
 SAME custody session as re-mint consumption (FLOOR-BIND-01 fence), so
 it sequences with the re-mint, not standalone.
 
+### Overnight progress ledger (updated ~23:50; all evidence in .desk + session scratchpad, custody commits as noted)
+
+- **D-113 TRANSCRIBED + pushed** (`8e68cde`, consult trace in
+  process_traces/2026-08-05-d113-rigor-consult/). CLAIMS_STATUS WB
+  terminal labels landed this commit; kernel row retirement rides the
+  next registration batch.
+- **QUIET-GUARD**: fix round 1 closed all ten findings (lead-replayed
+  95/95 + full suite green; bench-committed `e0acaf7`); xhigh delta
+  re-audit FAILED it (F1 blocker: idempotent init retry can report
+  success with unresolved directory-fsync durability; F2 partial-
+  upgrade ordering; F3 census availability; F4 evidence gaps) — **fix
+  round 2 IN FLIGHT** with lead-dictated closure shapes.
+  Same-signature counter: init-durability at 1 (F1 is an introduced
+  defect, first fix; trigger fires if the next delta fails there).
+- **COLDGATE-VALIDATOR**: consult-adopted restructure landed on the
+  branch (`3964c6e`, lead-replayed 26/26 + frozen-packet smoke; suite
+  2514 green); xhigh delta re-audit FAILED it (B1: malformed digest
+  arg serialized verbatim into REFUSE receipts — live-proved; B2:
+  non-CommonMark backtick fence opener lets a phantom fence HIDE real
+  duplicate headings → duplicate Charter pin PASSes) — **blocker fix
+  round IN FLIGHT**. Fence-parsing same-signature counter: 1.
+- **D-079 issuance**: verification COMPLETE (38/38 recovered,
+  hash-authenticated, physics-replayed: 32 valid / 6 invalid / 0
+  unresolved) but BLOCKED on two items. **B1 RULED by the lead**: the
+  two high-bound members (`20260726T000039-491995f3`,
+  `20260801T064830-c76f5d1c`) are SYSTEMATIC-INVALID in the ledger
+  (production preflight screen + D-102's explicit naming control over
+  the candidate tool's stored-status labels; R2.8's "six further" was
+  conditioned on the unratified candidate inventory — valid total is
+  30, eight further to trigger). **B2 (no deterministic bootstrap
+  contract) — design+implement session IN FLIGHT** on
+  impl/ledger-bootstrap (xhigh; genesis-only, atomic, import-marked
+  receipts, dry-run default; expected head `8e80b6e9…` under the
+  report's rules). Verification record custodied:
+  process_traces/2026-08-05-d079-issuance/. Issuance itself (execute +
+  head-pin commit + artifact edit + D-116 entry) remains a separately
+  gated step — Ed pre-authorized overnight, conditional on the gate.
+- **Fast-tier**: PR #102 open, CI running; lead-replayed 70/70 incl.
+  desktop IPC tests; solo-review ruled proportional (Ed-dictated
+  20-line diff). On merge: fast rides scripts/codex-bridge
+  (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
+  personal wrapper without his word).
+
 ### Ed directive batch (2026-08-05 ~22:00, in-thread; 12-hour autonomous window)
 
 1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10

@@ -62,10 +62,21 @@ default consumption. Outcomes per window:
   binds a T1-incompatible power-policy identity (immutable evidence; the
   machinery's rejection was CORRECT), so no calibration bracket can ever
   form. C1 re-collects in a future window.
-- **Window B: re-evaluation ATTEMPTED 2026-08-03 under the full license
-  and STOPPED correctly — still non-claim-bearing; the license is
-  EXHAUSTED AS DRAWN (D-112); the next move is Ed's (parked ruling,
-  `WINB-R06-DISPOSITION-01`).** The whole chain executed: D-108 ruled
+- **Window B: TERMINALLY CLAIM-RETIRED (D-113, Ed ruling 2026-08-05):
+  RETAINED_IMMUTABLE / PERMANENTLY_NON_CLAIM_BEARING.** Ed chose
+  abandonment over salvage ("soundness and quality of the project and
+  claims above all"): no re-evaluation or claim consumption will ever
+  occur; the WB-specific D-100/D-106/D-108 license chain is retired
+  (general machinery survives for other windows);
+  `WINB-R06-DISPOSITION-01` closes ABANDONED_FOR_FRESH_COLLECTION;
+  labelled read-only forensic/diagnostic use remains permitted ("Window
+  B, original verdict FAILED, D-113 claim-retired, non-claim
+  evidence"). Every still-desired WB claim component re-collects fresh
+  beginning Window C — no WB member enters a replacement claim basis.
+  The F7 scope question is ANSWERED: whole-window voiding is affirmed
+  as the current semantics (a cell-scoped alternative only via the
+  D-083 cold gate; not built). Historical record of the 2026-08-03
+  attempt below. The whole chain executed: D-108 ruled
   (clause (c) retired), row `D100-BII-BINDING-01` CLOSED (PR #99 +
   clause-(d) three-occurrence digest-bound re-record), closure +
   membership-binding artifacts authored and dry-authorized, D-093 scan
@@ -79,16 +90,16 @@ default consumption. Outcomes per window:
   channel removes r06 (exclusion cap spent on r08; not a dangler;
   waivers forbidden), and the NEG-8 drift bound expired 2026-08-02, so
   no PASS path exists under the license as drawn. Original FAILED
-  verdict untouched. Ed owes (D-112 clause 4): the r06 removal channel,
-  the F7 barred-cell scope question, and fresh-bound authorization —
-  or formal abandonment in favor of window C re-collection.
+  verdict untouched. The WB NEG-8 bound re-mint obligation is MOOT
+  under D-113; the near-run-time freshness rule continues to bind
+  every future window (runbook + D-078, by cross-reference).
 
 | Paper claim | Campaign | Collected | State after D-100 |
 |---|---|---|---|
 | **C1 — linearity** | `linearity_ramp` | **40/40** (window A) | DEAD for claims (window A permanent FAIL); re-collect (window C/D); data usable as design input (micro_delta slope) + corroboration diagnostics only |
-| **C2 — null ladder** | `null_ladder` | o0128 + o0512 **complete** (window B); o2048 → window C | BLOCKED on the D-112-parked r06 disposition (WINB-R06-DISPOSITION-01): the re-evaluation license is exhausted as drawn; alternative path = window C re-collection |
+| **C2 — null ladder** | `null_ladder` | o0128 + o0512 collected in window B — **returned to uncollected-for-claim state (D-113)**; o2048 never collected | Re-collect ALL of C2 fresh (window C, or split per the frozen plan); no WB member enters a replacement claim basis |
 | **C3 — micro-delta** | `micro_delta` | not collected | Plan is draft-pending-slope by design; slope fit may consume window A ramp as DESIGN input (not a claim) |
-| **C4 — additivity** | `additivity_shapes` | **23/24 single-root** (window B) + 21/24 corroborating (window A) | The three `p2048-o0128` cells are BARRED regardless (frozen min_n=8, r08 named, 7 present) — that shape re-collects in window C; the other six cells (two shapes, 8/8) BLOCKED the same way (D-112: one barred-cell member currently voids whole-window consumption — the F7 scope question is part of the parked ruling) |
+| **C4 — additivity** | `additivity_shapes` | 23/24 single-root collected in window B — **returned to uncollected-for-claim state (D-113)**; 21/24 window-A corroborating remain labelled non-claim diagnostics | Re-collect C4 fresh (window C/D per the frozen plan). F7 ANSWERED by D-113: whole-window voiding affirmed as current semantics; no cell-scoped salvage |
 | **C5 — long holds** | `long_holds` | not collected → window C | — |
 
 ## 4. Standing gates on EVERY claim consumption
