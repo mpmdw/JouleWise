@@ -35,7 +35,11 @@ esac
 # Copy every mutable repository input exactly once into a root-owned staging
 # directory.  Validation and installation below both consume these same
 # operator-nonwritable bytes; no repository path is re-read after validation.
-STAGE_ROOT=$(/usr/bin/sudo /usr/bin/mktemp -d "/private/tmp/joulewise-quiet-guard-root.XXXXXX")
+# Resolve the system temp root to its real path first so a symlinked /tmp
+# cannot redirect the root-owned staging directory (on macOS this resolves to
+# /private/tmp; on other platforms to the real temp root).
+TMP_REAL=$(cd /tmp && /bin/pwd -P)
+STAGE_ROOT=$(/usr/bin/sudo /usr/bin/mktemp -d "$TMP_REAL/joulewise-quiet-guard-root.XXXXXX")
 cleanup() {
   if [ -n "${STAGE_ROOT:-}" ]; then
     /usr/bin/sudo /bin/rm -R -- "$STAGE_ROOT"
