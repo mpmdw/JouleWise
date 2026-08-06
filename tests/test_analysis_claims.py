@@ -775,13 +775,14 @@ class InputSeamTests(unittest.TestCase):
         artifact = make_artifact(
             [make_cell(regime=make_regime(stack_identity=stack))]
         )
+        plan_sha256 = artifact["provenance"]["calibration_plan"]["sha256"]
         records: dict[str, tuple[dict, dict]] = {}
         cell = artifact["cells"][0]
         for record in cell["absolute"]["bundle_observations"]:
             records[record["bundle_id"]] = (
                 record,
                 {
-                    "plan_sha256": HEX,
+                    "plan_sha256": plan_sha256,
                     "block_id": None,
                     "label": None,
                     "sequence_index": None,
@@ -792,7 +793,7 @@ class InputSeamTests(unittest.TestCase):
                 records[record["bundle_id"]] = (
                     record,
                     {
-                        "plan_sha256": HEX,
+                        "plan_sha256": plan_sha256,
                         "block_id": block["block_id"],
                         "label": record["plan_label"],
                         "sequence_index": record["plan_sequence_index"],
