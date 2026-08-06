@@ -10,6 +10,92 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+Last updated: 2026-08-06 — **CHECKPOINT for /clear (read the CHECKPOINT
+block immediately below FIRST).** Everything below the checkpoint is
+still-valid history.
+
+## ✅ CHECKPOINT 2026-08-06 — resume here after /clear (Fable magistrate, marathon session)
+
+**IMMEDIATE RESUME ACTION (one live item):**
+1. **PR #109 (`impl/d079-issuance`) — merge on green, then RE-MINT.**
+   This PR ISSUES the D-079 calibration acceptance artifact (the
+   authentication anchor for all floor-mint claims): D-116, issued
+   config (fixture→issued, file sha `316113960c…`), committed head-pin
+   (seq 76 / head `08456d50…`), cold-gate custody, + a 5-file test
+   reconciliation. It cleared its FULL gauntlet (two rule-11 cold gates,
+   adversarial audit + 3 delta rounds, exact-bytes dual cold review,
+   zero-regression reconciliation + coverage-preservation audit ACCEPT).
+   At checkpoint: CI running. **On green → self-merge under D-072**
+   (it's the completed gate shape). If a successor finds it already
+   merged, skip to the re-mint.
+
+**THE AUTHORITATIVE LEDGER — do not lose (survives /clear as a file):**
+- `runs/calibration_observation_ledger.jsonl` — the 76-receipt genesis
+  chain, **git-ignored** (local custody artifact), sha256
+  `aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f`.
+  BACKED UP at `~/JouleWise-window-custody/d079-issuance-20260806/`
+  (byte-identical). Deterministic from the custodied inputs
+  (`docs/process_traces/2026-08-06-d079-issuance-coldgate/ISSUANCE-*`,
+  on the PR branch → main after merge) + raw evidence. The committed
+  head-pin (in the config) is the D-109 R1.4 trust anchor; the ledger
+  file itself is a custody artifact. **Must stay backed up before the
+  re-mint consumes it.**
+
+**THE RE-MINT (task 8, the payoff — next after PR #109):**
+- D-110 conditions now ALL satisfied: (a) PR #100, (c) PR #105, (b) THIS
+  issuance. MINT-GENERALIZE-01 UNBLOCKED. Next: ONE custody session —
+  governed a10 phase-floor extraction
+  (`configs/floor_mint/a10_extraction_spec.json`, ~20 min) THEN mint #1
+  re-derivation under the corrected selector, embedding the never-zero
+  `A_s = max(observed_drift_s, 0.010818)` allowance (D-102 pin 3 /
+  D-110). Same custody session (FLOOR-BIND-01 fence). Claim-critical →
+  full gauntlet. Output: non-empty claims table (CLAIMS_STATUS §1) +
+  the labelled a10 phase floors (D-078 cl.11) + the 1.5B-vs-7B decode
+  contrast (frozen metric `phase_energy_j.decode`, NOT the 146.73 J
+  diagnostic). THIS is the MVP demonstration (Phase 3 measured data).
+
+**AFTER THE RE-MINT:** paper results section (task 12, results C-v +
+limitations from the minted numbers) → assemble A+ MVP draft (methods
+already on main: `docs/paper/draft-v1.md`).
+
+**This session's landed work (all merged to main + pushed):** PR #102
+Codex Fast Mode (`CODEX_SERVICE_TIER=fast`), #103 coldgate validator,
+#104 registration batch, #106 ledger-bootstrap infra, #107 QUIET-GUARD
+commit 1, #108 issuance consumer; decisions D-113 (Window B terminally
+claim-retired), D-115 (quiet-guard Q2 authority), D-116 (D-079 issuance,
+on PR #109). Two rule-11 escalation consults (CGV F3 closure, QG census
+Option C) — records in `docs/process_traces/`.
+
+**Ed's standing directives this session (all durable — memory + here):**
+- **Priority stack (BINDING):** P1 the A+ MVP paper, P2 the ICPE
+  version, P3 modularity for future inference-technique research
+  questions — P3 SACRIFICED if it costs P1/P2. (memory
+  `paper-first-priority-stack`.)
+- **Syllabus (advisor Rivoire — JouleSort author, sets the metrology
+  bar; memory `advisor-rivoire-joulesort`):** Phase 1 (system) DONE;
+  Phase 2 (outline+related-work) DONE (draft-v1 on main); **Phase 3
+  (>=1 experimental section WITH measured data) = LIVE TARGET** = the
+  re-mint demonstration; Phase 4 full paper.
+- **Venue ceiling:** ICPE full research track is the realistic ambitious
+  target (best fit + Rivoire's community); top-tier only if a mechanism/
+  split research bet lands. Full ranked roadmap:
+  `docs/strategy/2026-08-06-impressiveness-roadmap.md`.
+- **Wall meter:** D-092 ratified it as claim C8; Yokogawa WT310E (~$2935
+  new, ~$1-1.5k used), get Ethernet; BORROW from Rivoire's lab first;
+  TWO (one per machine) only for the split-inference stretch (both boxes
+  colocating). NOT required for the A+ MVP.
+- **Sol effort:** high/xhigh per complexity (cap lifted); Fast Mode
+  (2.5x credits) on xhigh via `scripts/codex-bridge` only (codex-run-v3
+  does not read it — do not modify Ed's personal wrapper).
+
+**Cleanup for the successor:** one scratchpad worktree remains
+(`…/scratchpad/d079recon` on `impl/d079-issuance`) — prune after PR #109
+merges. The end-of-session bookkeeping (task 9: consistency sweep,
+council log, skill-usage log) is still OWED — do it after the re-mint.
+Nothing critical is unpushed; main is clean.
+
+---
+
 Last updated: 2026-08-05 LATE NIGHT — Fable magistrate session resumed
 from the NIGHT checkpoint. Read the LATE-NIGHT block first; the NIGHT
 and EVENING blocks below it are still-valid history.
