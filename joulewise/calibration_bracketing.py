@@ -639,13 +639,62 @@ def discover_calibration_candidates(
         return ()
     candidates: list[CalibrationCandidate] = []
     for observation in ledger_snapshot.observations:
-        if observation.disposition != "valid":
+        if observation.disposition != "valid" or observation.is_historical_import:
             continue
         candidate = _candidate_from_observation(observation)
         if candidate is None:
             return ()
         candidates.append(candidate)
     return tuple(candidates)
+
+
+def _prior_set_matches_import_cutoff_prefix(
+    artifact: Mapping[str, Any],
+    ledger_snapshot: CalibrationLedgerSnapshot,
+) -> bool:
+    """Bind issuance prior-set data to the import-marked cutoff prefix."""
+
+    cutoff = artifact["ledger_cutoff"]
+    prefix = tuple(
+        observation
+        for observation in ledger_snapshot.observations
+        if observation.sequence <= cutoff["sequence"]
+    )
+    # The checked-in schema fixture predates issuance and deliberately has a
+    # genesis cutoff. Production issuance, or any fixture containing imported
+    # prefix rows, must satisfy the exact marker-bound comparison below.
+    if not prefix and artifact.get("artifact_role") == "schema_fixture_unissued":
+        return True
+    if any(not observation.is_historical_import for observation in prefix):
+        return False
+    catalog = artifact["prior_observation_set"]["epoch_catalog"]
+    expected = {
+        (
+            row["attempt_id"],
+            row["content_id"],
+            row["disposition"],
+            row["epoch_id"],
+        )
+        for row in artifact["prior_observation_set"]["observations"]
+    }
+    observed: set[tuple[str, str, str, str]] = set()
+    for observation in prefix:
+        epoch_ids = [
+            epoch_id
+            for epoch_id, epoch in catalog.items()
+            if dict(epoch) == dict(observation.identity_epoch)
+        ]
+        if observation.content_id is None or len(epoch_ids) != 1:
+            return False
+        observed.add(
+            (
+                observation.attempt_id,
+                observation.content_id,
+                observation.classification_disposition,
+                epoch_ids[0],
+            )
+        )
+    return observed == expected and len(observed) == len(prefix)
 
 
 def evaluate_calibration_bracket(
@@ -730,6 +779,8 @@ def evaluate_calibration_bracket(
         or ledger_snapshot.ledger_schema != cutoff["ledger_schema"]
     ):
         return result, ("calibration_ledger_baseline_missing",)
+    if not _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot):
+        return result, ("calibration_ledger_baseline_missing",)
     identity_epoch = artifact["identity_epoch"]
     prospective = artifact["prospective_rederivation"]
     result["policy"].update(
@@ -809,6 +860,7 @@ def evaluate_calibration_bracket(
         )
         for observation in ledger_snapshot.observations
         if observation.disposition == "valid"
+        and not observation.is_historical_import
     }
     supplied_valid = {
         (
@@ -876,18 +928,24 @@ def evaluate_calibration_bracket(
         for observation in ledger_snapshot.observations
         if observation.content_id is not None
     }
+    distinct_live_observations = {
+        content_id: observation
+        for content_id, observation in distinct_observations.items()
+        if not observation.is_historical_import
+    }
     new_observations = [
         observation
-        for content_id, observation in sorted(distinct_observations.items())
+        for content_id, observation in sorted(distinct_live_observations.items())
         if content_id not in prior_ids
     ]
     new_observations.extend(
         sorted(
             (
                 observation
-                for observation in ledger_snapshot.observations
+                for observation in ledger_snapshot.post_cutoff_live_observations(
+                    cutoff["sequence"]
+                )
                 if observation.content_id is None
-                and observation.sequence > cutoff["sequence"]
             ),
             key=lambda observation: (observation.sequence, observation.attempt_id),
         )
@@ -1144,6 +1202,7 @@ def calibration_bracket_for_bundles(
         candidates = discover_calibration_candidates(ledger_snapshot)
         registered_valid = sum(
             observation.disposition == "valid"
+            and not observation.is_historical_import
             for observation in ledger_snapshot.observations
         )
         if ledger_snapshot.valid and len(candidates) != registered_valid:
