@@ -42,6 +42,7 @@ from joulewise.quiet_guard import (
 )
 from joulewise.quiet_guard_process import (
     AncestorIdentity,
+    DarwinProcessRecord,
     ProcessIdentity,
     ProcessObservationError,
     SnapshotProcessSource,
@@ -305,6 +306,27 @@ class InstallationTests(EngineTestCase):
         with self.assertRaises(GuardError) as caught:
             self.engine.validate_inactive_installation()
         self.assertEqual(caught.exception.cause, "schema_mismatch")
+
+    def test_validation_refusal_does_not_create_missing_control_lock(self) -> None:
+        root = self.root / "validation-only-refusal"
+        root.mkdir()
+        (root / "config.json").write_text("not-json")
+        before = {path.name: path.read_bytes() for path in root.iterdir()}
+        engine = GuardEngine(root, host_id="host-A", boot_id="boot-A", test_mode=True)
+        with self.assertRaises(GuardError) as caught:
+            engine.validate_inactive_installation()
+        self.assertEqual(caught.exception.cause, "lock_unavailable")
+        self.assertEqual({path.name: path.read_bytes() for path in root.iterdir()}, before)
+        self.assertFalse(engine.paths.lock.exists())
+
+    def test_validation_of_absent_installation_creates_no_state_path(self) -> None:
+        root = self.root / "absent-validation"
+        engine = GuardEngine(root, host_id="host-A", boot_id="boot-A", test_mode=True)
+        self.assertEqual(
+            engine.validate_inactive_installation(),
+            initial_state("host-A", "boot-A"),
+        )
+        self.assertFalse(root.exists())
 
     def test_non_test_arbitrary_root_cannot_initialize(self) -> None:
         arbitrary = GuardEngine(
@@ -900,9 +922,11 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
         class CensusSource:
             def __init__(self):
                 self.calls = 0
+                self.protected = ()
 
-            def census(self):
+            def census(self, protected_identities=()):
                 self.calls += 1
+                self.protected = tuple(protected_identities)
                 return (unrelated, child, owner)
 
             def observe(self, pid):
@@ -917,7 +941,67 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
             returned_source, rows = self.helper._recovery_inputs(engine)
         self.assertIs(returned_source, source)
         self.assertEqual(source.calls, 1)
+        self.assertEqual(source.protected, (owner,))
         self.assertEqual(rows, (child, owner))
+
+    def test_privileged_recovery_retains_custody_when_protected_pid_vanishes_after_error(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix=guard_module.TEST_STATE_ROOT_PREFIX
+        ) as temporary:
+            root = Path(temporary) / "state"
+            engine = GuardEngine(
+                root, host_id="host-A", boot_id="boot-A", test_mode=True
+            )
+            engine.initialize_inactive()
+            owner = identity(123)
+            engine.transition(
+                "handoff_pending",
+                "initiating_session",
+                owner=owner,
+                registry_entries=(owner,),
+            )
+            recovery = engine.audit_registry(SnapshotProcessSource(), ())
+            lease_id = recovery["lease"]["lease_id"]
+            snapshots = [b"123\n456\n", b"456\n"]
+            stable = DarwinProcessRecord(
+                456, 0, "1785940800.123456", "/bin/stable", ("stable",)
+            )
+
+            def runner(arguments, **kwargs):
+                del kwargs
+                return subprocess.CompletedProcess(
+                    arguments, 0, stdout=snapshots.pop(0), stderr=b""
+                )
+
+            class ChurnReader:
+                def __init__(self):
+                    self.owner_calls = 0
+
+                def read(self, pid):
+                    if pid == owner.pid:
+                        self.owner_calls += 1
+                        if self.owner_calls == 1:
+                            raise ProcessObservationError(
+                                "protected registry PID is unobservable"
+                            )
+                        return None
+                    return stable
+
+            source = self.helper.PsProcessSource(runner, reader=ChurnReader())
+            with mock.patch.object(self.helper, "PsProcessSource", return_value=source):
+                try:
+                    returned_source, rows = self.helper._recovery_inputs(engine)
+                    engine.recover(
+                        acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                        acknowledged_by="Ed",
+                        source=returned_source,
+                        independent_census_rows=rows,
+                    )
+                except ProcessObservationError:
+                    pass
+            retained = engine.read_state()
+            self.assertEqual(retained["state"], "recovery_required")
+            self.assertEqual(retained["lease"]["lease_id"], lease_id)
 
     def test_privileged_parser_rejects_non_allowlisted_command(self) -> None:
         with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
@@ -1137,7 +1221,7 @@ class WriteBoundaryTests(EngineTestCase):
         stage = setup.index("STAGE_ROOT=$(/usr/bin/sudo")
         self.assertLess(revoke, authorize)
         self.assertLess(authorize, stage)
-        self.assertEqual(setup.count("/usr/bin/sudo"), 21)
+        self.assertEqual(setup.count("/usr/bin/sudo"), 17)
         logical_setup = setup.replace("\\\n", " ")
         sudo_targets = [
             re.search(r"/usr/bin/sudo\s+([^\s)]+)", line).group(1)
@@ -1162,11 +1246,7 @@ class WriteBoundaryTests(EngineTestCase):
                 "/usr/bin/install",
                 "/usr/bin/install",
                 "/usr/bin/python3",
-                "/usr/bin/install",
-                "/usr/bin/install",
-                "/usr/bin/install",
-                "/usr/bin/install",
-                "/usr/bin/install",
+                "/usr/bin/python3",
                 '"$HELPER"',
             ],
         )
@@ -1194,20 +1274,29 @@ class WriteBoundaryTests(EngineTestCase):
         validation_and_install = setup.split("# Authenticate the exact root-staged bytes", 1)[1]
         self.assertNotIn("$REPO_ROOT/", validation_and_install)
         self.assertIn('visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"', setup)
-        self.assertIn('"$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"', setup)
+        self.assertIn(
+            'f"{stage_root}/joulewise-quiet-guard.sudoers", sudoers_path', setup
+        )
+        self.assertIn("with engine.inactive_installation_lock", setup)
         self.assertNotIn("recover --ack *", setup)
         self.assertIn("unsafe root-helper parent", setup)
 
-    def test_setup_boot_mismatch_preflight_preserves_installed_artifacts(self) -> None:
+    def test_setup_interleaved_state_change_refuses_before_every_artifact_write(self) -> None:
         setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
         preflight = setup.index("validate_inactive_installation(privileged_setup=True)")
+        locked_revalidation = setup.index("with engine.inactive_installation_lock")
+        self.assertLess(preflight, locked_revalidation)
         for install_fragment in (
-            '"$STAGE_ROOT/joulewise/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"',
-            '"$STAGE_ROOT/joulewise/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"',
-            '"$STAGE_ROOT/quiet_guard_privileged.py" "$HELPER"',
-            '"$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"',
+            'f"{stage_root}/joulewise/quiet_guard.py", f"{lib_root}/quiet_guard.py"',
+            'f"{stage_root}/joulewise/quiet_guard_process.py", f"{lib_root}/quiet_guard_process.py"',
+            'f"{stage_root}/quiet_guard_privileged.py", helper',
+            'f"{stage_root}/joulewise-quiet-guard.sudoers", sudoers_path',
         ):
-            self.assertLess(preflight, setup.index(install_fragment), install_fragment)
+            self.assertIn(install_fragment, setup)
+        self.assertLess(
+            locked_revalidation,
+            setup.index("subprocess.run(command, check=True)"),
+        )
 
         with tempfile.TemporaryDirectory(prefix=guard_module.TEST_STATE_ROOT_PREFIX) as temporary:
             temporary_root = Path(temporary)
@@ -1272,6 +1361,7 @@ class WriteBoundaryTests(EngineTestCase):
             }
             for original, replacement in replacements.items():
                 rendered = rendered.replace(original, replacement)
+            rendered = rendered.replace("row.st_uid != 0", "False")
             production_preflight = (
                 "from joulewise.quiet_guard import GuardEngine, PRODUCTION_STATE_ROOT\n"
                 "GuardEngine(PRODUCTION_STATE_ROOT).validate_inactive_installation("
@@ -1281,12 +1371,43 @@ class WriteBoundaryTests(EngineTestCase):
             fixture_preflight = (
                 "from pathlib import Path\n"
                 "from joulewise.quiet_guard import GuardEngine\n"
-                'GuardEngine(Path(sys.argv[2]), host_id="host-A", boot_id="boot-B", '
+                'GuardEngine(Path(sys.argv[2]), host_id="host-A", boot_id="boot-A", '
                 "test_mode=True).validate_inactive_installation()\n"
                 "' \"$STAGE_ROOT\" \"$STATE_ROOT\""
             )
             self.assertIn(production_preflight, rendered)
             rendered = rendered.replace(production_preflight, fixture_preflight)
+            rendered = rendered.replace(
+                "import subprocess, sys\nsys.path.insert(0, sys.argv[1])",
+                "import subprocess, sys\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])",
+            )
+            rendered = rendered.replace(
+                "engine = GuardEngine(PRODUCTION_STATE_ROOT)",
+                'engine = GuardEngine(Path(sys.argv[5]), host_id="host-A", '
+                'boot_id="boot-A", test_mode=True)',
+            )
+            rendered = rendered.replace(
+                "with engine.inactive_installation_lock(privileged_setup=True):",
+                "with engine.inactive_installation_lock():",
+            )
+            rendered = rendered.replace(
+                "' \"$STAGE_ROOT\" \"$LIB_ROOT\" \"$HELPER\" \"$SUDOERS_PATH\"",
+                "' \"$STAGE_ROOT\" \"$LIB_ROOT\" \"$HELPER\" \"$SUDOERS_PATH\" \"$STATE_ROOT\"",
+            )
+            mutator = temporary_root / "mutate_state.py"
+            mutator.write_text(
+                "import sys\n"
+                "from pathlib import Path\n"
+                f"sys.path.insert(0, {str(REPO_ROOT)!r})\n"
+                "from joulewise.quiet_guard import GuardEngine\n"
+                'GuardEngine(Path(sys.argv[1]), host_id="host-A", boot_id="boot-A", '
+                'test_mode=True).transition("recovery_required", "engine")\n'
+            )
+            rendered = rendered.replace(
+                fixture_preflight,
+                fixture_preflight
+                + f'\n"{sys.executable}" "{mutator}" "$STATE_ROOT"',
+            )
             sandboxed_setup = temporary_root / "setup.sh"
             sandboxed_setup.write_text(rendered)
             completed = subprocess.run(
@@ -1297,7 +1418,7 @@ class WriteBoundaryTests(EngineTestCase):
                 check=False,
             )
             self.assertNotEqual(completed.returncode, 0, completed.stdout)
-            self.assertIn(b"state belongs to another boot", completed.stderr)
+            self.assertIn(b"existing guard state is not initial", completed.stderr)
             self.assertEqual({path: path.read_bytes() for path in installed}, before)
 
     def test_setup_digest_pins_match_every_reviewed_root_executable_artifact(self) -> None:

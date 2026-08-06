@@ -161,7 +161,7 @@ def _recovery_inputs(engine: GuardEngine) -> tuple[PsProcessSource, tuple]:
     registered = tuple(
         validate_identity_mapping(raw) for raw in state["registry"]["entries"]
     )
-    enumerated = source.census()
+    enumerated = source.census(protected_identities=registered)
     family = tuple(
         row
         for row in enumerated

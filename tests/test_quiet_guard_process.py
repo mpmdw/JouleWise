@@ -335,6 +335,80 @@ class PsProcessSourceTests(unittest.TestCase):
         self.assertEqual(reader.calls, [123, 456, 456])
         self.assertEqual(snapshots, [])
 
+    def test_protected_unobservable_pid_cannot_retry_into_absence(self) -> None:
+        snapshots = [b"123\n456\n", b"456\n"]
+        stable = DarwinProcessRecord(456, 0, "1785940800.123456", "/bin/stable", ("stable",))
+
+        def runner(arguments, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
+
+        class ChurnReader:
+            def read(self, pid):
+                if pid == 123:
+                    raise ProcessObservationError("protected PID 123 is unobservable")
+                return stable
+
+        with self.assertRaisesRegex(
+            ProcessObservationError,
+            "protected PID\\(s\\) became absent after an unobservable census observation: 123",
+        ):
+            PsProcessSource(runner, reader=ChurnReader()).census(
+                protected_identities=(identity(123),)
+            )
+        self.assertEqual(snapshots, [])
+
+    def test_protected_unobservable_pid_may_retry_into_observable_identity(self) -> None:
+        snapshots = [b"123\n", b"123\n"]
+        stable = DarwinProcessRecord(123, 0, "1785940800.123456", "/bin/stable", ("stable",))
+
+        def runner(arguments, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
+
+        class RecoveringReader:
+            def __init__(self):
+                self.calls = 0
+
+            def read(self, pid):
+                self.calls += 1
+                if self.calls == 1:
+                    raise ProcessObservationError(f"protected PID {pid} is transiently unobservable")
+                return stable
+
+        reader = RecoveringReader()
+        rows = PsProcessSource(runner, reader=reader).census(
+            protected_identities=(identity(123),)
+        )
+        self.assertEqual([row.pid for row in rows], [123])
+        self.assertEqual(reader.calls, 3)
+        self.assertEqual(snapshots, [])
+
+    def test_protected_unobservable_pid_cannot_retry_into_listed_absence(self) -> None:
+        snapshots = [b"123\n", b"123\n"]
+
+        def runner(arguments, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
+
+        class VanishingReader:
+            def __init__(self):
+                self.calls = 0
+
+            def read(self, pid):
+                self.calls += 1
+                if self.calls == 1:
+                    raise ProcessObservationError(f"protected PID {pid} is unobservable")
+                return None
+
+        with self.assertRaisesRegex(
+            ProcessObservationError,
+            "protected PID\\(s\\) became absent after an unobservable census observation: 123",
+        ):
+            PsProcessSource(runner, reader=VanishingReader()).census(
+                protected_identities=(identity(123),)
+            )
+
     def test_census_persistent_unobservability_refuses_after_bound(self) -> None:
         snapshots = 0
 

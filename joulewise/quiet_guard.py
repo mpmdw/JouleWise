@@ -576,9 +576,22 @@ class GuardEngine:
         """Refuse an incompatible installed state without replacing artifacts."""
 
         self._require_inactive_installation_authority(privileged_setup)
-        with self.locked():
+        if not self.paths.root.exists():
+            return initial_state(self.host_id, self.boot_id)
+        with self.locked(create=False):
             _, state, _, _ = self._inactive_installation_state()
             return state
+
+    @contextmanager
+    def inactive_installation_lock(
+        self, *, privileged_setup: bool = False
+    ) -> Iterator[dict[str, Any]]:
+        """Hold one lock across inactive-state validation and artifact writes."""
+
+        self._require_inactive_installation_authority(privileged_setup)
+        with self.locked():
+            _, state, _, _ = self._inactive_installation_state()
+            yield state
 
     def _require_inactive_installation_authority(self, privileged_setup: bool) -> None:
         is_production = self.paths.root == PRODUCTION_STATE_ROOT.resolve()
@@ -607,9 +620,17 @@ class GuardEngine:
         return config, state, config_exists, state_exists
 
     @contextmanager
-    def locked(self, *, blocking: bool = False) -> Iterator[None]:
-        self.paths.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        descriptor = os.open(self.paths.lock, os.O_RDWR | os.O_CREAT, 0o600)
+    def locked(
+        self, *, blocking: bool = False, create: bool = True
+    ) -> Iterator[None]:
+        if create:
+            self.paths.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        elif not self.paths.root.is_dir() or not self.paths.lock.exists():
+            raise GuardError(
+                "lock_unavailable", "existing installation has no control lock"
+            )
+        flags = os.O_RDWR | (os.O_CREAT if create else 0)
+        descriptor = os.open(self.paths.lock, flags, 0o600)
         operation = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
         try:
             try:

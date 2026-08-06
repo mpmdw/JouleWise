@@ -213,7 +213,12 @@ class ProcessSource(Protocol):
 
         ...
 
-    def census(self) -> tuple[ProcessIdentity, ...]:
+    def census(
+        self,
+        protected_identities: Iterable[ProcessIdentity] = (),
+    ) -> tuple[ProcessIdentity, ...]:
+        """Return the census, preserving protected observation failures."""
+
         ...
 
 
@@ -271,7 +276,11 @@ class SnapshotProcessSource:
     def observe(self, pid: int) -> ProcessIdentity | None:
         return self._identities.get(pid)
 
-    def census(self) -> tuple[ProcessIdentity, ...]:
+    def census(
+        self,
+        protected_identities: Iterable[ProcessIdentity] = (),
+    ) -> tuple[ProcessIdentity, ...]:
+        del protected_identities
         return tuple(self._identities[pid] for pid in sorted(self._identities))
 
 
@@ -525,7 +534,12 @@ class PsProcessSource:
             ancestry=tuple(ancestry),
         )
 
-    def census(self) -> tuple[ProcessIdentity, ...]:
+    def census(
+        self,
+        protected_identities: Iterable[ProcessIdentity] = (),
+    ) -> tuple[ProcessIdentity, ...]:
+        protected_pids = {identity.pid for identity in protected_identities}
+        protected_unobservable: set[int] = set()
         for attempt in range(CENSUS_SNAPSHOT_ATTEMPTS):
             raw = self._run(("/bin/ps", "-axo", "pid="))
             if not raw:
@@ -541,12 +555,25 @@ class PsProcessSource:
             identities: list[ProcessIdentity] = []
             try:
                 for pid in pids:
-                    identity = self.observe(pid)
+                    try:
+                        identity = self.observe(pid)
+                    except ProcessObservationError:
+                        if pid in protected_pids:
+                            protected_unobservable.add(pid)
+                        raise
                     if identity is not None:
                         identities.append(identity)
             except ProcessObservationError:
                 if attempt + 1 == CENSUS_SNAPSHOT_ATTEMPTS:
                     raise
                 continue
+            observed_pids = {identity.pid for identity in identities}
+            missing_protected = protected_unobservable.difference(observed_pids)
+            if missing_protected:
+                rendered = ", ".join(str(pid) for pid in sorted(missing_protected))
+                raise ProcessObservationError(
+                    "protected PID(s) became absent after an unobservable "
+                    f"census observation: {rendered}"
+                )
             return tuple(sorted(identities, key=lambda identity: identity.pid))
         raise AssertionError("bounded census attempts exhausted without a result")

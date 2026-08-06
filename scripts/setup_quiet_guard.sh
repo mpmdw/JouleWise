@@ -10,9 +10,9 @@ CREDENTIAL_ROOT="/Library/Application Support/JouleWise/quiet-guard-credentials"
 LIB_ROOT="$INSTALL_ROOT/lib/joulewise"
 HELPER="/usr/local/libexec/joulewise-quiet-guard"
 SUDOERS_PATH="/etc/sudoers.d/joulewise-quiet-guard"
-QUIET_GUARD_SHA256="e7360b7110b48d33b5e6264ddabd5a7e6cc6f6c9455d60c1e62e1aa58db490d6"
-QUIET_GUARD_PROCESS_SHA256="67406dd851355db69e4fbc9cc948fdcad08bde7b1fc1ceecfbc08443b0accd0a"
-QUIET_GUARD_PRIVILEGED_SHA256="5ffbf24ab3483400844beb5abe2fea7447731ca6efc096d01f428453b508993e"
+QUIET_GUARD_SHA256="932d383f9e2ec05f6e32015800c266c0ed2c6d5078c026d0e0420421e23ce27c"
+QUIET_GUARD_PROCESS_SHA256="b2c31563c4c0bf76f293ada905e9c524356aab0a1daf2fd311ed1a2c4674a78d"
+QUIET_GUARD_PRIVILEGED_SHA256="bcc3c0de964193acb84b83276ec5b5518c48b32079097174a313232ffa681bcc"
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "Run this setup as the intended unprivileged operator, not as root." >&2
@@ -89,8 +89,9 @@ for offset in range(0, len(arguments), 2):
   "$STAGE_ROOT/quiet_guard_privileged.py" "$QUIET_GUARD_PRIVILEGED_SHA256"
 /usr/bin/sudo /usr/sbin/visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"
 
-# Refuse incompatible existing state using the authenticated staged engine
-# before replacing any installed module, helper, or sudoers artifact.
+# Refuse incompatible existing state using the authenticated staged engine.
+# On a pristine host this validation-only pass does not create the state root
+# or control.lock.  Installation revalidates below while holding that lock.
 /usr/bin/sudo /usr/bin/python3 -I -S -B -c '
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -108,16 +109,26 @@ row = os.lstat(path)
 if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode) or row.st_uid != 0 or row.st_mode & 0o022:
     raise SystemExit(f"unsafe root-helper parent: {path}")
 ' /usr/local/libexec
-/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 /dev/null "$LIB_ROOT/__init__.py"
-/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
-  "$STAGE_ROOT/joulewise/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"
-/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
-  "$STAGE_ROOT/joulewise/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"
-/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0755 \
-  "$STAGE_ROOT/quiet_guard_privileged.py" "$HELPER"
 
-/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0440 \
-  "$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"
+# No installed artifact is written unless the fresh inactive-state validation
+# and every replacement occur beneath this same continuously held control.lock.
+/usr/bin/sudo /usr/bin/python3 -I -S -B -c '
+import subprocess, sys
+sys.path.insert(0, sys.argv[1])
+from joulewise.quiet_guard import GuardEngine, PRODUCTION_STATE_ROOT
+stage_root, lib_root, helper, sudoers_path = sys.argv[1:5]
+engine = GuardEngine(PRODUCTION_STATE_ROOT)
+commands = (
+    ("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0644", "/dev/null", f"{lib_root}/__init__.py"),
+    ("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0644", f"{stage_root}/joulewise/quiet_guard.py", f"{lib_root}/quiet_guard.py"),
+    ("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0644", f"{stage_root}/joulewise/quiet_guard_process.py", f"{lib_root}/quiet_guard_process.py"),
+    ("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0755", f"{stage_root}/quiet_guard_privileged.py", helper),
+    ("/usr/bin/install", "-o", "root", "-g", "wheel", "-m", "0440", f"{stage_root}/joulewise-quiet-guard.sudoers", sudoers_path),
+)
+with engine.inactive_installation_lock(privileged_setup=True):
+    for command in commands:
+        subprocess.run(command, check=True)
+' "$STAGE_ROOT" "$LIB_ROOT" "$HELPER" "$SUDOERS_PATH"
 
 # install-inactive is intentionally not in sudoers. Setup invokes it directly
 # while authenticated; it writes live_promotion=false and no lease.
