@@ -7302,3 +7302,60 @@ open soundness-sweep blockers (RT-1 mint-floor understatement; voided
 numbers on README/PROJECT_STATUS), the a10 phase-floor extraction, and
 MINT-GENERALIZE-01 — whose D-110 condition (a) was satisfied the same
 day by the CAL-BRACKET merge (PR #100, `f75d12b`).
+
+## D-115: Quiet-guard Q2 setup authority is a FIXED INSTALLATION CAPABILITY, not general root authority (Commit-1 packet entry; renumbered from the contract's proposed D-114 marker)
+
+**Date:** 2026-08-05 (lead adjudication, Fable magistrate session).
+**Status:** ADJUDICATED under Ed's standing Q2 license (2026-08-05
+ratification batch: Q2 proceeds on lead defaults subject to Ed veto).
+**Numbering note:** the Commit-1 worker proposed this entry as D-114
+inside `docs/contracts/quiet_guard.md` (it does not own the decision
+log, correctly). D-114 was consumed the same day by the T3-CHAIN
+DESCOPE, so this entry is D-115; the contract marker renumbers to
+D-115 in the Commit-1 fix round. **Packet-letter deviation, ruled:**
+the IMPL-PACKET file map places this entry in Commit 1's delta, but
+the branch forked before D-114 landed and an in-branch append would
+manufacture a merge conflict in this file; the entry lands on main and
+is merged back into `impl/quiet-guard`, which satisfies the packet's
+purpose (binding authority exists before the capability merges) with
+cleaner custody.
+
+**Question.** Q2 asked what authority the one-time
+`scripts/setup_quiet_guard.sh` sudo session exercises when it creates
+the root-owned quiet-guard state under
+`/Library/Application Support/JouleWise/quiet-guard/`.
+
+**Ruling.**
+1. **Capability boundary.** The setup script exercises a fixed
+   installation capability: create the root-owned state/install
+   directories, install the fixed-command privileged helper and the
+   narrow `sudoers.d` command aliases, and write `live_promotion=false`.
+   It confers NO general root authority; nothing outside that
+   enumerated set is licensed. Normal guard operation is `sudo -n`
+   against the fixed command aliases only, and the helper drops to the
+   invoking uid/gid before any agent child executes.
+2. **Binding conditions on the capability** (from the 2026-08-05
+   adversarial audits qg-audit-A/B; the capability is not validly
+   exercised without them):
+   a. **Fresh interactive authorization** — the installer must
+      invalidate any cached sudo timestamp (`sudo -k`) before
+      requesting authorization, so a cached ticket can never silently
+      convert repository state into root-executed code.
+   b. **Authenticated content** — what is installed must be
+      authenticated against pinned digests of the reviewed artifacts
+      (or an equivalently strong provenance check), not merely parsed
+      for syntactic validity; root-staging closes copy races but does
+      not authenticate what was staged.
+   c. **Real interpreter isolation** — the installed helper runs with
+      genuine isolation guarantees (no site initialization, no
+      user-site, no environment hooks: `-I`-equivalent), matching the
+      contract's isolation claim.
+3. **Inactive by construction.** Commit 1 installs INACTIVE:
+   `live_promotion=false`, `arm` refuses (`t3_char_pair_verdict_missing`),
+   and no launcher, chain, watcher, or projection code is in scope
+   (D-114 descope). Activation requires a separate, later, Ed-visible
+   step and is not licensed by this entry.
+
+**Consequences.** The Commit-1 fix round renumbers the contract marker
+and implements conditions 2a-2c with discriminating regressions; the
+QUIET-GUARD-01 row cannot land while any condition lacks enforcement.
