@@ -10,11 +10,63 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-05 NIGHT — **CHECKPOINT: Ed-ordered stop for a
-Fable model-switch (classifier tier-flap on adversarial-audit vocab).**
-Read the NIGHT block immediately below and stop; everything under it
-(the EVENING descope block included) is still-valid history — the
-EVENING queue is unchanged except where this block updates it.
+Last updated: 2026-08-05 LATE NIGHT — Fable magistrate session resumed
+from the NIGHT checkpoint. Read the LATE-NIGHT block first; the NIGHT
+and EVENING blocks below it are still-valid history.
+
+## ⏳ 2026-08-05 LATE NIGHT — Fable resume: all 4 audits harvested, D-115 adjudicated, two Sol rounds in flight
+
+**Harvest complete** — all four checkpoint audits finished and are
+copied to `.desk/2026-08-05-checkpoint-audits/` (cgv-audit-A/B,
+qg-audit-A/B; qg-audit-B's `.status` semantic fields failed to parse but
+its report envelope is present, final, and well-formed — wrapper
+artifact, noted).
+
+**COLDGATE-VALIDATOR-01** — cgv-audit-B (oversight/prune lens) reframes
+F3 entirely: B1 blocker (PASS receipt does not bind the judge to the
+validated bytes — post-validation exhibit substitution), S1 fenced-
+heading false refusals, S2 --help receipt violation, and a prune
+recommendation to DELETE the attestation privacy subsystem F3 lives in
+(free-text attestation fields discriminate no registry invariant). Per
+the rule-11 escalation trigger, a **Sol design consult is IN FLIGHT**
+(read-only, high — rule-10 tier is xhigh, Ed's Sol-HIGH-only directive
+controls, deviation recorded) on: closure shape (refuse-all-slashes vs
+allowlist vs delete-the-subsystem), B1 scope (in-branch vs CGV-HARDEN-01
+sibling row), S1/S2 disposition, regression vectors. Magistrate's
+analysis in the consult: the `input / output` acceptance test and the
+privacy invariant are mutually unsatisfiable (POSIX filenames may
+contain spaces), so no denylist regex can close F3. Consult prompt +
+output land in the session scratchpad; do not land the branch before
+synthesis.
+
+**QUIET-GUARD-01 commit 1** — both audits FAIL the branch; convergent
+blockers: observation-failure conflated with ABSENT → false-zero census
+can release custody; `idle` state accepts a live lease; plus init-wedge
+(A-F3), installer-as-root-code-loader under cached sudo (B-F3), `-E` is
+not isolation (B-F5), pre-landed Commit-2/3 behavior (A-F5), Darwin
+decoder has no discriminating coverage (A-F6/B-F6), D-114 marker
+collision (A-F4/B-F4). **D-115 ADJUDICATED and pushed to main
+(`0941cf5`)**: Q2 setup authority = fixed installation capability, with
+binding conditions 2a (sudo -k fresh auth) / 2b (authenticated staged
+content) / 2c (real interpreter isolation); numbering collision with the
+descope's D-114 resolved (entry lands via main, merged into the branch
+at `262faca` — packet-letter deviation ruled and recorded in the entry).
+**Sol fix round IN FLIGHT** (workspace-write, high, WRITE_SCOPE = the 8
+commit-1 files, decision log excluded) closing all ten findings with
+defect-shaped regressions. On return: lead replays tests unpiped, then
+DELTA RE-AUDIT (fix rounds introduce defects — proven), then land
+commit 1 only.
+
+**Wrapper gotcha rediscovered (add to field notes):** codex-run-v3
+takes the prompt as a literal STRING (`"$*"`), not a file path — pass
+`"$(cat prompt.md)"`. A file-path arg silently becomes the whole prompt
+(and with --write-scope fails rc=64 on the missing WRITE_SCOPE line).
+One consult was launched with a path-as-prompt, killed cleanly, and
+relaunched before any output was consumed.
+
+**Unchanged queue after these land:** a10 phase-floor extraction, then
+MINT-GENERALIZE-01 (b)+(c) — the D-110 re-mint embedding
+`max(drift, 0.010818 s)`, clause (c) = last sweep blocker DC-2/FM-3.
 
 ## ✅ CHECKPOINT 2026-08-05 night — Ed model-switch stop (successor is FABLE; read this, then the EVENING queue)
 
