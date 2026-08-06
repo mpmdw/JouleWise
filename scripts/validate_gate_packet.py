@@ -68,9 +68,9 @@ MANIFEST_TITLE_RE = re.compile(
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})  ([^\r\n]+)$")
 FENCE_RE = re.compile(r"^[ \t]*```[ \t]*$")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
-ABSOLUTE_PATH_RE = re.compile(
-    r"(?:^|(?<=[\s'\"([{]))(?:/[^\s]*|[A-Za-z]:[\\/][^\s]*)"
-)
+# Lexical privacy invariant: deliberately fail closed for controlled attestations.
+# Embedded slashes (for example input/output or 3/4) are refused by design.
+ABSOLUTE_PATH_RE = re.compile(r"/(?=\S)|(?:~|[A-Za-z]:)[\\/]|\\\\(?=\S)")
 
 
 class CliError(Exception):
@@ -574,12 +574,81 @@ def _cli_refusal() -> dict[str, Any]:
     )
 
 
+def _receipt_preflight_reason(receipt: dict[str, Any]) -> str | None:
+    attestations = receipt.get("convening_attestations")
+    if isinstance(attestations, dict):
+        for field in ("contamination_disclosure", "launch_environment"):
+            value = attestations.get(field)
+            if isinstance(value, str) and _contains_absolute_path(value):
+                return "attestation_invalid"
+
+    path_values: list[Any] = [receipt.get("packet_charter_path")]
+    inputs = receipt.get("inputs")
+    if isinstance(inputs, dict):
+        path_values.extend((inputs.get("charter"), inputs.get("packet")))
+    digests = receipt.get("digests")
+    if isinstance(digests, dict):
+        exhibits = digests.get("exhibits")
+        if isinstance(exhibits, list):
+            path_values.extend(
+                exhibit.get("path")
+                for exhibit in exhibits
+                if isinstance(exhibit, dict)
+            )
+    details = receipt.get("details")
+    if isinstance(details, list):
+        for detail in details:
+            if isinstance(detail, dict):
+                path_values.extend((detail.get("path"), detail.get("aliases")))
+    receipt_out_error = receipt.get("receipt_out_error")
+    if isinstance(receipt_out_error, dict):
+        path_values.append(receipt_out_error.get("path"))
+
+    if any(
+        isinstance(value, str) and _contains_absolute_path(value)
+        for value in path_values
+    ):
+        return "internal_error"
+    return None
+
+
+def _preflight_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    reason = _receipt_preflight_reason(receipt)
+    if reason is None:
+        return receipt
+    return _refuse(_cli_refusal(), reason)
+
+
+def _emit_receipt(receipt: dict[str, Any], receipt_out: str | None = None) -> int:
+    # PASS is provisional until the schema-aware serialization preflight succeeds.
+    receipt = _preflight_receipt(receipt)
+    output = _canonical_json(receipt)
+    if receipt_out is not None:
+        try:
+            _write_receipt_exclusive(Path(receipt_out), output)
+        except (OSError, ValueError):
+            if receipt["result"] == "PASS":
+                receipt = _refuse(
+                    receipt,
+                    "receipt_write_failed",
+                    [{"path": _basename(receipt_out)}],
+                )
+            else:
+                receipt["receipt_out_error"] = {
+                    "path": _basename(receipt_out),
+                    "reason": "receipt_write_failed",
+                }
+            receipt = _preflight_receipt(receipt)
+            output = _canonical_json(receipt)
+    sys.stdout.buffer.write(output)
+    return 0 if receipt["result"] == "PASS" else REFUSAL_EXIT
+
+
 def _run(argv: Sequence[str] | None) -> int:
     try:
         args = _parser().parse_args(argv)
     except CliError:
-        sys.stdout.buffer.write(_canonical_json(_cli_refusal()))
-        return REFUSAL_EXIT
+        return _emit_receipt(_cli_refusal())
 
     receipt_out_reason = _receipt_out_reason(
         args.receipt_out, args.packet, args.charter
@@ -597,8 +666,7 @@ def _run(argv: Sequence[str] | None) -> int:
             receipt_out_reason,
             [{"path": _basename(args.receipt_out)}],
         )
-        sys.stdout.buffer.write(_canonical_json(receipt))
-        return REFUSAL_EXIT
+        return _emit_receipt(receipt)
 
     receipt = validate(
         packet_arg=args.packet,
@@ -608,25 +676,7 @@ def _run(argv: Sequence[str] | None) -> int:
         launch_environment_attestation=args.launch_environment_attestation,
         contamination_disclosure=args.contamination_disclosure,
     )
-    output = _canonical_json(receipt)
-    if args.receipt_out is not None:
-        try:
-            _write_receipt_exclusive(Path(args.receipt_out), output)
-        except (OSError, ValueError):
-            if receipt["result"] == "PASS":
-                receipt = _refuse(
-                    receipt,
-                    "receipt_write_failed",
-                    [{"path": _basename(args.receipt_out)}],
-                )
-            else:
-                receipt["receipt_out_error"] = {
-                    "path": _basename(args.receipt_out),
-                    "reason": "receipt_write_failed",
-                }
-            output = _canonical_json(receipt)
-    sys.stdout.buffer.write(output)
-    return 0 if receipt["result"] == "PASS" else REFUSAL_EXIT
+    return _emit_receipt(receipt, args.receipt_out)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -638,8 +688,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return REFUSAL_EXIT
     except Exception:
         receipt = _refuse(_cli_refusal(), "internal_error")
-        sys.stdout.buffer.write(_canonical_json(receipt))
-        return REFUSAL_EXIT
+        return _emit_receipt(receipt)
 
 
 if __name__ == "__main__":

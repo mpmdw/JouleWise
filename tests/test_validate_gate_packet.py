@@ -160,6 +160,7 @@ class ValidateGatePacketTests(unittest.TestCase):
         )
         self.assertEqual(receipt["inputs"], {"charter": "charter.md", "packet": "PACKET.md"})
         self.assertEqual(receipt["digests"]["exhibits"][0]["path"], "evidence.txt")
+        self.assertEqual(receipt["schema"], "coldgate-validator-receipt/v1")
         self.assertNotIn(str(self.root).encode("utf-8"), completed.stdout)
         self.assertEqual(receipt_path.read_bytes(), completed.stdout)
 
@@ -243,7 +244,7 @@ class ValidateGatePacketTests(unittest.TestCase):
         with (
             mock.patch.object(
                 VALIDATOR_MODULE, "validate", side_effect=RuntimeError("fixture")
-            ),
+            ) as validate_mock,
             mock.patch.object(VALIDATOR_MODULE.sys, "stdout", captured),
         ):
             returncode = VALIDATOR_MODULE.main(
@@ -258,10 +259,23 @@ class ValidateGatePacketTests(unittest.TestCase):
                     self.charter_sha,
                 ]
             )
-        receipt = json.loads(captured.buffer.getvalue().decode("utf-8"))
+        output = captured.buffer.getvalue()
+        receipt = json.loads(output.decode("utf-8"))
         self.assertEqual(returncode, 2)
-        self.assertEqual(receipt["result"], "REFUSE")
-        self.assertEqual(receipt["reason"], "internal_error")
+        self.assertEqual(
+            receipt,
+            VALIDATOR_MODULE._refuse(VALIDATOR_MODULE._cli_refusal(), "internal_error"),
+        )
+        self.assertEqual(output, VALIDATOR_MODULE._canonical_json(receipt))
+        self.assertNotIn(str(self.root).encode("utf-8"), output)
+        validate_mock.assert_called_once_with(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+            launch_environment_attestation=None,
+            contamination_disclosure=None,
+        )
 
     def test_refuses_tampered_exhibit(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)
@@ -350,6 +364,29 @@ class ValidateGatePacketTests(unittest.TestCase):
         )
         completed, receipt = self.run_validator(packet)
         self.assert_refusal(completed, receipt, "exhibit_custody_invalid")
+        packet_directory_fd = os.open(
+            self.packet_directory, os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
+        )
+        real_open = os.open
+        try:
+            with mock.patch.object(
+                VALIDATOR_MODULE.os, "open", wraps=real_open
+            ) as open_mock:
+                _, _, reason = VALIDATOR_MODULE._open_exhibit(
+                    packet_directory_fd, "linked/evidence.txt"
+                )
+        finally:
+            os.close(packet_directory_fd)
+        self.assertEqual(reason, "exhibit_custody_invalid")
+        intermediate_calls = [
+            call
+            for call in open_mock.call_args_list
+            if call.args and call.args[0] == "linked"
+        ]
+        self.assertEqual(len(intermediate_calls), 1)
+        self.assertIn("dir_fd", intermediate_calls[0].kwargs)
+        self.assertTrue(intermediate_calls[0].args[1] & os.O_NOFOLLOW)
+        self.assertTrue(intermediate_calls[0].args[1] & os.O_DIRECTORY)
 
     def test_refuses_non_regular_exhibit(self) -> None:
         packet, _, _ = self.write_packet(
@@ -400,7 +437,11 @@ class ValidateGatePacketTests(unittest.TestCase):
         packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
         receipt_path = self.root / "receipt.json"
         captured = mock.Mock(buffer=io.BytesIO())
+        real_validate = VALIDATOR_MODULE.validate
         with (
+            mock.patch.object(
+                VALIDATOR_MODULE, "validate", wraps=real_validate
+            ) as validate_mock,
             mock.patch.object(
                 VALIDATOR_MODULE,
                 "_write_receipt_exclusive",
@@ -426,6 +467,19 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertEqual(returncode, 2)
         self.assertEqual(receipt["result"], "REFUSE")
         self.assertEqual(receipt["reason"], "receipt_write_failed")
+        self.assertEqual(receipt["details"], [{"path": "receipt.json"}])
+        self.assertFalse(receipt_path.exists())
+        self.assertEqual(
+            captured.buffer.getvalue(), VALIDATOR_MODULE._canonical_json(receipt)
+        )
+        validate_mock.assert_called_once_with(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+            launch_environment_attestation=None,
+            contamination_disclosure=None,
+        )
 
     def test_receipt_write_failure_preserves_validation_refusal(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)
@@ -475,6 +529,81 @@ class ValidateGatePacketTests(unittest.TestCase):
                 )
                 self.assert_refusal(completed, receipt, "attestation_invalid")
                 self.assertNotIn(str(self.root).encode("utf-8"), completed.stdout)
+
+    def test_refuses_delimiter_bypass_paths_in_convening_attestation(self) -> None:
+        packet, _, _ = self.write_packet(pin=self.charter_sha)
+        for value, path in (
+            ("cwd=/Users/edr/secret", "/Users/edr/secret"),
+            ("KEY=/abs", "/abs"),
+            ("a,/opt/x", "/opt/x"),
+        ):
+            with self.subTest(value=value):
+                completed, receipt = self.run_validator(
+                    packet, launch_environment_attestation=value
+                )
+                self.assert_refusal(completed, receipt, "attestation_invalid")
+                self.assertIsNone(
+                    receipt["convening_attestations"]["launch_environment"]
+                )
+                self.assertNotIn(value.encode("utf-8"), completed.stdout)
+                self.assertNotIn(path.encode("utf-8"), completed.stdout)
+
+    def test_accepts_space_surrounded_lone_slash_and_schema_id(self) -> None:
+        packet, _, _ = self.write_packet(pin=self.charter_sha)
+        completed, receipt = self.run_validator(
+            packet, launch_environment_attestation="input / output"
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(receipt["result"], "PASS")
+        self.assertEqual(
+            receipt["convening_attestations"]["launch_environment"],
+            "input / output",
+        )
+        self.assertEqual(receipt["schema"], "coldgate-validator-receipt/v1")
+
+    def test_serialization_preflight_refuses_non_attestation_path_leak(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        receipt_path = self.root / "receipt.json"
+        leak = "/Users/edr/secret"
+        injected_receipt = VALIDATOR_MODULE.validate(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+            launch_environment_attestation=None,
+            contamination_disclosure=None,
+        )
+        injected_receipt["inputs"]["packet"] = leak
+        captured = mock.Mock(buffer=io.BytesIO())
+        with (
+            mock.patch.object(
+                VALIDATOR_MODULE, "validate", return_value=injected_receipt
+            ),
+            mock.patch.object(VALIDATOR_MODULE.sys, "stdout", captured),
+        ):
+            returncode = VALIDATOR_MODULE.main(
+                [
+                    "--packet",
+                    str(packet),
+                    "--charter",
+                    str(self.charter),
+                    "--expected-packet-sha256",
+                    sha256(packet_bytes),
+                    "--expected-charter-sha256",
+                    self.charter_sha,
+                    "--receipt-out",
+                    str(receipt_path),
+                ]
+            )
+        output = captured.buffer.getvalue()
+        receipt = json.loads(output.decode("utf-8"))
+        self.assertEqual(returncode, 2)
+        self.assertEqual(receipt["result"], "REFUSE")
+        self.assertEqual(receipt["reason"], "internal_error")
+        self.assertEqual(receipt["inputs"], {"charter": None, "packet": None})
+        self.assertNotIn(leak.encode("utf-8"), output)
+        self.assertNotIn(leak.encode("utf-8"), receipt_path.read_bytes())
+        self.assertEqual(receipt_path.read_bytes(), output)
 
     def test_receipt_is_byte_deterministic(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)
