@@ -435,8 +435,19 @@ def load_calibration_acceptance_bound(
 
     try:
         raw = Path(path).read_bytes()
+    except OSError:
+        return None
+    return _acceptance_bound_from_authenticated_bytes(raw)
+
+
+def _acceptance_bound_from_authenticated_bytes(
+    raw: bytes,
+) -> dict[str, Any] | None:
+    """Parse acceptance bytes only when their role-indexed pin authenticates."""
+
+    try:
         value = json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     # Any file route is authenticated by one of the two reviewed exact-byte
     # states: the genesis fixture retained for pre-issuance tests, or the
