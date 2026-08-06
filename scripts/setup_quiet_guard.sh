@@ -10,8 +10,8 @@ CREDENTIAL_ROOT="/Library/Application Support/JouleWise/quiet-guard-credentials"
 LIB_ROOT="$INSTALL_ROOT/lib/joulewise"
 HELPER="/usr/local/libexec/joulewise-quiet-guard"
 SUDOERS_PATH="/etc/sudoers.d/joulewise-quiet-guard"
-QUIET_GUARD_SHA256="25819e5a01795e11989b40dc03eef07d5defd0c65e4cc562523f2a596c88b266"
-QUIET_GUARD_PROCESS_SHA256="03c1b1b885597556368d67905310e3777557951df889e8a442ac3f6c76f57b9d"
+QUIET_GUARD_SHA256="e7360b7110b48d33b5e6264ddabd5a7e6cc6f6c9455d60c1e62e1aa58db490d6"
+QUIET_GUARD_PROCESS_SHA256="67406dd851355db69e4fbc9cc948fdcad08bde7b1fc1ceecfbc08443b0accd0a"
 QUIET_GUARD_PRIVILEGED_SHA256="5ffbf24ab3483400844beb5abe2fea7447731ca6efc096d01f428453b508993e"
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -43,10 +43,11 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+/usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 0700 "$STAGE_ROOT/joulewise"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
-  "$REPO_ROOT/joulewise/quiet_guard.py" "$STAGE_ROOT/quiet_guard.py"
+  "$REPO_ROOT/joulewise/quiet_guard.py" "$STAGE_ROOT/joulewise/quiet_guard.py"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
-  "$REPO_ROOT/joulewise/quiet_guard_process.py" "$STAGE_ROOT/quiet_guard_process.py"
+  "$REPO_ROOT/joulewise/quiet_guard_process.py" "$STAGE_ROOT/joulewise/quiet_guard_process.py"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
   "$REPO_ROOT/scripts/quiet_guard_privileged.py" "$STAGE_ROOT/quiet_guard_privileged.py"
 
@@ -83,10 +84,19 @@ for offset in range(0, len(arguments), 2):
         raise SystemExit(f"reviewed-artifact digest mismatch: {path.name}")
     ast.parse(payload, filename=str(path))
 ' \
-  "$STAGE_ROOT/quiet_guard.py" "$QUIET_GUARD_SHA256" \
-  "$STAGE_ROOT/quiet_guard_process.py" "$QUIET_GUARD_PROCESS_SHA256" \
+  "$STAGE_ROOT/joulewise/quiet_guard.py" "$QUIET_GUARD_SHA256" \
+  "$STAGE_ROOT/joulewise/quiet_guard_process.py" "$QUIET_GUARD_PROCESS_SHA256" \
   "$STAGE_ROOT/quiet_guard_privileged.py" "$QUIET_GUARD_PRIVILEGED_SHA256"
 /usr/bin/sudo /usr/sbin/visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"
+
+# Refuse incompatible existing state using the authenticated staged engine
+# before replacing any installed module, helper, or sudoers artifact.
+/usr/bin/sudo /usr/bin/python3 -I -S -B -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from joulewise.quiet_guard import GuardEngine, PRODUCTION_STATE_ROOT
+GuardEngine(PRODUCTION_STATE_ROOT).validate_inactive_installation(privileged_setup=True)
+' "$STAGE_ROOT"
 
 /usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 0700 \
   "$STATE_ROOT" "$INSTALL_ROOT" "$CREDENTIAL_ROOT" "$INSTALL_ROOT/lib" "$LIB_ROOT"
@@ -100,9 +110,9 @@ if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode) or row.st_uid != 0
 ' /usr/local/libexec
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 /dev/null "$LIB_ROOT/__init__.py"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
-  "$STAGE_ROOT/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"
+  "$STAGE_ROOT/joulewise/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
-  "$STAGE_ROOT/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"
+  "$STAGE_ROOT/joulewise/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"
 /usr/bin/sudo /usr/bin/install -o root -g wheel -m 0755 \
   "$STAGE_ROOT/quiet_guard_privileged.py" "$HELPER"
 

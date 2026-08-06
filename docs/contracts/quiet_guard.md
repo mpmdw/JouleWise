@@ -163,7 +163,9 @@ preserves the prior document and removes the temporary file. A directory
 Inactive initialization is retry-idempotent across its two documents: if an
 interruption leaves one valid expected document, retry validates it and writes
 the missing peer; if both expected documents landed, retry returns the same
-inactive state without rewriting either. Unexpected existing content refuses.
+inactive state without rewriting either. Every successful invocation, including
+that no-rewrite retry, re-fsyncs the state directory and its parent; either
+failure is propagated. Unexpected existing content refuses.
 
 ## Exact process identity and census
 
@@ -189,7 +191,10 @@ torn/changed ancestry observation is `UNOBSERVABLE`. Neither produces a partial
 identity, and `UNOBSERVABLE` is never reinterpreted as absence. On non-Darwin
 or when required sysctls are unavailable observation refuses. Census enumerates
 independently and refuses if any listed PID is unobservable rather than
-silently omitting it and reporting a false zero.
+silently omitting it and reporting a false zero. A transient unobservable PID
+restarts the complete PID snapshot once; a second unobservable attempt refuses
+unchanged, so churn recovery is bounded and never turns unobservability into
+absence.
 Before action, callers compare the complete durable identity. Same PID with a
 different start time, executable, argv digest, or ancestry is `pid_reused`,
 never a match. Family discovery and the later T3 adapter must derive identities
@@ -264,6 +269,9 @@ operator-run, never agent-run. It:
 - validates the authenticated Python source without importing or writing bytecode;
 - stages each mutable repository artifact once in a root-owned mode-0700
   directory, validates those exact staged bytes, and installs only from them;
+- uses the authenticated staged engine to validate any existing config/state
+  against the current host and boot and require fresh or retryable initial
+  history before replacing any installed module, helper, or sudoers bytes;
 - creates root-owned mode-0700 state, install, and credential directories;
 - installs root-owned package modules and the fixed helper;
 - validates and installs identical staged sudoers bytes for only exact

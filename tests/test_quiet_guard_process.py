@@ -224,6 +224,8 @@ class PsProcessSourceTests(unittest.TestCase):
         self.assertNotEqual(first_identity, second_identity)
 
     def test_sysctl_decoder_preserves_subseconds_and_true_argv_boundaries(self) -> None:
+        """Discriminate decoder mutants that truncate usecs or flatten argv."""
+
         pid = 321
         seconds = 1_785_940_800
         microseconds = 654_321
@@ -308,6 +310,53 @@ class PsProcessSourceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ProcessObservationError, "listed PID 123"):
             PsProcessSource(runner, reader=FailingReader()).census()
+
+    def test_census_resnapshots_after_transient_unobservability(self) -> None:
+        snapshots = [b"123\n456\n", b"456\n"]
+        stable = DarwinProcessRecord(456, 0, "1785940800.123456", "/bin/stable", ("stable",))
+
+        def runner(arguments, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(arguments, 0, stdout=snapshots.pop(0), stderr=b"")
+
+        class ChurnReader:
+            def __init__(self):
+                self.calls = []
+
+            def read(self, pid):
+                self.calls.append(pid)
+                if pid == 123:
+                    raise ProcessObservationError("transiently unobservable PID 123")
+                return stable
+
+        reader = ChurnReader()
+        rows = PsProcessSource(runner, reader=reader).census()
+        self.assertEqual([row.pid for row in rows], [456])
+        self.assertEqual(reader.calls, [123, 456, 456])
+        self.assertEqual(snapshots, [])
+
+    def test_census_persistent_unobservability_refuses_after_bound(self) -> None:
+        snapshots = 0
+
+        def runner(arguments, **kwargs):
+            nonlocal snapshots
+            del kwargs
+            snapshots += 1
+            return subprocess.CompletedProcess(arguments, 0, stdout=b"123\n", stderr=b"")
+
+        class FailingReader:
+            def __init__(self):
+                self.calls = 0
+
+            def read(self, pid):
+                self.calls += 1
+                raise ProcessObservationError(f"persistently unobservable PID {pid}")
+
+        reader = FailingReader()
+        with self.assertRaisesRegex(ProcessObservationError, "persistently unobservable PID 123"):
+            PsProcessSource(runner, reader=reader).census()
+        self.assertEqual(snapshots, 2)
+        self.assertEqual(reader.calls, 2)
 
 
 if __name__ == "__main__":

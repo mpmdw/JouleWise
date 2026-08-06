@@ -32,6 +32,7 @@ from typing import Any, Callable, Iterable, Mapping, Protocol, Sequence
 
 PROCESS_IDENTITY_SCHEMA = "joulewise.quiet_guard.process_identity/v1"
 ARGV_DIGEST_PREFIX = "sha256:"
+CENSUS_SNAPSHOT_ATTEMPTS = 2
 
 
 class ProcessIdentityError(ValueError):
@@ -525,16 +526,27 @@ class PsProcessSource:
         )
 
     def census(self) -> tuple[ProcessIdentity, ...]:
-        raw = self._run(("/bin/ps", "-axo", "pid="))
-        if not raw:
-            raise ProcessIdentityError("Darwin process census is unavailable")
-        identities: list[ProcessIdentity] = []
-        for token in raw.split():
+        for attempt in range(CENSUS_SNAPSHOT_ATTEMPTS):
+            raw = self._run(("/bin/ps", "-axo", "pid="))
+            if not raw:
+                raise ProcessIdentityError("Darwin process census is unavailable")
+            pids: list[int] = []
+            for token in raw.split():
+                try:
+                    pids.append(int(token))
+                except ValueError as exc:
+                    raise ProcessObservationError(
+                        "Darwin process census listed a non-PID"
+                    ) from exc
+            identities: list[ProcessIdentity] = []
             try:
-                pid = int(token)
-            except ValueError as exc:
-                raise ProcessObservationError("Darwin process census listed a non-PID") from exc
-            identity = self.observe(pid)
-            if identity is not None:
-                identities.append(identity)
-        return tuple(sorted(identities, key=lambda identity: identity.pid))
+                for pid in pids:
+                    identity = self.observe(pid)
+                    if identity is not None:
+                        identities.append(identity)
+            except ProcessObservationError:
+                if attempt + 1 == CENSUS_SNAPSHOT_ATTEMPTS:
+                    raise
+                continue
+            return tuple(sorted(identities, key=lambda identity: identity.pid))
+        raise AssertionError("bounded census attempts exhausted without a result")

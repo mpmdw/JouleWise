@@ -255,6 +255,57 @@ class InstallationTests(EngineTestCase):
         self.assertEqual(recovered, initial_state("host-A", "boot-A"))
         self.assertEqual(engine.status()["state"], recovered)
 
+    def test_init_retry_must_complete_its_own_directory_durability_pass(self) -> None:
+        root = self.root / "directory-fsync-retry"
+        engine = GuardEngine(root, host_id="host-A", boot_id="boot-A", test_mode=True)
+        real_fsync_directory = guard_module._fsync_directory
+        first_calls: list[Path] = []
+
+        def fail_after_state_replace(directory):
+            first_calls.append(Path(directory))
+            if len(first_calls) == 2:
+                raise OSError("state directory fsync failed")
+            return real_fsync_directory(directory)
+
+        with mock.patch.object(
+            guard_module, "_fsync_directory", side_effect=fail_after_state_replace
+        ):
+            with self.assertRaisesRegex(OSError, "state directory fsync failed"):
+                engine.initialize_inactive()
+        self.assertTrue(engine.paths.config.exists())
+        self.assertTrue(engine.paths.state.exists())
+
+        with mock.patch.object(
+            guard_module,
+            "_fsync_directory",
+            side_effect=OSError("retry directory fsync still failed"),
+        ) as still_failing, mock.patch.object(guard_module, "_atomic_write_json") as write:
+            with self.assertRaisesRegex(OSError, "retry directory fsync still failed"):
+                engine.initialize_inactive()
+        still_failing.assert_called_once_with(engine.paths.root)
+        write.assert_not_called()
+
+        retry_calls: list[Path] = []
+
+        def successful_retry(directory):
+            retry_calls.append(Path(directory))
+            return real_fsync_directory(directory)
+
+        with mock.patch.object(
+            guard_module, "_fsync_directory", side_effect=successful_retry
+        ), mock.patch.object(guard_module, "_atomic_write_json") as write:
+            recovered = engine.initialize_inactive()
+        self.assertEqual(recovered, initial_state("host-A", "boot-A"))
+        self.assertEqual(retry_calls, [engine.paths.root, engine.paths.root.parent])
+        write.assert_not_called()
+
+    def test_install_preflight_refuses_noninitial_recovery_history(self) -> None:
+        self.pending(entries=(self.owner,))
+        self.engine.audit_registry(SnapshotProcessSource(), ())
+        with self.assertRaises(GuardError) as caught:
+            self.engine.validate_inactive_installation()
+        self.assertEqual(caught.exception.cause, "schema_mismatch")
+
     def test_non_test_arbitrary_root_cannot_initialize(self) -> None:
         arbitrary = GuardEngine(
             self.root / "other", host_id="host-A", boot_id="boot-A", test_mode=False
@@ -748,6 +799,23 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
         self.assertEqual(payload["cause"], "t3_char_pair_verdict_missing")
         run.assert_not_called()
 
+    def test_cli_arm_refusal_cause_matches_commit_one_contract(self) -> None:
+        contract = (REPO_ROOT / "docs/contracts/quiet_guard.md").read_text()
+        match = re.search(
+            r"`quiet_guard arm` refuses.*?canonical cause\s+`([^`]+)`",
+            contract,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        assert match is not None
+        with mock.patch.object(self.client.subprocess, "run") as run, mock.patch(
+            "builtins.print"
+        ) as emit:
+            exit_code = self.client.main(("arm",))
+        self.assertEqual(exit_code, self.client.EXIT_REFUSED)
+        self.assertEqual(json.loads(emit.call_args.args[0])["cause"], match.group(1))
+        run.assert_not_called()
+
     def test_test_initializer_refuses_production_root_without_sudo(self) -> None:
         with mock.patch.object(self.client.subprocess, "run") as run, mock.patch("builtins.print"):
             exit_code = self.client.main(
@@ -1069,7 +1137,7 @@ class WriteBoundaryTests(EngineTestCase):
         stage = setup.index("STAGE_ROOT=$(/usr/bin/sudo")
         self.assertLess(revoke, authorize)
         self.assertLess(authorize, stage)
-        self.assertEqual(setup.count("/usr/bin/sudo"), 19)
+        self.assertEqual(setup.count("/usr/bin/sudo"), 21)
         logical_setup = setup.replace("\\\n", " ")
         sudo_targets = [
             re.search(r"/usr/bin/sudo\s+([^\s)]+)", line).group(1)
@@ -1086,9 +1154,11 @@ class WriteBoundaryTests(EngineTestCase):
                 "/usr/bin/install",
                 "/usr/bin/install",
                 "/usr/bin/install",
+                "/usr/bin/install",
                 "/usr/bin/python3",
                 "/usr/bin/python3",
                 "/usr/sbin/visudo",
+                "/usr/bin/python3",
                 "/usr/bin/install",
                 "/usr/bin/install",
                 "/usr/bin/python3",
@@ -1127,6 +1197,108 @@ class WriteBoundaryTests(EngineTestCase):
         self.assertIn('"$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"', setup)
         self.assertNotIn("recover --ack *", setup)
         self.assertIn("unsafe root-helper parent", setup)
+
+    def test_setup_boot_mismatch_preflight_preserves_installed_artifacts(self) -> None:
+        setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
+        preflight = setup.index("validate_inactive_installation(privileged_setup=True)")
+        for install_fragment in (
+            '"$STAGE_ROOT/joulewise/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"',
+            '"$STAGE_ROOT/joulewise/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"',
+            '"$STAGE_ROOT/quiet_guard_privileged.py" "$HELPER"',
+            '"$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"',
+        ):
+            self.assertLess(preflight, setup.index(install_fragment), install_fragment)
+
+        with tempfile.TemporaryDirectory(prefix=guard_module.TEST_STATE_ROOT_PREFIX) as temporary:
+            temporary_root = Path(temporary)
+            state_root = temporary_root / "state"
+            install_root = temporary_root / "install"
+            lib_root = install_root / "lib" / "joulewise"
+            helper = temporary_root / "libexec" / "joulewise-quiet-guard"
+            sudoers = temporary_root / "sudoers" / "joulewise-quiet-guard"
+            credential_root = temporary_root / "credentials"
+            GuardEngine(
+                state_root, host_id="host-A", boot_id="boot-A", test_mode=True
+            ).initialize_inactive()
+            installed = {
+                lib_root / "quiet_guard.py": b"before:quiet_guard.py",
+                lib_root / "quiet_guard_process.py": b"before:quiet_guard_process.py",
+                helper: b"before:helper",
+                sudoers: b"before:sudoers",
+            }
+            for path, payload in installed.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(payload)
+            before = {path: path.read_bytes() for path in installed}
+
+            fake_sudo = temporary_root / "sudo"
+            fake_sudo.write_text(
+                f"#!{sys.executable}\n"
+                "import subprocess, sys\n"
+                "arguments = sys.argv[1:]\n"
+                "if arguments in (['-k'], ['-v']):\n"
+                "    raise SystemExit(0)\n"
+                "if arguments and arguments[0] == '/usr/sbin/visudo':\n"
+                "    raise SystemExit(0)\n"
+                "if arguments and arguments[0] == '/usr/bin/install':\n"
+                "    filtered = [arguments[0]]\n"
+                "    offset = 1\n"
+                "    while offset < len(arguments):\n"
+                "        if arguments[offset] in ('-o', '-g'):\n"
+                "            offset += 2\n"
+                "        else:\n"
+                "            filtered.append(arguments[offset])\n"
+                "            offset += 1\n"
+                "    arguments = filtered\n"
+                "raise SystemExit(subprocess.run(arguments, check=False).returncode)\n"
+            )
+            fake_sudo.chmod(0o755)
+
+            rendered = setup
+            replacements = {
+                'REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)':
+                    f'REPO_ROOT="{REPO_ROOT}"',
+                'STATE_ROOT="/Library/Application Support/JouleWise/quiet-guard"':
+                    f'STATE_ROOT="{state_root}"',
+                'INSTALL_ROOT="/Library/Application Support/JouleWise/quiet-guard-install"':
+                    f'INSTALL_ROOT="{install_root}"',
+                'CREDENTIAL_ROOT="/Library/Application Support/JouleWise/quiet-guard-credentials"':
+                    f'CREDENTIAL_ROOT="{credential_root}"',
+                'HELPER="/usr/local/libexec/joulewise-quiet-guard"': f'HELPER="{helper}"',
+                'SUDOERS_PATH="/etc/sudoers.d/joulewise-quiet-guard"':
+                    f'SUDOERS_PATH="{sudoers}"',
+                "/usr/local/libexec": str(helper.parent),
+                "/usr/bin/sudo": str(fake_sudo),
+            }
+            for original, replacement in replacements.items():
+                rendered = rendered.replace(original, replacement)
+            production_preflight = (
+                "from joulewise.quiet_guard import GuardEngine, PRODUCTION_STATE_ROOT\n"
+                "GuardEngine(PRODUCTION_STATE_ROOT).validate_inactive_installation("
+                "privileged_setup=True)\n"
+                "' \"$STAGE_ROOT\""
+            )
+            fixture_preflight = (
+                "from pathlib import Path\n"
+                "from joulewise.quiet_guard import GuardEngine\n"
+                'GuardEngine(Path(sys.argv[2]), host_id="host-A", boot_id="boot-B", '
+                "test_mode=True).validate_inactive_installation()\n"
+                "' \"$STAGE_ROOT\" \"$STATE_ROOT\""
+            )
+            self.assertIn(production_preflight, rendered)
+            rendered = rendered.replace(production_preflight, fixture_preflight)
+            sandboxed_setup = temporary_root / "setup.sh"
+            sandboxed_setup.write_text(rendered)
+            completed = subprocess.run(
+                ("/bin/sh", str(sandboxed_setup)),
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertNotEqual(completed.returncode, 0, completed.stdout)
+            self.assertIn(b"state belongs to another boot", completed.stderr)
+            self.assertEqual({path: path.read_bytes() for path in installed}, before)
 
     def test_setup_digest_pins_match_every_reviewed_root_executable_artifact(self) -> None:
         setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
@@ -1182,6 +1354,22 @@ class WriteBoundaryTests(EngineTestCase):
         )
         for forbidden in ("osascript", "caffeinate", "/usr/bin/open", "SIGTERM", "SIGKILL"):
             self.assertNotIn(forbidden, sources)
+
+    def test_commit_one_omits_drain_constants_and_launch_refusal_surface(self) -> None:
+        engine_source = (REPO_ROOT / "joulewise/quiet_guard.py").read_text()
+        removed_constants = {
+            "SESSION_EXIT_TIMEOUT_S": 120,
+            "APP_QUIT_TIMEOUT_S": 30,
+            "TERM_WAIT_TIMEOUT_S": 10,
+            "KILL_WAIT_TIMEOUT_S": 5,
+        }
+        for name, former_value in removed_constants.items():
+            self.assertFalse(hasattr(guard_module, name), name)
+            self.assertNotIn(f"{name} = {former_value}", engine_source)
+        self.assertFalse(hasattr(guard_module, "agent_launch_refusal"))
+        self.assertNotIn("agent_launch_refusal", engine_source)
+        self.assertNotIn("agent_launch_blocked", guard_module.FAILURE_CAUSES)
+        self.assertNotIn("agent_launch_blocked", engine_source)
 
 
 if __name__ == "__main__":

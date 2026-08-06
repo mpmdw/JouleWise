@@ -557,6 +557,30 @@ class GuardEngine:
         self.test_mode = test_mode
 
     def initialize_inactive(self, *, privileged_setup: bool = False) -> dict[str, Any]:
+        self._require_inactive_installation_authority(privileged_setup)
+        with self.locked():
+            config, state, config_exists, state_exists = self._inactive_installation_state()
+            if not config_exists:
+                _atomic_write_json(self.paths.config, config)
+            if not state_exists:
+                _atomic_write_json(self.paths.state, state)
+            # This invocation reports success only after both directory entries
+            # and the state-root entry itself have a completed durability pass.
+            # In particular, an idempotent retry cannot launder a prior
+            # post-replace directory-fsync failure into reported success.
+            _fsync_directory(self.paths.root)
+            _fsync_directory(self.paths.root.parent)
+            return state
+
+    def validate_inactive_installation(self, *, privileged_setup: bool = False) -> dict[str, Any]:
+        """Refuse an incompatible installed state without replacing artifacts."""
+
+        self._require_inactive_installation_authority(privileged_setup)
+        with self.locked():
+            _, state, _, _ = self._inactive_installation_state()
+            return state
+
+    def _require_inactive_installation_authority(self, privileged_setup: bool) -> None:
         is_production = self.paths.root == PRODUCTION_STATE_ROOT.resolve()
         if is_production and (not privileged_setup or self.test_mode):
             raise GuardError("privileged_command_refused", "production initialization is setup-only")
@@ -564,24 +588,23 @@ class GuardEngine:
             raise GuardError(
                 "privileged_command_refused", "non-production initialization is test-sandbox-only"
             )
-        with self.locked():
-            config = inactive_config(self.host_id)
-            state = initial_state(self.host_id, self.boot_id)
-            config_exists = self.paths.config.exists()
-            state_exists = self.paths.state.exists()
-            if config_exists:
-                installed_config = self.read_config()
-                if installed_config != config:
-                    raise GuardError("schema_mismatch", "existing inactive config differs")
-            if state_exists:
-                installed_state = self.read_state()
-                if installed_state != state:
-                    raise GuardError("schema_mismatch", "existing guard state is not initial")
-            if not config_exists:
-                _atomic_write_json(self.paths.config, config)
-            if not state_exists:
-                _atomic_write_json(self.paths.state, state)
-            return state
+
+    def _inactive_installation_state(self) -> tuple[dict[str, Any], dict[str, Any], bool, bool]:
+        """Validate the fresh/retryable state accepted by inactive setup."""
+
+        config = inactive_config(self.host_id)
+        state = initial_state(self.host_id, self.boot_id)
+        config_exists = self.paths.config.exists()
+        state_exists = self.paths.state.exists()
+        if config_exists:
+            installed_config = self.read_config()
+            if installed_config != config:
+                raise GuardError("schema_mismatch", "existing inactive config differs")
+        if state_exists:
+            installed_state = self.read_state()
+            if installed_state != state:
+                raise GuardError("schema_mismatch", "existing guard state is not initial")
+        return config, state, config_exists, state_exists
 
     @contextmanager
     def locked(self, *, blocking: bool = False) -> Iterator[None]:
