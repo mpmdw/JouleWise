@@ -29,6 +29,7 @@ const outputFile = required("output-file");
 const cwd = required("cwd");
 const model = args.get("model") ?? "gpt-5.6-sol";
 const effort = args.get("effort") ?? "high";
+const serviceTier = args.get("service-tier") ?? "default";
 const sandbox = args.get("sandbox") ?? "workspace-write";
 const timeoutMs = Number(args.get("timeout-ms") ?? process.env.CODEX_APP_BRIDGE_TIMEOUT_MS ?? 3_600_000);
 const codexHome = process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex");
@@ -267,6 +268,7 @@ const turnStartParams = {
   cwd,
   model,
   effort,
+  serviceTier,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
   sandboxPolicy,

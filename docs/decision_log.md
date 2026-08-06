@@ -135,6 +135,9 @@ be re-derived by a future agent gets an entry here.
 | D-110 | Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint, Ed ruling on sweep finding RT-1: floors embed zero allowance where D-102 pin 3 mandates +max(drift, 0.010818 s)); re-mint gated on D-109 landing + artifact issuance + validator pin widening; RT-2 dependency edge minted (MINT-GENERALIZE-01 hard-blocked on CAL-BRACKET-D079-01); night-consult 7B-mint license suspended; RT-5 recorded: all four PASSED window verdicts untainted | accepted (Ed 2026-08-03, sweep-triggered) |
 | D-111 | Adjudication evidence gains tracked custody: load-bearing adjudication artifacts (cold-gate packets, rulings, refuter reports, cited debate records, re-records, decision-input corpora, archive digests) commit under docs/process_traces/ in the producing session; .desk stays working scratch; named backfill set executed this session | accepted (Ed 2026-08-03, sweep-triggered) |
 | D-112 | Window B re-evaluation STOP gate synthesis: refusal = CORRECT fail-closed machinery (sole cause mtadd-p2048o0128-r06 collection-time clock-anchor failure, falsify-by-removal 69/69 + per-bundle attribution); no repair row; D-100 license EXHAUSTED AS DRAWN; original FAILED verdict stands; r06 removal channel + F7 barred-cell-scope question + NEG-8 bound re-mint PARKED FOR ED; standing correction: condition spellings non-unique to producer | accepted (magistrate synthesis of the convergent cold gate, 2026-08-03; record tracked in process_traces) |
+| D-113 | Window B TERMINALLY CLAIM-RETIRED (Ed ruled D-112 channel (c)): RETAINED_IMMUTABLE / PERMANENTLY_NON_CLAIM_BEARING with labelled forensic use; no new verdict (original FAILED stands); WB-specific D-100/D-106/D-108 license retired, general machinery survives; WINB-R06-DISPOSITION-01 closes ABANDONED_FOR_FRESH_COLLECTION; F7 whole-window voiding AFFIRMED as current semantics (cell-scoped alternative only via D-083 cold gate); NEG-8 WB re-mint MOOT, freshness rule survives by cross-reference; fresh-claim reset beginning Window C (no WB member in replacement basis; MET-WINDOW-C-01 re-scope); standing rigor-first principle + anti-rigor-spiral guardrail; Window C NO-GO until consult Q4 gates green | ratified (Ed 2026-08-05; magistrate transcription after Sol xhigh consult, record in process_traces) |
+| D-114 | T3-CHAIN DESCOPE (Ed directive, reverses his 2026-08-03 T3-DRIVE priority): t3 stays the INTERACTIVE control plane; t3-resident-during-measurement-windows DROPPED; QUIET-GUARD-01 re-scoped to commit 1 only; commits 2-4 + T3-CHAR-PAIR-01 + WO-T3-VIS-01 + SEC5A-REMOTE-01 shelved; T3-DRIVE gate lifted; Q13 degraded tail accepted; Q10 credential superseded | ratified (Ed, 2026-08-05, in-thread; D-113 number reserved for the parked WINB-R06 disposition) |
+| D-115 | Quiet-guard Q2 setup authority = FIXED INSTALLATION CAPABILITY, not general root authority; binding conditions: fresh interactive sudo authorization (sudo -k), digest-authenticated staged content, real interpreter isolation; installs INACTIVE; renumbered from the contract's proposed D-114 marker (number collision with the descope); entry lands via main + merge-back (packet-letter deviation ruled in the entry) | adjudicated (lead under Ed's standing Q2 license, 2026-08-05) |
 
 ---
 
@@ -7233,3 +7236,240 @@ D-102 epoch; the taint is confined to floor artifacts.
    on the INTEGRATION tree whenever the branch is behind main. Recorded
    with the collision as its motivating catch (CI on the merge ref was
    the only layer that could see it).
+
+## D-113: WINDOW B TERMINALLY CLAIM-RETIRED — abandonment ruled (Ed); fresh collection beginning Window C; F7 whole-window precedent affirmed
+
+**Date:** 2026-08-05 (Ed ruling, in-thread; transcribed by the Fable
+magistrate after a bounded Sol xhigh design consult — full record at
+`docs/process_traces/2026-08-05-d113-rigor-consult/`). The number was
+reserved by D-112 clause 4.
+**Status:** RATIFIED (Ed chose channel (c) of D-112 clause 4 verbatim:
+"the rigor of the data collected matters, i have ample time — soundness
+and quality of the project and claims above all").
+
+**Ruling.**
+1. **Abandonment.** No Window B re-evaluation or claim consumption will
+   occur, ever. This entry is a license-and-claim-custody disposition,
+   NOT a governed evaluation: no new verdict row is emitted; the
+   original FAILED verdict remains the sole as-issued Window B verdict
+   and continues to govern default consumption.
+2. **Terminal status: RETAINED_IMMUTABLE / CLAIM_RETIRED /
+   PERMANENTLY_NON_CLAIM_BEARING.** The authenticated corpus, campaign
+   log, closure/membership artifacts, r06 stop record, and verified
+   backup remain preserved under existing custody policy (no deletion,
+   movement, or re-archival is required or triggered). Window B is
+   prohibited from supplying any claim cell, floor, calibration, NEG-8
+   reference, drift bound, or whole-window basis. Labelled read-only
+   use for instrument forensics, machinery regression, protocol design,
+   and diagnostics remains permitted; every such use carries the label
+   "Window B, original verdict FAILED, D-113 claim-retired, non-claim
+   evidence."
+3. **License retirement (scoped).** D-100 §5 as modified through
+   D-106/D-108 is EXHAUSTED AND RETIRED for Window B;
+   `salvage_dangler_exclusion_v1` may not be invoked against that
+   corpus again. The license text and artifacts are preserved as
+   historical evidence. D-100's general semantics and D-108 clause 5's
+   future-dangler return-to-gate rule survive intact for other windows.
+4. **WINB-R06-DISPOSITION-01 closes: ABANDONED_FOR_FRESH_COLLECTION.**
+   The unpinned `current_environment_refusals` sub-branch is retained
+   as unresolved historical residue, nonblocking (r06 can authorize no
+   claim). No successor r06 investigation row absent a new forensic
+   purpose.
+5. **F7 precedent AFFIRMED as current semantics:** an included member
+   carrying a globally scoped refusal voids the whole-window
+   consumption basis even when its cell is independently barred; barred
+   status has no upstream authentication effect. Recorded explicitly as
+   CONFIRMATION of the ratified fail-closed semantics, not as a finding
+   that whole-window invalidation is always the physically correct
+   causal scope. Any future cell-scoped semantic requires the D-083
+   cold gate, a causal-domain proof, preregistration before collection,
+   a new explicit semantics identity, and anti-claim-shopping
+   regressions — none of which is built now (the only use case was
+   abandoned). Blast radius is managed prospectively via shorter,
+   claim-coherent windows.
+6. **NEG-8:** the expired Window-B bound and its re-mint obligation are
+   MOOT. The standing near-run-time freshness rule (window runbook +
+   D-078: dual-family bound minted inside the same quiet window that
+   consumes it; 86400 s is a maximum validity horizon, never permission
+   to reuse; exact identity bindings; refusal on change or expiry)
+   continues to bind every future window BY CROSS-REFERENCE — no
+   duplication of thresholds into this entry. A Window C mint is a
+   fresh mint, not a re-mint.
+7. **Fresh-claim reset.** Every still-desired Window-B claim component
+   routes to fresh collection beginning with Window C; no Window B
+   member counts toward replacement claims (C2's o0128/o0512 and C4's
+   Window-B members return to uncollected-for-claim state).
+   MET-WINDOW-C-01 must be re-scoped from its remainder-only shape to a
+   fresh-claim plan; if the full replacement exceeds the runbook's
+   2-4 hour envelope with references, calibrations, and >=20% failure
+   margin, it splits prospectively across windows C and D rather than
+   compressing the night.
+8. **STANDING PRINCIPLE (Ed's prerogative, operationalized):** for
+   irreversible claim-bearing collection, schedule pressure, sunk cost,
+   and convenience never justify weakening a soundness gate; unknown or
+   unresolved known-failure state is NO-GO; when salvage and fresh
+   collection differ materially in epistemic quality and fresh
+   collection is feasible, fresh collection is the default. PAIRED
+   GUARDRAIL (anti-rigor-spiral, with D-078): more data or more process
+   is required only when it closes a named validity threat or
+   materially improves a planned claim — smaller independent windows, a
+   narrower claim, or no claim may be MORE rigorous than
+   over-collection. Escalation stays event-driven (repeated known
+   failure, new producer for a refusal spelling, identity-epoch change,
+   consumer failure after clean collection); no new recurring
+   ceremonies. Mechanization is ONE hard start fence on the
+   claim-window task (a reviewed frozen-plan readiness record + every
+   hard dependency satisfied, verified by the ordinary launcher), not a
+   new governance subsystem.
+9. **Window C readiness: NO-GO until the consult's precondition gates
+   are green** (consult record Q4, the ONE home for the full list):
+   frozen fresh scope with runtime budget; desk toolchain + D-078 chain
+   complete on merged main including the ISSUED D-079 acceptance
+   artifact and the D-110 (b)+(c) re-mint chain; instrument/machine
+   identity gates including the 140 W adapter discrepancy and a fresh
+   §5A; quiet-guard status used honestly (installed-INACTIVE is not a
+   Window C control; the proven zero-agent guarded-shell path with
+   independent census is the default); and one frozen GO/NO-GO
+   checklist with no in-night policy decisions. The runbook
+   §5A-vs-§13.1 member-level clock-retry inconsistency must be resolved
+   BEFORE the plan freeze; rigor-first default is NO member-level
+   anchor retry without a prospective ruling.
+
+**Consult dissents recorded (adopted):** kept-local-never-consumed was
+rejected in favor of claim-retired-with-labelled-forensic-use; the
+strict F7 answer is semantics-confirmation, not causal-scope truth;
+D-110 condition (c) is readiness assurance for Window C, not
+contamination physics; an installed-inactive quiet guard contributes
+nothing to the Window C assurance case.
+
+**Consequences.** CLAIMS_STATUS Window B section gains the terminal
+labels; kernel row WINB-R06-DISPOSITION-01 retires as ABANDONED (same
+session, after in-flight read-only sessions clear); MET-WINDOW-C-01
+re-scope and the claim-window start fence register as queued work;
+RUN_STATE's parked-decisions list drops D-113.
+
+## D-114: T3-CHAIN DESCOPE — t3 stays the interactive control plane; t3-resident-during-measurement-windows is DROPPED (Ed directive, supersedes the 2026-08-03 T3-DRIVE priority)
+
+**Date:** 2026-08-05 (Ed, in-thread, during the desk session).
+**Status:** RATIFIED by the directive's own author. This reverses Ed's
+2026-08-03 ~23:55 T3-DRIVE-PRIORITY directive. Under rule 11 a
+lieutenant may not self-exempt from a standing priority; that
+constraint does not bind Ed reversing his own instruction, so no cold
+gate was convened. The lead proposed the descope shape; Ed ruled.
+
+**Question.** The t3-drive chain (host-wide quiet lease, refuse-at-arm,
+resident watcher, t3 handoff/relaunch, README banner projection, plus
+an app-up/app-down characterization pair to decide app-adjacent window
+admissibility) had grown a root-owned, sudo-capable, credential-bearing
+surface — a 7-blocker focused audit on commit 1 alone, and a design
+consult showing the credential could not be honestly removed without
+also revising Q10/Q11/Q13/Q19/Q24 as a set. Ed: "is the juice worth the
+squeeze for a UX improvement of using t3 as a control plane?" and "I am
+tired of wasting time on this control plane stuff and want to get back
+to the project."
+
+**Ruling.**
+1. **KEEP — t3 as the INTERACTIVE control plane.** Ed drives sessions
+   from t3, including remotely and away from the measurement machine.
+   This costs nothing and requires no guard machinery.
+2. **DROP — t3 resident during measurement windows.** Claim windows
+   return to the proven path: quit t3, ordinary guarded shell, zero
+   agent sessions, fresh §5A, walk away. Every successful claim window
+   to date used exactly this path. The app-up admissibility question is
+   therefore MOOT, not answered.
+3. **QUIET-GUARD-01 re-scoped to COMMIT 1 ONLY** — the host-wide quiet
+   lease and process census, installed-INACTIVE. Retained on non-t3
+   merit: it gives the ordinary guarded-shell launcher a MECHANICAL
+   refuse-at-arm census, replacing today's procedural eyeballing. Its
+   seven audit blockers are still fixed to the safety bar before it
+   lands (it is root-adjacent regardless of who calls it).
+4. **SHELVED:** QUIET-GUARD commits 2-4 (launcher interception, t3
+   handoff + resident watcher, t3-relaunch + banner projection + all
+   credential handling); T3-CHAR-PAIR-01 (BOTH arms — the r03 re-capture
+   and the app-DOWN arm); WO-T3-VIS-01; SEC5A-REMOTE-01 (its
+   programmatic substrate lived in the dropped scope).
+5. **T3-DRIVE-PRIORITY gate LIFTED** (`active_global_gates: []`); the
+   project queue is ungated. The two in-flight t3-adjacent desk items
+   (T3-AMEND-01 doctrine bookkeeping, COLDGATE-VALIDATOR-01) finish
+   because both are cheap, near-complete, and independently useful.
+6. **Q13's degraded tail is ACCEPTED as an edge case** (Ed, explicit):
+   if a relaunch fails and no session returns, there is no remote
+   signal. A failed relaunch requires physical presence anyway, so
+   local discovery at next login is sufficient. This retires the
+   requirement that motivated the unattended-push credential.
+7. **Q10 (guard git identity WITH unattended push) is SUPERSEDED** —
+   moot under the descope; no credential enters any guard path.
+
+**Design record preserved for any future revival** (from the 2026-08-05
+credential consult, before the descope was ruled): a credentialed
+network pusher running DURING a quiet window contradicts the window's
+defining property. The correct shape is credentials only at the
+unprivileged interactive boundary (pre-arm and post-window pushes), a
+PRE-ARMED SERVER-SIDE DEAD-MAN ALARM for the no-return case (which also
+catches total host death), a dedicated non-login service UID rather
+than HOME-restore env scrubbing (root is otherwise ambiently
+credential-reachable via git helpers / SSH / Keychain), and a banner
+that can only truthfully say ARMING_REQUESTED pre-window.
+
+**Consequences.** The successor's queue is the science queue: the two
+open soundness-sweep blockers (RT-1 mint-floor understatement; voided
+numbers on README/PROJECT_STATUS), the a10 phase-floor extraction, and
+MINT-GENERALIZE-01 — whose D-110 condition (a) was satisfied the same
+day by the CAL-BRACKET merge (PR #100, `f75d12b`).
+
+## D-115: Quiet-guard Q2 setup authority is a FIXED INSTALLATION CAPABILITY, not general root authority (Commit-1 packet entry; renumbered from the contract's proposed D-114 marker)
+
+**Date:** 2026-08-05 (lead adjudication, Fable magistrate session).
+**Status:** ADJUDICATED under Ed's standing Q2 license (2026-08-05
+ratification batch: Q2 proceeds on lead defaults subject to Ed veto).
+**Numbering note:** the Commit-1 worker proposed this entry as D-114
+inside `docs/contracts/quiet_guard.md` (it does not own the decision
+log, correctly). D-114 was consumed the same day by the T3-CHAIN
+DESCOPE, so this entry is D-115; the contract marker renumbers to
+D-115 in the Commit-1 fix round. **Packet-letter deviation, ruled:**
+the IMPL-PACKET file map places this entry in Commit 1's delta, but
+the branch forked before D-114 landed and an in-branch append would
+manufacture a merge conflict in this file; the entry lands on main and
+is merged back into `impl/quiet-guard`, which satisfies the packet's
+purpose (binding authority exists before the capability merges) with
+cleaner custody.
+
+**Question.** Q2 asked what authority the one-time
+`scripts/setup_quiet_guard.sh` sudo session exercises when it creates
+the root-owned quiet-guard state under
+`/Library/Application Support/JouleWise/quiet-guard/`.
+
+**Ruling.**
+1. **Capability boundary.** The setup script exercises a fixed
+   installation capability: create the root-owned state/install
+   directories, install the fixed-command privileged helper and the
+   narrow `sudoers.d` command aliases, and write `live_promotion=false`.
+   It confers NO general root authority; nothing outside that
+   enumerated set is licensed. Normal guard operation is `sudo -n`
+   against the fixed command aliases only, and the helper drops to the
+   invoking uid/gid before any agent child executes.
+2. **Binding conditions on the capability** (from the 2026-08-05
+   adversarial audits qg-audit-A/B; the capability is not validly
+   exercised without them):
+   a. **Fresh interactive authorization** — the installer must
+      invalidate any cached sudo timestamp (`sudo -k`) before
+      requesting authorization, so a cached ticket can never silently
+      convert repository state into root-executed code.
+   b. **Authenticated content** — what is installed must be
+      authenticated against pinned digests of the reviewed artifacts
+      (or an equivalently strong provenance check), not merely parsed
+      for syntactic validity; root-staging closes copy races but does
+      not authenticate what was staged.
+   c. **Real interpreter isolation** — the installed helper runs with
+      genuine isolation guarantees (no site initialization, no
+      user-site, no environment hooks: `-I`-equivalent), matching the
+      contract's isolation claim.
+3. **Inactive by construction.** Commit 1 installs INACTIVE:
+   `live_promotion=false`, `arm` refuses (`t3_char_pair_verdict_missing`),
+   and no launcher, chain, watcher, or projection code is in scope
+   (D-114 descope). Activation requires a separate, later, Ed-visible
+   step and is not licensed by this entry.
+
+**Consequences.** The Commit-1 fix round renumbers the contract marker
+and implements conditions 2a-2c with discriminating regressions; the
+QUIET-GUARD-01 row cannot land while any condition lacks enforcement.

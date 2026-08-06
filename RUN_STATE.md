@@ -10,9 +10,324 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-05 — Ed ratification batch + PR #100 MERGED.
-Read the 2026-08-05 block first, then the 2026-08-04 checkpoint and
-T3-HANDOFF blocks below (items 1 and 6 there carry in-line corrections).
+Last updated: 2026-08-05 LATE NIGHT — Fable magistrate session resumed
+from the NIGHT checkpoint. Read the LATE-NIGHT block first; the NIGHT
+and EVENING blocks below it are still-valid history.
+
+## ⏳ 2026-08-05 LATE NIGHT — Fable resume: all 4 audits harvested, D-115 adjudicated, two Sol rounds in flight
+
+**Harvest complete** — all four checkpoint audits finished and are
+copied to `.desk/2026-08-05-checkpoint-audits/` (cgv-audit-A/B,
+qg-audit-A/B; qg-audit-B's `.status` semantic fields failed to parse but
+its report envelope is present, final, and well-formed — wrapper
+artifact, noted).
+
+**COLDGATE-VALIDATOR-01** — cgv-audit-B (oversight/prune lens) reframes
+F3 entirely: B1 blocker (PASS receipt does not bind the judge to the
+validated bytes — post-validation exhibit substitution), S1 fenced-
+heading false refusals, S2 --help receipt violation, and a prune
+recommendation to DELETE the attestation privacy subsystem F3 lives in
+(free-text attestation fields discriminate no registry invariant). Per
+the rule-11 escalation trigger, a **Sol design consult is IN FLIGHT**
+(read-only, high — rule-10 tier is xhigh, Ed's Sol-HIGH-only directive
+controls, deviation recorded) on: closure shape (refuse-all-slashes vs
+allowlist vs delete-the-subsystem), B1 scope (in-branch vs CGV-HARDEN-01
+sibling row), S1/S2 disposition, regression vectors. Magistrate's
+analysis in the consult: the `input / output` acceptance test and the
+privacy invariant are mutually unsatisfiable (POSIX filenames may
+contain spaces), so no denylist regex can close F3. Consult prompt +
+output land in the session scratchpad; do not land the branch before
+synthesis.
+
+**QUIET-GUARD-01 commit 1** — both audits FAIL the branch; convergent
+blockers: observation-failure conflated with ABSENT → false-zero census
+can release custody; `idle` state accepts a live lease; plus init-wedge
+(A-F3), installer-as-root-code-loader under cached sudo (B-F3), `-E` is
+not isolation (B-F5), pre-landed Commit-2/3 behavior (A-F5), Darwin
+decoder has no discriminating coverage (A-F6/B-F6), D-114 marker
+collision (A-F4/B-F4). **D-115 ADJUDICATED and pushed to main
+(`0941cf5`)**: Q2 setup authority = fixed installation capability, with
+binding conditions 2a (sudo -k fresh auth) / 2b (authenticated staged
+content) / 2c (real interpreter isolation); numbering collision with the
+descope's D-114 resolved (entry lands via main, merged into the branch
+at `262faca` — packet-letter deviation ruled and recorded in the entry).
+**Sol fix round IN FLIGHT** (workspace-write, high, WRITE_SCOPE = the 8
+commit-1 files, decision log excluded) closing all ten findings with
+defect-shaped regressions. On return: lead replays tests unpiped, then
+DELTA RE-AUDIT (fix rounds introduce defects — proven), then land
+commit 1 only.
+
+**Wrapper gotcha rediscovered (add to field notes):** codex-run-v3
+takes the prompt as a literal STRING (`"$*"`), not a file path — pass
+`"$(cat prompt.md)"`. A file-path arg silently becomes the whole prompt
+(and with --write-scope fails rc=64 on the missing WRITE_SCOPE line).
+One consult was launched with a path-as-prompt, killed cleanly, and
+relaunched before any output was consumed.
+
+**Unchanged queue after these land:** a10 phase-floor extraction, then
+MINT-GENERALIZE-01 (b)+(c) — the D-110 re-mint embedding
+`max(drift, 0.010818 s)`, clause (c) = last sweep blocker DC-2/FM-3.
+Scout correction (this session): the a10 extraction must run in the
+SAME custody session as re-mint consumption (FLOOR-BIND-01 fence), so
+it sequences with the re-mint, not standalone.
+
+### Overnight progress ledger (updated ~23:50; all evidence in .desk + session scratchpad, custody commits as noted)
+
+- **D-113 TRANSCRIBED + pushed** (`8e68cde`, consult trace in
+  process_traces/2026-08-05-d113-rigor-consult/). CLAIMS_STATUS WB
+  terminal labels landed this commit; kernel row retirement rides the
+  next registration batch.
+- **QUIET-GUARD**: fix round 1 closed all ten findings (lead-replayed
+  95/95 + full suite green; bench-committed `e0acaf7`); xhigh delta
+  re-audit FAILED it (F1 blocker: idempotent init retry can report
+  success with unresolved directory-fsync durability; F2 partial-
+  upgrade ordering; F3 census availability; F4 evidence gaps) — **fix
+  round 2 IN FLIGHT** with lead-dictated closure shapes.
+  Same-signature counter: init-durability at 1 (F1 is an introduced
+  defect, first fix; trigger fires if the next delta fails there).
+- **COLDGATE-VALIDATOR**: consult-adopted restructure landed on the
+  branch (`3964c6e`, lead-replayed 26/26 + frozen-packet smoke; suite
+  2514 green); xhigh delta re-audit FAILED it (B1: malformed digest
+  arg serialized verbatim into REFUSE receipts — live-proved; B2:
+  non-CommonMark backtick fence opener lets a phantom fence HIDE real
+  duplicate headings → duplicate Charter pin PASSes) — **blocker fix
+  round IN FLIGHT**. Fence-parsing same-signature counter: 1.
+- **D-079 issuance**: verification COMPLETE (38/38 recovered,
+  hash-authenticated, physics-replayed: 32 valid / 6 invalid / 0
+  unresolved) but BLOCKED on two items. **B1 RULED by the lead**: the
+  two high-bound members (`20260726T000039-491995f3`,
+  `20260801T064830-c76f5d1c`) are SYSTEMATIC-INVALID in the ledger
+  (production preflight screen + D-102's explicit naming control over
+  the candidate tool's stored-status labels; R2.8's "six further" was
+  conditioned on the unratified candidate inventory — valid total is
+  30, eight further to trigger). **B2 (no deterministic bootstrap
+  contract) — design+implement session IN FLIGHT** on
+  impl/ledger-bootstrap (xhigh; genesis-only, atomic, import-marked
+  receipts, dry-run default; expected head `8e80b6e9…` under the
+  report's rules). Verification record custodied:
+  process_traces/2026-08-05-d079-issuance/. Issuance itself (execute +
+  head-pin commit + artifact edit + D-116 entry) remains a separately
+  gated step — Ed pre-authorized overnight, conditional on the gate.
+- **Fast-tier**: PR #102 open, CI running; lead-replayed 70/70 incl.
+  desktop IPC tests; solo-review ruled proportional (Ed-dictated
+  20-line diff). On merge: fast rides scripts/codex-bridge
+  (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
+  personal wrapper without his word).
+
+### Ed directive batch (2026-08-05 ~22:00, in-thread; 12-hour autonomous window)
+
+1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
+   restored); prior HIGH-only directive retired by its author.
+2. **Codex Fast Mode (service tier)**: 1.5x speed / 2.5x credits;
+   Ed specified the exact bridge implementation (per-call opt-in via
+   `CODEX_SERVICE_TIER=fast`, never a standing default) — being
+   implemented on `impl/codex-fast-tier`. License: use fast on xhigh
+   runs by default, fast-on-high when other streams block on the
+   result.
+3. **D-113 RULED (c) by Ed**: Window B re-evaluation ABANDONED; Window
+   C will be collected fresh. Prerogative, Ed verbatim: "the rigor of
+   the data collected matters, i have ample time — soundness and
+   quality of the project and claims above all." Sol xhigh consult on
+   managing that prerogative is in flight; the magistrate transcribes
+   D-113 after synthesis.
+4. **Acceptance-artifact issuance AUTHORIZED overnight** (MINT-
+   GENERALIZE-01 clause (b)), conditional on the D-079 backfill
+   verification (in flight) coming back fully resolved and passing the
+   lead review gate; full record for Ed's morning review.
+5. Workflow/fan-out standing license re-confirmed for this push.
+
+## ✅ CHECKPOINT 2026-08-05 night — Ed model-switch stop (successor is FABLE; read this, then the EVENING queue)
+
+**Why the stop:** Ed hit the auto-mode classifier tier-flap (the
+adversarial-audit vocabulary trips it — documented in codex-delegation
+§Security) and ordered an ASAP checkpoint so he can resume on Fable.
+State is DURABLE: both in-flight branches are PUSHED to origin (ephemeral
+worktrees are safe to lose); nothing critical is unpushed.
+
+### What landed this session (pushed; main green at `b55008f`)
+
+- **PR #101 (T3-AMEND-01) MERGED** on green under D-072 (`906ddf9`);
+  row retired (`b55008f`, kernel pins 65→64); `impl/t3-amend` worktree +
+  branch pruned.
+- **Two "open" queue items were verified ALREADY DONE** (stale
+  carry-forwards; no work needed):
+  1. Voided-number scrub — landed 2026-08-03. README clean;
+     PROJECT_STATUS:83 labels 147 J diagnostic + names registered
+     141.29 J w/ D-110 caveat (covers DC-1 too); voided a10/7B values
+     confined to CLAIMS_STATUS's non-claim-bearing section.
+  2. RT-1 — was ADJUDICATED same-day as decision-log **D-110** (mint #1
+     tainted; re-mint must embed never-zero `max(drift, 0.010818 s)` per
+     D-102 pin 3). Sweep memory `two-week-soundness-sweep-2026-08-03`
+     updated to un-stale both.
+  Net: of the two-week sweep's four blockers, only **DC-2/FM-3**
+  (validator evidence_root_id pin-widening) is live open work — and it
+  is exactly MINT-GENERALIZE-01 clause (c).
+
+### IN FLIGHT at checkpoint — harvest, do NOT re-run blind
+
+Four fresh read-only Sol audits (high) were launched over the two
+uncommitted-at-EVENING branches, two lenses each. At stop: **cgv-audit-A
+DONE; qg-audit-A, qg-audit-B, cgv-audit-B still RUNNING** on their own
+2400 s watchdogs (they will finish and write to the session scratchpad —
+path in `.desk/2026-08-05-checkpoint-audits/AUDIT-SCRATCHPAD-PATH.txt`;
+completed reports + all four prompts copied into that `.desk` dir for
+durability; if the scratchpad is gone, the prompts re-run the audits).
+
+1. **COLDGATE-VALIDATOR-01** — branch `impl/coldgate-validator` @
+   `38b6570` (PUSHED). Bench tests pass (31, unpiped exit 0).
+   **cgv-audit-A verdict = FAIL / F3 PARTIAL (should-fix):** the F3
+   "structural closure" commit still lets a **whitespace-leading POSIX
+   absolute path** (`--launch-environment-attestation "cwd='/ secret'"`)
+   bypass validation + serialization preflight and exit 0 with PASS
+   containing the secret (`scripts/validate_gate_packet.py:73,126,607`).
+   This is the **THIRD formulation of the same F3 absolute-path-bypass
+   signature** → per rule 11's standing escalation trigger the next spend
+   is a **CONSULT on the closure shape, NOT fix round 4.** cgv-audit-B
+   (oversight/overbuild-prune lens) still pending — read it first; it may
+   add prune items. **Do not land this branch until F3 closes via
+   consult.**
+2. **QUIET-GUARD-01 commit 1** — branch `impl/quiet-guard` @ `d482869`
+   (PUSHED, checkpoint commit self-labeled UNAUDITED). Bench tests pass
+   (84, unpiped exit 0). Both audits (qg-audit-A delta re-audit of the
+   7-blocker fix round whose report was lost; qg-audit-B adversarial
+   priv-esc/fail-closed lens) were still RUNNING at stop — **harvest both
+   verdicts before landing.** On clean: land **commit 1 ONLY** (quiet
+   lease + process census, installed-INACTIVE); commits 2–4 remain
+   SHELVED per the EVENING descope.
+
+### Next substantive item (un-gated payoff)
+
+**MINT-GENERALIZE-01 (b) issuance + (c) validator pin-widening** — the
+D-110 corrected re-mint; condition (a) satisfied by PR #100. Clause (c)
+is the last live sweep blocker (DC-2/FM-3). The re-mint MUST embed the
+never-zero `max(drift, 0.010818 s)` allowance (the RT-1/D-110
+correction). This is the path back to a non-empty claims table.
+
+### Standing facts unchanged
+
+Sol HIGH only (Ed). Never gate a commit on a piped test command. Rule 11
+cold gates convene from a worktree. Ed's parked decisions (D-113/WINB-R06,
+window C §5A, NVIDIA) all unchanged.
+
+## ✅ CHECKPOINT 2026-08-05 evening — DESCOPE + RESUME SCRIPT (still-valid queue; NIGHT block above updates it)
+
+**Ed's directive this session (supersedes the 2026-08-03 T3-DRIVE
+priority, which was Ed's own and is Ed-reversed): the t3 control-plane
+build-out is NOT worth its cost. Get back to the project.** t3 remains
+the INTERACTIVE control plane (Ed drives sessions from it, remotely —
+free, keep). What is dropped is **t3-resident-during-measurement-
+windows**: windows return to the proven zero-agent guarded-shell path
+(quit t3 → §5A → walk away), which produced every successful claim
+window to date. The Q13 degraded tail (relaunch fails, no remote
+signal) is Ed-ACCEPTED as an edge case — a failed relaunch needs
+physical presence anyway.
+
+### SUCCESSOR'S QUEUE — start here, all agent-startable desk work
+
+1. **RT-1 mint-floor understatement** + **README/PROJECT_STATUS voided-
+   number scrub** — the two open blockers from the 2026-08-03 two-week
+   soundness sweep (memory: `two-week-soundness-sweep-2026-08-03`).
+2. **a10 phase-floor extraction** — pure desk work, banked since
+   2026-07-25 (memory: `joulewise-window-a-claim-path`).
+3. **MINT-GENERALIZE-01 (A12)** — **D-110 condition (a) is SATISFIED**
+   as of PR #100 (merged today, `f75d12b`). Remaining: (b) acceptance-
+   artifact issuance and (c) validator pin-widening — both desk work,
+   now un-gated. This is the path back to a non-empty claims table.
+4. Then the D-095 chain / gated contrast claim.
+
+**Ed-gated, unchanged, not blocking:** window C (needs a fresh §5A
+physical); **D-113 / WINB-R06-DISPOSITION-01** (biggest parked
+decision); NVIDIA ratification.
+
+### What landed this session (all pushed; main green)
+
+- **PR #100 MERGED** (`f75d12b`) — CAL-BRACKET-D079-01 / D-109. Row
+  retired, kernel pins 66→65 (`e160c89`), D-110(a) satisfied.
+- **Ed ratification batch** (`3931233`): both cold-gate acks recorded
+  (cold-packet-handoff gate CLEARED-WITH-EXCEPTION; charter registry
+  **RATIFIED**), QUIET-GUARD Q10/Q13 ruled (both later SUPERSEDED by
+  the descope + the credential consult below), council C-048.
+- **D-072 mechanical self-merge RESTORED** — `.claude/settings.local.json`
+  (untracked, per-machine) now allows `gh pr merge`; the classifier
+  block that forced Ed-taps is cured. Memory `merge-authority-with-review`
+  updated.
+- **PR #101 OPEN → merge on green** — T3-AMEND-01, final delta **ACCEPT
+  zero blockers**. Full gauntlet: draft → 2 lenses → fix → delta FAIL
+  (2 blockers) → fixes + design consult → ACCEPT. Contract stays
+  v1.1; v1.2 bump recorded as a recommendation for a future ratification.
+
+### IN FLIGHT at checkpoint (harvest from disk — do NOT re-run blind)
+
+- **QUIET-GUARD-01 commit 1** — Sol fix round RUNNING at checkpoint
+  (`scratchpad/quietguard`, branch `impl/quiet-guard`, work UNCOMMITTED
+  in-tree). It closes 7 audit blockers (priv-esc via env-selected
+  interpreter; validate/install TOCTOU; arbitrary-root test initializer;
+  macOS process identity via `kinfo_proc`/`KERN_PROCARGS2`/ancestry
+  recheck; boot/hostname wedge; missing decision entry; tautological
+  tests). Report: `scratchpad/qg-fix-out.md` + `.status`. **On harvest:
+  replay tests unpiped, delta re-audit, land commit 1 ONLY.**
+- **COLDGATE-VALIDATOR-01** — F3 final fix round; worktree
+  `scratchpad/cgvalidator` (branch `impl/coldgate-validator`) has
+  UNCOMMITTED Sol edits. Needs bench replay + a final delta, then PR.
+
+### DESCOPE — what is SHELVED (do not build; reopen only on Ed's word)
+
+QUIET-GUARD commits **2–4** (t3 handoff chain, resident watcher,
+t3-relaunch, README banner projection); **T3-CHAR-PAIR-01** (r03
+re-capture AND the app-DOWN arm); **WO-T3-VIS-01**; **SEC5A-REMOTE-01**
+(was gated on the guard). QUIET-GUARD-01 is re-scoped to **commit 1
+only** — the quiet lease + process census, installed-INACTIVE — which
+keeps real non-t3 value: mechanical refuse-at-arm for the ordinary
+guarded window launcher, replacing today's procedural eyeballing.
+The four Ed-questions from the credential consult are MOOT under the
+descope.
+
+### Design record worth keeping (from the credential consult, before descope)
+
+Ed's challenge — "why so much security-critical code for a small
+convenience?" — was correct and is the reason for the descope. For the
+record if commits 2–4 ever revive: putting a git credential in a
+root-owned guard is wrong (a credentialed network pusher DURING a quiet
+window contradicts the window's defining property). The right shape is
+credentials only at the unprivileged interactive boundary (pre-arm and
+post-window pushes), a **pre-armed server-side dead-man alarm** for the
+no-return case (also catches total host death), a dedicated non-login
+service UID (`_joulewiseguard`) rather than HOME-restore env scrubbing,
+and Q10/Q11/Q13/Q19/Q24 revised as a SET. Full consult record in the
+session run report.
+
+### Follow-on rows to register (queued this checkpoint)
+
+- **T3-PROV-SCHEMA-01** (P2) — four-axis provenance record +
+  `authority_class` + ingestion-event schema. **Contract §8 references
+  it by name**: it is what ENDS the §8 transitional convention and
+  supplies real reverse-consult enforcement (today the adapter validates
+  only self-reported headers — disclosed honestly in §8, with
+  consumption-side fail-closed as the actual protection).
+- **CGV-HARDEN-01** (P3) — receipt-write TOCTOU (dirfd-relative write)
+  + fsync/dir-sync atomicity; both pre-existing, deferred deliberately.
+- **codex-bridge sandbox-flag defect** (P2, real) — `scripts/codex-bridge`
+  `review` mode records `observer_sandbox=read-only` in its audit
+  manifest but never passes `-s read-only`; sessions actually launch
+  workspace-write, so the audit metadata MISSTATES enforcement. Caught
+  live by a review lens (~line 451-453). Needs the flag + a regression.
+
+### Standing operating facts (unchanged, still binding)
+
+- Sol effort cap **HIGH only** (Ed) — no xhigh without his word; record
+  the deviation if a ruled gate composition names higher.
+- Never gate a commit on a piped test command (recurred twice).
+- Rule 11 cold gates convene **from a worktree** (doctrine provably
+  absent there); charter is RATIFIED and hash-pinned.
+- **Timeouts are hang insurance, never work budgets** (Ed, this
+  session): a TIMEOUT indicts the UNIT SIZE — decompose across Sols,
+  never accept it as failure. Folded into codex-delegation §Protocol.
+- **The merge gate includes an OVERBUILD PRUNE** (Ed, this session):
+  Sol writes too much code/too many tests on occasion; "would I want to
+  maintain this diff" is part of the Fable diff gate. Folded into
+  operation-loop §4g.
+- Delegated prompts forbid touching any audit/state/manifest/log
+  artifact — "the trail is not yours to repair."
 
 ## ✅ 2026-08-05 — Ed's decision batch executed (PR #100 merged; acks recorded; quiet-guard ruled)
 
@@ -1421,16 +1736,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `T3-DRIVE-PRIORITY`
-
-Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. The former in-flight exception (CAL-BRACKET-D079-01 round-2 chain) RESOLVED: PR #100 merged 2026-08-05 (f75d12b).
-
-- Scope: `select` in [ED-EXTERNAL], [QUIET-MAC], [AGENT].
-- Allowed kernel task IDs: `T3-CHAR-PAIR-01`, `QUIET-GUARD-01`, `SEC5A-REMOTE-01`, `WO-T3-VIS-01`, `T3-AMEND-01`, `COLDGATE-VALIDATOR-01`.
-- Authority: Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work); docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5.
-- Clearance: Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
@@ -1438,15 +1744,15 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [ED-EXTERNAL]
 
-- GATED — E1 `P1-008` (excluded by: T3-DRIVE-PRIORITY): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q7 `T3-CHAR-PAIR-01`: App-up vs app-down idle-capture characterization pair (NON-CLAIM): decide whether t3 resident processes (server, helpers, cloudflared) pollute the quiet-mac measurement floor; unlocks the app-adjacent window-operation question. Runnable next quiet night; blocked by nothing.
+- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- READY — A2 `QUIET-GUARD-01`: Quiet-guard work order (full gauntlet): host-wide quiet lease, refuse-at-arm, characterized resident watcher; plus Ed requirements recorded 2026-08-03 — t3-armed operation (a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3 with a survivor inventory), t3-relaunch-on-close, and README-banner signaling.
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

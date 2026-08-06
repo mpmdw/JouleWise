@@ -80,7 +80,7 @@ EXPECTED_IDS = {
     # 2026-08-03 t3-drive chain mint (Ed directive ~23:55 + the t3-doctrine
     # gate synthesis): agent-lane rows.
     "QUIET-GUARD-01", "SEC5A-REMOTE-01", "WO-T3-VIS-01",
-    "T3-AMEND-01", "COLDGATE-VALIDATOR-01",
+    "COLDGATE-VALIDATOR-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -100,7 +100,7 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
-                "CAL-BRACKET-D079-01"}
+                "CAL-BRACKET-D079-01", "T3-AMEND-01"}
 
 
 def load_kernel():
@@ -255,11 +255,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_65(self):
+    def test_exact_live_id_set_64(self):
         # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
-        # merged f75d12b; Completed table owns the record).
+        # merged f75d12b). 65 -> 64: T3-AMEND-01 retired the same day
+        # (PR #101 merged 906ddf9). Completed table owns both records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 65)
+        self.assertEqual(len(self.tasks), 64)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -276,27 +277,22 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared_and_t3_drive_gate_live(self):
+    def test_stop_card_cleared_and_no_global_gate_live(self):
         # The comprehensive-audit gate was removed at close-out (Ed's
         # adoption merge of PR #66, 2026-07-15); gate semantics remain
         # tested against the frozen fixtures below. 2026-08-03: the
-        # T3-DRIVE-PRIORITY gate went live (Ed directive ~23:55 — the
-        # t3-drive chain outranks all non-in-flight work; the in-flight
-        # exception CAL-BRACKET-D079-01 landed via PR #100 2026-08-05
-        # and left the allowlist with its retirement).
+        # T3-DRIVE-PRIORITY gate went live (Ed directive ~23:55).
+        # 2026-08-05: that gate is LIFTED — Ed reversed his own directive
+        # (t3 control-plane build-out not worth its cost; t3 stays the
+        # interactive control plane, t3-resident-during-windows dropped),
+        # so the project queue is ungated again and the shelved t3-chain
+        # rows below no longer compete for selection.
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        gates = self.kernel["active_global_gates"]
-        self.assertEqual([gate["id"] for gate in gates], ["T3-DRIVE-PRIORITY"])
-        self.assertEqual(set(gates[0]["scope"]["lanes"]), set(gen_state.LANES))
-        self.assertEqual(
-            set(gates[0]["allowed_task_ids"]),
-            {"T3-CHAR-PAIR-01", "QUIET-GUARD-01", "SEC5A-REMOTE-01",
-             "WO-T3-VIS-01", "T3-AMEND-01", "COLDGATE-VALIDATOR-01"},
-        )
-        selected = gen_state.selectable_task_ids(self.kernel)
-        self.assertEqual(selected, {"QUIET-GUARD-01", "T3-CHAR-PAIR-01"})
+        self.assertEqual(self.kernel["active_global_gates"], [])
+        for tid in ("T3-CHAR-PAIR-01", "WO-T3-VIS-01", "SEC5A-REMOTE-01"):
+            self.assertEqual(self.tasks[tid]["status"], "shelved")
 
     def test_axi_work_program_sequence_authority_and_window_fences(self):
         # AXI-S0 (2026-07-15), AXI-SA and AXI-SB (2026-07-16) completed and
@@ -759,30 +755,42 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         self.assertNotIn("| READY |", queue)
         self.assertNotIn("PARTIAL; READY", queue)
 
-    def test_live_kernel_renders_t3_drive_gate_and_cleared_restores_ready(self):
-        # 2026-08-03: T3-DRIVE-PRIORITY is live (Ed directive ~23:55); the
-        # allowed t3-drive chain heads stay READY, everything else renders
-        # GATED, and clearing the gate restores the no-gate rendering.
+    def test_live_kernel_renders_ungated_and_a_gate_renders_gated(self):
+        # 2026-08-05: the live kernel is UNGATED (T3-DRIVE-PRIORITY lifted
+        # with the t3-chain descope). The gate MECHANISM stays pinned by
+        # applying a synthetic gate to a copy — the direction of the
+        # earlier assertion is simply inverted, not dropped.
         kernel = load_kernel()
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
         for rendered in (run_state, queue):
-            self.assertIn("T3-DRIVE-PRIORITY", rendered)
-            self.assertNotIn(
-                "NONE — no global work-selection gate is active", rendered
-            )
-        self.assertIn("- READY —", run_state)
-        self.assertIn("GATED — T3-DRIVE-PRIORITY", queue)
-
-        cleared = copy.deepcopy(kernel)
-        cleared["active_global_gates"] = []
-        gen_state.validate(cleared)
-        run_state = gen_state.render_run_state(cleared)
-        queue = gen_state.render_queue(cleared)
-        for rendered in (run_state, queue):
             self.assertIn("NONE — no global work-selection gate is active", rendered)
             self.assertNotIn("GATED —", rendered)
         self.assertIn("- READY —", run_state)
+
+        gated = copy.deepcopy(kernel)
+        gated["active_global_gates"] = [
+            {
+                "id": "SYNTHETIC-TEST-GATE",
+                "summary": "fixture gate: pins gate rendering after the live gate lifted",
+                "authority": ["test fixture (no real authority)"],
+                "clearance": "cleared by deleting this fixture",
+                "scope": {"operation": "select", "lanes": list(gen_state.LANES)},
+                "allowed_task_ids": ["QUIET-GUARD-01"],
+            }
+        ]
+        gen_state.validate(gated)
+        run_state = gen_state.render_run_state(gated)
+        queue = gen_state.render_queue(gated)
+        for rendered in (run_state, queue):
+            self.assertIn("SYNTHETIC-TEST-GATE", rendered)
+            self.assertNotIn(
+                "NONE — no global work-selection gate is active", rendered
+            )
+        self.assertIn("GATED — SYNTHETIC-TEST-GATE", queue)
+        self.assertEqual(
+            gen_state.selectable_task_ids(gated), {"QUIET-GUARD-01"}
+        )
 
 
 class TestGeneratorSelfConsistency(unittest.TestCase):

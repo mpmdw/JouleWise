@@ -1,31 +1,5 @@
 {
-  "active_global_gates": [
-    {
-      "allowed_task_ids": [
-        "T3-CHAR-PAIR-01",
-        "QUIET-GUARD-01",
-        "SEC5A-REMOTE-01",
-        "WO-T3-VIS-01",
-        "T3-AMEND-01",
-        "COLDGATE-VALIDATOR-01"
-      ],
-      "authority": [
-        "Ed directive 2026-08-03 ~23:55 (t3-drive chain outranks all non-in-flight work)",
-        "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md + synthesis-exhibits SX5"
-      ],
-      "clearance": "Ed can drive fully from t3 (t3-drive chain landed) or Ed explicitly lifts the pause",
-      "id": "T3-DRIVE-PRIORITY",
-      "scope": {
-        "lanes": [
-          "ed_external",
-          "quiet_mac",
-          "agent"
-        ],
-        "operation": "select"
-      },
-      "summary": "Ed directive 2026-08-03 ~23:55: the t3-drive chain is the critical path; all non-in-flight project work is paused until Ed can drive fully from t3. The former in-flight exception (CAL-BRACKET-D079-01 round-2 chain) RESOLVED: PR #100 merged 2026-08-05 (f75d12b)."
-    }
-  ],
+  "active_global_gates": [],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
@@ -2689,13 +2663,11 @@
     "QUIET-GUARD-01": {
       "acceptance": {
         "evidence": [
-          "Host-wide quiet lease implemented and enforced",
-          "Refuse-at-arm: arming refuses when the host is not quiet",
-          "Characterized resident watcher running against the characterized resident set",
-          "t3-armed operation: a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3, emitting a survivor inventory",
-          "t3-relaunch-on-close behavior implemented",
-          "README-banner signaling implemented",
-          "Full gauntlet: independent audit, severity-tiered refuters, and delta re-audit of every fix round"
+          "Commit 1 only: host-wide quiet lease implemented and enforced",
+          "Refuse-at-arm: arming refuses when the host is not quiet (usable by the ordinary guarded-shell window launcher)",
+          "Installed-INACTIVE: no arming path, no production lease, live_promotion=false",
+          "Seven focused-audit blockers closed (priv-esc interpreter, validate/install TOCTOU, arbitrary-root initializer, macOS process identity, boot/hostname wedge, decision entry, independently-pinned tests)",
+          "Full gauntlet on the landed commit: independent audit + delta re-audit of every fix round"
         ],
         "pointer": {
           "json_pointer": "/tasks/QUIET-GUARD-01/acceptance",
@@ -2728,7 +2700,7 @@
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Buildable now; app-adjacent USE (live_promotion) gates on the T3-CHAR-PAIR-01 verdict.",
+      "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -2778,8 +2750,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 8,
-      "status": "blocked",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Ruling-requiring; starts only after QUIET-GUARD-01 lands.",
+      "status": "shelved",
+      "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Shelved with the guard's shelved commits: the programmatic substrate this amendment needed lived in the dropped watcher/handoff scope.",
       "stop_card": null
     },
     "SUPERSESSION-DUP-REFUSAL-01": {
@@ -2820,54 +2792,6 @@
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
     },
-    "T3-AMEND-01": {
-      "acceptance": {
-        "evidence": [
-          "Operating orders 1a-1e land as amended/narrowed, including the lease-resolution clause, ingestion-event fields, and route narrowing + two-arc pilot",
-          "Originator provisos land: hint not authority, observed-at-version, fail-closed unknowns, corroborating fields",
-          "Q3e merged effort-cap rule lands",
-          "SX5 scoping lands: t3 is the main driver when in use, never mandatory; no t3 ceremony in plain claude sessions",
-          "Full-access flag-mapping custody artifact capture lands",
-          "D-080 amendment lands: numeric backstop + mechanical definitions",
-          "A cross-check against the synthesis amendment list shows no amendment dropped"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/T3-AMEND-01/acceptance",
-          "label": "T3-AMEND-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Every amendment ratified by the t3-doctrine gate synthesis lands in bridge-protocol §4/§6/§7/§8 and the affected skills, cross-checked against the synthesis amendment list with none dropped."
-      },
-      "authority": {
-        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
-        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "PR #100 merged 2026-08-05 (f75d12b) under D-072 with Ed's explicit go; T3-AMEND-01 is the first desk item after",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "task",
-          "required": "In-flight CAL-BRACKET-D079-01 round-2 chain lands through PR; T3-AMEND-01 is the first desk item after",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "CAL-BRACKET-D079-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Bridge-protocol §4/§6/§7/§8 + skills amendments carrying EVERY amendment from the t3-doctrine gate synthesis: operating orders 1a-1e as amended/narrowed (incl. lease-resolution clause, ingestion-event fields, route narrowing + two-arc pilot), originator provisos (hint not authority, observed-at-version, fail-closed unknowns, corroborating fields), the Q3e merged effort-cap rule, SX5 scoping (t3 = main driver when in use, never mandatory; no t3 ceremony in plain claude sessions), Full-access flag-mapping custody artifact capture, and the D-080 amendment (numeric backstop + mechanical definitions).",
-      "id": "T3-AMEND-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 11,
-      "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. First desk item after the in-flight CAL-BRACKET chain lands through PR.",
-      "stop_card": null
-    },
     "T3-CHAR-PAIR-01": {
       "acceptance": {
         "evidence": [
@@ -2906,8 +2830,8 @@
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 7,
-      "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. Head of the t3-drive chain; its verdict gates QUIET-GUARD-01's app-adjacent (live_promotion) use.",
+      "status": "shelved",
+      "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Both arms shelved: the app-UP r03 re-capture and the app-DOWN arm existed to decide app-adjacent window admissibility, which the descope moots. Reopen only on Ed's word.",
       "stop_card": null
     },
     "TEST-SPEED-01": {
@@ -3063,8 +2987,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 9,
-      "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. New adapter: full council is mandatory.",
+      "status": "shelved",
+      "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). t3-thread-bridge shelved: phone-visible delegated rounds are the exact convenience the descope declines to pay for. Reopen only on Ed's word.",
       "stop_card": null
     }
   },

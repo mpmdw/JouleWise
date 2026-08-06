@@ -23,33 +23,57 @@ Choose before launch and always pass the choice explicitly:
 When uncertain between `high` and `xhigh`, start `high`; escalate a fresh or
 continued session only when the task actually exhibits an xhigh trigger.
 
+A standing Ed effort directive controls over a ruled gate composition's
+stated tier, which is a default unless expressly marked mandatory. Every
+deviation is recorded at launch, in the gate record, and in synthesis — ruled
+tier, applied tier, directive cited, original reasoning preserved — visible to
+Ed. If an expressly mandatory tier conflicts with a standing directive, do not
+launch or consume the instrument until Ed prospectively rules. A failed or
+materially degraded round under a capped tier is supporting datum for
+escalation, never a prerequisite for requesting it. The lead may not raise or
+lower a ruled tier on its own authority.
+
 ## Transport selection
 
 All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
 sequence, not the contract.
 
+Apply contract §4's t3 applicability and preferred-presentation-plane rule.
+
 1. Read root `AGENTS.md`; run Mission M0 for substantial work.
-2. Choose the transport using contract §4. For background or delegated work,
-   prefer `scripts/codex-bridge`: on Ed's configured desktop it sends the real
-   Sol turn to an app-owned bridge task, so the native Codex pet sees the task
-   as running, while retaining the audited CLI files. Use MCP for quick direct
-   interaction when native pet visibility is not required.
+2. Choose the transport and apply the tracked-subagent limits, pilot record,
+   and accounting rule by reference to contract §4.
 3. Build the applicable contract §1 header. For writes, open the session with
    `scripts/bridge session-open` and use its returned header fragment.
-4. For the preferred background route, set `CODEX_REASONING_EFFORT` to the
-   selected tier and call `scripts/codex-bridge new` or
-   `scripts/codex-bridge review`. For MCP, call project tool `codex` with the
+4. For a substantial background or parallel Sol round that needs
+   operator-visible lifecycle state, use the preferred background route: set
+   `CODEX_REASONING_EFFORT` to the selected tier and call
+   `scripts/codex-bridge new` or `scripts/codex-bridge review`. For MCP, call
+   project tool `codex` with the
    Git-root `cwd`, model `gpt-5.6-sol`, config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
    and hop headers in developer instructions or the bridge prompt.
+   Fast Mode is per-call opt-in only: add `CODEX_SERVICE_TIER=fast` to a
+   `scripts/codex-bridge` invocation when Ed chooses the faster service tier,
+   for example `CODEX_SERVICE_TIER=fast scripts/codex-bridge new ...`. Omit it
+   to retain `default`; never make Fast Mode a standing default because it
+   consumes roughly 2.5x credits.
 5. Validate the return under contract §2. Handle early returns and routing
    changes under §§3-4 on the thread required by §5.
 6. After writes, run `scripts/bridge session-close` as specified by contract
    §6. Keep primitives for recovery or adjudicated overrides.
 7. Inspect every diff, replay the required lead checks, and adjudicate the
    worker's result. The lead owns final verification.
+
+At the next t3-mediated session after the 2026-08-03 doctrine gate, capture the
+owed Full-access mapping amendment exhibit before citing any UI-to-flag mapping
+as evidence. Bind one observation to the t3 and CLI versions, selected UI mode,
+timestamp, full child argv, and a process-table record containing PID, start
+time, and ancestry; store the capture at a tracked process-trace location. The
+contract §4 prohibition already binds independently of this exhibit. Apply
+contract §4's approval-evidence rules.
 
 These enforcement boundaries remain explicit:
 
@@ -69,8 +93,11 @@ explicit per-task selection remains mandatory.
 ## Audited path
 
 For D-050/D-064 runs, prefer `~/.local/bin/codex-run-v3` with model, selected
-effort, genre, and exhaustive write scope. If unavailable, set
-`CODEX_REASONING_EFFORT` to the selected tier and use `scripts/codex-bridge`.
+effort, genre, and exhaustive write scope. If it is unavailable, use
+`scripts/codex-bridge` only for a substantial background or parallel Sol round
+that needs operator-visible lifecycle state; set `CODEX_REASONING_EFFORT` to
+the selected tier. Otherwise return to contract §4 and select the matching
+foreground route.
 
 ## Session observability + recovery (WO-027)
 
