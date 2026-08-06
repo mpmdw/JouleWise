@@ -10,13 +10,86 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-05 EVENING — **CHECKPOINT: T3-CHAIN DESCOPED
-(Ed directive), project queue REOPENED.** Read the CHECKPOINT block
-immediately below and stop; everything under it is history. The
-2026-08-04 blocks and the T3-DRIVE priority they encode are SUPERSEDED
-by this checkpoint's descope.
+Last updated: 2026-08-05 NIGHT — **CHECKPOINT: Ed-ordered stop for a
+Fable model-switch (classifier tier-flap on adversarial-audit vocab).**
+Read the NIGHT block immediately below and stop; everything under it
+(the EVENING descope block included) is still-valid history — the
+EVENING queue is unchanged except where this block updates it.
 
-## ✅ CHECKPOINT 2026-08-05 evening — DESCOPE + RESUME SCRIPT (successor: read ONLY this block)
+## ✅ CHECKPOINT 2026-08-05 night — Ed model-switch stop (successor is FABLE; read this, then the EVENING queue)
+
+**Why the stop:** Ed hit the auto-mode classifier tier-flap (the
+adversarial-audit vocabulary trips it — documented in codex-delegation
+§Security) and ordered an ASAP checkpoint so he can resume on Fable.
+State is DURABLE: both in-flight branches are PUSHED to origin (ephemeral
+worktrees are safe to lose); nothing critical is unpushed.
+
+### What landed this session (pushed; main green at `b55008f`)
+
+- **PR #101 (T3-AMEND-01) MERGED** on green under D-072 (`906ddf9`);
+  row retired (`b55008f`, kernel pins 65→64); `impl/t3-amend` worktree +
+  branch pruned.
+- **Two "open" queue items were verified ALREADY DONE** (stale
+  carry-forwards; no work needed):
+  1. Voided-number scrub — landed 2026-08-03. README clean;
+     PROJECT_STATUS:83 labels 147 J diagnostic + names registered
+     141.29 J w/ D-110 caveat (covers DC-1 too); voided a10/7B values
+     confined to CLAIMS_STATUS's non-claim-bearing section.
+  2. RT-1 — was ADJUDICATED same-day as decision-log **D-110** (mint #1
+     tainted; re-mint must embed never-zero `max(drift, 0.010818 s)` per
+     D-102 pin 3). Sweep memory `two-week-soundness-sweep-2026-08-03`
+     updated to un-stale both.
+  Net: of the two-week sweep's four blockers, only **DC-2/FM-3**
+  (validator evidence_root_id pin-widening) is live open work — and it
+  is exactly MINT-GENERALIZE-01 clause (c).
+
+### IN FLIGHT at checkpoint — harvest, do NOT re-run blind
+
+Four fresh read-only Sol audits (high) were launched over the two
+uncommitted-at-EVENING branches, two lenses each. At stop: **cgv-audit-A
+DONE; qg-audit-A, qg-audit-B, cgv-audit-B still RUNNING** on their own
+2400 s watchdogs (they will finish and write to the session scratchpad —
+path in `.desk/2026-08-05-checkpoint-audits/AUDIT-SCRATCHPAD-PATH.txt`;
+completed reports + all four prompts copied into that `.desk` dir for
+durability; if the scratchpad is gone, the prompts re-run the audits).
+
+1. **COLDGATE-VALIDATOR-01** — branch `impl/coldgate-validator` @
+   `38b6570` (PUSHED). Bench tests pass (31, unpiped exit 0).
+   **cgv-audit-A verdict = FAIL / F3 PARTIAL (should-fix):** the F3
+   "structural closure" commit still lets a **whitespace-leading POSIX
+   absolute path** (`--launch-environment-attestation "cwd='/ secret'"`)
+   bypass validation + serialization preflight and exit 0 with PASS
+   containing the secret (`scripts/validate_gate_packet.py:73,126,607`).
+   This is the **THIRD formulation of the same F3 absolute-path-bypass
+   signature** → per rule 11's standing escalation trigger the next spend
+   is a **CONSULT on the closure shape, NOT fix round 4.** cgv-audit-B
+   (oversight/overbuild-prune lens) still pending — read it first; it may
+   add prune items. **Do not land this branch until F3 closes via
+   consult.**
+2. **QUIET-GUARD-01 commit 1** — branch `impl/quiet-guard` @ `d482869`
+   (PUSHED, checkpoint commit self-labeled UNAUDITED). Bench tests pass
+   (84, unpiped exit 0). Both audits (qg-audit-A delta re-audit of the
+   7-blocker fix round whose report was lost; qg-audit-B adversarial
+   priv-esc/fail-closed lens) were still RUNNING at stop — **harvest both
+   verdicts before landing.** On clean: land **commit 1 ONLY** (quiet
+   lease + process census, installed-INACTIVE); commits 2–4 remain
+   SHELVED per the EVENING descope.
+
+### Next substantive item (un-gated payoff)
+
+**MINT-GENERALIZE-01 (b) issuance + (c) validator pin-widening** — the
+D-110 corrected re-mint; condition (a) satisfied by PR #100. Clause (c)
+is the last live sweep blocker (DC-2/FM-3). The re-mint MUST embed the
+never-zero `max(drift, 0.010818 s)` allowance (the RT-1/D-110
+correction). This is the path back to a non-empty claims table.
+
+### Standing facts unchanged
+
+Sol HIGH only (Ed). Never gate a commit on a piped test command. Rule 11
+cold gates convene from a worktree. Ed's parked decisions (D-113/WINB-R06,
+window C §5A, NVIDIA) all unchanged.
+
+## ✅ CHECKPOINT 2026-08-05 evening — DESCOPE + RESUME SCRIPT (still-valid queue; NIGHT block above updates it)
 
 **Ed's directive this session (supersedes the 2026-08-03 T3-DRIVE
 priority, which was Ed's own and is Ed-reversed): the t3 control-plane
