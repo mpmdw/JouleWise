@@ -73,14 +73,17 @@ EXPECTED_IDS = {
     # 2026-08-03 sleep-window: production-default custody hardening deferred
     # from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake).
     "NODE-CUSTODY-DEFAULT-01",
-    # 2026-08-03 16h runway: D-112 parked r06 disposition (winB STOP gate)
-    # and the D-080 fresh-eyes trigger wiring (sweep finding + Ed's
-    # concurrent-audit pattern).
-    "WINB-R06-DISPOSITION-01", "D080-TRIGGER-01",
+    # 2026-08-03 16h runway: D-080 fresh-eyes trigger wiring
+    # (sweep finding + Ed's concurrent-audit pattern). The D-112-parked
+    # r06 disposition retired under D-113 in the 2026-08-05 batch.
+    "D080-TRIGGER-01",
     # 2026-08-03 t3-drive chain mint (Ed directive ~23:55 + the t3-doctrine
-    # gate synthesis): agent-lane rows.
+    # gate synthesis): surviving agent-lane rows. COLDGATE-VALIDATOR-01
+    # retired after PR #103 in the 2026-08-05 batch.
     "QUIET-GUARD-01", "SEC5A-REMOTE-01", "WO-T3-VIS-01",
-    "COLDGATE-VALIDATOR-01",
+    # 2026-08-05 registration batch: four agent-lane follow-ons.
+    "T3-PROV-SCHEMA-01", "CODEX-BRIDGE-SANDBOX-01",
+    "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -100,7 +103,8 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
-                "CAL-BRACKET-D079-01", "T3-AMEND-01"}
+                "CAL-BRACKET-D079-01", "T3-AMEND-01",
+                "COLDGATE-VALIDATOR-01", "WINB-R06-DISPOSITION-01"}
 
 
 def load_kernel():
@@ -255,12 +259,14 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_64(self):
+    def test_exact_live_id_set_66(self):
         # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
         # merged f75d12b). 65 -> 64: T3-AMEND-01 retired the same day
-        # (PR #101 merged 906ddf9). Completed table owns both records.
+        # (PR #101 merged 906ddf9). Registration batch: 64 -> 62 by retiring
+        # COLDGATE-VALIDATOR-01 and WINB-R06-DISPOSITION-01, then 62 -> 66
+        # by registering four follow-ons. Completed table owns all retirements.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 64)
+        self.assertEqual(len(self.tasks), 66)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
