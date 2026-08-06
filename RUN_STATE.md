@@ -10,10 +10,62 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-06 AFTERNOON — **PR #109 MERGED (`c537386`); the
-re-mint is STRUCTURALLY BLOCKED at main and the fork AWAITS ED'S RULING.
-Read the AFTERNOON block first;** the morning checkpoint below it is
-executed history.
+Last updated: 2026-08-06 — **CHECKPOINT (machine move). Read this block
+first;** the AFTERNOON block below it is the fork detail, still current.
+
+## ✅ CHECKPOINT 2026-08-06 late — machine-move stop (resume script)
+
+**Nothing in flight; nothing unpushed after this commit.** All background
+jobs harvested; consult custodied; campaign logs sha-verified untouched.
+
+**STATE IN ONE BREATH:** PR #109 merged (`c537386`); first consumption
+attempt proved the historical re-mint structurally closed at main (see
+AFTERNOON block + `docs/process_traces/2026-08-06-d110-remint-fork/`);
+Sol xhigh + magistrate recommend Option 2 (three fresh prospective
+windows); **Ed has NOT yet ruled** — he was probing costs when the
+session stopped.
+
+**Ed's in-thread directives this exchange (record, not yet decision-log):**
+1. **MVP claim scope: "a little more than just decode, at least
+   decode/prefill."** Magistrate's proposed shape (not yet Ed-acked):
+   prefill FLOOR cells ride both fresh floor windows cheaply; a prefill
+   CONTRAST first gets a labelled non-claim desk feasibility check from
+   historical diagnostics against the D-078 ~5 J effective bar — if it
+   clears, the contrast window grows a prefill ABBA arm; if not, prefill
+   floors are claimed, contrast stays decode-only, and the infeasibility
+   becomes a limitations paragraph.
+2. **Ed challenged the zero-agent window rule** ("why can't you be
+   running quietly?"). Owed answer components, for the successor: (a)
+   physics at our bar — a bursty resident agent stack at ~0.1–0.5 W over
+   minute-scale members is joules-to-tens-of-joules gross vs a ~5 J
+   effective bar; idle subtraction cancels only the steady part; every
+   CLAIM window to date was zero-agent; the app-resident mode was only
+   ever used for fenced NON-claim characterization. (b) The banked
+   `runs_char_t3appup_20260804_r01/_r02` captures exist precisely to
+   QUANTIFY the dormant-app delta — **desk analysis queued (protocol
+   §Analysis: mean/p95 package power from rich_telemetry_idle.jsonl)**;
+   run it and give Ed a NUMBER. (c) The honest reframe: the binding
+   presence constraint is §5A's sudo (network-time toggle), not the
+   zero-agent rule; the agent-armed window design (QUIET-GUARD two-phase
+   handoff, commits 2–4 + a scoped sudoers rule for the two systemsetup
+   commands) exists and was descoped by Ed's OWN ruling as not worth the
+   security-critical code — reopenable on his word if three fresh
+   windows change his calculus.
+3. Ed confirmed understanding that Option 2 = recollect the science
+   windows (~3 windows, bookend-presence only) while everything else
+   (instrument arc, acceptance rule, tooling, process record) stands.
+
+**RESUME ORDER for the successor:**
+1. If Ed has ruled the fork → transcribe the decision (supersede/amend
+   D-110 + D-113 rewire per SYNTHESIS.md) and start the Option-2 desk
+   queue (AFTERNOON block bottom). If not ruled → he owes: fork ruling,
+   prefill-contrast shape ack, three-nights scheduling.
+2. T3-CHAR-PAIR r01/r02 desk analysis (the dormant-app number) — cheap,
+   answers his live question, informs any zero-agent-rule revisit.
+3. Prefill-contrast feasibility desk check from historical diagnostics
+   (labelled, non-claim).
+4. End-of-session bookkeeping STILL OWED from the marathon session:
+   consistency sweep, council log, skill-usage log.
 
 ## ⏳ 2026-08-06 AFTERNOON — re-mint fork: historical consumption is closed at main; Ed's ruling owed
 
