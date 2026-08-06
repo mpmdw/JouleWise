@@ -114,6 +114,22 @@ it sequences with the re-mint, not standalone.
   (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
   personal wrapper without his word).
 
+### ESCALATION TRIGGER FIRED — quiet-guard observation-failure→absence class (recorded ~01:15 2026-08-06)
+
+qg-delta3 (xhigh) ruled the class RECURRENT at count 2: round 3's
+protected-set fix omitted the lease owner and matched by PID only,
+after round 2's retry introduced the class. Per rule 11 the next spend
+is a CONSULT — launched (Sol xhigh, read-only) on the closure shape,
+with the magistrate's structural diagnosis (protected-set ENUMERATION
+is the regenerating failure; Option A = eliminate enumeration,
+universally fail-closed retry) and an admission on the record: the
+round-2 lead contract seeded the class by dictating "retry for
+unrelated pids" (an enumeration concept) to serve an availability
+requirement the lead is now prepared to revoke. F2 (lock continuity)
+is CLOSED; init-durability remains closed at count 1. The branch does
+NOT land until the consult-adopted shape closes the class and a delta
+re-audit accepts.
+
 ### Ed directive batch (2026-08-05 ~22:00, in-thread; 12-hour autonomous window)
 
 1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
