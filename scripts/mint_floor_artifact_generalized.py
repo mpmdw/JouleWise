@@ -11,7 +11,6 @@ whose exact file bytes must match a separately supplied SHA-256.
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import importlib.util
 import inspect
@@ -20,7 +19,7 @@ import json
 import math
 import re
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
@@ -97,7 +96,9 @@ _CORE_SIGNATURES = {
         "comparative: 'AuthenticatedComponent', project_commit: 'str', "
         "project_tree_state: 'str') -> 'dict[str, Any]'"
     ),
-    "validate_floor_artifact": "(value: 'Mapping') -> 'list'",
+    "validate_floor_artifact": (
+        "(value: 'Mapping', *, pinset: 'Mapping | None' = None) -> 'list'"
+    ),
     "mint_floor_artifact": (
         "(*, artifact_id: 'str', floor_path: 'Path', statement_path: 'Path', "
         "calibration_plan_path: 'Path', "
@@ -507,57 +508,23 @@ def _fresh_original_core() -> ModuleType:
     return module
 
 
-def _artifact_for_legacy_root_validation(
-    artifact: Mapping[str, Any], pinset: MintPinset
-) -> Mapping[str, Any]:
-    """Present legacy root labels to the review-pinned mint-core validator."""
+def _validator_pinset(pinset: MintPinset) -> Mapping[str, Any]:
+    """Project an authenticated parsed pinset back to its schema mapping."""
 
-    normalized = copy.deepcopy(dict(artifact))
-    for cell in normalized.get("cells", []):
-        provenance = cell.get("provenance") if isinstance(cell, Mapping) else None
-        if not isinstance(provenance, Mapping):
-            continue
-        for component_name, pins, legacy_id in (
-            ("absolute", pinset.absolute, "a10"),
-            ("comparative", pinset.comparative, "window_c"),
-        ):
-            component = provenance.get(component_name)
-            if not isinstance(component, dict):
-                continue
-            if component.get("evidence_root_id") != pins.evidence_root_id:
-                continue
-            component["evidence_root_id"] = legacy_id
-    return normalized
+    return {
+        "schema_version": PINSET_SCHEMA_VERSION,
+        **asdict(pinset),
+    }
 
 
 def _configured_artifact_validator(
     core: ModuleType, pinset: MintPinset
 ) -> Callable[[Mapping[str, Any]], list[Any]]:
     original_validator = core.validate_floor_artifact
+    validator_pinset = _validator_pinset(pinset)
 
     def validate(artifact: Mapping[str, Any]) -> list[Any]:
-        root_errors: list[str] = []
-        for index, cell in enumerate(artifact.get("cells", [])):
-            provenance = cell.get("provenance") if isinstance(cell, Mapping) else None
-            if not isinstance(provenance, Mapping):
-                continue
-            for component_name, pins in (
-                ("absolute", pinset.absolute),
-                ("comparative", pinset.comparative),
-            ):
-                component = provenance.get(component_name)
-                if isinstance(component, Mapping) and component.get(
-                    "evidence_root_id"
-                ) != pins.evidence_root_id:
-                    root_errors.append(
-                        f"cells[{index}].provenance.{component_name}."
-                        "evidence_root_id: differs from authenticated pinset"
-                    )
-        if root_errors:
-            return root_errors
-        return original_validator(
-            _artifact_for_legacy_root_validation(artifact, pinset)
-        )
+        return original_validator(artifact, pinset=validator_pinset)
 
     return validate
 

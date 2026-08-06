@@ -2064,6 +2064,25 @@ class AnalysisIntegrationTests(unittest.TestCase):
         calibration_plan_sha256 = hashlib.sha256(
             calibration_plan_path.read_bytes()
         ).hexdigest()
+        pinset_directory = floor_dir / "floor_mint_pinsets"
+        pinset_directory.mkdir()
+        pinset = json.loads(
+            (
+                ROOT / "scripts" / "floor_mint_pinsets" / "mint1.json"
+            ).read_text(encoding="utf-8")
+        )
+        pinset["plan"]["plan_id"] = "floor-exact-cli-plan"
+        pinset["plan"]["sha256"] = calibration_plan_sha256
+        (pinset_directory / "floor_exact_cli.json").write_text(
+            json.dumps(pinset, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        pinset_patch = mock.patch(
+            "joulewise.detection_floor._FLOOR_MINT_PINSET_DIRECTORY",
+            pinset_directory,
+        )
+        pinset_patch.start()
+        self.addCleanup(pinset_patch.stop)
         cells = []
         groups = []
         order_rows = {"a10": [], "window_c": []}

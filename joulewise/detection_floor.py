@@ -102,7 +102,48 @@ _CONSUMPTION_SEMANTICS_IDS = {
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 }
-_EVIDENCE_ROOT_IDS = {"a10", "window_c"}
+_FLOOR_MINT_PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
+_FLOOR_MINT_PINSET_DIRECTORY = (
+    Path(__file__).resolve().parents[1] / "scripts" / "floor_mint_pinsets"
+)
+_FLOOR_MINT_PINSET_KEYS = {
+    "schema_version",
+    "mint_tool_version",
+    "plan",
+    "artifact",
+    "cell",
+    "absolute",
+    "comparative",
+}
+_FLOOR_MINT_PLAN_PIN_KEYS = {
+    "plan_id",
+    "sha256",
+    "declared_calibration_scope",
+    "artifact_calibration_scope",
+}
+_FLOOR_MINT_ARTIFACT_PIN_KEYS = {
+    "cell_id",
+    "transport_group_id",
+    "source_class",
+}
+_FLOOR_MINT_CELL_PIN_KEYS = {
+    "condition_family_id",
+    "condition_family_sha256",
+    "metric",
+    "window_class",
+    "target_precheck_path",
+    "operative_floor_six_decimal",
+}
+_FLOOR_MINT_COMPONENT_PIN_KEYS = {
+    "evidence_root_id",
+    "calibration_cell_id",
+    "evaluation_basis_sha256",
+    "evaluation_basis_members",
+    "extraction_spec_members",
+    "expected_n",
+    "drift_allowance_j",
+    "order_manifest_id",
+}
 FLOOR_METRIC_CATALOG = (
     "gross_energy_j",
     "energy_request_j",
@@ -1388,6 +1429,182 @@ def _is_hex(value, length: int = 64) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class _FloorMintPinsetProjection:
+    family_identity: tuple[str, str, str]
+    evidence_root_ids: frozenset[str]
+
+
+def _is_trimmed_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value) and value == value.strip()
+
+
+def _is_positive_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _is_six_decimal_literal(value: object) -> bool:
+    if not isinstance(value, str) or value.count(".") != 1:
+        return False
+    whole, fraction = value.split(".")
+    return (
+        bool(whole)
+        and whole.isdigit()
+        and (whole == "0" or not whole.startswith("0"))
+        and len(fraction) == 6
+        and fraction.isdigit()
+    )
+
+
+def _project_floor_mint_pinset(
+    value: object,
+) -> _FloorMintPinsetProjection | None:
+    """Return only the family identity and exact root literals of a v1 pinset."""
+
+    if not isinstance(value, Mapping) or set(value) != _FLOOR_MINT_PINSET_KEYS:
+        return None
+    if value.get("schema_version") != _FLOOR_MINT_PINSET_SCHEMA_VERSION:
+        return None
+    if not _is_trimmed_string(value.get("mint_tool_version")):
+        return None
+
+    plan = value.get("plan")
+    artifact = value.get("artifact")
+    cell = value.get("cell")
+    components = (value.get("absolute"), value.get("comparative"))
+    if (
+        not isinstance(plan, Mapping)
+        or set(plan) != _FLOOR_MINT_PLAN_PIN_KEYS
+        or not isinstance(artifact, Mapping)
+        or set(artifact) != _FLOOR_MINT_ARTIFACT_PIN_KEYS
+        or not isinstance(cell, Mapping)
+        or set(cell) != _FLOOR_MINT_CELL_PIN_KEYS
+        or any(
+            not isinstance(component, Mapping)
+            or set(component) != _FLOOR_MINT_COMPONENT_PIN_KEYS
+            for component in components
+        )
+    ):
+        return None
+
+    if (
+        not _is_trimmed_string(plan.get("plan_id"))
+        or not _is_hex(plan.get("sha256"))
+        or not _is_trimmed_string(plan.get("declared_calibration_scope"))
+        or not _is_trimmed_string(plan.get("artifact_calibration_scope"))
+        or any(not _is_trimmed_string(item) for item in artifact.values())
+    ):
+        return None
+
+    target_precheck_path = cell.get("target_precheck_path")
+    if (
+        not _is_trimmed_string(cell.get("condition_family_id"))
+        or not _is_hex(cell.get("condition_family_sha256"))
+        or not _is_trimmed_string(cell.get("metric"))
+        or not _is_trimmed_string(cell.get("window_class"))
+        or not isinstance(target_precheck_path, (list, tuple))
+        or not target_precheck_path
+        or any(not _is_trimmed_string(part) for part in target_precheck_path)
+        or not _is_six_decimal_literal(cell.get("operative_floor_six_decimal"))
+    ):
+        return None
+
+    root_ids = []
+    for component in components:
+        if (
+            not _is_trimmed_string(component.get("evidence_root_id"))
+            or not _is_trimmed_string(component.get("calibration_cell_id"))
+            or not _is_hex(component.get("evaluation_basis_sha256"))
+            or not _is_positive_int(component.get("evaluation_basis_members"))
+            or not _is_positive_int(component.get("extraction_spec_members"))
+            or not _is_positive_int(component.get("expected_n"))
+            or not _is_number(component.get("drift_allowance_j"))
+            or component.get("drift_allowance_j") < 0
+            or not _is_trimmed_string(component.get("order_manifest_id"))
+        ):
+            return None
+        root_ids.append(component["evidence_root_id"])
+
+    return _FloorMintPinsetProjection(
+        family_identity=(
+            value["mint_tool_version"],
+            plan["plan_id"],
+            plan["sha256"],
+        ),
+        evidence_root_ids=frozenset(root_ids),
+    )
+
+
+def _reject_duplicate_pinset_keys(pairs) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate pinset key {key!r}")
+        result[key] = value
+    return result
+
+
+def _repository_floor_mint_pinsets() -> list[_FloorMintPinsetProjection]:
+    projections = []
+    try:
+        paths = sorted(_FLOOR_MINT_PINSET_DIRECTORY.glob("*.json"))
+    except OSError:
+        return projections
+    for path in paths:
+        try:
+            value = json.loads(
+                path.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_pinset_keys,
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            continue
+        projection = _project_floor_mint_pinset(value)
+        if projection is not None:
+            projections.append(projection)
+    return projections
+
+
+def _artifact_family_identity(value: Mapping) -> tuple[str, str, str] | None:
+    provenance = value.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return None
+    plan = provenance.get("calibration_plan")
+    mint_tool_version = provenance.get("mint_tool_version")
+    if (
+        not isinstance(plan, Mapping)
+        or not _is_trimmed_string(mint_tool_version)
+        or not _is_trimmed_string(plan.get("plan_id"))
+        or not _is_hex(plan.get("sha256"))
+    ):
+        return None
+    return mint_tool_version, plan["plan_id"], plan["sha256"]
+
+
+def _resolve_evidence_root_ids(
+    value: Mapping,
+    pinset: Mapping | None,
+) -> tuple[frozenset[str] | None, str | None]:
+    identity = _artifact_family_identity(value)
+    candidates = (
+        [_project_floor_mint_pinset(pinset)]
+        if pinset is not None
+        else _repository_floor_mint_pinsets()
+    )
+    matches = [
+        candidate
+        for candidate in candidates
+        if candidate is not None and candidate.family_identity == identity
+    ]
+    if not matches:
+        return None, "artifact.pinset: no pinset matches artifact family identity"
+    if len(matches) > 1:
+        return (
+            None,
+            "artifact.pinset: multiple pinsets match artifact family identity",
+        )
+    return matches[0].evidence_root_ids, None
+
+
 def _has_duplicates(values) -> bool:
     return any(value in values[:index] for index, value in enumerate(values))
 
@@ -1910,6 +2127,7 @@ def _validate_component_provenance(
     record: Mapping,
     where: str,
     errors,
+    evidence_root_ids: frozenset[str] | None,
 ) -> tuple[Mapping | None, set[str]]:
     if not _check_keys(
         provenance,
@@ -1923,10 +2141,14 @@ def _validate_component_provenance(
         or not provenance["calibration_cell_id"].strip()
     ):
         errors.append(f"{where}.calibration_cell_id: must be a nonempty string")
-    if provenance["evidence_root_id"] not in _EVIDENCE_ROOT_IDS:
+    evidence_root_id = provenance["evidence_root_id"]
+    if not _is_trimmed_string(evidence_root_id):
         errors.append(
-            f"{where}.evidence_root_id: must be one of "
-            f"{sorted(_EVIDENCE_ROOT_IDS)}"
+            f"{where}.evidence_root_id: must be a nonempty trimmed string"
+        )
+    elif evidence_root_ids is not None and evidence_root_id not in evidence_root_ids:
+        errors.append(
+            f"{where}.evidence_root_id: not pinned by artifact family pinset"
         )
     order_manifest = provenance["order_manifest"]
     if _check_keys(
@@ -2195,7 +2417,13 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
     )
 
 
-def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
+def _validate_cell(
+    cell,
+    where,
+    errors,
+    calibration_plan_sha256=None,
+    evidence_root_ids: frozenset[str] | None = None,
+) -> None:
     if not _check_keys_with_optional(
         cell,
         _CELL_KEYS,
@@ -2376,6 +2604,7 @@ def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
                     component_record,
                     component_where,
                     errors,
+                    evidence_root_ids,
                 )
             )
             if source_regime is not None:
@@ -2582,13 +2811,20 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
             _validate_condition_family(family, family_where, errors)
 
 
-def validate_floor_artifact(value: Mapping) -> list:
+def validate_floor_artifact(
+    value: Mapping,
+    *,
+    pinset: Mapping | None = None,
+) -> list:
     """Validate a ``joulewise.detection_floor_artifact.v2`` document.
 
     Returns a list of error strings; an empty list means valid. Recomputes
     every residual, delta, mean, stddev, prediction, unguarded/guarded floor,
     guard factor, cell gate, and transport composition against the stored
-    values within ``max(1e-12, 1e-12 * abs(expected))``.
+    values within ``max(1e-12, 1e-12 * abs(expected))``. Evidence-root ids
+    must be exact literals in the uniquely matching family pinset. When an
+    explicit pinset is supplied, its caller is responsible for authenticating
+    the pinset bytes before validation.
     """
     errors: list = []
     if not _check_keys(value, _TOP_KEYS, "artifact", errors):
@@ -2601,6 +2837,9 @@ def validate_floor_artifact(value: Mapping) -> list:
         errors.append("artifact: invalid source_class")
     if not isinstance(value["artifact_id"], str) or not value["artifact_id"]:
         errors.append("artifact: artifact_id must be a nonempty string")
+    evidence_root_ids, pinset_error = _resolve_evidence_root_ids(value, pinset)
+    if pinset_error is not None:
+        errors.append(pinset_error)
     if value["method"] != build_method_block():
         errors.append("artifact: method block does not match the canonical v1 method")
     calibration_plan_sha256 = _validate_provenance(
@@ -2620,7 +2859,13 @@ def validate_floor_artifact(value: Mapping) -> list:
     seen_keys = set()
     for i, cell in enumerate(cells):
         where = f"cells[{i}]"
-        _validate_cell(cell, where, errors, calibration_plan_sha256)
+        _validate_cell(
+            cell,
+            where,
+            errors,
+            calibration_plan_sha256,
+            evidence_root_ids,
+        )
         if isinstance(cell, Mapping):
             cell_id = cell.get("cell_id")
             if cell_id in cells_by_id:
