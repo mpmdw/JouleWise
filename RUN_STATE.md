@@ -141,6 +141,15 @@ COMPLETING. D-110(c) is landed (PR #105); Sol's "not on main" was wrong.
 **This is the gate working: it prevented an irreversible ledger write
 paired with a production-refused artifact.**
 
+### GOVERNING PRIORITY STACK (Ed, 2026-08-06) — all work serves the paper
+P1 the A+ MVP paper; P2 the long-term ICPE version; P3 modularity to
+answer the future inference-technique research questions (spec decode,
+MTP, MoE, KDA, split) — kept where FREE, but SACRIFICED if it costs P1
+or P2. Decision rule for every design choice: serve MVP → ICPE → keep
+the future-axis seam modular only at no cost to 1&2; else ship. Do not
+gold-plate future-axis machinery before the paper is secured. (Memory:
+`paper-first-priority-stack`; refines `modularity-preference`.)
+
 ### SYLLABUS ANCHOR (Ed, 2026-08-06) — the overarching goal
 Phase 1: develop/justify/demonstrate an LLM-inference energy measurement
 system — SUBSTANTIALLY DONE (repaired+validated instrument; metrology
