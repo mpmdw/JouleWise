@@ -7,6 +7,7 @@ import json
 import hashlib
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from joulewise.calibration_ledger import (
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
+    HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA,
     HISTORICAL_IMPORT_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_RESERVATION_EVENT,
     HISTORICAL_IMPORT_TABLE_SCHEMA,
@@ -29,7 +31,9 @@ from joulewise.calibration_ledger import (
     canonical_json_bytes,
     canonical_sha256,
     content_id_from_artifact_hashes,
+    custody_manifest_bytes,
     finalize_attempt_receipt,
+    generate_historical_custody_manifest,
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
     prepare_historical_import,
@@ -203,6 +207,28 @@ class CalibrationLedgerTests(unittest.TestCase):
         }
         return checkout, checkout / "runs_fixture", custodies, table
 
+    def _historical_import_args(self, table: dict, custodies: list[Path]) -> dict:
+        table_raw = (json.dumps(table, indent=2, sort_keys=True) + "\n").encode()
+        manifest = {
+            "schema_version": HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA,
+            "ledger_schema": LEDGER_SCHEMA,
+            "members": {
+                member["content_id"]: str(custody.resolve())
+                for member, custody in zip(table["members"], custodies)
+            },
+        }
+        manifest_raw = custody_manifest_bytes(manifest)
+        return {
+            "disposition_table_raw": table_raw,
+            "expected_disposition_table_sha256": hashlib.sha256(
+                table_raw
+            ).hexdigest(),
+            "custody_manifest_raw": manifest_raw,
+            "expected_custody_manifest_sha256": hashlib.sha256(
+                manifest_raw
+            ).hexdigest(),
+        }
+
     def test_crash_between_reservation_and_finalization_refuses(self) -> None:
         custody = self.root / "never-created"
         pending = self._reserve("crash-attempt", custody)
@@ -328,11 +354,13 @@ class CalibrationLedgerTests(unittest.TestCase):
         self,
     ) -> None:
         checkout, root, custodies, table = self._historical_fixture()
-        del custodies
+        import_args = self._historical_import_args(table, custodies)
         table_path = self.root / "dispositions.json"
         table_path.write_text(
             json.dumps(table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        manifest_path = self.root / "custody-manifest.json"
+        manifest_path.write_bytes(import_args["custody_manifest_raw"])
         dry_ledger = self.root / "dry-run-ledger.jsonl"
         script = Path(__file__).resolve().parents[1] / "scripts" / (
             "calibration_ledger_bootstrap.py"
@@ -342,6 +370,12 @@ class CalibrationLedgerTests(unittest.TestCase):
             str(script),
             "--disposition-table",
             str(table_path),
+            "--expected-table-sha256",
+            import_args["expected_disposition_table_sha256"],
+            "--custody-manifest",
+            str(manifest_path),
+            "--expected-custody-manifest-sha256",
+            import_args["expected_custody_manifest_sha256"],
             "--checkout-root",
             str(checkout),
             "--ledger",
@@ -360,12 +394,70 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertEqual(rows[-1]["record"], "bootstrap-summary")
         self.assertFalse(rows[-1]["executed"])
         self.assertEqual(rows[-1]["final_sequence"], 6)
+        self.assertEqual(
+            rows[-1]["disposition_table_sha256"],
+            import_args["expected_disposition_table_sha256"],
+        )
+        self.assertEqual(
+            rows[-1]["custody_manifest_sha256"],
+            import_args["expected_custody_manifest_sha256"],
+        )
+        wrong_digest = list(command)
+        digest_index = wrong_digest.index("--expected-table-sha256") + 1
+        wrong_digest[digest_index] = "0" * 64
+        refused = subprocess.run(wrong_digest, check=False, capture_output=True)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn(b"disposition table sha256 mismatch", refused.stderr)
+        emitted = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--disposition-table",
+                str(table_path),
+                "--expected-table-sha256",
+                import_args["expected_disposition_table_sha256"],
+                "--checkout-root",
+                str(checkout),
+                "--emit-custody-manifest",
+                str(root),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        self.assertEqual(emitted.stdout, import_args["custody_manifest_raw"])
+        self.assertIn(
+            import_args["expected_custody_manifest_sha256"].encode(),
+            emitted.stderr,
+        )
+        self.assertFalse(dry_ledger.exists())
+
+    def test_historical_import_refuses_nonimportable_disposition(self) -> None:
+        _checkout, _root, custodies, table = self._historical_fixture()
+        table["members"][0]["disposition"] = "abandoned"
+        import_args = self._historical_import_args(table, custodies)
+        with self.assertRaisesRegex(CalibrationLedgerError, "member is malformed"):
+            prepare_historical_import(**import_args)
+
+    def test_historical_import_refuses_symlinked_pinned_custody(self) -> None:
+        _checkout, _root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        linked = self.root / "symlinked-custody"
+        linked.symlink_to(custodies[0], target_is_directory=True)
+        manifest = json.loads(import_args["custody_manifest_raw"])
+        manifest["members"][table["members"][0]["content_id"]] = str(linked)
+        manifest_raw = custody_manifest_bytes(manifest)
+        import_args["custody_manifest_raw"] = manifest_raw
+        import_args["expected_custody_manifest_sha256"] = hashlib.sha256(
+            manifest_raw
+        ).hexdigest()
+        with self.assertRaisesRegex(CalibrationLedgerError, "through a symlink"):
+            prepare_historical_import(**import_args)
 
     def test_historical_import_refuses_nonempty_ledger_and_nongenesis_pin(
         self,
     ) -> None:
         checkout, root, custodies, table = self._historical_fixture()
-        del custodies
+        import_args = self._historical_import_args(table, custodies)
         self.ledger.write_bytes(b"not-empty\n")
         with self.assertRaisesRegex(CalibrationLedgerError, "empty ledger"):
             bootstrap_historical_import(
@@ -373,7 +465,7 @@ class CalibrationLedgerTests(unittest.TestCase):
                 head_pin_path=self.pin,
                 roots=[root],
                 checkout_root=checkout,
-                disposition_table=table,
+                **import_args,
                 require_committed_pin=False,
             )
 
@@ -391,13 +483,13 @@ class CalibrationLedgerTests(unittest.TestCase):
                 head_pin_path=self.pin,
                 roots=[root],
                 checkout_root=checkout,
-                disposition_table=table,
+                **import_args,
                 require_committed_pin=False,
             )
 
     def test_historical_import_io_failure_rolls_back_partial_append(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
-        del custodies
+        import_args = self._historical_import_args(table, custodies)
 
         def partial_write_then_fail(handle, payload):
             handle.write(payload[: len(payload) // 2])
@@ -415,7 +507,7 @@ class CalibrationLedgerTests(unittest.TestCase):
                     head_pin_path=self.pin,
                     roots=[root],
                     checkout_root=checkout,
-                    disposition_table=table,
+                    **import_args,
                     execute=True,
                     require_committed_pin=False,
                 )
@@ -423,17 +515,110 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertEqual(self.ledger.read_bytes(), b"")
         self.assertEqual(json.loads(self.pin.read_text())["sequence"], 0)
 
-    def test_historical_import_marker_is_not_a_post_cutoff_live_observation(
-        self,
-    ) -> None:
+    def test_historical_import_fsync_failure_keeps_visible_ledger_empty(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
-        del custodies
+        import_args = self._historical_import_args(table, custodies)
+        with mock.patch.object(
+            calibration_ledger.os,
+            "fsync",
+            side_effect=OSError("injected fsync"),
+        ):
+            with self.assertRaisesRegex(CalibrationLedgerError, "failed atomically"):
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        self.assertEqual(self.ledger.read_bytes(), b"")
+
+    def test_sigkill_mid_import_leaves_retryable_genesis(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        code = f"""
+import os, signal
+from pathlib import Path
+import joulewise.calibration_ledger as module
+def die_mid_write(handle, payload):
+    handle.write(payload[:len(payload) // 2])
+    handle.flush()
+    os.fsync(handle.fileno())
+    os.kill(os.getpid(), signal.SIGKILL)
+module._write_bootstrap_payload = die_mid_write
+module.bootstrap_historical_import(
+    Path({str(self.ledger)!r}),
+    head_pin_path=Path({str(self.pin)!r}),
+    roots=[Path({str(root)!r})],
+    checkout_root=Path({str(checkout)!r}),
+    disposition_table_raw={import_args['disposition_table_raw']!r},
+    expected_disposition_table_sha256={import_args['expected_disposition_table_sha256']!r},
+    custody_manifest_raw={import_args['custody_manifest_raw']!r},
+    expected_custody_manifest_sha256={import_args['expected_custody_manifest_sha256']!r},
+    execute=True,
+    require_committed_pin=False,
+)
+"""
+        killed = subprocess.run([sys.executable, "-c", code], check=False)
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        self.assertEqual(self.ledger.read_bytes(), b"")
         plan = bootstrap_historical_import(
             self.ledger,
             head_pin_path=self.pin,
             roots=[root],
             checkout_root=checkout,
-            disposition_table=table,
+            **import_args,
+            execute=True,
+            require_committed_pin=False,
+        )
+        self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes)
+
+    def test_execute_reauthenticates_all_artifacts_after_lock(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        original_gate = calibration_ledger._require_genesis_bootstrap_state
+        calls = 0
+
+        def mutate_after_locked_gate(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            original_gate(*args, **kwargs)
+            if calls == 2:
+                with (custodies[0] / "events.jsonl").open("ab") as handle:
+                    handle.write(b"drift-after-prepare\n")
+
+        with mock.patch.object(
+            calibration_ledger,
+            "_require_genesis_bootstrap_state",
+            side_effect=mutate_after_locked_gate,
+        ):
+            with self.assertRaisesRegex(
+                CalibrationLedgerError, "reauthentication failed"
+            ):
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        self.assertEqual(self.ledger.read_bytes(), b"")
+
+    def test_historical_import_marker_is_not_a_post_cutoff_live_observation(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        plan = bootstrap_historical_import(
+            self.ledger,
+            head_pin_path=self.pin,
+            roots=[root],
+            checkout_root=checkout,
+            **import_args,
             execute=True,
             require_committed_pin=False,
         )
@@ -456,7 +641,21 @@ class CalibrationLedgerTests(unittest.TestCase):
             },
         )
 
-    def test_historical_import_selects_smallest_hash_complete_relative_custody(
+    def test_live_capture_finalization_cannot_carry_import_marker(self) -> None:
+        custody = self._custody("live-marker-boundary")
+        self._reserve("live-marker-boundary", custody)
+        final = self._finalize("live-marker-boundary", custody)
+        self._write_pin(head_pin_for_receipt(final))
+        snapshot = self._snapshot()
+        self.assertTrue(snapshot.valid)
+        self.assertEqual(len(snapshot.observations), 1)
+        self.assertFalse(snapshot.observations[0].is_historical_import)
+        self.assertEqual(
+            {receipt["event"] for receipt in snapshot.receipts},
+            {"reservation", "finalization"},
+        )
+
+    def test_historical_import_manifest_pins_head_and_subset_roots_refuse(
         self,
     ) -> None:
         checkout, root, custodies, table = self._historical_fixture()
@@ -469,10 +668,27 @@ class CalibrationLedgerTests(unittest.TestCase):
         )
         duplicate.parent.mkdir(parents=True)
         shutil.copytree(source, duplicate)
+        table_raw = (json.dumps(table, indent=2, sort_keys=True) + "\n").encode()
+        table_sha = hashlib.sha256(table_raw).hexdigest()
+        manifest = generate_historical_custody_manifest(
+            roots=[root, checkout / "a_duplicate"],
+            checkout_root=checkout,
+            disposition_table_raw=table_raw,
+            expected_disposition_table_sha256=table_sha,
+        )
+        manifest_raw = custody_manifest_bytes(manifest)
+        import_args = {
+            "disposition_table_raw": table_raw,
+            "expected_disposition_table_sha256": table_sha,
+            "custody_manifest_raw": manifest_raw,
+            "expected_custody_manifest_sha256": hashlib.sha256(
+                manifest_raw
+            ).hexdigest(),
+        }
         plan = prepare_historical_import(
             roots=[root, checkout / "a_duplicate"],
             checkout_root=checkout,
-            disposition_table=table,
+            **import_args,
         )
         imported = next(
             row
@@ -484,21 +700,32 @@ class CalibrationLedgerTests(unittest.TestCase):
             imported["custody_locator"],
             str(duplicate.resolve()),
         )
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "absent from root discovery"
+        ):
+            prepare_historical_import(
+                roots=[root],
+                checkout_root=checkout,
+                **import_args,
+            )
+        manifest_only = prepare_historical_import(**import_args)
+        self.assertEqual(manifest_only.head_digest, plan.head_digest)
 
     def test_historical_import_refuses_tampered_evidence_bytes(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
         with (custodies[1] / "events.jsonl").open("ab") as handle:
             handle.write(b"tampered\n")
         with self.assertRaisesRegex(CalibrationLedgerError, "hash mismatch"):
             prepare_historical_import(
                 roots=[root],
                 checkout_root=checkout,
-                disposition_table=table,
+                **import_args,
             )
 
     def test_three_member_historical_import_has_hand_computed_head(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
-        del custodies
+        import_args = self._historical_import_args(table, custodies)
         inspect_candidate = calibration_ledger._inspect_historical_candidate
 
         def stable_vector_candidate(*args, **kwargs):
@@ -507,7 +734,8 @@ class CalibrationLedgerTests(unittest.TestCase):
                 candidate = replace(
                     candidate,
                     custody_locator=(
-                        f"/fixture-checkout/{candidate.custody_sort_key}"
+                        "/fixture-checkout/"
+                        f"{Path(candidate.custody_locator).relative_to(checkout.resolve())}"
                     ),
                 )
             return content_id, candidate, error
@@ -521,9 +749,7 @@ class CalibrationLedgerTests(unittest.TestCase):
             side_effect=stable_vector_candidate,
         ):
             plan = prepare_historical_import(
-                roots=[root],
-                checkout_root=checkout,
-                disposition_table=table,
+                **import_args,
             )
         self.assertEqual(plan.final_sequence, 6)
         self.assertEqual(

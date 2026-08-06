@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Prepare or execute the deterministic calibration-ledger genesis import.
 
-Dry-run is the default. It authenticates every supplied custody copy and
-prints the complete canonical receipt chain plus the exact candidate head pin
-without writing either file. ``--execute`` atomically writes only the ledger;
-the lead must review and commit the printed head pin separately.
+Dry-run is the default. It authenticates the reviewed disposition table and
+per-member custody manifest, then prints the complete canonical receipt chain
+plus the exact candidate head pin without writing either file. ``--execute``
+atomically writes only the ledger; the lead must review and commit the printed
+head pin separately.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -25,6 +27,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     CalibrationLedgerError,
     bootstrap_historical_import,
     canonical_json_bytes,
+    custody_manifest_bytes,
+    generate_historical_custody_manifest,
 )
 
 
@@ -59,6 +63,8 @@ def _emit(plan: Any, *, executed: bool) -> None:
         "receipt_count": len(plan.receipts),
         "final_sequence": plan.final_sequence,
         "head_digest": plan.head_digest,
+        "disposition_table_sha256": plan.disposition_table_sha256,
+        "custody_manifest_sha256": plan.custody_manifest_sha256,
         "head_pin": plan.head_pin,
         "head_pin_content": _pin_content(plan.head_pin),
     }
@@ -70,15 +76,34 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "roots",
-        nargs="+",
+        nargs="*",
         type=Path,
-        help="run root, instrument_validation directory, or custody directory",
+        help="optional strict cross-check roots; required in manifest-emission mode",
     )
     parser.add_argument(
         "--disposition-table",
         required=True,
         type=Path,
         help="explicit ruled historical-import table",
+    )
+    parser.add_argument(
+        "--expected-table-sha256",
+        required=True,
+        help="required SHA-256 of the disposition table's exact raw bytes",
+    )
+    parser.add_argument(
+        "--custody-manifest",
+        type=Path,
+        help="reviewed content_id-to-absolute-locator custody manifest",
+    )
+    parser.add_argument(
+        "--expected-custody-manifest-sha256",
+        help="required SHA-256 of the custody manifest's exact raw bytes",
+    )
+    parser.add_argument(
+        "--emit-custody-manifest",
+        action="store_true",
+        help="print a lexicographically selected manifest and write nothing",
     )
     parser.add_argument(
         "--checkout-root",
@@ -95,12 +120,41 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        table_raw = args.disposition_table.read_bytes()
+        if args.emit_custody_manifest:
+            if args.execute:
+                raise ValueError("--emit-custody-manifest cannot execute")
+            if not args.roots:
+                raise ValueError("--emit-custody-manifest requires custody roots")
+            manifest = generate_historical_custody_manifest(
+                roots=args.roots,
+                checkout_root=args.checkout_root,
+                disposition_table_raw=table_raw,
+                expected_disposition_table_sha256=args.expected_table_sha256,
+            )
+            raw = custody_manifest_bytes(manifest)
+            sys.stdout.buffer.write(raw)
+            sys.stdout.buffer.flush()
+            print(
+                f"custody-manifest-sha256={hashlib.sha256(raw).hexdigest()}",
+                file=sys.stderr,
+            )
+            return 0
+        if args.custody_manifest is None:
+            raise ValueError("--custody-manifest is required")
+        if args.expected_custody_manifest_sha256 is None:
+            raise ValueError("--expected-custody-manifest-sha256 is required")
         plan = bootstrap_historical_import(
             args.ledger,
             head_pin_path=args.head_pin,
             roots=args.roots,
             checkout_root=args.checkout_root,
-            disposition_table=_json_object(args.disposition_table),
+            disposition_table_raw=table_raw,
+            expected_disposition_table_sha256=args.expected_table_sha256,
+            custody_manifest_raw=args.custody_manifest.read_bytes(),
+            expected_custody_manifest_sha256=(
+                args.expected_custody_manifest_sha256
+            ),
             execute=args.execute,
             repo_root=REPO_ROOT,
         )

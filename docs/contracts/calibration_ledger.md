@@ -22,12 +22,16 @@ ordinary capture route. Version 1 has the following fixed decisions.
    `content_id`. Attempt IDs are required to be unique; the content-ID
    secondary key only makes collision diagnosis deterministic, after which a
    collision refuses rather than inventing a new attempt identity.
-2. **Custody selection:** among all hash-complete checkout copies of one
-   content ID, select the lexicographically smallest POSIX checkout-relative
-   custody path. The selected copy's resolved absolute path is stored in both
-   receipts, preserving the v1 live-receipt custody semantics; the relative
-   spelling is used only as the deterministic comparison key. Incomplete
-   copies do not outrank a complete copy; absence of any complete copy refuses.
+2. **Custody selection:** import authority is a reviewed, raw-byte-SHA-256-
+   pinned custody manifest mapping every table content ID to one exact absolute
+   locator. The importer uses exactly that locator; invocation roots have no
+   selection authority. A missing or hash-incomplete pinned copy, a locator or
+   governed artifact reached through a symlink, or a manifest/table content-set
+   mismatch refuses. Optional roots are a strict cross-check: every pinned
+   locator must be discovered, and the discovered hash-complete content set
+   must equal the manifest set. `--emit-custody-manifest` is the only place the
+   lexicographically smallest POSIX checkout-relative rule selects locators;
+   it prints review bytes and writes nothing.
 3. **Transaction representation:** every member has exactly two receipts,
    `historical-import-v1-reservation` immediately followed by
    `historical-import-v1-finalization`. There is no summary receipt. The
@@ -38,9 +42,13 @@ ordinary capture route. Version 1 has the following fixed decisions.
    `2 * member_count`.
 
 Consumers must not treat an import-marked finalization as a fresh post-cutoff
-observation. `LedgerObservation.is_historical_import` exposes the marker, and
-`CalibrationLedgerSnapshot.post_cutoff_live_observations()` performs the safe
-filtered enumeration.
+observation or bracket endpoint. Production candidate discovery checks the
+marker directly, and prospective trigger subtraction uses
+`CalibrationLedgerSnapshot.post_cutoff_live_observations()`. At consumption,
+the acceptance artifact's `prior_observation_set` must exactly equal the
+import-marked ledger prefix at its cutoff (attempt ID, content ID,
+classification disposition, and epoch); any omission, addition, or live row in
+that prefix refuses.
 
 ### Ruled disposition table
 
@@ -71,23 +79,42 @@ shape is:
         "instrument_evidence.json": "...",
         "manifest.json": "..."
       },
-      "disposition": "valid | systematic-invalid | ordinary-invalid | abandoned"
+      "disposition": "valid | systematic-invalid | ordinary-invalid"
     }
   ]
 }
 ```
 
-The table member order is non-authoritative. The importer requires unique
-attempt and content IDs, a complete five-artifact hash map, a content ID that
-is exactly the canonical hash of the manifest/evidence byte hashes, and one
-final disposition.
+The table's exact raw bytes are authenticated by required
+`--expected-table-sha256`, and that digest is recorded in the prepared plan and
+bootstrap summary. The table member order is non-authoritative. The importer
+requires unique attempt and content IDs, a complete five-artifact hash map, a
+content ID that is exactly the canonical hash of the manifest/evidence byte
+hashes, and one importable disposition. `abandoned`, `unresolved`, and every
+other disposition outside the three values above refuse.
 
-For every supplied custody directory the importer reads the actual bytes,
-recomputes all five hashes and the content ID, verifies the manifest's complete
-artifact table, verifies the evidence document's raw/events/trace hashes,
-extracts the six-field epoch and full T1 binding from the authenticated
-evidence, and preserves the source numeric lexemes for capture time and bound.
-The authenticated exact-epoch content set must equal the table exactly. Every
+The reviewed custody manifest shape is:
+
+```json
+{
+  "schema_version": "joulewise.calibration_historical_import_custody_manifest.v1",
+  "ledger_schema": "joulewise.calibration_observation_ledger.v1",
+  "members": {
+    "content-id-64-lowercase-hex": "/exact/absolute/custody/locator"
+  }
+}
+```
+
+Its exact raw-byte digest is authenticated by required
+`--expected-custody-manifest-sha256` and reported in the bootstrap summary.
+
+For every manifest-pinned custody directory the importer opens contained
+no-follow descriptors, reads the actual bytes, recomputes all five hashes and
+the content ID, verifies the manifest's complete artifact table, verifies the
+evidence document's raw/events/trace hashes, extracts the six-field epoch and
+full T1 binding from the authenticated evidence, and preserves the source
+numeric lexemes for capture time and bound.
+The authenticated manifest content set must equal the table exactly. Every
 selected attempt ID and artifact hash must equal its table row. Any mismatch,
 missing member, extra member, malformed primary document, or absent
 hash-complete custody copy refuses.
@@ -101,12 +128,15 @@ Both dry-run and execution require:
   all-zero genesis digest.
 
 Execution prepares and canonicalizes the entire chain in memory, obtains the
-exclusive ledger lock, rechecks both genesis conditions, appends the whole
-chain in one write, flushes, and fsyncs once. A write or fsync exception rolls
-the ledger back to zero bytes and refuses. A crash that defeats rollback still
-cannot be mistaken for success: the genesis pin disagrees with any complete
-physical extension, while a partial JSONL append is malformed. Retrying after
-a successful import refuses because the ledger is nonempty.
+exclusive ledger lock, rechecks both genesis conditions, and immediately
+re-opens all five artifacts for every member through contained no-follow
+descriptors. Every hash must still equal the prepared plan. It then writes and
+fsyncs the complete payload to a sibling staging file and atomically replaces
+the empty ledger. Until replacement, readers see only genesis; after
+replacement, readers see only the complete chain. A write, fsync, or
+reauthentication failure leaves zero reader-visible receipts. Process death
+mid-stage likewise leaves a retryable genesis ledger. Retrying after a
+successful replacement refuses because the ledger is nonempty.
 
 The importer never writes the head pin. After execution, claim evaluation is
 expected to refuse until the lead has reviewed and committed the exact printed
@@ -115,13 +145,23 @@ pin, preserving D-109 R1.4's anti-rollback boundary.
 ### Bootstrap CLI
 
 `scripts/calibration_ledger_bootstrap.py` is dry-run unless `--execute` is
-present. Required inputs are `--disposition-table`, `--checkout-root`, and one
-or more run, `instrument_validation`, or custody roots. `--ledger` and
-`--head-pin` override their repository defaults.
+present. Both dry-run and execution require `--disposition-table`,
+`--expected-table-sha256`, `--custody-manifest`, and
+`--expected-custody-manifest-sha256`. Zero or more run,
+`instrument_validation`, or custody roots may be supplied only as the strict
+cross-check described above. `--checkout-root` supplies the relative ordering
+base for manifest generation/cross-check discovery; `--ledger` and `--head-pin`
+override repository defaults.
+
+Manifest generation requires `--emit-custody-manifest`, the authenticated
+disposition table, `--checkout-root`, and all review roots. It prints one
+pretty, key-sorted JSON manifest to stdout, prints the SHA-256 of those exact
+bytes to stderr, and performs no ledger or pin write. The reviewed stdout bytes
+and printed digest then become the required normal-mode inputs.
 
 Dry-run creates no ledger or pin. Standard output is byte-stable NDJSON: one
 canonical `receipt` record for every receipt, followed by one
-`bootstrap-summary` containing the receipt count, final sequence/head, head-pin
-object, and exact pretty-printed head-pin file content. `--execute` prints the
-same chain after the single atomic append, with `executed=true`; it still does
-not write the pin.
+`bootstrap-summary` containing both input digests, the receipt count, final
+sequence/head, head-pin object, and exact pretty-printed head-pin file content.
+`--execute` prints the same chain after the single atomic append, with
+`executed=true`; it still does not write the pin.
