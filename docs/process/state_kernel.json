@@ -2792,54 +2792,6 @@
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
     },
-    "T3-AMEND-01": {
-      "acceptance": {
-        "evidence": [
-          "Operating orders 1a-1e land as amended/narrowed, including the lease-resolution clause, ingestion-event fields, and route narrowing + two-arc pilot",
-          "Originator provisos land: hint not authority, observed-at-version, fail-closed unknowns, corroborating fields",
-          "Q3e merged effort-cap rule lands",
-          "SX5 scoping lands: t3 is the main driver when in use, never mandatory; no t3 ceremony in plain claude sessions",
-          "Full-access flag-mapping custody artifact capture lands",
-          "D-080 amendment lands: numeric backstop + mechanical definitions",
-          "A cross-check against the synthesis amendment list shows no amendment dropped"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/T3-AMEND-01/acceptance",
-          "label": "T3-AMEND-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Every amendment ratified by the t3-doctrine gate synthesis lands in bridge-protocol §4/§6/§7/§8 and the affected skills, cross-checked against the synthesis amendment list with none dropped."
-      },
-      "authority": {
-        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
-        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "PR #100 merged 2026-08-05 (f75d12b) under D-072 with Ed's explicit go; T3-AMEND-01 is the first desk item after",
-            "path": "docs/decision_log.md"
-          },
-          "kind": "task",
-          "required": "In-flight CAL-BRACKET-D079-01 round-2 chain lands through PR; T3-AMEND-01 is the first desk item after",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "CAL-BRACKET-D079-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Bridge-protocol §4/§6/§7/§8 + skills amendments carrying EVERY amendment from the t3-doctrine gate synthesis: operating orders 1a-1e as amended/narrowed (incl. lease-resolution clause, ingestion-event fields, route narrowing + two-arc pilot), originator provisos (hint not authority, observed-at-version, fail-closed unknowns, corroborating fields), the Q3e merged effort-cap rule, SX5 scoping (t3 = main driver when in use, never mandatory; no t3 ceremony in plain claude sessions), Full-access flag-mapping custody artifact capture, and the D-080 amendment (numeric backstop + mechanical definitions).",
-      "id": "T3-AMEND-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 11,
-      "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis. First desk item after the in-flight CAL-BRACKET chain lands through PR.",
-      "stop_card": null
-    },
     "T3-CHAR-PAIR-01": {
       "acceptance": {
         "evidence": [

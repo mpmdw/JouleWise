@@ -80,7 +80,7 @@ EXPECTED_IDS = {
     # 2026-08-03 t3-drive chain mint (Ed directive ~23:55 + the t3-doctrine
     # gate synthesis): agent-lane rows.
     "QUIET-GUARD-01", "SEC5A-REMOTE-01", "WO-T3-VIS-01",
-    "T3-AMEND-01", "COLDGATE-VALIDATOR-01",
+    "COLDGATE-VALIDATOR-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-006", "P2-010", "P2-019", "P2-020",
@@ -100,7 +100,7 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "QA-10B-EXISTING-RETRY",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
-                "CAL-BRACKET-D079-01"}
+                "CAL-BRACKET-D079-01", "T3-AMEND-01"}
 
 
 def load_kernel():
@@ -255,11 +255,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_65(self):
+    def test_exact_live_id_set_64(self):
         # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
-        # merged f75d12b; Completed table owns the record).
+        # merged f75d12b). 65 -> 64: T3-AMEND-01 retired the same day
+        # (PR #101 merged 906ddf9). Completed table owns both records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 65)
+        self.assertEqual(len(self.tasks), 64)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
