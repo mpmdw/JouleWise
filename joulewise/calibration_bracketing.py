@@ -39,7 +39,10 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import CalibrationBracketingPolicy
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
-ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2.fixture.v1"
+ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2"
+ACCEPTANCE_FIXTURE_SCHEMA = (
+    "joulewise.calibration_acceptance_bound.v2.fixture.v1"
+)
 ACCEPTANCE_EVALUATION_SCHEMA = "joulewise.calibration_acceptance_evaluation.v2"
 DEFAULT_ACCEPTANCE_BOUND_PATH = (
     Path(__file__).resolve().parents[1]
@@ -49,6 +52,9 @@ DEFAULT_ACCEPTANCE_BOUND_PATH = (
 )
 DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
+)
+ISSUED_ACCEPTANCE_BOUND_SHA256 = (
+    "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 ESTIMATOR_CODE_PATHS = (
@@ -166,14 +172,57 @@ def _valid_acceptance_bound(value: Any) -> bool:
     issuance = value.get("issuance")
     backfill = value.get("backfill_candidate")
     derivation = value.get("decimal_derivation")
+    role = value.get("artifact_role")
+    if role == "schema_fixture_unissued":
+        role_valid = (
+            value.get("schema_version") == ACCEPTANCE_FIXTURE_SCHEMA
+            and isinstance(issuance, Mapping)
+            and issuance.get("status") == "unratified_fixture"
+            and issuance.get("claim_eligible") is False
+            and isinstance(cutoff, Mapping)
+            and cutoff.get("sequence") == 0
+            and cutoff.get("head_digest") == "0" * 64
+            and cutoff.get("role")
+            == "fixture_genesis_not_a_production_issuance_cutoff"
+            and isinstance(backfill, Mapping)
+            and backfill.get("status") == "unratified_candidate_only"
+            and backfill.get("production_issuance_blocked") is True
+        )
+        allowed_prior_dispositions = {
+            "valid",
+            "systematic-invalid",
+            "ordinary-invalid",
+            "blind-holdout",
+            "unresolved",
+        }
+    elif role == "issued":
+        role_valid = (
+            value.get("schema_version") == ACCEPTANCE_BOUND_SCHEMA
+            and isinstance(issuance, Mapping)
+            and issuance.get("status") == "issued"
+            and issuance.get("claim_eligible") is True
+            and isinstance(cutoff, Mapping)
+            and isinstance(cutoff.get("sequence"), int)
+            and not isinstance(cutoff.get("sequence"), bool)
+            and cutoff.get("sequence") > 0
+            and _valid_sha256(cutoff.get("head_digest"))
+            and cutoff.get("head_digest") != "0" * 64
+            and cutoff.get("role") == "issued_acceptance_baseline"
+            and isinstance(backfill, Mapping)
+            and backfill.get("status") == "issued"
+            and backfill.get("production_issuance_blocked") is False
+        )
+        allowed_prior_dispositions = {
+            "valid",
+            "systematic-invalid",
+            "ordinary-invalid",
+        }
+    else:
+        return False
     if (
-        value.get("schema_version") != ACCEPTANCE_BOUND_SCHEMA
+        not role_valid
         or value.get("acceptance_id") != "d079_calibration_acceptance_v2_n19"
         or value.get("decision_ids") != ["D-102", "D-109"]
-        or value.get("artifact_role") != "schema_fixture_unissued"
-        or not isinstance(issuance, Mapping)
-        or issuance.get("status") != "unratified_fixture"
-        or issuance.get("claim_eligible") is not False
         or value.get("derivation_sha256") != _canonical_sha256(core)
         or not isinstance(identity, Mapping)
         or set(identity) != set(ACCEPTANCE_IDENTITY_FIELDS)
@@ -204,8 +253,6 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or len(corpus["members"]) != 19
         or not isinstance(cutoff, Mapping)
         or cutoff.get("ledger_schema") != LEDGER_SCHEMA
-        or cutoff.get("sequence") != 0
-        or cutoff.get("head_digest") != "0" * 64
         or not isinstance(prior, Mapping)
         or prior.get("cutoff")
         != {
@@ -214,11 +261,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
             "ledger_schema": cutoff.get("ledger_schema"),
         }
         or not isinstance(prior.get("epoch_catalog"), Mapping)
+        or set(prior["epoch_catalog"]) != {"d079_epoch"}
         or prior["epoch_catalog"].get("d079_epoch") != identity
         or not isinstance(prior.get("observations"), list)
-        or not isinstance(backfill, Mapping)
-        or backfill.get("status") != "unratified_candidate_only"
-        or backfill.get("production_issuance_blocked") is not True
         or not isinstance(derivation, Mapping)
         or derivation.get("numeric_semantics") != "decimal_source_lexemes"
     ):
@@ -251,6 +296,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
         return False
 
     prior_ids: list[str] = []
+    prior_attempt_ids: list[str] = []
     prior_member_ids: set[str] = set()
     for observation in prior["observations"]:
         if (
@@ -259,23 +305,35 @@ def _valid_acceptance_bound(value: Any) -> bool:
             != {"content_id", "epoch_id", "disposition", "attempt_id"}
             or not _valid_sha256(observation.get("content_id"))
             or observation.get("epoch_id") != "d079_epoch"
-            or observation.get("disposition")
-            not in {
-                "valid",
-                "systematic-invalid",
-                "ordinary-invalid",
-                "blind-holdout",
-                "unresolved",
-            }
+            or observation.get("disposition") not in allowed_prior_dispositions
             or not isinstance(observation.get("attempt_id"), str)
             or not observation.get("attempt_id")
         ):
             return False
         prior_ids.append(observation["content_id"])
+        prior_attempt_ids.append(observation["attempt_id"])
         if observation["attempt_id"] in member_ids:
             prior_member_ids.add(observation["attempt_id"])
-    if len(prior_ids) != len(set(prior_ids)) or prior_member_ids != set(member_ids):
+    if (
+        len(prior_ids) != len(set(prior_ids))
+        or len(prior_attempt_ids) != len(set(prior_attempt_ids))
+        or prior_member_ids != set(member_ids)
+    ):
         return False
+    if role == "issued":
+        disposition_counts = {
+            disposition: sum(
+                observation["disposition"] == disposition
+                for observation in prior["observations"]
+            )
+            for disposition in sorted(allowed_prior_dispositions)
+        }
+        if (
+            len(prior["observations"]) != 38
+            or cutoff["sequence"] != 2 * len(prior["observations"])
+            or backfill.get("candidate_inventory") != disposition_counts
+        ):
+            return False
     member_content_ids = {
         content_id_from_artifact_hashes(
             {
@@ -377,13 +435,29 @@ def load_calibration_acceptance_bound(
 
     try:
         raw = Path(path).read_bytes()
-        value = json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except OSError:
         return None
-    # Any file route is authenticated by byte equality with the checked-in
-    # artifact.  A caller cannot turn an alternate self-consistent document
-    # into authority merely by choosing another path.
-    if hashlib.sha256(raw).hexdigest() != DEFAULT_ACCEPTANCE_BOUND_SHA256:
+    return _acceptance_bound_from_authenticated_bytes(raw)
+
+
+def _acceptance_bound_from_authenticated_bytes(
+    raw: bytes,
+) -> dict[str, Any] | None:
+    """Parse acceptance bytes only when their role-indexed pin authenticates."""
+
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    # Any file route is authenticated by one of the two reviewed exact-byte
+    # states: the genesis fixture retained for pre-issuance tests, or the
+    # deterministically emitted issued artifact. A caller cannot turn an
+    # alternate self-consistent document into authority by choosing a path.
+    expected_sha256 = {
+        "schema_fixture_unissued": DEFAULT_ACCEPTANCE_BOUND_SHA256,
+        "issued": ISSUED_ACCEPTANCE_BOUND_SHA256,
+    }.get(value.get("artifact_role") if isinstance(value, Mapping) else None)
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
         return None
     if not _valid_acceptance_bound(value):
         return None
@@ -399,6 +473,16 @@ def _authenticated_explicit_acceptance_bound(
     if pinned is None or dict(value) != pinned:
         return None
     return pinned
+
+
+def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
+    """Return the reviewed exact-byte pin for a validated artifact role."""
+
+    return (
+        ISSUED_ACCEPTANCE_BOUND_SHA256
+        if artifact.get("artifact_role") == "issued"
+        else DEFAULT_ACCEPTANCE_BOUND_SHA256
+    )
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -754,13 +838,17 @@ def evaluate_calibration_bracket(
             },
         }
         return result, ("calibration_acceptance_bound_stale",)
-    if not _allow_unissued_fixture:
+    artifact_role = artifact["artifact_role"]
+    artifact_sha256 = _acceptance_artifact_sha256(artifact)
+    if artifact_role == "schema_fixture_unissued" and not _allow_unissued_fixture:
         result["acceptance"] = {
             "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
             "artifact": {
                 "acceptance_id": artifact["acceptance_id"],
-                "artifact_sha256": DEFAULT_ACCEPTANCE_BOUND_SHA256,
-                "authentication": "checked_in_byte_sha256_pin",
+                "artifact_sha256": artifact_sha256,
+                "authentication": "checked_in_genesis_fixture_byte_sha256_pin",
+                "artifact_role": artifact_role,
+                "claim_eligible": False,
             },
             "freshness": {
                 "status": "stale",
@@ -769,6 +857,24 @@ def evaluate_calibration_bracket(
         }
         return result, ("calibration_acceptance_bound_stale",)
     cutoff = artifact["ledger_cutoff"]
+    result["acceptance"] = {
+        "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
+        "artifact": {
+            "acceptance_id": artifact["acceptance_id"],
+            "artifact_sha256": artifact_sha256,
+            "authentication": (
+                "checked_in_issued_artifact_byte_sha256_pin"
+                if artifact_role == "issued"
+                else "checked_in_genesis_fixture_byte_sha256_pin"
+            ),
+            "artifact_role": artifact_role,
+            "claim_eligible": False,
+        },
+        "freshness": {
+            "status": "stale",
+            "reason": "acceptance_artifact_ledger_authentication_pending",
+        },
+    }
     if ledger_snapshot is None:
         return result, ("calibration_ledger_snapshot_required",)
     if ledger_snapshot.refusal_reasons:
@@ -777,6 +883,11 @@ def evaluate_calibration_bracket(
         ledger_snapshot.baseline_sequence != cutoff["sequence"]
         or ledger_snapshot.baseline_digest != cutoff["head_digest"]
         or ledger_snapshot.ledger_schema != cutoff["ledger_schema"]
+        or artifact_role == "issued"
+        and (
+            ledger_snapshot.head_sequence <= 0
+            or ledger_snapshot.head_digest == "0" * 64
+        )
     ):
         return result, ("calibration_ledger_baseline_missing",)
     if not _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot):
@@ -809,8 +920,14 @@ def evaluate_calibration_bracket(
         "schema_version": ACCEPTANCE_EVALUATION_SCHEMA,
         "artifact": {
             "acceptance_id": artifact["acceptance_id"],
-            "artifact_sha256": DEFAULT_ACCEPTANCE_BOUND_SHA256,
-            "authentication": "checked_in_byte_sha256_pin",
+            "artifact_sha256": artifact_sha256,
+            "authentication": (
+                "checked_in_issued_artifact_byte_sha256_pin"
+                if artifact_role == "issued"
+                else "checked_in_genesis_fixture_byte_sha256_pin"
+            ),
+            "artifact_role": artifact_role,
+            "claim_eligible": artifact_role == "issued",
             "derivation_sha256": artifact["derivation_sha256"],
         },
         "freshness": {

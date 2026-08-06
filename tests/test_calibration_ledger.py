@@ -19,6 +19,11 @@ from unittest import mock
 
 import joulewise.calibration_ledger as calibration_ledger
 from scripts import calibration_ledger_bootstrap as bootstrap_cli
+from joulewise.calibration_bracketing import (
+    _canonical_sha256 as acceptance_canonical_sha256,
+    _valid_acceptance_bound,
+    load_calibration_acceptance_bound,
+)
 from joulewise.calibration_ledger import (
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
@@ -44,6 +49,24 @@ from joulewise.calibration_ledger import (
     prepare_historical_import,
 )
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+
+
+_REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
+_REAL_D079_CUSTODY_MANIFEST = Path(
+    "/private/tmp/d079-custody-manifest.lead.json"
+)
+_REAL_D079_TABLE_SHA256 = (
+    "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
+)
+_REAL_D079_CUSTODY_MANIFEST_SHA256 = (
+    "99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078"
+)
+_ISSUED_D079_DERIVATION_SHA256 = (
+    "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+)
+_ISSUED_D079_FILE_SHA256 = (
+    "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+)
 
 
 class CalibrationLedgerTests(unittest.TestCase):
@@ -437,6 +460,249 @@ class CalibrationLedgerTests(unittest.TestCase):
         )
         self.assertFalse(dry_ledger.exists())
 
+    @unittest.skipUnless(
+        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
+        "lead-reviewed D-079 import inputs are unavailable",
+    )
+    def test_d079_issued_artifact_mode_is_deterministic_and_write_explicit(
+        self,
+    ) -> None:
+        script = Path(__file__).resolve().parents[1] / "scripts" / (
+            "calibration_ledger_bootstrap.py"
+        )
+        dry_ledger = self.root / "issued-mode-ledger.jsonl"
+        emitted_path = self.root / "issued-acceptance.json"
+        command = [
+            sys.executable,
+            str(script),
+            "--disposition-table",
+            str(_REAL_D079_TABLE),
+            "--expected-table-sha256",
+            _REAL_D079_TABLE_SHA256,
+            "--custody-manifest",
+            str(_REAL_D079_CUSTODY_MANIFEST),
+            "--expected-custody-manifest-sha256",
+            _REAL_D079_CUSTODY_MANIFEST_SHA256,
+            "--checkout-root",
+            "/Users/edr",
+            "--ledger",
+            str(dry_ledger),
+            "--prepare-issued-artifact",
+        ]
+        first = subprocess.run(command, check=True, capture_output=True)
+        self.assertEqual(first.stderr, b"")
+        self.assertFalse(dry_ledger.exists())
+        self.assertFalse(emitted_path.exists())
+        rows = [json.loads(line) for line in first.stdout.splitlines()]
+        issued = next(
+            row for row in rows if row["record"] == "issued-acceptance-artifact"
+        )
+        summary = rows[-1]
+        self.assertEqual(summary["record"], "bootstrap-summary")
+        self.assertEqual(summary["final_sequence"], 76)
+        self.assertEqual(
+            summary["head_digest"],
+            "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+        )
+        self.assertEqual(
+            issued["derivation_sha256"], _ISSUED_D079_DERIVATION_SHA256
+        )
+        self.assertEqual(issued["artifact_file_sha256"], _ISSUED_D079_FILE_SHA256)
+        self.assertEqual(
+            len(issued["artifact"]["prior_observation_set"]["observations"]),
+            38,
+        )
+        self.assertEqual(issued["artifact"]["derivation_corpus"]["n"], 19)
+
+        plan = prepare_historical_import(
+            checkout_root=Path("/Users/edr"),
+            disposition_table_raw=_REAL_D079_TABLE.read_bytes(),
+            expected_disposition_table_sha256=_REAL_D079_TABLE_SHA256,
+            custody_manifest_raw=_REAL_D079_CUSTODY_MANIFEST.read_bytes(),
+            expected_custody_manifest_sha256=(
+                _REAL_D079_CUSTODY_MANIFEST_SHA256
+            ),
+        )
+        source = load_calibration_acceptance_bound()
+        self.assertIsNotNone(source)
+        reversed_source = dict(reversed(tuple(source.items())))
+        canonical_artifact = bootstrap_cli._issued_acceptance_artifact(
+            plan, source
+        )
+        reordered_artifact = bootstrap_cli._issued_acceptance_artifact(
+            plan, reversed_source
+        )
+        canonical_bytes = bootstrap_cli._issued_artifact_bytes(
+            canonical_artifact
+        )
+        reordered_bytes = bootstrap_cli._issued_artifact_bytes(
+            reordered_artifact
+        )
+        self.assertEqual(canonical_bytes, reordered_bytes)
+        self.assertEqual(
+            hashlib.sha256(reordered_bytes).hexdigest(),
+            _ISSUED_D079_FILE_SHA256,
+        )
+
+        class BinaryOutput:
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+        success_stdout = BinaryOutput()
+        with mock.patch.object(
+            bootstrap_cli,
+            "_issued_artifact_bytes",
+            wraps=bootstrap_cli._issued_artifact_bytes,
+        ) as serialize:
+            prepared = bootstrap_cli._prepare_issued_acceptance_artifact(
+                plan, source
+            )
+            with mock.patch.object(bootstrap_cli.sys, "stdout", success_stdout):
+                bootstrap_cli._emit(
+                    plan,
+                    executed=True,
+                    outcome="committed",
+                    prepared_issued_artifact=prepared,
+                )
+        self.assertEqual(serialize.call_count, 1)
+        success_rows = [
+            json.loads(line)
+            for line in success_stdout.buffer.getvalue().splitlines()
+        ]
+        self.assertEqual(
+            success_rows[-2]["artifact_file_sha256"],
+            _ISSUED_D079_FILE_SHA256,
+        )
+        self.assertEqual(
+            success_rows[-1]["issued_artifact_file_sha256"],
+            _ISSUED_D079_FILE_SHA256,
+        )
+
+        emit_command = [
+            argument
+            for argument in command
+            if argument != "--prepare-issued-artifact"
+        ]
+        emit_command.extend(["--emit-issued-artifact", str(emitted_path)])
+        emitted = subprocess.run(emit_command, check=True, capture_output=True)
+        self.assertFalse(dry_ledger.exists())
+        self.assertTrue(emitted_path.is_file())
+        self.assertEqual(
+            hashlib.sha256(emitted_path.read_bytes()).hexdigest(),
+            _ISSUED_D079_FILE_SHA256,
+        )
+        emitted_rows = [json.loads(line) for line in emitted.stdout.splitlines()]
+        self.assertEqual(
+            emitted_rows[-1]["issued_artifact_derivation_sha256"],
+            _ISSUED_D079_DERIVATION_SHA256,
+        )
+
+    def test_issued_artifact_rejects_self_consistent_unpinned_template(
+        self,
+    ) -> None:
+        source = load_calibration_acceptance_bound()
+        self.assertIsNotNone(source)
+        tampered = json.loads(json.dumps(source))
+        tampered["issuance"]["reason"] = "self-consistent but unauthenticated"
+        tampered["derivation_sha256"] = acceptance_canonical_sha256(
+            {
+                key: value
+                for key, value in tampered.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertTrue(_valid_acceptance_bound(tampered))
+
+        with self.assertRaisesRegex(ValueError, "role-indexed byte pin"):
+            bootstrap_cli._issued_acceptance_artifact(object(), tampered)
+
+    def test_execute_invalid_artifact_source_refuses_without_ledger_write(
+        self,
+    ) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        table_path = self.root / "invalid-source-dispositions.json"
+        table_path.write_bytes(import_args["disposition_table_raw"])
+        manifest_path = self.root / "invalid-source-custody.json"
+        manifest_path.write_bytes(import_args["custody_manifest_raw"])
+        source = load_calibration_acceptance_bound()
+        self.assertIsNotNone(source)
+        tampered = json.loads(json.dumps(source))
+        tampered["issuance"]["reason"] = "invalid source must precede commit"
+        tampered["derivation_sha256"] = acceptance_canonical_sha256(
+            {
+                key: value
+                for key, value in tampered.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertTrue(_valid_acceptance_bound(tampered))
+        source_path = self.root / "invalid-source.json"
+        source_path.write_text(json.dumps(tampered), encoding="utf-8")
+        ledger = self.root / "must-remain-absent.jsonl"
+        script = Path(__file__).resolve().parents[1] / "scripts" / (
+            "calibration_ledger_bootstrap.py"
+        )
+
+        refused = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--disposition-table",
+                str(table_path),
+                "--expected-table-sha256",
+                import_args["expected_disposition_table_sha256"],
+                "--custody-manifest",
+                str(manifest_path),
+                "--expected-custody-manifest-sha256",
+                import_args["expected_custody_manifest_sha256"],
+                "--checkout-root",
+                str(checkout),
+                "--ledger",
+                str(ledger),
+                "--head-pin",
+                str(self.pin),
+                "--acceptance-artifact",
+                str(source_path),
+                "--prepare-issued-artifact",
+                "--execute",
+                str(root),
+            ],
+            check=False,
+            capture_output=True,
+        )
+
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn(b"role-indexed byte pin", refused.stderr)
+        self.assertFalse(ledger.exists())
+
+    def test_issued_artifact_mid_write_failure_preserves_destination(self) -> None:
+        payload = b'{"artifact":"complete"}\n'
+
+        def partial_write_then_fail(handle, raw):
+            handle.write(raw[: len(raw) // 2])
+            handle.flush()
+            raise OSError("injected issued-artifact mid-write failure")
+
+        for name, prior in (("existing", b"prior-anchor\n"), ("absent", None)):
+            with self.subTest(destination=name):
+                destination = self.root / f"{name}-issued.json"
+                if prior is not None:
+                    destination.write_bytes(prior)
+                with mock.patch.object(
+                    bootstrap_cli,
+                    "_write_issued_artifact_payload",
+                    side_effect=partial_write_then_fail,
+                ):
+                    with self.assertRaisesRegex(OSError, "mid-write"):
+                        bootstrap_cli._atomic_emit_issued_artifact(
+                            destination, payload
+                        )
+                if prior is None:
+                    self.assertFalse(destination.exists())
+                else:
+                    self.assertEqual(destination.read_bytes(), prior)
+
     def test_historical_input_digest_pair_changes_committed_chain(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
         import_args = self._historical_import_args(table, custodies)
@@ -727,6 +993,33 @@ class CalibrationLedgerTests(unittest.TestCase):
 
         stdout = BinaryOutput()
         stderr = io.StringIO()
+        emitted_path = self.root / "uncertain-issued.json"
+        issued_artifact = {"derivation_sha256": "d" * 64}
+        issued_raw = bootstrap_cli._issued_artifact_bytes(issued_artifact)
+        issued_file_sha256 = hashlib.sha256(issued_raw).hexdigest()
+        issued_record = {
+            "schema_version": bootstrap_cli.ISSUED_ARTIFACT_OUTPUT_SCHEMA,
+            "record": "issued-acceptance-artifact",
+            "artifact": issued_artifact,
+            "derivation_sha256": issued_artifact["derivation_sha256"],
+            "artifact_file_sha256": issued_file_sha256,
+            "artifact_file_content": issued_raw.decode("utf-8"),
+        }
+        prepared_issued_artifact = (
+            bootstrap_cli.PreparedIssuedAcceptanceArtifact(
+                artifact_file_bytes=issued_raw,
+                artifact_file_sha256=issued_file_sha256,
+                derivation_sha256=issued_artifact["derivation_sha256"],
+                output_record_bytes=canonical_json_bytes(issued_record) + b"\n",
+                summary_fields=(
+                    (
+                        "issued_artifact_derivation_sha256",
+                        issued_artifact["derivation_sha256"],
+                    ),
+                    ("issued_artifact_file_sha256", issued_file_sha256),
+                ),
+            )
+        )
         argv = [
             "calibration_ledger_bootstrap.py",
             "--disposition-table",
@@ -741,6 +1034,8 @@ class CalibrationLedgerTests(unittest.TestCase):
             str(self.ledger),
             "--head-pin",
             str(self.pin),
+            "--emit-issued-artifact",
+            str(emitted_path),
             "--execute",
             str(root),
         ]
@@ -750,15 +1045,34 @@ class CalibrationLedgerTests(unittest.TestCase):
             mock.patch.object(bootstrap_cli.sys, "stderr", stderr),
             mock.patch.object(
                 bootstrap_cli,
+                "prepare_historical_import",
+                return_value=plan,
+            ),
+            mock.patch.object(
+                bootstrap_cli,
+                "_prepare_issued_acceptance_artifact",
+                return_value=prepared_issued_artifact,
+            ),
+            mock.patch.object(
+                bootstrap_cli,
                 "bootstrap_historical_import",
                 side_effect=HistoricalImportDurabilityUncertain(plan),
             ),
+            mock.patch.object(
+                bootstrap_cli,
+                "_issued_artifact_bytes",
+                side_effect=ValueError(
+                    "injected post-commit artifact serialization"
+                ),
+            ) as serialize,
         ):
             exit_code = bootstrap_cli.main()
+        serialize.assert_not_called()
         self.assertEqual(exit_code, bootstrap_cli.DURABILITY_UNCERTAIN_EXIT)
         self.assertNotEqual(exit_code, 2)
         rows = [json.loads(line) for line in stdout.buffer.getvalue().splitlines()]
-        self.assertEqual(len(rows), len(plan.receipts) + 1)
+        self.assertEqual(len(rows), len(plan.receipts) + 2)
+        self.assertEqual(rows[-2]["record"], "issued-acceptance-artifact")
         self.assertEqual(rows[-1]["record"], "bootstrap-summary")
         self.assertTrue(rows[-1]["executed"])
         self.assertEqual(
@@ -773,6 +1087,10 @@ class CalibrationLedgerTests(unittest.TestCase):
             rows[-1]["custody_manifest_sha256"],
             plan.custody_manifest_sha256,
         )
+        self.assertEqual(
+            rows[-1]["issued_artifact_file_sha256"], issued_file_sha256
+        )
+        self.assertEqual(emitted_path.read_bytes(), issued_raw)
         self.assertIn("rerun the identical --execute invocation", stderr.getvalue())
 
     def test_tampered_nonempty_ledger_never_enters_confirm_path(self) -> None:

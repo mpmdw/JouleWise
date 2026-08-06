@@ -180,6 +180,51 @@ The importer never writes the head pin. After execution, claim evaluation is
 expected to refuse until the lead has reviewed and committed the exact printed
 pin, preserving D-109 R1.4's anti-rollback boundary.
 
+## Issued D-079 acceptance artifact
+
+The acceptance consumer recognizes two exact-byte roles. The retained genesis
+test fixture uses schema
+`joulewise.calibration_acceptance_bound.v2.fixture.v1`, role
+`schema_fixture_unissued`, and file SHA-256
+`9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb`.
+It remains useful only to pre-issuance tests and production evaluation always
+refuses it. The deterministic issued document uses schema
+`joulewise.calibration_acceptance_bound.v2`, role `issued`, and exact emitted
+file SHA-256
+`316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985`.
+No other role, schema, or file bytes are accepted, even when its internal
+whole-core digest is self-consistent.
+
+Issued-artifact authentication is conjunctive and fail-closed:
+
+1. The file must match the issued byte pin and its `derivation_sha256` must be
+   the canonical SHA-256 of every top-level key except `derivation_sha256`.
+2. The one threaded `CalibrationLedgerSnapshot` must have authenticated the
+   physical ledger against the repository-committed current head pin. Missing
+   ledger bytes, an uncommitted pin, rollback, a fork, or any physical/pinned
+   head mismatch refuses before the artifact can become claim-eligible.
+3. The artifact cutoff is passed to the snapshot loader as its baseline. The
+   exact digest must occur at the exact sequence in that authenticated chain,
+   and the evaluator rechecks the snapshot's baseline fields against the
+   artifact. A later committed live extension is permitted by D-109 R1.4; it
+   does not change the historical issuance cutoff.
+4. `prior_observation_set` must equal the complete import-marked observation
+   prefix through the cutoff, member for member by attempt ID, path-independent
+   content ID, classification disposition, and identity epoch. Any omission,
+   addition, duplicate, non-import row, or epoch divergence refuses.
+
+The artifact's stored `issuance.claim_eligible=true` is necessary but not
+sufficient. The evaluation result reports effective `claim_eligible=true`
+only after all four checks pass and a non-genesis ledger head is present.
+Before that point it reports false. The issued D-079 state is sequence 76 at
+head
+`08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`,
+with 38 import-marked, content-distinct observations: 30 valid, 2
+systematic-invalid, and 6 ordinary-invalid. The threshold-producing
+`derivation_corpus` remains n=19. The issued whole-core
+`derivation_sha256` is
+`4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02`.
+
 ### Bootstrap CLI
 
 `scripts/calibration_ledger_bootstrap.py` is dry-run unless `--execute` is
@@ -196,6 +241,53 @@ disposition table, `--checkout-root`, and all review roots. It prints one
 pretty, key-sorted JSON manifest to stdout, prints the SHA-256 of those exact
 bytes to stderr, and performs no ledger or pin write. The reviewed stdout bytes
 and printed digest then become the required normal-mode inputs.
+
+Issued-artifact preparation is a separate explicit mode over the same
+authenticated `HistoricalImportPlan`. `--prepare-issued-artifact` adds one
+`issued-acceptance-artifact` NDJSON record before the final bootstrap summary
+and performs no artifact write. The record contains the full artifact, its
+whole-core derivation digest, the exact pretty-printed file content, and the
+file-byte digest. `--acceptance-artifact` selects the current exact-byte
+fixture or already-issued template; its default is
+`configs/calibration/calibration_acceptance_d079_v2.json`.
+
+The issuance source is authenticated against the exact byte pin selected by
+its role before any issued document is built. Structural validity or a
+self-consistent recomputed `derivation_sha256` is not source authority. The
+builder normalizes from that authenticated pinned document, rather than from
+caller mapping insertion order, and uses the frozen schema-field order and
+fixed JSON separators. Consequently a top-level key-order variant of the same
+authenticated mapping produces byte-identical issued content at the reviewed
+`316113960c…` pin.
+
+`--emit-issued-artifact [PATH]` is the only artifact-writing switch. Omitting
+`PATH` selects that default acceptance path. The emitted observations are
+copied in ledger-prefix order only from
+`historical-import-v1-finalization` receipts; the tool does not rediscover or
+reclassify the corpus. It refuses unless the plan is exactly the ruled
+76-receipt head and 30/2/6 inventory, preserves the n=19 derivation corpus,
+sets the issued role/status/eligibility state, and recomputes the whole-core
+digest. This switch never writes the ledger head pin. A dry-run without the
+switch therefore remains fully read-only, including the acceptance artifact.
+
+Emission never truncates the destination in place. It writes the complete
+issued bytes to a sibling staging file, flushes and fsyncs that file, and then
+uses `os.replace` to atomically publish it. A staging write or fsync failure
+therefore leaves the prior destination bytes intact, or leaves the destination
+absent when it did not previously exist.
+
+When issuance preparation or emission is combined with `--execute`, ordering
+is validate then commit. Before the irreversible ledger call, the tool
+authenticates the source, builds and structurally validates the artifact,
+recomputes its whole-core digest, verifies its cutoff equals the prepared
+import head, verifies its prior set exactly equals the complete import prefix,
+checks the final issued byte pin, and completes any requested atomic artifact
+emission. Any failure in those steps exits `2` without creating or writing the
+ledger. Only then may `bootstrap_historical_import(execute=True)` run; no
+artifact preparation or artifact write occurs after that call. If the ledger
+commit instead reaches `committed_durability_uncertain`, the already-prepared
+artifact is included in the full receipt/summary output and the CLI preserves
+exit `3`.
 
 Dry-run creates no ledger or pin. Standard output is byte-stable NDJSON: one
 canonical `receipt` record for every receipt, followed by one
