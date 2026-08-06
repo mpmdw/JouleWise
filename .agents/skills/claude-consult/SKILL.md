@@ -12,9 +12,13 @@ itself started by Claude.
 
 ## Guardrails
 
-1. Do not use this skill if the current prompt contains
+1. Eligibility, delegated-session exclusion, the transitional convention, and
+   the non-authority-bearing limit on a transitional consult's result are
+   governed by contract §8 — the one normative home. Do not restate that rule
+   here; read §8 before invoking. The single operational trigger worth
+   repeating: never invoke if the current prompt contains
    `BRIDGE_ORIGIN: claude`. A legitimate top-level reverse call identifies its
-   origin as Codex and sets its remaining hop count to zero.
+   origin as Codex with hop count zero.
 2. Call the project Claude MCP `consult_fable` tool exactly once. Pass the
    optional `effort` parameter: `high` (default) for ordinary consults,
    `xhigh` for judgment-dense ones; other values are rejected. The bridge

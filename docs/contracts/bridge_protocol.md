@@ -55,6 +55,10 @@ Required fields:
 large files. Inline context SHOULD contain only the current ruling, unstable
 facts, and small controlling excerpts.
 
+Future gate packets MUST give source line ranges for their citations. Text
+labelled `verbatim` MUST be reproduced verbatim; paraphrase, ellipsis, or other
+editing MUST be labelled as such rather than presented as a verbatim excerpt.
+
 `ROLE` MUST NOT combine implementation, independent review, and final
 adjudication.
 
@@ -233,6 +237,60 @@ Reasoning effort does not determine transport. Interaction shape does.
 An xhigh discussion MAY use MCP. A long high-effort mechanical run SHOULD use
 CLI.
 
+### T3-mediated presentation, routing, and provenance
+
+T3 is the preferred presentation plane when it is in use. It is neither a
+mandatory nor an exclusive bridge plane, and it never becomes the compliance
+plane. These t3-specific rules apply only to t3-mediated activity. A plain
+Claude Code session remains first-class and carries no t3-specific ceremony.
+
+For a t3-mediated invocation, the tracked provenance record MUST distinguish
+four axes: `control_plane`, `transport`, `authority_class`, and `governance`
+(implementation follow-on: `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`).
+The selected task-shape route in the table above is the authoritative
+transport record. A rollout's `session_meta.originator` MAY be recorded beside
+that set only as a provenance hint. It is never the sole discriminator and
+never authority-bearing. The observed values `t3code_desktop` and
+`codex_cli_rs` are version-bound observations from CLI version `0.146.0`, not
+a closed enum or a compatibility promise. Classification authority comes from
+the §4 launch route and the lease event's §6 `owner_kind`. Absence of the
+optional hint never disables a route or classification. If the hint is present,
+an unknown value or a value contradictory to those authoritative fields fails
+closed: it does not establish native, wrapped, delegated, top-level, approval,
+or gate status.
+
+T3 `Full access` mode is prohibited for this repository; t3-mediated work uses
+only Supervised or Auto. The prohibition does not depend on an asserted
+UI-to-CLI flag mapping. In Auto, phone cards are post-hoc notifications and
+never approval evidence. Thread-side reports are inadmissible on approval
+semantics because the model is blind to the harness approval layer. Anything
+requiring Ed's eyes uses Supervised, and a claim that Supervised held or
+blocked an action requires harness-event evidence rather than the thread's own
+account.
+
+T3-native Codex threads are Ed-direct only. They MUST NOT receive
+lead-delegated or gate-bearing work. If their output is materially consumed,
+the lead MUST append a tracked ingestion event that binds the native session
+identity, output digest, lead disposition, and tracked process-trace location
+(implementation follow-on: `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`). A t3 activity
+marker or thread transcript alone is not that event.
+
+The tracked Codex subagent route is limited to substantial background or
+parallel Sol rounds that require operator-visible lifecycle state. It is a
+thin dispatch and presentation steward, not an implementation or adjudication
+authority, and the audited child ceremony remains controlling. Each wrapper
+invocation counts as a subagent invocation for D-080 accounting and MUST NOT be
+silently deduplicated from the child run. This conditional route is a two-arc
+pilot; each arc records whether Ed used the activity view, wrapper failures,
+latency, and Fable overhead before the default is retained or changed through
+its owning process.
+
+TUI operation remains available only outside `[QUIET-MAC]` work. Claim-bearing
+runs use an ordinary guarded shell with zero agent sessions; t3 availability
+does not relax the repository's zero-agent doctrine.
+
 If MCP work expands beyond a short bounded turn, the worker SHOULD stop at a
 safe boundary and return:
 
@@ -315,12 +373,21 @@ Lease events MUST include:
 - `baseline_manifest`
 - `baseline_digest`
 - `task`, `role`, and optional `thread_id`
-- `host` and optional caller-supplied `pid`
+- `host`
+- Optional process-identity fields `pid`, `process_start_time`, and
+  `process_ancestry` (an ordered ancestry record)
 - Event timestamp
 - Optional `expires_at`
 - Optional `note`
 - For overrides: conflicting lease ids, approver, reason, and resulting
   attribution policy
+
+`owner_kind` is an authoritative launch-route field, not a value inferred from
+rollout metadata. When a t3-mediated record also carries §4 `originator`, the
+two fields MUST be retained separately. Absence of the optional hint never
+disables a route or classification. A present unknown or contradictory hint
+cannot override `owner_kind` and fails closed for any classification that would
+confer authority.
 
 Conflict detection and acquisition MUST occur under the exclusive
 `.codex-bridge/bridge.lock`, held via a Python standard-library `fcntl.flock`.
@@ -374,6 +441,16 @@ missing recorded process may be marked `abandoned` under the bridge lock.
 Human leases and leases without a process require explicit lead abandonment.
 
 Stale leases become `abandoned`, never silently `released`.
+
+No pattern-kills; kill only manifest-recorded PIDs verified by start-time + ancestry.
+
+A t3 checkpoint revert is forbidden in the main tree. In a worktree it is a
+workspace mutation: stop writers; capture the current manifest and diff;
+record the intended revert; resolve every active bridge lease by explicit
+release or abandonment; and perform the revert. Delegation MUST NOT resume
+until a fresh invocation has acquired a fresh lease and captured a fresh
+baseline. A t3 checkpoint reference is never audit evidence, and a t3
+checkmark is never a bridge return envelope.
 
 Lease and thread events use separate logs and join through `invocation_id`.
 
@@ -495,6 +572,17 @@ arbitrary records remain lossless.
 The prompt MUST provide `BASE_HEAD`, `BASELINE_MANIFEST`, and
 `BASELINE_DIGEST`.
 
+A future native-write acceptance-gate exercise MUST be predeclared before the
+write. Its evidence MUST bind the native session identity and authoritative
+launch route to the governing manifest, baseline digest, declared scope,
+output digest, and resulting artifact or commit. A later narrative or
+retroactive route designation cannot establish the gate. This requirement is
+forward-looking; it does not reopen the one previously accepted exercise:
+commit `97d6e3d`, the isolated one-file `RUN_STATE.md` native-write gate exercise
+recorded in `RUN_STATE.md`'s T3 gate/probe log and accepted in
+`docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md` under
+“Acceptance-gate dispositions.”
+
 `scope-check` MUST receive the prompt-supplied digest through the required
 `--expect-digest sha256:...` argument, verify the manifest self-digest, and
 verify equality with that external anchor before using the manifest. A missing
@@ -555,6 +643,39 @@ protocol boundary, not filesystem enforcement.
 
 `consult_fable` is available only to a top-level Codex lead for one bounded,
 read-only peer judgment.
+
+In the represented steady state, top-level status is established by the
+authoritative §4 launch route and §6 `owner_kind`; the optional §4 `originator`
+hint cannot establish or elevate that status. Its absence never disables a
+consult, while a present unknown or contradictory value fails closed.
+
+**Normative rule.** Only an actually top-level Codex lead may invoke a reverse
+consult; a Claude-originated or delegated session is ineligible.
+
+**TRANSITIONAL — convention, not enforcement.** Until the four-axis provenance
+record, including its `authority_class` field, is representable through the
+implementation follow-on `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, the adapter has no
+authoritative signal for the caller's launch route or delegated status: it
+validates only the caller-supplied `BRIDGE_ORIGIN: codex` and
+`BRIDGE_HOPS_REMAINING: 0` lines, which neither prove top-level status nor
+create authority. **Mechanical acceptance of the caller-supplied header tuple is
+not proof of top-level status and does not establish reverse-consult
+authority.** During the transition the normative rule is therefore a
+best-effort convention, not a mechanically enforced eligibility test: a caller
+known or visibly marked delegated MUST NOT invoke, and a *present* unknown or
+contradictory delegated/origin marker fails closed — but wholly-absent status
+does not disable the consult (mirroring the §4 provenance rule; see §9,
+"Convention versus enforcement," for which properties are mechanically enforced
+versus convention-bound). **Fail closed at consumption:** a transitional
+consult result is non-authority-bearing advice — it cannot prove caller
+eligibility, satisfy an independent-review or approval requirement, establish
+gate status, expose privileged data, or displace lead adjudication. The
+transition ends only when `T3-PROV-SCHEMA-01` both represents the four-axis
+record (including `authority_class`) AND makes admission consume the
+authoritative §4 launch-route and §6 `owner_kind` evidence with rejection
+tests; merely defining or persisting the schema does not end it. Once that
+lands, the authoritative §4/§6 record supersedes this transitional convention.
 
 The caller's prompt MUST begin with:
 
@@ -700,7 +821,7 @@ Surface disposition is therefore:
 | `.claude/agents/codex.md` | Agent role and handoff | Contract/skill pointers plus canonical enforcement snippets |
 | `.claude/commands/codex.md` | Slash-command dispatch | Contract/skill pointers plus canonical enforcement snippets |
 | `.claude/skills/codex/SKILL.md` | Effort policy and operating sequence | Operating home; wire details remain contract pointers; canonical enforcement snippets stay local |
-| `.agents/skills/claude-consult/SKILL.md` | Reverse-consult invocation | Current receiver prose inventoried but unchanged; excluded from WO-020 edits by lead ruling |
+| `.agents/skills/claude-consult/SKILL.md` | Reverse-consult invocation | Receiver boundary pointing to contract §8; previously excluded from WO-020 edits by lead ruling, then amended by T3-AMEND-01 |
 
 ### Canonical enforcement snippets
 
