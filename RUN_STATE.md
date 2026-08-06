@@ -10,11 +10,67 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-06 — **CHECKPOINT for /clear (read the CHECKPOINT
-block immediately below FIRST).** Everything below the checkpoint is
-still-valid history.
+Last updated: 2026-08-06 AFTERNOON — **PR #109 MERGED (`c537386`); the
+re-mint is STRUCTURALLY BLOCKED at main and the fork AWAITS ED'S RULING.
+Read the AFTERNOON block first;** the morning checkpoint below it is
+executed history.
 
-## ✅ CHECKPOINT 2026-08-06 — resume here after /clear (Fable magistrate, marathon session)
+## ⏳ 2026-08-06 AFTERNOON — re-mint fork: historical consumption is closed at main; Ed's ruling owed
+
+**PR #109 merged on green** under D-072 at the gate-reviewed head
+`d85b4f9` (no post-review commits; ledger + custody backup verified
+byte-identical to the checkpoint sha before merge). `d079recon`
+worktree + local branch pruned. All three D-110 conditions were thereby
+satisfied — and the FIRST consumption attempt exposed a structural
+block.
+
+**THE FINDING (full record:
+`docs/process_traces/2026-08-06-d110-remint-fork/` — DIAGNOSIS,
+consult prompt+response, SYNTHESIS):** no historical window (a10,
+window-C, old window-D, 7B-floor, contrast — all pre-genesis) can pass
+authenticated max-bracket consumption at merged main. The issued ledger
+holds only import-marked receipts; candidate discovery excludes imports
+by design (CAL-BRACKET arc `63f43a68`, retained through issuance);
+future live receipts cannot causally bracket past windows. Every
+refusal was fail-closed; campaign logs sha-verified untouched (backups
+in `~/JouleWise-window-custody/d110-remint-20260806/log_backups/`).
+
+**Sol xhigh pre-decision consult (run `20260806T165843Z-10884`) +
+magistrate CONCUR: Option 2 — supersede the D-110 historical re-mint
+with THREE compact prospective windows** (fresh 1.5B decode floor,
+fresh 7B decode floor, fresh contrast; each live-bracketed under the
+issued regime, ~3 h class each). Chain: historical corpus → issued
+acceptance rule → live brackets → prospective floors → contrast.
+Option 1 (finite-allowlist historical candidacy) preserved as a
+cold-gated contingency only — semantics sketch is in the consult
+response. The consult verified all five historical bracket pairs exist
+physically (drifts 0.000167–0.003680 s, under the 0.010818 s screen) —
+the objection is provenance completeness, not causality.
+
+**ED OWES (his ruling moots a cold gate — apex authority):**
+1. Ratify superseding D-110's re-mint order with prospective
+   replacement (+ the D-113 dependency rewire the consult flags).
+2. MVP claim scope: decode contrast only, or more phase cells?
+3. Three quiet-mac nights scheduling appetite (§5A each).
+
+**Desk work unblocked regardless (consult §4, queue for the successor):**
+freeze the three window plans + budgets (new immutable identifiers —
+"Window D" name is taken); 1.5B decode-only floor plan from the proven
+10-absolute/40-null design; generalized mint pinsets w/ per-plan
+six-decimal literals (the D-084 literal `7.377086` refuses any
+corrected mint under EVERY option — closure is per-plan supply via the
+generalized path); freeze extraction specs/order manifests/
+evidence-root ids/contrast manifest; synthetic three-window live-ledger
+integration regression; D-102 successor-artifact packet; results/
+methods prose with placeholders.
+
+**Session ops notes:** verdict/extraction tooling gotchas (relative
+`--runs-dir` path-doubling; verdict >2 min; stale `campaign.lock` on a
+killed run) are recorded in the trace DIAGNOSIS. End-of-session
+bookkeeping (consistency sweep, council log, skill-usage log) still
+OWED.
+
+## ✅ CHECKPOINT 2026-08-06 morning — executed by the afternoon session above
 
 **IMMEDIATE RESUME ACTION (one live item):**
 1. **PR #109 (`impl/d079-issuance`) — merge on green, then RE-MINT.**
