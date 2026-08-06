@@ -621,6 +621,45 @@
       "status": "queued",
       "stop_card": null
     },
+    "CGV-HARDEN-01": {
+      "acceptance": {
+        "evidence": [
+          "The convening runner persists the validator receipt with a dirfd-relative write that closes the receipt-write TOCTOU",
+          "Receipt publication is atomic and includes file fsync plus parent-directory sync",
+          "Regression tests distinguish path replacement, durability failure, and successful atomic publication"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CGV-HARDEN-01/acceptance",
+          "label": "CGV-HARDEN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The convening runner durably persists validator receipts through a dirfd-relative, crash-atomic, fsync-complete write path."
+      },
+      "authority": {
+        "label": "2026-08-05 COLDGATE-VALIDATOR F3 consult Q2 receipt-persistence disposition",
+        "path": "docs/process_traces/2026-08-05-cgv-f3-consult/SYNTHESIS.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-08-05 F3 consult Q2 dissent",
+            "path": "docs/process_traces/2026-08-05-cgv-f3-consult/CONSULT-REPORT.md"
+          },
+          "rule": "Keep this row a sibling of COLDGATE-HANDOFF-01 and never merge them: durable receipt storage and validated-byte judge handoff have different contracts, tests, and failure consequences"
+        }
+      ],
+      "flags": [],
+      "goal": "Harden runner-owned receipt persistence after validator --receipt-out removal: use a dirfd-relative receipt write that closes receipt-write TOCTOU and supplies fsync plus directory-sync atomicity.",
+      "id": "CGV-HARDEN-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 53,
+      "status": "queued",
+      "status_note": "2026-08-05: runner-scoped because PR #103 removed the validator's --receipt-out; deliberately registered as a sibling of, never folded into, COLDGATE-HANDOFF-01.",
+      "stop_card": null
+    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -661,35 +700,74 @@
       "status": "shelved",
       "stop_card": null
     },
-    "COLDGATE-VALIDATOR-01": {
+    "CODEX-BRIDGE-SANDBOX-01": {
       "acceptance": {
         "evidence": [
-          "Validator implements the docs/process/coldgate_charter_registry.md packet spec",
-          "Charter v3 fold-ins honored: convening/disclosure clauses and the line-range relaxation",
-          "Discriminating tests cover accept and refuse paths"
+          "scripts/codex-bridge review passes the read-only sandbox flag to every non-app review launch",
+          "The review audit manifest records the sandbox actually supplied to the launch",
+          "A regression proves the recorded review sandbox and launched sandbox are both read-only and cannot drift apart"
         ],
         "pointer": {
-          "json_pointer": "/tasks/COLDGATE-VALIDATOR-01/acceptance",
-          "label": "COLDGATE-VALIDATOR-01 acceptance",
+          "json_pointer": "/tasks/CODEX-BRIDGE-SANDBOX-01/acceptance",
+          "label": "CODEX-BRIDGE-SANDBOX-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "scripts/validate_gate_packet.py implements the coldgate charter registry spec including the charter v3 fold-ins, with discriminating tests."
+        "summary": "codex-bridge review launches read-only exactly as its audit manifest claims, with regression coverage binding recorded and effective sandbox values."
       },
       "authority": {
-        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
-        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+        "label": "2026-08-05 live inspection: review records observer_sandbox=read-only but the non-app launch omits -s read-only",
+        "path": "scripts/codex-bridge"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Build scripts/validate_gate_packet.py per the coldgate charter registry spec plus the charter v3 fold-ins (convening/disclosure clauses, line-range relaxation).",
-      "id": "COLDGATE-VALIDATOR-01",
+      "goal": "Correct scripts/codex-bridge review-mode sandbox enforcement: pass the read-only sandbox flag instead of launching workspace-write while recording read-only metadata.",
+      "id": "CODEX-BRIDGE-SANDBOX-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 13,
+      "status": "queued",
+      "status_note": "Caught live 2026-08-05: observer_sandbox is set to read-only, but the non-app review invocation omits the sandbox flag, so audit metadata misstates enforcement.",
+      "stop_card": null
+    },
+    "COLDGATE-HANDOFF-01": {
+      "acceptance": {
+        "evidence": [
+          "Deterministic post-hash path replacement delivers the original immutable snapshot or refuses without invoking the judge",
+          "Same-inode mutation through a second descriptor never delivers mutated bytes under the old receipt",
+          "Judge-received payload hashes equal the receipt hashes and the runner receipt binds the judge request or session identity"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COLDGATE-HANDOFF-01/acceptance",
+          "label": "COLDGATE-HANDOFF-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The convening runner delivers exactly the bytes the validator observed, with immutable snapshot-to-judge transport binding and a judge-identity-bound runner receipt."
+      },
+      "authority": {
+        "label": "2026-08-05 COLDGATE-VALIDATOR F3 consult Q2 handoff ruling and tests",
+        "path": "docs/process_traces/2026-08-05-cgv-f3-consult/CONSULT-REPORT.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-08-05 F3 consult standing operational constraint",
+            "path": "docs/process_traces/2026-08-05-cgv-f3-consult/SYNTHESIS.md"
+          },
+          "rule": "Until this row lands, no validator PASS may be used to convene a cold judge"
+        }
+      ],
+      "flags": [],
+      "goal": "Build runner-owned sealed-byte judge handoff: capture immutable in-process packet, charter, and exhibit byte snapshots; compute digests over those exact buffers; construct judge input from the same buffers; and specify and test transport byte-to-request binding.",
+      "id": "COLDGATE-HANDOFF-01",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 14,
       "status": "queued",
-      "status_note": "2026-08-03: minted from Ed's t3-drive directive + the t3-doctrine gate synthesis; spec home is docs/process/coldgate_charter_registry.md.",
+      "status_note": "Design warnings: holding file descriptors open does NOT seal bytes because a second descriptor can mutate the same inode; path-based launch-time revalidation alone leaves a revalidate-to-read race. Pending-ratification payload carried by this row: the proposed amendment to docs/process/coldgate_charter_registry.md separating validator observation from runner custody. The registry is Ed-ratified and is NOT edited by this or any session without a cold-gate/Ed ratification.",
       "stop_card": null
     },
     "CUSTODY-HARDEN-01": {
@@ -1103,7 +1181,8 @@
     "MET-WINDOW-C-01": {
       "acceptance": {
         "evidence": [
-          "null_o2048 collected (claim C2 ladder complete), long_holds Part A collected (C5), and additivity p2048o0128-r08 collected (C4 single-root 24/24), each under the frozen-plan discipline (D-096)",
+          "A fresh-claim plan recollects every still-desired Window-B claim component beginning with Window C; no Window B member enters a replacement claim basis",
+          "The fresh plan includes the still-required C2, C4, and C5 collection scope under the frozen-plan discipline, split prospectively across windows C and D if one window cannot retain at least 20 percent failure margin inside the runbook's 2-4 hour envelope",
           "Window operated under the validated protocols: bird-SIGSTOP with identity custody, guarded launcher, one-line arm messages with zero output streaming during idle-gate exposure, third-failure salvage rule",
           "Whole-window verdict emitted by machinery that has passed MET-VERDICT-ADJ-01 adjudication; supersessions recorded once, pre-verdict; both roots backed up rc=0"
         ],
@@ -1112,13 +1191,22 @@
           "label": "MET-WINDOW-C-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The metrology remainder window collects null_o2048, long_holds, and the last additivity slot under validated window protocols, with its verdict emitted by adjudicated machinery."
+        "summary": "The fresh-claim metrology plan replaces every still-desired Window-B claim component without using any Window-B member, under reviewed frozen-plan and validated-window controls."
       },
       "authority": {
-        "label": "2026-08-01 metrology window B run report (remainder scope) + D-096 frozen-plan vocabulary",
-        "path": "docs/run_reports/2026-08-01-metrology-window-b.md"
+        "label": "D-113 clauses 7-9 fresh-claim reset, readiness fence, and prospective C/D split",
+        "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "artifact",
+          "required": "A reviewed FROZEN-PLAN READINESS RECORD exists before any collection night: frozen plan digest, issued calibration acceptance artifact, clean pinned head, empty waivers, fresh roots, and environment preflight, launcher-verified",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "FROZEN-PLAN-READINESS-RECORD"
+        },
         {
           "evidence": null,
           "kind": "external",
@@ -1164,6 +1252,13 @@
         },
         {
           "authority": {
+            "label": "D-113 clauses 8-9 hard start fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Before any collection night, the ordinary launcher verifies a reviewed FROZEN-PLAN READINESS RECORD binding the frozen plan digest, issued calibration acceptance artifact, clean pinned head, empty waivers, fresh roots, and environment preflight"
+        },
+        {
+          "authority": {
             "label": "D-096 frozen-plan ratification",
             "path": "docs/decision_log.md"
           },
@@ -1180,12 +1275,13 @@
       "flags": [
         "lead_only"
       ],
-      "goal": "Third metrology window: collect the remainder — null_o2048 (completes the C2 null ladder), long_holds Part A (C5), and additivity p2048o0128-r08 (completes C4 single-root 24/24) — as one ~2h quiet-Mac window.",
+      "goal": "Execute a reviewed fresh-claim collection plan beginning with Window C: no Window B member enters a replacement claim basis; split prospectively across windows C and D if the complete replacement cannot fit the 2-4 hour envelope with at least 20 percent failure margin.",
       "id": "MET-WINDOW-C-01",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 1,
       "status": "blocked",
+      "status_note": "D-113 clauses 7 and 9: the former remainder-only scope is SUPERSEDED. A fresh-claim plan is required; no Window B member enters a replacement claim basis. If the full replacement exceeds the runbook's 2-4 hour envelope with at least 20 percent margin, split it prospectively across windows C and D.",
       "stop_card": null
     },
     "MINT-GENERALIZE-01": {
@@ -1210,11 +1306,23 @@
         {
           "evidence": null,
           "kind": "decision",
-          "required": "The D-110 re-mint conditions hold before ANY further mint, including the governed 7B mint: (b) acceptance artifact ISSUED after verified R2 backfill; (c) evidence_root_id validator pin widened. Condition (a) — CAL-BRACKET-D079-01 lands merged + gauntlet-clean — was SATISFIED 2026-08-05 (PR #100 merged, f75d12b).",
+          "required": "The remaining D-110 re-mint conditions hold before ANY further mint, including the governed 7B mint: (b) the acceptance artifact is ISSUED after verified R2 backfill and deterministic ledger bootstrap; (c) the evidence_root_id validator pin is widened",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
           "target": "D-110"
+        },
+        {
+          "evidence": {
+            "label": "PR #100 merged 2026-08-05 (f75d12b); D-110 condition (a) satisfied",
+            "path": "docs/decision_log.md"
+          },
+          "kind": "task",
+          "required": "CAL-BRACKET-D079-01 lands merged and gauntlet-clean",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "CAL-BRACKET-D079-01"
         },
         {
           "evidence": {
@@ -1247,7 +1355,7 @@
       "priority": "p1_phase_gate",
       "rank": 12,
       "status": "blocked",
-      "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); this row is HARD-BLOCKED on CAL-BRACKET-D079-01 landing + the D-110 re-mint conditions. The night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/).",
+      "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -2834,6 +2942,46 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Both arms shelved: the app-UP r03 re-capture and the app-DOWN arm existed to decide app-adjacent window admissibility, which the descope moots. Reopen only on Ed's word.",
       "stop_card": null
     },
+    "T3-PROV-SCHEMA-01": {
+      "acceptance": {
+        "evidence": [
+          "A tracked provenance record represents the four axes control_plane, transport, authority_class, and governance, with authority_class explicit",
+          "A tracked ingestion-event schema binds native session identity, output digest, lead disposition, and tracked process-trace location",
+          "Reverse-consult admission consumes authoritative launch-route and owner_kind evidence rather than self-reported headers",
+          "Rejection regressions fail closed on delegated, unknown, or contradictory provenance and prove that merely persisting the schema cannot end the transition"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T3-PROV-SCHEMA-01/acceptance",
+          "label": "T3-PROV-SCHEMA-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The four-axis provenance plus ingestion-event schema ends bridge §8's transitional convention by mechanically enforcing reverse-consult eligibility from authoritative route and ownership evidence."
+      },
+      "authority": {
+        "label": "Bridge protocol §8 transitional reverse-consult enforcement follow-on",
+        "path": "docs/contracts/bridge_protocol.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Bridge protocol §8 fail-closed transition rule",
+            "path": "docs/contracts/bridge_protocol.md"
+          },
+          "rule": "The transition ends only when admission consumes authoritative launch-route and owner_kind evidence with rejection tests; defining or persisting the schema alone is insufficient"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement the tracked four-axis provenance record with authority_class and the ingestion-event schema, then make reverse-consult admission consume authoritative launch-route and owner_kind evidence so bridge §8's transitional convention ends.",
+      "id": "T3-PROV-SCHEMA-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 11,
+      "status": "queued",
+      "status_note": "Bridge §8 currently validates only self-reported headers; consumption-side fail-closed is the actual protection until this row supplies real enforcement.",
+      "stop_card": null
+    },
     "TEST-SPEED-01": {
       "acceptance": {
         "evidence": [
@@ -2915,47 +3063,6 @@
       "rank": 34,
       "status": "queued",
       "status_note": "lead personal tooling, non-repo",
-      "stop_card": null
-    },
-    "WINB-R06-DISPOSITION-01": {
-      "acceptance": {
-        "evidence": [
-          "Ed ruling recorded as a decision entry covering: removal channel, F7 scope, fresh NEG-8 bound",
-          "If a waiver/re-binding channel is ruled: implemented + audited + a fresh governed re-evaluation run under the ruled shape; if abandonment: window C plan absorbs the C2/C4 remainder and CLAIMS_STATUS reflects it",
-          "The unpinned current_environment_refusals sub-branch for r06 is pinned in the evidence-gap record"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/WINB-R06-DISPOSITION-01/acceptance",
-          "label": "WINB-R06-DISPOSITION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Window B re-evaluation is reachable under a ruled r06 disposition, or formally abandoned in favor of window C re-collection, with the ruling recorded."
-      },
-      "authority": {
-        "label": "D-112 clause 4 (parked ruling) + the winB STOP gate record",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "external",
-          "required": "Ed ruling on the r06 removal channel + the F7 scope question + fresh NEG-8 bound authorization (D-112 clause 4)",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "D-113"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Dispose of the mtadd-p2048o0128-r06 evidence gap so window B re-evaluation becomes reachable or is formally abandoned: Ed rules the removal channel (per-member waiver / membership re-binding / abandon for window C re-collection), the D-112-parked F7 barred-cell scope question, and the fresh NEG-8 bound re-mint any future licensed run needs.",
-      "id": "WINB-R06-DISPOSITION-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 53,
-      "status": "blocked",
-      "status_note": "2026-08-03: minted by D-112 (winB STOP gate, classification (i)). r06's collection-time clock-anchor failure (native_intersection_empty) is the sole cause of the salvage-consumption refusal; no licensed channel removes it (exclusion cap spent on r08; not a dangler; waivers forbidden). License EXHAUSTED AS DRAWN; original FAILED verdict stands. Full record docs/process_traces/2026-08-03-winB-reeval-stop/.",
       "stop_card": null
     },
     "WO-T3-VIS-01": {

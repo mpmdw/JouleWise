@@ -14,6 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+import joulewise.detection_floor as detection_floor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -62,6 +63,34 @@ HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
 HEX_D = "d" * 64
+MINT1_PLAN_ID = "p2-015-window-a-m3max-qwen25-1p5b-v1"
+MINT1_PLAN_SHA256 = (
+    "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab"
+)
+MINT1_TOOL_VERSION = "joulewise.floor_mint.v1"
+MINT1_PINSET_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "floor_mint_pinsets"
+    / "mint1.json"
+)
+MINT1_PINSET_SHA256 = (
+    "4c58e64636863379f26bcf0fe03503ddfcf3bcf9bfa184fe0d385ca47b459a67"
+)
+
+
+def write_pinset(
+    directory: Path,
+    value: object,
+    *,
+    name: str = "pinset.json",
+) -> tuple[Path, str]:
+    raw = (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    path = directory / name
+    path.write_bytes(raw)
+    return path, hashlib.sha256(raw).hexdigest()
 
 
 def whole_window_allowance(
@@ -972,12 +1001,12 @@ def make_artifact(cells=None):
         source_class="synthetic",
         provenance={
             "calibration_plan": {
-                "plan_id": "plan-1",
+                "plan_id": MINT1_PLAN_ID,
                 "declared_calibration_scope": "window_a",
                 "relative_path": "configs/calibration-plan.json",
-                "sha256": HEX_A,
+                "sha256": MINT1_PLAN_SHA256,
             },
-            "mint_tool_version": "joulewise.floor_mint.v1",
+            "mint_tool_version": MINT1_TOOL_VERSION,
             "implementation": {
                 "project_commit": "0" * 40,
                 "project_tree_state": "clean",
@@ -1071,6 +1100,218 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_mint1_pinset_preserves_byte_stable_empty_finding_set(self):
+        self.assertEqual(
+            hashlib.sha256(MINT1_PINSET_PATH.read_bytes()).hexdigest(),
+            MINT1_PINSET_SHA256,
+        )
+        findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(
+            json.dumps(findings, separators=(",", ":")).encode("utf-8"),
+            b"[]",
+        )
+
+    def test_evidence_root_outside_artifact_family_pinset_refuses(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["provenance"]["absolute"][
+            "evidence_root_id"
+        ] = "unreviewed_root"
+        self.assertEqual(
+            validate_floor_artifact(artifact),
+            [
+                "cells[0].provenance.absolute.evidence_root_id: "
+                "not pinned by artifact family pinset"
+            ],
+        )
+
+    def test_artifact_without_resolvable_pinset_refuses(self):
+        artifact = make_artifact()
+        artifact["provenance"]["calibration_plan"]["plan_id"] = (
+            "unregistered-plan"
+        )
+        self.assertEqual(
+            validate_floor_artifact(artifact),
+            ["artifact.pinset: no pinset matches artifact family identity"],
+        )
+
+    def test_multiple_matching_pinsets_refuse(self):
+        pinset_bytes = MINT1_PINSET_PATH.read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            pinset_directory = Path(tmp)
+            (pinset_directory / "first.json").write_bytes(pinset_bytes)
+            (pinset_directory / "second.json").write_bytes(pinset_bytes)
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(
+            findings,
+            ["artifact.pinset: multiple pinsets match artifact family identity"],
+        )
+
+    def test_repository_symlinked_pinset_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "outside-pinset"
+            target.write_bytes(MINT1_PINSET_PATH.read_bytes())
+            pinset_directory = root / "repository"
+            pinset_directory.mkdir()
+            (pinset_directory / "mint1.json").symlink_to(target)
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(
+            findings,
+            [
+                "artifact.pinset: repository pinset 'mint1.json': "
+                "pinset file must not be a symlink"
+            ],
+        )
+
+    def test_explicit_symlinked_pinset_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.json"
+            target.write_bytes(MINT1_PINSET_PATH.read_bytes())
+            symlink = root / "pinset.json"
+            symlink.symlink_to(target)
+            findings = validate_floor_artifact(
+                make_artifact(),
+                pinset_path=symlink,
+                expected_pinset_sha256=MINT1_PINSET_SHA256,
+            )
+        self.assertEqual(
+            findings,
+            [
+                "artifact.pinset: explicit pinset: "
+                "pinset file must not be a symlink"
+            ],
+        )
+
+    def test_malformed_repository_pinset_refuses_instead_of_skipping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pinset_directory = Path(tmp)
+            (pinset_directory / "garbage.json").write_text(
+                "this is not JSON",
+                encoding="utf-8",
+            )
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(len(findings), 1)
+        self.assertIn(
+            "artifact.pinset: repository pinset 'garbage.json': "
+            "pinset is not valid UTF-8 JSON",
+            findings[0],
+        )
+
+    def test_explicit_pinset_digest_mismatch_refuses_forged_roots(self):
+        pinset = json.loads(MINT1_PINSET_PATH.read_text(encoding="utf-8"))
+        artifact = make_artifact()
+        for component_name in ("absolute", "comparative"):
+            artifact["cells"][0]["provenance"][component_name][
+                "evidence_root_id"
+            ] = "attacker_root"
+            pinset[component_name]["evidence_root_id"] = "attacker_root"
+        with tempfile.TemporaryDirectory() as tmp:
+            forged_path, forged_digest = write_pinset(Path(tmp), pinset)
+            self.assertNotEqual(forged_digest, MINT1_PINSET_SHA256)
+            findings = validate_floor_artifact(
+                artifact,
+                pinset_path=forged_path,
+                expected_pinset_sha256=MINT1_PINSET_SHA256,
+            )
+        self.assertEqual(len(findings), 1)
+        self.assertIn("pinset sha256 mismatch", findings[0])
+
+    def test_synthetic_second_pinset_is_family_scoped(self):
+        pinset = json.loads(MINT1_PINSET_PATH.read_text(encoding="utf-8"))
+        pinset["mint_tool_version"] = "joulewise.floor_mint.synthetic.v1"
+        pinset["plan"]["plan_id"] = "synthetic-second-family"
+        pinset["plan"]["sha256"] = HEX_D
+        for component_name in ("absolute", "comparative"):
+            pinset[component_name]["evidence_root_id"] = "synthetic_root"
+
+        own_artifact = make_artifact()
+        own_artifact["provenance"]["mint_tool_version"] = pinset[
+            "mint_tool_version"
+        ]
+        own_artifact["provenance"]["calibration_plan"].update(
+            {
+                "plan_id": pinset["plan"]["plan_id"],
+                "sha256": pinset["plan"]["sha256"],
+            }
+        )
+        for block in own_artifact["cells"][0]["comparative"]["blocks"]:
+            block["calibration_plan_sha256"] = pinset["plan"]["sha256"]
+        for component_name in ("absolute", "comparative"):
+            own_artifact["cells"][0]["provenance"][component_name][
+                "evidence_root_id"
+            ] = "synthetic_root"
+        with tempfile.TemporaryDirectory() as tmp:
+            pinset_directory = Path(tmp)
+            (pinset_directory / "family-a.json").write_bytes(
+                MINT1_PINSET_PATH.read_bytes()
+            )
+            family_b_path, family_b_digest = write_pinset(
+                pinset_directory,
+                pinset,
+                name="family-b.json",
+            )
+            self.assertEqual(
+                validate_floor_artifact(
+                    own_artifact,
+                    pinset_path=family_b_path,
+                    expected_pinset_sha256=family_b_digest,
+                ),
+                [],
+            )
+
+            confused_family_a = make_artifact()
+            for component_name in ("absolute", "comparative"):
+                confused_family_a["cells"][0]["provenance"][component_name][
+                    "evidence_root_id"
+                ] = "synthetic_root"
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(confused_family_a)
+        self.assertEqual(
+            findings,
+            [
+                "cells[0].provenance.absolute.evidence_root_id: "
+                "not pinned by artifact family pinset",
+                "cells[0].provenance.comparative.evidence_root_id: "
+                "not pinned by artifact family pinset",
+            ],
+        )
+
+    def test_pinset_io_errors_do_not_leak_absolute_paths(self):
+        secret = "/private/lead/custody/hidden-pinset.json"
+        artifact = make_artifact()
+        findings = validate_floor_artifact(
+            artifact,
+            pinset_path=secret,
+            expected_pinset_sha256="0" * 64,
+        )
+        self.assertTrue(findings)
+        for finding in findings:
+            self.assertNotIn(secret, finding)
+            self.assertNotIn("/private/lead", finding)
+
+    def test_evidence_root_global_hardcode_is_removed(self):
+        self.assertFalse(hasattr(detection_floor, "_EVIDENCE_ROOT_IDS"))
 
     def test_cross_window_component_bases_and_semantics_are_independent(self):
         artifact = make_artifact([make_cross_window_cell()])
@@ -1440,7 +1681,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
                 lambda artifact: artifact["cells"][0]["provenance"]["absolute"].__setitem__(
                     "evidence_root_id", "other"
                 ),
-                "evidence_root_id: must be one of",
+                "evidence_root_id: not pinned by artifact family pinset",
             ),
             (
                 lambda artifact: artifact["provenance"].__setitem__(
@@ -1627,7 +1868,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
     def test_artifact_records_plan_hash_and_per_member_abba_sequence(self):
         artifact = make_artifact()
         block = artifact["cells"][0]["comparative"]["blocks"][0]
-        self.assertEqual(block["calibration_plan_sha256"], HEX_A)
+        self.assertEqual(block["calibration_plan_sha256"], MINT1_PLAN_SHA256)
         self.assertEqual(
             [member["plan_label"] for member in block["members"]],
             ["A", "B", "B", "A"],

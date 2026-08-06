@@ -71,6 +71,84 @@ Scout correction (this session): the a10 extraction must run in the
 SAME custody session as re-mint consumption (FLOOR-BIND-01 fence), so
 it sequences with the re-mint, not standalone.
 
+### Overnight progress ledger (updated ~23:50; all evidence in .desk + session scratchpad, custody commits as noted)
+
+- **D-113 TRANSCRIBED + pushed** (`8e68cde`, consult trace in
+  process_traces/2026-08-05-d113-rigor-consult/). CLAIMS_STATUS WB
+  terminal labels landed this commit; kernel row retirement rides the
+  next registration batch.
+- **QUIET-GUARD**: fix round 1 closed all ten findings (lead-replayed
+  95/95 + full suite green; bench-committed `e0acaf7`); xhigh delta
+  re-audit FAILED it (F1 blocker: idempotent init retry can report
+  success with unresolved directory-fsync durability; F2 partial-
+  upgrade ordering; F3 census availability; F4 evidence gaps) — **fix
+  round 2 IN FLIGHT** with lead-dictated closure shapes.
+  Same-signature counter: init-durability at 1 (F1 is an introduced
+  defect, first fix; trigger fires if the next delta fails there).
+- **COLDGATE-VALIDATOR**: consult-adopted restructure landed on the
+  branch (`3964c6e`, lead-replayed 26/26 + frozen-packet smoke; suite
+  2514 green); xhigh delta re-audit FAILED it (B1: malformed digest
+  arg serialized verbatim into REFUSE receipts — live-proved; B2:
+  non-CommonMark backtick fence opener lets a phantom fence HIDE real
+  duplicate headings → duplicate Charter pin PASSes) — **blocker fix
+  round IN FLIGHT**. Fence-parsing same-signature counter: 1.
+- **D-079 issuance**: verification COMPLETE (38/38 recovered,
+  hash-authenticated, physics-replayed: 32 valid / 6 invalid / 0
+  unresolved) but BLOCKED on two items. **B1 RULED by the lead**: the
+  two high-bound members (`20260726T000039-491995f3`,
+  `20260801T064830-c76f5d1c`) are SYSTEMATIC-INVALID in the ledger
+  (production preflight screen + D-102's explicit naming control over
+  the candidate tool's stored-status labels; R2.8's "six further" was
+  conditioned on the unratified candidate inventory — valid total is
+  30, eight further to trigger). **B2 (no deterministic bootstrap
+  contract) — design+implement session IN FLIGHT** on
+  impl/ledger-bootstrap (xhigh; genesis-only, atomic, import-marked
+  receipts, dry-run default; expected head `8e80b6e9…` under the
+  report's rules). Verification record custodied:
+  process_traces/2026-08-05-d079-issuance/. Issuance itself (execute +
+  head-pin commit + artifact edit + D-116 entry) remains a separately
+  gated step — Ed pre-authorized overnight, conditional on the gate.
+- **Fast-tier**: PR #102 open, CI running; lead-replayed 70/70 incl.
+  desktop IPC tests; solo-review ruled proportional (Ed-dictated
+  20-line diff). On merge: fast rides scripts/codex-bridge
+  (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
+  personal wrapper without his word).
+
+### QG census — magistrate stop-condition set (recorded ~02:40 2026-08-06)
+
+The Option C redesign delta audit (qg-deltaC, xhigh) found the
+observation/churn-to-absence class SURVIVES — but the survival is
+localized to ONE discriminator clause: `PID_REUSED` fires on any
+full-identity mismatch, whereas the adopted consult explicitly requires
+"only a different START-TIME anchor may classify as PID_REUSED" (a
+same-start exec/argv/ancestry change must REFUSE, not clear custody).
+Every STRUCTURAL piece the consult prescribed passed. Magistrate call:
+this is a mis-implementation of a sentence the consult already wrote,
+not the design being wrong — so ONE precise fix against that clause is
+warranted (first occurrence on this specific new logic).
+**HARD STOP-CONDITION (binds the magistrate): if the fix's delta audit
+still finds the class, the branch is SHELVED for Ed — no further
+iteration.** QG commit 1 is descoped, installed-INACTIVE, on no
+measurement path, and gates no claim; it does not warrant unbounded
+spend, and rigor-first (D-113) governs CLAIM-BEARING collection, not a
+convenience guard. This stop-condition is the record of that judgment.
+
+### ESCALATION TRIGGER FIRED — quiet-guard observation-failure→absence class (recorded ~01:15 2026-08-06)
+
+qg-delta3 (xhigh) ruled the class RECURRENT at count 2: round 3's
+protected-set fix omitted the lease owner and matched by PID only,
+after round 2's retry introduced the class. Per rule 11 the next spend
+is a CONSULT — launched (Sol xhigh, read-only) on the closure shape,
+with the magistrate's structural diagnosis (protected-set ENUMERATION
+is the regenerating failure; Option A = eliminate enumeration,
+universally fail-closed retry) and an admission on the record: the
+round-2 lead contract seeded the class by dictating "retry for
+unrelated pids" (an enumeration concept) to serve an availability
+requirement the lead is now prepared to revoke. F2 (lock continuity)
+is CLOSED; init-durability remains closed at count 1. The branch does
+NOT land until the consult-adopted shape closes the class and a delta
+re-audit accepts.
+
 ### Ed directive batch (2026-08-05 ~22:00, in-thread; 12-hour autonomous window)
 
 1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
