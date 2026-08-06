@@ -10,6 +10,9 @@ CREDENTIAL_ROOT="/Library/Application Support/JouleWise/quiet-guard-credentials"
 LIB_ROOT="$INSTALL_ROOT/lib/joulewise"
 HELPER="/usr/local/libexec/joulewise-quiet-guard"
 SUDOERS_PATH="/etc/sudoers.d/joulewise-quiet-guard"
+QUIET_GUARD_SHA256="25819e5a01795e11989b40dc03eef07d5defd0c65e4cc562523f2a596c88b266"
+QUIET_GUARD_PROCESS_SHA256="03c1b1b885597556368d67905310e3777557951df889e8a442ac3f6c76f57b9d"
+QUIET_GUARD_PRIVILEGED_SHA256="5ffbf24ab3483400844beb5abe2fea7447731ca6efc096d01f428453b508993e"
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "Run this setup as the intended unprivileged operator, not as root." >&2
@@ -24,30 +27,31 @@ case "$OPERATOR" in
     ;;
 esac
 
-# The operator explicitly authenticates once. Every installed runtime route is
-# then sudo -n through one fixed helper and the two aliases above.
-sudo -v
+# A cached timestamp may never authorize repository bytes for root execution.
+# Invalidate it first, then require a fresh interactive operator grant.
+/usr/bin/sudo -k
+/usr/bin/sudo -v
 
 # Copy every mutable repository input exactly once into a root-owned staging
 # directory.  Validation and installation below both consume these same
 # operator-nonwritable bytes; no repository path is re-read after validation.
-STAGE_ROOT=$(sudo /usr/bin/mktemp -d "/private/tmp/joulewise-quiet-guard-root.XXXXXX")
+STAGE_ROOT=$(/usr/bin/sudo /usr/bin/mktemp -d "/private/tmp/joulewise-quiet-guard-root.XXXXXX")
 cleanup() {
   if [ -n "${STAGE_ROOT:-}" ]; then
-    sudo /bin/rm -R -- "$STAGE_ROOT"
+    /usr/bin/sudo /bin/rm -R -- "$STAGE_ROOT"
   fi
 }
 trap cleanup EXIT HUP INT TERM
 
-sudo /usr/bin/install -o root -g wheel -m 0600 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
   "$REPO_ROOT/joulewise/quiet_guard.py" "$STAGE_ROOT/quiet_guard.py"
-sudo /usr/bin/install -o root -g wheel -m 0600 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
   "$REPO_ROOT/joulewise/quiet_guard_process.py" "$STAGE_ROOT/quiet_guard_process.py"
-sudo /usr/bin/install -o root -g wheel -m 0600 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0600 \
   "$REPO_ROOT/scripts/quiet_guard_privileged.py" "$STAGE_ROOT/quiet_guard_privileged.py"
 
 RECOVERY_ACK="I acknowledge quiet-guard recovery and exact-identity abandonment"
-sudo /usr/bin/python3 -I -c '
+/usr/bin/sudo /usr/bin/python3 -I -S -c '
 import os, sys
 path, helper, operator, acknowledgment = sys.argv[1:]
 escaped = acknowledgment.replace("\\", "\\\\").replace(" ", "\\ ")
@@ -63,40 +67,50 @@ with os.fdopen(fd, "wb") as handle:
     os.fsync(handle.fileno())
 ' "$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$HELPER" "$OPERATOR" "$RECOVERY_ACK"
 
-# Parse the staged Python bytes without importing or writing bytecode, and
-# validate the exact staged sudoers bytes that will be installed.
-for staged in \
-  "$STAGE_ROOT/quiet_guard.py" \
-  "$STAGE_ROOT/quiet_guard_process.py" \
-  "$STAGE_ROOT/quiet_guard_privileged.py"
-do
-  sudo /usr/bin/python3 -I -B -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' "$staged"
-done
-sudo /usr/sbin/visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"
+# Authenticate the exact root-staged bytes against review-pinned SHA-256
+# digests, then parse those same bytes without import or bytecode writes.
+/usr/bin/sudo /usr/bin/python3 -I -S -B -c '
+import ast, hashlib, hmac, pathlib, sys
+arguments = sys.argv[1:]
+if len(arguments) % 2:
+    raise SystemExit("path/digest pairs required")
+for offset in range(0, len(arguments), 2):
+    path = pathlib.Path(arguments[offset])
+    expected = arguments[offset + 1]
+    payload = path.read_bytes()
+    observed = hashlib.sha256(payload).hexdigest()
+    if not hmac.compare_digest(observed, expected):
+        raise SystemExit(f"reviewed-artifact digest mismatch: {path.name}")
+    ast.parse(payload, filename=str(path))
+' \
+  "$STAGE_ROOT/quiet_guard.py" "$QUIET_GUARD_SHA256" \
+  "$STAGE_ROOT/quiet_guard_process.py" "$QUIET_GUARD_PROCESS_SHA256" \
+  "$STAGE_ROOT/quiet_guard_privileged.py" "$QUIET_GUARD_PRIVILEGED_SHA256"
+/usr/bin/sudo /usr/sbin/visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"
 
-sudo /usr/bin/install -d -o root -g wheel -m 0700 \
+/usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 0700 \
   "$STATE_ROOT" "$INSTALL_ROOT" "$CREDENTIAL_ROOT" "$INSTALL_ROOT/lib" "$LIB_ROOT"
-sudo /usr/bin/install -d -o root -g wheel -m 0755 /usr/local/libexec
-sudo /usr/bin/python3 -I -c '
+/usr/bin/sudo /usr/bin/install -d -o root -g wheel -m 0755 /usr/local/libexec
+/usr/bin/sudo /usr/bin/python3 -I -S -c '
 import os, stat, sys
 path = sys.argv[1]
 row = os.lstat(path)
 if not stat.S_ISDIR(row.st_mode) or stat.S_ISLNK(row.st_mode) or row.st_uid != 0 or row.st_mode & 0o022:
     raise SystemExit(f"unsafe root-helper parent: {path}")
 ' /usr/local/libexec
-sudo /usr/bin/install -o root -g wheel -m 0644 /dev/null "$LIB_ROOT/__init__.py"
-sudo /usr/bin/install -o root -g wheel -m 0644 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 /dev/null "$LIB_ROOT/__init__.py"
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
   "$STAGE_ROOT/quiet_guard.py" "$LIB_ROOT/quiet_guard.py"
-sudo /usr/bin/install -o root -g wheel -m 0644 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0644 \
   "$STAGE_ROOT/quiet_guard_process.py" "$LIB_ROOT/quiet_guard_process.py"
-sudo /usr/bin/install -o root -g wheel -m 0755 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0755 \
   "$STAGE_ROOT/quiet_guard_privileged.py" "$HELPER"
 
-sudo /usr/bin/install -o root -g wheel -m 0440 \
+/usr/bin/sudo /usr/bin/install -o root -g wheel -m 0440 \
   "$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"
 
 # install-inactive is intentionally not in sudoers. Setup invokes it directly
 # while authenticated; it writes live_promotion=false and no lease.
-sudo "$HELPER" install-inactive
+/usr/bin/sudo "$HELPER" install-inactive
 
 echo "Quiet guard installed inactive for $OPERATOR (live_promotion=false)."

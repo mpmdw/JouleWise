@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from unittest import mock
 
 import joulewise.quiet_guard as guard_module
 from joulewise.quiet_guard import (
     ACTORS,
-    APP_QUIT_TIMEOUT_S,
     CONFIG_SCHEMA,
     FAILURE_CAUSES,
     FAILURE_SCHEMA,
@@ -26,20 +29,21 @@ from joulewise.quiet_guard import (
     POWERMETRICS_PROBE,
     PRODUCTION_STATE_ROOT,
     RECOVERY_ACKNOWLEDGMENT,
-    KILL_WAIT_TIMEOUT_S,
-    SESSION_EXIT_TIMEOUT_S,
+    LEASE_SCHEMA,
+    SETUP_AUTHORITY_DECISION,
     STATES,
-    TERM_WAIT_TIMEOUT_S,
     TRANSITION_TABLE,
     _atomic_write_json,
-    agent_launch_refusal,
     canonical_json_bytes,
     failure_mapping,
+    initial_state,
     transition_rule,
+    validate_state,
 )
 from joulewise.quiet_guard_process import (
     AncestorIdentity,
     ProcessIdentity,
+    ProcessObservationError,
     SnapshotProcessSource,
     argv_digest,
 )
@@ -88,7 +92,7 @@ EXPECTED_FAILURE_CAUSES = {
     "recovery_acknowledgment_missing",
     "processes_remain",
     "independent_census_nonzero",
-    "agent_launch_blocked",
+    "process_observation_unavailable",
     "privileged_command_refused",
 }
 
@@ -110,7 +114,7 @@ EXPECTED_FAILURE_SIGNATURES = {
     "recovery_acknowledgment_missing": "quiet_guard/recovery_acknowledgment_missing/v1",
     "processes_remain": "quiet_guard/processes_remain/v1",
     "independent_census_nonzero": "quiet_guard/independent_census_nonzero/v1",
-    "agent_launch_blocked": "quiet_guard/agent_launch_blocked/v1",
+    "process_observation_unavailable": "quiet_guard/process_observation_unavailable/v1",
     "privileged_command_refused": "quiet_guard/privileged_command_refused/v1",
 }
 
@@ -171,16 +175,14 @@ class InstallationTests(EngineTestCase):
         self.assertEqual(status["state"]["state"], "idle")
         self.assertIsNone(status["state"]["lease"])
 
-    def test_ratified_timeout_constants_are_pinned_but_not_executed(self) -> None:
-        self.assertEqual(
-            (
-                SESSION_EXIT_TIMEOUT_S,
-                APP_QUIT_TIMEOUT_S,
-                TERM_WAIT_TIMEOUT_S,
-                KILL_WAIT_TIMEOUT_S,
-            ),
-            (120, 30, 10, 5),
-        )
+    def test_setup_authority_marker_is_binding_d115(self) -> None:
+        contract = (REPO_ROOT / "docs/contracts/quiet_guard.md").read_text()
+        source = (REPO_ROOT / "joulewise/quiet_guard.py").read_text()
+        self.assertEqual(SETUP_AUTHORITY_DECISION, "D-115")
+        self.assertIn("D-115 (ADJUDICATED)", source)
+        self.assertIn("D-115 (ADJUDICATED)", contract)
+        self.assertNotIn("OPEN DECISION MARKER", contract)
+        self.assertNotIn("D-114 (PROPOSED)", source + contract)
 
     def test_arm_refuses_with_ratified_canonical_cause(self) -> None:
         refusal = self.engine.arm_refusal()
@@ -222,11 +224,36 @@ class InstallationTests(EngineTestCase):
                 test_mode=True,
             )
 
-    def test_initialization_does_not_overwrite_existing_install(self) -> None:
+    def test_inactive_initialization_is_idempotent_without_rewrite(self) -> None:
         before = self.engine.paths.state.read_bytes()
-        with self.assertRaises(GuardError):
-            self.engine.initialize_inactive()
+        with mock.patch.object(guard_module, "_atomic_write_json") as write:
+            state = self.engine.initialize_inactive()
+        self.assertEqual(state["state"], "idle")
+        write.assert_not_called()
         self.assertEqual(self.engine.paths.state.read_bytes(), before)
+
+    def test_interrupted_inactive_initialization_completes_on_retry(self) -> None:
+        root = self.root / "interrupted"
+        engine = GuardEngine(root, host_id="host-A", boot_id="boot-A", test_mode=True)
+        real_write = guard_module._atomic_write_json
+        calls = 0
+
+        def fail_state_once(path, value):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected state write failure")
+            return real_write(path, value)
+
+        with mock.patch.object(guard_module, "_atomic_write_json", side_effect=fail_state_once):
+            with self.assertRaisesRegex(OSError, "injected state write failure"):
+                engine.initialize_inactive()
+        self.assertTrue(engine.paths.config.exists())
+        self.assertFalse(engine.paths.state.exists())
+
+        recovered = engine.initialize_inactive()
+        self.assertEqual(recovered, initial_state("host-A", "boot-A"))
+        self.assertEqual(engine.status()["state"], recovered)
 
     def test_non_test_arbitrary_root_cannot_initialize(self) -> None:
         arbitrary = GuardEngine(
@@ -339,21 +366,6 @@ class TransitionTableTests(EngineTestCase):
         self.assertEqual(self.engine.read_state()["state"], "handoff_pending")
         self.assertEqual(self.engine.read_state()["lease"], pending["lease"])
 
-    def test_recovery_and_both_handoff_states_block_agent_launch(self) -> None:
-        self.assertIsNone(agent_launch_refusal(self.engine.read_state()))
-        pending = self.pending()
-        self.assertEqual(agent_launch_refusal(pending)["cause"], "agent_launch_blocked")
-        held = self.engine.transition(
-            "quiet_held",
-            "watcher",
-            registry_entries=(),
-            independent_census_zero=True,
-        )
-        self.assertEqual(agent_launch_refusal(held)["cause"], "agent_launch_blocked")
-        recovery = self.engine.transition("recovery_required", "watcher")
-        self.assertEqual(agent_launch_refusal(recovery)["cause"], "agent_launch_blocked")
-
-
 class ValidationTests(EngineTestCase):
     def rewrite_state(self, mutate) -> None:
         raw = json.loads(self.engine.paths.state.read_text())
@@ -438,6 +450,33 @@ class ValidationTests(EngineTestCase):
         with self.assertRaises(GuardError) as caught:
             self.engine.read_state()
         self.assertEqual(caught.exception.cause, "epoch_regression")
+
+    def test_idle_with_live_lease_and_registry_refuses_canonically(self) -> None:
+        state = initial_state("host-A", "boot-A")
+        state["registry"]["entries"] = [self.owner.to_mapping()]
+        state["lease"] = {
+            "schema": LEASE_SCHEMA,
+            "host_id": "host-A",
+            "boot_id": "boot-A",
+            "epoch": 0,
+            "lease_id": str(uuid.uuid4()),
+            "owner": self.owner.to_mapping(),
+            "created_epoch": 0,
+        }
+        with self.assertRaises(GuardError) as caught:
+            validate_state(state, "host-A", "boot-A")
+        self.assertEqual(caught.exception.cause, "lease_invalid")
+        self.assertEqual(
+            caught.exception.to_mapping()["signature"],
+            "quiet_guard/lease_invalid/v1",
+        )
+
+    def test_idle_with_registry_but_null_lease_refuses(self) -> None:
+        state = initial_state("host-A", "boot-A")
+        state["registry"]["entries"] = [self.owner.to_mapping()]
+        with self.assertRaises(GuardError) as caught:
+            validate_state(state, "host-A", "boot-A")
+        self.assertEqual(caught.exception.cause, "registry_invalid")
 
     def test_spliced_event_history_refuses(self) -> None:
         self.pending()
@@ -531,6 +570,13 @@ class LockAndAtomicityTests(EngineTestCase):
 
 
 class StaleRecoveryTests(EngineTestCase):
+    class UnobservableSource:
+        def observe(self, pid):
+            raise ProcessObservationError(f"cannot observe {pid}")
+
+        def census(self):
+            raise ProcessObservationError("census unavailable")
+
     def test_matching_registry_stays_pending(self) -> None:
         self.pending(entries=(self.owner,))
         state = self.engine.audit_registry(
@@ -553,6 +599,15 @@ class StaleRecoveryTests(EngineTestCase):
         self.assertEqual(evidence["result"], "pid_reused")
         self.assertEqual(evidence["observed"], reused.to_mapping())
 
+    def test_unobservable_registry_enters_recovery_and_retains_lease(self) -> None:
+        self.pending(entries=(self.owner,))
+        state = self.engine.audit_registry(self.UnobservableSource(), ())
+        self.assertEqual(state["state"], "recovery_required")
+        self.assertEqual(
+            state["events"][-1]["cause"], "process_observation_unavailable"
+        )
+        self.assertIsNotNone(state["lease"])
+
     def test_recovery_requires_exact_acknowledgment(self) -> None:
         self.recovery_with_stale_owner()
         with self.assertRaises(GuardError) as caught:
@@ -574,6 +629,21 @@ class StaleRecoveryTests(EngineTestCase):
                 independent_census_rows=(),
             )
         self.assertEqual(caught.exception.cause, "processes_remain")
+
+    def test_recovery_refuses_unobservable_identity_without_releasing_custody(self) -> None:
+        recovery = self.recovery_with_stale_owner()
+        lease_id = recovery["lease"]["lease_id"]
+        with self.assertRaises(GuardError) as caught:
+            self.engine.recover(
+                acknowledgment=RECOVERY_ACKNOWLEDGMENT,
+                acknowledged_by="Ed",
+                source=self.UnobservableSource(),
+                independent_census_rows=(),
+            )
+        self.assertEqual(caught.exception.cause, "process_observation_unavailable")
+        retained = self.engine.read_state()
+        self.assertEqual(retained["state"], "recovery_required")
+        self.assertEqual(retained["lease"]["lease_id"], lease_id)
 
     def test_recovery_refuses_nonzero_independent_census(self) -> None:
         self.recovery_with_stale_owner()
@@ -669,9 +739,13 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
         self.assertNotIn("-S", command)
 
     def test_arm_refuses_without_invoking_sudo(self) -> None:
-        with mock.patch.object(self.client.subprocess, "run") as run, mock.patch("builtins.print"):
+        with mock.patch.object(self.client.subprocess, "run") as run, mock.patch(
+            "builtins.print"
+        ) as emit:
             exit_code = self.client.main(("arm",))
         self.assertEqual(exit_code, self.client.EXIT_REFUSED)
+        payload = json.loads(emit.call_args.args[0])
+        self.assertEqual(payload["cause"], "t3_char_pair_verdict_missing")
         run.assert_not_called()
 
     def test_test_initializer_refuses_production_root_without_sudo(self) -> None:
@@ -739,6 +813,43 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
             self.helper.ALLOWED_COMMANDS,
             ("install-inactive", "status", "recover"),
         )
+
+    def test_privileged_recovery_enumerates_independently(self) -> None:
+        owner = identity()
+        child = identity(
+            202,
+            ancestry=(
+                AncestorIdentity(
+                    owner.pid,
+                    owner.start_time,
+                    owner.executable,
+                    owner.argv_digest,
+                ),
+            ),
+        )
+        unrelated = identity(303)
+
+        class CensusSource:
+            def __init__(self):
+                self.calls = 0
+
+            def census(self):
+                self.calls += 1
+                return (unrelated, child, owner)
+
+            def observe(self, pid):
+                raise AssertionError(f"registry-only observation used for {pid}")
+
+        source = CensusSource()
+        engine = mock.Mock()
+        engine.status.return_value = {
+            "state": {"registry": {"entries": [owner.to_mapping()]}}
+        }
+        with mock.patch.object(self.helper, "PsProcessSource", return_value=source):
+            returned_source, rows = self.helper._recovery_inputs(engine)
+        self.assertIs(returned_source, source)
+        self.assertEqual(source.calls, 1)
+        self.assertEqual(rows, (child, owner))
 
     def test_privileged_parser_rejects_non_allowlisted_command(self) -> None:
         with mock.patch("sys.stderr"), self.assertRaises(SystemExit):
@@ -818,30 +929,85 @@ class ClientAndPrivilegeBoundaryTests(unittest.TestCase):
             with self.assertRaises(GuardError):
                 self.helper.drop_privileges(identity_row, {})
 
-    def test_executable_helper_pins_interpreter_and_rejects_path_poisoning(self) -> None:
+    def test_executable_helper_uses_isolated_no_site_interpreter(self) -> None:
         helper_path = REPO_ROOT / "scripts/quiet_guard_privileged.py"
         helper_source = helper_path.read_text()
-        self.assertEqual(helper_source.splitlines()[0], "#!/usr/bin/python3 -E")
+        self.assertEqual(
+            helper_source.splitlines()[:4],
+            [
+                "#!/bin/sh",
+                '""":"',
+                'exec /usr/bin/python3 -I -S "$0" "$@"',
+                ':"""',
+            ],
+        )
         self.assertNotIn("/usr/bin/env", helper_source)
         self.assertNotIn("REPOSITORY_ROOT", helper_source)
         self.assertIn('sys.path[:] = [_INSTALLED_LIBRARY, *_stdlib]', helper_source)
         self.assertTrue(os.access(helper_path, os.X_OK))
+        completed = subprocess.run(
+            (
+                "/usr/bin/python3",
+                "-I",
+                "-S",
+                "-c",
+                "import sys; print(sys.flags.ignore_environment, "
+                "sys.flags.no_user_site, sys.flags.isolated, sys.flags.no_site)",
+            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.strip(), "1 1 1 1")
+
+    def test_installed_helper_bootstrap_rejects_path_poisoning(self) -> None:
+        source = (REPO_ROOT / "scripts/quiet_guard_privileged.py").read_text()
         with tempfile.TemporaryDirectory() as temporary:
-            attacker = Path(temporary)
+            root = Path(temporary).resolve()
+            helper_path = root / "libexec" / "joulewise-quiet-guard"
+            library = root / "install" / "lib"
+            package = library / "joulewise"
+            helper_path.parent.mkdir(parents=True)
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            shutil.copyfile(REPO_ROOT / "joulewise/quiet_guard.py", package / "quiet_guard.py")
+            shutil.copyfile(
+                REPO_ROOT / "joulewise/quiet_guard_process.py",
+                package / "quiet_guard_process.py",
+            )
+            installed_source = source.replace(
+                '_INSTALLED_HELPER = "/usr/local/libexec/joulewise-quiet-guard"',
+                f'_INSTALLED_HELPER = "{helper_path}"',
+            ).replace(
+                '_INSTALLED_LIBRARY = "/Library/Application Support/JouleWise/quiet-guard-install/lib"',
+                f'_INSTALLED_LIBRARY = "{library}"',
+            )
+            helper_path.write_text(installed_source)
+            helper_path.chmod(0o755)
+
+            attacker = root / "attacker"
+            attacker.mkdir()
             marker = attacker / "attacker-ran"
-            fake_python = attacker / "python3"
-            fake_python.write_text(f"#!/bin/sh\n/usr/bin/touch '{marker}'\nexit 93\n")
-            fake_python.chmod(0o755)
+            attacker_package = attacker / "joulewise"
+            attacker_package.mkdir()
+            (attacker_package / "__init__.py").write_text("")
+            (attacker_package / "quiet_guard.py").write_text(
+                f"from pathlib import Path\nPath({str(marker)!r}).touch()\n"
+            )
             environment = dict(os.environ, PATH=str(attacker), PYTHONPATH=str(attacker))
             completed = subprocess.run(
                 (str(helper_path), "status"),
-                cwd="/",
+                cwd=attacker,
                 env=environment,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
             )
-            self.assertNotEqual(completed.returncode, 93)
+            self.assertEqual(completed.returncode, self.helper.EXIT_REFUSED, completed.stderr)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["cause"], "privileged_command_refused")
             self.assertFalse(marker.exists())
 
     def test_executable_root_helper_enforces_exact_argv(self) -> None:
@@ -898,12 +1064,54 @@ class WriteBoundaryTests(EngineTestCase):
         setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
         client = (REPO_ROOT / "scripts/quiet_guard.py").read_text()
         helper = (REPO_ROOT / "scripts/quiet_guard_privileged.py").read_text()
-        self.assertIn("sudo -v", setup)
+        revoke = setup.index("/usr/bin/sudo -k")
+        authorize = setup.index("/usr/bin/sudo -v")
+        stage = setup.index("STAGE_ROOT=$(/usr/bin/sudo")
+        self.assertLess(revoke, authorize)
+        self.assertLess(authorize, stage)
+        self.assertEqual(setup.count("/usr/bin/sudo"), 19)
+        logical_setup = setup.replace("\\\n", " ")
+        sudo_targets = [
+            re.search(r"/usr/bin/sudo\s+([^\s)]+)", line).group(1)
+            for line in logical_setup.splitlines()
+            if "/usr/bin/sudo" in line and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(
+            sudo_targets,
+            [
+                "-k",
+                "-v",
+                "/usr/bin/mktemp",
+                "/bin/rm",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/python3",
+                "/usr/bin/python3",
+                "/usr/sbin/visudo",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/python3",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                "/usr/bin/install",
+                '"$HELPER"',
+            ],
+        )
         self.assertIn("install-inactive", setup)
         self.assertIn("live_promotion=false", setup)
         self.assertNotIn("systemsetup", setup)
         self.assertNotIn("sudo -v", client + helper)
         self.assertIn('"/usr/bin/sudo", "-n"', client)
+        syntax = subprocess.run(
+            ("/bin/sh", "-n", str(REPO_ROOT / "scripts/setup_quiet_guard.sh")),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_setup_validates_and_installs_identical_root_staged_bytes(self) -> None:
         setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
@@ -913,12 +1121,54 @@ class WriteBoundaryTests(EngineTestCase):
             "$REPO_ROOT/scripts/quiet_guard_privileged.py",
         ):
             self.assertEqual(setup.count(mutable_path), 1, mutable_path)
-        validation_and_install = setup.split("# Parse the staged Python bytes", 1)[1]
+        validation_and_install = setup.split("# Authenticate the exact root-staged bytes", 1)[1]
         self.assertNotIn("$REPO_ROOT/", validation_and_install)
         self.assertIn('visudo -cf "$STAGE_ROOT/joulewise-quiet-guard.sudoers"', setup)
         self.assertIn('"$STAGE_ROOT/joulewise-quiet-guard.sudoers" "$SUDOERS_PATH"', setup)
         self.assertNotIn("recover --ack *", setup)
         self.assertIn("unsafe root-helper parent", setup)
+
+    def test_setup_digest_pins_match_every_reviewed_root_executable_artifact(self) -> None:
+        setup = (REPO_ROOT / "scripts/setup_quiet_guard.sh").read_text()
+        expected = {
+            "QUIET_GUARD_SHA256": REPO_ROOT / "joulewise/quiet_guard.py",
+            "QUIET_GUARD_PROCESS_SHA256": REPO_ROOT / "joulewise/quiet_guard_process.py",
+            "QUIET_GUARD_PRIVILEGED_SHA256": REPO_ROOT / "scripts/quiet_guard_privileged.py",
+        }
+        for variable, path in expected.items():
+            match = re.search(rf'^{variable}="([0-9a-f]{{64}})"$', setup, re.MULTILINE)
+            self.assertIsNotNone(match, variable)
+            assert match is not None
+            pinned = match.group(1)
+            payload = path.read_bytes()
+            self.assertEqual(pinned, hashlib.sha256(payload).hexdigest(), path)
+            self.assertNotEqual(pinned, hashlib.sha256(payload + b"\n# tampered").hexdigest())
+        self.assertIn("hmac.compare_digest(observed, expected)", setup)
+        self.assertIn("reviewed-artifact digest mismatch", setup)
+        validator = setup.split(
+            "/usr/bin/sudo /usr/bin/python3 -I -S -B -c '\n", 1
+        )[1].split("\n' \\\n", 1)[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            staged = Path(temporary) / "quiet_guard.py"
+            payload = (REPO_ROOT / "joulewise/quiet_guard.py").read_bytes()
+            staged.write_bytes(payload)
+            digest = hashlib.sha256(payload).hexdigest()
+            valid = subprocess.run(
+                (sys.executable, "-I", "-S", "-B", "-c", validator, str(staged), digest),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            staged.write_bytes(payload + b"\n# syntactically valid tampering\n")
+            tampered = subprocess.run(
+                (sys.executable, "-I", "-S", "-B", "-c", validator, str(staged), digest),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertNotEqual(tampered.returncode, 0)
+            self.assertIn(b"reviewed-artifact digest mismatch", tampered.stderr)
 
     def test_commit_one_contains_no_launch_quit_or_measurement_command(self) -> None:
         sources = "\n".join(

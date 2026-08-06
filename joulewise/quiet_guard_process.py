@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 import ctypes
 import ctypes.util
+import errno
 import hashlib
 import struct
 import subprocess
@@ -35,6 +36,14 @@ ARGV_DIGEST_PREFIX = "sha256:"
 
 class ProcessIdentityError(ValueError):
     """A process observation or durable identity is malformed."""
+
+
+class ProcessObservationError(ProcessIdentityError):
+    """A listed or previously observed process cannot be observed reliably."""
+
+    def __init__(self, detail: str, *, error_number: int | None = None) -> None:
+        super().__init__(detail)
+        self.error_number = error_number
 
 
 def argv_digest(argv: Sequence[str] | bytes) -> str:
@@ -195,6 +204,12 @@ class ProcessSource(Protocol):
     """Injectable boundary for exact observation and independent census."""
 
     def observe(self, pid: int) -> ProcessIdentity | None:
+        """Return an identity or ``None`` only for a positively absent PID.
+
+        Observation failures and torn reads raise ``ProcessObservationError``;
+        callers must never reinterpret them as absence.
+        """
+
         ...
 
     def census(self) -> tuple[ProcessIdentity, ...]:
@@ -205,6 +220,7 @@ class Revalidation(str, Enum):
     MATCH = "match"
     ABSENT = "absent"
     PID_REUSED = "pid_reused"
+    UNOBSERVABLE = "unobservable"
 
 
 def revalidate_identity(
@@ -213,7 +229,10 @@ def revalidate_identity(
 ) -> tuple[Revalidation, ProcessIdentity | None]:
     """Re-observe ``expected.pid`` and classify the exact identity."""
 
-    observed = source.observe(expected.pid)
+    try:
+        observed = source.observe(expected.pid)
+    except ProcessObservationError:
+        return Revalidation.UNOBSERVABLE, None
     if observed is None:
         return Revalidation.ABSENT, None
     if observed == expected:
@@ -322,56 +341,71 @@ class SysctlDarwinProcessReader:
             self._libc.sysctl.restype = ctypes.c_int
         return self._libc
 
-    def _sysctl(self, mib: Sequence[int], capacity: int | None = None) -> bytes | None:
+    def _sysctl(self, mib: Sequence[int], capacity: int | None = None) -> bytes:
         libc = self._system_library()
         if libc is None:
-            return None
+            raise ProcessObservationError("Darwin system library is unavailable")
         names = (ctypes.c_int * len(mib))(*mib)
         if capacity is None:
             size = ctypes.c_size_t(0)
             if libc.sysctl(names, len(mib), None, ctypes.byref(size), None, 0) != 0:
-                return None
+                raise ProcessObservationError(
+                    "Darwin sysctl size query failed",
+                    error_number=ctypes.get_errno(),
+                )
             capacity = size.value
-        if capacity <= 0:
-            return None
+        if capacity < 0:
+            raise ProcessObservationError("Darwin sysctl returned a negative capacity")
+        if capacity == 0:
+            return b""
         buffer = ctypes.create_string_buffer(capacity)
         size = ctypes.c_size_t(capacity)
         if libc.sysctl(names, len(mib), buffer, ctypes.byref(size), None, 0) != 0:
-            return None
+            raise ProcessObservationError(
+                "Darwin sysctl payload query failed",
+                error_number=ctypes.get_errno(),
+            )
         return bytes(buffer.raw[: size.value])
 
-    def _argmax(self) -> int | None:
+    def _argmax(self) -> int:
         payload = self._sysctl((self.CTL_KERN, self.KERN_ARGMAX))
-        if payload is None or len(payload) < ctypes.sizeof(ctypes.c_int):
-            return None
+        if len(payload) < ctypes.sizeof(ctypes.c_int):
+            raise ProcessObservationError("KERN_ARGMAX payload is malformed")
         value = struct.unpack_from("=i", payload)[0]
-        return value if 0 < value <= 16 * 1024 * 1024 else None
+        if not 0 < value <= 16 * 1024 * 1024:
+            raise ProcessObservationError("KERN_ARGMAX value is invalid")
+        return value
 
     def _start_time(self, pid: int) -> str | None:
-        payload = self._sysctl(
-            (self.CTL_KERN, self.KERN_PROC, self.KERN_PROC_PID, pid)
-        )
-        if payload is None or len(payload) < ctypes.sizeof(_Timeval):
+        try:
+            payload = self._sysctl(
+                (self.CTL_KERN, self.KERN_PROC, self.KERN_PROC_PID, pid)
+            )
+        except ProcessObservationError as exc:
+            if exc.error_number == errno.ESRCH:
+                return None
+            raise
+        if not payload:
             return None
+        if len(payload) < ctypes.sizeof(_Timeval):
+            raise ProcessObservationError("KERN_PROC_PID payload is malformed")
         value = _Timeval.from_buffer_copy(payload)
         if value.tv_sec <= 0 or not 0 <= value.tv_usec < 1_000_000:
-            return None
+            raise ProcessObservationError("KERN_PROC_PID start time is invalid")
         return f"{value.tv_sec}.{value.tv_usec:06d}"
 
     def _procargs(self, pid: int) -> tuple[str, tuple[str, ...]] | None:
         capacity = self._argmax()
-        if capacity is None:
-            return None
         payload = self._sysctl((self.CTL_KERN, self.KERN_PROCARGS2, pid), capacity)
-        if payload is None or len(payload) < ctypes.sizeof(ctypes.c_int):
-            return None
+        if len(payload) < ctypes.sizeof(ctypes.c_int):
+            raise ProcessObservationError("KERN_PROCARGS2 payload is malformed")
         argc = struct.unpack_from("=i", payload)[0]
         if argc <= 0 or argc > 1_000_000:
-            return None
+            raise ProcessObservationError("KERN_PROCARGS2 argc is invalid")
         cursor = ctypes.sizeof(ctypes.c_int)
         executable_end = payload.find(b"\0", cursor)
         if executable_end <= cursor:
-            return None
+            raise ProcessObservationError("KERN_PROCARGS2 executable is missing")
         executable = payload[cursor:executable_end].decode("utf-8", "surrogateescape")
         cursor = executable_end + 1
         while cursor < len(payload) and payload[cursor] == 0:
@@ -380,11 +414,11 @@ class SysctlDarwinProcessReader:
         for _ in range(argc):
             end = payload.find(b"\0", cursor)
             if end < cursor:
-                return None
+                raise ProcessObservationError("KERN_PROCARGS2 argv is truncated")
             arguments.append(payload[cursor:end].decode("utf-8", "surrogateescape"))
             cursor = end + 1
         if not arguments:
-            return None
+            raise ProcessObservationError("KERN_PROCARGS2 argv is empty")
         return executable, tuple(arguments)
 
     def _parent(self, pid: int) -> int | None:
@@ -395,34 +429,38 @@ class SysctlDarwinProcessReader:
             check=False,
         )
         if result.returncode != 0:
-            return None
+            raise ProcessObservationError("parent linkage query failed")
         parts = bytes(result.stdout).split()
         if len(parts) != 2:
-            return None
+            raise ProcessObservationError("parent linkage payload is malformed")
         try:
             observed_pid, ppid = (int(part) for part in parts)
         except ValueError:
-            return None
+            raise ProcessObservationError("parent linkage is not numeric")
         if observed_pid != pid or ppid < 0:
-            return None
+            raise ProcessObservationError("parent linkage does not match the requested PID")
         return ppid
 
     def _read_once(self, pid: int) -> DarwinProcessRecord | None:
         start_time = self._start_time(pid)
+        if start_time is None:
+            return None
         procargs = self._procargs(pid)
         ppid = self._parent(pid)
-        if start_time is None or procargs is None or ppid is None:
-            return None
         executable, argv = procargs
         return DarwinProcessRecord(pid, ppid, start_time, executable, argv)
 
     def read(self, pid: int) -> DarwinProcessRecord | None:
-        if type(pid) is not int or pid <= 0 or self._platform_name != "darwin":
-            return None
+        if type(pid) is not int or pid <= 0:
+            raise ProcessObservationError("PID must be a positive integer")
+        if self._platform_name != "darwin":
+            raise ProcessObservationError("Darwin process observation is unavailable")
         first = self._read_once(pid)
-        second = self._read_once(pid)
-        if first is None or first != second:
+        if first is None:
             return None
+        second = self._read_once(pid)
+        if second is None or first != second:
+            raise ProcessObservationError("process changed during kernel observation")
         return first
 
 
@@ -465,11 +503,11 @@ class PsProcessSource:
         parent_pid = row.ppid
         while parent_pid > 0:
             if parent_pid in seen:
-                return None
+                raise ProcessObservationError("process ancestry contains a cycle")
             seen.add(parent_pid)
             parent = self._reader.read(parent_pid)
             if parent is None:
-                return None
+                raise ProcessObservationError("ancestor disappeared during observation")
             observed_rows.append(parent)
             ancestry.append(self._ancestor(parent))
             parent_pid = parent.ppid
@@ -477,7 +515,7 @@ class PsProcessSource:
         # still have precisely the same start, argv, executable, and parent.
         for original in observed_rows:
             if self._reader.read(original.pid) != original:
-                return None
+                raise ProcessObservationError("process ancestry changed during observation")
         return ProcessIdentity(
             pid=row.pid,
             start_time=row.start_time,
@@ -494,8 +532,8 @@ class PsProcessSource:
         for token in raw.split():
             try:
                 pid = int(token)
-            except ValueError:
-                continue
+            except ValueError as exc:
+                raise ProcessObservationError("Darwin process census listed a non-PID") from exc
             identity = self.observe(pid)
             if identity is not None:
                 identities.append(identity)

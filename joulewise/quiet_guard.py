@@ -52,11 +52,6 @@ POWERMETRICS_PROBE = (
     "-i",
     "100",
 )
-SESSION_EXIT_TIMEOUT_S = 120
-APP_QUIT_TIMEOUT_S = 30
-TERM_WAIT_TIMEOUT_S = 10
-KILL_WAIT_TIMEOUT_S = 5
-
 STATES = (
     "idle",
     "handoff_pending",
@@ -95,10 +90,9 @@ RECOVERY_ACKNOWLEDGMENT = (
     "I acknowledge quiet-guard recovery and exact-identity abandonment"
 )
 
-# OPEN DECISION MARKER: D-114 (PROPOSED) — Quiet-guard Q2 setup
-# authority is a fixed installation capability, not general root authority.
-# The binding decision-log entry remains lead-owned.
-PROPOSED_SETUP_AUTHORITY_DECISION = "D-114"
+# D-115 (ADJUDICATED) binds the fixed installation capability and its fresh
+# authorization, authenticated-content, and interpreter-isolation conditions.
+SETUP_AUTHORITY_DECISION = "D-115"
 
 FAILURE_CAUSES = (
     "t3_char_pair_verdict_missing",
@@ -118,7 +112,7 @@ FAILURE_CAUSES = (
     "recovery_acknowledgment_missing",
     "processes_remain",
     "independent_census_nonzero",
-    "agent_launch_blocked",
+    "process_observation_unavailable",
     "privileged_command_refused",
 )
 FAILURE_SIGNATURES = {
@@ -346,6 +340,8 @@ def _validate_lease(value: Any, host_id: str, boot_id: str, epoch: int, state: s
         if state in {"handoff_pending", "quiet_held"}:
             raise GuardError("lease_invalid", f"{state} requires a lease")
         return None
+    if state == "idle":
+        raise GuardError("lease_invalid", "idle requires a null lease")
     raw = _require_exact_fields(
         value,
         {"schema", "host_id", "boot_id", "epoch", "lease_id", "owner", "created_epoch"},
@@ -441,6 +437,8 @@ def validate_state(value: Any, host_id: str, boot_id: str) -> dict[str, Any]:
         raise GuardError("schema_mismatch", "unknown guard state")
     registry = _validate_registry(raw["registry"], host_id, boot_id, epoch)
     lease = _validate_lease(raw["lease"], host_id, boot_id, epoch, state)
+    if state == "idle" and registry["entries"]:
+        raise GuardError("registry_invalid", "idle requires an empty registry")
     if not isinstance(raw["events"], list) or len(raw["events"]) != epoch:
         raise GuardError("epoch_regression", "event count must equal state epoch")
     events = [
@@ -530,22 +528,6 @@ def transition_rule(source: str, target: str, actor: str) -> TransitionRule | No
     return TRANSITION_TABLE.get((source, target, actor))
 
 
-def agent_launch_refusal(state: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Return the perimeter refusal for a non-idle durable state.
-
-    Commit 2 will call this under the same control lock around
-    check-spawn-register.  Landing it here makes Q20's recovery block part of
-    the engine contract without editing a launcher prematurely.
-    """
-
-    name = state.get("state") if isinstance(state, Mapping) else None
-    if name == "idle":
-        return None
-    if name not in STATES:
-        return failure_mapping("schema_mismatch", "agent launch saw an invalid guard state")
-    return failure_mapping("agent_launch_blocked", f"agent launch blocked while guard is {name}")
-
-
 class GuardEngine:
     """Root-parameterized durable state engine.
 
@@ -583,12 +565,22 @@ class GuardEngine:
                 "privileged_command_refused", "non-production initialization is test-sandbox-only"
             )
         with self.locked():
-            if self.paths.config.exists() or self.paths.state.exists():
-                raise GuardError("schema_mismatch", "guard installation already exists")
             config = inactive_config(self.host_id)
             state = initial_state(self.host_id, self.boot_id)
-            _atomic_write_json(self.paths.config, config)
-            _atomic_write_json(self.paths.state, state)
+            config_exists = self.paths.config.exists()
+            state_exists = self.paths.state.exists()
+            if config_exists:
+                installed_config = self.read_config()
+                if installed_config != config:
+                    raise GuardError("schema_mismatch", "existing inactive config differs")
+            if state_exists:
+                installed_state = self.read_state()
+                if installed_state != state:
+                    raise GuardError("schema_mismatch", "existing guard state is not initial")
+            if not config_exists:
+                _atomic_write_json(self.paths.config, config)
+            if not state_exists:
+                _atomic_write_json(self.paths.state, state)
             return state
 
     @contextmanager
@@ -845,7 +837,12 @@ class GuardEngine:
                         "observed": observed.to_mapping() if observed else None,
                     }
                 )
-                if verdict == Revalidation.PID_REUSED:
+                if verdict == Revalidation.UNOBSERVABLE:
+                    cause = "process_observation_unavailable"
+                elif (
+                    verdict == Revalidation.PID_REUSED
+                    and cause != "process_observation_unavailable"
+                ):
                     cause = "pid_reuse_detected"
                 elif verdict == Revalidation.ABSENT and not cause:
                     cause = "stale_registry"
@@ -913,6 +910,11 @@ class GuardEngine:
                 verdict, observed = revalidate_identity(expected, source)
                 if verdict == Revalidation.MATCH:
                     raise GuardError("processes_remain", f"registered PID {expected.pid} still matches")
+                if verdict == Revalidation.UNOBSERVABLE:
+                    raise GuardError(
+                        "process_observation_unavailable",
+                        f"registered PID {expected.pid} could not be observed",
+                    )
                 abandoned.append(
                     {
                         "expected": expected.to_mapping(),
@@ -995,6 +997,11 @@ class GuardEngine:
                 if verdict == Revalidation.MATCH:
                     raise GuardError(
                         "processes_remain", f"registered PID {expected.pid} still matches"
+                    )
+                if verdict == Revalidation.UNOBSERVABLE:
+                    raise GuardError(
+                        "process_observation_unavailable",
+                        f"registered PID {expected.pid} could not be observed",
                     )
             abandoned.append(
                 {

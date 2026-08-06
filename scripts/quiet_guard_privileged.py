@@ -1,22 +1,17 @@
-#!/usr/bin/python3 -E
-"""Root-owned fixed-command helper for the inactive quiet-guard install.
-
-Only ``status`` and ``recover`` are exposed through sudoers.  The
-``install-inactive`` command is invoked directly by the interactive setup
-script while already root and is not granted NOPASSWD authority.  No command
-in this commit launches or signals a process.
-"""
+#!/bin/sh
+""":"
+exec /usr/bin/python3 -I -S "$0" "$@"
+:"""
 
 from __future__ import annotations
 
 import os
 import sys
 
-# This must run before any non-bootstrap import.  The kernel-selected system
-# interpreter ignores PYTHON* variables via ``-E``; an installed NOPASSWD
-# helper then admits only the root-owned private library plus the interpreter's
-# standard-library roots.  In particular, neither cwd nor a repository path is
-# ever added for installed code resolution.
+# The shell/Python polyglot above selects the fixed system interpreter with
+# isolated mode and site initialization disabled.  This bootstrap runs before
+# any non-standard import and admits only the root-owned private library plus
+# standard-library roots at the installed path.
 _INSTALLED_HELPER = "/usr/local/libexec/joulewise-quiet-guard"
 _INSTALLED_LIBRARY = "/Library/Application Support/JouleWise/quiet-guard-install/lib"
 if os.path.realpath(__file__) == _INSTALLED_HELPER:
@@ -31,6 +26,11 @@ if os.path.realpath(__file__) == _INSTALLED_HELPER:
     sys.path[:] = [_INSTALLED_LIBRARY, *_stdlib]
     os.environ.pop("PYTHONPATH", None)
     os.environ.pop("PYTHONHOME", None)
+else:
+    # Repository execution exists only for non-root tests and setup review.
+    _repository_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    if _repository_root not in sys.path:
+        sys.path.insert(0, _repository_root)
 
 import argparse
 from dataclasses import dataclass
@@ -49,9 +49,9 @@ from joulewise.quiet_guard import (  # noqa: E402
     failure_mapping,
 )
 from joulewise.quiet_guard_process import (  # noqa: E402
+    ProcessIdentityError,
     PsProcessSource,
-    Revalidation,
-    revalidate_identity,
+    descends_from,
     validate_identity_mapping,
 )
 
@@ -149,7 +149,7 @@ def _emit(value: object) -> None:
 
 
 def _recovery_inputs(engine: GuardEngine) -> tuple[PsProcessSource, tuple]:
-    """Independently re-observe every exact registered identity.
+    """Enumerate independently, then select the exact registered family.
 
     The later T3-family commit will broaden this census with its dynamically
     derived family manifest.  Commit 1 has no production registration path,
@@ -158,13 +158,16 @@ def _recovery_inputs(engine: GuardEngine) -> tuple[PsProcessSource, tuple]:
 
     source = PsProcessSource()
     state = engine.status()["state"]
-    still_present = []
-    for raw in state["registry"]["entries"]:
-        expected = validate_identity_mapping(raw)
-        result, observed = revalidate_identity(expected, source)
-        if result == Revalidation.MATCH and observed is not None:
-            still_present.append(observed)
-    return source, tuple(still_present)
+    registered = tuple(
+        validate_identity_mapping(raw) for raw in state["registry"]["entries"]
+    )
+    enumerated = source.census()
+    family = tuple(
+        row
+        for row in enumerated
+        if row in registered or any(descends_from(row, owner) for owner in registered)
+    )
+    return source, family
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -197,6 +200,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     except GuardError as exc:
         _emit(exc.to_mapping())
+        return EXIT_REFUSED
+    except ProcessIdentityError as exc:
+        _emit(failure_mapping("process_observation_unavailable", str(exc)))
         return EXIT_REFUSED
     except OSError as exc:
         _emit(failure_mapping("privileged_command_refused", str(exc)))

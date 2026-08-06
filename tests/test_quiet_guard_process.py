@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import struct
 import subprocess
 import unittest
 
@@ -10,6 +12,7 @@ from joulewise.quiet_guard_process import (
     DarwinProcessRecord,
     ProcessIdentity,
     ProcessIdentityError,
+    ProcessObservationError,
     PsProcessSource,
     Revalidation,
     SnapshotProcessSource,
@@ -104,6 +107,18 @@ class RevalidationTests(unittest.TestCase):
         self.assertEqual(verdict, Revalidation.ABSENT)
         self.assertIsNone(observed)
 
+    def test_observation_failure_is_not_absence(self) -> None:
+        class UnobservableSource:
+            def observe(self, pid):
+                raise ProcessObservationError(f"cannot observe {pid}")
+
+            def census(self):
+                return ()
+
+        verdict, observed = revalidate_identity(identity(), UnobservableSource())
+        self.assertEqual(verdict, Revalidation.UNOBSERVABLE)
+        self.assertIsNone(observed)
+
     def test_reused_pid_start_time_is_not_a_match(self) -> None:
         expected = identity()
         reused = identity(start_time="boot+99")
@@ -189,7 +204,8 @@ class PsProcessSourceTests(unittest.TestCase):
         changed_child = DarwinProcessRecord(10, 99, "1785940800.123456", "/app/t3", ("t3", "--one"))
         parent = DarwinProcessRecord(1, 0, "1785940000.000001", "/sbin/launchd", ("launchd",))
         reader = SequenceReader({10: (child, changed_child), 1: (parent,)})
-        self.assertIsNone(PsProcessSource(reader=reader).observe(10))
+        with self.assertRaises(ProcessObservationError):
+            PsProcessSource(reader=reader).observe(10)
 
     def test_true_argv_ambiguity_changes_identity_despite_same_display(self) -> None:
         display_command = "t3 --token REDACTED"
@@ -197,14 +213,81 @@ class PsProcessSourceTests(unittest.TestCase):
         second = DarwinProcessRecord(10, 0, "1785940800.123456", "/app/t3", ("t3", "--token", "two"))
         first_identity = PsProcessSource(reader=SequenceReader({10: (first, first)})).observe(10)
         second_identity = PsProcessSource(reader=SequenceReader({10: (second, second)})).observe(10)
-        self.assertEqual(display_command, display_command)
         self.assertIsNotNone(first_identity)
         self.assertIsNotNone(second_identity)
+        assert first_identity is not None
+        self.assertEqual(first_identity.argv_digest, argv_digest(first.argv))
+        self.assertNotEqual(
+            first_identity.argv_digest,
+            argv_digest(tuple(display_command.split())),
+        )
         self.assertNotEqual(first_identity, second_identity)
 
-    def test_non_darwin_sysctl_reader_fails_closed(self) -> None:
+    def test_sysctl_decoder_preserves_subseconds_and_true_argv_boundaries(self) -> None:
+        pid = 321
+        seconds = 1_785_940_800
+        microseconds = 654_321
+        executable = "/Applications/T3 Code (Alpha).app/Contents/MacOS/t3"
+        arguments = ("t3", "--label=alpha beta", "", "tail value")
+
+        class Timeval(ctypes.Structure):
+            _fields_ = (("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_int))
+
+        start_payload = bytes(Timeval(seconds, microseconds)) + (b"\0" * 512)
+        argv_payload = (
+            struct.pack("=i", len(arguments))
+            + executable.encode()
+            + b"\0\0\0"
+            + b"\0".join(argument.encode() for argument in arguments)
+            + b"\0PATH=/not-an-argument\0"
+        )
+
+        def runner(command, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(command, 0, stdout=f"{pid} 0\n".encode(), stderr=b"")
+
+        class PayloadReader(SysctlDarwinProcessReader):
+            def _sysctl(self, mib, capacity=None):
+                del capacity
+                key = tuple(mib)
+                if key == (self.CTL_KERN, self.KERN_ARGMAX):
+                    return struct.pack("=i", 4096)
+                if key == (self.CTL_KERN, self.KERN_PROC, self.KERN_PROC_PID, pid):
+                    return start_payload
+                if key == (self.CTL_KERN, self.KERN_PROCARGS2, pid):
+                    return argv_payload
+                raise AssertionError(key)
+
+        reader = PayloadReader(runner, platform_name="darwin")
+        decoded = reader.read(pid)
+        self.assertEqual(
+            decoded,
+            DarwinProcessRecord(
+                pid,
+                0,
+                f"{seconds}.{microseconds:06d}",
+                executable,
+                arguments,
+            ),
+        )
+        observed = PsProcessSource(runner, reader=reader).observe(pid)
+        self.assertIsNotNone(observed)
+        assert observed is not None
+        self.assertEqual(observed.start_time, "1785940800.654321")
+        self.assertEqual(observed.argv_digest, argv_digest(arguments))
+
+    def test_non_darwin_sysctl_reader_is_unobservable_not_absent(self) -> None:
         reader = SysctlDarwinProcessReader(platform_name="linux")
-        self.assertIsNone(reader.read(99))
+        with self.assertRaises(ProcessObservationError):
+            reader.read(99)
+
+    def test_sysctl_esrch_is_the_only_initial_absence_signal(self) -> None:
+        class AbsentReader(SysctlDarwinProcessReader):
+            def _sysctl(self, mib, capacity=None):
+                del mib, capacity
+                raise ProcessObservationError("gone", error_number=3)
+
+        self.assertIsNone(AbsentReader(platform_name="darwin").read(99))
 
     def test_failed_census_is_refusal_not_false_zero(self) -> None:
         def runner(arguments, **kwargs):
@@ -213,6 +296,18 @@ class PsProcessSourceTests(unittest.TestCase):
 
         with self.assertRaises(ProcessIdentityError):
             PsProcessSource(runner, reader=SequenceReader({})).census()
+
+    def test_census_refuses_when_a_listed_pid_is_unobservable(self) -> None:
+        def runner(arguments, **kwargs):
+            del kwargs
+            return subprocess.CompletedProcess(arguments, 0, stdout=b"123\n", stderr=b"")
+
+        class FailingReader:
+            def read(self, pid):
+                raise ProcessObservationError(f"sysctl failed for listed PID {pid}")
+
+        with self.assertRaisesRegex(ProcessObservationError, "listed PID 123"):
+            PsProcessSource(runner, reader=FailingReader()).census()
 
 
 if __name__ == "__main__":
