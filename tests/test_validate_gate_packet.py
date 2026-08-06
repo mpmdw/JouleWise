@@ -348,6 +348,96 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "PASS")
         self.assertEqual(receipt["packet_charter_pin_sha256"], self.charter_sha)
 
+    def test_backtick_in_backtick_info_string_exposes_duplicate_headings(self) -> None:
+        manifest = f"{sha256(self.exhibit_bytes)}  inputs/evidence.txt\n"
+        charter_section = (
+            "## Charter pin\n\n"
+            "Charter: `charter.md`\n"
+            f"sha256 `{self.charter_sha}`\n\n"
+        )
+        manifest_section = (
+            "## Exhibit manifest\n\n"
+            "```\n"
+            f"{manifest}"
+            "```\n\n"
+        )
+
+        cases = (
+            (
+                "charter_and_manifest_duplicates",
+                charter_section
+                + "## First section end\n\n"
+                + manifest_section
+                + "## Second section end\n\n"
+                + "````bogus`\n"
+                + charter_section
+                + manifest_section
+                + "````\n",
+                "charter_pin_duplicate",
+            ),
+            (
+                "manifest_duplicate",
+                charter_section
+                + "## First section end\n\n"
+                + manifest_section
+                + "## Second section end\n\n"
+                + "````bogus`\n"
+                + manifest_section
+                + "````\n",
+                "manifest_parse_error",
+            ),
+        )
+        for name, body, reason in cases:
+            with self.subTest(name=name):
+                packet = self.packet_directory / "PACKET.md"
+                packet_bytes = ("# Synthetic cold gate\n\n" + body).encode("utf-8")
+                packet.write_bytes(packet_bytes)
+                completed, receipt = self.run_validator(
+                    packet, expected_packet=sha256(packet_bytes)
+                )
+                self.assert_refusal(completed, receipt, reason)
+
+    def test_markdown_fence_state_edge_behaviors(self) -> None:
+        lines = [
+            "```python",
+            "# masked by backtick fence",
+            "~~~~",
+            "# different marker neither nests nor closes",
+            "````",
+            "# visible after closer",
+            "    ```",
+            "# visible after four-space-indented pseudo-fence",
+            "~~~ info with ` backtick",
+            "# masked by tilde fence",
+            "```",
+            "# backticks do not close tilde fence",
+            "~~~~",
+            "# visible after tilde closer",
+            "```unterminated",
+            "# masked through EOF",
+        ]
+        self.assertEqual(
+            VALIDATOR_MODULE._outside_fence_mask(lines),
+            [
+                False,
+                False,
+                False,
+                False,
+                False,
+                True,
+                True,
+                True,
+                False,
+                False,
+                False,
+                False,
+                False,
+                True,
+                False,
+                False,
+            ],
+        )
+
     def test_refuses_ambiguous_pin_inside_the_scoped_section(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha, ambiguous_pin=True)
         completed, receipt = self.run_validator(packet)
@@ -495,6 +585,15 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertFalse(receipt_path.exists())
 
     def test_receipt_privacy_is_structural_for_absolute_input_paths(self) -> None:
+        """Separate v2-shape checks from privacy regressions.
+
+        ``assert_refusal`` and the explicit PASS assertions guard the new v2
+        binding fields.  Basename-only serialization of valid packet/charter
+        paths pre-existed at 38b6570.  The malformed-digest null/no-echo cases
+        below are the B1-discriminating privacy behavior added after that
+        baseline; the remaining CLI cases pin the already leak-free V4/V5/V7
+        paths.
+        """
         packet, _, _ = self.write_packet(pin=self.charter_sha)
         passed, pass_receipt = self.run_validator(packet)
         refused, refuse_receipt = self.run_validator(
@@ -502,11 +601,100 @@ class ValidateGatePacketTests(unittest.TestCase):
         )
         self.assertEqual(passed.returncode, 0)
         self.assertEqual(pass_receipt["result"], "PASS")
+        self.assertEqual(
+            pass_receipt["binding_scope"], "validation_time_observation_only"
+        )
+        self.assertIs(pass_receipt["judge_handoff_bound"], False)
         self.assert_refusal(refused, refuse_receipt, "packet_digest_mismatch")
         for output in (passed.stdout, refused.stdout):
             self.assertNotIn(str(self.root).encode("utf-8"), output)
             self.assertNotIn(str(packet).encode("utf-8"), output)
             self.assertNotIn(str(self.charter).encode("utf-8"), output)
+
+        digest_cases = (
+            (
+                "expected_packet_sha256",
+                "/Users/edr/private/digest-secret",
+                self.charter_sha,
+                "expected_packet_sha256_invalid",
+            ),
+            (
+                "expected_charter_sha256",
+                sha256(packet.read_bytes()),
+                "/Users/edr/private/charter-digest-secret",
+                "expected_charter_sha256_invalid",
+            ),
+        )
+        for field, expected_packet, expected_charter, reason in digest_cases:
+            supplied = (
+                expected_packet
+                if field == "expected_packet_sha256"
+                else expected_charter
+            )
+            with self.subTest(field=field):
+                completed = self.run_cli(
+                    [
+                        "--packet",
+                        str(packet),
+                        "--charter",
+                        str(self.charter),
+                        "--expected-packet-sha256",
+                        expected_packet,
+                        "--expected-charter-sha256",
+                        expected_charter,
+                    ]
+                )
+                receipt = json.loads(completed.stdout.decode("utf-8"))
+                self.assert_refusal(completed, receipt, reason)
+                self.assertIsNone(receipt[field])
+                self.assertNotIn(supplied.encode("utf-8"), completed.stdout)
+
+        private_packet = "/Users/edr/private/PACKET.md"
+        private_charter = "/Users/edr/private/charter.md"
+        cli_cases = (
+            (
+                "unknown_option",
+                ["--unknown-option", "/Users/edr/private/secret"],
+                "cli_invalid",
+            ),
+            (
+                "missing_digest",
+                [
+                    "--packet",
+                    private_packet,
+                    "--charter",
+                    private_charter,
+                    "--expected-charter-sha256",
+                    "0" * 64,
+                ],
+                "cli_invalid",
+            ),
+            (
+                "unreadable_packet",
+                [
+                    "--packet",
+                    private_packet,
+                    "--charter",
+                    private_charter,
+                    "--expected-packet-sha256",
+                    "0" * 64,
+                    "--expected-charter-sha256",
+                    "0" * 64,
+                ],
+                "packet_unreadable",
+            ),
+        )
+        for name, arguments, reason in cli_cases:
+            with self.subTest(name=name):
+                completed = self.run_cli(arguments)
+                receipt = json.loads(completed.stdout.decode("utf-8"))
+                self.assert_refusal(completed, receipt, reason)
+                for raw_value in (
+                    b"/Users/edr/private/secret",
+                    private_packet.encode("utf-8"),
+                    private_charter.encode("utf-8"),
+                ):
+                    self.assertNotIn(raw_value, completed.stdout)
 
     def test_receipt_is_byte_deterministic(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)

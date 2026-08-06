@@ -74,7 +74,9 @@ MANIFEST_TITLE_RE = re.compile(
 )
 MANIFEST_LINE_RE = re.compile(r"^([0-9a-fA-F]{64})  ([^\r\n]+)$")
 FENCE_RE = re.compile(r"^[ \t]*```[ \t]*$")
-MARKDOWN_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*$")
+MARKDOWN_FENCE_OPEN_RE = re.compile(
+    r"^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$"
+)
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
@@ -116,7 +118,7 @@ def _basename(value: str | None) -> str | None:
 def _normalized_digest(value: str | None) -> str | None:
     if value is not None and HEX_RE.fullmatch(value):
         return value.lower()
-    return value
+    return None
 
 
 def _base_receipt(
@@ -177,7 +179,8 @@ def _outside_fence_mask(lines: list[str]) -> list[bool]:
             if opening is None:
                 outside.append(True)
                 continue
-            fence = opening.group(1)
+            fence = opening.group(1) or opening.group(2)
+            assert fence is not None
             marker = fence[0]
             opening_length = len(fence)
             outside.append(False)
