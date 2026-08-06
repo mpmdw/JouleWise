@@ -46,6 +46,24 @@ from joulewise.calibration_ledger import (
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 
 
+_REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
+_REAL_D079_CUSTODY_MANIFEST = Path(
+    "/private/tmp/d079-custody-manifest.lead.json"
+)
+_REAL_D079_TABLE_SHA256 = (
+    "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
+)
+_REAL_D079_CUSTODY_MANIFEST_SHA256 = (
+    "99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078"
+)
+_ISSUED_D079_DERIVATION_SHA256 = (
+    "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+)
+_ISSUED_D079_FILE_SHA256 = (
+    "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+)
+
+
 class CalibrationLedgerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -436,6 +454,81 @@ class CalibrationLedgerTests(unittest.TestCase):
             emitted.stderr,
         )
         self.assertFalse(dry_ledger.exists())
+
+    @unittest.skipUnless(
+        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
+        "lead-reviewed D-079 import inputs are unavailable",
+    )
+    def test_d079_issued_artifact_mode_is_deterministic_and_write_explicit(
+        self,
+    ) -> None:
+        script = Path(__file__).resolve().parents[1] / "scripts" / (
+            "calibration_ledger_bootstrap.py"
+        )
+        dry_ledger = self.root / "issued-mode-ledger.jsonl"
+        emitted_path = self.root / "issued-acceptance.json"
+        command = [
+            sys.executable,
+            str(script),
+            "--disposition-table",
+            str(_REAL_D079_TABLE),
+            "--expected-table-sha256",
+            _REAL_D079_TABLE_SHA256,
+            "--custody-manifest",
+            str(_REAL_D079_CUSTODY_MANIFEST),
+            "--expected-custody-manifest-sha256",
+            _REAL_D079_CUSTODY_MANIFEST_SHA256,
+            "--checkout-root",
+            "/Users/edr",
+            "--ledger",
+            str(dry_ledger),
+            "--prepare-issued-artifact",
+        ]
+        first = subprocess.run(command, check=True, capture_output=True)
+        second = subprocess.run(command, check=True, capture_output=True)
+        self.assertEqual(first.stdout, second.stdout)
+        self.assertEqual(first.stderr, b"")
+        self.assertFalse(dry_ledger.exists())
+        self.assertFalse(emitted_path.exists())
+        rows = [json.loads(line) for line in first.stdout.splitlines()]
+        issued = next(
+            row for row in rows if row["record"] == "issued-acceptance-artifact"
+        )
+        summary = rows[-1]
+        self.assertEqual(summary["record"], "bootstrap-summary")
+        self.assertEqual(summary["final_sequence"], 76)
+        self.assertEqual(
+            summary["head_digest"],
+            "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+        )
+        self.assertEqual(
+            issued["derivation_sha256"], _ISSUED_D079_DERIVATION_SHA256
+        )
+        self.assertEqual(issued["artifact_file_sha256"], _ISSUED_D079_FILE_SHA256)
+        self.assertEqual(
+            len(issued["artifact"]["prior_observation_set"]["observations"]),
+            38,
+        )
+        self.assertEqual(issued["artifact"]["derivation_corpus"]["n"], 19)
+
+        emit_command = [
+            argument
+            for argument in command
+            if argument != "--prepare-issued-artifact"
+        ]
+        emit_command.extend(["--emit-issued-artifact", str(emitted_path)])
+        emitted = subprocess.run(emit_command, check=True, capture_output=True)
+        self.assertFalse(dry_ledger.exists())
+        self.assertTrue(emitted_path.is_file())
+        self.assertEqual(
+            hashlib.sha256(emitted_path.read_bytes()).hexdigest(),
+            _ISSUED_D079_FILE_SHA256,
+        )
+        emitted_rows = [json.loads(line) for line in emitted.stdout.splitlines()]
+        self.assertEqual(
+            emitted_rows[-1]["issued_artifact_derivation_sha256"],
+            _ISSUED_D079_DERIVATION_SHA256,
+        )
 
     def test_historical_input_digest_pair_changes_committed_chain(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()

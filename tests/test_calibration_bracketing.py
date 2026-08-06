@@ -8,12 +8,14 @@ import math
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+import subprocess
 import tempfile
 from types import MappingProxyType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from joulewise.calibration_bracketing import (
+    ACCEPTANCE_BOUND_SCHEMA,
     CalibrationCandidate,
     _canonical_sha256,
     _valid_acceptance_bound,
@@ -28,7 +30,9 @@ from joulewise.calibration_ledger import (
     LEDGER_SCHEMA,
     CalibrationLedgerSnapshot,
     LedgerObservation,
+    bootstrap_historical_import,
     content_id_from_artifact_hashes,
+    load_calibration_ledger_snapshot,
 )
 from joulewise.powermetrics_fiducial import (
     MAX_AGE_S,
@@ -41,6 +45,129 @@ from joulewise.powermetrics_fiducial import (
     V2_BINDING_FIELDS,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from scripts.calibration_ledger_bootstrap import (
+    _issued_acceptance_artifact,
+    _issued_artifact_bytes,
+)
+
+
+_REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
+_REAL_D079_CUSTODY_MANIFEST = Path(
+    "/private/tmp/d079-custody-manifest.lead.json"
+)
+_REAL_D079_TABLE_SHA256 = (
+    "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
+)
+_REAL_D079_CUSTODY_MANIFEST_SHA256 = (
+    "99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078"
+)
+
+
+def _synthetic_issued_artifact() -> dict:
+    """Return a schema-valid issued artifact for isolated consumer tests."""
+
+    artifact = json.loads(json.dumps(load_calibration_acceptance_bound()))
+    assert artifact is not None
+    prior = artifact["prior_observation_set"]
+    observations = [
+        row for row in prior["observations"] if row["disposition"] == "valid"
+    ]
+    assert len(observations) == 19
+    additions = (
+        ("valid", 11),
+        ("systematic-invalid", 2),
+        ("ordinary-invalid", 6),
+    )
+    for disposition, count in additions:
+        for index in range(count):
+            token = f"synthetic-issued-{disposition}-{index}"
+            observations.append(
+                {
+                    "content_id": hashlib.sha256(token.encode()).hexdigest(),
+                    "epoch_id": "d079_epoch",
+                    "disposition": disposition,
+                    "attempt_id": token,
+                }
+            )
+    head_digest = hashlib.sha256(b"synthetic-issued-head").hexdigest()
+    artifact["schema_version"] = ACCEPTANCE_BOUND_SCHEMA
+    artifact["artifact_role"] = "issued"
+    artifact["issuance"] = {
+        "status": "issued",
+        "claim_eligible": True,
+        "reason": "synthetic issued-artifact consumer regression",
+    }
+    artifact["ledger_cutoff"] = {
+        "sequence": 76,
+        "head_digest": head_digest,
+        "ledger_schema": LEDGER_SCHEMA,
+        "role": "issued_acceptance_baseline",
+    }
+    prior["cutoff"] = {
+        key: artifact["ledger_cutoff"][key]
+        for key in ("sequence", "head_digest", "ledger_schema")
+    }
+    prior["observations"] = observations
+    artifact["backfill_candidate"].update(
+        {
+            "status": "issued",
+            "candidate_inventory": {
+                "ordinary-invalid": 6,
+                "systematic-invalid": 2,
+                "valid": 30,
+            },
+            "production_issuance_blocked": False,
+            "required_verification": "complete: synthetic consumer regression",
+        }
+    )
+    artifact["derivation_sha256"] = _canonical_sha256(
+        {
+            key: value
+            for key, value in artifact.items()
+            if key != "derivation_sha256"
+        }
+    )
+    assert _valid_acceptance_bound(artifact)
+    return artifact
+
+
+def _synthetic_issued_snapshot(
+    artifact: dict,
+) -> CalibrationLedgerSnapshot:
+    epoch = artifact["prior_observation_set"]["epoch_catalog"]["d079_epoch"]
+    observations = tuple(
+        LedgerObservation(
+            sequence=2 * index,
+            receipt_digest=hashlib.sha256(
+                f"issued-receipt-{index}".encode()
+            ).hexdigest(),
+            attempt_id=row["attempt_id"],
+            content_id=row["content_id"],
+            artifact_sha256=MappingProxyType({}),
+            identity_epoch=MappingProxyType(dict(epoch)),
+            t1_bindings=MappingProxyType({field: None for field in V2_BINDING_FIELDS}),
+            capture_wall_time_s="1.0",
+            exact_bound_lexeme_s="0.025",
+            disposition=row["disposition"],
+            custody_locator=f"/synthetic-issued/{row['attempt_id']}",
+            observation_kind="historical-import",
+        )
+        for index, row in enumerate(
+            artifact["prior_observation_set"]["observations"], start=1
+        )
+    )
+    cutoff = artifact["ledger_cutoff"]
+    return CalibrationLedgerSnapshot(
+        ledger_schema=LEDGER_SCHEMA,
+        ledger_path=Path("synthetic-issued-ledger.jsonl"),
+        head_sequence=cutoff["sequence"],
+        head_digest=cutoff["head_digest"],
+        receipts=(),
+        observations=observations,
+        refusal_reasons=(),
+        baseline_sequence=cutoff["sequence"],
+        baseline_digest=cutoff["head_digest"],
+    )
 
 
 def _fixture_snapshot(
@@ -172,6 +299,264 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             result["acceptance"]["freshness"]["reason"],
             "acceptance_artifact_unissued_fixture",
+        )
+
+    def test_issued_artifact_authenticates_and_becomes_claim_eligible(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        snapshot = _synthetic_issued_snapshot(artifact)
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+            )
+
+        self.assertEqual(reasons, ("instrument_calibration_bracket_missing",))
+        self.assertTrue(result["acceptance"]["artifact"]["claim_eligible"])
+        self.assertEqual(
+            result["acceptance"]["artifact"]["artifact_role"], "issued"
+        )
+
+    def test_issued_artifact_wrong_head_digest_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        snapshot = _synthetic_issued_snapshot(artifact)
+        artifact["ledger_cutoff"]["head_digest"] = "f" * 64
+        artifact["prior_observation_set"]["cutoff"]["head_digest"] = "f" * 64
+        artifact["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertTrue(_valid_acceptance_bound(artifact))
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+            )
+
+        self.assertEqual(reasons, ("calibration_ledger_baseline_missing",))
+        self.assertFalse(result["acceptance"]["artifact"]["claim_eligible"])
+
+    def test_issued_artifact_missing_ledger_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=None,
+            )
+
+        self.assertEqual(reasons, ("calibration_ledger_snapshot_required",))
+        self.assertFalse(result["acceptance"]["artifact"]["claim_eligible"])
+
+    def test_issued_artifact_committed_head_mismatch_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        snapshot = replace(
+            _synthetic_issued_snapshot(artifact),
+            refusal_reasons=("calibration_ledger_head_mismatch",),
+        )
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+            )
+
+        self.assertEqual(reasons, ("calibration_ledger_head_mismatch",))
+        self.assertFalse(result["acceptance"]["artifact"]["claim_eligible"])
+
+    def test_issued_artifact_prior_set_divergence_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        snapshot = _synthetic_issued_snapshot(artifact)
+        artifact["prior_observation_set"]["observations"][19]["content_id"] = (
+            hashlib.sha256(b"divergent-prior-member").hexdigest()
+        )
+        artifact["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertTrue(_valid_acceptance_bound(artifact))
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+            )
+
+        self.assertEqual(reasons, ("calibration_ledger_baseline_missing",))
+        self.assertFalse(result["acceptance"]["artifact"]["claim_eligible"])
+
+    def test_issued_artifact_stale_derivation_sha256_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        artifact["derivation_sha256"] = "0" * 64
+        self.assertFalse(_valid_acceptance_bound(artifact))
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=None,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=artifact["identity_epoch"],
+                policy=self.policy,
+                ledger_snapshot=_synthetic_issued_snapshot(
+                    _synthetic_issued_artifact()
+                ),
+            )
+
+        self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
+        self.assertIsNone(result["acceptance"]["artifact"])
+
+    def test_unknown_acceptance_artifact_role_refuses(self) -> None:
+        artifact = _synthetic_issued_artifact()
+        artifact["artifact_role"] = "unknown"
+        artifact["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertFalse(_valid_acceptance_bound(artifact))
+
+    @unittest.skipUnless(
+        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
+        "lead-reviewed D-079 import inputs are unavailable",
+    )
+    def test_production_path_authenticates_real_76_receipt_import_prefix(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            ledger = repo / "runs" / "calibration_observation_ledger.jsonl"
+            pin = repo / "configs" / "calibration" / "calibration_ledger_head.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(
+                json.dumps(
+                    {
+                        "sequence": 0,
+                        "head_digest": GENESIS_DIGEST,
+                        "ledger_schema": LEDGER_SCHEMA,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            plan = bootstrap_historical_import(
+                ledger,
+                head_pin_path=pin,
+                checkout_root=Path("/Users/edr"),
+                disposition_table_raw=_REAL_D079_TABLE.read_bytes(),
+                expected_disposition_table_sha256=_REAL_D079_TABLE_SHA256,
+                custody_manifest_raw=_REAL_D079_CUSTODY_MANIFEST.read_bytes(),
+                expected_custody_manifest_sha256=(
+                    _REAL_D079_CUSTODY_MANIFEST_SHA256
+                ),
+                execute=False,
+                require_committed_pin=False,
+                repo_root=repo,
+            )
+            source = load_calibration_acceptance_bound()
+            self.assertIsNotNone(source)
+            issued = _issued_acceptance_artifact(plan, source)
+            self.assertEqual(
+                issued["derivation_corpus"], source["derivation_corpus"]
+            )
+            issued_path = repo / "issued-acceptance.json"
+            issued_path.write_bytes(_issued_artifact_bytes(issued))
+            loaded = load_calibration_acceptance_bound(issued_path)
+            self.assertEqual(loaded, issued)
+
+            ledger.parent.mkdir(parents=True)
+            ledger.write_bytes(plan.ledger_bytes)
+            pin.write_text(json.dumps(dict(plan.head_pin)) + "\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "tests@joulewise.invalid"],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "JouleWise tests"],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "add", pin.relative_to(repo).as_posix()],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", "pin test ledger head"],
+                cwd=repo,
+                check=True,
+            )
+            snapshot = load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                baseline_sequence=plan.final_sequence,
+                baseline_digest=plan.head_digest,
+                require_committed_pin=True,
+                verify_custody=True,
+                repo_root=repo,
+            )
+            self.assertEqual(snapshot.refusal_reasons, ())
+            self.assertEqual(len(snapshot.observations), 38)
+            self.assertTrue(all(row.is_historical_import for row in snapshot.observations))
+            with patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=loaded,
+            ):
+                result, reasons = _evaluate_calibration_bracket(
+                    (),
+                    window_start_s=100.0,
+                    window_end_s=110.0,
+                    bindings=issued["identity_epoch"],
+                    policy=self.policy,
+                    ledger_snapshot=snapshot,
+                )
+
+        self.assertEqual(reasons, ("instrument_calibration_bracket_missing",))
+        self.assertTrue(result["acceptance"]["artifact"]["claim_eligible"])
+        self.assertEqual(
+            result["acceptance"]["ledger_snapshot"]["baseline_sequence"], 76
         )
 
     def test_import_marker_is_excluded_by_discovery_and_trigger_paths(self) -> None:

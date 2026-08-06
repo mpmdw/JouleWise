@@ -24,6 +24,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
+    HISTORICAL_IMPORT_FINALIZATION_EVENT,
+    HISTORICAL_IMPORT_RESERVATION_EVENT,
+    LEDGER_SCHEMA,
     CalibrationLedgerError,
     HistoricalImportDurabilityUncertain,
     bootstrap_historical_import,
@@ -31,10 +34,28 @@ from joulewise.calibration_ledger import (  # noqa: E402
     custody_manifest_bytes,
     generate_historical_custody_manifest,
 )
+from joulewise.calibration_bracketing import (  # noqa: E402
+    ACCEPTANCE_BOUND_SCHEMA,
+    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    _canonical_sha256,
+    _valid_acceptance_bound,
+)
 
 
 OUTPUT_SCHEMA = "joulewise.calibration_historical_import_dry_run.v1"
+ISSUED_ARTIFACT_OUTPUT_SCHEMA = (
+    "joulewise.calibration_acceptance_issuance_dry_run.v1"
+)
 DURABILITY_UNCERTAIN_EXIT = 3
+_D079_ISSUANCE_SEQUENCE = 76
+_D079_ISSUANCE_HEAD_DIGEST = (
+    "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
+)
+_D079_ISSUANCE_INVENTORY = {
+    "ordinary-invalid": 6,
+    "systematic-invalid": 2,
+    "valid": 30,
+}
 
 
 def _json_object(path: Path) -> Mapping[str, Any]:
@@ -53,11 +74,144 @@ def _pin_content(pin: Mapping[str, Any]) -> str:
     return json.dumps(ordered, indent=2, ensure_ascii=False) + "\n"
 
 
-def _emit(plan: Any, *, executed: bool, outcome: str) -> None:
+def _issued_artifact_bytes(artifact: Mapping[str, Any]) -> bytes:
+    return (
+        json.dumps(
+            dict(artifact),
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _issued_acceptance_artifact(
+    plan: Any,
+    source_artifact: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the D-079 issued artifact only from the prepared ledger prefix."""
+
+    if not _valid_acceptance_bound(source_artifact):
+        raise ValueError("acceptance artifact source is invalid")
+    if (
+        plan.final_sequence != _D079_ISSUANCE_SEQUENCE
+        or plan.head_digest != _D079_ISSUANCE_HEAD_DIGEST
+        or len(plan.receipts) != _D079_ISSUANCE_SEQUENCE
+    ):
+        raise ValueError("ledger plan is not the ruled D-079 issuance cutoff")
+    if any(
+        receipt.get("event")
+        not in {
+            HISTORICAL_IMPORT_RESERVATION_EVENT,
+            HISTORICAL_IMPORT_FINALIZATION_EVENT,
+        }
+        for receipt in plan.receipts
+    ):
+        raise ValueError("issued prior set requires an import-only ledger prefix")
+
+    artifact = json.loads(json.dumps(dict(source_artifact), allow_nan=False))
+    epoch_catalog = artifact["prior_observation_set"]["epoch_catalog"]
+    observations: list[dict[str, Any]] = []
+    for receipt in plan.receipts:
+        if receipt["event"] != HISTORICAL_IMPORT_FINALIZATION_EVENT:
+            continue
+        epoch_ids = [
+            epoch_id
+            for epoch_id, epoch in epoch_catalog.items()
+            if dict(epoch) == dict(receipt["identity_epoch"])
+        ]
+        if len(epoch_ids) != 1:
+            raise ValueError("ledger observation does not map to one artifact epoch")
+        observations.append(
+            {
+                "content_id": receipt["content_id"],
+                "epoch_id": epoch_ids[0],
+                "disposition": receipt["disposition"],
+                "attempt_id": receipt["attempt_id"],
+            }
+        )
+    disposition_counts = {
+        disposition: sum(
+            observation["disposition"] == disposition
+            for observation in observations
+        )
+        for disposition in sorted(_D079_ISSUANCE_INVENTORY)
+    }
+    if (
+        len(observations) != 38
+        or disposition_counts != _D079_ISSUANCE_INVENTORY
+        or len({row["content_id"] for row in observations}) != len(observations)
+        or len({row["attempt_id"] for row in observations}) != len(observations)
+    ):
+        raise ValueError("ledger prefix does not have the ruled 30/2/6 inventory")
+
+    cutoff = {
+        "sequence": plan.final_sequence,
+        "head_digest": plan.head_digest,
+        "ledger_schema": LEDGER_SCHEMA,
+    }
+    artifact["schema_version"] = ACCEPTANCE_BOUND_SCHEMA
+    artifact["artifact_role"] = "issued"
+    artifact["issuance"] = {
+        "status": "issued",
+        "claim_eligible": True,
+        "reason": (
+            "D-109 R2 raw-physics and artifact-hash verification is bound "
+            "by the authenticated historical-import cutoff"
+        ),
+    }
+    artifact["ledger_cutoff"] = {
+        **cutoff,
+        "role": "issued_acceptance_baseline",
+    }
+    artifact["prior_observation_set"]["cutoff"] = cutoff
+    artifact["prior_observation_set"]["observations"] = observations
+    artifact["backfill_candidate"].update(
+        {
+            "status": "issued",
+            "candidate_inventory": disposition_counts,
+            "production_issuance_blocked": False,
+            "required_verification": (
+                "complete: lead-owned raw-physics and artifact-hash verification"
+            ),
+        }
+    )
+    artifact["derivation_sha256"] = _canonical_sha256(
+        {
+            key: value
+            for key, value in artifact.items()
+            if key != "derivation_sha256"
+        }
+    )
+    if not _valid_acceptance_bound(artifact):
+        raise ValueError("deterministically emitted acceptance artifact is invalid")
+    return artifact
+
+
+def _emit(
+    plan: Any,
+    *,
+    executed: bool,
+    outcome: str,
+    issued_artifact: Mapping[str, Any] | None = None,
+) -> None:
     for receipt in plan.receipts:
         sys.stdout.buffer.write(
             canonical_json_bytes({"record": "receipt", "receipt": receipt}) + b"\n"
         )
+    issued_raw: bytes | None = None
+    if issued_artifact is not None:
+        issued_raw = _issued_artifact_bytes(issued_artifact)
+        issued_record = {
+            "schema_version": ISSUED_ARTIFACT_OUTPUT_SCHEMA,
+            "record": "issued-acceptance-artifact",
+            "artifact": issued_artifact,
+            "derivation_sha256": issued_artifact["derivation_sha256"],
+            "artifact_file_sha256": hashlib.sha256(issued_raw).hexdigest(),
+            "artifact_file_content": issued_raw.decode("utf-8"),
+        }
+        sys.stdout.buffer.write(canonical_json_bytes(issued_record) + b"\n")
     summary = {
         "schema_version": OUTPUT_SCHEMA,
         "record": "bootstrap-summary",
@@ -71,6 +225,17 @@ def _emit(plan: Any, *, executed: bool, outcome: str) -> None:
         "head_pin": plan.head_pin,
         "head_pin_content": _pin_content(plan.head_pin),
     }
+    if issued_artifact is not None and issued_raw is not None:
+        summary.update(
+            {
+                "issued_artifact_derivation_sha256": issued_artifact[
+                    "derivation_sha256"
+                ],
+                "issued_artifact_file_sha256": hashlib.sha256(
+                    issued_raw
+                ).hexdigest(),
+            }
+        )
     sys.stdout.buffer.write(canonical_json_bytes(summary) + b"\n")
     sys.stdout.buffer.flush()
 
@@ -121,12 +286,38 @@ def main() -> int:
         action="store_true",
         help="atomically write the ledger (the head pin is still never written)",
     )
+    parser.add_argument(
+        "--acceptance-artifact",
+        type=Path,
+        default=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        help="current D-079 fixture or already-issued artifact used as the template",
+    )
+    parser.add_argument(
+        "--prepare-issued-artifact",
+        action="store_true",
+        help="print the deterministic issued artifact and digests without writing it",
+    )
+    parser.add_argument(
+        "--emit-issued-artifact",
+        nargs="?",
+        const=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        type=Path,
+        metavar="PATH",
+        help=(
+            "explicitly write the deterministic issued artifact (default: the "
+            "checked-in acceptance-artifact path); it is also printed"
+        ),
+    )
     args = parser.parse_args()
     try:
         table_raw = args.disposition_table.read_bytes()
         if args.emit_custody_manifest:
             if args.execute:
                 raise ValueError("--emit-custody-manifest cannot execute")
+            if args.prepare_issued_artifact or args.emit_issued_artifact is not None:
+                raise ValueError(
+                    "--emit-custody-manifest cannot prepare an issued artifact"
+                )
             if not args.roots:
                 raise ValueError("--emit-custody-manifest requires custody roots")
             manifest = generate_historical_custody_manifest(
@@ -162,7 +353,17 @@ def main() -> int:
             repo_root=REPO_ROOT,
         )
     except HistoricalImportDurabilityUncertain as exc:
-        _emit(exc.plan, executed=True, outcome=exc.outcome)
+        issued_artifact = None
+        if args.prepare_issued_artifact or args.emit_issued_artifact is not None:
+            issued_artifact = _issued_acceptance_artifact(
+                exc.plan, _json_object(args.acceptance_artifact)
+            )
+        _emit(
+            exc.plan,
+            executed=True,
+            outcome=exc.outcome,
+            issued_artifact=issued_artifact,
+        )
         print(
             "committed: parent-directory durability remains uncertain after "
             "one retry; rerun the identical --execute invocation to confirm "
@@ -173,10 +374,24 @@ def main() -> int:
     except (CalibrationLedgerError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"refusing: {exc}", file=sys.stderr)
         return 2
+    issued_artifact = None
+    if args.prepare_issued_artifact or args.emit_issued_artifact is not None:
+        try:
+            issued_artifact = _issued_acceptance_artifact(
+                plan, _json_object(args.acceptance_artifact)
+            )
+            if args.emit_issued_artifact is not None:
+                args.emit_issued_artifact.write_bytes(
+                    _issued_artifact_bytes(issued_artifact)
+                )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"refusing: {exc}", file=sys.stderr)
+            return 2
     _emit(
         plan,
         executed=args.execute,
         outcome="committed" if args.execute else "planned",
+        issued_artifact=issued_artifact,
     )
     return 0
 
