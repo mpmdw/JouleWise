@@ -649,15 +649,33 @@ authoritative §4 launch route and §6 `owner_kind`; the optional §4 `originato
 hint cannot establish or elevate that status. Its absence never disables a
 consult, while a present unknown or contradictory value fails closed.
 
-**TRANSITIONAL —** Until the four-axis provenance record, including its
-`authority_class` field, is representable through the implementation follow-on
-`T3-PROV-SCHEMA-01` in
-`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, an unleased
-read-only consult uses the existing §8 origin test: the current Codex session is
-not Claude-originated or marked delegated, and the consult request supplies
-`BRIDGE_ORIGIN: codex` with `BRIDGE_HOPS_REMAINING: 0`. A session marked or
-otherwise known to be delegated is ineligible by default. Once that follow-on
-lands, the authoritative §4/§6 record supersedes this transitional test.
+**Normative rule.** Only an actually top-level Codex lead may invoke a reverse
+consult; a Claude-originated or delegated session is ineligible.
+
+**TRANSITIONAL — convention, not enforcement.** Until the four-axis provenance
+record, including its `authority_class` field, is representable through the
+implementation follow-on `T3-PROV-SCHEMA-01` in
+`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, the adapter has no
+authoritative signal for the caller's launch route or delegated status: it
+validates only the caller-supplied `BRIDGE_ORIGIN: codex` and
+`BRIDGE_HOPS_REMAINING: 0` lines, which neither prove top-level status nor
+create authority. **Mechanical acceptance of the caller-supplied header tuple is
+not proof of top-level status and does not establish reverse-consult
+authority.** During the transition the normative rule is therefore a
+best-effort convention, not a mechanically enforced eligibility test: a caller
+known or visibly marked delegated MUST NOT invoke, and a *present* unknown or
+contradictory delegated/origin marker fails closed — but wholly-absent status
+does not disable the consult (mirroring the §4 provenance rule; see §9,
+"Convention versus enforcement," for which properties are mechanically enforced
+versus convention-bound). **Fail closed at consumption:** a transitional
+consult result is non-authority-bearing advice — it cannot prove caller
+eligibility, satisfy an independent-review or approval requirement, establish
+gate status, expose privileged data, or displace lead adjudication. The
+transition ends only when `T3-PROV-SCHEMA-01` both represents the four-axis
+record (including `authority_class`) AND makes admission consume the
+authoritative §4 launch-route and §6 `owner_kind` evidence with rejection
+tests; merely defining or persisting the schema does not end it. Once that
+lands, the authoritative §4/§6 record supersedes this transitional convention.
 
 The caller's prompt MUST begin with:
 

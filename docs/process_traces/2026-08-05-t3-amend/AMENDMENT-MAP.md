@@ -100,8 +100,9 @@ candidate and requires its own gate. Insert this launch clause before current
 > worktree where those sources are absent, or an equivalently verified
 > doctrine-free context. Every cold ruling MUST open with a disclosure naming
 > any doctrine or memory material present at launch, including “none observed.”
-> Contamination does not void a ruling automatically; the ruling stands or
-> falls on its verified evidence.
+> A DISCLOSED contamination does not void a ruling automatically; the ruling
+> stands or falls on its verified evidence. An UNDISCLOSED contamination
+> discovered later voids the ruling (registry Convening procedure §2).
 
 In charter §4, replace the sentence beginning “Such an exhibit must state”
 with:
@@ -167,10 +168,17 @@ Run the trigger as a separate concurrent read-only instance, deliver findings
 mid-flight, and require it to fire without operator memory. These OS-1 mechanics
 have no synthesis ancestry.
 
-### P04 — cold-gate late-contamination consequence
+### (reclassified — NOT a proposal) cold-gate late-contamination consequence
 
 Automatically void a ruling when undisclosed launch contamination is discovered
-later. This OS-2 mechanic has no synthesis ancestry.
+later. **This DOES have synthesis ancestry** and is already landed: the
+registry Convening procedure §2 (`docs/process/coldgate_charter_registry.md`)
+— adopted 2026-08-03 and affirmed unanimously by SYNTHESIS.md §Q3a-3d — states
+that a contaminated ruling "is not void per se … but an undisclosed
+contamination discovered later voids the ruling." Disposition: **CHECKED / NO
+NEW WRITE** (the mechanic is registry law, not a new proposal). The earlier
+mis-classification conflated the *disclosed* case (ruling stands or falls on
+cited evidence) with the *undisclosed-discovered-later* case (voids).
 
 | Follow-on row | Non-normative implementation proposal |
 |---|---|
