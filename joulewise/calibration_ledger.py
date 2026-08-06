@@ -24,13 +24,23 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, BinaryIO
 
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 
 
 LEDGER_SCHEMA = "joulewise.calibration_observation_ledger.v1"
 RECEIPT_SCHEMA = "joulewise.calibration_observation_receipt.v1"
+HISTORICAL_IMPORT_TABLE_SCHEMA = (
+    "joulewise.calibration_historical_import_table.v1"
+)
+HISTORICAL_IMPORT_EVENT_PREFIX = "historical-import-v1"
+HISTORICAL_IMPORT_RESERVATION_EVENT = (
+    f"{HISTORICAL_IMPORT_EVENT_PREFIX}-reservation"
+)
+HISTORICAL_IMPORT_FINALIZATION_EVENT = (
+    f"{HISTORICAL_IMPORT_EVENT_PREFIX}-finalization"
+)
 GENESIS_DIGEST = "0" * 64
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER_PATH = REPO_ROOT / "runs" / "calibration_observation_ledger.jsonl"
@@ -54,6 +64,21 @@ ALL_DISPOSITIONS = FINAL_DISPOSITIONS | {"pending"}
 CONTENT_ID_ARTIFACTS = (
     "instrument_evidence.json",
     "manifest.json",
+)
+GOVERNED_ARTIFACTS = (
+    "raw/powermetrics.plist",
+    "events.jsonl",
+    "power_trace.csv",
+    "instrument_evidence.json",
+    "manifest.json",
+)
+MANIFEST_BOUND_ARTIFACTS = tuple(
+    name for name in GOVERNED_ARTIFACTS if name != "manifest.json"
+)
+EVIDENCE_BOUND_ARTIFACTS = (
+    "raw/powermetrics.plist",
+    "events.jsonl",
+    "power_trace.csv",
 )
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -139,13 +164,7 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
 
     root = Path(custody_dir)
     result: dict[str, str] = {}
-    for relative in (
-        "raw/powermetrics.plist",
-        "events.jsonl",
-        "power_trace.csv",
-        "instrument_evidence.json",
-        "manifest.json",
-    ):
+    for relative in GOVERNED_ARTIFACTS:
         path = root / relative
         if path.is_file():
             result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -173,6 +192,7 @@ class LedgerObservation:
     exact_bound_lexeme_s: str | None
     disposition: str
     custody_locator: str
+    observation_kind: str = "live-capture"
 
     @property
     def classification_disposition(self) -> str:
@@ -181,6 +201,10 @@ class LedgerObservation:
         return (
             "unresolved" if self.disposition == "abandoned" else self.disposition
         )
+
+    @property
+    def is_historical_import(self) -> bool:
+        return self.observation_kind == "historical-import"
 
 
 @dataclass(frozen=True)
@@ -216,6 +240,55 @@ class CalibrationLedgerSnapshot:
         return MappingProxyType(
             {key: tuple(value) for key, value in sorted(grouped.items())}
         )
+
+    def post_cutoff_live_observations(
+        self, cutoff_sequence: int
+    ) -> tuple[LedgerObservation, ...]:
+        """Return only fresh live-capture observations after ``cutoff_sequence``.
+
+        Historical bootstrap finalizations are deliberately excluded even
+        when a caller compares them with the genesis sequence-zero cutoff.
+        """
+
+        if (
+            isinstance(cutoff_sequence, bool)
+            or not isinstance(cutoff_sequence, int)
+            or cutoff_sequence < 0
+        ):
+            raise CalibrationLedgerError("cutoff_sequence must be nonnegative")
+        return tuple(
+            observation
+            for observation in self.observations
+            if observation.sequence > cutoff_sequence
+            and not observation.is_historical_import
+        )
+
+
+@dataclass(frozen=True)
+class HistoricalImportPlan:
+    """Deterministic, authenticated genesis bootstrap prepared in memory."""
+
+    receipts: tuple[Mapping[str, Any], ...]
+    final_sequence: int
+    head_digest: str
+    head_pin: Mapping[str, Any]
+
+    @property
+    def ledger_bytes(self) -> bytes:
+        return b"".join(canonical_json_bytes(row) + b"\n" for row in self.receipts)
+
+
+@dataclass(frozen=True)
+class _HistoricalCandidate:
+    attempt_id: str
+    content_id: str
+    artifact_sha256: Mapping[str, str]
+    identity_epoch: Mapping[str, Any]
+    t1_bindings: Mapping[str, Any]
+    capture_wall_time_s: str | None
+    exact_bound_lexeme_s: str | None
+    custody_sort_key: str
+    custody_locator: str
 
 
 def _frozen_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -272,7 +345,13 @@ def _valid_receipt_shape(receipt: object) -> bool:
         or not isinstance(sequence, int)
         or sequence < 1
         or not _is_sha256(receipt.get("predecessor_digest"))
-        or event not in {"reservation", "finalization"}
+        or event
+        not in {
+            "reservation",
+            "finalization",
+            HISTORICAL_IMPORT_RESERVATION_EVENT,
+            HISTORICAL_IMPORT_FINALIZATION_EVENT,
+        }
         or not isinstance(receipt.get("attempt_id"), str)
         or not receipt.get("attempt_id")
         or disposition not in ALL_DISPOSITIONS
@@ -295,7 +374,7 @@ def _valid_receipt_shape(receipt: object) -> bool:
     content_id = receipt.get("content_id")
     if content_id is not None and not _is_sha256(content_id):
         return False
-    if event == "reservation":
+    if event in {"reservation", HISTORICAL_IMPORT_RESERVATION_EVENT}:
         return (
             disposition == "pending"
             and content_id is None
@@ -414,13 +493,27 @@ def _attempts_and_observations(
     reasons: set[str] = set()
     for receipt in receipts:
         attempt_id = str(receipt["attempt_id"])
-        if receipt["event"] == "reservation":
+        if receipt["event"] in {
+            "reservation",
+            HISTORICAL_IMPORT_RESERVATION_EVENT,
+        }:
             if attempt_id in pending or attempt_id in finalized:
                 reasons.add("calibration_ledger_attempt_conflict")
             else:
                 pending[attempt_id] = receipt
             continue
-        if attempt_id not in pending or attempt_id in finalized:
+        reservation = pending.get(attempt_id)
+        expected_final_event = (
+            HISTORICAL_IMPORT_FINALIZATION_EVENT
+            if reservation is not None
+            and reservation["event"] == HISTORICAL_IMPORT_RESERVATION_EVENT
+            else "finalization"
+        )
+        if (
+            reservation is None
+            or attempt_id in finalized
+            or receipt["event"] != expected_final_event
+        ):
             reasons.add("calibration_ledger_attempt_conflict")
         else:
             finalized[attempt_id] = receipt
@@ -460,18 +553,27 @@ def _attempts_and_observations(
                 exact_bound_lexeme_s=receipt.get("exact_bound_lexeme_s"),
                 disposition=str(receipt["disposition"]),
                 custody_locator=str(receipt["custody_locator"]),
+                observation_kind=(
+                    "historical-import"
+                    if receipt["event"] == HISTORICAL_IMPORT_FINALIZATION_EVENT
+                    else "live-capture"
+                ),
             )
         )
     return observations, reasons
 
 
-def _custody_reasons(observations: Sequence[LedgerObservation]) -> set[str]:
+def _custody_reasons(
+    observations: Sequence[LedgerObservation], repo_root: Path
+) -> set[str]:
     for observation in observations:
         if not observation.artifact_sha256:
             if observation.disposition == "abandoned":
                 continue
             return {"calibration_ledger_custody_invalid"}
         root = Path(observation.custody_locator)
+        if not root.is_absolute():
+            root = Path(repo_root) / root
         for relative, expected in observation.artifact_sha256.items():
             path = root / relative
             try:
@@ -573,7 +675,7 @@ def load_calibration_ledger_snapshot(
     observations, state_reasons = _attempts_and_observations(receipts)
     reasons.update(state_reasons)
     if verify_custody:
-        reasons.update(_custody_reasons(observations))
+        reasons.update(_custody_reasons(observations, repo_root))
     return CalibrationLedgerSnapshot(
         ledger_schema=LEDGER_SCHEMA,
         ledger_path=ledger_path,
@@ -620,6 +722,447 @@ def _new_receipt(
     }
     receipt["receipt_digest"] = _receipt_digest(receipt)
     return receipt
+
+
+def _json_object_from_bytes(raw: bytes, source: Path) -> Mapping[str, Any]:
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError(f"{source}: malformed JSON") from exc
+    if not isinstance(value, Mapping):
+        raise CalibrationLedgerError(f"{source}: expected a JSON object")
+    return value
+
+
+def _number_lexemes(raw: bytes, source: Path) -> Mapping[str, Any]:
+    try:
+        value = json.loads(raw, parse_float=str, parse_int=str)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError(f"{source}: malformed JSON") from exc
+    if not isinstance(value, Mapping):
+        raise CalibrationLedgerError(f"{source}: expected a JSON object")
+    return value
+
+
+def _historical_import_table(
+    value: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Mapping[str, Any]]]:
+    if set(value) != {
+        "schema_version",
+        "ledger_schema",
+        "identity_epoch",
+        "members",
+    }:
+        raise CalibrationLedgerError("historical import table has invalid keys")
+    if (
+        value.get("schema_version") != HISTORICAL_IMPORT_TABLE_SCHEMA
+        or value.get("ledger_schema") != LEDGER_SCHEMA
+    ):
+        raise CalibrationLedgerError("historical import table schema mismatch")
+    epoch = value.get("identity_epoch")
+    members = value.get("members")
+    if (
+        not isinstance(epoch, Mapping)
+        or set(epoch) != set(IDENTITY_EPOCH_FIELDS)
+        or any(epoch.get(field) in (None, "") for field in IDENTITY_EPOCH_FIELDS)
+        or not isinstance(members, list)
+        or not members
+    ):
+        raise CalibrationLedgerError("historical import table is incomplete")
+
+    by_content: dict[str, Mapping[str, Any]] = {}
+    attempt_ids: set[str] = set()
+    for member in members:
+        if not isinstance(member, Mapping) or set(member) != {
+            "attempt_id",
+            "content_id",
+            "artifact_sha256",
+            "disposition",
+        }:
+            raise CalibrationLedgerError("historical import member has invalid keys")
+        attempt_id = member.get("attempt_id")
+        content_id = member.get("content_id")
+        artifacts = member.get("artifact_sha256")
+        disposition = member.get("disposition")
+        if (
+            not isinstance(attempt_id, str)
+            or not attempt_id
+            or not _is_sha256(content_id)
+            or not isinstance(artifacts, Mapping)
+            or set(artifacts) != set(GOVERNED_ARTIFACTS)
+            or any(not _is_sha256(item) for item in artifacts.values())
+            or content_id_from_artifact_hashes(artifacts) != content_id
+            or disposition not in FINAL_DISPOSITIONS
+        ):
+            raise CalibrationLedgerError("historical import member is malformed")
+        if attempt_id in attempt_ids:
+            raise CalibrationLedgerError(
+                "historical import attempt_id collision; content_id tiebreak is "
+                "diagnostic only"
+            )
+        if str(content_id) in by_content:
+            raise CalibrationLedgerError("historical import content_id is duplicated")
+        attempt_ids.add(attempt_id)
+        by_content[str(content_id)] = member
+    return dict(epoch), by_content
+
+
+def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
+    directories: set[Path] = set()
+    if not roots:
+        raise CalibrationLedgerError("at least one historical import root is required")
+    for supplied in roots:
+        try:
+            root = Path(supplied).resolve(strict=True)
+        except OSError as exc:
+            raise CalibrationLedgerError(
+                f"historical import root is unreadable: {supplied}"
+            ) from exc
+        if (root / "manifest.json").is_file():
+            directories.add(root)
+        directories.update(path.parent for path in root.glob("*/manifest.json"))
+        directories.update(
+            path.parent
+            for path in root.glob("instrument_validation/*/manifest.json")
+        )
+    if not directories:
+        raise CalibrationLedgerError("historical import roots contain no candidates")
+    return tuple(sorted(directories, key=lambda path: path.as_posix()))
+
+
+def _inspect_historical_candidate(
+    directory: Path,
+    *,
+    checkout_root: Path,
+    expected_epoch: Mapping[str, Any],
+) -> tuple[str | None, _HistoricalCandidate | None, str | None]:
+    manifest_path = directory / "manifest.json"
+    evidence_path = directory / "instrument_evidence.json"
+    try:
+        manifest_raw = manifest_path.read_bytes()
+        evidence_raw = evidence_path.read_bytes()
+        manifest = _json_object_from_bytes(manifest_raw, manifest_path)
+        evidence = _json_object_from_bytes(evidence_raw, evidence_path)
+    except (OSError, CalibrationLedgerError) as exc:
+        return None, None, f"{directory}: primary evidence is unreadable: {exc}"
+
+    bindings = evidence.get("bindings")
+    if not isinstance(bindings, Mapping):
+        return None, None, f"{directory}: evidence bindings are missing"
+    epoch = _normalized_vector(bindings, IDENTITY_EPOCH_FIELDS)
+    if epoch != dict(expected_epoch):
+        return None, None, None
+
+    primary_hashes = {
+        "instrument_evidence.json": hashlib.sha256(evidence_raw).hexdigest(),
+        "manifest.json": hashlib.sha256(manifest_raw).hexdigest(),
+    }
+    content_id = content_id_from_artifact_hashes(primary_hashes)
+    if content_id is None:
+        return None, None, f"{directory}: content identity is incomplete"
+
+    try:
+        resolved = directory.resolve(strict=True)
+        custody_sort_key = resolved.relative_to(checkout_root).as_posix()
+    except (OSError, ValueError) as exc:
+        return content_id, None, f"{directory}: custody is outside checkout root: {exc}"
+
+    raw_by_name: dict[str, bytes] = {
+        "instrument_evidence.json": evidence_raw,
+        "manifest.json": manifest_raw,
+    }
+    try:
+        for relative in GOVERNED_ARTIFACTS:
+            if relative not in raw_by_name:
+                raw_by_name[relative] = (directory / relative).read_bytes()
+    except OSError as exc:
+        return content_id, None, f"{directory}: hash-complete custody is missing: {exc}"
+    hashes = {
+        name: hashlib.sha256(raw_by_name[name]).hexdigest()
+        for name in GOVERNED_ARTIFACTS
+    }
+
+    manifest_artifacts = manifest.get("artifacts")
+    evidence_artifacts = evidence.get("artifact_sha256")
+    if (
+        not isinstance(manifest_artifacts, Mapping)
+        or set(manifest_artifacts) != set(MANIFEST_BOUND_ARTIFACTS)
+        or any(
+            manifest_artifacts.get(name) != hashes[name]
+            for name in MANIFEST_BOUND_ARTIFACTS
+        )
+    ):
+        return content_id, None, f"{directory}: manifest artifact hash mismatch"
+    if (
+        not isinstance(evidence_artifacts, Mapping)
+        or set(evidence_artifacts) != set(EVIDENCE_BOUND_ARTIFACTS)
+        or any(
+            evidence_artifacts.get(name) != hashes[name]
+            for name in EVIDENCE_BOUND_ARTIFACTS
+        )
+    ):
+        return content_id, None, f"{directory}: evidence artifact hash mismatch"
+
+    attempt_id = evidence.get("validation_id")
+    if (
+        not isinstance(attempt_id, str)
+        or not attempt_id
+        or manifest.get("validation_id") != attempt_id
+    ):
+        return content_id, None, f"{directory}: attempt identity mismatch"
+    t1_bindings = _normalized_vector(bindings, T1_FIELDS)
+    if any(t1_bindings.get(field) in (None, "") for field in T1_FIELDS):
+        return content_id, None, f"{directory}: full T1 binding is incomplete"
+    try:
+        lexemes = _number_lexemes(evidence_raw, evidence_path)
+    except CalibrationLedgerError as exc:
+        return content_id, None, str(exc)
+    capture = lexemes.get("capture_wall_time_s")
+    bound = lexemes.get("b_fiducial_s")
+    if capture is not None and not isinstance(capture, str):
+        return content_id, None, f"{directory}: capture time lexeme is invalid"
+    if bound is not None and not isinstance(bound, str):
+        return content_id, None, f"{directory}: bound lexeme is invalid"
+    if capture is None:
+        return content_id, None, f"{directory}: capture time is missing"
+    return (
+        content_id,
+        _HistoricalCandidate(
+            attempt_id=attempt_id,
+            content_id=content_id,
+            artifact_sha256=MappingProxyType(hashes),
+            identity_epoch=MappingProxyType(epoch),
+            t1_bindings=MappingProxyType(t1_bindings),
+            capture_wall_time_s=capture,
+            exact_bound_lexeme_s=bound,
+            custody_sort_key=custody_sort_key,
+            custody_locator=resolved.as_posix(),
+        ),
+        None,
+    )
+
+
+def prepare_historical_import(
+    *,
+    roots: Sequence[Path],
+    checkout_root: Path,
+    disposition_table: Mapping[str, Any],
+) -> HistoricalImportPlan:
+    """Authenticate evidence and prepare the canonical genesis import chain.
+
+    The input table is explicit ruled data. Stored evidence status labels are
+    intentionally neither read nor compared with its dispositions.
+    """
+
+    expected_epoch, table_by_content = _historical_import_table(disposition_table)
+    try:
+        checkout = Path(checkout_root).resolve(strict=True)
+    except OSError as exc:
+        raise CalibrationLedgerError("checkout root is unreadable") from exc
+
+    complete: dict[str, list[_HistoricalCandidate]] = {}
+    incomplete: dict[str, list[str]] = {}
+    unknown_errors: list[str] = []
+    for directory in _historical_directories(roots):
+        content_id, candidate, error = _inspect_historical_candidate(
+            directory,
+            checkout_root=checkout,
+            expected_epoch=expected_epoch,
+        )
+        if candidate is not None:
+            complete.setdefault(candidate.content_id, []).append(candidate)
+        elif error is not None:
+            if content_id is None:
+                unknown_errors.append(error)
+            else:
+                incomplete.setdefault(content_id, []).append(error)
+    if unknown_errors:
+        raise CalibrationLedgerError(sorted(unknown_errors)[0])
+
+    expected_ids = set(table_by_content)
+    extra_ids = sorted((set(complete) | set(incomplete)) - expected_ids)
+    missing_ids = sorted(expected_ids - set(complete))
+    if extra_ids:
+        raise CalibrationLedgerError(
+            f"historical import table omits authenticated content_id {extra_ids[0]}"
+        )
+    if missing_ids:
+        detail = sorted(incomplete.get(missing_ids[0], []))
+        if detail:
+            raise CalibrationLedgerError(detail[0])
+        raise CalibrationLedgerError(
+            f"historical import content_id is missing: {missing_ids[0]}"
+        )
+
+    selected: list[tuple[_HistoricalCandidate, Mapping[str, Any]]] = []
+    for content_id, member in table_by_content.items():
+        candidate = min(
+            complete[content_id], key=lambda item: item.custody_sort_key
+        )
+        if candidate.attempt_id != member["attempt_id"]:
+            raise CalibrationLedgerError(
+                f"{content_id}: attempt_id differs from disposition table"
+            )
+        if dict(candidate.artifact_sha256) != dict(member["artifact_sha256"]):
+            raise CalibrationLedgerError(
+                f"{content_id}: artifact hashes differ from disposition table"
+            )
+        selected.append((candidate, member))
+
+    # Attempt ids are contractually unique. content_id is the deterministic
+    # secondary key used before the duplicate-attempt refusal above.
+    selected.sort(key=lambda item: (item[0].attempt_id, item[0].content_id))
+    receipts: list[Mapping[str, Any]] = []
+    predecessor = GENESIS_DIGEST
+    for candidate, member in selected:
+        reservation = _new_receipt(
+            sequence=len(receipts) + 1,
+            predecessor_digest=predecessor,
+            event=HISTORICAL_IMPORT_RESERVATION_EVENT,
+            attempt_id=candidate.attempt_id,
+            content_id=None,
+            artifacts={},
+            identity_epoch=candidate.identity_epoch,
+            t1_bindings=candidate.t1_bindings,
+            capture_wall_time_s=None,
+            exact_bound_lexeme_s=None,
+            disposition="pending",
+            custody_locator=candidate.custody_locator,
+        )
+        if not _valid_receipt_shape(reservation):
+            raise CalibrationLedgerError("historical reservation is malformed")
+        receipts.append(reservation)
+        predecessor = str(reservation["receipt_digest"])
+        finalization = _new_receipt(
+            sequence=len(receipts) + 1,
+            predecessor_digest=predecessor,
+            event=HISTORICAL_IMPORT_FINALIZATION_EVENT,
+            attempt_id=candidate.attempt_id,
+            content_id=candidate.content_id,
+            artifacts=candidate.artifact_sha256,
+            identity_epoch=candidate.identity_epoch,
+            t1_bindings=candidate.t1_bindings,
+            capture_wall_time_s=candidate.capture_wall_time_s,
+            exact_bound_lexeme_s=candidate.exact_bound_lexeme_s,
+            disposition=str(member["disposition"]),
+            custody_locator=candidate.custody_locator,
+        )
+        if not _valid_receipt_shape(finalization):
+            raise CalibrationLedgerError("historical finalization is malformed")
+        receipts.append(finalization)
+        predecessor = str(finalization["receipt_digest"])
+
+    observations, reasons = _attempts_and_observations(receipts)
+    if reasons or len(observations) != len(selected):
+        raise CalibrationLedgerError(
+            ", ".join(sorted(reasons or {"historical import is incomplete"}))
+        )
+    final = receipts[-1]
+    pin = head_pin_for_receipt(final)
+    return HistoricalImportPlan(
+        receipts=tuple(_frozen_mapping(row) for row in receipts),
+        final_sequence=len(receipts),
+        head_digest=str(final["receipt_digest"]),
+        head_pin=_frozen_mapping(pin),
+    )
+
+
+def _require_genesis_bootstrap_state(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    require_committed_pin: bool,
+    repo_root: Path,
+) -> None:
+    try:
+        pin_raw = Path(head_pin_path).read_bytes()
+        pin_value = json.loads(pin_raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError("head pin is unreadable") from exc
+    if _head_pin(pin_value) != (0, GENESIS_DIGEST):
+        raise CalibrationLedgerError("historical import requires the genesis head pin")
+    if (
+        require_committed_pin
+        and _committed_pin_bytes(Path(head_pin_path), Path(repo_root)) != pin_raw
+    ):
+        raise CalibrationLedgerError("head pin is not committed at Git HEAD")
+    path = Path(ledger_path)
+    try:
+        raw = path.read_bytes() if path.exists() else b""
+    except OSError as exc:
+        raise CalibrationLedgerError("physical ledger is unreadable") from exc
+    if raw:
+        raise CalibrationLedgerError("historical import requires an empty ledger")
+
+
+def _write_bootstrap_payload(handle: BinaryIO, payload: bytes) -> None:
+    written = handle.write(payload)
+    if written != len(payload):
+        raise OSError("short historical import write")
+
+
+def bootstrap_historical_import(
+    ledger_path: Path,
+    *,
+    head_pin_path: Path,
+    roots: Sequence[Path],
+    checkout_root: Path,
+    disposition_table: Mapping[str, Any],
+    execute: bool = False,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> HistoricalImportPlan:
+    """Prepare, and only when requested atomically append, the genesis import.
+
+    Dry-run is the default and creates no path. Execution performs one write
+    containing the complete prepared chain, fsyncs it, and rolls the ledger
+    back to empty if the write or fsync raises. The head pin is never written.
+    """
+
+    ledger = Path(ledger_path)
+    pin = Path(head_pin_path)
+    _require_genesis_bootstrap_state(
+        ledger,
+        pin,
+        require_committed_pin=require_committed_pin,
+        repo_root=Path(repo_root),
+    )
+    plan = prepare_historical_import(
+        roots=roots,
+        checkout_root=checkout_root,
+        disposition_table=disposition_table,
+    )
+    if not execute:
+        return plan
+
+    payload = plan.ledger_bytes
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(descriptor, "r+b", closefd=False) as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            _require_genesis_bootstrap_state(
+                ledger,
+                pin,
+                require_committed_pin=require_committed_pin,
+                repo_root=Path(repo_root),
+            )
+            try:
+                handle.seek(0, os.SEEK_END)
+                _write_bootstrap_payload(handle, payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            except Exception as exc:
+                handle.seek(0)
+                handle.truncate(0)
+                handle.flush()
+                os.fsync(handle.fileno())
+                raise CalibrationLedgerError(
+                    "historical import append failed atomically"
+                ) from exc
+    finally:
+        os.close(descriptor)
+    return plan
 
 
 def _locked_append(
@@ -796,18 +1339,26 @@ __all__ = [
     "DEFAULT_LEDGER_PATH",
     "FINAL_DISPOSITIONS",
     "GENESIS_DIGEST",
+    "GOVERNED_ARTIFACTS",
+    "HISTORICAL_IMPORT_EVENT_PREFIX",
+    "HISTORICAL_IMPORT_FINALIZATION_EVENT",
+    "HISTORICAL_IMPORT_RESERVATION_EVENT",
+    "HISTORICAL_IMPORT_TABLE_SCHEMA",
     "IDENTITY_EPOCH_FIELDS",
     "LEDGER_SCHEMA",
     "RECEIPT_SCHEMA",
     "REFUSAL_TAXONOMY",
     "CalibrationLedgerError",
     "CalibrationLedgerSnapshot",
+    "HistoricalImportPlan",
     "LedgerObservation",
     "append_pending_receipt",
     "artifact_hashes",
+    "bootstrap_historical_import",
     "canonical_sha256",
     "content_id_from_artifact_hashes",
     "finalize_attempt_receipt",
     "head_pin_for_receipt",
     "load_calibration_ledger_snapshot",
+    "prepare_historical_import",
 ]
