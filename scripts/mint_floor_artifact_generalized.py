@@ -18,8 +18,9 @@ import itertools
 import json
 import math
 import re
+import stat
 import sys
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
@@ -97,7 +98,8 @@ _CORE_SIGNATURES = {
         "project_tree_state: 'str') -> 'dict[str, Any]'"
     ),
     "validate_floor_artifact": (
-        "(value: 'Mapping', *, pinset: 'Mapping | None' = None) -> 'list'"
+        "(value: 'Mapping', *, pinset_path: 'Path | None' = None, "
+        "expected_pinset_sha256: 'str | None' = None) -> 'list'"
     ),
     "mint_floor_artifact": (
         "(*, artifact_id: 'str', floor_path: 'Path', statement_path: 'Path', "
@@ -428,8 +430,17 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset:
     """Authenticate exact pinset bytes, then enforce the closed v1 schema."""
 
     expected = _sha256(expected_sha256, "pinset sha256 argument")
+    path = Path(path)
     try:
-        raw = Path(path).read_bytes()
+        file_stat = path.lstat()
+    except OSError as exc:
+        raise MintError(f"pinset cannot be inspected: {exc}") from exc
+    if stat.S_ISLNK(file_stat.st_mode):
+        raise MintError("pinset must not be a symlink")
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise MintError("pinset must be a regular file")
+    try:
+        raw = path.read_bytes()
     except OSError as exc:
         raise MintError(f"pinset cannot be read: {exc}") from exc
     actual = hashlib.sha256(raw).hexdigest()
@@ -508,28 +519,29 @@ def _fresh_original_core() -> ModuleType:
     return module
 
 
-def _validator_pinset(pinset: MintPinset) -> Mapping[str, Any]:
-    """Project an authenticated parsed pinset back to its schema mapping."""
-
-    return {
-        "schema_version": PINSET_SCHEMA_VERSION,
-        **asdict(pinset),
-    }
-
-
 def _configured_artifact_validator(
-    core: ModuleType, pinset: MintPinset
+    core: ModuleType,
+    pinset_path: Path,
+    expected_pinset_sha256: str,
 ) -> Callable[[Mapping[str, Any]], list[Any]]:
     original_validator = core.validate_floor_artifact
-    validator_pinset = _validator_pinset(pinset)
 
     def validate(artifact: Mapping[str, Any]) -> list[Any]:
-        return original_validator(artifact, pinset=validator_pinset)
+        return original_validator(
+            artifact,
+            pinset_path=pinset_path,
+            expected_pinset_sha256=expected_pinset_sha256,
+        )
 
     return validate
 
 
-def _configured_core(pinset: MintPinset) -> ModuleType:
+def _configured_core(
+    pinset: MintPinset,
+    *,
+    pinset_path: Path,
+    expected_pinset_sha256: str,
+) -> ModuleType:
     """Load an isolated mint-1 core and replace only its hard-pin globals."""
 
     core = _fresh_original_core()
@@ -576,7 +588,11 @@ def _configured_core(pinset: MintPinset) -> ModuleType:
     for name, value in assignments.items():
         setattr(core, name, value)
 
-    core.validate_floor_artifact = _configured_artifact_validator(core, pinset)
+    core.validate_floor_artifact = _configured_artifact_validator(
+        core,
+        pinset_path,
+        expected_pinset_sha256,
+    )
 
     def generalized_gate(
         *,
@@ -655,7 +671,11 @@ def pre_registration_gate(
     """Run the configured pre-registration gate without building an artifact."""
 
     pinset = load_pinset(pinset_path, pinset_sha256)
-    core = _configured_core(pinset)
+    core = _configured_core(
+        pinset,
+        pinset_path=pinset_path,
+        expected_pinset_sha256=pinset_sha256,
+    )
     try:
         core.pre_registration_gate(
             plan=plan,
@@ -683,7 +703,11 @@ def mint_authenticated_artifact(
     """Gate and build from already-authenticated component fixtures/evidence."""
 
     pinset = load_pinset(pinset_path, pinset_sha256)
-    core = _configured_core(pinset)
+    core = _configured_core(
+        pinset,
+        pinset_path=pinset_path,
+        expected_pinset_sha256=pinset_sha256,
+    )
     try:
         return core.mint_authenticated_artifact(
             artifact_id=artifact_id,
@@ -708,7 +732,11 @@ def validate_floor_artifact(
     """Validate an artifact against both schema v2 and its root-id pins."""
 
     pinset = load_pinset(pinset_path, pinset_sha256)
-    core = _configured_core(pinset)
+    core = _configured_core(
+        pinset,
+        pinset_path=pinset_path,
+        expected_pinset_sha256=pinset_sha256,
+    )
     return core.validate_floor_artifact(artifact)
 
 
@@ -731,7 +759,11 @@ def mint_floor_artifact(
     """Authenticate, gate, construct, bind, validate, and write one artifact."""
 
     pinset = load_pinset(pinset_path, pinset_sha256)
-    core = _configured_core(pinset)
+    core = _configured_core(
+        pinset,
+        pinset_path=pinset_path,
+        expected_pinset_sha256=pinset_sha256,
+    )
     try:
         return core.mint_floor_artifact(
             artifact_id=artifact_id,

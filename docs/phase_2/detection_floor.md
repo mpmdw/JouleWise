@@ -173,10 +173,21 @@ The artifact-to-pinset join uses only this existing identity tuple:
 3. `provenance.calibration_plan.sha256`.
 
 The ordinary library validator resolves that tuple against the v1 pinsets in
-`scripts/floor_mint_pinsets/`. The generalized mint supplies its separately
-SHA-256-authenticated pinset directly to the same library validator. It does
-not rewrite a future family's root ids to mint-1 labels. Resolution is
-fail-closed and produces these exact findings:
+`scripts/floor_mint_pinsets/`. Repository discovery accepts only regular
+`*.json` files that are not symlinks; a symlink, non-regular entry, unreadable
+file, malformed JSON document, duplicate-key document, or document outside the
+closed v1 schema makes resolution refuse rather than silently disappearing
+from the candidate set.
+
+The public explicit route is
+`validate_floor_artifact(artifact, pinset_path=...,`
+`expected_pinset_sha256=...)`. Both arguments are required together. The
+library itself rejects symlinks and non-regular files, re-reads the exact bytes,
+checks them against the expected digest, and parses only after that check. No
+public route accepts an already-parsed pinset mapping. The generalized mint
+passes its path and separately supplied expected SHA-256 through this route; it
+does not pass parsed content or rewrite a future family's root ids to mint-1
+labels. Resolution is fail-closed and produces these core findings:
 
 - zero matches: `artifact.pinset: no pinset matches artifact family identity`;
 - multiple matches: `artifact.pinset: multiple pinsets match artifact family identity`;

@@ -1544,24 +1544,66 @@ def _reject_duplicate_pinset_keys(pairs) -> dict:
     return result
 
 
-def _repository_floor_mint_pinsets() -> list[_FloorMintPinsetProjection]:
+def _read_floor_mint_pinset(
+    path: Path,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[_FloorMintPinsetProjection | None, str | None]:
+    """Read one regular, non-symlink pinset and optionally authenticate bytes."""
+
+    path = Path(path)
+    if expected_sha256 is not None and not _is_hex(expected_sha256):
+        return None, "expected sha256 must be 64 lowercase hexadecimal characters"
+    try:
+        file_stat = path.lstat()
+    except OSError as exc:
+        return None, f"cannot inspect pinset file: {exc}"
+    if stat.S_ISLNK(file_stat.st_mode):
+        return None, "pinset file must not be a symlink"
+    if not stat.S_ISREG(file_stat.st_mode):
+        return None, "pinset file must be a regular file"
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        return None, f"cannot read pinset file: {exc}"
+    if expected_sha256 is not None:
+        actual_sha256 = hashlib.sha256(raw).hexdigest()
+        if actual_sha256 != expected_sha256:
+            return (
+                None,
+                "pinset sha256 mismatch: "
+                f"expected {expected_sha256}, observed {actual_sha256}",
+            )
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_pinset_keys,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return None, f"pinset is not valid UTF-8 JSON: {exc}"
+    projection = _project_floor_mint_pinset(value)
+    if projection is None:
+        return None, "pinset does not match the closed v1 schema"
+    return projection, None
+
+
+def _repository_floor_mint_pinsets(
+) -> tuple[list[_FloorMintPinsetProjection], str | None]:
     projections = []
     try:
         paths = sorted(_FLOOR_MINT_PINSET_DIRECTORY.glob("*.json"))
-    except OSError:
-        return projections
+    except OSError as exc:
+        return [], f"artifact.pinset: repository pinset scan failed: {exc}"
     for path in paths:
-        try:
-            value = json.loads(
-                path.read_text(encoding="utf-8"),
-                object_pairs_hook=_reject_duplicate_pinset_keys,
+        projection, error = _read_floor_mint_pinset(path)
+        if error is not None:
+            return (
+                [],
+                f"artifact.pinset: repository pinset {path.name!r}: {error}",
             )
-        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-            continue
-        projection = _project_floor_mint_pinset(value)
-        if projection is not None:
-            projections.append(projection)
-    return projections
+        assert projection is not None
+        projections.append(projection)
+    return projections, None
 
 
 def _artifact_family_identity(value: Mapping) -> tuple[str, str, str] | None:
@@ -1582,14 +1624,28 @@ def _artifact_family_identity(value: Mapping) -> tuple[str, str, str] | None:
 
 def _resolve_evidence_root_ids(
     value: Mapping,
-    pinset: Mapping | None,
+    pinset_path: Path | None,
+    expected_pinset_sha256: str | None,
 ) -> tuple[frozenset[str] | None, str | None]:
     identity = _artifact_family_identity(value)
-    candidates = (
-        [_project_floor_mint_pinset(pinset)]
-        if pinset is not None
-        else _repository_floor_mint_pinsets()
-    )
+    if (pinset_path is None) != (expected_pinset_sha256 is None):
+        return (
+            None,
+            "artifact.pinset: pinset_path and expected_pinset_sha256 "
+            "must be supplied together",
+        )
+    if pinset_path is not None:
+        projection, error = _read_floor_mint_pinset(
+            pinset_path,
+            expected_sha256=expected_pinset_sha256,
+        )
+        if error is not None:
+            return None, f"artifact.pinset: explicit pinset: {error}"
+        candidates = [projection]
+    else:
+        candidates, error = _repository_floor_mint_pinsets()
+        if error is not None:
+            return None, error
     matches = [
         candidate
         for candidate in candidates
@@ -2814,7 +2870,8 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
 def validate_floor_artifact(
     value: Mapping,
     *,
-    pinset: Mapping | None = None,
+    pinset_path: Path | None = None,
+    expected_pinset_sha256: str | None = None,
 ) -> list:
     """Validate a ``joulewise.detection_floor_artifact.v2`` document.
 
@@ -2822,9 +2879,11 @@ def validate_floor_artifact(
     every residual, delta, mean, stddev, prediction, unguarded/guarded floor,
     guard factor, cell gate, and transport composition against the stored
     values within ``max(1e-12, 1e-12 * abs(expected))``. Evidence-root ids
-    must be exact literals in the uniquely matching family pinset. When an
-    explicit pinset is supplied, its caller is responsible for authenticating
-    the pinset bytes before validation.
+    must be exact literals in the uniquely matching family pinset. The default
+    route resolves reviewed repository pinsets. The explicit route requires
+    both ``pinset_path`` and ``expected_pinset_sha256``; this function re-reads
+    the file, rejects symlinks/non-regular files, authenticates the exact bytes,
+    and only then parses the closed pinset schema.
     """
     errors: list = []
     if not _check_keys(value, _TOP_KEYS, "artifact", errors):
@@ -2837,7 +2896,11 @@ def validate_floor_artifact(
         errors.append("artifact: invalid source_class")
     if not isinstance(value["artifact_id"], str) or not value["artifact_id"]:
         errors.append("artifact: artifact_id must be a nonempty string")
-    evidence_root_ids, pinset_error = _resolve_evidence_root_ids(value, pinset)
+    evidence_root_ids, pinset_error = _resolve_evidence_root_ids(
+        value,
+        pinset_path,
+        expected_pinset_sha256,
+    )
     if pinset_error is not None:
         errors.append(pinset_error)
     if value["method"] != build_method_block():

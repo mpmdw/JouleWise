@@ -79,6 +79,20 @@ MINT1_PINSET_SHA256 = (
 )
 
 
+def write_pinset(
+    directory: Path,
+    value: object,
+    *,
+    name: str = "pinset.json",
+) -> tuple[Path, str]:
+    raw = (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    path = directory / name
+    path.write_bytes(raw)
+    return path, hashlib.sha256(raw).hexdigest()
+
+
 def whole_window_allowance(
     value=0.4,
     observed=0.3,
@@ -1138,6 +1152,87 @@ class TestArtifactEmitValidate(unittest.TestCase):
             ["artifact.pinset: multiple pinsets match artifact family identity"],
         )
 
+    def test_repository_symlinked_pinset_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "outside-pinset"
+            target.write_bytes(MINT1_PINSET_PATH.read_bytes())
+            pinset_directory = root / "repository"
+            pinset_directory.mkdir()
+            (pinset_directory / "mint1.json").symlink_to(target)
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(
+            findings,
+            [
+                "artifact.pinset: repository pinset 'mint1.json': "
+                "pinset file must not be a symlink"
+            ],
+        )
+
+    def test_explicit_symlinked_pinset_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.json"
+            target.write_bytes(MINT1_PINSET_PATH.read_bytes())
+            symlink = root / "pinset.json"
+            symlink.symlink_to(target)
+            findings = validate_floor_artifact(
+                make_artifact(),
+                pinset_path=symlink,
+                expected_pinset_sha256=MINT1_PINSET_SHA256,
+            )
+        self.assertEqual(
+            findings,
+            [
+                "artifact.pinset: explicit pinset: "
+                "pinset file must not be a symlink"
+            ],
+        )
+
+    def test_malformed_repository_pinset_refuses_instead_of_skipping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pinset_directory = Path(tmp)
+            (pinset_directory / "garbage.json").write_text(
+                "this is not JSON",
+                encoding="utf-8",
+            )
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(make_artifact())
+        self.assertEqual(len(findings), 1)
+        self.assertIn(
+            "artifact.pinset: repository pinset 'garbage.json': "
+            "pinset is not valid UTF-8 JSON",
+            findings[0],
+        )
+
+    def test_explicit_pinset_digest_mismatch_refuses_forged_roots(self):
+        pinset = json.loads(MINT1_PINSET_PATH.read_text(encoding="utf-8"))
+        artifact = make_artifact()
+        for component_name in ("absolute", "comparative"):
+            artifact["cells"][0]["provenance"][component_name][
+                "evidence_root_id"
+            ] = "attacker_root"
+            pinset[component_name]["evidence_root_id"] = "attacker_root"
+        with tempfile.TemporaryDirectory() as tmp:
+            forged_path, forged_digest = write_pinset(Path(tmp), pinset)
+            self.assertNotEqual(forged_digest, MINT1_PINSET_SHA256)
+            findings = validate_floor_artifact(
+                artifact,
+                pinset_path=forged_path,
+                expected_pinset_sha256=MINT1_PINSET_SHA256,
+            )
+        self.assertEqual(len(findings), 1)
+        self.assertIn("pinset sha256 mismatch", findings[0])
+
     def test_synthetic_second_pinset_is_family_scoped(self):
         pinset = json.loads(MINT1_PINSET_PATH.read_text(encoding="utf-8"))
         pinset["mint_tool_version"] = "joulewise.floor_mint.synthetic.v1"
@@ -1162,20 +1257,43 @@ class TestArtifactEmitValidate(unittest.TestCase):
             own_artifact["cells"][0]["provenance"][component_name][
                 "evidence_root_id"
             ] = "synthetic_root"
-        self.assertEqual(
-            validate_floor_artifact(own_artifact, pinset=pinset),
-            [],
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            pinset_directory = Path(tmp)
+            (pinset_directory / "family-a.json").write_bytes(
+                MINT1_PINSET_PATH.read_bytes()
+            )
+            family_b_path, family_b_digest = write_pinset(
+                pinset_directory,
+                pinset,
+                name="family-b.json",
+            )
+            self.assertEqual(
+                validate_floor_artifact(
+                    own_artifact,
+                    pinset_path=family_b_path,
+                    expected_pinset_sha256=family_b_digest,
+                ),
+                [],
+            )
 
-        confused_mint1 = make_artifact()
-        confused_mint1["cells"][0]["provenance"]["absolute"][
-            "evidence_root_id"
-        ] = "synthetic_root"
+            confused_family_a = make_artifact()
+            for component_name in ("absolute", "comparative"):
+                confused_family_a["cells"][0]["provenance"][component_name][
+                    "evidence_root_id"
+                ] = "synthetic_root"
+            with patch.object(
+                detection_floor,
+                "_FLOOR_MINT_PINSET_DIRECTORY",
+                pinset_directory,
+            ):
+                findings = validate_floor_artifact(confused_family_a)
         self.assertEqual(
-            validate_floor_artifact(confused_mint1),
+            findings,
             [
                 "cells[0].provenance.absolute.evidence_root_id: "
-                "not pinned by artifact family pinset"
+                "not pinned by artifact family pinset",
+                "cells[0].provenance.comparative.evidence_root_id: "
+                "not pinned by artifact family pinset",
             ],
         )
 
