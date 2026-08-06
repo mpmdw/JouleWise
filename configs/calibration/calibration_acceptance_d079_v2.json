@@ -1,21 +1,21 @@
 {
-  "schema_version": "joulewise.calibration_acceptance_bound.v2.fixture.v1",
+  "schema_version": "joulewise.calibration_acceptance_bound.v2",
   "acceptance_id": "d079_calibration_acceptance_v2_n19",
   "decision_ids": [
     "D-102",
     "D-109"
   ],
-  "artifact_role": "schema_fixture_unissued",
+  "artifact_role": "issued",
   "issuance": {
-    "status": "unratified_fixture",
-    "claim_eligible": false,
-    "reason": "D-109 R2 clause 7 requires lead verification of raw physics and hashes before production issuance"
+    "status": "issued",
+    "claim_eligible": true,
+    "reason": "D-109 R2 raw-physics and artifact-hash verification is bound by the authenticated historical-import cutoff"
   },
   "ledger_cutoff": {
-    "sequence": 0,
-    "head_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sequence": 76,
+    "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
     "ledger_schema": "joulewise.calibration_observation_ledger.v1",
-    "role": "fixture_genesis_not_a_production_issuance_cutoff"
+    "role": "issued_acceptance_baseline"
   },
   "identity_epoch": {
     "os_build": "25F84",
@@ -184,8 +184,8 @@
   },
   "prior_observation_set": {
     "cutoff": {
-      "sequence": 0,
-      "head_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sequence": 76,
+      "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
       "ledger_schema": "joulewise.calibration_observation_ledger.v1"
     },
     "content_identity_method": "sha256(canonical_json({instrument_evidence.json,manifest.json} byte sha256s))",
@@ -200,33 +200,245 @@
       }
     },
     "observations": [
-      {"content_id": "c2a4412ee77fd2c10a397c8c4072d06c31bf26ea6b6a9a2ad1764dced71de2e9", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T145535-e941c821"},
-      {"content_id": "029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T194118-9dc0749d"},
-      {"content_id": "7232cfa1de9e6e19543d00c976e184ee23f8e4a17d2b05f7f4fa44fc6461f01f", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T214220-1acdbbc0"},
-      {"content_id": "7d7e898178e7fac74d9733a6703319d3458785abb671a2d43907a1018549f554", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T215127-eeef661a"},
-      {"content_id": "273e6326b8a43c4b97d2d9437cee84320488dc5857cf3bd663e916c53601f02f", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T222332-901c5c13"},
-      {"content_id": "5092d2cd9912f5dd0fa79161e86e7eb07c0196f61585a0770500a27be46df55c", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260722T232509-82642517"},
-      {"content_id": "08ea40cb06c6290ad056a698a0803e4dbfc4591203121f4524169e380d8fc7fa", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T023058-8732d1c9"},
-      {"content_id": "eac62f5e4fa7600afbb6d822b6770e25513ae79e00a5e2ad12c0e89cfb205df1", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T052051-d9358c8a"},
-      {"content_id": "c75a8d727664c28ff3bbce88eab6e4065e00bc965f2f447fb2a41df488faa9fd", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T183306-4ce692b4"},
-      {"content_id": "0c5851939bac8e93973dbf8464e7c053ce4b1da0a708efa062a80d169004e6d9", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T194632-d04e038e"},
-      {"content_id": "2ae2573af972e9c9b3fbe0aa98d57d265056b58902b35eb5995925fa10c1fbe8", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T195730-bc4ba14a"},
-      {"content_id": "418db55fa63dd5a0bae1ebb2291d860748df350d1b94aae4645d858c0527741c", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T221449-e9ae755e"},
-      {"content_id": "f3db4bc343a25c25734a017a02089ddc15db5169d67b222356d5a6fc09e143e4", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260723T223406-314f6d9e"},
-      {"content_id": "35ae646c47747e8561982ec8a7128e2e1a84e5c3255de66ee18ba51415017dc3", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260724T014109-57844352"},
-      {"content_id": "bf7c217c20effafa210cb53e86db0e6743df4e5eafca779d79ae0e8073c8f7b3", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260725T005132-a64711b7"},
-      {"content_id": "10fe0bff822d2c2546f2cbc45d85e9fb46cbd739dc4a972585775a2e2f29a0ec", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260725T011533-0b5ec77c"},
-      {"content_id": "ff6de7a0496f834973007f3c355b3c2dd3bd37e9701b632b049904f134f52e00", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260725T022712-0a9534f5"},
-      {"content_id": "51f24f06cc5d99a58fc354423f4b08b03dfe5c2e8ece4ea148967896802cb984", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260725T030533-d3f076e5"},
-      {"content_id": "ac89c0d106fdf4aff146f11f77c95dea4682d35d71e6c3582c9169772149acc9", "epoch_id": "d079_epoch", "disposition": "valid", "attempt_id": "20260725T060617-97c5cba6"},
-      {"content_id": "10f7781f9e7504bff749767ca4d0581f743d2bcf2982edfd9b42454a456646d5", "epoch_id": "d079_epoch", "disposition": "blind-holdout", "attempt_id": "fixture-known-holdout"}
+      {
+        "content_id": "c2a4412ee77fd2c10a397c8c4072d06c31bf26ea6b6a9a2ad1764dced71de2e9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T145535-e941c821"
+      },
+      {
+        "content_id": "029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T194118-9dc0749d"
+      },
+      {
+        "content_id": "ec850ad5359df234cf091b452194753acbd609f8c5102443fca8cfb40b3c72aa",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260722T213749-563b9849"
+      },
+      {
+        "content_id": "7232cfa1de9e6e19543d00c976e184ee23f8e4a17d2b05f7f4fa44fc6461f01f",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T214220-1acdbbc0"
+      },
+      {
+        "content_id": "7d7e898178e7fac74d9733a6703319d3458785abb671a2d43907a1018549f554",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T215127-eeef661a"
+      },
+      {
+        "content_id": "273e6326b8a43c4b97d2d9437cee84320488dc5857cf3bd663e916c53601f02f",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T222332-901c5c13"
+      },
+      {
+        "content_id": "5092d2cd9912f5dd0fa79161e86e7eb07c0196f61585a0770500a27be46df55c",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T232509-82642517"
+      },
+      {
+        "content_id": "08ea40cb06c6290ad056a698a0803e4dbfc4591203121f4524169e380d8fc7fa",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T023058-8732d1c9"
+      },
+      {
+        "content_id": "eac62f5e4fa7600afbb6d822b6770e25513ae79e00a5e2ad12c0e89cfb205df1",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T052051-d9358c8a"
+      },
+      {
+        "content_id": "c75a8d727664c28ff3bbce88eab6e4065e00bc965f2f447fb2a41df488faa9fd",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T183306-4ce692b4"
+      },
+      {
+        "content_id": "0c5851939bac8e93973dbf8464e7c053ce4b1da0a708efa062a80d169004e6d9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T194632-d04e038e"
+      },
+      {
+        "content_id": "2ae2573af972e9c9b3fbe0aa98d57d265056b58902b35eb5995925fa10c1fbe8",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T195730-bc4ba14a"
+      },
+      {
+        "content_id": "418db55fa63dd5a0bae1ebb2291d860748df350d1b94aae4645d858c0527741c",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T221449-e9ae755e"
+      },
+      {
+        "content_id": "f3db4bc343a25c25734a017a02089ddc15db5169d67b222356d5a6fc09e143e4",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T223406-314f6d9e"
+      },
+      {
+        "content_id": "35ae646c47747e8561982ec8a7128e2e1a84e5c3255de66ee18ba51415017dc3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260724T014109-57844352"
+      },
+      {
+        "content_id": "bf7c217c20effafa210cb53e86db0e6743df4e5eafca779d79ae0e8073c8f7b3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T005132-a64711b7"
+      },
+      {
+        "content_id": "10fe0bff822d2c2546f2cbc45d85e9fb46cbd739dc4a972585775a2e2f29a0ec",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T011533-0b5ec77c"
+      },
+      {
+        "content_id": "ff6de7a0496f834973007f3c355b3c2dd3bd37e9701b632b049904f134f52e00",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T022712-0a9534f5"
+      },
+      {
+        "content_id": "51f24f06cc5d99a58fc354423f4b08b03dfe5c2e8ece4ea148967896802cb984",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T030533-d3f076e5"
+      },
+      {
+        "content_id": "1ef9ce6167865f3e04304b73ada774e11515b3895a5b51d5c1d8b7eb18af9aea",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260725T055825-b10cb348"
+      },
+      {
+        "content_id": "ac89c0d106fdf4aff146f11f77c95dea4682d35d71e6c3582c9169772149acc9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T060617-97c5cba6"
+      },
+      {
+        "content_id": "03a6a20dae1071f7c74e5c006e891849e83c317080390b64473ed319545a4710",
+        "epoch_id": "d079_epoch",
+        "disposition": "systematic-invalid",
+        "attempt_id": "20260726T000039-491995f3"
+      },
+      {
+        "content_id": "20d2518c3d99619a1ba56ffa679fadf9a5e5870064324c27f5cb6a7a99e9afdb",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260726T031222-e0ce33f5"
+      },
+      {
+        "content_id": "ce9373a047879fbf94c30d5119b2735ca6a9b9f16ddb460f8310f8654642b96b",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260726T225227-1f550773"
+      },
+      {
+        "content_id": "8872864d1c97f40987dab4d693479fee6405c8616ea1effdf2a0457c10f5a8f8",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260726T225920-ab4272f5"
+      },
+      {
+        "content_id": "03497b300c7d35bd6fe08855dc468687e788f81481ab7285b04fa726a202d440",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T015824-45feb516"
+      },
+      {
+        "content_id": "51633cd3498a0c234962301bd608f5a31916bd3a3cb3f2e805fd2215edc849ca",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T020611-4a409a30"
+      },
+      {
+        "content_id": "20ff4e73d0a329e3ecfc4b98be496c66392c77ea353a96f9885d5e52bdb98e37",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T050047-95e2f87e"
+      },
+      {
+        "content_id": "7410aafd9448b8da07e4b919e324b24bc7b15ac9b01a3200e39ef6f615cadfc3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260729T204105-39d25f8a"
+      },
+      {
+        "content_id": "4451d9a9cd5c6b5a801d146908b549886bd11559fc4c2ee3e771434fb4b95bd9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260730T014035-124df355"
+      },
+      {
+        "content_id": "6026cb9f72b5a76f2a4b5b4f88bde06d644e3cd47e4e0cdc11d44ab6ecf5fabf",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260730T210703-f76b5771"
+      },
+      {
+        "content_id": "e522d8fabdebaa446776c52f8c263be6d853b700107d21c835557be475b165c2",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260731T012210-374020b6"
+      },
+      {
+        "content_id": "bd170c828910f4543f60ee76fae1f04b10707c58cd907be4c707706faea78aae",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260731T161713-b8b08280"
+      },
+      {
+        "content_id": "ff49477c8c7d71df3a9b7f86681e436ede8b7c1ac8c2b3fb2ee745cd6421ada1",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260731T214355-126fc2ab"
+      },
+      {
+        "content_id": "473a8aec1aba846e270ddccaa6bbea5b315cd36f28616e2daff2d7edefe52518",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260801T010113-e859f3aa"
+      },
+      {
+        "content_id": "9add6b6926ef2eb45722cfcdc8562a643dba0fd43f045ae534419fc7a7ecfd21",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260801T010805-ff3fdc88"
+      },
+      {
+        "content_id": "ea0c34c63f1c9bed2649081eab80a3fbaf5c4ffd1ea37da12bc11945053aefca",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260801T014059-8c3bfe9e"
+      },
+      {
+        "content_id": "ef01bcca6caf35f7abea2dcaa7acf8cc53d5a9e3463c413dba61d17f9179c448",
+        "epoch_id": "d079_epoch",
+        "disposition": "systematic-invalid",
+        "attempt_id": "20260801T064830-c76f5d1c"
+      }
     ]
   },
   "backfill_candidate": {
-    "status": "unratified_candidate_only",
-    "candidate_inventory": {"valid": 32, "invalid": 6},
-    "production_issuance_blocked": true,
-    "required_verification": "lead-owned raw-physics and artifact-hash verification; any unresolved member blocks issuance",
+    "status": "issued",
+    "candidate_inventory": {
+      "ordinary-invalid": 6,
+      "systematic-invalid": 2,
+      "valid": 30
+    },
+    "production_issuance_blocked": false,
+    "required_verification": "complete: lead-owned raw-physics and artifact-hash verification",
     "superseded_id_only_blind_exclusions": [
       "20260726T000039-491995f3",
       "20260726T031222-e0ce33f5"
@@ -285,5 +497,5 @@
       "embedding_count": 1
     }
   },
-  "derivation_sha256": "3cece3b2c816476887613c3c25d8d186dbefa61047275c5b157d32980249da9d"
+  "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
 }

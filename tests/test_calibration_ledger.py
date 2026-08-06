@@ -19,13 +19,16 @@ from unittest import mock
 
 import joulewise.calibration_ledger as calibration_ledger
 from scripts import calibration_ledger_bootstrap as bootstrap_cli
+from tests.test_calibration_bracketing import (
+    _unissued_acceptance_fixture,
+    _unissued_acceptance_fixture_bytes,
+)
 from joulewise.calibration_bracketing import (
     _canonical_sha256 as acceptance_canonical_sha256,
     _valid_acceptance_bound,
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_ledger import (
-    DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
     HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA,
@@ -98,6 +101,53 @@ class CalibrationLedgerTests(unittest.TestCase):
 
     def _write_pin(self, value: dict) -> None:
         self.pin.write_text(json.dumps(value) + "\n", encoding="utf-8")
+
+    def _isolated_cli_checkout(self) -> tuple[Path, Path]:
+        """Copy the CLI into a tiny repo with a committed genesis head pin."""
+
+        source_root = Path(__file__).resolve().parents[1]
+        repo = self.root / "cli-repo"
+        shutil.copytree(source_root / "joulewise", repo / "joulewise")
+        (repo / "scripts").mkdir()
+        shutil.copy2(
+            source_root / "scripts" / "calibration_ledger_bootstrap.py",
+            repo / "scripts" / "calibration_ledger_bootstrap.py",
+        )
+        pin = repo / "configs" / "calibration" / "calibration_ledger_head.json"
+        pin.parent.mkdir(parents=True)
+        pin.write_text(
+            json.dumps(
+                {
+                    "sequence": 0,
+                    "head_digest": GENESIS_DIGEST,
+                    "ledger_schema": LEDGER_SCHEMA,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "tests@joulewise.invalid"],
+            cwd=repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "JouleWise tests"],
+            cwd=repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "add", pin.relative_to(repo).as_posix()],
+            cwd=repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-qm", "pin synthetic genesis head"],
+            cwd=repo,
+            check=True,
+        )
+        return repo / "scripts" / "calibration_ledger_bootstrap.py", pin
 
     def _custody(self, attempt_id: str) -> Path:
         path = self.root / "another-root" / "instrument_validation" / attempt_id
@@ -390,9 +440,7 @@ class CalibrationLedgerTests(unittest.TestCase):
         manifest_path = self.root / "custody-manifest.json"
         manifest_path.write_bytes(import_args["custody_manifest_raw"])
         dry_ledger = self.root / "dry-run-ledger.jsonl"
-        script = Path(__file__).resolve().parents[1] / "scripts" / (
-            "calibration_ledger_bootstrap.py"
-        )
+        script, head_pin = self._isolated_cli_checkout()
         command = [
             sys.executable,
             str(script),
@@ -409,7 +457,7 @@ class CalibrationLedgerTests(unittest.TestCase):
             "--ledger",
             str(dry_ledger),
             "--head-pin",
-            str(DEFAULT_HEAD_PIN_PATH),
+            str(head_pin),
             str(root),
         ]
         first = subprocess.run(command, check=True, capture_output=True)
@@ -467,11 +515,12 @@ class CalibrationLedgerTests(unittest.TestCase):
     def test_d079_issued_artifact_mode_is_deterministic_and_write_explicit(
         self,
     ) -> None:
-        script = Path(__file__).resolve().parents[1] / "scripts" / (
-            "calibration_ledger_bootstrap.py"
-        )
+        script, head_pin = self._isolated_cli_checkout()
         dry_ledger = self.root / "issued-mode-ledger.jsonl"
         emitted_path = self.root / "issued-acceptance.json"
+        source_path = self.root / "unissued-acceptance.json"
+        source_raw = _unissued_acceptance_fixture_bytes()
+        source_path.write_bytes(source_raw)
         command = [
             sys.executable,
             str(script),
@@ -487,6 +536,10 @@ class CalibrationLedgerTests(unittest.TestCase):
             "/Users/edr",
             "--ledger",
             str(dry_ledger),
+            "--head-pin",
+            str(head_pin),
+            "--acceptance-artifact",
+            str(source_path),
             "--prepare-issued-artifact",
         ]
         first = subprocess.run(command, check=True, capture_output=True)
@@ -523,14 +576,13 @@ class CalibrationLedgerTests(unittest.TestCase):
                 _REAL_D079_CUSTODY_MANIFEST_SHA256
             ),
         )
-        source = load_calibration_acceptance_bound()
-        self.assertIsNotNone(source)
+        source = _unissued_acceptance_fixture()
         reversed_source = dict(reversed(tuple(source.items())))
         canonical_artifact = bootstrap_cli._issued_acceptance_artifact(
-            plan, source
+            plan, source, source_artifact_raw=source_raw
         )
         reordered_artifact = bootstrap_cli._issued_acceptance_artifact(
-            plan, reversed_source
+            plan, reversed_source, source_artifact_raw=source_raw
         )
         canonical_bytes = bootstrap_cli._issued_artifact_bytes(
             canonical_artifact
@@ -555,7 +607,7 @@ class CalibrationLedgerTests(unittest.TestCase):
             wraps=bootstrap_cli._issued_artifact_bytes,
         ) as serialize:
             prepared = bootstrap_cli._prepare_issued_acceptance_artifact(
-                plan, source
+                plan, source, source_artifact_raw=source_raw
             )
             with mock.patch.object(bootstrap_cli.sys, "stdout", success_stdout):
                 bootstrap_cli._emit(

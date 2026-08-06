@@ -62,6 +62,10 @@ from joulewise.analysis_engine.registry import (
     sha256_bytes,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from tests.test_calibration_bracketing import (
+    _fixture_snapshot,
+    _unissued_acceptance_fixture,
+)
 from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 from tests.test_run_campaign import (
     d100_real_salvage_leaf_patches,
@@ -69,6 +73,24 @@ from tests.test_run_campaign import (
     read_all_jsonl,
     run_campaign_module,
 )
+
+
+def _install_synthetic_calibration_defaults(test: unittest.TestCase) -> None:
+    """Keep synthetic consumption sessions independent of the live anchor."""
+
+    snapshot, _candidates = _fixture_snapshot([])
+    acceptance = patch(
+        "joulewise.whole_window.load_calibration_acceptance_bound",
+        return_value=_unissued_acceptance_fixture(),
+    )
+    ledger = patch(
+        "joulewise.whole_window.load_calibration_ledger_snapshot",
+        return_value=snapshot,
+    )
+    acceptance.start()
+    ledger.start()
+    test.addCleanup(ledger.stop)
+    test.addCleanup(acceptance.stop)
 
 
 class WholeWindowSelectionTests(unittest.TestCase):
@@ -1048,6 +1070,9 @@ class WholeWindowSelectionTests(unittest.TestCase):
 
 
 class MaxBracketConsumptionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        _install_synthetic_calibration_defaults(self)
+
     @staticmethod
     def _b1_public_path_fixture(
         root: Path,
@@ -1117,6 +1142,8 @@ class MaxBracketConsumptionTests(unittest.TestCase):
             receipts=(),
             observations=(),
             refusal_reasons=refusal_reasons,
+            baseline_sequence=0,
+            baseline_digest=GENESIS_DIGEST,
         )
 
     def test_b1_r1_explicit_minted_fresh_valid_session_is_prepared_and_accepted(
@@ -2269,6 +2296,11 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     "joulewise.reduce.environment_admission_refusals",
                     return_value=(),
                 ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "load_calibration_acceptance_bound",
+                    return_value=_unissued_acceptance_fixture(),
+                ),
             ):
                 minted = reduce_bundle(
                     bundle,
@@ -2790,6 +2822,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
 
 class SalvageSemanticsDispatchTests(unittest.TestCase):
     def setUp(self) -> None:
+        _install_synthetic_calibration_defaults(self)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
