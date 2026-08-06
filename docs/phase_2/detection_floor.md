@@ -156,6 +156,54 @@ calibrated condition family. It does not promise nonparametric 95/95 coverage,
 does not validate unobserved thermal/controller states, and does not replace
 backend systematic or drift bounds.
 
+### Pinset-Derived Evidence-Root Authentication
+
+`validate_floor_artifact` authenticates each component's
+`evidence_root_id` against the artifact family's reviewed floor-mint pinset.
+The allowed set is the unique set of exact literals already stored at
+`absolute.evidence_root_id` and `comparative.evidence_root_id` in that
+pinset. There is no wildcard, pattern-based allowance, nonempty-string
+fallback, or duplicate root-list field. Adding a future family or root is a
+reviewed pinset-data change; it is not a validator code change.
+
+The artifact-to-pinset join uses only this existing identity tuple:
+
+1. `provenance.mint_tool_version`;
+2. `provenance.calibration_plan.plan_id`; and
+3. `provenance.calibration_plan.sha256`.
+
+The ordinary library validator resolves that tuple against the v1 pinsets in
+`scripts/floor_mint_pinsets/`. Repository discovery accepts only regular
+`*.json` files that are not symlinks; a symlink, non-regular entry, unreadable
+file, malformed JSON document, duplicate-key document, or document outside the
+closed v1 schema makes resolution refuse rather than silently disappearing
+from the candidate set.
+
+The public explicit route is
+`validate_floor_artifact(artifact, pinset_path=...,`
+`expected_pinset_sha256=...)`. Both arguments are required together. The
+library itself rejects symlinks and non-regular files, re-reads the exact bytes,
+checks them against the expected digest, and parses only after that check. No
+public route accepts an already-parsed pinset mapping. The generalized mint
+passes its path and separately supplied expected SHA-256 through this route; it
+does not pass parsed content or rewrite a future family's root ids to mint-1
+labels. Resolution is fail-closed and produces these core findings:
+
+- zero matches: `artifact.pinset: no pinset matches artifact family identity`;
+- multiple matches: `artifact.pinset: multiple pinsets match artifact family identity`;
+- a component root outside the uniquely matched family's two pinned literals:
+  `cells[N].provenance.COMPONENT.evidence_root_id: not pinned by artifact family pinset`.
+
+Mint-1 behavior is frozen: `scripts/floor_mint_pinsets/mint1.json` remains
+byte-identical at SHA-256
+`4c58e64636863379f26bcf0fe03503ddfcf3bcf9bfa184fe0d385ca47b459a67`;
+its existing `a10` and `window_c` literals, artifact construction, and the
+original mint's final validation gate are unchanged. A valid mint-1 artifact
+therefore retains the exact finding bytes `[]`. This authentication route does
+not grant or restore any mint license. In particular, D-110 clause 3 remains a
+separate license gate; a future pinset can make a hypothetical artifact
+truthfully valid without authorizing that artifact to be minted or published.
+
 ### Cell List
 
 The default target for Window A is `n = 10` strict-valid bundles per cell.
