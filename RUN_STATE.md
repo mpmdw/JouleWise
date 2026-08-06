@@ -114,6 +114,25 @@ it sequences with the re-mint, not standalone.
   (codex-run-v3 does not read CODEX_SERVICE_TIER — do not modify Ed's
   personal wrapper without his word).
 
+### QG census — magistrate stop-condition set (recorded ~02:40 2026-08-06)
+
+The Option C redesign delta audit (qg-deltaC, xhigh) found the
+observation/churn-to-absence class SURVIVES — but the survival is
+localized to ONE discriminator clause: `PID_REUSED` fires on any
+full-identity mismatch, whereas the adopted consult explicitly requires
+"only a different START-TIME anchor may classify as PID_REUSED" (a
+same-start exec/argv/ancestry change must REFUSE, not clear custody).
+Every STRUCTURAL piece the consult prescribed passed. Magistrate call:
+this is a mis-implementation of a sentence the consult already wrote,
+not the design being wrong — so ONE precise fix against that clause is
+warranted (first occurrence on this specific new logic).
+**HARD STOP-CONDITION (binds the magistrate): if the fix's delta audit
+still finds the class, the branch is SHELVED for Ed — no further
+iteration.** QG commit 1 is descoped, installed-INACTIVE, on no
+measurement path, and gates no claim; it does not warrant unbounded
+spend, and rigor-first (D-113) governs CLAIM-BEARING collection, not a
+convenience guard. This stop-condition is the record of that judgment.
+
 ### ESCALATION TRIGGER FIRED — quiet-guard observation-failure→absence class (recorded ~01:15 2026-08-06)
 
 qg-delta3 (xhigh) ruled the class RECURRENT at count 2: round 3's
