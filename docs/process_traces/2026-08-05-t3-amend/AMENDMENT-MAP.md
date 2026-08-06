@@ -128,6 +128,20 @@ surface):
 > permission mode, epoch continuity, and absence of a duplicated turn or side
 > effect.
 
+## Reclassified — NOT a proposal: cold-gate late-contamination consequence
+
+(Moved OUT of the Proposals container: the blanket "no synthesis ancestry" statement there does not apply to this item.)
+
+Automatically void a ruling when undisclosed launch contamination is discovered
+later. **This DOES have synthesis ancestry** and is already landed: the
+registry Convening procedure §2 (`docs/process/coldgate_charter_registry.md`)
+— adopted 2026-08-03 and affirmed unanimously by SYNTHESIS.md §Q3a-3d — states
+that a contaminated ruling "is not void per se … but an undisclosed
+contamination discovered later voids the ruling." Disposition: **CHECKED / NO
+NEW WRITE** (the mechanic is registry law, not a new proposal). The earlier
+mis-classification conflated the *disclosed* case (ruling stands or falls on
+cited evidence) with the *undisclosed-discovered-later* case (voids).
+
 ## Proposals (NOT amendments — no synthesis ancestry; require their own future ruling)
 
 Nothing in this section is law, operative acceptance text, or a synthesis
@@ -167,18 +181,6 @@ the T3 synthesis.
 Run the trigger as a separate concurrent read-only instance, deliver findings
 mid-flight, and require it to fire without operator memory. These OS-1 mechanics
 have no synthesis ancestry.
-
-### (reclassified — NOT a proposal) cold-gate late-contamination consequence
-
-Automatically void a ruling when undisclosed launch contamination is discovered
-later. **This DOES have synthesis ancestry** and is already landed: the
-registry Convening procedure §2 (`docs/process/coldgate_charter_registry.md`)
-— adopted 2026-08-03 and affirmed unanimously by SYNTHESIS.md §Q3a-3d — states
-that a contaminated ruling "is not void per se … but an undisclosed
-contamination discovered later voids the ruling." Disposition: **CHECKED / NO
-NEW WRITE** (the mechanic is registry law, not a new proposal). The earlier
-mis-classification conflated the *disclosed* case (ruling stands or falls on
-cited evidence) with the *undisclosed-discovered-later* case (voids).
 
 | Follow-on row | Non-normative implementation proposal |
 |---|---|
