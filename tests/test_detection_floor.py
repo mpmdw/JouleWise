@@ -1297,6 +1297,19 @@ class TestArtifactEmitValidate(unittest.TestCase):
             ],
         )
 
+    def test_pinset_io_errors_do_not_leak_absolute_paths(self):
+        secret = "/private/lead/custody/hidden-pinset.json"
+        artifact = make_artifact()
+        findings = validate_floor_artifact(
+            artifact,
+            pinset_path=secret,
+            expected_pinset_sha256="0" * 64,
+        )
+        self.assertTrue(findings)
+        for finding in findings:
+            self.assertNotIn(secret, finding)
+            self.assertNotIn("/private/lead", finding)
+
     def test_evidence_root_global_hardcode_is_removed(self):
         self.assertFalse(hasattr(detection_floor, "_EVIDENCE_ROOT_IDS"))
 

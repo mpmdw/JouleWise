@@ -434,7 +434,7 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset:
     try:
         file_stat = path.lstat()
     except OSError as exc:
-        raise MintError(f"pinset cannot be inspected: {exc}") from exc
+        raise MintError(f"pinset cannot be inspected: {exc.strerror or type(exc).__name__}") from exc
     if stat.S_ISLNK(file_stat.st_mode):
         raise MintError("pinset must not be a symlink")
     if not stat.S_ISREG(file_stat.st_mode):
@@ -442,7 +442,7 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset:
     try:
         raw = path.read_bytes()
     except OSError as exc:
-        raise MintError(f"pinset cannot be read: {exc}") from exc
+        raise MintError(f"pinset cannot be read: {exc.strerror or type(exc).__name__}") from exc
     actual = hashlib.sha256(raw).hexdigest()
     if actual != expected:
         raise MintError(

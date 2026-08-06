@@ -1557,7 +1557,7 @@ def _read_floor_mint_pinset(
     try:
         file_stat = path.lstat()
     except OSError as exc:
-        return None, f"cannot inspect pinset file: {exc}"
+        return None, f"cannot inspect pinset file: {exc.strerror or type(exc).__name__}"
     if stat.S_ISLNK(file_stat.st_mode):
         return None, "pinset file must not be a symlink"
     if not stat.S_ISREG(file_stat.st_mode):
@@ -1565,7 +1565,7 @@ def _read_floor_mint_pinset(
     try:
         raw = path.read_bytes()
     except OSError as exc:
-        return None, f"cannot read pinset file: {exc}"
+        return None, f"cannot read pinset file: {exc.strerror or type(exc).__name__}"
     if expected_sha256 is not None:
         actual_sha256 = hashlib.sha256(raw).hexdigest()
         if actual_sha256 != expected_sha256:
@@ -1593,7 +1593,7 @@ def _repository_floor_mint_pinsets(
     try:
         paths = sorted(_FLOOR_MINT_PINSET_DIRECTORY.glob("*.json"))
     except OSError as exc:
-        return [], f"artifact.pinset: repository pinset scan failed: {exc}"
+        return [], f"artifact.pinset: repository pinset scan failed: {exc.strerror or type(exc).__name__}"
     for path in paths:
         projection, error = _read_floor_mint_pinset(path)
         if error is not None:
