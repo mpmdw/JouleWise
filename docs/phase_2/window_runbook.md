@@ -363,26 +363,22 @@ returned.
 ### If a single member still fails the anchor
 
 Stabilization lowers the rate; it does not make the failure impossible. When
-one member refuses with `wall_minus_monotonic_span_exceeded`:
+one member refuses with `wall_minus_monotonic_span_exceeded`, no member-level
+anchor retry is adopted. Under D-113 clause 9, no such retry occurs without a
+prospective ruling made before the plan freeze:
 
 - [ ] **Do not mint a bound, a verdict, or a floor from a basis that contains
   the invalid occurrence.** An invalid member never becomes a valid one.
-- [ ] Preserve and quarantine **only the invalid member**. Valid members
-  already collected stay exactly where they are.
-- [ ] Settle conservatively — at least the full 180 seconds, and longer if the
-  machine has been touched.
-- [ ] Rerun that member's exact frozen config. Change nothing else in the
-  plan.
-- [ ] Strict-validate the replacement with
-  `.venv/bin/python -m joulewise validate-bundle --strict`.
-- [ ] Record supersession of the old occurrence using the existing procedure
-  in §10, "Slot quarantine and supersession".
-- [ ] Rerun the dual-family bound mint so the bound derives from the repaired
-  corpus.
+- [ ] Preserve and quarantine the invalid member. Valid members already
+  collected stay exactly where they are, but no replacement member is
+  collected under an unruled retry.
+- [ ] Stop the stage under the existing `--max-failures 1` behavior and take
+  the disposition to the lead. Do not hand-retry, supersede, or rerun the
+  dual-family bound mint as if a member-level retry were licensed.
 
 `--max-failures` stays at 1. Every admission gate, every family screen, and
-every refusal stays exactly as written. This recovery relaxes no acceptance
-condition; it replaces one lost member with a properly collected one.
+every refusal stays exactly as written. Calibration-only retry remains
+governed as written in §6 and is not changed by this member-level prohibition.
 
 ## 5B. Pre-flight calibration screen (D-079 clause 3)
 
