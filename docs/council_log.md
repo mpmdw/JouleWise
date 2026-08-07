@@ -79,6 +79,7 @@ standing instructions.
 | C-046 | 2026-07-26 | Retrospective: CAL-REBRACKET-01 max-bracket consumption gauntlet (PR #86) | Governed consumption-time authenticated re-derivation landed after three implementation rounds and three independent audits; a9/a10 replays passed with widened members and unchanged point estimates |
 | C-047 | 2026-08-03 | The 16h runway (Ed-granted; joint Fable+Sol decision authority; concurrent sweep instance mid-flight): D-108/D-109 debate+rulings executed, D-110/D-111 sweep-triggered rulings, winB STOP cold gate -> D-112, two Sol gauntlets, pinned byte-identical mint replay, checkpoint for harness switch | D-108 closed via PR #99 + re-record; CAL-BRACKET held at 2e61ff9 (B1 residual, rule-11 gate owed); winB license exhausted as drawn (r06 disposition parked for Ed); mint chain D-110-blocked; CLAIMS_STATUS section 1 honestly NONE; sweep propagation fixes landed; layer yield in the run report |
 | C-048 | 2026-08-04 | Integration-collision resolution on the CAL-BRACKET-D079-01 lead gate: bounded pre-decision Sol HIGH consult -> consult-shaped signature amendment -> fresh delta re-audit -> bench guard hardening -> merge-ref CI | The delta re-audit PROVED a live repr-'None' default spoof against the rendered-signature guard (hardened with a regression); the consult corrected the byte-identity oracle to integration-tree core-vs-wrapper parity (a historical-digest replay would have contradicted D-110); lead integration-tree replay 2487 OK exit-0 unpiped; PR #100 gate-complete, merged 2026-08-05 (`f75d12b`) |
+| C-049 | 2026-08-05/06 | The 12h autonomous marathon: six PRs (#102-#104, #106-#108) + PR #109 issuance gauntlet; two rule-11 escalation consults (CGV F3 closure, QG census Option C); the D-079 issuance cold gate (split verdict, HOLD upheld); D-113/D-115/D-116; then the first re-mint consumption attempt exposed a structural closure -> Sol xhigh fork consult | The cold gate's HOLD prevented an irreversible ledger write paired with a production-refused artifact (F1 no-consumer-path, F2 digest-role coupling — issuance reframed as implementation and re-gauntleted as PRs #108/#109); xhigh delta re-audits again caught introduced defects (QG init-durability F1; CGV live-proved receipt-serialization B1 + phantom-fence B2); historical max-bracket consumption proved structurally closed at main — Option 2 (three fresh prospective windows) recommended by consult + magistrate; Ed's ruling OWED at close |
 
 ---
 
@@ -2793,3 +2794,77 @@ Instrumentation note: two HIGH-effort Sol instruments again produced
 blocker-grade unique catches (consult F1, audit F2) — Ed's cap shows
 no quality decline through this arc. The delta-re-audit rule (every
 fix round) paid for itself on a 127-line mostly-test amendment.
+
+## C-049: The 12h autonomous marathon — issuance through the gate, six PRs, and the fork the first consumption exposed (2026-08-05/06)
+
+Session: Fable magistrate, Ed's 12-hour autonomous window (directive
+batch 2026-08-05 ~22:00: effort cap lifted, fast tier specified,
+D-113 ruled (c), overnight issuance pre-authorized conditional on the
+gate). Full records: `docs/process_traces/2026-08-06-d079-issuance-coldgate/`,
+`docs/process_traces/2026-08-06-d110-remint-fork/` (DIAGNOSIS, consult
+prompt+response, SYNTHESIS), RUN_STATE checkpoint blocks of 2026-08-06
+(morning + afternoon + late), plus the per-arc consult traces of
+2026-08-05 in `docs/process_traces/`. This entry is the owed council
+record assembled by the 2026-08-07 successor from those artifacts.
+
+Shape, in sequence: (i) four checkpoint audits harvested → D-115
+adjudicated (Q2 fixed installation capability w/ binding conditions);
+(ii) two rule-11 escalation consults after same-signature counters hit
+2 — CGV F3 absolute-path-bypass (consult-adopted restructure replacing
+the denylist approach) and QG census observation→absence class (Option
+C redesign, magistrate stop-condition set); (iii) fix rounds each
+followed by xhigh delta re-audits; (iv) the D-079 issuance rule-11 cold
+gate — SPLIT verdict, fresh-Fable PROCEED vs Sol-xhigh contract-lens
+HOLD — magistrate UPHELD the HOLD; (v) issuance reframed from "an edit"
+to a design-bearing consumer implementation, run through the full
+gauntlet (PR #108 consumer, PR #109 execution + ledger genesis import +
+5-file test reconciliation; two cold gates, adversarial audit + 3 delta
+rounds, exact-bytes dual cold review); (vi) D-116 issued, PR #109
+merged on green under D-072 at gate-reviewed head `d85b4f9`; (vii) the
+FIRST consumption attempt against the issued regime → structural
+finding → Sol xhigh pre-decision fork consult (run
+`20260806T165843Z-10884`) → magistrate synthesis.
+
+### Unique catches, by layer
+
+- **Rule-11 cold gate (the flagship):** the issuance HOLD caught that
+  the packet was underscoped — F1: `calibration_bracketing.py` had NO
+  consumer path for an issued acceptance artifact (a JSON flip would
+  have made it unloadable in production); F2: `derivation_sha256`
+  covers the whole artifact core, so the assumed "n=19 preserved ⇒
+  digest preserved" was FALSE (lead-reproduced). An irreversible ledger
+  write paired with a production-refused artifact was prevented. The
+  split verdict was synthesized by the magistrate (rule 9), not
+  majority-voted.
+- **xhigh delta re-audits (fix rounds introduce defects — proven
+  again, twice):** QG F1 — idempotent init retry reporting success with
+  unresolved directory-fsync durability (introduced by fix round 1);
+  CGV B1 — malformed digest arg serialized verbatim into REFUSE
+  receipts (live-proved) and B2 — a non-CommonMark phantom fence hiding
+  real duplicate headings from the pin check.
+- **Oversight/prune lens (cgv-audit-B):** PASS receipt did not bind the
+  judge to the validated bytes (post-validation exhibit substitution),
+  plus the prune recommendation that reframed F3's whole subsystem —
+  the finding that triggered the CGV consult.
+- **The consumption attempt itself as a layer:** only the live attempt
+  exposed that import-marked receipts are excluded from candidate
+  discovery BY DESIGN (CAL-BRACKET arc, retained through issuance), so
+  no historical window can pass authenticated max-bracket consumption
+  at main — every refusal fail-closed; campaign logs sha-verified
+  untouched. Desk review had not predicted it.
+- **Fork consult (Sol xhigh):** verified all five historical bracket
+  pairs physically exist under the drift screen (the objection is
+  provenance completeness, not causality); recommended Option 2 (three
+  compact prospective windows) over finite-allowlist historical
+  candidacy (Option 1, preserved cold-gated); flagged the D-113
+  dependency rewire; supplied the unblocked-regardless desk queue.
+
+### Dispositions and open state at close
+
+D-113 transcribed (`8e68cde`); D-115 on main (`0941cf5`); D-116 on PR
+#109; PR #109 merged (`c537386`). Magistrate + consult CONCUR on
+Option 2; **Ed had NOT ruled at the machine-move stop** — his ruling,
+the prefill-contrast shape ack, and three-nights scheduling were the
+owed items handed to the successor (RUN_STATE checkpoint block).
+Wrapper gotcha re-recorded: codex-run-v3 takes the prompt as a literal
+string, never a file path (one consult killed + relaunched cleanly).
