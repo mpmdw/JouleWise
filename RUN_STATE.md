@@ -10,8 +10,39 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-06 — **CHECKPOINT (machine move). Read this block
-first;** the AFTERNOON block below it is the fork detail, still current.
+Last updated: 2026-08-07 — **LIVE SESSION (14h Ed window). Read this
+block first;** the 2026-08-06 checkpoint below is executed history.
+
+## ⏳ 2026-08-07 — paper-first session (LIVE; interim block, refreshed mid-flight)
+
+**Ed's directives this session:** (1) abandon t3 work; (2) MVP capstone
+paper FIRST, rest later; (3) 14h autonomous window; (4) three quiet
+nights + desk work accepted as the path → **D-117 transcribed+pushed**
+(D-110 re-mint order superseded; three prospective windows; prefill
+floors ride floor windows; contrast decode-only; 256-tok prefill arm
+still Ed's option); (5) Workflow license for non-serial desk work.
+
+**DONE this session (all pushed):** checkpoint resume items 2-4 —
+T3-CHAR-PAIR r01/r02 analysis banked (`fc48b1b`, dormant floor 0.192 W,
+NON-CLAIM); prefill feasibility scout MARGINAL-at-128-tok custodied
+(`docs/process_traces/2026-08-07-prefill-feasibility/`); C-049 marathon
+council record (`03841c8`); skill-usage log; D-117 (`dbb9685`);
+CLAIMS_STATUS un-staled (`a1f0e19`).
+
+**IN FLIGHT (harvest, do not re-run):** (a) paper fix round on branch
+`impl/paper-mvp-complete` — Sol xhigh, WRITE_SCOPE
+docs/paper/draft-v1.md, closing round-2 findings (lens A 3 blockers:
+tense, two-gate rule collapse, prefill-marginality misstatement; lens B
+11; F-BIB-1) — review records + bibliography audit custodied on the
+branch (`3542265`, `1892edc`); on harvest: lead diff gate → delta
+re-audit → PR → merge on green (D-072). (b) Plan-freeze design consult
+(Sol xhigh, read-only, scratchpad desk worktree) for the three-window
+packet → on return: lead ratify → enforced-scope implementation units →
+adversarial review → PR(s). Then: three-night operator packet for Ed;
+end-of-session sweep + run report.
+
+**Worktrees:** `<session-scratchpad>/desk` (main, bookkeeping) — prune
+at close. Main tree holds `impl/paper-mvp-complete`.
 
 ## ✅ CHECKPOINT 2026-08-06 late — machine-move stop (resume script)
 

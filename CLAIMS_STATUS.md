@@ -8,12 +8,21 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-03 night** (16h-runway checkpoint: D-108/D-109
-ruled + executed; **D-110 makes mint #1 retroactively NON-CLAIM-BEARING**;
-window B re-evaluation STOPPED at the deviation escape → D-112 (license
-exhausted as drawn, r06 disposition parked for Ed); mint-1 re-derivability
-proven byte-identical at the pinned commit; report:
-`docs/run_reports/2026-08-03-16h-runway.md`).
+Last updated: **2026-08-07** (D-117: the historical re-mint path is
+SUPERSEDED — structurally closed at main after the D-116 issuance
+(candidate discovery excludes import-marked receipts by design); the
+claim path forward is THREE PROSPECTIVE WINDOWS — fresh 1.5B decode
+floor, fresh 7B decode floor, fresh decode contrast — live-bracketed
+under the issued acceptance regime, with prefill floor cells riding
+both floor windows. Prior "re-mint conditions" in this file are
+historical: D-109 landed (PR #100), issuance executed (D-116, PR #109),
+validator pin widening landed (PR #105). Full record:
+`docs/process_traces/2026-08-06-d110-remint-fork/`.)
+
+Earlier header (2026-08-03 night, for the record): D-108/D-109 ruled +
+executed; D-110 made mint #1 retroactively NON-CLAIM-BEARING; window B
+re-evaluation STOPPED → D-112; mint-1 re-derivability proven
+byte-identical; report: `docs/run_reports/2026-08-03-16h-runway.md`.
 
 ---
 
@@ -29,12 +38,16 @@ move to §5 until the re-mint. The DERIVATION toolchain itself is
 proven honest: the full pinned replay (2026-08-03) reproduced both
 extraction reports, the artifact, and the statement BYTE-IDENTICAL
 (`docs/process_traces/2026-08-03-q1-remint-bytecompare/`). The taint is
-semantic (the selector the era used), not derivational. Re-mint
-conditions: D-109 implementation lands (branch held at `2e61ff9`, one
-audit blocker outstanding) + acceptance-artifact issuance (verified R2
-backfill) + validator `evidence_root_id` pin widening (DC-2). All four
-PASSED window verdicts remain untainted (sweep RT-5; the 0.010 cliff is
-strictly tighter than the ruled screen).
+semantic (the selector the era used), not derivational.
+**2026-08-07 (D-117):** the historical re-mint order is SUPERSEDED —
+all three former re-mint conditions completed (D-109 via PR #100;
+issuance via D-116/PR #109; pin widening via PR #105) and the FIRST
+consumption attempt then proved historical consumption structurally
+closed at main. Replacement: three prospective windows (D-117 cl.2);
+the never-zero allowance correction binds their mints. All four PASSED
+window verdicts remain untainted (sweep RT-5), but pre-genesis windows
+CANNOT be claim-consumed — their role is diagnostic and
+rule-establishing only.
 
 **Standing measurement fact (D-078 cl.11, Ed-ratified):** the instrument
 is attribution-limited (~1 J), not noise-limited (~0.3 J). Floors
@@ -46,8 +59,8 @@ instrument-tightening program.
 
 | Candidate claim | Value (prose-only until gated) | Window / verdict | Blocker |
 |---|---|---|---|
-| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | **HARD-BLOCKED by D-110** (RT-2 dependency edge): CAL-BRACKET-D079-01 must land (held at `2e61ff9`, one audit blocker B1 outstanding; round 2 needs its rule-11 gate) + acceptance-artifact issuance + validator pin widening — THEN the governed mint. The 2026-08-03 night consult's conditional mint license is SUSPENDED on the record. |
-| **1.5B-vs-7B decode contrast** (demonstration study #1) | **Registered claim metric (frozen v3 manifest): `phase_energy_j.decode`, 7B−1.5B = 141.29 J per block.** The widely-quoted 146.730349 J (σ 0.241 J, n=10 ABBA) is the `idle_subtracted_energy_j` whole-request DIAGNOSTIC — quote it only labelled as such, never as the claim (sweep DC-1; both reproduce byte-exactly from disk). | `window_contrast_20260730`, **PASSED** | The D-095 chain now runs THROUGH the D-110 re-mint: v3 manifest merged (PR #95) → mint #1 re-mint + multi-cell mint under the repaired selector (`MINT-GENERALIZE-01`, D-110-blocked) → gated claim. |
+| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | **RE-SCOPED by D-117 (2026-08-07):** `window_7bfloor_20260729` is pre-genesis and cannot be claim-consumed; these values are DIAGNOSTIC and design inputs for the fresh 7B floor window (D-117 cl.2). The prior D-110 condition chain completed and was then superseded. |
+| **1.5B-vs-7B decode contrast** (demonstration study #1) | **Registered claim metric (frozen v3 manifest): `phase_energy_j.decode`, 7B−1.5B = 141.29 J per block.** The widely-quoted 146.730349 J (σ 0.241 J, n=10 ABBA) is the `idle_subtracted_energy_j` whole-request DIAGNOSTIC — quote it only labelled as such, never as the claim (sweep DC-1; both reproduce byte-exactly from disk). | `window_contrast_20260730`, **PASSED** | **RE-SCOPED by D-117 (2026-08-07):** `window_contrast_20260730` is pre-genesis and cannot be claim-consumed; values are DIAGNOSTIC and the design template for the fresh contrast window (D-117 cl.2). The D-095 chain now runs through the prospective windows' mints. |
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
 

@@ -139,6 +139,7 @@ be re-derived by a future agent gets an entry here.
 | D-114 | T3-CHAIN DESCOPE (Ed directive, reverses his 2026-08-03 T3-DRIVE priority): t3 stays the INTERACTIVE control plane; t3-resident-during-measurement-windows DROPPED; QUIET-GUARD-01 re-scoped to commit 1 only; commits 2-4 + T3-CHAR-PAIR-01 + WO-T3-VIS-01 + SEC5A-REMOTE-01 shelved; T3-DRIVE gate lifted; Q13 degraded tail accepted; Q10 credential superseded | ratified (Ed, 2026-08-05, in-thread; D-113 number reserved for the parked WINB-R06 disposition) |
 | D-115 | Quiet-guard Q2 setup authority = FIXED INSTALLATION CAPABILITY, not general root authority; binding conditions: fresh interactive sudo authorization (sudo -k), digest-authenticated staged content, real interpreter isolation; installs INACTIVE; renumbered from the contract's proposed D-114 marker (number collision with the descope); entry lands via main + merge-back (packet-letter deviation ruled in the entry) | adjudicated (lead under Ed's standing Q2 license, 2026-08-05) |
 | D-116 | D-079 calibration acceptance artifact ISSUED; ledger genesis import executed (seq 76 / head 08456d50…; issued sha 316113960c…; 30/2/6 dispositions); D-110 condition (b) SATISFIED → MINT-GENERALIZE-01 unblocked for re-mint; two-cold-gate history (plan HELD → consumer impl + gauntlet → bytes PROCEED, sequencing HOLD resolved by consumer-first merge); window_metrologyB calibration fiducials in completeness record are NOT a D-113 violation | executed (Fable magistrate, 2026-08-06; Ed pre-authorized) |
+| D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
 
 ---
 
@@ -7081,6 +7082,12 @@ unclosable duty that does not warrant a license precondition.
 
 ## D-110: Mint 1 retroactively NON-CLAIM-BEARING (taint-and-remint); RT-2 dependency edge minted; the night consult's 7B-mint license SUSPENDED
 
+> **2026-08-07 supersession (D-117):** clause 3's historical re-mint
+> order is SUPERSEDED — structurally unsatisfiable at main (see
+> `docs/process_traces/2026-08-06-d110-remint-fork/`); replaced by
+> three prospective windows. The taint holding and the never-zero
+> allowance correction STAND and bind the D-117 mints.
+
 - Date: 2026-08-03 (Ed ruling, present, option "taint-and-remint" selected
   from the magistrate's three-option packet during the 16h runway)
 - Status: accepted (trigger: the Ed-ordered two-week read-only soundness
@@ -7239,6 +7246,10 @@ D-102 epoch; the taint is confined to floor artifacts.
    the only layer that could see it).
 
 ## D-113: WINDOW B TERMINALLY CLAIM-RETIRED — abandonment ruled (Ed); fresh collection beginning Window C; F7 whole-window precedent affirmed
+
+> **2026-08-07 amendment (D-117 cl.4):** the readiness dependency on
+> D-110's historical re-mint is REMOVED; the three-window P1 closure
+> precedes the MET-WINDOW-C-01 replacement campaign.
 
 **Date:** 2026-08-05 (Ed ruling, in-thread; transcribed by the Fable
 magistrate after a bounded Sol xhigh design consult — full record at
@@ -7493,3 +7504,64 @@ QUIET-GUARD-01 row cannot land while any condition lacks enforcement.
 **Gate history (the process earned its keep on the anchor).** Two rule-11 cold gates. Cold gate #1 (on the plan) HELD correctly — the naive JSON-edit plan had no issued-artifact consumer (F1) and would have invalidated the whole-core digest (F2). That forced a real consumer implementation, which then ran the full C-028 gauntlet: adversarial audit (consumer proven false-ACCEPT-resistant; 3 emission/execute blockers incl. ledger-commit-BEFORE-artifact-validation) → fix → delta (exit-3 masking) → fix → final delta ACCEPT. Cold gate #2 (on the exact bytes): both lenses PROCEED on CONTENT (head/dispositions/B1/R2 all independently reproduced); HOLD on sequencing only — the consumer had to land on main before writing the issued artifact, else the anchor bricks. Resolved by merging PR #108 first, then executing against consumer-present main, with the co-landing verification (`_valid_acceptance_bound(issued)=True`) confirmed post-write. Full records: `docs/process_traces/2026-08-06-d079-issuance-coldgate/`.
 
 **Consequences.** MINT-GENERALIZE-01 (b) satisfied; the re-mint (a10 extraction + mint #1 re-derivation under the corrected selector, embedding the D-102 pin-3 never-zero drift allowance) is the next step — the path to a non-empty claims table. The runs/ ledger must be custody-backed before the re-mint consumes it.
+
+## D-117: D-110's historical re-mint order SUPERSEDED — prospective three-window replacement (Option 2) adopted; D-113 readiness rewired
+
+**Date:** 2026-08-07 (Ed directive, in-thread; transcribed by the Fable
+magistrate. Ed, verbatim: "if i recall for a paper ready at the quality
+needed we need 3 more machine quiet nights and a lot of desk work",
+with an explicit go to "execute all the deskwork" — read together with
+his 2026-08-06 in-thread MVP-scope directive "a little more than just
+decode, at least decode/prefill". His ruling moots a cold gate: apex
+authority per rule 11.)
+**Status:** ADOPTED. Full technical record:
+`docs/process_traces/2026-08-06-d110-remint-fork/` (DIAGNOSIS: the
+structural closure live-reproduced at `c537386`; Sol xhigh consult run
+`20260806T165843Z-10884`; SYNTHESIS: magistrate concurrence).
+
+1. **The D-110 clause-3 re-mint order (historical a10 consumption under
+   the corrected selector) is SUPERSEDED.** The issued ledger holds only
+   import-marked receipts; candidate discovery excludes imports by
+   design; future live receipts cannot causally bracket past windows.
+   The order is structurally unsatisfiable at main, not merely
+   inconvenient. D-110's OTHER holdings STAND untouched: mint #1 and
+   derivatives remain non-claim-bearing, and the never-zero
+   `A_s = max(observed_drift_s, 0.010818)` allowance (D-102 pin 3)
+   BINDS every mint under this entry.
+2. **Replacement: three compact prospective claim windows** — fresh
+   1.5B decode floor, fresh 7B decode floor, fresh 1.5B-vs-7B contrast
+   — each with fresh §5A, live pre/post calibration receipts appended
+   to the issued ledger, own verdict + head-pin + custody. Claims
+   chain: historical corpus → issued D-079 acceptance rule → live
+   brackets → prospective floors → prospective contrast. Honest
+   framing preserved from the consult: historical data establish the
+   RULE; live receipts bracket all claim-bearing science.
+3. **Scope (Ed's decode/prefill directive):** prefill FLOOR cells ride
+   both floor windows (cheap, same members' prefill phase). The model
+   contrast is DECODE-ONLY by default: the 2026-08-07 desk feasibility
+   check (`docs/process_traces/2026-08-07-prefill-feasibility/`) found
+   the 128-token prefill contrast MARGINAL against the effective bar
+   (interval overlaps it). A prospectively frozen ≥256-token prefill
+   contrast arm remains an OPEN ED OPTION (estimand change +
+   ~110 core minutes, likely its own window) — not adopted here.
+4. **D-113 rewire:** its readiness dependency on the historical re-mint
+   completing is REMOVED. The three-window P1 closure PRECEDES the
+   broader MET-WINDOW-C-01 C2/C4/C5 replacement campaign (grounds:
+   Ed's paper-first priority stack, 2026-08-06).
+5. **Naming:** "Window D" is unavailable (collides with
+   `runs_window_d_20260726` and D-113's reserved terminology); the
+   three windows receive new immutable plan/root identifiers at plan
+   freeze.
+6. **Option 1 (finite-allowlist historical candidacy) is PRESERVED as
+   a versioned contingency ONLY**, requiring a rule-11 cold gate before
+   any implementation (semantics sketch: consult response §3). The
+   historical corpora remain untouched on disk, non-claim-bearing per
+   D-110 cl.1, logs sha-verified.
+7. **Unblocked desk queue** (consult §4): freeze three window plans +
+   budgets; 1.5B decode floor plan from the proven 10-absolute/40-null
+   design; generalized mint pinsets with per-plan six-decimal literals
+   (the D-084 hard literal `7.377086` refuses any corrected mint under
+   every option — closure is per-plan supply via the generalized path);
+   extraction specs / order manifests / evidence-root ids / contrast
+   manifest; synthetic three-window live-ledger integration regression;
+   D-102 successor-artifact packet; results/methods prose placeholders.
