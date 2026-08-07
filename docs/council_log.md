@@ -80,6 +80,7 @@ standing instructions.
 | C-047 | 2026-08-03 | The 16h runway (Ed-granted; joint Fable+Sol decision authority; concurrent sweep instance mid-flight): D-108/D-109 debate+rulings executed, D-110/D-111 sweep-triggered rulings, winB STOP cold gate -> D-112, two Sol gauntlets, pinned byte-identical mint replay, checkpoint for harness switch | D-108 closed via PR #99 + re-record; CAL-BRACKET held at 2e61ff9 (B1 residual, rule-11 gate owed); winB license exhausted as drawn (r06 disposition parked for Ed); mint chain D-110-blocked; CLAIMS_STATUS section 1 honestly NONE; sweep propagation fixes landed; layer yield in the run report |
 | C-048 | 2026-08-04 | Integration-collision resolution on the CAL-BRACKET-D079-01 lead gate: bounded pre-decision Sol HIGH consult -> consult-shaped signature amendment -> fresh delta re-audit -> bench guard hardening -> merge-ref CI | The delta re-audit PROVED a live repr-'None' default spoof against the rendered-signature guard (hardened with a regression); the consult corrected the byte-identity oracle to integration-tree core-vs-wrapper parity (a historical-digest replay would have contradicted D-110); lead integration-tree replay 2487 OK exit-0 unpiped; PR #100 gate-complete, merged 2026-08-05 (`f75d12b`) |
 | C-049 | 2026-08-05/06 | The 12h autonomous marathon: six PRs (#102-#104, #106-#108) + PR #109 issuance gauntlet; two rule-11 escalation consults (CGV F3 closure, QG census Option C); the D-079 issuance cold gate (split verdict, HOLD upheld); D-113/D-115/D-116; then the first re-mint consumption attempt exposed a structural closure -> Sol xhigh fork consult | The cold gate's HOLD prevented an irreversible ledger write paired with a production-refused artifact (F1 no-consumer-path, F2 digest-role coupling — issuance reframed as implementation and re-gauntleted as PRs #108/#109); xhigh delta re-audits again caught introduced defects (QG init-durability F1; CGV live-proved receipt-serialization B1 + phantom-fence B2); historical max-bracket consumption proved structurally closed at main — Option 2 (three fresh prospective windows) recommended by consult + magistrate; Ed's ruling OWED at close |
+| C-050 | 2026-08-07 | Paper-first session under Ed's Sol-burn license: the MVP capstone paper through a full round-2 gauntlet (2 lenses → bibliography/novelty audit → Sol xhigh fix round → delta re-audit → bench fidelity corrections) + D-117 transcription + plan-freeze ratification + night-hardening 3-lens sweep + a 24-direction paper-portfolio factory (Sol fast proposals → Opus 5 referees → dual opposing-prior Sol xhigh syntheses → magistrate adjudication) + U1/U3 implementation gauntlets + read-only meta-sweeps and a far-ahead plan factory | Paper SHIPPED as a complete draft (PR #110 merged, `6a70707`); D-117 + the plan-freeze design memo ratified (gates 1-8, work orders U1-U10); portfolio arc adopted (MVP + Window C → quantization BF16/Q4/Q8 → MoE stretch) with 7 night-cheap riders folded in; the PAIRED AUDIT LENSES were the session's highest-yield layer by a wide margin (U3 contract lens live-proved that fabricated custody hashes plus tampered drift/allowance still minted the four-cell artifact; U1 execution lens live-proved concurrent double-arm acceptance and a "never leak" test that asserts the leak); the delta re-audit again caught an INTRODUCED blocker (recovery boundary, 7/8 closed) and the Opus referee corps caught a portfolio-wide ~5 J-vs-~14 J floor-sizing error, the Window-C/§6 evidence gap, and the paper's missing advisor-lineage citations; U1/U3 branches pushed awaiting final gates; Ed's rulings ##1-7 OWED |
 
 ---
 
@@ -2868,3 +2869,162 @@ the prefill-contrast shape ack, and three-nights scheduling were the
 owed items handed to the successor (RUN_STATE checkpoint block).
 Wrapper gotcha re-recorded: codex-run-v3 takes the prompt as a literal
 string, never a file path (one consult killed + relaunched cleanly).
+
+## C-050: The paper-first session — the MVP draft shipped, 24 directions adjudicated, and the paired-audit layer's biggest day (2026-08-07)
+
+Session: Fable magistrate, Opus 5 lieutenant lanes, Sol as workhorse.
+Ed's directives, in order received: resume from checkpoint; **abandon
+the t3 work — MVP capstone paper first, the rest later**; a 14-hour
+autonomous window and the 3-quiet-nights-plus-desk-work path (which
+became **D-117**); a **Sol burn** (3 h unlimited, extended to 12 h) with
+fast mode everywhere and ~20 paper investigations run far ahead of the
+council; **Opus 5 counter-reviewers** on every paper idea; and
+plan/spec/implementation drafting staged for later review (Opus
+examines Sol drafts, Sol adjudicates, Fable reviews last). Full records:
+`docs/run_reports/2026-08-07-paper-first-session.md`;
+`docs/process_traces/2026-08-07-{d117-plan-freeze,night-hardening,d117-u-units,meta-sweeps,plan-factory,prefill-feasibility}/`;
+`docs/strategy/2026-08-07-paper-portfolio/` (24 proposals, 24 reviews,
+two syntheses, ADJUDICATION); paper records
+`docs/paper/draft-v1-review-round2-lens{A,B}.md` and
+`docs/paper/bibliography-audit-2026-08-07.md`.
+
+Shape, in sequence: (i) the **paper gauntlet** — two review lenses
+(metrology-fidelity; plain-language/coherence, both returning REVISE) →
+a web-verified **bibliography and novelty audit** → a **Sol xhigh fix
+round** of 14 items → **delta re-audit** → **bench fidelity corrections
+read against the CODE** → PR #110 merged (`6a70707`); (ii) **D-117**
+transcribed from Ed's ruling (D-110's historical re-mint order
+superseded; three prospective windows), with CLAIMS_STATUS un-staled;
+(iii) the **plan-freeze design consult** — Sol xhigh design memo
+ratified (gates 1-8 adopted, work orders U1-U10, identifier scheme,
+two-stage pin freeze, zero calibration retries, U2 cold-gated);
+(iv) a **night-hardening 3-lens sweep** over the runner, calibration/
+ledger, and extraction/mint paths, plus a separately-charged paper-vs-
+code fidelity audit; (v) the **paper-portfolio factory** — 24
+directions (20 directed + 4 open-ended) developed by Sol high/fast,
+each adversarially counter-reviewed by an Opus 5 referee, then two
+**opposing-prior** Sol xhigh syntheses, then magistrate ADJUDICATION;
+(vi) the **U1 and U3 implementation units**, each through paired
+contract+execution audits and a lead-dictated fix round (U1: 8 items,
+then an xhigh delta; U3: 7 items, delta owed); (vii) read-only
+**meta-sweeps** (refusal census, contamination desk study, decision-log
+coherence, queue staleness, council-log layer yields, skill drift, pack
+scout, production-format scout, docs-vs-practice); (viii) a **plan
+factory** of 8 far-ahead Sol drafts, explicitly staged for council
+review rather than landing.
+
+### Unique catches, by layer
+
+- **Paired audit lenses (contract + execution) — the session's
+  highest-yield layer by a wide margin.** U3 CONTRACT live-proved that
+  postcollection custody and D-110 allowance pins are **self-attested,
+  not authenticated**: every receipt/content/binding/head/report hash
+  replaced with fabricated values and `observed_drift_s` /
+  `applied_allowance_s` tampered to `0.000001`/`0.010818`, the pinset's
+  own self-hashes repaired — and the four-cell artifact **still
+  minted** (CRITICAL); the same lens found the mint **deriving its own
+  six-decimal literals** (HIGH), the exact behaviour D-084's
+  never-derived requirement and the design memo prohibit. U1 CONTRACT
+  found L5 not closed — intended-window identity and `runs_root`
+  binding were **optional** — and that aborting a session **deletes
+  finalized observations from D-109's authoritative trigger universe**
+  (both BLOCKER). U1 EXECUTION live-proved **concurrent double-arm
+  acceptance** (two synchronized writers both `accepted` into the same
+  reserved slot, one ledger line) and **open-session candidate
+  leakage**, and showed that the test named `never_leak_as_candidates`
+  **asserts the leak** it purports to forbid.
+- **Delta re-audit (fix rounds introduce defects — the record holds).**
+  U1's fix round closed 7 of 8 items and preserved the D-116
+  issued-prefix replay byte-identical, but the delta found an
+  **INTRODUCED blocker at the recovery boundary**: an interruption
+  after recovery evidence is written but before journal clearing leaves
+  the next recovery computing different evidence counters and refusing
+  governed closure. FIX-6 stands PARTIAL; the torn-tail class is the
+  only one whose signature survives, so FIX-6b carries a binding
+  no-round-three stop-condition (next recurrence is a rule-11 consult).
+- **Opus referee corps (24 counter-reviews).** A **systematic sizing
+  error across the portfolio** — proposals sized against the generic
+  ~5 J bar when their 7B arms face the measured **~14.0 J armwise
+  floor** (comparative 13.998036715259254 J, the only actually-minted
+  comparative floor); flagged independently in the cross-runtime,
+  MoE-routing, MTP, parameter-scaling, KV-context and prefill reviews,
+  several of whose kill gates sat *below* the floor they had to clear.
+  The **Window-C/§6 evidence gap**: draft §6's six characterization
+  rows — contribution C-iv — are all `[PENDING WINDOW C]`, D-117 funds
+  no Window C, and D-117 cl.4 places the broader campaign *after* the
+  three-window closure, so one of the paper's advertised contributions
+  would ship with zero evidence, with no decision entry recording that
+  choice. The **anti-conservative floor transport** rule in the
+  prefill-scaling design (repeatability scales with magnitude; floors
+  do not transport across workload lengths). And the **missing
+  advisor-lineage citations** — the referee on the advisor-lens
+  proposal caught that `draft-v1.md` §8 cited RAPL-in-Action, Jay &
+  Ostapenco, MLPerf Power and SPEC and **neither JouleSort nor
+  Mantis**, i.e. the paper did not cite its own advisor's foundational
+  work, and that the one session tasked with the advisor's perspective
+  had missed it.
+- **Bibliography and novelty audit (web-verified).** All **13/13
+  citation keys resolve to real, correctly identified works**; the §2
+  three-leg novelty claim **STANDS** (no published `powermetrics`
+  validation study of any kind exists through 2026-08); 12/13
+  characterizations accurate, with **one factual error** — F-BIB-1, the
+  draft attributed load/baseline/transfer dependence to the
+  disaggregation paper's ENERGY outcome when the paper conditions its
+  PERFORMANCE benefits and reports energy essentially unconditionally
+  higher — corrected in §8 the same round. Eight pre-submission
+  double-checks queued.
+- **Meta-sweeps (read-only, Sol high/fast).** The **refusal census**
+  quantified §5's refusal-log claim and evidenced the pre-window
+  plumbing item: of 44 refused member occurrences only 14 have a
+  reconstructable causal reason (**30 have none**), and at the
+  member-identity level the reconstructable rate is **34.2%** (13 of 38
+  identities) — two different denominators, both reported, neither
+  derived from the other. The **contamination desk study** swept **742**
+  historical idle captures and found member-length burst excess above
+  1 J in **35.0%** of 93 s windows and 31.9% of 97 s windows, **never
+  above 5 J**, worst observed 3.21 J — with the honesty caveat the
+  study itself insists on: only **two** ~360 s app-resident
+  characterization captures were long enough to host member-length
+  windows, the ~4,400 placements per width are heavily overlapping and
+  strongly dependent, and the rates are NON-CLAIM/DIAGNOSTIC and
+  descriptive, not production-run probabilities.
+- **Lead bench.** The **D-117 decision-index CI break** —
+  self-inflicted (the decision body landed without its index row) and
+  self-caught; the U4 trailing-slash scope-glob launch failure; and the
+  **paper fidelity corrections applied by hand** against the code
+  (interval-average integration replacing "trapezoidal", the exact
+  operative bracket formula, custody-claim narrowing,
+  operator-quarantine wording).
+
+### Instrumentation notes
+
+**Fast mode is a real per-call tier, and only on one route.**
+`CODEX_SERVICE_TIER=fast scripts/codex-bridge` genuinely sets the
+service tier per call (~1.5x speed, 2.5x credits); `codex-run-v3` does
+**not** read the variable — verified this session — so audited,
+enforced-WRITE_SCOPE implementation runs take the standard tier by
+construction. That is the correct split and was ratified as a
+deviation note in the plan freeze: fast for read-only fan-out (lenses,
+scouts, ideation, drafting), standard for invariant-bearing code.
+**A Sol OUTPUT was blocked by a content classifier** for the first time
+— adversarial-audit vocabulary in the U1 delta re-audit's final message
+(previously only ever observed on input) — recovered by resuming the
+same session with a neutral-language, conclusions-only re-emission;
+the recovered verdict is what stands in the custody record.
+
+### Dispositions and open state at close
+
+Paper merged (PR #110, `6a70707`) with demonstration values pending the
+D-117 windows by construction and explicit pending markers in the
+draft. D-117 transcribed and the plan freeze ratified (three toolchain
+blockers stand before any arm). Portfolio arc **adopted**: MVP + Window
+C → P2 quantization BF16/Q4/Q8 → MoE stretch (re-anchored, desk-gated),
+with 7 night-cheap riders folded into the MVP and the rest killed with
+salvage recorded. U1 (`impl/d117-u1-ledger-session`) and U3
+(`impl/d117-u3-pinset-v2`) are pushed and **await their final gates**;
+U1's FIX-6b and U3's delta are the next spends. **Ed's ranked rulings
+##1-7 are OWED** — §6/Window C funding, reported-energy cells before
+the pack hashes freeze (time-critical), reason-code plumbing before
+night one, the 256-token prefill arm, the P2 commitment, calendar
+dates, and public-artifact scope — all recorded in
+`docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`.
