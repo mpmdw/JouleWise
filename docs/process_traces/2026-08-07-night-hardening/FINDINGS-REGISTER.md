@@ -63,3 +63,17 @@ the cryptographic-custody claim to what binds; quarantine is an
 OPERATOR action validated by the recorder, not automatic; disclose (or
 close) drift-evidence-in-verdict-hash scope; explain the policy JSON
 `0.01` vs executable `0.010818` screen.
+
+## Pre-window evidence-plumbing items (from the portfolio referee corps, 2026-08-07)
+
+- **URGENT before the three nights (rev-refusal-as-result):** window-verdict
+  rows carry no {member_id → reason_code} mapping and 16 of the 20
+  window-verdict condition codes live OUTSIDE the ratified
+  refusal_scope_spec.md enums (shadow taxonomy). If the D-117 nights run
+  before this lands, their member-failure evidence is free-text prose,
+  unrecoverable for any later analysis. Candidate small unit (U1.6):
+  reason-code field + spec reconciliation. Decide at the readiness gate.
+- Also banked: every D-117 member already carries an in-custody idle
+  capture (~203 across historical windows) — a zero-night contamination
+  desk-study substrate (P(asymmetric burst > 1 J / > 5 J) over real
+  member durations).
