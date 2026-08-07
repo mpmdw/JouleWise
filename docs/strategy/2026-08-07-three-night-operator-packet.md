@@ -1,0 +1,392 @@
+# Three-night quiet-mac operator packet (D-117) — PRE-FREEZE EDITION
+
+Status 2026-08-07: the per-night checklists below are the ratified SHAPE;
+the `[PLAN-ID]`/`[BUDGET]` cells bind only when the campaign packs freeze
+(work orders U5-U7). Magistrate-supplied values from the ratified design
+memo (`docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`):
+
+| Night | Plan (frozen identifier scheme) | Occupancy incl. 20% margin |
+|---|---|---|
+| 1 | plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1 | **3.14 h** |
+| 2 | plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1 | **3.24 h** |
+| 3 | plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1 | **2.80 h** |
+| (4) | Window C characterization — ED RULING #1 pending | ~3 h class |
+
+**HARD GATES before night 1 (none are optional):** U1/U1b two-slot ledger
+bracket session + writer integration; U2 successor engine (cold-gated);
+U3 pinset v2 / multi-cell mint; U4 three-window regression green; U5-U7
+packs frozen + readiness validator green; reason-code plumbing (register
+item, Ed ruling #3); absolute runs-dir paths in every launch command
+(night-strander R6 mitigation); campaign.lock absent at arm; NEVER kill a
+running verdict (R7 — it can exceed 2 minutes by design).
+
+Ed presence: bookends only (~15-20 min each end, §5A sequence in the
+night pages). Everything between the bookends is unattended.
+
+---
+# Three-Night Quiet-Mac Operator Packet — Draft
+
+**Operator:** Ed  
+**Status:** **HOLD until every `[PLACEHOLDER]` and `[BUDGET]` is frozen and the readiness record passes.**
+
+Each night is an independent claim window with fresh roots, calibration bracket, in-window bound, references, verdict, and custody backup.
+
+### Presence legend
+
+- **ED PRESENT:** Ed is physically at the Mac.
+- **REMOTE OK:** Allowed only before final arming or after `measurement_complete`.
+- **UNATTENDED:** No remote access, agents, browsers, monitoring, log tails, or operator input.
+
+---
+
+# Night 1 — Fresh 1.5B Decode + Prefill Floors
+
+**Window ID:** `[PLACEHOLDER: 1.5B FLOOR WINDOW ID]`  
+**Plan root:** `[PLACEHOLDER: PLAN ROOT]`  
+**Science configs:** `[PLACEHOLDER: FROZEN CONFIG IDS]`  
+**Total duration:** `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]`  
+**Do-not-return-before:** `[BUDGET: COMPLETION TIME/SIGNAL]`
+
+Science payload: the proven decode-floor shape—10 absolute repeats plus 10 null-ABBA blocks/40 members. Prefill floor cells are extracted from these same bundles; they are not optional and are not a separate contrast.
+
+## T-minus preparation — REMOTE OK
+
+- [ ] Readiness record passes with no warning or exception.
+- [ ] Reviewed `main` is clean and equals the recorded commit.
+- [ ] Plan ID, plan-tree hash, chain hash, policy hash, calibration-acceptance hash, and ledger-head pin are recorded.
+- [ ] Exact science membership and order are frozen:
+  - before midpoint: `[PLACEHOLDER: STAGE IDS]`
+  - after midpoint: `[PLACEHOLDER: STAGE IDS]`
+- [ ] Decode and prefill extraction cells, analysis rules, and exact evidence-root mappings are frozen.
+- [ ] `waivers.json` is exactly `[]`; the launch and verdict commands contain no waiver argument.
+- [ ] Retry policy is frozen. There is no manual or outcome-driven retry.
+- [ ] Unique claim, bound, custody, quarantine, and backup paths are named and empty.
+- [ ] Both claim and bound backup destinations exist and have sufficient capacity.
+- [ ] At least 20 GB disk headroom remains.
+- [ ] The pinned 1.5B model, tokenizer, configs, scripts, and virtual environment load locally without downloads.
+- [ ] Every stage validates and dry-runs in exact manifest order with no unresolved warning.
+- [ ] The frozen budget includes both calibrations, 12 bound members, references 3/1/3, all science, every 180-second settle, and at least 20% margin.
+
+## Arm sequence — ED PRESENT
+
+- [ ] Connect the approved 140 W Anker supply and approved cable. Confirm external AC, `ac_high_power`, low-power mode off, and 140 W negotiated. Do not change them afterward.
+- [ ] Finish or pause Time Machine, updates, indexing, downloads, and cloud uploads.
+- [ ] Confirm thermal pressure is nominal and passwordless `powermetrics` works.
+- [ ] Compare the Mac’s clock with an independent trusted source.
+- [ ] Record the existing network-time state:
+
+  ```sh
+  sudo systemsetup -getusingnetworktime
+  ```
+
+- [ ] Disable automatic network-time adjustment:
+
+  ```sh
+  sudo systemsetup -setusingnetworktime off
+  ```
+
+- [ ] Run and read the preparation probe:
+
+  ```sh
+  bash scripts/quiet_mac_prep.sh
+  ```
+
+- [ ] Quit Claude, Codex, t3, browsers, browser automation, monitors, watchers, and log tails. Confirm the final process census is clean.
+- [ ] Run the frozen pre-window readiness command:
+
+  ```sh
+  bash scripts/prewindow_check.sh --wait \
+    --timeout-min [BUDGET] \
+    --window [PLACEHOLDER: PREWINDOW LABEL]
+  ```
+
+- [ ] Leave the Mac untouched for at least 10 minutes. This also exceeds the required 180-second post-sudo settle.
+- [ ] Tell everyone nearby: do not touch the Mac, lid, display, charger, or cable.
+- [ ] Launch exactly once from the ordinary foreground shell:
+
+  ```sh
+  WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"
+  caffeinate -is /bin/zsh \
+    "$WINDOW_PLAN_ROOT/window-chain.zsh" \
+    "$WINDOW_PLAN_ROOT"
+  ```
+
+- [ ] Use the 20-second arm period to step away. After the one-line arm notice, produce no more operator or remote activity.
+
+## Runs unattended — UNATTENDED
+
+| Approximate point | Automatic work |
+|---|---|
+| T+0 to `[BUDGET]` | 180-second settle, transient display sleep, pre calibration |
+| T+`[BUDGET]` | Pre-calibration level screen; failure stops before science |
+| T+`[BUDGET]` | Twelve fresh bound members, then same-window dual-family bound mint |
+| T+`[BUDGET]` | Three start references |
+| T+`[BUDGET]` | 1.5B decode absolute cell, first null blocks, and frozen prefill-floor extraction basis |
+| T+`[BUDGET]` | One midpoint reference |
+| T+`[BUDGET]` | Remaining null blocks and frozen prefill-floor extraction basis |
+| T+`[BUDGET]` | Three end references |
+| T+`[BUDGET]` | Post calibration; together with the pre calibration it forms the bracket |
+| T+`[BUDGET]` | `measurement_complete` |
+
+Every campaign invocation performs its own 20-second display arm, fresh environment probe, CPU admission, and 180-second settle. Do not inspect the first member or intervene.
+
+## Morning close-out
+
+- [ ] **ED PRESENT:** Use only the frozen completion signal/no-earlier-than time. Wake the display only after `measurement_complete`.
+- [ ] **REMOTE OK:** Reconnect the lead/agent. Finalize all calibration-ledger reservations and commit the exact new ledger-head pin before claim evaluation.
+- [ ] Confirm the complete calibration bracket, fresh bound, exact membership, seven references, stable adapter identity, and clean admissions.
+- [ ] Emit exactly one ordinary whole-window verdict:
+
+  ```sh
+  .venv/bin/python scripts/run_campaign.py \
+    --whole-window-verdict \
+    --runs-dir "$RUNS_ROOT" \
+    --log "$RUNS_ROOT/campaign_log.jsonl" \
+    --campaign-policy configs/campaign_policies/quiet_mac_p2_production.json \
+    --neg8-drift-bound "$BOUND_RUNS_ROOT/neg8-drift-bound.json"
+  ```
+
+- [ ] Require `status: passed`; record the evaluation-basis SHA-256.
+- [ ] Release any intentionally stopped cloud-sync process using its fail-safe cleanup.
+- [ ] Back up both immutable roots; require exit code `0` twice:
+
+  ```sh
+  bash scripts/backup_runs.sh "$RUNS_ROOT" "$CLAIM_BACKUP_DEST"
+  bash scripts/backup_runs.sh "$BOUND_RUNS_ROOT" "$BOUND_BACKUP_DEST"
+  ```
+
+- [ ] **ED PRESENT:** Restore and verify automatic network time:
+
+  ```sh
+  sudo systemsetup -setusingnetworktime on
+  sudo systemsetup -getusingnetworktime
+  ```
+
+- [ ] Keep governed extraction and floor analysis in the same lead-controlled custody session.
+- [ ] Call the night claim-bearing only after verdict, both backups, and extraction all pass.
+
+**Send the agent:** window/plan IDs; commit and policy hash; claim, bound, and custody roots; `measurement_complete` timestamp; pre/post calibration directories; verdict status and basis SHA; both backup destinations and exit codes; network-time off/on timestamps; and every failed, quarantined, or superseded occurrence.
+
+---
+
+# Night 2 — Fresh 7B Decode + Prefill Floors
+
+**Window ID:** `[PLACEHOLDER: 7B FLOOR WINDOW ID]`  
+**Plan root:** `[PLACEHOLDER: PLAN ROOT]`  
+**Science configs:** `[PLACEHOLDER: FROZEN CONFIG IDS]`  
+**Total duration:** `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]`  
+**Do-not-return-before:** `[BUDGET: COMPLETION TIME/SIGNAL]`
+
+Science payload: 10 decode absolute repeats plus 10 null-ABBA blocks/40 members on the frozen 7B stack. Prefill floor cells come from the same bundles and must be included in the frozen extraction.
+
+## T-minus preparation — REMOTE OK
+
+- [ ] Readiness record passes with no exception.
+- [ ] Clean reviewed commit, policy hash, calibration-acceptance hash, ledger head, plan hash, and launcher hash are recorded.
+- [ ] Exact stages are frozen:
+  - before midpoint: `[PLACEHOLDER: 7B ABSOLUTE + NULL BLOCKS 1–5 CONFIG IDS]`
+  - after midpoint: `[PLACEHOLDER: 7B NULL BLOCKS 6–10 CONFIG IDS]`
+- [ ] Decode and prefill cells, analysis rules, extraction spec, evidence roots, and counts are frozen.
+- [ ] `waivers.json` is exactly `[]`; retry policy is frozen.
+- [ ] Fresh claim, bound, custody, quarantine, and backup paths are named and empty.
+- [ ] Both 1.5B reference-model and 7B science-model snapshots are complete, revision-correct, and usable offline.
+- [ ] Every stage validates and dry-runs in exact order.
+- [ ] Disk and both backup destinations have sufficient headroom.
+- [ ] Budget includes the 7B cold first load, all settles, calibrations, bound corpus, references, science, and at least 20% margin.
+
+## Arm sequence — ED PRESENT
+
+- [ ] Connect and verify the approved charger/cable: external AC, 140 W negotiated, `ac_high_power`, low-power mode off.
+- [ ] Finish or pause background maintenance and cloud transfers.
+- [ ] Confirm nominal thermal state and passwordless `powermetrics`.
+- [ ] Verify the clock against an independent source.
+- [ ] Record and disable automatic network time:
+
+  ```sh
+  sudo systemsetup -getusingnetworktime
+  sudo systemsetup -setusingnetworktime off
+  ```
+
+- [ ] Run `bash scripts/quiet_mac_prep.sh`; resolve every failure.
+- [ ] Quit all agents, t3, browsers, automation, monitors, watchers, and tails; require a clean census.
+- [ ] Run the frozen `prewindow_check.sh --wait` command and require `READY`.
+- [ ] Leave the Mac untouched for at least 10 minutes.
+- [ ] Tell everyone nearby not to touch the machine or power path.
+- [ ] Launch exactly once:
+
+  ```sh
+  WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"
+  caffeinate -is /bin/zsh \
+    "$WINDOW_PLAN_ROOT/window-chain.zsh" \
+    "$WINDOW_PLAN_ROOT"
+  ```
+
+- [ ] Step away during the 20-second arm. No remote or local monitoring afterward.
+
+## Runs unattended — UNATTENDED
+
+| Approximate point | Automatic work |
+|---|---|
+| T+0 to `[BUDGET]` | Settle, transient display sleep, pre calibration and level screen |
+| T+`[BUDGET]` | Twelve fresh bound members and same-window bound mint |
+| T+`[BUDGET]` | Three start references |
+| T+`[BUDGET]` | 7B absolute cell and null blocks 1–5; prefill evidence rides the same bundles |
+| T+`[BUDGET]` | One midpoint reference |
+| T+`[BUDGET]` | 7B null blocks 6–10; remaining prefill evidence |
+| T+`[BUDGET]` | Three end references |
+| T+`[BUDGET]` | Post calibration and bracket closure |
+| T+`[BUDGET]` | `measurement_complete` |
+
+The first 7B member may take longer because it reads the local model snapshot cold. That alone is not a failure and is not a reason to intervene.
+
+## Morning close-out
+
+- [ ] **ED PRESENT:** Confirm `measurement_complete` before waking or touching anything.
+- [ ] **REMOTE OK:** Reconnect the lead/agent; finalize calibration receipts and commit the new ledger-head pin.
+- [ ] Authenticate the calibration bracket, fresh bound, exact science basis, 3/1/3 references, CPU admission, and adapter continuity.
+- [ ] Emit exactly one whole-window verdict and require `status: passed`.
+- [ ] Record the evaluation-basis SHA-256.
+- [ ] Release any stopped cloud-sync process safely.
+- [ ] Back up claim and bound roots separately; require exit `0` for both.
+- [ ] **ED PRESENT:** Restore automatic network time and verify it is on.
+- [ ] Run governed extraction for both 7B decode and 7B prefill floor cells in the same custody session as the consuming analysis.
+- [ ] Do not advance to the contrast night until the required 1.5B and 7B floor artifacts, custody, and head pins are ready.
+
+**Send the agent:** all identifiers and roots; completion timestamp; pre/post calibration directories; exact member/failure inventory; verdict row and basis SHA; both backup receipts; network-time timestamps; and the decode/prefill extraction paths.
+
+---
+
+# Night 3 — Fresh 1.5B-vs-7B Decode Contrast
+
+**Window ID:** `[PLACEHOLDER: DECODE CONTRAST WINDOW ID]`  
+**Plan root:** `[PLACEHOLDER: PLAN ROOT]`  
+**Science configs:** `[PLACEHOLDER: CONTRAST CONFIG IDS]`  
+**1.5B floor artifact:** `[PLACEHOLDER: FROZEN ARTIFACT ID/HASH]`  
+**7B floor artifact:** `[PLACEHOLDER: FROZEN ARTIFACT ID/HASH]`  
+**Total duration:** `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]`  
+**Do-not-return-before:** `[BUDGET: COMPLETION TIME/SIGNAL]`
+
+Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks 1–5 run before the midpoint reference and blocks 6–10 after it. Do not add a prefill contrast to this night.
+
+## T-minus preparation — REMOTE OK
+
+- [ ] Both preceding floor windows have passed their verdict, backup, extraction, and custody gates.
+- [ ] Exact 1.5B and 7B floor artifact IDs, hashes, stack identities, and ledger-head pins are frozen into the contrast plan.
+- [ ] Readiness record passes with no exception.
+- [ ] Reviewed commit, policy, acceptance artifact, ledger head, plan tree, chain, and exact evidence-root mappings are recorded.
+- [ ] Contrast membership is frozen: 10 complete A/B/B/A blocks; no optional member, top-up, block deletion, or outcome-driven replacement.
+- [ ] Stage split is frozen:
+  - before midpoint: `[PLACEHOLDER: BLOCKS 1–5 CONFIG ID]`
+  - after midpoint: `[PLACEHOLDER: BLOCKS 6–10 CONFIG ID]`
+- [ ] Both model snapshots and tokenizers are complete, revision-correct, and available offline.
+- [ ] `waivers.json` is exactly `[]`; retry policy and analysis direction are frozen.
+- [ ] Fresh claim, bound, custody, quarantine, and backup paths are named and empty.
+- [ ] Every config validates and both stages dry-run in exact manifest order.
+- [ ] Budget includes two-model load churn, all settles, calibrations, bound corpus, references, science, and at least 20% margin.
+
+## Arm sequence — ED PRESENT
+
+- [ ] Verify approved power supply/cable, external AC, 140 W negotiation, high-power policy, and low-power mode off.
+- [ ] Finish or pause maintenance, updates, indexing, backups, downloads, and cloud uploads.
+- [ ] Confirm nominal thermal state and passwordless `powermetrics`.
+- [ ] Verify the clock independently; record and disable automatic network time:
+
+  ```sh
+  sudo systemsetup -getusingnetworktime
+  sudo systemsetup -setusingnetworktime off
+  ```
+
+- [ ] Run `bash scripts/quiet_mac_prep.sh`; resolve every failure.
+- [ ] Quit every agent, t3, browser, automation session, monitor, watcher, and tail. Require a zero-survivor census.
+- [ ] Run the frozen `prewindow_check.sh --wait` command and require `READY`.
+- [ ] Leave the Mac untouched for at least 10 minutes.
+- [ ] Tell everyone nearby not to touch the Mac or its power path.
+- [ ] Launch exactly once:
+
+  ```sh
+  WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"
+  caffeinate -is /bin/zsh \
+    "$WINDOW_PLAN_ROOT/window-chain.zsh" \
+    "$WINDOW_PLAN_ROOT"
+  ```
+
+- [ ] Walk away during the 20-second arm. Do not monitor either model’s progress.
+
+## Runs unattended — UNATTENDED
+
+| Approximate point | Automatic work |
+|---|---|
+| T+0 to `[BUDGET]` | Settle, transient display sleep, pre calibration and level screen |
+| T+`[BUDGET]` | Twelve fresh bound members and same-window bound mint |
+| T+`[BUDGET]` | Three start references |
+| T+`[BUDGET]` | Decode contrast blocks 1–5 |
+| T+`[BUDGET]` | One midpoint reference |
+| T+`[BUDGET]` | Decode contrast blocks 6–10 |
+| T+`[BUDGET]` | Three end references |
+| T+`[BUDGET]` | Post calibration and bracket closure |
+| T+`[BUDGET]` | `measurement_complete` |
+
+Alternating models causes ordinary load-time variation. Never use observed run time or apparent effect size to add, drop, reorder, or rerun a block.
+
+## Morning close-out
+
+- [ ] **ED PRESENT:** Confirm `measurement_complete` before waking the display.
+- [ ] **REMOTE OK:** Reconnect the lead/agent; finalize calibration receipts and commit the exact ledger-head pin.
+- [ ] Authenticate the bracket, bound, 3/1/3 references, all 10 complete blocks, both stack identities, CPU admission, and stable power identity.
+- [ ] Emit exactly one ordinary whole-window verdict; require `status: passed`.
+- [ ] Record its exact evaluation-basis SHA-256.
+- [ ] Release any stopped cloud-sync process using the frozen cleanup.
+- [ ] Back up claim and bound roots separately; require two exit-`0` receipts.
+- [ ] **ED PRESENT:** Restore and verify automatic network time.
+- [ ] Run exact-basis contrast extraction and analysis against the frozen 1.5B and 7B floors in the same custody session.
+- [ ] Report the frozen directional result even if it does not clear the decision envelope. Never top up the campaign.
+
+**Send the agent:** window/plan and both floor IDs; code, policy, and ledger pins; all roots; completion timestamp; calibration directories; exact ten-block inventory; verdict and basis SHA; backup receipts; network-time timestamps; extraction path; and every refusal or deviation.
+
+---
+
+# ABORT Page — Stop, Preserve, Diagnose
+
+A failed night is still evidence. It is not permission to clean up and try again.
+
+## Treat the night as failed or non-claim-bearing if any of these occurs
+
+- The chain stops before `measurement_complete`.
+- The pre-calibration level screen aborts before member 1.
+- A display wakes, the screensaver engages, or anyone touches the Mac.
+- CPU, thermal, clock, environment, or adapter admission refuses.
+- The charger, cable, wattage, lid, or power policy changes.
+- A member is incomplete, fallback-anchored, duplicated, missing, or occupies an existing slot.
+- A science stage does not complete its exact frozen membership.
+- The post calibration is missing or invalid.
+- The calibration ledger has a pending, malformed, or conflicting receipt.
+- The whole-window verdict is anything other than `passed`.
+- Either custody backup fails.
+- Extraction refuses membership or reports that not all frozen cells are extractable.
+
+## What to do immediately
+
+- [ ] Stop touching the machine. Let the foreground chain stop on its own unless safety requires intervention.
+- [ ] Record the visible failure and time without altering any artifact.
+- [ ] Preserve the complete claim root, bound root, calibration directories, campaign logs, operator logs, locks, and partial bundles.
+- [ ] Mark the night **ABORTED / NOT CLAIM-BEARING** until the lead establishes a stronger valid status.
+- [ ] Restore automatic network time only after the stopped state and available custody have been recorded.
+- [ ] Send the lead/agent the exact roots, last completed stage, failure text, timestamp, process or power change observed, and whether `measurement_complete` exists.
+
+## Never do these things
+
+- **Never delete, overwrite, truncate, or “clean up” failed evidence.**
+- **Never retry until a specific cause has been identified, removed, verified, and shown to be retryable by the frozen plan.**
+- Never rerun merely because a calibration number, energy result, or verdict was unfavorable.
+- Never change a threshold, waiver, membership list, model identity, stage order, analysis rule, or retry count during the night.
+- Never use an environment override.
+- Never borrow a calibration or bound from another night.
+- Never hand-patch metadata, hashes, calibration bounds, or drift allowances.
+- Never add members, drop blocks, or top up to improve significance.
+- Never append a different verdict over the same basis.
+- Never delete an unreadable lock blindly; establish whether its PID is live.
+- Never reuse a contaminated root as though it were fresh.
+- Never treat a failed backup as permission to alter the source.
+- Never wake the display or reconnect remotely simply to check progress.
+
+One automatic settled retry is permitted only when the chain itself identifies a calibration failure whose sole reason is the allowed clock-anchor condition. Any other retry requires the frozen cause-removal rule. With no named removable cause, the night ends.
