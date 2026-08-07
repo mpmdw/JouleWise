@@ -274,3 +274,28 @@ Accept the merge (nothing here voids evidence). Queue before night 1:
 - F5 shared normalization + one `main()`-path symlink regression.
 - F3 runbook section, rehearsed once.
 - F6/F7 fold into any later touch of these files; none justify a dedicated PR.
+
+---
+## CORROBORATION (magistrate note, 2026-08-07)
+
+The independent post-merge cross-unit integration review (see
+POSTMERGE-INTEGRATION-REVIEW.md) reached this gate's F5 finding by a
+different route: it constructed a U1 -> U3 binding directly and found the
+symlink-path case FAILS while the canonical-path control PASSES. It also
+identified WHY every prior layer missed it — the test fixtures normalize
+both sides with resolve(), so the disagreement is invisible in tests and
+appears only against a real symlinked root. On macOS all of /tmp is
+symlinked, which is where quiet-window scratch paths live.
+
+Two independent apex-tier reviews converging on the same defect by
+different methods raises F5 from MEDIUM to a night-critical fix. It is
+already in the running U1 gate-debt fix round as FIX-F5.
+
+Otherwise the integration review corroborates cross-unit agreement:
+terminal derivation 76 + 3x5 = 91; binding_digest vs
+bracket_binding_sha256 domains intentionally distinct; the 0.010818
+allowance arithmetic agreeing across U1/U3/U4 (rule STRINGS differ —
+symbolic in U1, literal-expanded in U3 — worth unifying later); issued
+prefix consistently 76 with 30/2/6 dispositions; U4's private-seam
+dependencies intact after the sequential merge. Full suite on merged
+main: Ran 2733, OK, exit 0.
