@@ -1,0 +1,22 @@
+{
+  "schema_version": "joulewise.calibration_acceptance_registry.v1",
+  "authority": "committed_registry_one_active_exact_sha256",
+  "entries": [
+    {
+      "acceptance_id": "d079_calibration_acceptance_v2_n19",
+      "artifact_path": "configs/calibration/calibration_acceptance_d079_v2.json",
+      "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+      "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+      "artifact_schema": "joulewise.calibration_acceptance_bound.v2",
+      "generation": 1,
+      "active": true,
+      "parent_acceptance_id": null,
+      "parent_artifact_sha256": null,
+      "ledger_cutoff": {
+        "sequence": 76,
+        "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+        "ledger_schema": "joulewise.calibration_observation_ledger.v1"
+      }
+    }
+  ]
+}

@@ -10,6 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import re
+import subprocess
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
@@ -41,21 +44,29 @@ from joulewise.schemas import CalibrationBracketingPolicy
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
 BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2"
+ACCEPTANCE_SUCCESSOR_SCHEMA = "joulewise.calibration_acceptance_bound.v3"
 ACCEPTANCE_FIXTURE_SCHEMA = (
     "joulewise.calibration_acceptance_bound.v2.fixture.v1"
 )
 ACCEPTANCE_EVALUATION_SCHEMA = "joulewise.calibration_acceptance_evaluation.v2"
+ACCEPTANCE_REGISTRY_SCHEMA = "joulewise.calibration_acceptance_registry.v1"
+ACCEPTANCE_TRIGGER_PROBE_SCHEMA = (
+    "joulewise.calibration_acceptance_trigger_probe.v1"
+)
 DEFAULT_ACCEPTANCE_BOUND_PATH = (
     Path(__file__).resolve().parents[1]
     / "configs"
     / "calibration"
     / "calibration_acceptance_d079_v2.json"
 )
+DEFAULT_ACCEPTANCE_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "configs"
+    / "calibration"
+    / "calibration_acceptance_registry.json"
+)
 DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
-)
-ISSUED_ACCEPTANCE_BOUND_SHA256 = (
-    "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 ESTIMATOR_CODE_PATHS = (
@@ -71,6 +82,110 @@ _D102_OPERATIVE_VALUES = {
     "max_budgetable_excess_s": "0.001275166090593858",
     "maximum_budgetable_drift_s": "0.012093166090593858",
 }
+
+# COLD-GATE-Q1: the successor corpus is the complete content-distinct valid
+# same-epoch ledger prefix, not the triggering suffix or the frozen n=19 set.
+SUCCESSOR_CORPUS_SELECTION = (
+    "all_content_distinct_valid_same_epoch_observations_through_cutoff"
+)
+# COLD-GATE-Q2: retain both protections; the successor level screen is the
+# larger of the observed maximum and the 95% two-draw prediction.
+SUCCESSOR_PREFLIGHT_SCREEN_RULE = "max(observed_maximum,prediction_95_two_draw)"
+# COLD-GATE-Q3: dependency-free Decimal incomplete-beta inversion is pinned at
+# 80 digits. The D-102 df=18 coefficients remain explicit compatibility pins.
+SUCCESSOR_QUANTILE_METHOD = "decimal_incomplete_beta_bisection_v1"
+SUCCESSOR_DECIMAL_PRECISION = 80
+# COLD-GATE-Q4: a range successor below the pending boundary retains it; once
+# crossed, the next boundary is twice the newly issued corpus count.
+SUCCESSOR_COUNT_BOUNDARY_RULE = "retain_until_crossed_then_double_issued_count"
+# COLD-GATE-Q5: a new systematic observation remains new and blocks every
+# automatic build until an authority ruling disposes it.
+SUCCESSOR_SYSTEMATIC_POLICY = "persistent_refusal_pending_new_ruling"
+# COLD-GATE-Q6: no-content attempts are recorded, but only an explicit unused
+# U1 slot closed by its terminal abort is non-concealing; other shapes refuse.
+SUCCESSOR_NONCONTENT_POLICY = "record_and_refuse_unless_governed_unused_slot"
+# COLD-GATE-Q7: v3 artifacts use cutoff-derived immutable names, remain present
+# in the checkout, and form a single-parent ancestry rooted at the issued v2.
+SUCCESSOR_LINEAGE_POLICY = "immutable_present_single_parent_cutoff_named_v3"
+# COLD-GATE-Q8: the checked-in registry is the sole rotating trust anchor; it
+# has exactly one active row and authenticates that artifact's exact bytes.
+ACCEPTANCE_REGISTRY_AUTHORITY = "committed_registry_one_active_exact_sha256"
+# COLD-GATE-Q9: publish immutable artifact bytes first and switch the registry
+# last; the registry replace is the authority commit point. The head is input.
+SUCCESSOR_PUBLICATION_POLICY = "artifact_first_registry_last_head_input_only"
+# COLD-GATE-Q10: a pre-science probe may inspect exactly U1's governed open
+# two-slot extension; a triggered build requires an aborted/finalized terminal
+# session and a committed head before issuance.
+PRE_PROBE_OPEN_SESSION_POLICY = "permit_governed_open_u1_extension_probe_only"
+# COLD-GATE-Q11: post evidence may be consumed under the successor only when
+# lineage records its parent-artifact judgment before self-fit construction.
+POST_SUCCESSOR_POLICY = "require_explicit_parent_judgment_lineage"
+# COLD-GATE-Q12: this four-file exhibit closes the authenticated probe API;
+# writer scalar removal and the U8 arm-path call remain separately scoped.
+WRITER_INTEGRATION_SCOPE_STATUS = "probe_closed_writer_and_arm_path_residual"
+SUCCESSOR_DECISION_IDS = (
+    "D-102",
+    "D-109",
+    "D-117",
+    "COLD-GATE-U2-PENDING",
+)
+
+_SUCCESSOR_TOP_LEVEL_FIELDS = {
+    "schema_version",
+    "acceptance_id",
+    "decision_ids",
+    "artifact_role",
+    "issuance",
+    "lineage",
+    "ledger_cutoff",
+    "identity_epoch",
+    "prospective_rederivation",
+    "derivation_corpus",
+    "prior_observation_set",
+    "decimal_derivation",
+    "derivation_sha256",
+}
+_SUCCESSOR_ARTIFACT_NAME_RE = re.compile(
+    r"^calibration_acceptance_v3_s([1-9][0-9]*)_([0-9a-f]{16})\.json$"
+)
+_D102_RATIFIED_T_QUANTILES = {
+    (18, "0.975"): Decimal(
+        "2.1009220402410352934446802481715190309096147708883899652987837826492167345329145"
+    ),
+    (18, "0.995"): Decimal(
+        "2.8784404727135853941939366597008136821841052811738896572381901955286218320347263"
+    ),
+}
+
+
+def _registry_bootstrap_issued_sha256() -> str:
+    """Compatibility export for the one legacy issuance-only consumer."""
+
+    try:
+        value = json.loads(DEFAULT_ACCEPTANCE_REGISTRY_PATH.read_bytes())
+        entries = value.get("entries") if isinstance(value, Mapping) else None
+        if isinstance(entries, list):
+            for entry in entries:
+                if (
+                    isinstance(entry, Mapping)
+                    and entry.get("acceptance_id")
+                    == "d079_calibration_acceptance_v2_n19"
+                ):
+                    digest = entry.get("artifact_sha256")
+                    if isinstance(digest, str) and re.fullmatch(
+                        r"[0-9a-f]{64}", digest
+                    ):
+                        return digest
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        pass
+    # D-116's out-of-scope genesis bootstrap is tested from a standalone copy
+    # of this module without repository configs. Retain its historical v2
+    # emission oracle only; active runtime selection never consults this
+    # fallback and every v3 digest exists solely in the committed registry.
+    return "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+
+
+ISSUED_ACCEPTANCE_BOUND_SHA256 = _registry_bootstrap_issued_sha256()
 
 
 @dataclass(frozen=True)
@@ -142,6 +257,280 @@ def _decimal(value: Any) -> Decimal | None:
     return result if result.is_finite() else None
 
 
+def _decimal_text(value: Decimal) -> str:
+    """Render one finite Decimal without exponent or binary64 mediation."""
+
+    if not value.is_finite():
+        raise ValueError("decimal value must be finite")
+    return format(value, "f")
+
+
+def _decimal_pi() -> Decimal:
+    """Return pi deterministically at the active Decimal precision."""
+
+    one = Decimal(1)
+    two = Decimal(2)
+    four = Decimal(4)
+    a = one
+    b = one / two.sqrt()
+    t = Decimal(1) / four
+    power = one
+    for _ in range(10):
+        midpoint = (a + b) / two
+        b = (a * b).sqrt()
+        t -= power * (a - midpoint) ** 2
+        a = midpoint
+        power *= two
+    return (a + b) ** 2 / (four * t)
+
+
+def _decimal_beta_a_half(df: int) -> Decimal:
+    """Compute B(df/2, 1/2) for an integer df without a gamma primitive."""
+
+    if df % 2 == 0:
+        m = df // 2
+        numerator = Decimal(4**m * math.factorial(m) * math.factorial(m - 1))
+        return numerator / Decimal(math.factorial(2 * m))
+    m = (df - 1) // 2
+    numerator = Decimal(math.factorial(2 * m)) * _decimal_pi()
+    denominator = Decimal(4**m * math.factorial(m) ** 2)
+    return numerator / denominator
+
+
+def _decimal_beta_continued_fraction(
+    a: Decimal, b: Decimal, x: Decimal
+) -> Decimal:
+    """Evaluate the incomplete-beta continued fraction by Lentz iteration."""
+
+    one = Decimal(1)
+    qab = a + b
+    qap = a + one
+    qam = a - one
+    tiny = Decimal(1).scaleb(-(SUCCESSOR_DECIMAL_PRECISION - 8))
+    epsilon = Decimal(1).scaleb(-(SUCCESSOR_DECIMAL_PRECISION - 12))
+
+    def guarded(value: Decimal) -> Decimal:
+        if abs(value) >= tiny:
+            return value
+        return -tiny if value < 0 else tiny
+
+    c = one
+    d = one / guarded(one - qab * x / qap)
+    result = d
+    for iteration in range(1, 10_001):
+        i = Decimal(iteration)
+        doubled = Decimal(2 * iteration)
+        numerator = i * (b - i) * x / ((qam + doubled) * (a + doubled))
+        d = one / guarded(one + numerator * d)
+        c = guarded(one + numerator / c)
+        result *= d * c
+
+        numerator = -(
+            (a + i)
+            * (qab + i)
+            * x
+            / ((a + doubled) * (qap + doubled))
+        )
+        d = one / guarded(one + numerator * d)
+        c = guarded(one + numerator / c)
+        change = d * c
+        result *= change
+        if abs(change - one) <= epsilon:
+            return result
+    raise ArithmeticError("Decimal incomplete beta did not converge")
+
+
+def _decimal_regularized_incomplete_beta_df_half(
+    x: Decimal, df: int
+) -> Decimal:
+    if x <= 0:
+        return Decimal(0)
+    if x >= 1:
+        return Decimal(1)
+    a = Decimal(df) / Decimal(2)
+    b = Decimal("0.5")
+    beta = _decimal_beta_a_half(df)
+    front = (x**a) * ((Decimal(1) - x) ** b) / beta
+    if x < (a + 1) / (a + b + 2):
+        result = front * _decimal_beta_continued_fraction(a, b, x) / a
+    else:
+        result = Decimal(1) - (
+            front
+            * _decimal_beta_continued_fraction(b, a, Decimal(1) - x)
+            / b
+        )
+    return min(Decimal(1), max(Decimal(0), result))
+
+
+def _decimal_student_t_survival(value: Decimal, df: int) -> Decimal:
+    if value == 0:
+        return Decimal("0.5")
+    argument = Decimal(df) / (Decimal(df) + value * value)
+    return Decimal("0.5") * _decimal_regularized_incomplete_beta_df_half(
+        argument, df
+    )
+
+
+def decimal_student_t_quantile(probability: str, df: int) -> Decimal:
+    """Return the pinned deterministic Student-t quantile as a Decimal."""
+
+    if isinstance(df, bool) or not isinstance(df, int) or df < 1:
+        raise ValueError("df must be an integer >= 1")
+    target = _decimal(probability)
+    if target is None or not Decimal(0) < target < Decimal(1):
+        raise ValueError("probability must be a finite decimal between zero and one")
+    pinned = _D102_RATIFIED_T_QUANTILES.get((df, probability))
+    if pinned is not None:
+        return pinned
+    if target == Decimal("0.5"):
+        return Decimal(0)
+
+    with localcontext() as context:
+        context.prec = SUCCESSOR_DECIMAL_PRECISION
+        sign = Decimal(-1) if target < Decimal("0.5") else Decimal(1)
+        tail = target if target < Decimal("0.5") else Decimal(1) - target
+        lower = Decimal(0)
+        upper = Decimal(1)
+        while _decimal_student_t_survival(upper, df) > tail:
+            upper *= 2
+        tolerance = Decimal(1).scaleb(-(SUCCESSOR_DECIMAL_PRECISION - 8))
+        while upper - lower > tolerance:
+            midpoint = (lower + upper) / 2
+            if _decimal_student_t_survival(midpoint, df) > tail:
+                lower = midpoint
+            else:
+                upper = midpoint
+        return +(sign * ((lower + upper) / 2))
+
+
+def derive_successor_decimal_derivation(
+    members: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Derive the complete v3 Decimal record from authenticated members."""
+
+    if len(members) < 2:
+        raise ValueError("successor derivation requires at least two members")
+    content_ids: list[str] = []
+    values: list[Decimal] = []
+    for member in members:
+        content_id = member.get("content_id") if isinstance(member, Mapping) else None
+        value = _decimal(member.get("b_fiducial_s")) if isinstance(member, Mapping) else None
+        if not _valid_sha256(content_id) or value is None or value < 0:
+            raise ValueError("successor member has invalid content ID or bound")
+        content_ids.append(content_id)
+        values.append(value)
+    if content_ids != sorted(content_ids) or len(content_ids) != len(set(content_ids)):
+        raise ValueError("successor members must be content-ID sorted and distinct")
+
+    with localcontext() as context:
+        context.prec = SUCCESSOR_DECIMAL_PRECISION
+        count = Decimal(len(values))
+        mean = sum(values, Decimal(0)) / count
+        sample_sd = (
+            sum((value - mean) ** 2 for value in values)
+            / Decimal(len(values) - 1)
+        ).sqrt()
+        minimum = min(values)
+        maximum = max(values)
+        observed_range = maximum - minimum
+        prediction_95 = (
+            decimal_student_t_quantile("0.975", len(values) - 1)
+            * sample_sd
+            * Decimal(2).sqrt()
+        )
+        prediction_99 = (
+            decimal_student_t_quantile("0.995", len(values) - 1)
+            * sample_sd
+            * Decimal(2).sqrt()
+        )
+        display_quantum = Decimal("0.000000000000000001")
+        prediction_95_display = prediction_95.quantize(
+            display_quantum, rounding=ROUND_HALF_EVEN
+        )
+        prediction_99_display = prediction_99.quantize(
+            display_quantum, rounding=ROUND_HALF_EVEN
+        )
+        bracket_screen = observed_range.quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
+        )
+        preflight_source = max(maximum, prediction_95)
+        preflight_screen = preflight_source.quantize(
+            Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
+        )
+        maximum_budgetable_drift = prediction_99_display
+        max_budgetable_excess = max(
+            Decimal(0), maximum_budgetable_drift - bracket_screen
+        )
+
+    return {
+        "numeric_semantics": "decimal_source_lexemes",
+        "quantile_method": {
+            "algorithm": SUCCESSOR_QUANTILE_METHOD,
+            "precision_decimal_digits": SUCCESSOR_DECIMAL_PRECISION,
+            "probabilities": {
+                "prediction_95_two_draw": "0.975",
+                "prediction_99_two_draw": "0.995",
+            },
+            "rounding": "ROUND_HALF_EVEN",
+            "d102_df18_compatibility_pin": True,
+        },
+        "source_statistics": {
+            "minimum_s": _decimal_text(minimum),
+            "minimum_content_id": content_ids[values.index(minimum)],
+            "maximum_s": _decimal_text(maximum),
+            "maximum_content_id": content_ids[values.index(maximum)],
+            "range_s": _decimal_text(observed_range),
+            "mean_s": _decimal_text(
+                mean.quantize(display_quantum, rounding=ROUND_HALF_EVEN)
+            ),
+            "sample_sd_s": _decimal_text(
+                sample_sd.quantize(display_quantum, rounding=ROUND_HALF_EVEN)
+            ),
+            "prediction_95_two_draw_s": _decimal_text(prediction_95_display),
+            "prediction_99_two_draw_s": _decimal_text(prediction_99_display),
+        },
+        "presentation_values": {
+            "range_12_places_s": {
+                "value": _decimal_text(
+                    observed_range.quantize(
+                        Decimal("0.000000000001"), rounding=ROUND_HALF_EVEN
+                    )
+                ),
+                "label": "presentation_only_not_a_comparator",
+            }
+        },
+        "rounding": {
+            "mode": "ROUND_HALF_EVEN",
+            "source_fields": "authenticated_decimal_lexemes_unrounded",
+            "statistics_quantum_s": "0.000000000000000001",
+            "bracket_screen": {
+                "source": "source_statistics.range_s",
+                "quantum_s": "0.000001",
+                "value_s": _decimal_text(bracket_screen),
+            },
+            "preflight_level_screen": {
+                "source_rule": SUCCESSOR_PREFLIGHT_SCREEN_RULE,
+                "quantum_s": "0.000000000000001",
+                "value_s": _decimal_text(preflight_screen),
+            },
+        },
+        "ratified_operatives": {
+            "bracket_screen_s": _decimal_text(bracket_screen),
+            "preflight_level_screen_s": _decimal_text(preflight_screen),
+            "max_budgetable_excess_s": _decimal_text(max_budgetable_excess),
+            "maximum_budgetable_drift_s": _decimal_text(
+                maximum_budgetable_drift
+            ),
+            "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+            "operative_bound_rule": (
+                "max(pre_b_fiducial_s,post_b_fiducial_s)"
+                "+calibration_drift_allowance_s"
+            ),
+            "embedding_count": 1,
+        },
+    }
+
+
 def _candidate_decimal(candidate: CalibrationCandidate) -> Decimal | None:
     value = candidate.b_fiducial_s
     if isinstance(value, Decimal):
@@ -173,11 +562,610 @@ def _current_estimator_code_sha256() -> dict[str, str] | None:
         return None
 
 
+def _path_has_symlink_component(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+    current = root
+    for part in relative.parts:
+        current = current / part
+        try:
+            if current.is_symlink():
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _repository_relative_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or "\\" in value:
+        return None
+    candidate = Path(value)
+    if candidate.is_absolute() or value != candidate.as_posix():
+        return None
+    if any(part in {"", ".", ".."} for part in candidate.parts):
+        return None
+    return value
+
+
+def _valid_registry(value: Any) -> bool:
+    if (
+        not isinstance(value, Mapping)
+        or set(value) != {"schema_version", "authority", "entries"}
+        or value.get("schema_version") != ACCEPTANCE_REGISTRY_SCHEMA
+        or value.get("authority") != ACCEPTANCE_REGISTRY_AUTHORITY
+        or not isinstance(value.get("entries"), list)
+        or not value["entries"]
+    ):
+        return False
+    expected_keys = {
+        "acceptance_id",
+        "artifact_path",
+        "artifact_sha256",
+        "derivation_sha256",
+        "artifact_schema",
+        "generation",
+        "active",
+        "parent_acceptance_id",
+        "parent_artifact_sha256",
+        "ledger_cutoff",
+    }
+    ids: set[str] = set()
+    paths: set[str] = set()
+    entries_by_id: dict[str, Mapping[str, Any]] = {}
+    active_count = 0
+    for entry in value["entries"]:
+        cutoff = entry.get("ledger_cutoff") if isinstance(entry, Mapping) else None
+        if (
+            not isinstance(entry, Mapping)
+            or set(entry) != expected_keys
+            or not isinstance(entry.get("acceptance_id"), str)
+            or not entry["acceptance_id"]
+            or _repository_relative_path(entry.get("artifact_path")) is None
+            or not entry["artifact_path"].startswith("configs/calibration/")
+            or not _valid_sha256(entry.get("artifact_sha256"))
+            or not _valid_sha256(entry.get("derivation_sha256"))
+            or entry.get("artifact_schema")
+            not in {ACCEPTANCE_BOUND_SCHEMA, ACCEPTANCE_SUCCESSOR_SCHEMA}
+            or isinstance(entry.get("generation"), bool)
+            or not isinstance(entry.get("generation"), int)
+            or entry["generation"] < 1
+            or not isinstance(entry.get("active"), bool)
+            or not isinstance(cutoff, Mapping)
+            or set(cutoff) != {"sequence", "head_digest", "ledger_schema"}
+            or isinstance(cutoff.get("sequence"), bool)
+            or not isinstance(cutoff.get("sequence"), int)
+            or cutoff["sequence"] < 1
+            or not _valid_sha256(cutoff.get("head_digest"))
+            or cutoff.get("ledger_schema") != LEDGER_SCHEMA
+        ):
+            return False
+        acceptance_id = entry["acceptance_id"]
+        artifact_path = entry["artifact_path"]
+        if acceptance_id in ids or artifact_path in paths:
+            return False
+        ids.add(acceptance_id)
+        paths.add(artifact_path)
+        entries_by_id[acceptance_id] = entry
+        active_count += int(entry["active"])
+    if active_count != 1:
+        return False
+
+    roots = 0
+    child_counts = {entry["acceptance_id"]: 0 for entry in value["entries"]}
+    for entry in value["entries"]:
+        parent_id = entry["parent_acceptance_id"]
+        parent_sha = entry["parent_artifact_sha256"]
+        if parent_id is None:
+            roots += 1
+            if parent_sha is not None or entry["generation"] != 1:
+                return False
+            continue
+        parent = entries_by_id.get(parent_id)
+        if (
+            not isinstance(parent_id, str)
+            or parent is None
+            or parent_sha != parent["artifact_sha256"]
+            or entry["generation"] != parent["generation"] + 1
+            or entry["ledger_cutoff"]["sequence"]
+            <= parent["ledger_cutoff"]["sequence"]
+        ):
+            return False
+        child_counts[parent_id] += 1
+        if child_counts[parent_id] > 1:
+            return False
+        seen = {entry["acceptance_id"]}
+        cursor: Mapping[str, Any] | None = parent
+        while cursor is not None:
+            cursor_id = cursor["acceptance_id"]
+            if cursor_id in seen:
+                return False
+            seen.add(cursor_id)
+            next_parent = cursor["parent_acceptance_id"]
+            cursor = entries_by_id.get(next_parent) if next_parent is not None else None
+    leaves = [entry_id for entry_id, count in child_counts.items() if count == 0]
+    active_ids = [entry["acceptance_id"] for entry in value["entries"] if entry["active"]]
+    return bool(
+        roots == 1
+        and len(leaves) == 1
+        and active_ids == leaves
+        and {entry["generation"] for entry in value["entries"]}
+        == set(range(1, len(value["entries"]) + 1))
+    )
+
+
+def _git_head_bytes(path: Path, repo_root: Path) -> bytes | None:
+    try:
+        relative = path.relative_to(repo_root).as_posix()
+        completed = subprocess.run(
+            ["git", "show", f"HEAD:{relative}"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+        )
+    except (OSError, ValueError):
+        return None
+    return completed.stdout if completed.returncode == 0 else None
+
+
+def load_calibration_acceptance_registry(
+    path: Path = DEFAULT_ACCEPTANCE_REGISTRY_PATH,
+    *,
+    repo_root: Path = _REPO_ROOT,
+    require_committed: bool = True,
+) -> dict[str, Any] | None:
+    """Load the single-active acceptance registry and authenticate ancestry."""
+
+    path = Path(path)
+    lexical_repo_root = Path(repo_root).absolute()
+    repo_root = Path(repo_root).resolve()
+    try:
+        if _path_has_symlink_component(path.absolute(), lexical_repo_root):
+            return None
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(repo_root)
+        raw = resolved.read_bytes()
+        value = json.loads(raw)
+    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if require_committed and _git_head_bytes(resolved, repo_root) != raw:
+        return None
+    if not _valid_registry(value):
+        return None
+    entries_by_id = {entry["acceptance_id"]: entry for entry in value["entries"]}
+    artifacts_by_id: dict[str, Mapping[str, Any]] = {}
+    for entry in value["entries"]:
+        artifact_path = repo_root / entry["artifact_path"]
+        try:
+            if _path_has_symlink_component(artifact_path.absolute(), repo_root):
+                return None
+            artifact_resolved = artifact_path.resolve(strict=True)
+            artifact_resolved.relative_to(repo_root)
+            artifact_raw = artifact_resolved.read_bytes()
+            artifact = json.loads(artifact_raw)
+        except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if (
+            hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]
+            or not _valid_acceptance_bound(artifact)
+            or artifact.get("acceptance_id") != entry["acceptance_id"]
+            or artifact.get("schema_version") != entry["artifact_schema"]
+            or artifact.get("derivation_sha256") != entry["derivation_sha256"]
+            or {
+                key: artifact["ledger_cutoff"].get(key)
+                for key in ("sequence", "head_digest", "ledger_schema")
+            }
+            != entry["ledger_cutoff"]
+        ):
+            return None
+        artifacts_by_id[entry["acceptance_id"]] = artifact
+        if entry["artifact_schema"] == ACCEPTANCE_SUCCESSOR_SCHEMA:
+            filename_match = _SUCCESSOR_ARTIFACT_NAME_RE.fullmatch(
+                Path(entry["artifact_path"]).name
+            )
+            if (
+                filename_match is None
+                or int(filename_match.group(1))
+                != entry["ledger_cutoff"]["sequence"]
+                or filename_match.group(2)
+                != entry["ledger_cutoff"]["head_digest"][:16]
+            ):
+                return None
+    for entry in value["entries"]:
+        if entry["artifact_schema"] != ACCEPTANCE_SUCCESSOR_SCHEMA:
+            continue
+        artifact = artifacts_by_id[entry["acceptance_id"]]
+        lineage = artifact["lineage"]
+        parent_entry = entries_by_id.get(entry["parent_acceptance_id"])
+        parent = artifacts_by_id.get(entry["parent_acceptance_id"])
+        if parent_entry is None or parent is None:
+            return None
+        count = artifact["derivation_corpus"]["n"]
+        parent_boundary = _artifact_count_boundary(parent)
+        expected_boundary = parent_boundary if count < parent_boundary else 2 * count
+        if (
+            lineage["generation"] != entry["generation"]
+            or lineage["parent_acceptance_id"] != entry["parent_acceptance_id"]
+            or lineage["parent_artifact_sha256"] != parent_entry["artifact_sha256"]
+            or lineage["parent_derivation_sha256"] != parent["derivation_sha256"]
+            or lineage["parent_ledger_cutoff"] != parent_entry["ledger_cutoff"]
+            or artifact["prospective_rederivation"]["count_trigger"][
+                "next_boundary"
+            ]
+            != expected_boundary
+        ):
+            return None
+    return dict(value)
+
+
+def _active_registry_entry(registry: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    active = [
+        entry
+        for entry in registry.get("entries", ())
+        if isinstance(entry, Mapping) and entry.get("active") is True
+    ]
+    return active[0] if len(active) == 1 else None
+
+
+def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
+    if (
+        set(value) != _SUCCESSOR_TOP_LEVEL_FIELDS
+        or value.get("schema_version") != ACCEPTANCE_SUCCESSOR_SCHEMA
+        or value.get("artifact_role") != "issued"
+        or not isinstance(value.get("acceptance_id"), str)
+        or not value["acceptance_id"].startswith("d079_calibration_acceptance_v3_s")
+        or value.get("decision_ids") != list(SUCCESSOR_DECISION_IDS)
+        or value.get("derivation_sha256")
+        != _canonical_sha256(
+            {key: item for key, item in value.items() if key != "derivation_sha256"}
+        )
+    ):
+        return False
+    issuance = value.get("issuance")
+    lineage = value.get("lineage")
+    cutoff = value.get("ledger_cutoff")
+    identity = value.get("identity_epoch")
+    prospective = value.get("prospective_rederivation")
+    corpus = value.get("derivation_corpus")
+    prior = value.get("prior_observation_set")
+    derivation = value.get("decimal_derivation")
+    if (
+        not isinstance(issuance, Mapping)
+        or set(issuance) != {"status", "claim_eligible", "reason"}
+        or issuance.get("status") != "issued"
+        or issuance.get("claim_eligible") is not True
+        or not isinstance(issuance.get("reason"), str)
+        or not issuance["reason"]
+        or not isinstance(cutoff, Mapping)
+        or set(cutoff) != {"sequence", "head_digest", "ledger_schema", "role"}
+        or isinstance(cutoff.get("sequence"), bool)
+        or not isinstance(cutoff.get("sequence"), int)
+        or cutoff["sequence"] < 1
+        or not _valid_sha256(cutoff.get("head_digest"))
+        or value["acceptance_id"]
+        != (
+            f"d079_calibration_acceptance_v3_s{cutoff['sequence']}_"
+            f"{cutoff['head_digest'][:16]}"
+        )
+        or cutoff.get("ledger_schema") != LEDGER_SCHEMA
+        or cutoff.get("role") != "issued_acceptance_baseline"
+        or not isinstance(identity, Mapping)
+        or set(identity) != set(ACCEPTANCE_IDENTITY_FIELDS)
+        or any(identity.get(field) in (None, "") for field in ACCEPTANCE_IDENTITY_FIELDS)
+    ):
+        return False
+    if (
+        not isinstance(lineage, Mapping)
+        or set(lineage)
+        != {
+            "generation",
+            "root_acceptance_id",
+            "parent_acceptance_id",
+            "parent_artifact_sha256",
+            "parent_derivation_sha256",
+            "parent_ledger_cutoff",
+            "trigger_judgment",
+        }
+        or isinstance(lineage.get("generation"), bool)
+        or not isinstance(lineage.get("generation"), int)
+        or lineage["generation"] < 2
+        or any(
+            not isinstance(lineage.get(field), str) or not lineage[field]
+            for field in ("root_acceptance_id", "parent_acceptance_id")
+        )
+        or not _valid_sha256(lineage.get("parent_artifact_sha256"))
+        or not _valid_sha256(lineage.get("parent_derivation_sha256"))
+        or not isinstance(lineage.get("parent_ledger_cutoff"), Mapping)
+        or set(lineage["parent_ledger_cutoff"])
+        != {"sequence", "head_digest", "ledger_schema"}
+        or isinstance(lineage["parent_ledger_cutoff"].get("sequence"), bool)
+        or not isinstance(lineage["parent_ledger_cutoff"].get("sequence"), int)
+        or lineage["parent_ledger_cutoff"]["sequence"] >= cutoff["sequence"]
+        or not _valid_sha256(lineage["parent_ledger_cutoff"].get("head_digest"))
+        or lineage["parent_ledger_cutoff"].get("ledger_schema") != LEDGER_SCHEMA
+        or not isinstance(lineage.get("trigger_judgment"), Mapping)
+    ):
+        return False
+    judgment = lineage["trigger_judgment"]
+    if (
+        set(judgment)
+        != {
+            "judged_under_acceptance_id",
+            "judged_under_artifact_sha256",
+            "result",
+            "new_content_ids",
+            "triggers",
+        }
+        or judgment.get("judged_under_acceptance_id")
+        != lineage["parent_acceptance_id"]
+        or judgment.get("judged_under_artifact_sha256")
+        != lineage["parent_artifact_sha256"]
+        or judgment.get("result") != "successor_required"
+        or not isinstance(judgment.get("new_content_ids"), list)
+        or judgment["new_content_ids"] != sorted(set(judgment["new_content_ids"]))
+        or not all(_valid_sha256(item) for item in judgment["new_content_ids"])
+        or not isinstance(judgment.get("triggers"), list)
+        or not judgment["triggers"]
+        or judgment["triggers"]
+        != [
+            trigger
+            for trigger in (
+                "new_valid_same_identity_capture_expands_observed_range",
+                "content_distinct_valid_same_epoch_count_boundary",
+            )
+            if trigger in judgment["triggers"]
+        ]
+    ):
+        return False
+    if (
+        not isinstance(prospective, Mapping)
+        or prospective.get("calendar_expiry") is not None
+        or prospective.get("trigger_observation_rule")
+        != "judge_under_prior_artifact_never_self_fit"
+        or prospective.get("protocol_sha256") != protocol_sha256(PROTOCOL_ID)
+        or prospective.get("estimator_code_sha256")
+        != _current_estimator_code_sha256()
+        or prospective.get("triggers")
+        != [
+            "identity_field_change",
+            "protocol_or_estimator_byte_change",
+            "new_valid_same_identity_capture_expands_observed_range",
+            "content_distinct_valid_same_epoch_count_boundary",
+            "new_systematic_failure_challenges_preflight_screen",
+        ]
+        or not isinstance(prospective.get("count_trigger"), Mapping)
+        or set(prospective["count_trigger"])
+        != {"source_corpus_count", "next_boundary", "rule"}
+        or prospective["count_trigger"].get("rule")
+        != SUCCESSOR_COUNT_BOUNDARY_RULE
+    ):
+        return False
+    if (
+        not isinstance(corpus, Mapping)
+        or set(corpus) != {"selection", "n", "members"}
+        or corpus.get("selection") != SUCCESSOR_CORPUS_SELECTION
+        or isinstance(corpus.get("n"), bool)
+        or not isinstance(corpus.get("n"), int)
+        or corpus["n"] < 2
+        or not isinstance(corpus.get("members"), list)
+        or len(corpus["members"]) != corpus["n"]
+        or prospective["count_trigger"].get("source_corpus_count") != corpus["n"]
+        or isinstance(prospective["count_trigger"].get("next_boundary"), bool)
+        or not isinstance(prospective["count_trigger"].get("next_boundary"), int)
+        or prospective["count_trigger"]["next_boundary"] <= corpus["n"]
+    ):
+        return False
+    member_keys = {
+        "content_id",
+        "attempt_id",
+        "finalization_sequence",
+        "receipt_digest",
+        "custody_locator",
+        "b_fiducial_s",
+        "manifest_sha256",
+        "instrument_evidence_sha256",
+    }
+    member_ids: list[str] = []
+    for member in corpus["members"]:
+        if (
+            not isinstance(member, Mapping)
+            or set(member) != member_keys
+            or not _valid_sha256(member.get("content_id"))
+            or not isinstance(member.get("attempt_id"), str)
+            or not member["attempt_id"]
+            or isinstance(member.get("finalization_sequence"), bool)
+            or not isinstance(member.get("finalization_sequence"), int)
+            or member["finalization_sequence"] < 1
+            or member["finalization_sequence"] > cutoff["sequence"]
+            or not _valid_sha256(member.get("receipt_digest"))
+            or not isinstance(member.get("custody_locator"), str)
+            or not member["custody_locator"]
+            or (bound := _decimal(member.get("b_fiducial_s"))) is None
+            or bound < 0
+            or not _valid_sha256(member.get("manifest_sha256"))
+            or not _valid_sha256(member.get("instrument_evidence_sha256"))
+        ):
+            return False
+        member_ids.append(member["content_id"])
+    if member_ids != sorted(set(member_ids)):
+        return False
+    if (
+        not isinstance(prior, Mapping)
+        or set(prior)
+        != {
+            "cutoff",
+            "content_identity_method",
+            "epoch_catalog",
+            "observations",
+            "noncontent_attempts",
+        }
+        or prior.get("cutoff")
+        != {key: cutoff[key] for key in ("sequence", "head_digest", "ledger_schema")}
+        or prior.get("content_identity_method")
+        != "sha256(canonical_json({instrument_evidence.json,manifest.json} byte sha256s))"
+        or not isinstance(prior.get("epoch_catalog"), Mapping)
+        or prior["epoch_catalog"].get("active_epoch") != identity
+        or any(
+            not isinstance(epoch_id, str)
+            or not epoch_id
+            or not isinstance(epoch, Mapping)
+            or set(epoch) != set(ACCEPTANCE_IDENTITY_FIELDS)
+            or any(epoch.get(field) in (None, "") for field in ACCEPTANCE_IDENTITY_FIELDS)
+            for epoch_id, epoch in prior["epoch_catalog"].items()
+        )
+        or len(
+            {
+                tuple((field, epoch[field]) for field in ACCEPTANCE_IDENTITY_FIELDS)
+                for epoch in prior["epoch_catalog"].values()
+            }
+        )
+        != len(prior["epoch_catalog"])
+        or not isinstance(prior.get("observations"), list)
+        or not isinstance(prior.get("noncontent_attempts"), list)
+    ):
+        return False
+    for row in prior["noncontent_attempts"]:
+        if (
+            not isinstance(row, Mapping)
+            or set(row)
+            != {
+                "attempt_id",
+                "closure_sequence",
+                "receipt_digest",
+                "disposition",
+                "custody_locator",
+            }
+            or not isinstance(row.get("attempt_id"), str)
+            or not row["attempt_id"]
+            or isinstance(row.get("closure_sequence"), bool)
+            or not isinstance(row.get("closure_sequence"), int)
+            or row["closure_sequence"] < 1
+            or row["closure_sequence"] > cutoff["sequence"]
+            or not _valid_sha256(row.get("receipt_digest"))
+            or row.get("disposition") != "governed-unused-slot"
+            or not isinstance(row.get("custody_locator"), str)
+            or not row["custody_locator"]
+        ):
+            return False
+    prior_ids: list[str] = []
+    valid_active_ids: set[str] = set()
+    prior_by_id: dict[str, Mapping[str, Any]] = {}
+    all_attempt_ids: set[str] = set()
+    all_sequences: set[int] = set()
+    all_receipts: set[str] = set()
+    for observation in prior["observations"]:
+        if (
+            not isinstance(observation, Mapping)
+            or set(observation)
+            != {
+                "content_id",
+                "epoch_id",
+                "disposition",
+                "representative_attempt_id",
+                "attempts",
+            }
+            or not _valid_sha256(observation.get("content_id"))
+            or observation.get("epoch_id") not in prior["epoch_catalog"]
+            or observation.get("disposition")
+            not in {"valid", "systematic-invalid", "ordinary-invalid"}
+            or not isinstance(observation.get("representative_attempt_id"), str)
+            or not isinstance(observation.get("attempts"), list)
+            or not observation["attempts"]
+        ):
+            return False
+        attempts = observation["attempts"]
+        sequences: list[int] = []
+        for attempt in attempts:
+            if (
+                not isinstance(attempt, Mapping)
+                or set(attempt)
+                != {
+                    "attempt_id",
+                    "finalization_sequence",
+                    "receipt_digest",
+                    "observation_kind",
+                    "custody_locator",
+                    "exact_bound_lexeme_s",
+                    "manifest_sha256",
+                    "instrument_evidence_sha256",
+                }
+                or not isinstance(attempt.get("attempt_id"), str)
+                or not attempt["attempt_id"]
+                or isinstance(attempt.get("finalization_sequence"), bool)
+                or not isinstance(attempt.get("finalization_sequence"), int)
+                or attempt["finalization_sequence"] < 1
+                or attempt["finalization_sequence"] > cutoff["sequence"]
+                or not _valid_sha256(attempt.get("receipt_digest"))
+                or attempt.get("observation_kind")
+                not in {
+                    "historical-import",
+                    "live-capture",
+                    "bracket-session-finalized",
+                    "bracket-session-aborted",
+                }
+                or not isinstance(attempt.get("custody_locator"), str)
+                or not attempt["custody_locator"]
+                or not _valid_sha256(attempt.get("manifest_sha256"))
+                or not _valid_sha256(attempt.get("instrument_evidence_sha256"))
+                or (
+                    attempt.get("exact_bound_lexeme_s") is not None
+                    and (
+                        (attempt_bound := _decimal(attempt["exact_bound_lexeme_s"]))
+                        is None
+                        or attempt_bound < 0
+                    )
+                )
+                or observation["disposition"] == "valid"
+                and attempt.get("exact_bound_lexeme_s") is None
+                or attempt["attempt_id"] in all_attempt_ids
+                or attempt["finalization_sequence"] in all_sequences
+                or attempt["receipt_digest"] in all_receipts
+            ):
+                return False
+            sequences.append(attempt["finalization_sequence"])
+            all_attempt_ids.add(attempt["attempt_id"])
+            all_sequences.add(attempt["finalization_sequence"])
+            all_receipts.add(attempt["receipt_digest"])
+        if sequences != sorted(sequences) or observation["representative_attempt_id"] != attempts[0]["attempt_id"]:
+            return False
+        prior_ids.append(observation["content_id"])
+        prior_by_id[observation["content_id"]] = observation
+        if observation["disposition"] == "valid" and observation["epoch_id"] == "active_epoch":
+            valid_active_ids.add(observation["content_id"])
+    if prior_ids != sorted(set(prior_ids)) or valid_active_ids != set(member_ids):
+        return False
+    for member in corpus["members"]:
+        row = prior_by_id[member["content_id"]]
+        representative = row["attempts"][0]
+        if (
+            row["disposition"] != "valid"
+            or row["epoch_id"] != "active_epoch"
+            or member["attempt_id"] != representative["attempt_id"]
+            or member["finalization_sequence"]
+            != representative["finalization_sequence"]
+            or member["receipt_digest"] != representative["receipt_digest"]
+            or member["custody_locator"] != representative["custody_locator"]
+            or member["b_fiducial_s"] != representative["exact_bound_lexeme_s"]
+            or member["manifest_sha256"] != representative["manifest_sha256"]
+            or member["instrument_evidence_sha256"]
+            != representative["instrument_evidence_sha256"]
+        ):
+            return False
+    try:
+        expected_derivation = derive_successor_decimal_derivation(corpus["members"])
+    except (ArithmeticError, InvalidOperation, ValueError):
+        return False
+    return derivation == expected_derivation
+
+
 def _valid_acceptance_bound(value: Any) -> bool:
     """Validate the D-102 artifact from its decimal-source member table."""
 
     if not isinstance(value, Mapping):
         return False
+    if value.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA:
+        return _valid_successor_acceptance_bound(value)
     core = {key: item for key, item in value.items() if key != "derivation_sha256"}
     identity = value.get("identity_epoch")
     prospective = value.get("prospective_rederivation")
@@ -444,12 +1432,40 @@ def _valid_acceptance_bound(value: Any) -> bool:
 
 
 def load_calibration_acceptance_bound(
-    path: Path = DEFAULT_ACCEPTANCE_BOUND_PATH,
+    path: Path | None = None,
 ) -> dict[str, Any] | None:
-    """Load the file-pinned D-102 acceptance artifact fail-closed."""
+    """Load the registry-selected D-102 acceptance artifact fail-closed.
 
+    An explicit path retains the exact-byte v2 bootstrap route;
+    successors are accepted only through a registry entry.
+    """
+
+    if path is None:
+        # The exhibit must execute before its new registry can be committed.
+        # Once this path exists at Git HEAD (the only landing shape), every
+        # ordinary consumer automatically upgrades to strict commit equality.
+        registry_head_bytes = _git_head_bytes(
+            DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT
+        )
+        registry = load_calibration_acceptance_registry(
+            require_committed=registry_head_bytes is not None,
+        )
+        active = _active_registry_entry(registry) if registry is not None else None
+        if active is None:
+            return None
+        requested = _REPO_ROOT / str(active["artifact_path"])
+        try:
+            raw = requested.read_bytes()
+        except OSError:
+            return None
+        return _acceptance_bound_from_authenticated_bytes(
+            raw,
+            expected_sha256=str(active["artifact_sha256"]),
+        )
+
+    requested = Path(path)
     try:
-        raw = Path(path).read_bytes()
+        raw = requested.read_bytes()
     except OSError:
         return None
     return _acceptance_bound_from_authenticated_bytes(raw)
@@ -457,6 +1473,8 @@ def load_calibration_acceptance_bound(
 
 def _acceptance_bound_from_authenticated_bytes(
     raw: bytes,
+    *,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any] | None:
     """Parse acceptance bytes only when their role-indexed pin authenticates."""
 
@@ -468,11 +1486,19 @@ def _acceptance_bound_from_authenticated_bytes(
     # states: the genesis fixture retained for pre-issuance tests, or the
     # deterministically emitted issued artifact. A caller cannot turn an
     # alternate self-consistent document into authority by choosing a path.
-    expected_sha256 = {
-        "schema_fixture_unissued": DEFAULT_ACCEPTANCE_BOUND_SHA256,
-        "issued": ISSUED_ACCEPTANCE_BOUND_SHA256,
-    }.get(value.get("artifact_role") if isinstance(value, Mapping) else None)
-    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+    role = value.get("artifact_role") if isinstance(value, Mapping) else None
+    schema = value.get("schema_version") if isinstance(value, Mapping) else None
+    authenticated_sha256 = expected_sha256
+    if authenticated_sha256 is None:
+        authenticated_sha256 = {
+            "schema_fixture_unissued": DEFAULT_ACCEPTANCE_BOUND_SHA256,
+            "issued": (
+                ISSUED_ACCEPTANCE_BOUND_SHA256
+                if schema == ACCEPTANCE_BOUND_SCHEMA
+                else None
+            ),
+        }.get(role)
+    if hashlib.sha256(raw).hexdigest() != authenticated_sha256:
         return None
     if not _valid_acceptance_bound(value):
         return None
@@ -493,6 +1519,15 @@ def _authenticated_explicit_acceptance_bound(
 def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
     """Return the reviewed exact-byte pin for a validated artifact role."""
 
+    registry = load_calibration_acceptance_registry(
+        require_committed=(
+            _git_head_bytes(DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT)
+            is not None
+        )
+    )
+    active = _active_registry_entry(registry) if registry is not None else None
+    if active is not None and active.get("acceptance_id") == artifact.get("acceptance_id"):
+        return str(active["artifact_sha256"])
     return (
         ISSUED_ACCEPTANCE_BOUND_SHA256
         if artifact.get("artifact_role") == "issued"
@@ -505,6 +1540,386 @@ def _valid_sha256(value: Any) -> bool:
         isinstance(value, str)
         and len(value) == 64
         and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _artifact_prior_content_ids(artifact: Mapping[str, Any]) -> set[str]:
+    return {
+        row["content_id"]
+        for row in artifact["prior_observation_set"]["observations"]
+        if isinstance(row, Mapping) and _valid_sha256(row.get("content_id"))
+    }
+
+
+def _artifact_corpus_values(artifact: Mapping[str, Any]) -> tuple[Decimal, ...]:
+    values = tuple(
+        value
+        for member in artifact["derivation_corpus"]["members"]
+        if (value := _decimal(member.get("b_fiducial_s"))) is not None
+    )
+    return values
+
+
+def _artifact_count_boundary(artifact: Mapping[str, Any]) -> int:
+    if artifact.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA:
+        return int(
+            artifact["prospective_rederivation"]["count_trigger"][
+                "next_boundary"
+            ]
+        )
+    return 38
+
+
+def _probe_observation_universe(
+    snapshot: CalibrationLedgerSnapshot,
+) -> tuple[LedgerObservation, ...]:
+    observations = list(snapshot.observations)
+    visible_attempts = {observation.attempt_id for observation in observations}
+    # U1 deliberately withholds open-session evidence from the ordinary
+    # consumption universe. The pre-science probe is the one authorized reader
+    # of a finalized PRE in that governed open capability.
+    if snapshot.is_governed_open_bracket_extension:
+        for session in snapshot.bracket_sessions:
+            if session.state != "open":
+                continue
+            observations.extend(
+                observation
+                for observation in session.finalized_slots.values()
+                if observation.attempt_id not in visible_attempts
+            )
+    return tuple(sorted(observations, key=lambda observation: observation.sequence))
+
+
+def _group_probe_observations(
+    observations: Sequence[LedgerObservation],
+) -> tuple[dict[str, tuple[LedgerObservation, ...]], tuple[LedgerObservation, ...]] | None:
+    grouped: dict[str, list[LedgerObservation]] = {}
+    noncontent: list[LedgerObservation] = []
+    for observation in observations:
+        if observation.content_id is None:
+            noncontent.append(observation)
+            continue
+        grouped.setdefault(observation.content_id, []).append(observation)
+    result: dict[str, tuple[LedgerObservation, ...]] = {}
+    for content_id, aliases in sorted(grouped.items()):
+        ordered = tuple(sorted(aliases, key=lambda observation: observation.sequence))
+        first = ordered[0]
+        expected = (
+            first.classification_disposition,
+            dict(first.identity_epoch),
+            dict(first.artifact_sha256),
+            first.exact_bound_lexeme_s,
+        )
+        if any(
+            (
+                alias.classification_disposition,
+                dict(alias.identity_epoch),
+                dict(alias.artifact_sha256),
+                alias.exact_bound_lexeme_s,
+            )
+            != expected
+            for alias in ordered[1:]
+        ):
+            return None
+        result[content_id] = ordered
+    return result, tuple(sorted(noncontent, key=lambda observation: observation.sequence))
+
+
+def _observation_custody_authentic(observation: LedgerObservation) -> bool:
+    if observation.content_id is None or not observation.artifact_sha256:
+        return False
+    candidate = _candidate_from_observation(
+        observation
+        if observation.disposition == "valid"
+        else replace(observation, disposition="valid")
+    )
+    return candidate is not None
+
+
+def _probe_result(
+    *,
+    outcome: str,
+    active: Mapping[str, Any] | None,
+    artifact: Mapping[str, Any] | None,
+    snapshot: CalibrationLedgerSnapshot,
+    observed_identity_epoch: Mapping[str, Any] | None,
+    new_content_ids: Sequence[str] = (),
+    triggers: Sequence[str] = (),
+    refusal_reasons: Sequence[str] = (),
+) -> dict[str, Any]:
+    cutoff = artifact.get("ledger_cutoff") if isinstance(artifact, Mapping) else None
+    return {
+        "schema_version": ACCEPTANCE_TRIGGER_PROBE_SCHEMA,
+        "outcome": outcome,
+        "active_acceptance_id": (
+            artifact.get("acceptance_id") if isinstance(artifact, Mapping) else None
+        ),
+        "artifact_sha256": active.get("artifact_sha256") if active else None,
+        "derivation_sha256": (
+            artifact.get("derivation_sha256")
+            if isinstance(artifact, Mapping)
+            else None
+        ),
+        "parent_cutoff": (
+            {
+                key: cutoff.get(key)
+                for key in ("sequence", "head_digest", "ledger_schema")
+            }
+            if isinstance(cutoff, Mapping)
+            else None
+        ),
+        "current_ledger_head": {
+            "sequence": snapshot.head_sequence,
+            "head_digest": snapshot.head_digest,
+            "ledger_schema": snapshot.ledger_schema,
+            "committed_sequence": snapshot.committed_head_sequence,
+            "committed_digest": snapshot.committed_head_digest,
+        },
+        "observed_identity_epoch": (
+            dict(observed_identity_epoch)
+            if isinstance(observed_identity_epoch, Mapping)
+            else None
+        ),
+        "new_content_ids": list(new_content_ids),
+        "observed_triggers": list(triggers),
+        "refusal_reasons": list(refusal_reasons),
+        "writer_integration_scope_status": WRITER_INTEGRATION_SCOPE_STATUS,
+    }
+
+
+def probe_calibration_acceptance_trigger(
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    *,
+    observed_identity_epoch: Mapping[str, Any] | None,
+    registry_path: Path = DEFAULT_ACCEPTANCE_REGISTRY_PATH,
+    repo_root: Path = _REPO_ROOT,
+    require_committed_registry: bool = True,
+    verify_custody: bool = True,
+) -> dict[str, Any]:
+    """Authenticate the active artifact and classify the pre/post trigger.
+
+    This is the U2 hook shape for §5A. It performs no writes and returns one of
+    the four closed outcomes required by the cold-gate brief.
+    """
+
+    empty_snapshot = isinstance(ledger_snapshot, CalibrationLedgerSnapshot)
+    if not empty_snapshot:
+        raise TypeError("ledger_snapshot must be a CalibrationLedgerSnapshot")
+    registry = load_calibration_acceptance_registry(
+        registry_path,
+        repo_root=repo_root,
+        require_committed=require_committed_registry,
+    )
+    active = _active_registry_entry(registry) if registry is not None else None
+    artifact: dict[str, Any] | None = None
+    if active is not None:
+        try:
+            raw = (Path(repo_root) / str(active["artifact_path"])).read_bytes()
+        except OSError:
+            raw = b""
+        artifact = _acceptance_bound_from_authenticated_bytes(
+            raw,
+            expected_sha256=str(active["artifact_sha256"]),
+        )
+    if active is None or artifact is None:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=("acceptance_registry_or_artifact_invalid",),
+        )
+    cutoff = artifact["ledger_cutoff"]
+    allow_open = ledger_snapshot.is_governed_open_bracket_extension
+    snapshot_reasons = set(ledger_snapshot.refusal_reasons)
+    if (
+        snapshot_reasons
+        and not allow_open
+        or allow_open
+        and snapshot_reasons
+        != {
+            "calibration_ledger_bracket_session_open",
+            "calibration_ledger_head_mismatch",
+        }
+        or ledger_snapshot.ledger_schema != LEDGER_SCHEMA
+        or ledger_snapshot.head_sequence < cutoff["sequence"]
+        or cutoff["sequence"] > len(ledger_snapshot.receipts)
+        or cutoff["sequence"] > 0
+        and ledger_snapshot.receipts[cutoff["sequence"] - 1].get("receipt_digest")
+        != cutoff["head_digest"]
+        or ledger_snapshot.head_sequence != len(ledger_snapshot.receipts)
+        or ledger_snapshot.head_sequence > 0
+        and ledger_snapshot.receipts[-1].get("receipt_digest")
+        != ledger_snapshot.head_digest
+        or not _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot)
+    ):
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=("calibration_ledger_prefix_not_authenticated",),
+        )
+    expected_epoch = artifact["identity_epoch"]
+    if (
+        not isinstance(observed_identity_epoch, Mapping)
+        or set(observed_identity_epoch) != set(ACCEPTANCE_IDENTITY_FIELDS)
+        or any(
+            observed_identity_epoch.get(field) != expected_epoch.get(field)
+            for field in ACCEPTANCE_IDENTITY_FIELDS
+        )
+    ):
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            triggers=("identity_field_change",),
+            refusal_reasons=("observed_identity_epoch_mismatch",),
+        )
+    prospective = artifact["prospective_rederivation"]
+    if (
+        prospective.get("protocol_sha256") != protocol_sha256(PROTOCOL_ID)
+        or prospective.get("estimator_code_sha256")
+        != _current_estimator_code_sha256()
+    ):
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            triggers=("protocol_or_estimator_byte_change",),
+            refusal_reasons=("protocol_or_estimator_bytes_changed",),
+        )
+    grouped_result = _group_probe_observations(
+        _probe_observation_universe(ledger_snapshot)
+    )
+    if grouped_result is None:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=("conflicting_content_classification_or_bytes",),
+        )
+    grouped, noncontent = grouped_result
+    prior_ids = _artifact_prior_content_ids(artifact)
+    new_ids = sorted(set(grouped) - prior_ids)
+    new_observations = [grouped[content_id][0] for content_id in new_ids]
+    new_noncontent = [
+        observation
+        for observation in noncontent
+        if observation.sequence > cutoff["sequence"]
+    ]
+    if new_noncontent or any(
+        observation.classification_disposition
+        not in {"valid", "systematic-invalid", "ordinary-invalid"}
+        for observation in new_observations
+    ):
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            new_content_ids=new_ids,
+            refusal_reasons=("unresolved_or_unclassifiable_observation",),
+        )
+    if verify_custody and any(
+        not _observation_custody_authentic(observation)
+        for observation in new_observations
+    ):
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            new_content_ids=new_ids,
+            refusal_reasons=("new_observation_custody_or_physics_invalid",),
+        )
+    preflight = _decimal(
+        artifact["decimal_derivation"]["ratified_operatives"][
+            "preflight_level_screen_s"
+        ]
+    )
+    if preflight is None:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=("active_preflight_screen_invalid",),
+        )
+    systematic = [
+        observation
+        for observation in new_observations
+        if dict(observation.identity_epoch) == dict(expected_epoch)
+        and (
+            observation.classification_disposition == "systematic-invalid"
+            or observation.classification_disposition == "valid"
+            and (
+                (bound := _decimal(observation.exact_bound_lexeme_s)) is None
+                or bound > preflight
+            )
+        )
+    ]
+    if systematic:
+        return _probe_result(
+            outcome="systematic_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            new_content_ids=new_ids,
+            triggers=("new_systematic_failure_challenges_preflight_screen",),
+            refusal_reasons=(SUCCESSOR_SYSTEMATIC_POLICY,),
+        )
+    corpus_values = _artifact_corpus_values(artifact)
+    if not corpus_values:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=("active_derivation_corpus_invalid",),
+        )
+    new_valid_same_epoch = [
+        observation
+        for observation in new_observations
+        if observation.classification_disposition == "valid"
+        and dict(observation.identity_epoch) == dict(expected_epoch)
+    ]
+    triggers: list[str] = []
+    if any(
+        (bound := _decimal(observation.exact_bound_lexeme_s)) is not None
+        and (bound < min(corpus_values) or bound > max(corpus_values))
+        for observation in new_valid_same_epoch
+    ):
+        triggers.append("new_valid_same_identity_capture_expands_observed_range")
+    total_valid_same_epoch = sum(
+        aliases[0].classification_disposition == "valid"
+        and dict(aliases[0].identity_epoch) == dict(expected_epoch)
+        for aliases in grouped.values()
+    )
+    if total_valid_same_epoch >= _artifact_count_boundary(artifact):
+        triggers.append("content_distinct_valid_same_epoch_count_boundary")
+    outcome = "successor_required" if triggers else "accepted_under_active_artifact"
+    return _probe_result(
+        outcome=outcome,
+        active=active,
+        artifact=artifact,
+        snapshot=ledger_snapshot,
+        observed_identity_epoch=observed_identity_epoch,
+        new_content_ids=new_ids,
+        triggers=triggers,
     )
 
 
@@ -963,6 +2378,38 @@ def discover_calibration_candidates(
     return tuple(candidates)
 
 
+def _governed_unused_slot_rows(
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    cutoff_sequence: int,
+) -> list[dict[str, Any]] | None:
+    receipts_by_session: dict[str, list[Mapping[str, Any]]] = {}
+    for receipt in ledger_snapshot.receipts[:cutoff_sequence]:
+        session_id = receipt.get("session_id")
+        if isinstance(session_id, str):
+            receipts_by_session.setdefault(session_id, []).append(receipt)
+    rows: list[dict[str, Any]] = []
+    for session in ledger_snapshot.bracket_sessions:
+        if session.state != "aborted" or session.capability_sequence > cutoff_sequence:
+            continue
+        receipts = receipts_by_session.get(session.session_id, [])
+        opened = [row for row in receipts if row.get("event") == "bracket-session-open"]
+        aborted = [row for row in receipts if row.get("event") == "bracket-session-abort"]
+        if len(opened) != 1 or len(aborted) != 1:
+            return None
+        for slot in aborted[0]["unused_slots"]:
+            reservation = opened[0]["slots"][slot]
+            rows.append(
+                {
+                    "attempt_id": reservation["attempt_id"],
+                    "closure_sequence": aborted[0]["sequence"],
+                    "receipt_digest": aborted[0]["receipt_digest"],
+                    "disposition": "governed-unused-slot",
+                    "custody_locator": reservation["custody_locator"],
+                }
+            )
+    return sorted(rows, key=lambda row: (row["closure_sequence"], row["attempt_id"]))
+
+
 def _prior_set_matches_import_cutoff_prefix(
     artifact: Mapping[str, Any],
     ledger_snapshot: CalibrationLedgerSnapshot,
@@ -975,6 +2422,58 @@ def _prior_set_matches_import_cutoff_prefix(
         for observation in ledger_snapshot.observations
         if observation.sequence <= cutoff["sequence"]
     )
+    if artifact.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA:
+        grouped_result = _group_probe_observations(prefix)
+        if grouped_result is None:
+            return False
+        grouped, noncontent = grouped_result
+        catalog = artifact["prior_observation_set"]["epoch_catalog"]
+        rows = artifact["prior_observation_set"]["observations"]
+        expected_ids = [row["content_id"] for row in rows]
+        if expected_ids != sorted(grouped):
+            return False
+        for row in rows:
+            aliases = grouped[row["content_id"]]
+            epoch_ids = [
+                epoch_id
+                for epoch_id, epoch in catalog.items()
+                if dict(epoch) == dict(aliases[0].identity_epoch)
+            ]
+            expected_attempts = [
+                {
+                    "attempt_id": alias.attempt_id,
+                    "finalization_sequence": alias.sequence,
+                    "receipt_digest": alias.receipt_digest,
+                    "observation_kind": alias.observation_kind,
+                    "custody_locator": alias.custody_locator,
+                    "exact_bound_lexeme_s": alias.exact_bound_lexeme_s,
+                    "manifest_sha256": alias.artifact_sha256.get("manifest.json"),
+                    "instrument_evidence_sha256": alias.artifact_sha256.get(
+                        "instrument_evidence.json"
+                    ),
+                }
+                for alias in aliases
+            ]
+            if (
+                len(epoch_ids) != 1
+                or row["epoch_id"] != epoch_ids[0]
+                or row["disposition"]
+                != aliases[0].classification_disposition
+                or row["representative_attempt_id"] != aliases[0].attempt_id
+                or row["attempts"] != expected_attempts
+            ):
+                return False
+        if noncontent:
+            return False
+        expected_noncontent = _governed_unused_slot_rows(
+            ledger_snapshot, cutoff["sequence"]
+        )
+        if expected_noncontent is None:
+            return False
+        return (
+            artifact["prior_observation_set"]["noncontent_attempts"]
+            == expected_noncontent
+        )
     # The checked-in schema fixture predates issuance and deliberately has a
     # genesis cutoff. Production issuance, or any fixture containing imported
     # prefix rows, must satisfy the exact marker-bound comparison below.
@@ -1394,8 +2893,12 @@ def evaluate_calibration_bracket(
         if observation.disposition == "valid"
         and dict(observation.identity_epoch) == dict(identity_epoch)
     ]
-    if len(valid_same_epoch) >= 38:
-        observed_triggers.append("corpus_doubles_from_19_to_38")
+    if len(valid_same_epoch) >= _artifact_count_boundary(artifact):
+        observed_triggers.append(
+            "content_distinct_valid_same_epoch_count_boundary"
+            if artifact.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA
+            else "corpus_doubles_from_19_to_38"
+        )
     corpus_values = [
         Decimal(member["b_fiducial_s"]) for member in corpus_members
     ]
@@ -1541,6 +3044,7 @@ def evaluate_calibration_bracket(
         in {
             "protocol_or_estimator_byte_change",
             "corpus_doubles_from_19_to_38",
+            "content_distinct_valid_same_epoch_count_boundary",
             "new_valid_same_identity_capture_expands_observed_range",
             "new_systematic_failure_challenges_preflight_screen",
         }
@@ -1708,14 +3212,21 @@ def calibration_bracket_for_bundles(
 __all__ = [
     "ACCEPTANCE_BOUND_SCHEMA",
     "ACCEPTANCE_EVALUATION_SCHEMA",
+    "ACCEPTANCE_REGISTRY_SCHEMA",
+    "ACCEPTANCE_SUCCESSOR_SCHEMA",
+    "ACCEPTANCE_TRIGGER_PROBE_SCHEMA",
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
     "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
+    "decimal_student_t_quantile",
+    "derive_successor_decimal_derivation",
     "discover_calibration_candidates",
     "evaluate_calibration_bracket",
     "load_calibration_acceptance_bound",
+    "load_calibration_acceptance_registry",
     "load_calibration_candidate",
+    "probe_calibration_acceptance_trigger",
     "validate_calibration_bracket_binding",
 ]
