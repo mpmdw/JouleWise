@@ -42,3 +42,24 @@ U1/U3 in flight cover L5 and part of the mint surface. U2 covers L4's
 trigger probe. R6 (absolute-paths) + R5 (monotonic time) + lock
 staleness need either a small hardening unit (U1.5) or explicit
 operator-procedure mitigations — decide when lens 3 lands.
+
+## Lens 3 — extraction/mint (AUDIT-MINT.md; landed after first commit)
+
+- Allowance arithmetic CLEAN (Decimal A_s once; component+allowance;
+  max-not-sum; armwise max at claims) — no defect in inspected path.
+- Confirms U3 scope: multi-cell/multi-plan minting, prefill metric,
+  pinset-to-claims handoff, membership validation all missing for the
+  D-117 morning chain. Exact required pinset fields documented in the
+  report (feed into U3's review as the ground-truth checklist).
+- Pinset `drift_allowance_j` (energy trajectory) ≠ D-102 `A_s` (timing)
+  — keep the distinction in U3's schema docs.
+
+## Paper-vs-code fidelity (AUDIT-PAPER-FIDELITY.md)
+
+Queue for the paper diff gate (B-tier accuracy fixes before advisor
+review): B1 "trapezoidal integration" → interval-average integration as
+implemented; B2 publish the exact operative bracket formula; B3 narrow
+the cryptographic-custody claim to what binds; quarantine is an
+OPERATOR action validated by the recorder, not automatic; disclose (or
+close) drift-evidence-in-verdict-hash scope; explain the policy JSON
+`0.01` vs executable `0.010818` screen.
