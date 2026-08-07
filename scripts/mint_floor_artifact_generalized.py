@@ -11,6 +11,7 @@ whose exact file bytes must match a separately supplied SHA-256.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib.util
 import inspect
@@ -21,6 +22,7 @@ import re
 import stat
 import sys
 from dataclasses import dataclass, replace
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
@@ -38,9 +40,23 @@ from joulewise.whole_window import (  # noqa: E402
 
 
 PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
+PINSET_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pinset.v2"
+PIN_REQUIREMENTS_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pin_requirements.v2"
+V2_MINT_TOOL_VERSION = "joulewise.floor_mint.generalized.v2"
+V2_ALLOWANCE_RULE = "max(observed_drift_s,0.010818)"
+V2_BRACKET_SCREEN_S = "0.010818"
+V2_CELL_COMPOSITION_RULE = "componentwise_max_never_sum.v1"
+V2_CONSUMER_FLOOR_RULE = "cross_stack_armwise_max.v1"
+V2_EXTRACTION_POSTCOLLECTION_SCHEMA = (
+    "joulewise.floor_mint_extraction_postcollection.v2"
+)
+V2_BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
+RETIRED_OPERATIVE_FLOOR_LITERAL = "7.377086"
 _ORIGINAL_MINT_PATH = Path(__file__).with_name("mint_floor_artifact.py")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _SIX_DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)\.[0-9]{6}$")
+_SIX_DECIMAL_QUANTUM = Decimal("0.000001")
 _EVIDENCE_ROOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _SEMANTICS_IDS = {
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -157,6 +173,7 @@ class ComponentPins:
     expected_n: int
     drift_allowance_j: float
     order_manifest_id: str
+    consumption_semantics_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,11 +187,45 @@ class MintPinset:
 
 
 @dataclass(frozen=True)
+class V2Pinset:
+    """A closed final-stage v2 pinset.
+
+    ``value`` retains the authenticated JSON shape so producer and aggregate
+    hashes can be checked over the exact governed projections.  Desk-stage
+    requirements use a disjoint schema version and are never represented by
+    this type.
+    """
+
+    value: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
 class ComponentInputs:
     evidence_root: Path
     report_path: Path
     spec_path: Path
     order_manifest_path: Path
+
+
+@dataclass(frozen=True)
+class V2CellComponents:
+    absolute: Any
+    comparative: Any
+    allowed_consumer_condition_families: tuple[Mapping[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class V2ProducerInputs:
+    plan: Mapping[str, Any]
+    cells: Mapping[str, V2CellComponents]
+    evidence_root: Path
+    plan_sha256: str
+    plan_declared_sha256: str
+    plan_sidecar_sha256: str
+    calibration_acceptance: Mapping[str, Any]
+    calibration_acceptance_sha256: str
+    bracket_binding: Mapping[str, Any]
+    bracket_binding_sha256: str
 
 
 def _object(
@@ -277,6 +328,644 @@ def _component_pins(value: object, label: str) -> ComponentPins:
             row["order_manifest_id"], f"{label}.order_manifest_id"
         ),
     )
+
+
+def _decimal_text(value: object, label: str) -> Decimal:
+    text = _string(value, label)
+    if _DECIMAL_RE.fullmatch(text) is None:
+        raise MintError(f"{label} must be a plain unsigned decimal string")
+    try:
+        parsed = Decimal(text)
+    except InvalidOperation as exc:
+        raise MintError(f"{label} must be an exact decimal string") from exc
+    if not parsed.is_finite() or parsed < 0:
+        raise MintError(f"{label} must be a finite nonnegative decimal string")
+    return parsed
+
+
+def _six_decimal(value: object, label: str) -> str:
+    if not isinstance(value, str) or _SIX_DECIMAL_RE.fullmatch(value) is None:
+        raise MintError(f"{label} must be a nonnegative six-decimal literal")
+    if value == RETIRED_OPERATIVE_FLOOR_LITERAL:
+        raise MintError(
+            f"{label} reuses retired literal {RETIRED_OPERATIVE_FLOOR_LITERAL}"
+        )
+    return value
+
+
+def _verify_six_decimal_rendering(
+    full_precision: object,
+    six_decimal: object,
+    *,
+    label: str,
+) -> None:
+    """Verify Decimal ``.6f`` semantics without rendering a mint literal."""
+
+    full = _decimal_text(full_precision, f"{label}.full_precision")
+    literal = _six_decimal(six_decimal, f"{label}.six_decimal")
+    with localcontext() as context:
+        context.prec = max(80, len(full.as_tuple().digits) + 7)
+        rounded = full.quantize(
+            _SIX_DECIMAL_QUANTUM,
+            rounding=ROUND_HALF_EVEN,
+        )
+    if Decimal(literal) != rounded:
+        raise MintError(
+            f"{label}.six_decimal must equal the .6f rendering of "
+            f"{label}.full_precision"
+        )
+
+
+def _member_pins(value: object, label: str) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, list) or not value:
+        raise MintError(f"{label} must be a nonempty array")
+    result: list[tuple[str, str]] = []
+    for index, item in enumerate(value):
+        row_label = f"{label}[{index}]"
+        row = _object(item, row_label, {"bundle_id", "config_sha256"})
+        result.append(
+            (
+                _string(row["bundle_id"], f"{row_label}.bundle_id"),
+                _sha256(row["config_sha256"], f"{row_label}.config_sha256"),
+            )
+        )
+    bundle_ids = [bundle_id for bundle_id, _digest in result]
+    if len(bundle_ids) != len(set(bundle_ids)):
+        raise MintError(f"{label} bundle_id values must be unique")
+    return tuple(result)
+
+
+def _consumer_family_pins(value: object, label: str) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, list) or not value:
+        raise MintError(f"{label} must be a nonempty array")
+    result = []
+    for index, item in enumerate(value):
+        row_label = f"{label}[{index}]"
+        row = _object(
+            item,
+            row_label,
+            {"condition_family_id", "condition_family_sha256"},
+        )
+        result.append(
+            (
+                _string(
+                    row["condition_family_id"],
+                    f"{row_label}.condition_family_id",
+                ),
+                _sha256(
+                    row["condition_family_sha256"],
+                    f"{row_label}.condition_family_sha256",
+                ),
+            )
+        )
+    if len(result) != len(set(result)):
+        raise MintError(f"{label} entries must be unique")
+    return tuple(result)
+
+
+def _parse_v2_component(value: object, label: str) -> ComponentPins:
+    row = _object(
+        value,
+        label,
+        {
+            "evidence_root_id",
+            "calibration_cell_id",
+            "evaluation_basis_sha256",
+            "evaluation_basis_members",
+            "extraction_spec_sha256",
+            "extraction_spec_members",
+            "expected_n",
+            "drift_allowance_j",
+            "order_manifest_id",
+            "order_manifest_sha256",
+            "consumption_semantics_id",
+            "members",
+        },
+    )
+    members = _member_pins(row["members"], f"{label}.members")
+    extraction_count = _positive_int(
+        row["extraction_spec_members"], f"{label}.extraction_spec_members"
+    )
+    # Parse the additional hashes even though the v1-compatible core consumes
+    # only the ComponentPins projection.  The v2 gate authenticates them
+    # against the supplied component evidence before construction.
+    _sha256(row["extraction_spec_sha256"], f"{label}.extraction_spec_sha256")
+    _sha256(row["order_manifest_sha256"], f"{label}.order_manifest_sha256")
+    return ComponentPins(
+        evidence_root_id=_evidence_root_id(
+            row["evidence_root_id"], f"{label}.evidence_root_id"
+        ),
+        calibration_cell_id=_string(
+            row["calibration_cell_id"], f"{label}.calibration_cell_id"
+        ),
+        evaluation_basis_sha256=_sha256(
+            row["evaluation_basis_sha256"],
+            f"{label}.evaluation_basis_sha256",
+        ),
+        evaluation_basis_members=_positive_int(
+            row["evaluation_basis_members"],
+            f"{label}.evaluation_basis_members",
+        ),
+        extraction_spec_members=extraction_count,
+        expected_n=_positive_int(row["expected_n"], f"{label}.expected_n"),
+        drift_allowance_j=_nonnegative_number(
+            row["drift_allowance_j"], f"{label}.drift_allowance_j"
+        ),
+        order_manifest_id=_string(
+            row["order_manifest_id"], f"{label}.order_manifest_id"
+        ),
+        consumption_semantics_id=_semantics_id(
+            row["consumption_semantics_id"],
+            f"{label}.consumption_semantics_id",
+        ),
+    )
+
+
+def _semantics_id(value: object, label: str) -> str:
+    text = _string(value, label)
+    if text not in _SEMANTICS_IDS:
+        raise MintError(f"{label} must be a registered consumption semantics id")
+    return text
+
+
+def _parse_v2_postcollection(value: object, label: str) -> None:
+    row = _object(
+        value,
+        label,
+        {
+            "absolute_evaluation_basis_sha256",
+            "absolute_evaluation_basis_members",
+            "comparative_evaluation_basis_sha256",
+            "comparative_evaluation_basis_members",
+            "pre_receipt_sha256",
+            "pre_content_sha256",
+            "post_receipt_sha256",
+            "post_content_sha256",
+            "bracket_binding_sha256",
+            "terminal_ledger_head_sha256",
+            "observed_drift_s",
+            "allowance_rule",
+            "bracket_screen_s",
+            "applied_allowance_s",
+            "allowance_embedding_count",
+            "extraction_report_sha256",
+            "absolute_floor_full_precision",
+            "comparative_floor_full_precision",
+            "operative_floor_full_precision",
+            "absolute_floor_six_decimal",
+            "comparative_floor_six_decimal",
+            "operative_floor_six_decimal",
+        },
+    )
+    for name in (
+        "absolute_evaluation_basis_sha256",
+        "comparative_evaluation_basis_sha256",
+        "pre_receipt_sha256",
+        "pre_content_sha256",
+        "post_receipt_sha256",
+        "post_content_sha256",
+        "bracket_binding_sha256",
+        "terminal_ledger_head_sha256",
+        "extraction_report_sha256",
+    ):
+        _sha256(row[name], f"{label}.{name}")
+    _positive_int(
+        row["absolute_evaluation_basis_members"],
+        f"{label}.absolute_evaluation_basis_members",
+    )
+    _positive_int(
+        row["comparative_evaluation_basis_members"],
+        f"{label}.comparative_evaluation_basis_members",
+    )
+    if row["allowance_rule"] != V2_ALLOWANCE_RULE:
+        raise MintError(
+            f"{label}.allowance_rule must equal {V2_ALLOWANCE_RULE!r}"
+        )
+    if row["bracket_screen_s"] != V2_BRACKET_SCREEN_S:
+        raise MintError(
+            f"{label}.bracket_screen_s must equal {V2_BRACKET_SCREEN_S!r}"
+        )
+    if (
+        isinstance(row["allowance_embedding_count"], bool)
+        or not isinstance(row["allowance_embedding_count"], int)
+        or row["allowance_embedding_count"] != 1
+    ):
+        raise MintError(
+            f"{label}.allowance_embedding_count must equal 1 (once per cell)"
+        )
+    observed = _decimal_text(row["observed_drift_s"], f"{label}.observed_drift_s")
+    applied = _decimal_text(
+        row["applied_allowance_s"], f"{label}.applied_allowance_s"
+    )
+    if applied != max(observed, Decimal(V2_BRACKET_SCREEN_S)):
+        raise MintError(
+            f"{label}.applied_allowance_s does not apply the never-zero rule once"
+        )
+    absolute_full = _decimal_text(
+        row["absolute_floor_full_precision"],
+        f"{label}.absolute_floor_full_precision",
+    )
+    comparative_full = _decimal_text(
+        row["comparative_floor_full_precision"],
+        f"{label}.comparative_floor_full_precision",
+    )
+    operative_full = _decimal_text(
+        row["operative_floor_full_precision"],
+        f"{label}.operative_floor_full_precision",
+    )
+    for name in (
+        "absolute_floor_six_decimal",
+        "comparative_floor_six_decimal",
+        "operative_floor_six_decimal",
+    ):
+        _six_decimal(row[name], f"{label}.{name}")
+    for component_name in ("absolute", "comparative", "operative"):
+        _verify_six_decimal_rendering(
+            row[f"{component_name}_floor_full_precision"],
+            row[f"{component_name}_floor_six_decimal"],
+            label=f"{label}.{component_name}_floor",
+        )
+    if operative_full != max(absolute_full, comparative_full):
+        raise MintError(
+            f"{label}.operative_floor_full_precision must equal the armwise maximum, never a sum"
+        )
+
+
+def _parse_v2_pinset(value: object) -> V2Pinset:
+    root = _object(
+        value,
+        "pinset",
+        {"schema_version", "mint_tool_version", "producer_plans", "aggregate"},
+    )
+    if root["schema_version"] != PINSET_SCHEMA_VERSION_V2:
+        raise MintError(
+            f"pinset.schema_version must equal {PINSET_SCHEMA_VERSION_V2!r}"
+        )
+    if root["mint_tool_version"] != V2_MINT_TOOL_VERSION:
+        raise MintError(
+            f"pinset.mint_tool_version must equal {V2_MINT_TOOL_VERSION!r}"
+        )
+    producers = root["producer_plans"]
+    if not isinstance(producers, list) or len(producers) != 2:
+        raise MintError("pinset.producer_plans must contain exactly two plans")
+
+    plan_ids: list[str] = []
+    cell_ids: list[str] = []
+    group_ids: list[str] = []
+    cell_values: list[Mapping[str, Any]] = []
+    for producer_index, producer_value in enumerate(producers):
+        label = f"pinset.producer_plans[{producer_index}]"
+        producer = _object(
+            producer_value,
+            label,
+            {
+                "plan",
+                "evidence_root_id",
+                "component_artifact",
+                "model_runtime_config",
+                "extraction_spec",
+                "calibration_acceptance",
+                "cells",
+            },
+        )
+        plan = _object(
+            producer["plan"],
+            f"{label}.plan",
+            {
+                "plan_id",
+                "sha256",
+                "declared_sha256",
+                "sidecar_sha256",
+                "relative_path",
+                "declared_calibration_scope",
+                "artifact_calibration_scope",
+            },
+        )
+        plan_id = _string(plan["plan_id"], f"{label}.plan.plan_id")
+        plan_ids.append(plan_id)
+        for name in ("sha256", "declared_sha256", "sidecar_sha256"):
+            _sha256(plan[name], f"{label}.plan.{name}")
+        if plan["declared_sha256"] != plan["sha256"]:
+            raise MintError(
+                f"{label}.plan.declared_sha256 must equal the actual plan sha256"
+            )
+        _string(plan["relative_path"], f"{label}.plan.relative_path")
+        _string(
+            plan["declared_calibration_scope"],
+            f"{label}.plan.declared_calibration_scope",
+        )
+        if plan["artifact_calibration_scope"] != "production_window":
+            raise MintError(
+                f"{label}.plan.artifact_calibration_scope must equal 'production_window'"
+            )
+        evidence_root_id = _evidence_root_id(
+            producer["evidence_root_id"], f"{label}.evidence_root_id"
+        )
+        component_artifact = _object(
+            producer["component_artifact"],
+            f"{label}.component_artifact",
+            {"artifact_id", "sha256"},
+        )
+        _string(
+            component_artifact["artifact_id"],
+            f"{label}.component_artifact.artifact_id",
+        )
+        _sha256(
+            component_artifact["sha256"],
+            f"{label}.component_artifact.sha256",
+        )
+        runtime = _object(
+            producer["model_runtime_config"],
+            f"{label}.model_runtime_config",
+            {
+                "model_artifact_sha256",
+                "runtime_identity_sha256",
+                "config_set_sha256",
+            },
+        )
+        for name in runtime:
+            _sha256(runtime[name], f"{label}.model_runtime_config.{name}")
+        extraction = _object(
+            producer["extraction_spec"],
+            f"{label}.extraction_spec",
+            {"sha256", "member_count"},
+        )
+        _sha256(extraction["sha256"], f"{label}.extraction_spec.sha256")
+        _positive_int(
+            extraction["member_count"],
+            f"{label}.extraction_spec.member_count",
+        )
+        acceptance = _object(
+            producer["calibration_acceptance"],
+            f"{label}.calibration_acceptance",
+            {
+                "acceptance_id",
+                "artifact_sha256",
+                "derivation_sha256",
+                "derivation_rule_id",
+            },
+        )
+        _string(
+            acceptance["acceptance_id"],
+            f"{label}.calibration_acceptance.acceptance_id",
+        )
+        _sha256(
+            acceptance["artifact_sha256"],
+            f"{label}.calibration_acceptance.artifact_sha256",
+        )
+        _sha256(
+            acceptance["derivation_sha256"],
+            f"{label}.calibration_acceptance.derivation_sha256",
+        )
+        _string(
+            acceptance["derivation_rule_id"],
+            f"{label}.calibration_acceptance.derivation_rule_id",
+        )
+
+        cells = producer["cells"]
+        if not isinstance(cells, list) or len(cells) != 2:
+            raise MintError(f"{label}.cells must contain decode and prefill")
+        roles = []
+        component_member_universe: set[str] = set()
+        producer_custody_pins: list[tuple[object, ...]] = []
+        for cell_index, cell_value in enumerate(cells):
+            cell_label = f"{label}.cells[{cell_index}]"
+            cell = _object(
+                cell_value,
+                cell_label,
+                {
+                    "role",
+                    "cell_id",
+                    "transport_group_id",
+                    "condition_family_id",
+                    "condition_family_sha256",
+                    "metric",
+                    "window_class",
+                    "target_precheck_path",
+                    "allowed_consumer_condition_families",
+                    "absolute",
+                    "comparative",
+                    "postcollection",
+                },
+            )
+            role = _string(cell["role"], f"{cell_label}.role")
+            roles.append(role)
+            expected_metric = {
+                "decode": "phase_energy_j.decode",
+                "prefill": "phase_energy_j.prefill",
+            }.get(role)
+            if expected_metric is None:
+                raise MintError(f"{cell_label}.role must be decode or prefill")
+            if cell["metric"] != expected_metric:
+                raise MintError(
+                    f"{cell_label}.metric must equal {expected_metric!r}"
+                )
+            if cell["window_class"] != "phase":
+                raise MintError(f"{cell_label}.window_class must equal 'phase'")
+            if cell["target_precheck_path"] != ["phase", role]:
+                raise MintError(
+                    f"{cell_label}.target_precheck_path must equal ['phase', {role!r}]"
+                )
+            cell_id = _string(cell["cell_id"], f"{cell_label}.cell_id")
+            group_id = _string(
+                cell["transport_group_id"],
+                f"{cell_label}.transport_group_id",
+            )
+            cell_ids.append(cell_id)
+            group_ids.append(group_id)
+            cell_values.append(cell)
+            _string(
+                cell["condition_family_id"],
+                f"{cell_label}.condition_family_id",
+            )
+            _sha256(
+                cell["condition_family_sha256"],
+                f"{cell_label}.condition_family_sha256",
+            )
+            _consumer_family_pins(
+                cell["allowed_consumer_condition_families"],
+                f"{cell_label}.allowed_consumer_condition_families",
+            )
+            absolute = _parse_v2_component(cell["absolute"], f"{cell_label}.absolute")
+            comparative = _parse_v2_component(
+                cell["comparative"], f"{cell_label}.comparative"
+            )
+            if absolute.evidence_root_id != evidence_root_id or (
+                comparative.evidence_root_id != evidence_root_id
+            ):
+                raise MintError(
+                    f"{cell_label}: component evidence_root_id must equal the producer root"
+                )
+            for component_name in ("absolute", "comparative"):
+                component = cell[component_name]
+                if (
+                    component["extraction_spec_sha256"] != extraction["sha256"]
+                    or component["extraction_spec_members"]
+                    != extraction["member_count"]
+                ):
+                    raise MintError(
+                        f"{cell_label}.{component_name}: extraction-spec inventory "
+                        "must equal the producer pins"
+                    )
+            _parse_v2_postcollection(
+                cell["postcollection"], f"{cell_label}.postcollection"
+            )
+            post = cell["postcollection"]
+            producer_custody_pins.append(
+                tuple(
+                    post[name]
+                    for name in (
+                        "pre_receipt_sha256",
+                        "pre_content_sha256",
+                        "post_receipt_sha256",
+                        "post_content_sha256",
+                        "bracket_binding_sha256",
+                        "terminal_ledger_head_sha256",
+                        "observed_drift_s",
+                        "applied_allowance_s",
+                        "extraction_report_sha256",
+                    )
+                )
+            )
+            if (
+                post["absolute_evaluation_basis_sha256"]
+                != absolute.evaluation_basis_sha256
+                or post["absolute_evaluation_basis_members"]
+                != absolute.evaluation_basis_members
+                or post["comparative_evaluation_basis_sha256"]
+                != comparative.evaluation_basis_sha256
+                or post["comparative_evaluation_basis_members"]
+                != comparative.evaluation_basis_members
+            ):
+                raise MintError(
+                    f"{cell_label}.postcollection evaluation basis disagrees with component pins"
+                )
+            component_member_universe.update(
+                bundle_id for bundle_id, _digest in _member_pins(
+                    cell["absolute"]["members"], f"{cell_label}.absolute.members"
+                )
+            )
+            component_member_universe.update(
+                bundle_id for bundle_id, _digest in _member_pins(
+                    cell["comparative"]["members"],
+                    f"{cell_label}.comparative.members",
+                )
+            )
+        if set(roles) != {"decode", "prefill"} or len(roles) != len(set(roles)):
+            raise MintError(f"{label}.cells must contain one decode and one prefill role")
+        if len(set(producer_custody_pins)) != 1:
+            raise MintError(
+                f"{label}.cells must share one authenticated producer custody record"
+            )
+        if len(component_member_universe) != extraction["member_count"]:
+            raise MintError(
+                f"{label}.extraction_spec.member_count must equal the unique pinned member count"
+            )
+
+    if len(plan_ids) != len(set(plan_ids)):
+        raise MintError("pinset producer plan ids must be unique")
+    if len(cell_ids) != 4 or len(cell_ids) != len(set(cell_ids)):
+        raise MintError("pinset must define exactly four unique cell ids")
+    if len(group_ids) != 4 or len(group_ids) != len(set(group_ids)):
+        raise MintError("pinset must define exactly four unique transport groups")
+
+    aggregate = _object(
+        root["aggregate"],
+        "pinset.aggregate",
+        {
+            "artifact_id",
+            "plan_set_id",
+            "producer_set_sha256",
+            "calibration_scope",
+            "source_class",
+            "cell_composition_rule",
+            "consumer_floor_rule",
+            "component_artifacts",
+            "cell_ids",
+            "transport_allowlists",
+        },
+    )
+    _string(aggregate["artifact_id"], "pinset.aggregate.artifact_id")
+    _string(aggregate["plan_set_id"], "pinset.aggregate.plan_set_id")
+    _sha256(
+        aggregate["producer_set_sha256"],
+        "pinset.aggregate.producer_set_sha256",
+    )
+    if aggregate["calibration_scope"] != "production_window":
+        raise MintError("pinset.aggregate.calibration_scope must equal 'production_window'")
+    if aggregate["source_class"] != "prospective":
+        raise MintError("pinset.aggregate.source_class must equal 'prospective'")
+    if aggregate["cell_composition_rule"] != V2_CELL_COMPOSITION_RULE:
+        raise MintError(
+            f"pinset.aggregate.cell_composition_rule must equal {V2_CELL_COMPOSITION_RULE!r}"
+        )
+    if aggregate["consumer_floor_rule"] != V2_CONSUMER_FLOOR_RULE:
+        raise MintError(
+            f"pinset.aggregate.consumer_floor_rule must equal {V2_CONSUMER_FLOOR_RULE!r}"
+        )
+    if aggregate["cell_ids"] != cell_ids:
+        raise MintError("pinset.aggregate.cell_ids must positionally equal producer cell ids")
+    component_artifacts = aggregate["component_artifacts"]
+    if not isinstance(component_artifacts, list) or len(component_artifacts) != 2:
+        raise MintError("pinset.aggregate.component_artifacts must contain two entries")
+    for index, entry_value in enumerate(component_artifacts):
+        entry_label = f"pinset.aggregate.component_artifacts[{index}]"
+        entry = _object(
+            entry_value,
+            entry_label,
+            {"plan_id", "artifact_id", "sha256", "producer_pin_sha256"},
+        )
+        _string(entry["plan_id"], f"{entry_label}.plan_id")
+        _string(entry["artifact_id"], f"{entry_label}.artifact_id")
+        _sha256(entry["sha256"], f"{entry_label}.sha256")
+        _sha256(
+            entry["producer_pin_sha256"],
+            f"{entry_label}.producer_pin_sha256",
+        )
+        producer = producers[index]
+        if entry["plan_id"] != producer["plan"]["plan_id"] or (
+            entry["artifact_id"] != producer["component_artifact"]["artifact_id"]
+            or entry["sha256"] != producer["component_artifact"]["sha256"]
+        ):
+            raise MintError(
+                f"{entry_label} does not match the corresponding producer component pins"
+            )
+    allowlists = aggregate["transport_allowlists"]
+    if not isinstance(allowlists, list) or len(allowlists) != 4:
+        raise MintError("pinset.aggregate.transport_allowlists must contain four entries")
+    for index, entry_value in enumerate(allowlists):
+        entry_label = f"pinset.aggregate.transport_allowlists[{index}]"
+        entry = _object(
+            entry_value,
+            entry_label,
+            {
+                "transport_group_id",
+                "cell_ids",
+                "allowed_consumer_condition_families",
+            },
+        )
+        if entry["transport_group_id"] != group_ids[index]:
+            raise MintError(f"{entry_label}.transport_group_id is out of order")
+        if entry["cell_ids"] != [cell_ids[index]]:
+            raise MintError(
+                f"{entry_label}.cell_ids must contain exactly its independently stack-scoped cell"
+            )
+        _consumer_family_pins(
+            entry["allowed_consumer_condition_families"],
+            f"{entry_label}.allowed_consumer_condition_families",
+        )
+        if _consumer_family_pins(
+            entry["allowed_consumer_condition_families"],
+            f"{entry_label}.allowed_consumer_condition_families",
+        ) != _consumer_family_pins(
+            cell_values[index]["allowed_consumer_condition_families"],
+            f"pinset cell {cell_ids[index]}.allowed_consumer_condition_families",
+        ):
+            raise MintError(
+                f"{entry_label}.allowed_consumer_condition_families "
+                "contradicts the component cell allowlist"
+            )
+    return V2Pinset(value=copy.deepcopy(dict(root)))
 
 
 def _parse_pinset(value: object) -> MintPinset:
@@ -426,8 +1115,8 @@ def _reject_nonfinite_json(value: str) -> None:
     raise MintError(f"pinset contains non-finite JSON number {value!r}")
 
 
-def load_pinset(path: Path, expected_sha256: str) -> MintPinset:
-    """Authenticate exact pinset bytes, then enforce the closed v1 schema."""
+def load_pinset(path: Path, expected_sha256: str) -> MintPinset | V2Pinset:
+    """Authenticate exact bytes, then enforce the disjoint final pinset schema."""
 
     expected = _sha256(expected_sha256, "pinset sha256 argument")
     path = Path(path)
@@ -456,7 +1145,19 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset:
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise MintError(f"pinset is not valid UTF-8 JSON: {exc}") from exc
+    schema_version = value.get("schema_version") if isinstance(value, Mapping) else None
+    if schema_version == PIN_REQUIREMENTS_SCHEMA_VERSION_V2:
+        raise MintError("desk-stage pin requirements are non-mintable")
+    if schema_version == PINSET_SCHEMA_VERSION_V2:
+        return _parse_v2_pinset(value)
     return _parse_pinset(value)
+
+
+def _load_v1_pinset(path: Path, expected_sha256: str) -> MintPinset:
+    pinset = load_pinset(path, expected_sha256)
+    if not isinstance(pinset, MintPinset):
+        raise MintError("v2 pinset requires the multi-cell mint entry point")
+    return pinset
 
 
 def _assert_core_interface(module: ModuleType) -> None:
@@ -670,7 +1371,7 @@ def pre_registration_gate(
 ) -> None:
     """Run the configured pre-registration gate without building an artifact."""
 
-    pinset = load_pinset(pinset_path, pinset_sha256)
+    pinset = _load_v1_pinset(pinset_path, pinset_sha256)
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -702,7 +1403,7 @@ def mint_authenticated_artifact(
 ) -> Mapping[str, Any]:
     """Gate and build from already-authenticated component fixtures/evidence."""
 
-    pinset = load_pinset(pinset_path, pinset_sha256)
+    pinset = _load_v1_pinset(pinset_path, pinset_sha256)
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -728,16 +1429,29 @@ def validate_floor_artifact(
     artifact: Mapping[str, Any],
     pinset_path: Path,
     pinset_sha256: str,
+    _skip_v2_hash_binding: bool = False,
 ) -> list[Any]:
-    """Validate an artifact against both schema v2 and its root-id pins."""
+    """Validate an artifact against its authenticated v1 or final-v2 pinset."""
 
     pinset = load_pinset(pinset_path, pinset_sha256)
-    core = _configured_core(
-        pinset,
-        pinset_path=pinset_path,
-        expected_pinset_sha256=pinset_sha256,
+    if isinstance(pinset, MintPinset):
+        core = _configured_core(
+            pinset,
+            pinset_path=pinset_path,
+            expected_pinset_sha256=pinset_sha256,
+        )
+        return core.validate_floor_artifact(artifact)
+    core = _fresh_original_core()
+    errors = list(
+        core.validate_floor_artifact(
+            artifact,
+            pinset_path=pinset_path,
+            expected_pinset_sha256=pinset_sha256,
+        )
     )
-    return core.validate_floor_artifact(artifact)
+    if not _skip_v2_hash_binding:
+        errors.extend(_validate_v2_artifact_binding(artifact, pinset))
+    return errors
 
 
 def mint_floor_artifact(
@@ -758,7 +1472,7 @@ def mint_floor_artifact(
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, bind, validate, and write one artifact."""
 
-    pinset = load_pinset(pinset_path, pinset_sha256)
+    pinset = _load_v1_pinset(pinset_path, pinset_sha256)
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -798,24 +1512,1794 @@ def mint_floor_artifact(
         raise MintError(str(exc)) from exc
 
 
+def _canonical_json_sha256(value: object) -> str:
+    try:
+        payload = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise MintError("v2 pin projection is not canonical JSON") from exc
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _artifact_payload(artifact: Mapping[str, Any]) -> bytes:
+    return (
+        json.dumps(artifact, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+
+
+def _artifact_sha256(artifact: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_artifact_payload(artifact)).hexdigest()
+
+
+def _v2_producer_hashes(pinset: V2Pinset) -> tuple[tuple[str, ...], str]:
+    producers = pinset.value["producer_plans"]
+    producer_hashes = tuple(_canonical_json_sha256(row) for row in producers)
+    producer_set_hash = _canonical_json_sha256(producers)
+    return producer_hashes, producer_set_hash
+
+
+def _validate_v2_pin_hashes(pinset: V2Pinset) -> None:
+    producer_hashes, producer_set_hash = _v2_producer_hashes(pinset)
+    aggregate = pinset.value["aggregate"]
+    for index, (observed, entry) in enumerate(
+        zip(producer_hashes, aggregate["component_artifacts"])
+    ):
+        if observed != entry["producer_pin_sha256"]:
+            raise MintError(
+                "aggregate/component hash mismatch: producer pin "
+                f"{index} expected {entry['producer_pin_sha256']}, observed {observed}"
+            )
+    if producer_set_hash != aggregate["producer_set_sha256"]:
+        raise MintError(
+            "aggregate hash mismatch: producer_set_sha256 expected "
+            f"{aggregate['producer_set_sha256']}, observed {producer_set_hash}"
+        )
+
+
+def _v2_component_pins(component: Mapping[str, Any], label: str) -> ComponentPins:
+    return _parse_v2_component(component, label)
+
+
+def _v2_mint_pinset(
+    producer: Mapping[str, Any],
+    cell: Mapping[str, Any],
+) -> MintPinset:
+    plan = producer["plan"]
+    post = cell["postcollection"]
+    return MintPinset(
+        mint_tool_version=V2_MINT_TOOL_VERSION,
+        plan=PlanPins(
+            plan_id=plan["plan_id"],
+            sha256=plan["sha256"],
+            declared_calibration_scope=plan["declared_calibration_scope"],
+            artifact_calibration_scope=plan["artifact_calibration_scope"],
+        ),
+        artifact=ArtifactPins(
+            cell_id=cell["cell_id"],
+            transport_group_id=cell["transport_group_id"],
+            source_class="prospective",
+        ),
+        cell=CellPins(
+            condition_family_id=cell["condition_family_id"],
+            condition_family_sha256=cell["condition_family_sha256"],
+            metric=cell["metric"],
+            window_class=cell["window_class"],
+            target_precheck_path=tuple(cell["target_precheck_path"]),
+            operative_floor_six_decimal=post["operative_floor_six_decimal"],
+        ),
+        absolute=_v2_component_pins(cell["absolute"], "v2.cell.absolute"),
+        comparative=_v2_component_pins(
+            cell["comparative"], "v2.cell.comparative"
+        ),
+    )
+
+
+def _v2_gate_component(
+    actual: Any,
+    pins: Mapping[str, Any],
+    *,
+    label: str,
+    metric: str,
+    window_class: str,
+) -> None:
+    if actual.evidence_root_id != pins["evidence_root_id"]:
+        raise MintError(f"{label}: evidence root id mismatch")
+    if actual.calibration_cell_id != pins["calibration_cell_id"]:
+        raise MintError(f"{label}: calibration cell id mismatch")
+    if actual.spec_sha256 != pins["extraction_spec_sha256"]:
+        raise MintError(f"{label}: extraction spec sha256 mismatch")
+    if actual.order_manifest_sha256 != pins["order_manifest_sha256"]:
+        raise MintError(f"{label}: order manifest sha256 mismatch")
+    if actual.spec_cell.get("metric") != metric or (
+        actual.spec_cell.get("window_class") != window_class
+    ):
+        raise MintError(f"{label}: wrong metric/phase precheck component")
+    if actual.whole_window_evaluation_basis_sha256 != pins[
+        "evaluation_basis_sha256"
+    ]:
+        raise MintError(f"{label}: evaluation basis sha256 mismatch")
+    if actual.evaluation_basis_member_count != pins["evaluation_basis_members"]:
+        raise MintError(f"{label}: evaluation basis member count mismatch")
+    if len(set(_v2_spec_member_ids(actual.spec))) != pins[
+        "extraction_spec_members"
+    ]:
+        raise MintError(f"{label}: extraction spec member count mismatch")
+    expected_member_count = (
+        pins["expected_n"]
+        if actual.kind == "absolute"
+        else 4 * pins["expected_n"]
+    )
+    if len(actual.members) != expected_member_count or actual.cell.get(
+        "floor", {}
+    ).get("n") != pins["expected_n"]:
+        raise MintError(f"{label}: expected n mismatch")
+    if actual.whole_window_drift_allowance.get("allowance_j") != pins[
+        "drift_allowance_j"
+    ]:
+        raise MintError(f"{label}: energy drift allowance mismatch")
+    if actual.order_manifest.get("manifest_id") != pins["order_manifest_id"]:
+        raise MintError(f"{label}: order manifest id mismatch")
+    if actual.consumption_semantics_id != pins["consumption_semantics_id"]:
+        raise MintError(f"{label}: consumption semantics mismatch")
+    observed_members = tuple(
+        (member.bundle_id, member.config_sha256) for member in actual.members
+    )
+    expected_members = _member_pins(pins["members"], f"{label}.members")
+    if observed_members != expected_members:
+        raise MintError(f"{label}: exact member/config pins mismatch")
+
+
+def _v2_spec_member_ids(spec: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return physical member ids across a potentially multi-metric spec."""
+
+    ids: list[str] = []
+    cells = spec.get("cells")
+    if not isinstance(cells, list):
+        return ()
+    for cell in cells:
+        if not isinstance(cell, Mapping):
+            continue
+        members = cell.get("members")
+        if isinstance(members, list):
+            ids.extend(
+                row["bundle_id"]
+                for row in members
+                if isinstance(row, Mapping)
+                and isinstance(row.get("bundle_id"), str)
+            )
+        blocks = cell.get("blocks")
+        if isinstance(blocks, list):
+            for block in blocks:
+                block_members = (
+                    block.get("members") if isinstance(block, Mapping) else None
+                )
+                if isinstance(block_members, Mapping):
+                    ids.extend(
+                        member
+                        for member in block_members.values()
+                        if isinstance(member, str)
+                    )
+    return tuple(ids)
+
+
+def _mapping_attribute(value: object, name: str) -> object:
+    if isinstance(value, Mapping):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _require_postcollection_evidence_equal(
+    field: str,
+    pinned: object,
+    evidenced: object,
+    *,
+    source: str,
+) -> None:
+    if pinned != evidenced:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {field} mismatch against {source}"
+        )
+
+
+def _v2_extraction_postcollection_record(
+    component: Any,
+    cell_id: str,
+    *,
+    label: str,
+) -> Mapping[str, Any]:
+    block = component.report.get("floor_mint_postcollection")
+    if not isinstance(block, Mapping) or set(block) != {
+        "schema_version",
+        "cells",
+    }:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} extraction report "
+            "has no closed floor_mint_postcollection record"
+        )
+    if block.get("schema_version") != V2_EXTRACTION_POSTCOLLECTION_SCHEMA:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} extraction report "
+            "postcollection schema mismatch"
+        )
+    cells = block.get("cells")
+    matches = (
+        [row for row in cells if isinstance(row, Mapping) and row.get("cell_id") == cell_id]
+        if isinstance(cells, list)
+        else []
+    )
+    if len(matches) != 1:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} extraction report "
+            f"must contain exactly one {cell_id!r} record"
+        )
+    row = _object(
+        matches[0],
+        f"{label}.floor_mint_postcollection[{cell_id}]",
+        {
+            "cell_id",
+            "observed_drift_s",
+            "applied_allowance_s",
+            "absolute_floor_full_precision",
+            "comparative_floor_full_precision",
+            "operative_floor_full_precision",
+            "absolute_floor_six_decimal",
+            "comparative_floor_six_decimal",
+            "operative_floor_six_decimal",
+        },
+    )
+    _string(row["cell_id"], f"{label}.cell_id")
+    _decimal_text(row["observed_drift_s"], f"{label}.observed_drift_s")
+    _decimal_text(row["applied_allowance_s"], f"{label}.applied_allowance_s")
+    for name in (
+        "absolute_floor_full_precision",
+        "comparative_floor_full_precision",
+        "operative_floor_full_precision",
+    ):
+        _decimal_text(row[name], f"{label}.{name}")
+    for name in (
+        "absolute_floor_six_decimal",
+        "comparative_floor_six_decimal",
+        "operative_floor_six_decimal",
+    ):
+        _six_decimal(row[name], f"{label}.{name}")
+    for component_name in ("absolute", "comparative", "operative"):
+        _verify_six_decimal_rendering(
+            row[f"{component_name}_floor_full_precision"],
+            row[f"{component_name}_floor_six_decimal"],
+            label=f"{label}.{component_name}_floor",
+        )
+    return row
+
+
+def _v2_authenticate_bracket_binding(
+    *,
+    producer: Mapping[str, Any],
+    inputs: V2ProducerInputs,
+    ledger_snapshot: Any,
+) -> tuple[Any, Any]:
+    label = f"producer {producer['plan']['plan_id']!r}"
+    binding = inputs.bracket_binding
+    if not isinstance(binding, Mapping) or set(binding) != {
+        "schema_version",
+        "ledger_schema",
+        "session_id",
+        "window_id",
+        "plan_id",
+        "plan_sha256",
+        "evidence_root_id",
+        "runs_root",
+        "capability_receipt_digest",
+        "terminal_head",
+        "endpoints",
+        "binding_digest",
+    }:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} bracket binding schema mismatch"
+        )
+    if binding.get("schema_version") != V2_BRACKET_BINDING_SCHEMA:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} bracket binding version mismatch"
+        )
+    if binding.get("ledger_schema") != "joulewise.calibration_observation_ledger.v1":
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} bracket ledger schema mismatch"
+        )
+    observed_binding_digest = _canonical_json_sha256(
+        {key: value for key, value in binding.items() if key != "binding_digest"}
+    )
+    if binding.get("binding_digest") != observed_binding_digest:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} binding digest mismatch"
+        )
+    for field, expected in (
+        ("plan_id", producer["plan"]["plan_id"]),
+        ("plan_sha256", producer["plan"]["sha256"]),
+        ("evidence_root_id", producer["evidence_root_id"]),
+        ("runs_root", str(inputs.evidence_root.resolve(strict=False))),
+    ):
+        if binding.get(field) != expected:
+            raise MintError(
+            f"postcollection_evidence_mismatch: {label} binding {field} mismatch"
+        )
+    for field in ("session_id", "window_id"):
+        if not isinstance(binding.get(field), str) or not binding[field]:
+            raise MintError(
+                f"postcollection_evidence_mismatch: {label} binding {field} mismatch"
+            )
+    _sha256(
+        binding.get("capability_receipt_digest"),
+        f"{label}.capability_receipt_digest",
+    )
+    _sha256(
+        inputs.bracket_binding_sha256,
+        f"{label}.bracket_binding_sha256",
+    )
+    if not bool(_mapping_attribute(ledger_snapshot, "valid")):
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} ledger snapshot is invalid"
+        )
+    if _mapping_attribute(ledger_snapshot, "ledger_schema") != binding[
+        "ledger_schema"
+    ]:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} ledger snapshot schema mismatch"
+        )
+    receipts = _mapping_attribute(ledger_snapshot, "receipts")
+    observations = _mapping_attribute(ledger_snapshot, "observations")
+    sessions = _mapping_attribute(ledger_snapshot, "bracket_session_by_id")
+    if not isinstance(receipts, tuple | list) or not isinstance(
+        observations, tuple | list
+    ):
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} ledger snapshot is incomplete"
+        )
+    session = (
+        sessions.get(binding["session_id"])
+        if isinstance(sessions, Mapping)
+        else None
+    )
+    if session is None:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} bracket session is absent"
+        )
+    for field, expected in (
+        ("state", "finalized"),
+        ("window_id", binding["window_id"]),
+        ("plan_id", binding["plan_id"]),
+        ("plan_sha256", binding["plan_sha256"]),
+        ("evidence_root_id", binding["evidence_root_id"]),
+        ("runs_root", binding["runs_root"]),
+        (
+            "capability_receipt_digest",
+            binding["capability_receipt_digest"],
+        ),
+    ):
+        if _mapping_attribute(session, field) != expected:
+            raise MintError(
+                f"postcollection_evidence_mismatch: {label} bracket session {field} mismatch"
+            )
+    finalized_slots = _mapping_attribute(session, "finalized_slots")
+    if not isinstance(finalized_slots, Mapping) or set(finalized_slots) != {
+        "pre",
+        "post",
+    }:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} finalized bracket slots mismatch"
+        )
+    receipt_digests = {
+        row.get("receipt_digest")
+        for row in receipts
+        if isinstance(row, Mapping) and _SHA256_RE.fullmatch(str(row.get("receipt_digest")))
+    }
+    if binding.get("capability_receipt_digest") not in receipt_digests:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} capability receipt is absent"
+        )
+    endpoints = binding.get("endpoints")
+    if not isinstance(endpoints, Mapping) or set(endpoints) != {"pre", "post"}:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} binding endpoints mismatch"
+        )
+    resolved = []
+    for role in ("pre", "post"):
+        endpoint = endpoints.get(role)
+        if not isinstance(endpoint, Mapping) or set(endpoint) != {
+            "attempt_id",
+            "receipt_digest",
+            "content_digest",
+        }:
+            raise MintError(
+                f"postcollection_evidence_mismatch: {label} {role} endpoint schema mismatch"
+            )
+        _sha256(endpoint.get("receipt_digest"), f"{label}.{role}.receipt_digest")
+        _sha256(endpoint.get("content_digest"), f"{label}.{role}.content_digest")
+        matches = [
+            observation
+            for observation in observations
+            if _mapping_attribute(observation, "attempt_id")
+            == endpoint.get("attempt_id")
+            and _mapping_attribute(observation, "receipt_digest")
+            == endpoint.get("receipt_digest")
+            and _mapping_attribute(observation, "content_id")
+            == endpoint.get("content_digest")
+        ]
+        if len(matches) != 1:
+            raise MintError(
+                f"postcollection_evidence_mismatch: {label} {role} receipt/content mismatch"
+            )
+        observation = matches[0]
+        finalized_observation = finalized_slots.get(role)
+        if any(
+            _mapping_attribute(finalized_observation, field)
+            != _mapping_attribute(observation, field)
+            for field in (
+                "sequence",
+                "attempt_id",
+                "receipt_digest",
+                "content_id",
+            )
+        ):
+            raise MintError(
+                f"postcollection_evidence_mismatch: {label} {role} finalized slot mismatch"
+            )
+        for field, expected in (
+            ("disposition", "valid"),
+            ("bracket_session_id", binding.get("session_id")),
+            ("bracket_slot", role),
+            ("bracket_window_id", binding.get("window_id")),
+            ("bracket_plan_id", producer["plan"]["plan_id"]),
+            ("bracket_plan_sha256", producer["plan"]["sha256"]),
+            ("bracket_evidence_root_id", producer["evidence_root_id"]),
+        ):
+            if _mapping_attribute(observation, field) != expected:
+                raise MintError(
+                    f"postcollection_evidence_mismatch: {label} {role} {field} mismatch"
+                )
+        resolved.append(observation)
+    terminal = binding.get("terminal_head")
+    post_sequence = _mapping_attribute(resolved[1], "sequence")
+    post_receipt = _mapping_attribute(resolved[1], "receipt_digest")
+    if (
+        not isinstance(terminal, Mapping)
+        or set(terminal) != {"sequence", "head_digest", "ledger_schema"}
+        or terminal.get("ledger_schema")
+        != "joulewise.calibration_observation_ledger.v1"
+        or isinstance(terminal.get("sequence"), bool)
+        or terminal.get("sequence") != post_sequence
+        or terminal.get("head_digest") != post_receipt
+        or not isinstance(post_sequence, int)
+        or post_sequence < 1
+        or post_sequence > len(receipts)
+        or not isinstance(receipts[post_sequence - 1], Mapping)
+        or receipts[post_sequence - 1].get("receipt_digest") != post_receipt
+    ):
+        raise MintError(
+            f"postcollection_evidence_mismatch: {label} terminal ledger head mismatch"
+        )
+    return resolved[0], resolved[1]
+
+
+def _v2_gate_producer_inventory(
+    producer: Mapping[str, Any],
+    inputs: V2ProducerInputs,
+) -> None:
+    plan = producer["plan"]
+    plan_id = plan["plan_id"]
+    if inputs.plan_sha256 != plan["sha256"]:
+        raise MintError(f"producer {plan_id!r}: calibration plan sha256 mismatch")
+    if inputs.plan_declared_sha256 != plan["declared_sha256"]:
+        raise MintError(f"producer {plan_id!r}: declared plan sha256 mismatch")
+    if inputs.plan_sidecar_sha256 != plan["sidecar_sha256"]:
+        raise MintError(f"producer {plan_id!r}: plan sidecar sha256 mismatch")
+    if inputs.plan.get("plan_id") != plan_id or inputs.plan.get(
+        "calibration_scope"
+    ) != plan["declared_calibration_scope"]:
+        raise MintError(f"producer {plan_id!r}: calibration plan identity mismatch")
+    acceptance = inputs.calibration_acceptance
+    acceptance_pins = producer["calibration_acceptance"]
+    if (
+        not isinstance(acceptance, Mapping)
+        or acceptance.get("acceptance_id") != acceptance_pins["acceptance_id"]
+        or inputs.calibration_acceptance_sha256
+        != acceptance_pins["artifact_sha256"]
+        or acceptance.get("derivation_sha256")
+        != acceptance_pins["derivation_sha256"]
+        or acceptance.get("schema_version")
+        != acceptance_pins["derivation_rule_id"]
+    ):
+        raise MintError(
+            f"producer {plan_id!r}: calibration acceptance evidence mismatch"
+        )
+    components = [
+        component
+        for cell in inputs.cells.values()
+        for component in (cell.absolute, cell.comparative)
+    ]
+    if not components:
+        raise MintError(f"producer {plan_id!r}: no authenticated components")
+    extraction_sha256s = {component.spec_sha256 for component in components}
+    if extraction_sha256s != {producer["extraction_spec"]["sha256"]}:
+        raise MintError(f"producer {plan_id!r}: extraction spec inventory mismatch")
+    unique_members = {
+        member.bundle_id for component in components for member in component.members
+    }
+    if len(unique_members) != producer["extraction_spec"]["member_count"]:
+        raise MintError(f"producer {plan_id!r}: extraction member inventory mismatch")
+    model_hashes = {
+        component.source_regime.get("stack_identity", {}).get(
+            "model_artifact_sha256"
+        )
+        for component in components
+    }
+    runtime_hashes = {
+        component.source_regime.get("stack_identity_sha256")
+        for component in components
+    }
+    config_hashes = {
+        component.scientific_config_identity_sha256 for component in components
+    }
+    runtime_pins = producer["model_runtime_config"]
+    if model_hashes != {runtime_pins["model_artifact_sha256"]}:
+        raise MintError(f"producer {plan_id!r}: model artifact inventory mismatch")
+    if runtime_hashes != {runtime_pins["runtime_identity_sha256"]}:
+        raise MintError(f"producer {plan_id!r}: runtime identity inventory mismatch")
+    if config_hashes != {runtime_pins["config_set_sha256"]}:
+        raise MintError(f"producer {plan_id!r}: config-set inventory mismatch")
+
+
+def _v2_gate_postcollection(
+    *,
+    producer: Mapping[str, Any],
+    cell_pins: Mapping[str, Any],
+    cell_inputs: V2CellComponents,
+    producer_inputs: V2ProducerInputs,
+    ledger_snapshot: Any,
+) -> None:
+    post = cell_pins["postcollection"]
+    pre, post_observation = _v2_authenticate_bracket_binding(
+        producer=producer,
+        inputs=producer_inputs,
+        ledger_snapshot=ledger_snapshot,
+    )
+    expected_binding_sha256 = post["bracket_binding_sha256"]
+    _require_postcollection_evidence_equal(
+        "bracket_binding_sha256",
+        expected_binding_sha256,
+        producer_inputs.bracket_binding_sha256,
+        source="supplied bracket-binding artifact bytes",
+    )
+    binding = producer_inputs.bracket_binding
+    endpoint_fields = {
+        "pre": ("pre_receipt_sha256", "pre_content_sha256"),
+        "post": ("post_receipt_sha256", "post_content_sha256"),
+    }
+    for role, observation in (("pre", pre), ("post", post_observation)):
+        receipt_field, content_field = endpoint_fields[role]
+        _require_postcollection_evidence_equal(
+            receipt_field,
+            post[receipt_field],
+            _mapping_attribute(observation, "receipt_digest"),
+            source=f"authenticated ledger {role} observation",
+        )
+        _require_postcollection_evidence_equal(
+            content_field,
+            post[content_field],
+            _mapping_attribute(observation, "content_id"),
+            source=f"authenticated ledger {role} observation",
+        )
+    _require_postcollection_evidence_equal(
+        "terminal_ledger_head_sha256",
+        post["terminal_ledger_head_sha256"],
+        binding["terminal_head"]["head_digest"],
+        source="authenticated bracket-binding terminal head",
+    )
+    try:
+        observed_drift = abs(
+            _decimal_text(
+                _mapping_attribute(pre, "exact_bound_lexeme_s"),
+                "ledger pre exact_bound_lexeme_s",
+            )
+            - _decimal_text(
+                _mapping_attribute(post_observation, "exact_bound_lexeme_s"),
+                "ledger post exact_bound_lexeme_s",
+            )
+        )
+    except (InvalidOperation, MintError) as exc:
+        raise MintError(
+            "postcollection_evidence_mismatch: ledger endpoint drift is not exact Decimal evidence"
+        ) from exc
+    _require_postcollection_evidence_equal(
+        "observed_drift_s",
+        _decimal_text(post["observed_drift_s"], "postcollection.observed_drift_s"),
+        observed_drift,
+        source="authenticated ledger endpoint bounds",
+    )
+    actual_components = (cell_inputs.absolute, cell_inputs.comparative)
+    for component in actual_components:
+        _require_postcollection_evidence_equal(
+            "extraction_report_sha256",
+            post["extraction_report_sha256"],
+            component.report_sha256,
+            source=f"supplied {component.kind} extraction-report artifact bytes",
+        )
+    records = [
+        _v2_extraction_postcollection_record(
+            component,
+            cell_pins["cell_id"],
+            label=f"{cell_pins['cell_id']}.{component.kind}",
+        )
+        for component in actual_components
+    ]
+    if records[0] != records[1]:
+        raise MintError(
+            "postcollection_evidence_mismatch: component extraction reports disagree"
+        )
+    report_record = records[0]
+    for name in (
+        "observed_drift_s",
+        "applied_allowance_s",
+        "absolute_floor_full_precision",
+        "comparative_floor_full_precision",
+        "operative_floor_full_precision",
+        "absolute_floor_six_decimal",
+        "comparative_floor_six_decimal",
+        "operative_floor_six_decimal",
+    ):
+        _require_postcollection_evidence_equal(
+            name,
+            post[name],
+            report_record[name],
+            source="authenticated extraction-report record",
+        )
+    actual_values = (
+        cell_inputs.absolute.cell.get("floor", {}).get(
+            "drift_widened_guarded_floor_j"
+        ),
+        cell_inputs.comparative.cell.get("floor", {}).get(
+            "drift_widened_guarded_floor_j"
+        ),
+    )
+    expected_values = (
+        _decimal_text(
+            post["absolute_floor_full_precision"],
+            "postcollection.absolute_floor_full_precision",
+        ),
+        _decimal_text(
+            post["comparative_floor_full_precision"],
+            "postcollection.comparative_floor_full_precision",
+        ),
+    )
+    for name, actual, expected in zip(
+        ("absolute", "comparative"), actual_values, expected_values
+    ):
+        if isinstance(actual, bool) or not isinstance(actual, int | float):
+            raise MintError(
+                f"postcollection_evidence_mismatch: {name} extraction value is not numeric"
+            )
+        if Decimal(str(actual)) != expected:
+            raise MintError(
+                f"postcollection_evidence_mismatch: {name} full-precision value mismatch"
+            )
+
+
+def _v2_allowed_families(
+    supplied: Sequence[Mapping[str, Any]],
+    pins: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+) -> list[Mapping[str, Any]]:
+    expected = [
+        (row["condition_family_id"], row["condition_family_sha256"])
+        for row in pins
+    ]
+    observed = []
+    normalized = []
+    from joulewise.detection_floor import (
+        CONDITION_FAMILY_DOMAIN,
+        canonical_domain_sha256,
+    )
+
+    for index, row in enumerate(supplied):
+        if not isinstance(row, Mapping):
+            raise MintError(f"{label}[{index}] must be an object")
+        definition = row.get("condition_family_definition")
+        family_id = row.get("condition_family_id")
+        family_sha256 = row.get("condition_family_sha256")
+        if not isinstance(definition, Mapping) or not isinstance(family_id, str):
+            raise MintError(f"{label}[{index}] is incomplete")
+        if canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition) != (
+            family_sha256
+        ):
+            raise MintError(f"{label}[{index}] condition-family hash mismatch")
+        observed.append((family_id, family_sha256))
+        normalized.append(dict(row))
+    if observed != expected:
+        raise MintError(f"{label} does not match the transport allowlist pins")
+    return normalized
+
+
+def _v2_pre_registration_gate(
+    *,
+    core: ModuleType,
+    producer: Mapping[str, Any],
+    cell_pins: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    absolute: Any,
+    comparative: Any,
+) -> Mapping[str, Any]:
+    plan_pins = producer["plan"]
+    if absolute.order_manifest.get("calibration_plan_sha256") != plan_pins[
+        "sha256"
+    ] or comparative.order_manifest.get("calibration_plan_sha256") != plan_pins[
+        "sha256"
+    ]:
+        raise MintError("v2 pre-registration gate: order-manifest plan sha mismatch")
+    if absolute.order_manifest.get("plan_id") != plan.get(
+        "plan_id"
+    ) or comparative.order_manifest.get("plan_id") != plan.get("plan_id"):
+        raise MintError("v2 pre-registration gate: order-manifest plan id mismatch")
+    absolute_binding = core._definition_binding(absolute)
+    comparative_bindings = comparative.spec_cell.get(
+        "condition_family_definitions"
+    )
+    if (
+        not isinstance(comparative_bindings, Mapping)
+        or comparative_bindings.get("A") != comparative_bindings.get("B")
+        or absolute_binding != comparative_bindings.get("A")
+        or absolute_binding.get("condition_family_id")
+        != cell_pins["condition_family_id"]
+        or absolute_binding.get("condition_family_sha256")
+        != cell_pins["condition_family_sha256"]
+        or absolute_binding.get("condition_family_definition", {}).get(
+            "abba_alias_relation"
+        )
+        != "A_equals_B"
+    ):
+        raise MintError(
+            "v2 pre-registration gate: components are not the pinned A==B null"
+        )
+    if not core._diagnostics_are_nonpublishing(
+        absolute.report
+    ) or not core._diagnostics_are_nonpublishing(comparative.report):
+        raise MintError(
+            "v2 pre-registration gate: diagnostic floor is marked as published"
+        )
+    if absolute.scientific_config_identity_sha256 != (
+        comparative.scientific_config_identity_sha256
+    ):
+        raise MintError(
+            "v2 pre-registration gate: scientific config identity mismatch"
+        )
+    if absolute.source_regime["stack_identity_sha256"] != (
+        comparative.source_regime["stack_identity_sha256"]
+    ):
+        raise MintError("v2 pre-registration gate: stack identity mismatch")
+    if absolute.backend != comparative.backend:
+        raise MintError("v2 pre-registration gate: telemetry backend mismatch")
+    return absolute_binding
+
+
+def _mint_v2_cell_artifact(
+    *,
+    core: ModuleType,
+    producer: Mapping[str, Any],
+    cell_pins: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    project_commit: str,
+    project_tree_state: str,
+    absolute: Any,
+    comparative: Any,
+) -> Mapping[str, Any]:
+    """Construct one v2 cell without invoking either v1 literal derivation."""
+
+    plan_pins = producer["plan"]
+    binding = _v2_pre_registration_gate(
+        core=core,
+        producer=producer,
+        cell_pins=cell_pins,
+        plan=plan,
+        absolute=absolute,
+        comparative=comparative,
+    )
+    relative_plan = core._safe_relative_posix(
+        plan_pins["relative_path"], "calibration_plan.relative_path"
+    )
+    absolute_estimate = core.absolute_false_effect_floor(
+        [member.metric_value_j for member in absolute.members],
+        admissible_half_widths_j=absolute.widths_j,
+    )
+    absolute_record = core.build_absolute_record(
+        absolute_estimate,
+        core._absolute_observations(absolute),
+        consumption_semantics_id=absolute.consumption_semantics_id,
+        whole_window_drift_allowance=absolute.whole_window_drift_allowance,
+    )
+    comparative_blocks, deltas = core._comparative_blocks(comparative)
+    comparative_estimate = core.comparative_false_effect_floor(
+        deltas,
+        admissible_half_widths_j=comparative.widths_j,
+    )
+    comparative_record = core.build_comparative_record(
+        comparative_estimate,
+        comparative_blocks,
+        consumption_semantics_id=comparative.consumption_semantics_id,
+        whole_window_drift_allowance=comparative.whole_window_drift_allowance,
+    )
+    definition = binding["condition_family_definition"]
+    if core.canonical_domain_sha256(
+        core.CONDITION_FAMILY_DOMAIN, definition
+    ) != cell_pins["condition_family_sha256"]:
+        raise MintError("condition-family definition hash changed after v2 gate")
+    cell = core.build_floor_cell(
+        cell_id=cell_pins["cell_id"],
+        key={
+            "backend": absolute.backend,
+            "metric": cell_pins["metric"],
+            "window_class": cell_pins["window_class"],
+            "condition_family_id": cell_pins["condition_family_id"],
+            "condition_family_definition": definition,
+            "condition_family_sha256": cell_pins["condition_family_sha256"],
+        },
+        eligibility={
+            "use_role": "primary_claim_gate",
+            "minimum_claim_n": cell_pins["absolute"]["expected_n"],
+            "status": "claim_ready",
+            "claim_usable": True,
+            "reason_codes": [],
+        },
+        absolute=absolute_record,
+        comparative=comparative_record,
+        transport_group_id=cell_pins["transport_group_id"],
+        provenance={
+            "absolute": core._component_provenance(absolute),
+            "comparative": core._component_provenance(comparative),
+        },
+    )
+    group = core.build_transport_group(
+        transport_group_id=cell_pins["transport_group_id"],
+        backend=absolute.backend,
+        metric=cell_pins["metric"],
+        window_class=cell_pins["window_class"],
+        stack_identity=cell["source_regime"]["stack_identity"],
+        source_cells=[cell],
+        allowed_consumer_condition_families=[
+            {
+                "condition_family_id": cell_pins["condition_family_id"],
+                "condition_family_definition": definition,
+                "condition_family_sha256": cell_pins[
+                    "condition_family_sha256"
+                ],
+            }
+        ],
+    )
+    artifact = core.build_floor_artifact(
+        artifact_id=producer["component_artifact"]["artifact_id"],
+        calibration_scope=plan_pins["artifact_calibration_scope"],
+        source_class="prospective",
+        provenance={
+            "calibration_plan": {
+                "plan_id": plan["plan_id"],
+                "declared_calibration_scope": plan_pins[
+                    "declared_calibration_scope"
+                ],
+                "relative_path": relative_plan,
+                "sha256": plan_pins["sha256"],
+            },
+            "mint_tool_version": V2_MINT_TOOL_VERSION,
+            "implementation": {
+                "project_commit": project_commit,
+                "project_tree_state": project_tree_state,
+                "python_package": "joulewise",
+            },
+        },
+        cells=[cell],
+        transport_groups=[group],
+    )
+    if artifact["cells"][0]["floor_gate_j"] != group["composed_floor_gate_j"]:
+        raise MintError("v2 post-construction transport headline mismatch")
+    errors = core.validate_floor_artifact(artifact)
+    if errors:
+        raise MintError(f"constructed v2 cell artifact is invalid: {errors[0]}")
+    core._assert_path_independent(artifact)
+    return artifact
+
+
+def _build_v2_artifacts(
+    *,
+    pinset: V2Pinset,
+    pinset_path: Path,
+    pinset_sha256: str,
+    producer_inputs: Mapping[str, V2ProducerInputs],
+    calibration_ledger_snapshot: Any,
+    project_commit: str,
+    project_tree_state: str,
+) -> tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]:
+    """Build the combined artifact and its two deterministic components.
+
+    This helper deliberately does not compare the supplied producer/component
+    hashes; it is the deterministic authoring primitive used to freeze those
+    hashes.  The public mint entry point performs every comparison before it
+    returns an artifact.
+    """
+
+    if re.fullmatch(r"[0-9a-f]{40}", project_commit) is None:
+        raise MintError("project_commit must be 40 lowercase hex chars")
+    if project_tree_state not in {"clean", "dirty"}:
+        raise MintError("project_tree_state must be 'clean' or 'dirty'")
+    component_artifacts: list[Mapping[str, Any]] = []
+    all_cells: list[Mapping[str, Any]] = []
+    all_groups: list[Mapping[str, Any]] = []
+    producer_plan_records: list[Mapping[str, Any]] = []
+
+    for producer_index, producer in enumerate(pinset.value["producer_plans"]):
+        plan_pins = producer["plan"]
+        plan_id = plan_pins["plan_id"]
+        inputs = producer_inputs.get(plan_id)
+        if inputs is None:
+            raise MintError(f"missing authenticated producer inputs for {plan_id!r}")
+        if set(inputs.cells) != {"decode", "prefill"}:
+            raise MintError(
+                f"producer inputs for {plan_id!r} must contain decode and prefill"
+            )
+        if inputs.plan.get("plan_id") != plan_id:
+            raise MintError(f"producer {plan_id!r}: calibration plan identity mismatch")
+        _v2_gate_producer_inventory(producer, inputs)
+        producer_cells: list[Mapping[str, Any]] = []
+        producer_groups: list[Mapping[str, Any]] = []
+        for cell_index, cell_pins in enumerate(producer["cells"]):
+            role = cell_pins["role"]
+            cell_inputs = inputs.cells[role]
+            _v2_gate_component(
+                cell_inputs.absolute,
+                cell_pins["absolute"],
+                label=f"producer[{producer_index}].{role}.absolute",
+                metric=cell_pins["metric"],
+                window_class=cell_pins["window_class"],
+            )
+            _v2_gate_component(
+                cell_inputs.comparative,
+                cell_pins["comparative"],
+                label=f"producer[{producer_index}].{role}.comparative",
+                metric=cell_pins["metric"],
+                window_class=cell_pins["window_class"],
+            )
+            _v2_gate_postcollection(
+                producer=producer,
+                cell_pins=cell_pins,
+                cell_inputs=cell_inputs,
+                producer_inputs=inputs,
+                ledger_snapshot=calibration_ledger_snapshot,
+            )
+            configured_pins = _v2_mint_pinset(producer, cell_pins)
+            core = _configured_core(
+                configured_pins,
+                pinset_path=pinset_path,
+                expected_pinset_sha256=pinset_sha256,
+            )
+            try:
+                cell_artifact = _mint_v2_cell_artifact(
+                    core=core,
+                    producer=producer,
+                    cell_pins=cell_pins,
+                    plan=inputs.plan,
+                    absolute=cell_inputs.absolute,
+                    comparative=cell_inputs.comparative,
+                    project_commit=project_commit,
+                    project_tree_state=project_tree_state,
+                )
+            except core.MintError as exc:
+                raise MintError(str(exc)) from exc
+            cell = copy.deepcopy(cell_artifact["cells"][0])
+            group = copy.deepcopy(cell_artifact["transport_groups"][0])
+            allowed = _v2_allowed_families(
+                cell_inputs.allowed_consumer_condition_families,
+                cell_pins["allowed_consumer_condition_families"],
+                label=f"producer[{producer_index}].cells[{cell_index}].allowlist",
+            )
+            group["allowed_consumer_condition_families"] = allowed
+            producer_cells.append(cell)
+            producer_groups.append(group)
+
+        first_cell_artifact = cell_artifact
+        component = {
+            **copy.deepcopy(first_cell_artifact),
+            "artifact_id": producer["component_artifact"]["artifact_id"],
+            "cells": producer_cells,
+            "transport_groups": producer_groups,
+        }
+        component_errors = validate_floor_artifact(
+            artifact=component,
+            pinset_path=pinset_path,
+            pinset_sha256=pinset_sha256,
+            _skip_v2_hash_binding=True,
+        )
+        if component_errors:
+            raise MintError(
+                f"constructed v2 component artifact is invalid: {component_errors[0]}"
+            )
+        component_artifacts.append(component)
+        all_cells.extend(copy.deepcopy(producer_cells))
+        all_groups.extend(copy.deepcopy(producer_groups))
+        producer_plan_records.append(
+            {
+                "plan_id": plan_id,
+                "declared_calibration_scope": plan_pins[
+                    "declared_calibration_scope"
+                ],
+                "relative_path": plan_pins["relative_path"],
+                "sha256": plan_pins["sha256"],
+            }
+        )
+
+    aggregate = pinset.value["aggregate"]
+    implementation = copy.deepcopy(
+        component_artifacts[0]["provenance"]["implementation"]
+    )
+    artifact = {
+        **copy.deepcopy(component_artifacts[0]),
+        "artifact_id": aggregate["artifact_id"],
+        "calibration_scope": aggregate["calibration_scope"],
+        "source_class": aggregate["source_class"],
+        "provenance": {
+            "calibration_plan": {
+                "plan_id": aggregate["plan_set_id"],
+                "declared_calibration_scope": "production_window",
+                "relative_path": Path(pinset_path).name,
+                "sha256": aggregate["producer_set_sha256"],
+            },
+            "producer_calibration_plans": producer_plan_records,
+            "mint_tool_version": V2_MINT_TOOL_VERSION,
+            "implementation": implementation,
+        },
+        "cells": all_cells,
+        "transport_groups": all_groups,
+    }
+    errors = validate_floor_artifact(
+        artifact=artifact,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+        _skip_v2_hash_binding=True,
+    )
+    if errors:
+        raise MintError(f"constructed v2 aggregate artifact is invalid: {errors[0]}")
+    return artifact, tuple(component_artifacts)
+
+
+def _validate_v2_artifact_binding(
+    artifact: Mapping[str, Any],
+    pinset: V2Pinset,
+) -> list[str]:
+    errors: list[str] = []
+    value = pinset.value
+    aggregate = value["aggregate"]
+    try:
+        _validate_v2_pin_hashes(pinset)
+    except MintError as exc:
+        errors.append(f"artifact.pinset: {exc}")
+    if artifact.get("artifact_id") != aggregate["artifact_id"]:
+        errors.append("artifact: aggregate artifact_id mismatch")
+    provenance = artifact.get("provenance")
+    expected_producer_plans = [
+        {
+            "plan_id": producer["plan"]["plan_id"],
+            "declared_calibration_scope": producer["plan"][
+                "declared_calibration_scope"
+            ],
+            "relative_path": producer["plan"]["relative_path"],
+            "sha256": producer["plan"]["sha256"],
+        }
+        for producer in value["producer_plans"]
+    ]
+    if not isinstance(provenance, Mapping):
+        errors.append("artifact.provenance: v2 aggregate provenance is missing")
+    else:
+        expected_aggregate_plan = {
+            "plan_id": aggregate["plan_set_id"],
+            "declared_calibration_scope": "production_window",
+            "relative_path": Path("pinset.json").name,
+            "sha256": aggregate["producer_set_sha256"],
+        }
+        aggregate_plan = provenance.get("calibration_plan")
+        if not isinstance(aggregate_plan, Mapping) or any(
+            aggregate_plan.get(field) != expected
+            for field, expected in expected_aggregate_plan.items()
+            if field != "relative_path"
+        ):
+            errors.append("artifact.provenance: aggregate plan-set pin mismatch")
+        if provenance.get("producer_calibration_plans") != expected_producer_plans:
+            errors.append("artifact.provenance: producer plan pins mismatch")
+        if provenance.get("mint_tool_version") != V2_MINT_TOOL_VERSION:
+            errors.append("artifact.provenance: v2 mint-tool identity mismatch")
+    cells = artifact.get("cells")
+    groups = artifact.get("transport_groups")
+    if not isinstance(cells, list) or not isinstance(groups, list):
+        return [*errors, "artifact: v2 cells/transport_groups are not arrays"]
+    if [cell.get("cell_id") for cell in cells if isinstance(cell, Mapping)] != (
+        aggregate["cell_ids"]
+    ):
+        errors.append("artifact: four-cell order does not match aggregate pins")
+    group_by_id = {
+        group.get("transport_group_id"): group
+        for group in groups
+        if isinstance(group, Mapping)
+    }
+    cell_by_id = {
+        cell.get("cell_id"): cell
+        for cell in cells
+        if isinstance(cell, Mapping)
+    }
+
+    for producer in value["producer_plans"]:
+        for cell_pin in producer["cells"]:
+            cell = cell_by_id.get(cell_pin["cell_id"])
+            if not isinstance(cell, Mapping):
+                continue
+            key = cell.get("key", {})
+            for field in (
+                "metric",
+                "window_class",
+                "condition_family_id",
+                "condition_family_sha256",
+            ):
+                expected = (
+                    cell_pin[field]
+                    if field in cell_pin
+                    else cell_pin.get(field)
+                )
+                if key.get(field) != expected:
+                    errors.append(f"cells[{cell_pin['cell_id']}]: {field} pin mismatch")
+            post = cell_pin["postcollection"]
+            for artifact_field, pin_field, component_name in (
+                (
+                    "floor_abs_j",
+                    "absolute_floor_full_precision",
+                    "absolute",
+                ),
+                (
+                    "floor_cmp_j",
+                    "comparative_floor_full_precision",
+                    "comparative",
+                ),
+                (
+                    "floor_gate_j",
+                    "operative_floor_full_precision",
+                    "operative",
+                ),
+            ):
+                actual = cell.get(artifact_field)
+                if (
+                    isinstance(actual, bool)
+                    or not isinstance(actual, int | float)
+                    or not math.isfinite(float(actual))
+                    or Decimal(str(actual)) != Decimal(post[pin_field])
+                ):
+                    errors.append(
+                        f"cells[{cell_pin['cell_id']}]: {component_name} "
+                        "full-precision pin mismatch"
+                    )
+            cell_provenance = cell.get("provenance", {})
+            roots = {
+                row.get("evidence_root_id")
+                for row in cell_provenance.values()
+                if isinstance(row, Mapping)
+            }
+            if roots != {producer["evidence_root_id"]}:
+                errors.append(f"cells[{cell_pin['cell_id']}]: evidence-root pin mismatch")
+            group = group_by_id.get(cell_pin["transport_group_id"])
+            if not isinstance(group, Mapping) or group.get("source_cell_ids") != [
+                cell_pin["cell_id"]
+            ]:
+                errors.append(
+                    f"cells[{cell_pin['cell_id']}]: transport must remain independently stack-scoped"
+                )
+            elif [
+                (row.get("condition_family_id"), row.get("condition_family_sha256"))
+                for row in group.get("allowed_consumer_condition_families", [])
+                if isinstance(row, Mapping)
+            ] != [
+                (row["condition_family_id"], row["condition_family_sha256"])
+                for row in cell_pin["allowed_consumer_condition_families"]
+            ]:
+                errors.append(f"cells[{cell_pin['cell_id']}]: transport allowlist mismatch")
+
+            aggregate_entry = next(
+                (
+                    row
+                    for row in aggregate["transport_allowlists"]
+                    if row["transport_group_id"]
+                    == cell_pin["transport_group_id"]
+                ),
+                None,
+            )
+            if not isinstance(aggregate_entry, Mapping) or aggregate_entry[
+                "allowed_consumer_condition_families"
+            ] != cell_pin["allowed_consumer_condition_families"]:
+                errors.append(
+                    f"cells[{cell_pin['cell_id']}]: aggregate transport allowlist mismatch"
+                )
+
+    if isinstance(provenance, Mapping):
+        for producer, component_pin in zip(
+            value["producer_plans"], aggregate["component_artifacts"]
+        ):
+            producer_cell_ids = [cell["cell_id"] for cell in producer["cells"]]
+            producer_group_ids = [
+                cell["transport_group_id"] for cell in producer["cells"]
+            ]
+            component = copy.deepcopy(dict(artifact))
+            component["artifact_id"] = component_pin["artifact_id"]
+            component["provenance"] = {
+                "calibration_plan": expected_producer_plans[
+                    value["producer_plans"].index(producer)
+                ],
+                "mint_tool_version": V2_MINT_TOOL_VERSION,
+                "implementation": copy.deepcopy(
+                    provenance.get("implementation")
+                ),
+            }
+            component["cells"] = [
+                copy.deepcopy(cell_by_id[cell_id])
+                for cell_id in producer_cell_ids
+                if cell_id in cell_by_id
+            ]
+            component["transport_groups"] = [
+                copy.deepcopy(group_by_id[group_id])
+                for group_id in producer_group_ids
+                if group_id in group_by_id
+            ]
+            if len(component["cells"]) != 2 or len(
+                component["transport_groups"]
+            ) != 2:
+                continue
+            observed_component_sha256 = _artifact_sha256(component)
+            if observed_component_sha256 != component_pin["sha256"]:
+                errors.append(
+                    "artifact: component artifact hash mismatch for "
+                    f"{component_pin['plan_id']!r}"
+                )
+    return errors
+
+
+def mint_multi_cell_authenticated_artifact(
+    *,
+    pinset_path: Path,
+    pinset_sha256: str,
+    producer_inputs: Mapping[str, V2ProducerInputs],
+    calibration_ledger_snapshot: Any,
+    project_commit: str,
+    project_tree_state: str,
+) -> Mapping[str, Any]:
+    """Mint the D-117 two-plan/four-cell artifact from authenticated inputs."""
+
+    loaded = load_pinset(pinset_path, pinset_sha256)
+    if not isinstance(loaded, V2Pinset):
+        raise MintError("multi-cell mint requires a final v2 pinset")
+    _validate_v2_pin_hashes(loaded)
+    artifact, components = _build_v2_artifacts(
+        pinset=loaded,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+        producer_inputs=producer_inputs,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
+        project_commit=project_commit,
+        project_tree_state=project_tree_state,
+    )
+    for index, (component, expected) in enumerate(
+        zip(components, loaded.value["aggregate"]["component_artifacts"])
+    ):
+        observed = _artifact_sha256(component)
+        if observed != expected["sha256"]:
+            raise MintError(
+                "aggregate/component hash mismatch: component artifact "
+                f"{index} expected {expected['sha256']}, observed {observed}"
+            )
+    errors = validate_floor_artifact(
+        artifact=artifact,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+    )
+    if errors:
+        raise MintError(f"constructed v2 artifact is invalid: {errors[0]}")
+    return artifact
+
+
+def _load_v2_input_manifest(path: Path) -> Mapping[str, Any]:
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as exc:
+        raise MintError(
+            f"v2 input manifest cannot be read: {exc.strerror or type(exc).__name__}"
+        ) from exc
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_nonfinite_json,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MintError(f"v2 input manifest is not valid UTF-8 JSON: {exc}") from exc
+    root = _object(
+        value,
+        "v2 input manifest",
+        {
+            "schema_version",
+            "calibration_acceptance",
+            "calibration_ledger",
+            "calibration_ledger_head_pin",
+            "producer_plans",
+        },
+    )
+    if root["schema_version"] != "joulewise.floor_mint_inputs.v2":
+        raise MintError(
+            "v2 input manifest.schema_version must equal "
+            "'joulewise.floor_mint_inputs.v2'"
+        )
+    if not isinstance(root["producer_plans"], list):
+        raise MintError("v2 input manifest.producer_plans must be an array")
+    return root
+
+
+def _v2_component_input_paths(
+    value: object,
+    label: str,
+) -> ComponentInputs:
+    row = _object(
+        value,
+        label,
+        {"evidence_root", "report", "spec", "order_manifest"},
+    )
+    return ComponentInputs(
+        evidence_root=Path(_string(row["evidence_root"], f"{label}.evidence_root")),
+        report_path=Path(_string(row["report"], f"{label}.report")),
+        spec_path=Path(_string(row["spec"], f"{label}.spec")),
+        order_manifest_path=Path(
+            _string(row["order_manifest"], f"{label}.order_manifest")
+        ),
+    )
+
+
+def _load_v2_ledger_snapshot(
+    core: ModuleType,
+    *,
+    acceptance: Mapping[str, Any],
+    ledger_path: Path,
+    head_pin_path: Path,
+) -> Any:
+    cutoff = (
+        acceptance.get("ledger_cutoff")
+        if isinstance(acceptance, Mapping)
+        else None
+    )
+    return core.load_calibration_ledger_snapshot(
+        ledger_path=ledger_path,
+        head_pin_path=head_pin_path,
+        baseline_sequence=(
+            cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
+        ),
+        baseline_digest=(
+            cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
+        ),
+    )
+
+
+def _authenticate_v2_inputs(
+    *,
+    pinset: V2Pinset,
+    pinset_path: Path,
+    pinset_sha256: str,
+    input_manifest_path: Path,
+    strict_validator: StrictValidator,
+    consumption_semantics_id: str | None,
+) -> tuple[
+    Mapping[str, V2ProducerInputs],
+    Mapping[str, Path],
+    Any,
+]:
+    manifest = _load_v2_input_manifest(input_manifest_path)
+    rows = manifest["producer_plans"]
+    if len(rows) != len(pinset.value["producer_plans"]):
+        raise MintError("v2 input manifest must contain every producer plan exactly once")
+    by_plan_id: dict[str, Mapping[str, Any]] = {}
+    for index, row_value in enumerate(rows):
+        label = f"v2 input manifest.producer_plans[{index}]"
+        row = _object(
+            row_value,
+            label,
+            {
+                "plan_id",
+                "calibration_plan",
+                "calibration_plan_sidecar",
+                "bracket_binding",
+                "cells",
+            },
+        )
+        plan_id = _string(row["plan_id"], f"{label}.plan_id")
+        if plan_id in by_plan_id:
+            raise MintError("v2 input manifest producer plan ids must be unique")
+        by_plan_id[plan_id] = row
+
+    evidence_core = _fresh_original_core()
+    acceptance_path = Path(
+        _string(
+            manifest["calibration_acceptance"],
+            "v2 input manifest.calibration_acceptance",
+        )
+    )
+    try:
+        acceptance_raw = acceptance_path.read_bytes()
+    except OSError as exc:
+        raise MintError(
+            "v2 calibration acceptance cannot be read: "
+            f"{exc.strerror or type(exc).__name__}"
+        ) from exc
+    acceptance = evidence_core.load_calibration_acceptance_bound(acceptance_path)
+    if not isinstance(acceptance, Mapping):
+        raise MintError("v2 calibration acceptance evidence is not authenticated")
+    try:
+        acceptance_after = acceptance_path.read_bytes()
+    except OSError as exc:
+        raise MintError(
+            "v2 calibration acceptance cannot be re-read after authentication: "
+            f"{exc.strerror or type(exc).__name__}"
+        ) from exc
+    if acceptance_after != acceptance_raw:
+        raise MintError("v2 calibration acceptance changed during authentication")
+    acceptance_sha256 = hashlib.sha256(acceptance_raw).hexdigest()
+    ledger_snapshot = _load_v2_ledger_snapshot(
+        evidence_core,
+        acceptance=acceptance,
+        ledger_path=Path(
+            _string(
+                manifest["calibration_ledger"],
+                "v2 input manifest.calibration_ledger",
+            )
+        ),
+        head_pin_path=Path(
+            _string(
+                manifest["calibration_ledger_head_pin"],
+                "v2 input manifest.calibration_ledger_head_pin",
+            )
+        ),
+    )
+    if not bool(getattr(ledger_snapshot, "valid", False)):
+        raise MintError("v2 calibration ledger snapshot is not authenticated")
+
+    result: dict[str, V2ProducerInputs] = {}
+    evidence_roots: dict[str, Path] = {}
+    for producer_index, producer in enumerate(pinset.value["producer_plans"]):
+        plan_id = producer["plan"]["plan_id"]
+        manifest_row = by_plan_id.get(plan_id)
+        if manifest_row is None:
+            raise MintError(f"v2 input manifest is missing producer {plan_id!r}")
+        plan_path = Path(
+            _string(
+                manifest_row["calibration_plan"],
+                f"v2 input manifest producer {plan_id}.calibration_plan",
+            )
+        )
+        try:
+            plan_raw = plan_path.read_bytes()
+            plan = json.loads(
+                plan_raw.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_keys,
+                parse_constant=_reject_nonfinite_json,
+            )
+        except OSError as exc:
+            raise MintError(
+                f"producer {plan_id!r} calibration plan cannot be read: "
+                f"{exc.strerror or type(exc).__name__}"
+            ) from exc
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise MintError(
+                f"producer {plan_id!r} calibration plan is invalid JSON: {exc}"
+            ) from exc
+        if not isinstance(plan, Mapping):
+            raise MintError(f"producer {plan_id!r} calibration plan must be an object")
+        if hashlib.sha256(plan_raw).hexdigest() != producer["plan"]["sha256"]:
+            raise MintError(f"producer {plan_id!r} calibration plan sha256 mismatch")
+        sidecar_path = Path(
+            _string(
+                manifest_row["calibration_plan_sidecar"],
+                f"v2 input manifest producer {plan_id}.calibration_plan_sidecar",
+            )
+        )
+        try:
+            sidecar_raw = sidecar_path.read_bytes()
+            sidecar_text = sidecar_raw.decode("utf-8")
+        except OSError as exc:
+            raise MintError(
+                f"producer {plan_id!r} plan sidecar cannot be read: "
+                f"{exc.strerror or type(exc).__name__}"
+            ) from exc
+        except UnicodeDecodeError as exc:
+            raise MintError(
+                f"producer {plan_id!r} plan sidecar is not UTF-8"
+            ) from exc
+        sidecar_parts = sidecar_text.strip().split()
+        if (
+            len(sidecar_parts) != 2
+            or sidecar_parts[0] != producer["plan"]["declared_sha256"]
+            or sidecar_parts[0] != hashlib.sha256(plan_raw).hexdigest()
+            or sidecar_parts[1] != plan_path.name
+            or hashlib.sha256(sidecar_raw).hexdigest()
+            != producer["plan"]["sidecar_sha256"]
+        ):
+            raise MintError(f"producer {plan_id!r} plan sidecar pins mismatch")
+        bracket_path = Path(
+            _string(
+                manifest_row["bracket_binding"],
+                f"v2 input manifest producer {plan_id}.bracket_binding",
+            )
+        )
+        try:
+            bracket_raw = bracket_path.read_bytes()
+            bracket_binding = json.loads(
+                bracket_raw.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_keys,
+                parse_constant=_reject_nonfinite_json,
+            )
+        except OSError as exc:
+            raise MintError(
+                f"producer {plan_id!r} bracket binding cannot be read: "
+                f"{exc.strerror or type(exc).__name__}"
+            ) from exc
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise MintError(
+                f"producer {plan_id!r} bracket binding is invalid JSON: {exc}"
+            ) from exc
+        if not isinstance(bracket_binding, Mapping):
+            raise MintError(f"producer {plan_id!r} bracket binding must be an object")
+        cells = manifest_row["cells"]
+        if not isinstance(cells, list) or len(cells) != 2:
+            raise MintError(
+                f"v2 input manifest producer {plan_id!r} must contain two cells"
+            )
+        cell_rows: dict[str, Mapping[str, Any]] = {}
+        for cell_index, cell_value in enumerate(cells):
+            cell_label = (
+                f"v2 input manifest producer {plan_id}.cells[{cell_index}]"
+            )
+            cell_row = _object(
+                cell_value,
+                cell_label,
+                {
+                    "role",
+                    "absolute",
+                    "comparative",
+                    "allowed_consumer_condition_families",
+                },
+            )
+            role = _string(cell_row["role"], f"{cell_label}.role")
+            if role in cell_rows:
+                raise MintError(f"producer {plan_id!r} cell roles must be unique")
+            cell_rows[role] = cell_row
+        if set(cell_rows) != {"decode", "prefill"}:
+            raise MintError(
+                f"producer {plan_id!r} input cells must be decode and prefill"
+            )
+
+        authenticated_cells: dict[str, V2CellComponents] = {}
+        producer_evidence_root: Path | None = None
+        for cell_pins in producer["cells"]:
+            role = cell_pins["role"]
+            cell_row = cell_rows[role]
+            configured = _v2_mint_pinset(producer, cell_pins)
+            core = _configured_core(
+                configured,
+                pinset_path=pinset_path,
+                expected_pinset_sha256=pinset_sha256,
+            )
+            authenticated = []
+            for component_name, expected_kind in (
+                ("absolute", "absolute"),
+                ("comparative", "comparative"),
+            ):
+                paths = _v2_component_input_paths(
+                    cell_row[component_name],
+                    f"producer {plan_id}.{role}.{component_name}",
+                )
+                root_id = cell_pins[component_name]["evidence_root_id"]
+                existing_root = evidence_roots.get(root_id)
+                if existing_root is not None and existing_root.resolve() != (
+                    paths.evidence_root.resolve()
+                ):
+                    raise MintError(
+                        f"evidence-root id {root_id!r} maps to multiple paths"
+                    )
+                evidence_roots[root_id] = paths.evidence_root
+                if (
+                    producer_evidence_root is not None
+                    and producer_evidence_root.resolve()
+                    != paths.evidence_root.resolve()
+                ):
+                    raise MintError(
+                        f"producer {plan_id!r} components map to multiple evidence roots"
+                    )
+                producer_evidence_root = paths.evidence_root
+                try:
+                    component = core._authenticate_component(
+                        core.ComponentPaths(
+                            evidence_root_id=root_id,
+                            evidence_root=paths.evidence_root,
+                            report_path=paths.report_path,
+                            spec_path=paths.spec_path,
+                            order_manifest_path=paths.order_manifest_path,
+                            calibration_cell_id=cell_pins[component_name][
+                                "calibration_cell_id"
+                            ],
+                            expected_kind=expected_kind,
+                        ),
+                        expected_cell_id=cell_pins[component_name][
+                            "calibration_cell_id"
+                        ],
+                        expected_basis_sha256=cell_pins[component_name][
+                            "evaluation_basis_sha256"
+                        ],
+                        strict_validator=strict_validator,
+                        expected_consumption_semantics_id=cell_pins[
+                            component_name
+                        ]["consumption_semantics_id"],
+                        calibration_ledger_snapshot=ledger_snapshot,
+                    )
+                except core.MintError as exc:
+                    raise MintError(str(exc)) from exc
+                authenticated.append(component)
+            families = cell_row["allowed_consumer_condition_families"]
+            if not isinstance(families, list):
+                raise MintError(
+                    f"producer {plan_id}.{role} allowed families must be an array"
+                )
+            authenticated_cells[role] = V2CellComponents(
+                absolute=authenticated[0],
+                comparative=authenticated[1],
+                allowed_consumer_condition_families=tuple(families),
+            )
+        if consumption_semantics_id is not None:
+            pinned_semantics = {
+                cell[component_name]["consumption_semantics_id"]
+                for cell in producer["cells"]
+                for component_name in ("absolute", "comparative")
+            }
+            if pinned_semantics != {consumption_semantics_id}:
+                raise MintError(
+                    "explicit v2 consumption semantics dispatch contradicts "
+                    "per-component pins"
+                )
+        if producer_evidence_root is None:
+            raise MintError(f"producer {plan_id!r} has no authenticated evidence root")
+        result[plan_id] = V2ProducerInputs(
+            plan=dict(plan),
+            cells=authenticated_cells,
+            evidence_root=producer_evidence_root,
+            plan_sha256=hashlib.sha256(plan_raw).hexdigest(),
+            plan_declared_sha256=sidecar_parts[0],
+            plan_sidecar_sha256=hashlib.sha256(sidecar_raw).hexdigest(),
+            calibration_acceptance=dict(acceptance),
+            calibration_acceptance_sha256=acceptance_sha256,
+            bracket_binding=dict(bracket_binding),
+            bracket_binding_sha256=hashlib.sha256(bracket_raw).hexdigest(),
+        )
+    return result, evidence_roots, ledger_snapshot
+
+
+def mint_multi_cell_floor_artifact(
+    *,
+    pinset_path: Path,
+    pinset_sha256: str,
+    input_manifest_path: Path,
+    floor_path: Path,
+    statement_path: Path,
+    project_commit: str,
+    project_tree_state: str,
+    strict_validator: StrictValidator,
+    consumption_semantics_id: str | None = None,
+) -> Mapping[str, Any]:
+    """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
+
+    loaded = load_pinset(pinset_path, pinset_sha256)
+    if not isinstance(loaded, V2Pinset):
+        raise MintError("multi-cell floor mint requires a final v2 pinset")
+    _validate_v2_pin_hashes(loaded)
+    inputs, evidence_roots, ledger_snapshot = _authenticate_v2_inputs(
+        pinset=loaded,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+        input_manifest_path=input_manifest_path,
+        strict_validator=strict_validator,
+        consumption_semantics_id=consumption_semantics_id,
+    )
+    artifact, components = _build_v2_artifacts(
+        pinset=loaded,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+        producer_inputs=inputs,
+        calibration_ledger_snapshot=ledger_snapshot,
+        project_commit=project_commit,
+        project_tree_state=project_tree_state,
+    )
+    for producer, component, expected in zip(
+        loaded.value["producer_plans"],
+        components,
+        loaded.value["aggregate"]["component_artifacts"],
+    ):
+        observed = _artifact_sha256(component)
+        if observed != expected["sha256"]:
+            raise MintError(
+                "aggregate/component hash mismatch: component artifact "
+                f"{expected['plan_id']!r} expected {expected['sha256']}, observed {observed}"
+            )
+        cells_by_id = {
+            cell["cell_id"]: cell for cell in component["cells"]
+        }
+        groups_by_id = {
+            group["transport_group_id"]: group
+            for group in component["transport_groups"]
+        }
+        for cell_pins in producer["cells"]:
+            configured = _v2_mint_pinset(producer, cell_pins)
+            core = _configured_core(
+                configured,
+                pinset_path=pinset_path,
+                expected_pinset_sha256=pinset_sha256,
+            )
+            single_cell_component = copy.deepcopy(dict(component))
+            single_cell_component["cells"] = [
+                copy.deepcopy(cells_by_id[cell_pins["cell_id"]])
+            ]
+            single_cell_component["transport_groups"] = [
+                copy.deepcopy(
+                    groups_by_id[cell_pins["transport_group_id"]]
+                )
+            ]
+            try:
+                core.bind_floor_artifact_evidence(
+                    single_cell_component,
+                    floor_path,
+                    evidence_roots,
+                    strict_validator=strict_validator,
+                    calibration_ledger_snapshot=ledger_snapshot,
+                )
+            except core.MintError as exc:
+                raise MintError(str(exc)) from exc
+    errors = validate_floor_artifact(
+        artifact=artifact,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+    )
+    if errors:
+        raise MintError(f"post-bind v2 artifact validation failed: {errors[0]}")
+    output_core = _fresh_original_core()
+    try:
+        output_core.write_outputs_exclusive(artifact, floor_path, statement_path)
+    except output_core.MintError as exc:
+        raise MintError(str(exc)) from exc
+    return artifact
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pinset", required=True, type=Path)
     parser.add_argument("--pinset-sha256", required=True)
-    parser.add_argument("--artifact-id", required=True)
+    parser.add_argument("--artifact-id")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--single-count-out", required=True, type=Path)
-    parser.add_argument("--calibration-plan", required=True, type=Path)
-    parser.add_argument("--calibration-plan-relative-path", required=True)
-    parser.add_argument("--absolute-root", required=True, type=Path)
-    parser.add_argument("--absolute-report", required=True, type=Path)
-    parser.add_argument("--absolute-spec", required=True, type=Path)
-    parser.add_argument("--absolute-order-manifest", required=True, type=Path)
-    parser.add_argument("--comparative-root", required=True, type=Path)
-    parser.add_argument("--comparative-report", required=True, type=Path)
-    parser.add_argument("--comparative-spec", required=True, type=Path)
+    parser.add_argument("--v2-input-manifest", type=Path)
+    parser.add_argument("--calibration-plan", type=Path)
+    parser.add_argument("--calibration-plan-relative-path")
+    parser.add_argument("--absolute-root", type=Path)
+    parser.add_argument("--absolute-report", type=Path)
+    parser.add_argument("--absolute-spec", type=Path)
+    parser.add_argument("--absolute-order-manifest", type=Path)
+    parser.add_argument("--comparative-root", type=Path)
+    parser.add_argument("--comparative-report", type=Path)
+    parser.add_argument("--comparative-spec", type=Path)
     parser.add_argument(
-        "--comparative-order-manifest", required=True, type=Path
+        "--comparative-order-manifest", type=Path
     )
     parser.add_argument("--project-commit", required=True)
     parser.add_argument(
@@ -837,6 +3321,46 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parser().parse_args(argv)
     try:
+        loaded = load_pinset(args.pinset, args.pinset_sha256)
+        if isinstance(loaded, V2Pinset):
+            if args.v2_input_manifest is None:
+                raise MintError("final v2 pinset requires --v2-input-manifest")
+            mint_multi_cell_floor_artifact(
+                pinset_path=args.pinset,
+                pinset_sha256=args.pinset_sha256,
+                input_manifest_path=args.v2_input_manifest,
+                floor_path=args.out,
+                statement_path=args.single_count_out,
+                project_commit=args.project_commit,
+                project_tree_state=args.project_tree_state,
+                strict_validator=lambda path, strict: validate_bundle(
+                    path, strict=strict
+                ),
+                consumption_semantics_id=args.consumption_semantics_id,
+            )
+            return 0
+        legacy_fields = {
+            "--artifact-id": args.artifact_id,
+            "--calibration-plan": args.calibration_plan,
+            "--calibration-plan-relative-path": (
+                args.calibration_plan_relative_path
+            ),
+            "--absolute-root": args.absolute_root,
+            "--absolute-report": args.absolute_report,
+            "--absolute-spec": args.absolute_spec,
+            "--absolute-order-manifest": args.absolute_order_manifest,
+            "--comparative-root": args.comparative_root,
+            "--comparative-report": args.comparative_report,
+            "--comparative-spec": args.comparative_spec,
+            "--comparative-order-manifest": (
+                args.comparative_order_manifest
+            ),
+        }
+        missing = [name for name, value in legacy_fields.items() if value is None]
+        if missing:
+            raise MintError(
+                "v1 pinset requires arguments: " + ", ".join(missing)
+            )
         mint_floor_artifact(
             pinset_path=args.pinset,
             pinset_sha256=args.pinset_sha256,

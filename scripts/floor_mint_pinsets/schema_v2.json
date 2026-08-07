@@ -1,0 +1,919 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://joulewise.local/schemas/floor_mint_pinsets/schema_v2.json",
+  "title": "JouleWise two-stage floor-mint pins v2",
+  "description": "Disjoint desk-stage authoring inventory and final-stage evidence-bound mint pinsets. The desk document makes no mintability or evidence-authentication claim; only #/$defs/finalPinset is mintable after every final field is compared with authenticated evidence or emitted artifact state.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/pinRequirements"
+    },
+    {
+      "$ref": "#/$defs/finalPinset"
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "decimalString": {
+      "description": "Exact nonnegative base-10 text: no sign, exponent, leading zero, negative zero, or alternate spelling.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "sixDecimal": {
+      "allOf": [
+        {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$"
+        },
+        {
+          "not": {
+            "const": "7.377086"
+          }
+        }
+      ]
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_id",
+        "config_sha256"
+      ],
+      "properties": {
+        "bundle_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "config_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "consumerFamily": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition_family_id",
+        "condition_family_sha256"
+      ],
+      "properties": {
+        "condition_family_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "condition_family_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id",
+        "sha256",
+        "declared_sha256",
+        "sidecar_sha256",
+        "relative_path",
+        "declared_calibration_scope",
+        "artifact_calibration_scope"
+      ],
+      "properties": {
+        "plan_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "declared_sha256": {
+          "description": "Digest declared by the plan sidecar; the final mint requires exact equality with sha256 of the authenticated plan artifact bytes.",
+          "$ref": "#/$defs/sha256"
+        },
+        "sidecar_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "relative_path": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "declared_calibration_scope": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "artifact_calibration_scope": {
+          "const": "production_window"
+        }
+      }
+    },
+    "modelRuntimeConfig": {
+      "description": "Evidence-bound inventory: model_artifact_sha256 is read from authenticated stack identity, runtime_identity_sha256 is its authenticated stack-identity digest, and config_set_sha256 is the authenticated scientific-config identity digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_artifact_sha256",
+        "runtime_identity_sha256",
+        "config_set_sha256"
+      ],
+      "properties": {
+        "model_artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "config_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "extractionSpec": {
+      "description": "Evidence-bound shared extraction-spec inventory. member_count is the unique physical bundle count, so repeated decode/prefill references to the same bundle are counted once.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "member_count"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "member_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "calibrationAcceptance": {
+      "description": "Evidence-bound acceptance artifact inventory. derivation_rule_id is the authenticated acceptance artifact schema_version that identifies its derivation contract.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptance_id",
+        "artifact_sha256",
+        "derivation_sha256",
+        "derivation_rule_id"
+      ],
+      "properties": {
+        "acceptance_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "derivation_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "derivation_rule_id": {
+          "$ref": "#/$defs/nonemptyString"
+        }
+      }
+    },
+    "allowanceContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowance_rule",
+        "bracket_screen_s",
+        "allowance_embedding_count"
+      ],
+      "properties": {
+        "allowance_rule": {
+          "const": "max(observed_drift_s,0.010818)"
+        },
+        "bracket_screen_s": {
+          "const": "0.010818"
+        },
+        "allowance_embedding_count": {
+          "const": 1
+        }
+      }
+    },
+    "deskComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_root_id",
+        "calibration_cell_id",
+        "extraction_spec_sha256",
+        "extraction_spec_members",
+        "expected_n",
+        "order_manifest_id",
+        "order_manifest_sha256",
+        "consumption_semantics_id",
+        "members"
+      ],
+      "properties": {
+        "evidence_root_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "calibration_cell_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "extraction_spec_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "extraction_spec_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected_n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "order_manifest_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "order_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "consumption_semantics_id": {
+          "enum": [
+            "d078_minted_envelopes_v1",
+            "d078_authenticated_max_bracket_rederivation_v1",
+            "salvage_dangler_exclusion_v1"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/member"
+          }
+        }
+      }
+    },
+    "finalComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_root_id",
+        "calibration_cell_id",
+        "evaluation_basis_sha256",
+        "evaluation_basis_members",
+        "extraction_spec_sha256",
+        "extraction_spec_members",
+        "expected_n",
+        "drift_allowance_j",
+        "order_manifest_id",
+        "order_manifest_sha256",
+        "consumption_semantics_id",
+        "members"
+      ],
+      "properties": {
+        "evidence_root_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "calibration_cell_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "evaluation_basis_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evaluation_basis_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "extraction_spec_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "extraction_spec_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected_n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "drift_allowance_j": {
+          "type": "number",
+          "minimum": 0
+        },
+        "order_manifest_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "order_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "consumption_semantics_id": {
+          "enum": [
+            "d078_minted_envelopes_v1",
+            "d078_authenticated_max_bracket_rederivation_v1",
+            "salvage_dangler_exclusion_v1"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/member"
+          }
+        }
+      }
+    },
+    "cellCommon": {
+      "type": "object",
+      "required": [
+        "role",
+        "cell_id",
+        "transport_group_id",
+        "condition_family_id",
+        "condition_family_sha256",
+        "metric",
+        "window_class",
+        "target_precheck_path",
+        "allowed_consumer_condition_families"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "decode",
+            "prefill"
+          ]
+        },
+        "cell_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "transport_group_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "condition_family_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "condition_family_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "metric": {
+          "enum": [
+            "phase_energy_j.decode",
+            "phase_energy_j.prefill"
+          ]
+        },
+        "window_class": {
+          "const": "phase"
+        },
+        "target_precheck_path": {
+          "oneOf": [
+            {
+              "const": [
+                "phase",
+                "decode"
+              ]
+            },
+            {
+              "const": [
+                "phase",
+                "prefill"
+              ]
+            }
+          ]
+        },
+        "allowed_consumer_condition_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/consumerFamily"
+          }
+        }
+      }
+    },
+    "deskPostcollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "const": "unresolved"
+        }
+      }
+    },
+    "finalPostcollection": {
+      "description": "Every field is authenticated by named equality checks at mint. Receipt/content pins are read from authenticated ledger observations, the terminal head from the authenticated bracket binding and ledger chain, bracket-binding and extraction-report hashes from the exact supplied artifact bytes, and observed drift/applied allowance plus floor values/renderings from the authenticated extraction report. Each six-decimal literal must also equal Decimal ROUND_HALF_EVEN .6f semantics for its full-precision pin; the mint verifies that relationship without producing or replacing the supplied literal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "absolute_evaluation_basis_sha256",
+        "absolute_evaluation_basis_members",
+        "comparative_evaluation_basis_sha256",
+        "comparative_evaluation_basis_members",
+        "pre_receipt_sha256",
+        "pre_content_sha256",
+        "post_receipt_sha256",
+        "post_content_sha256",
+        "bracket_binding_sha256",
+        "terminal_ledger_head_sha256",
+        "observed_drift_s",
+        "allowance_rule",
+        "bracket_screen_s",
+        "applied_allowance_s",
+        "allowance_embedding_count",
+        "extraction_report_sha256",
+        "absolute_floor_full_precision",
+        "comparative_floor_full_precision",
+        "operative_floor_full_precision",
+        "absolute_floor_six_decimal",
+        "comparative_floor_six_decimal",
+        "operative_floor_six_decimal"
+      ],
+      "properties": {
+        "absolute_evaluation_basis_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "absolute_evaluation_basis_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "comparative_evaluation_basis_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "comparative_evaluation_basis_members": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pre_receipt_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "pre_content_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "post_receipt_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "post_content_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bracket_binding_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "terminal_ledger_head_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "observed_drift_s": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "allowance_rule": {
+          "const": "max(observed_drift_s,0.010818)"
+        },
+        "bracket_screen_s": {
+          "const": "0.010818"
+        },
+        "applied_allowance_s": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "allowance_embedding_count": {
+          "const": 1
+        },
+        "extraction_report_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "absolute_floor_full_precision": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "comparative_floor_full_precision": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "operative_floor_full_precision": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "absolute_floor_six_decimal": {
+          "$ref": "#/$defs/sixDecimal"
+        },
+        "comparative_floor_six_decimal": {
+          "$ref": "#/$defs/sixDecimal"
+        },
+        "operative_floor_six_decimal": {
+          "$ref": "#/$defs/sixDecimal"
+        }
+      }
+    },
+    "deskCell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/cellCommon"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "cell_id",
+            "transport_group_id",
+            "condition_family_id",
+            "condition_family_sha256",
+            "metric",
+            "window_class",
+            "target_precheck_path",
+            "allowed_consumer_condition_families",
+            "allowance_contract",
+            "absolute",
+            "comparative",
+            "postcollection"
+          ],
+          "properties": {
+            "role": true,
+            "cell_id": true,
+            "transport_group_id": true,
+            "condition_family_id": true,
+            "condition_family_sha256": true,
+            "metric": true,
+            "window_class": true,
+            "target_precheck_path": true,
+            "allowed_consumer_condition_families": true,
+            "allowance_contract": {
+              "$ref": "#/$defs/allowanceContract"
+            },
+            "absolute": {
+              "$ref": "#/$defs/deskComponent"
+            },
+            "comparative": {
+              "$ref": "#/$defs/deskComponent"
+            },
+            "postcollection": {
+              "$ref": "#/$defs/deskPostcollection"
+            }
+          }
+        }
+      ]
+    },
+    "finalCell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/cellCommon"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "cell_id",
+            "transport_group_id",
+            "condition_family_id",
+            "condition_family_sha256",
+            "metric",
+            "window_class",
+            "target_precheck_path",
+            "allowed_consumer_condition_families",
+            "absolute",
+            "comparative",
+            "postcollection"
+          ],
+          "properties": {
+            "role": true,
+            "cell_id": true,
+            "transport_group_id": true,
+            "condition_family_id": true,
+            "condition_family_sha256": true,
+            "metric": true,
+            "window_class": true,
+            "target_precheck_path": true,
+            "allowed_consumer_condition_families": true,
+            "absolute": {
+              "$ref": "#/$defs/finalComponent"
+            },
+            "comparative": {
+              "$ref": "#/$defs/finalComponent"
+            },
+            "postcollection": {
+              "$ref": "#/$defs/finalPostcollection"
+            }
+          }
+        }
+      ]
+    },
+    "deskProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan",
+        "evidence_root_id",
+        "component_artifact_id",
+        "model_runtime_config",
+        "extraction_spec",
+        "calibration_acceptance",
+        "cells"
+      ],
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/plan"
+        },
+        "evidence_root_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "component_artifact_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "model_runtime_config": {
+          "$ref": "#/$defs/modelRuntimeConfig"
+        },
+        "extraction_spec": {
+          "$ref": "#/$defs/extractionSpec"
+        },
+        "calibration_acceptance": {
+          "$ref": "#/$defs/calibrationAcceptance"
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/deskCell"
+          }
+        }
+      }
+    },
+    "finalProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan",
+        "evidence_root_id",
+        "component_artifact",
+        "model_runtime_config",
+        "extraction_spec",
+        "calibration_acceptance",
+        "cells"
+      ],
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/plan"
+        },
+        "evidence_root_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "component_artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "$ref": "#/$defs/nonemptyString"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "model_runtime_config": {
+          "$ref": "#/$defs/modelRuntimeConfig"
+        },
+        "extraction_spec": {
+          "$ref": "#/$defs/extractionSpec"
+        },
+        "calibration_acceptance": {
+          "$ref": "#/$defs/calibrationAcceptance"
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/finalCell"
+          }
+        }
+      }
+    },
+    "deskAggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "plan_set_id",
+        "calibration_scope",
+        "source_class",
+        "cell_composition_rule",
+        "consumer_floor_rule",
+        "cell_ids",
+        "transport_allowlists",
+        "postcollection"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "plan_set_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "calibration_scope": {
+          "const": "production_window"
+        },
+        "source_class": {
+          "const": "prospective"
+        },
+        "cell_composition_rule": {
+          "const": "componentwise_max_never_sum.v1"
+        },
+        "consumer_floor_rule": {
+          "const": "cross_stack_armwise_max.v1"
+        },
+        "cell_ids": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/nonemptyString"
+          }
+        },
+        "transport_allowlists": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/transportAllowlist"
+          }
+        },
+        "postcollection": {
+          "$ref": "#/$defs/deskPostcollection"
+        }
+      }
+    },
+    "transportAllowlist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport_group_id",
+        "cell_ids",
+        "allowed_consumer_condition_families"
+      ],
+      "properties": {
+        "transport_group_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "cell_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonemptyString"
+          }
+        },
+        "allowed_consumer_condition_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/consumerFamily"
+          }
+        }
+      }
+    },
+    "componentArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id",
+        "artifact_id",
+        "sha256",
+        "producer_pin_sha256"
+      ],
+      "properties": {
+        "plan_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_pin_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "finalAggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "plan_set_id",
+        "producer_set_sha256",
+        "calibration_scope",
+        "source_class",
+        "cell_composition_rule",
+        "consumer_floor_rule",
+        "component_artifacts",
+        "cell_ids",
+        "transport_allowlists"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "plan_set_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "producer_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "calibration_scope": {
+          "const": "production_window"
+        },
+        "source_class": {
+          "const": "prospective"
+        },
+        "cell_composition_rule": {
+          "const": "componentwise_max_never_sum.v1"
+        },
+        "consumer_floor_rule": {
+          "const": "cross_stack_armwise_max.v1"
+        },
+        "component_artifacts": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/componentArtifact"
+          }
+        },
+        "cell_ids": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/nonemptyString"
+          }
+        },
+        "transport_allowlists": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/transportAllowlist"
+          }
+        }
+      }
+    },
+    "pinRequirements": {
+      "description": "Non-mintable desk-stage authoring inventory. Its fields are requirements to be copied and independently compared during finalization; this document itself does not assert that any value is resolved, authenticated, or mintable.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "mint_tool_version",
+        "producer_plans",
+        "aggregate"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "joulewise.floor_mint_pin_requirements.v2"
+        },
+        "mint_tool_version": {
+          "const": "joulewise.floor_mint.generalized.v2"
+        },
+        "producer_plans": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/deskProducer"
+          }
+        },
+        "aggregate": {
+          "$ref": "#/$defs/deskAggregate"
+        }
+      }
+    },
+    "finalPinset": {
+      "description": "Mintable only through the generalized v2 gate, which binds every parsed inventory field to authenticated input evidence, an exact corresponding emitted value, or an authenticated self-hash relation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "mint_tool_version",
+        "producer_plans",
+        "aggregate"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "joulewise.floor_mint_pinset.v2"
+        },
+        "mint_tool_version": {
+          "const": "joulewise.floor_mint.generalized.v2"
+        },
+        "producer_plans": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/finalProducer"
+          }
+        },
+        "aggregate": {
+          "$ref": "#/$defs/finalAggregate"
+        }
+      }
+    }
+  }
+}
