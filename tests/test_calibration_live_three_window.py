@@ -60,6 +60,7 @@ _FIXTURE = (
     / "scenario.json"
 )
 _USE_WINDOW_BINDING = object()
+_USE_WINDOW_RUNS_ROOT = object()
 _ISSUANCE_BASE_SEQUENCE = 76
 _LIVE_SESSION_COUNT = 3
 _PRODUCTION_RECEIPTS_PER_SESSION = 5
@@ -520,12 +521,18 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         candidates=None,
         binding=_USE_WINDOW_BINDING,
         bindings=None,
+        bracket_runs_root=_USE_WINDOW_RUNS_ROOT,
     ):
         window = self.windows[window_name]
         selected_binding = (
             self.bindings[window_name]
             if binding is _USE_WINDOW_BINDING
             else binding
+        )
+        selected_runs_root = (
+            window["runs_root"]
+            if bracket_runs_root is _USE_WINDOW_RUNS_ROOT
+            else bracket_runs_root
         )
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
@@ -543,7 +550,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 bracket_plan_id=window["plan_id"],
                 bracket_plan_sha256=window["plan_sha256"],
                 bracket_evidence_root_id=window["evidence_root_id"],
-                bracket_runs_root=window["runs_root"],
+                bracket_runs_root=selected_runs_root,
             )
 
     def _variant_snapshot(self, receipts: list[dict], pin: dict | None = None):
@@ -755,9 +762,14 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         _result, reasons = self._evaluate("beta", binding=None)
         self.assertEqual(reasons, ("calibration_bracket_binding_missing",))
 
-        result, reasons = self._evaluate(
-            "beta", binding=self.bindings["beta"]
+        _result, reasons = self._evaluate(
+            "beta",
+            binding=self.bindings["beta"],
+            bracket_runs_root=foreign_pre.bracket_runs_root,
         )
+        self.assertEqual(reasons, ("calibration_bracket_binding_invalid",))
+
+        result, reasons = self._evaluate("beta", binding=self.bindings["beta"])
         self.assertEqual(reasons, ())
         self.assertEqual(
             [result[slot]["attempt_id"] for slot in ("pre", "post")],
