@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from decimal import Decimal
 import hashlib
 import json
 from pathlib import Path
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +19,7 @@ from joulewise.calibration_bracketing import (
     _canonical_sha256 as bracketing_canonical_sha256,
     _valid_acceptance_bound,
     build_calibration_bracket_binding,
+    calibration_bracket_for_bundles,
     discover_calibration_candidates,
     evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
@@ -25,6 +28,8 @@ from joulewise.calibration_bracketing import (
 from joulewise.calibration_ledger import (
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_OPEN_EVENT,
+    BRACKET_SESSION_SLOT_CLAIM_EVENT,
+    GOVERNED_ARTIFACTS,
     HISTORICAL_IMPORT_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_RESERVATION_EVENT,
     LEDGER_SCHEMA,
@@ -33,6 +38,7 @@ from joulewise.calibration_ledger import (
     append_bracket_session_receipt,
     canonical_json_bytes,
     canonical_sha256,
+    claim_bracket_session_slot,
     content_id_from_artifact_hashes,
     finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
@@ -44,6 +50,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_V2_ID,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from scripts import validate_powermetrics_fiducial as production_writer
 
 
 _FIXTURE = (
@@ -53,6 +60,13 @@ _FIXTURE = (
     / "scenario.json"
 )
 _USE_WINDOW_BINDING = object()
+_ISSUANCE_BASE_SEQUENCE = 76
+_LIVE_SESSION_COUNT = 3
+_PRODUCTION_RECEIPTS_PER_SESSION = 5
+_EXPECTED_TERMINAL_SEQUENCE = (
+    _ISSUANCE_BASE_SEQUENCE
+    + _LIVE_SESSION_COUNT * _PRODUCTION_RECEIPTS_PER_SESSION
+)
 
 
 def _hash(label: str) -> str:
@@ -89,6 +103,13 @@ def _pin_bytes(pin: dict) -> bytes:
     return (json.dumps(pin, sort_keys=True) + "\n").encode("utf-8")
 
 
+def _write_synthetic_custody(custody: Path, label: str) -> None:
+    for relative in GOVERNED_ARTIFACTS:
+        path = custody / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f"{label}:{relative}".encode("utf-8"))
+
+
 class CalibrationLiveThreeWindowTests(unittest.TestCase):
     """Exercise one issuance-equivalent prefix and its three live sessions."""
 
@@ -97,8 +118,16 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         cls.scenario = json.loads(_FIXTURE.read_text(encoding="utf-8"))
         cls.epoch = dict(cls.scenario["identity_epoch"])
         cls.t1 = dict(cls.scenario["t1_bindings"])
+
+        cls._class_tmp = tempfile.TemporaryDirectory()
+        root = Path(cls._class_tmp.name)
+        runtime_windows = []
+        for source in cls.scenario["windows"]:
+            window = copy.deepcopy(source)
+            window["runs_root"] = str(root / "night-roots" / window["name"])
+            runtime_windows.append(window)
         cls.windows = {
-            row["name"]: row for row in cls.scenario["windows"]
+            row["name"]: row for row in runtime_windows
         }
         cls.policy = CalibrationBracketingPolicy(
             require_bracket=True,
@@ -122,15 +151,38 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         cls.base_sequence = len(base_receipts)
         cls.base_digest = base_receipts[-1]["receipt_digest"]
 
-        cls._class_tmp = tempfile.TemporaryDirectory()
-        root = Path(cls._class_tmp.name)
-        ledger = root / "ledger.jsonl"
-        pin = root / "head.json"
+        ledger = root / "runs" / "ledger.jsonl"
+        pin = root / "configs" / "calibration" / "head.json"
+        ledger.parent.mkdir(parents=True)
+        pin.parent.mkdir(parents=True)
         ledger.write_bytes(_ledger_bytes(base_receipts))
         pin.write_bytes(_pin_bytes(_pin_for(base_receipts[-1])))
 
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "tests@joulewise.invalid"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "JouleWise tests"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "add", pin.relative_to(root).as_posix()],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-qm", "pin issuance-equivalent head"],
+            cwd=root,
+            check=True,
+        )
+
         bindings: dict[str, dict] = {}
-        for window in cls.scenario["windows"]:
+        closeouts: dict[str, dict] = {}
+        for window in runtime_windows:
             attempts = {
                 slot: f"d117-{window['name']}-{slot}" for slot in ("pre", "post")
             }
@@ -156,35 +208,71 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 runs_root=window["runs_root"],
                 slots=slots,
                 head_pin_path=pin,
-                require_committed_pin=False,
+                require_committed_pin=True,
+                repo_root=root,
             )
             for slot in ("pre", "post"):
-                finalize_bracket_session_slot(
-                    ledger,
-                    session_id=window["session_id"],
-                    slot=slot,
-                    disposition="valid",
+                lifecycle = production_writer._CaptureLedgerLifecycle(
+                    ledger_path=ledger,
+                    head_pin_path=pin,
+                    attempt_id=attempts[slot],
                     custody_locator=slots[slot]["custody_locator"],
-                    artifact_sha256=_content_hashes(attempts[slot]),
                     identity_epoch=cls.epoch,
                     t1_bindings=cls.t1,
-                    capture_wall_time_s=str(window[f"{slot}_capture_s"]),
-                    exact_bound_lexeme_s=window[f"{slot}_bound_s"],
+                    session_id=window["session_id"],
+                    slot=slot,
+                    require_committed_pin=False,
                 )
-            pin_value = terminal_head_pin_for_session(
-                ledger, session_id=window["session_id"]
-            )
+                # The synthetic issuance prefix has hash-only import custody.
+                # Keep that fixture boundary while exercising the production
+                # writer's reservation validation, exclusive claim, and
+                # finalization path for every live endpoint.
+                def load_without_import_custody(*args, **kwargs):
+                    kwargs["verify_custody"] = False
+                    return load_calibration_ledger_snapshot(*args, **kwargs)
+
+                with patch.object(
+                    production_writer,
+                    "load_calibration_ledger_snapshot",
+                    side_effect=load_without_import_custody,
+                ):
+                    lifecycle.begin()
+                _write_synthetic_custody(
+                    Path(slots[slot]["custody_locator"]), attempts[slot]
+                )
+                lifecycle.capture_wall_time_s = str(
+                    window[f"{slot}_capture_s"]
+                )
+                lifecycle.exact_bound_lexeme_s = window[f"{slot}_bound_s"]
+                _receipt_value, terminal_pin = lifecycle.finalize("valid")
+                if slot == "pre":
+                    if terminal_pin is not None:
+                        raise AssertionError("pre finalization emitted a terminal pin")
+                elif terminal_pin is None:
+                    raise AssertionError("post finalization omitted its terminal pin")
+            pin_value = terminal_pin
             pin.write_bytes(_pin_bytes(pin_value))
-            terminal_snapshot = load_calibration_ledger_snapshot(
+            subprocess.run(
+                ["git", "add", pin.relative_to(root).as_posix()],
+                cwd=root,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", f"pin {window['name']} closeout"],
+                cwd=root,
+                check=True,
+            )
+            closeout_snapshot = load_calibration_ledger_snapshot(
                 ledger,
                 pin,
                 baseline_sequence=cls.base_sequence,
                 baseline_digest=cls.base_digest,
-                require_committed_pin=False,
+                require_committed_pin=True,
                 verify_custody=False,
+                repo_root=root,
             )
             bindings[window["name"]] = build_calibration_bracket_binding(
-                terminal_snapshot,
+                closeout_snapshot,
                 session_id=window["session_id"],
                 window_id=window["window_id"],
                 plan_id=window["plan_id"],
@@ -192,8 +280,21 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 evidence_root_id=window["evidence_root_id"],
                 runs_root=window["runs_root"],
             )
+            closeouts[window["name"]] = {
+                "snapshot": closeout_snapshot,
+                "ledger_bytes": ledger.read_bytes(),
+                "pin_bytes": pin.read_bytes(),
+                "pin_commit": subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip(),
+            }
 
         cls.bindings = bindings
+        cls.closeouts = closeouts
         cls.final_ledger_bytes = ledger.read_bytes()
         cls.final_pin_bytes = pin.read_bytes()
 
@@ -477,6 +578,17 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
         return value
 
+    def _receipt_index(
+        self, session_id: str, event: str, slot: str | None = None
+    ) -> int:
+        return next(
+            index
+            for index, row in enumerate(self.receipts)
+            if row.get("session_id") == session_id
+            and row.get("event") == event
+            and (slot is None or row.get("slot") == slot)
+        )
+
     def test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions(
         self,
     ) -> None:
@@ -491,6 +603,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             disposition: sum(row.disposition == disposition for row in imported)
             for disposition in ("valid", "systematic-invalid", "ordinary-invalid")
         }
+        self.assertEqual(self.base_sequence, _ISSUANCE_BASE_SEQUENCE)
         self.assertEqual(len(prefix), expected["receipt_count"])
         self.assertEqual(len(imported), expected["observation_count"])
         self.assertEqual(counts, expected["disposition_counts"])
@@ -510,9 +623,58 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             for row in self.snapshot.observations
             if row.is_historical_import
         }
-        self.assertEqual(len(candidates), 6)
+        expected = self.scenario["expected_live_extension"]
+        self.assertEqual(len(candidates), expected["candidate_count"])
         self.assertEqual(authenticated_attempts & imported_attempts, set())
         self.assertTrue(all(candidate.bracket_session_id for candidate in candidates))
+
+    def test_bundle_path_uses_ledger_discovery_as_candidate_authority(self) -> None:
+        window = self.windows["gamma"]
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(
+                start_s=window["window_start_s"],
+                end_s=window["window_end_s"],
+            ),
+            metadata=lambda: {
+                "instrument_calibration": {"bindings": dict(self.t1)}
+            },
+        )
+        with (
+            patch(
+                "joulewise.calibration_bracketing.BundleReader",
+                return_value=reader,
+            ),
+            patch(
+                "joulewise.calibration_bracketing._candidate_from_observation",
+                side_effect=self._candidate,
+            ),
+            patch(
+                "joulewise.calibration_bracketing.discover_calibration_candidates",
+                wraps=discover_calibration_candidates,
+            ) as discover,
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=self.acceptance,
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path(window["runs_root"]),
+                [Path(window["runs_root"]) / "science-member"],
+                self.policy,
+                ledger_snapshot=self.snapshot,
+                bracket_binding=self.bindings["gamma"],
+                bracket_window_id=window["window_id"],
+                bracket_plan_id=window["plan_id"],
+                bracket_plan_sha256=window["plan_sha256"],
+                bracket_evidence_root_id=window["evidence_root_id"],
+            )
+        discover.assert_called_once_with(self.snapshot)
+        self.assertEqual(reasons, ())
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(
+            [result[slot]["attempt_id"] for slot in ("pre", "post")],
+            ["d117-gamma-pre", "d117-gamma-post"],
+        )
 
     def test_alpha_beta_gamma_each_bind_only_their_own_pre_post_pair(self) -> None:
         for name, window in self.windows.items():
@@ -578,48 +740,231 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 _result, reasons = self._evaluate(name, binding=tampered)
                 self.assertEqual(reasons, ("calibration_bracket_binding_invalid",))
 
-    def test_all_three_verdicts_use_one_complete_candidate_universe(self) -> None:
+    def test_l5_foreign_runs_root_cannot_bracket_with_or_without_binding(
+        self,
+    ) -> None:
+        beta = self.windows["beta"]
+        by_attempt = {candidate.attempt_id: candidate for candidate in self.candidates}
+        foreign_pre = by_attempt["d117-alpha-pre"]
+        foreign_post = by_attempt["d117-gamma-post"]
+        self.assertNotEqual(foreign_pre.bracket_runs_root, beta["runs_root"])
+        self.assertNotEqual(foreign_post.bracket_runs_root, beta["runs_root"])
+        self.assertLessEqual(foreign_pre.capture_wall_time_s, beta["window_start_s"])
+        self.assertGreaterEqual(foreign_post.capture_wall_time_s, beta["window_end_s"])
+
+        _result, reasons = self._evaluate("beta", binding=None)
+        self.assertEqual(reasons, ("calibration_bracket_binding_missing",))
+
+        result, reasons = self._evaluate(
+            "beta", binding=self.bindings["beta"]
+        )
+        self.assertEqual(reasons, ())
+        self.assertEqual(
+            [result[slot]["attempt_id"] for slot in ("pre", "post")],
+            ["d117-beta-pre", "d117-beta-post"],
+        )
+        self.assertNotIn(
+            foreign_pre.attempt_id,
+            {result["pre"]["attempt_id"], result["post"]["attempt_id"]},
+        )
+        self.assertNotIn(
+            foreign_post.attempt_id,
+            {result["pre"]["attempt_id"], result["post"]["attempt_id"]},
+        )
+
+    def test_each_night_issues_its_verdict_at_a_committed_closeout(self) -> None:
+        expected = self.scenario["expected_live_extension"]
+        pin_commits = []
+        pin_digests = []
+        for index, vector in enumerate(expected["cross_window_openness"], start=1):
+            name = vector["closeout"]
+            snapshot = self.closeouts[name]["snapshot"]
+            pin_value = json.loads(self.closeouts[name]["pin_bytes"])
+            candidates = self._discover(snapshot)
+            candidate_window_ids = {
+                candidate.bracket_window_id for candidate in candidates
+            }
+            expected_window_ids = {
+                self.windows[window_name]["window_id"]
+                for window_name in vector["candidate_windows"]
+            }
+            with self.subTest(closeout=name):
+                self.assertEqual(snapshot.refusal_reasons, ())
+                self.assertEqual(len(snapshot.bracket_sessions), index)
+                self.assertEqual(
+                    len(
+                        [
+                            observation
+                            for observation in snapshot.observations
+                            if not observation.is_historical_import
+                        ]
+                    ),
+                    index * 2,
+                )
+                self.assertEqual(
+                    snapshot.head_sequence,
+                    self.base_sequence + index * _PRODUCTION_RECEIPTS_PER_SESSION,
+                )
+                self.assertEqual(pin_value["sequence"], snapshot.head_sequence)
+                self.assertEqual(pin_value["head_digest"], snapshot.head_digest)
+                self.assertEqual(candidate_window_ids, expected_window_ids)
+                result, reasons = self._evaluate(
+                    name,
+                    snapshot=snapshot,
+                    candidates=candidates,
+                    binding=self.bindings[name],
+                )
+                self.assertEqual(reasons, ())
+                self.assertEqual(result["status"], "passed")
+                self.assertEqual(
+                    result["acceptance"]["ledger_snapshot"]["sequence"],
+                    snapshot.head_sequence,
+                )
+            pin_commits.append(self.closeouts[name]["pin_commit"])
+            pin_digests.append(pin_value["head_digest"])
+        self.assertEqual(len(set(pin_commits)), _LIVE_SESSION_COUNT)
+        self.assertEqual(len(set(pin_digests)), _LIVE_SESSION_COUNT)
+
+    def test_final_closeout_replays_all_verdicts_with_complete_universe(self) -> None:
         snapshots = []
         for name in self.windows:
             result, reasons = self._evaluate(name, candidates=self.candidates)
             self.assertEqual(reasons, ())
             snapshots.append(result["acceptance"]["ledger_snapshot"])
         self.assertEqual(snapshots, [snapshots[0]] * 3)
-        self.assertEqual(snapshots[0]["sequence"], 85)
+        self.assertEqual(snapshots[0]["sequence"], _EXPECTED_TERMINAL_SEQUENCE)
         for name in self.windows:
             _result, reasons = self._evaluate(
                 name, candidates=self.candidates[:-1]
             )
             self.assertEqual(reasons, ("calibration_ledger_off_ledger_artifact",))
 
-    def test_ideal_three_receipt_sessions_end_at_terminal_sequence_85(self) -> None:
+    def test_production_writer_receipts_end_at_derived_terminal_sequence(self) -> None:
         live = self.snapshot.receipts[self.base_sequence :]
         expected = self.scenario["expected_live_extension"]
-        self.assertEqual(self.snapshot.head_sequence, expected["terminal_sequence"])
-        self.assertEqual(len(live), 9)
-        for index, window in enumerate(self.scenario["windows"]):
-            rows = live[index * 3 : index * 3 + 3]
+        receipt_model = expected["receipt_model_supersession"]["landed"]
+        self.assertEqual(self.snapshot.head_sequence, _EXPECTED_TERMINAL_SEQUENCE)
+        self.assertEqual(
+            len(live),
+            expected["session_count"] * _PRODUCTION_RECEIPTS_PER_SESSION,
+        )
+        self.assertEqual(
+            receipt_model["receipts_per_session"],
+            _PRODUCTION_RECEIPTS_PER_SESSION,
+        )
+        for index, window in enumerate(self.windows.values()):
+            start = index * _PRODUCTION_RECEIPTS_PER_SESSION
+            rows = live[start : start + _PRODUCTION_RECEIPTS_PER_SESSION]
             self.assertEqual(
                 [row["event"] for row in rows],
                 [
                     BRACKET_SESSION_OPEN_EVENT,
+                    BRACKET_SESSION_SLOT_CLAIM_EVENT,
                     BRACKET_SESSION_FINALIZATION_EVENT,
+                    BRACKET_SESSION_SLOT_CLAIM_EVENT,
                     BRACKET_SESSION_FINALIZATION_EVENT,
                 ],
             )
             self.assertEqual({row["session_id"] for row in rows}, {window["session_id"]})
-            self.assertEqual([rows[1]["slot"], rows[2]["slot"]], ["pre", "post"])
+            self.assertEqual(
+                [row["slot"] for row in rows[1:]],
+                ["pre", "pre", "post", "post"],
+            )
+        live_observations = [
+            observation
+            for observation in self.snapshot.observations
+            if not observation.is_historical_import
+        ]
+        self.assertEqual(
+            len(self.snapshot.bracket_sessions), expected["session_count"]
+        )
+        self.assertEqual(
+            {session.state for session in self.snapshot.bracket_sessions},
+            {"finalized"},
+        )
+        self.assertEqual(
+            len(live_observations), expected["live_observation_count"]
+        )
+        self.assertTrue(
+            all(
+                observation.observation_kind == "bracket-session-finalized"
+                and observation.disposition == "valid"
+                for observation in live_observations
+            )
+        )
 
-    def test_d110_never_zero_allowance_remains_active_for_all_verdicts(self) -> None:
+    def test_d110_allowance_selects_both_max_operands_across_windows(self) -> None:
         expected = self.scenario["expected_live_extension"]
-        for name in self.windows:
-            with self.subTest(window=name):
-                result, reasons = self._evaluate(name)
+        by_attempt = {candidate.attempt_id: candidate for candidate in self.candidates}
+        for vector in expected["allowance_branch_vectors"]:
+            name = vector["window"]
+            overridden = dict(by_attempt)
+            for slot in ("pre", "post"):
+                attempt_id = f"d117-{name}-{slot}"
+                overridden[attempt_id] = replace(
+                    overridden[attempt_id],
+                    b_fiducial_s=vector[f"{slot}_bound_s"],
+                )
+            candidates = tuple(
+                overridden[candidate.attempt_id] for candidate in self.candidates
+            )
+            with self.subTest(window=name, branch=vector["branch"]):
+                observed = Decimal(vector["observed_drift_s"])
+                screen = Decimal(expected["never_zero_allowance_s"])
+                if vector["branch"] == "bracket_screen_s":
+                    self.assertLess(observed, screen)
+                else:
+                    self.assertEqual(vector["branch"], "observed_drift_s")
+                    self.assertGreater(observed, screen)
+                result, reasons = self._evaluate(name, candidates=candidates)
                 self.assertEqual(reasons, ())
                 allowance = result["acceptance"]["allowance"]
                 self.assertEqual(allowance["rule"], expected["allowance_rule"])
-                self.assertEqual(allowance["value_s"], expected["never_zero_allowance_s"])
+                self.assertEqual(
+                    result["acceptance"]["drift"]["observed_s"],
+                    vector["observed_drift_s"],
+                )
+                self.assertEqual(
+                    allowance["value_s"], vector["selected_allowance_s"]
+                )
                 self.assertEqual(allowance["embedding_count"], 1)
+
+    def test_no_failure_campaign_has_36_valid_observations_two_short_of_trigger(
+        self,
+    ) -> None:
+        expected = self.scenario["expected_live_extension"][
+            "valid_observation_count"
+        ]
+        issuance_valid = {
+            observation.content_id
+            for observation in self.snapshot.observations
+            if observation.is_historical_import
+            and observation.disposition == "valid"
+            and dict(observation.identity_epoch) == self.epoch
+        }
+        valid_same_epoch = {
+            observation.content_id
+            for observation in self.snapshot.observations
+            if observation.disposition == "valid"
+            and dict(observation.identity_epoch) == self.epoch
+        }
+        self.assertEqual(len(issuance_valid), expected["issuance"])
+        self.assertEqual(
+            len(valid_same_epoch), expected["after_three_live_windows"]
+        )
+        self.assertEqual(
+            expected["corpus_doubling_trigger"] - len(valid_same_epoch),
+            expected["shortfall"],
+        )
+        for name in self.windows:
+            result, reasons = self._evaluate(name)
+            self.assertEqual(reasons, ())
+            self.assertNotIn(
+                "corpus_doubles_from_19_to_38",
+                result["acceptance"]["prospective_rederivation"][
+                    "observed_triggers"
+                ],
+            )
 
     def test_refuses_import_marker_removal_import_leakage_or_discovery_regression(
         self,
@@ -658,19 +1003,34 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
     def test_refuses_missing_duplicate_reordered_or_conflicting_session_receipts(
         self,
     ) -> None:
+        alpha_session = self.windows["alpha"]["session_id"]
+        post_claim = self._receipt_index(
+            alpha_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
+        )
+        post_final = self._receipt_index(
+            alpha_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
+        )
+        session_open = self._receipt_index(
+            alpha_session, BRACKET_SESSION_OPEN_EVENT
+        )
         variants: dict[str, list[dict]] = {}
-        variants["missing"] = self.receipts[:80] + self.receipts[81:]
+        variants["missing"] = (
+            self.receipts[:post_final] + self.receipts[post_final + 1 :]
+        )
         variants["duplicate"] = (
-            self.receipts[:81]
-            + [copy.deepcopy(self.receipts[80])]
-            + self.receipts[81:]
+            self.receipts[: post_final + 1]
+            + [copy.deepcopy(self.receipts[post_final])]
+            + self.receipts[post_final + 1 :]
         )
         reordered = copy.deepcopy(self.receipts)
-        reordered[79], reordered[80] = reordered[80], reordered[79]
+        reordered[post_claim], reordered[post_final] = (
+            reordered[post_final],
+            reordered[post_claim],
+        )
         variants["reordered"] = reordered
         conflicting = copy.deepcopy(self.receipts)
-        conflicting[78]["window_id"] = "conflicting-alpha-window"
-        conflicting[78] = _receipt(conflicting[78])
+        conflicting[session_open]["window_id"] = "conflicting-alpha-window"
+        conflicting[session_open] = _receipt(conflicting[session_open])
         variants["conflicting"] = conflicting
 
         for name, receipts in variants.items():
@@ -691,10 +1051,12 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             open_snapshot.refusal_reasons,
         )
 
-        abandoned = copy.deepcopy(self.receipts[:-1])
+        gamma_session = self.windows["gamma"]["session_id"]
+        post_claim = self._receipt_index(
+            gamma_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
+        )
+        abandoned = copy.deepcopy(self.receipts[:post_claim])
         abandoned[-1]["disposition"] = "abandoned"
-        abandoned[-1]["content_id"] = None
-        abandoned[-1]["artifact_sha256"] = {}
         abandoned = self._rechain(abandoned)
         abandoned_snapshot = self._variant_snapshot(abandoned)
         self.assertIn(
@@ -706,7 +1068,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self,
     ) -> None:
         mismatch_pin = {
-            "sequence": 85,
+            "sequence": _EXPECTED_TERMINAL_SEQUENCE,
             "head_digest": "f" * 64,
             "ledger_schema": LEDGER_SCHEMA,
         }
@@ -719,8 +1081,13 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self.assertIn("calibration_ledger_rollback", rollback.refusal_reasons)
 
         forked = copy.deepcopy(self.receipts)
-        forked[83]["predecessor_digest"] = "e" * 64
-        forked[83] = _receipt(forked[83])
+        fork_index = self._receipt_index(
+            self.windows["gamma"]["session_id"],
+            BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            "pre",
+        )
+        forked[fork_index]["predecessor_digest"] = "e" * 64
+        forked[fork_index] = _receipt(forked[fork_index])
         fork = self._variant_snapshot(forked)
         self.assertIn("calibration_ledger_chain_conflict", fork.refusal_reasons)
 
@@ -837,12 +1204,14 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 index
                 for index, row in enumerate(self.receipts)
                 if row.get("session_id") == gamma["session_id"]
+                and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
                 and row.get("slot") == "pre"
             ),
             "post": next(
                 index
                 for index, row in enumerate(self.receipts)
                 if row.get("session_id") == gamma["session_id"]
+                and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
                 and row.get("slot") == "post"
             ),
         }
@@ -949,6 +1318,13 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             slots=slots,
             head_pin_path=self.pin,
             require_committed_pin=False,
+        )
+        claim_bracket_session_slot(
+            self.ledger,
+            session_id=window["session_id"],
+            slot="pre",
+            attempt_id=attempts["pre"],
+            claim_id="synthetic-systematic-pre-claim",
         )
         finalize_bracket_session_slot(
             self.ledger,
