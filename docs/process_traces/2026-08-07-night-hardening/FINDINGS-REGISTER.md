@@ -88,9 +88,11 @@ attempts with 44 refused occurrences; 138 campaign prechecks (136 admitted,
 attempts; 26 distinct machine-readable reason codes grouping into 10
 mechanism families.
 
-**{member_id -> reason} reconstructability: 34.2% identity-level /
-31.8% occurrence-level — 30 of 44 refused occurrences have NO causal
-reason reconstructable.** The logs prove refusals happened far more
+**{member_id -> reason} reconstructability, two DISTINCT denominators
+(neither derives from the other): occurrence-level 14 of 44 refused
+occurrences reconstructable (31.8%) — so 30 of 44 have NO causal reason;
+identity-level 13 of 38 refused member identities reconstructable
+(34.2%).** The logs prove refusals happened far more
 reliably than they explain why. This is the quantitative case for the
 pre-window reason-code plumbing (Ed ruling #3): without it, the three
 D-117 nights will add more unexplained refusals to that denominator.

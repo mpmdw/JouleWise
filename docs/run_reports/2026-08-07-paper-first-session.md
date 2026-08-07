@@ -74,10 +74,15 @@ branch pushed. Both branches await their final gates.
 
 **Meta-sweeps (Sol high/fast, read-only).** Refusal census (13 window
 decisions, 1,173 member attempts, 44 refusals, 10 mechanism families —
-and **only 34% of refused members have a reconstructable reason**, which
-evidences the pre-window plumbing item); contamination desk study (742
-idle captures; member-length burst excess >1 J in ~35% of windows, never
->5 J, max 3.21 J); decision-log coherence; queue staleness; council-log
+and only 14 of 44 refused occurrences (31.8%), or 13 of 38 refused member
+identities (34.2%), have a reconstructable reason — two distinct
+denominators, neither derived from the other; this evidences the
+pre-window plumbing item); contamination desk study (742 idle captures
+analyzed, but ONLY TWO — the ~360 s app-resident characterization
+pre-idles — are long enough to support member-length windows; over
+strongly-overlapping placements in those two, burst excess exceeded 1 J
+in ~35% of 93 s windows and never exceeded 5 J, max 3.21 J; descriptive
+and NON-CLAIM, not production-run probabilities); decision-log coherence; queue staleness; council-log
 layer yields; skill-stack drift; U5–U7 pack scout; paper production-format
 scout; docs-vs-practice.
 
