@@ -516,6 +516,33 @@ module.abort_bracket_session(
             capture_output=True,
         )
 
+    def _abort_before_first_payload_byte_in_subprocess(
+        self,
+        ledger: Path,
+        *,
+        reason: str,
+    ):
+        source_root = Path(__file__).resolve().parents[1]
+        code = f"""
+import os, signal
+from pathlib import Path
+import joulewise.calibration_ledger as module
+def kill_before_write(_handle, _payload):
+    os.kill(os.getpid(), signal.SIGKILL)
+module._write_ledger_append_payload = kill_before_write
+module.abort_bracket_session(
+    Path({str(ledger)!r}),
+    session_id="session-alpha",
+    reason={reason!r},
+)
+"""
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=source_root,
+            check=False,
+            capture_output=True,
+        )
+
     def _finalize_post_in_subprocess_before_journal_clear(self):
         source_root = Path(__file__).resolve().parents[1]
         custody = self._custody("session-alpha-post")
@@ -660,6 +687,100 @@ module.finalize_bracket_session_slot(
             )["sequence"],
             receipt_count_before,
         )
+
+    def test_standalone_recovery_reports_never_started_intent_without_replay(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        ledger_before = self.ledger.read_bytes()
+        died = self._abort_before_first_payload_byte_in_subprocess(
+            self.ledger,
+            reason="never_started_abort",
+        )
+        self.assertEqual(died.returncode, -signal.SIGKILL)
+        journal_path = calibration_ledger._append_journal_path(self.ledger)
+        self.assertTrue(journal_path.exists())
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError,
+            "unstarted_or_abandoned_intent.*zero observed payload bytes",
+        ):
+            calibration_ledger.recover_calibration_ledger_append(self.ledger)
+
+        self.assertEqual(self.ledger.read_bytes(), ledger_before)
+        self.assertTrue(journal_path.exists())
+        self.assertEqual(list(self.root.glob("ledger.jsonl.recovery-*.json")), [])
+
+    def test_standalone_recovery_refuses_copied_foreign_operation_journal(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        foreign_ledger = self.root / "foreign-ledger.jsonl"
+        shutil.copy2(self.ledger, foreign_ledger)
+        died = self._abort_before_first_payload_byte_in_subprocess(
+            foreign_ledger,
+            reason="foreign_operation_abort",
+        )
+        self.assertEqual(died.returncode, -signal.SIGKILL)
+        target_journal = calibration_ledger._append_journal_path(self.ledger)
+        shutil.copy2(
+            calibration_ledger._append_journal_path(foreign_ledger),
+            target_journal,
+        )
+        ledger_before = self.ledger.read_bytes()
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError,
+            "unstarted_or_abandoned_intent.*zero observed payload bytes",
+        ):
+            calibration_ledger.recover_calibration_ledger_append(self.ledger)
+
+        self.assertEqual(self.ledger.read_bytes(), ledger_before)
+        self.assertTrue(target_journal.exists())
+        self.assertEqual(list(self.root.glob("ledger.jsonl.recovery-*.json")), [])
+
+    def test_recovery_validates_reconstructed_session_identity_before_clear(
+        self,
+    ) -> None:
+        opened = self._open_bracket_session()
+        raw = self.ledger.read_bytes()
+        foreign_abort = calibration_ledger._new_bracket_session_record(
+            sequence=2,
+            predecessor_digest=opened["receipt_digest"],
+            event=calibration_ledger.BRACKET_SESSION_ABORT_EVENT,
+            session_identity={
+                "session_id": "foreign-session",
+                "window_id": "window-alpha",
+                "plan_id": "plan-alpha",
+                "plan_sha256": "a" * 64,
+                "evidence_root_id": "evidence-alpha",
+                "runs_root": str(self.root / "another-root"),
+            },
+            fields={
+                "finalized_slots": [],
+                "unused_slots": ["pre", "post"],
+                "reason": "foreign_session_abort",
+            },
+        )
+        payload = canonical_json_bytes(foreign_abort) + b"\n"
+        calibration_ledger._prepare_append_journal(
+            self.ledger,
+            ledger_offset=len(raw),
+            predecessor_digest=opened["receipt_digest"],
+            payload=payload,
+        )
+        with self.ledger.open("ab") as handle:
+            handle.write(payload)
+        journal_path = calibration_ledger._append_journal_path(self.ledger)
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError,
+            "expected operation or session identity is invalid",
+        ):
+            calibration_ledger.recover_calibration_ledger_append(self.ledger)
+
+        self.assertTrue(journal_path.exists())
+        self.assertEqual(list(self.root.glob("ledger.jsonl.recovery-*.json")), [])
 
     def test_terminal_session_pin_classifies_journal_authenticated_torn_tail(
         self,

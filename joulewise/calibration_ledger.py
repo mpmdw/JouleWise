@@ -19,7 +19,9 @@ ledger, appends and fsyncs the ledger, then removes the sidecar.  A loader only
 recognizes a torn final line when its bytes are an exact prefix of that
 authenticated sidecar payload.  The next governed writer completes only the
 missing suffix (never deletes ledger bytes) and durably records a separate
-recovery-evidence JSON object before clearing the sidecar.
+recovery-evidence JSON object before clearing the sidecar.  A journal with no
+observed payload bytes is retained and reported as an unstarted or abandoned
+intent; automatic recovery requires physical evidence that the append began.
 """
 
 from __future__ import annotations
@@ -2351,6 +2353,106 @@ def _record_append_recovery(
     _atomic_private_write(path, payload)
 
 
+def _validate_reconstructed_append(
+    completed: bytes,
+    journal: Mapping[str, Any],
+) -> None:
+    """Authenticate the intended operation and its reconstructed ledger state."""
+
+    payload = str(journal["payload"]).encode("utf-8")
+    try:
+        intended = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError(
+            "append recovery refused: intended operation is malformed"
+        ) from exc
+    receipts, chain_reasons = _parse_ledger(completed)
+    if (
+        chain_reasons
+        or not receipts
+        or not _valid_receipt_shape(intended)
+        or receipts[-1] != intended
+        or int(intended["sequence"]) != len(receipts)
+        or intended["predecessor_digest"] != journal["predecessor_digest"]
+    ):
+        raise CalibrationLedgerError(
+            "append recovery refused: reconstructed ledger chain is invalid"
+        )
+
+    observations, sessions, state_reasons = _attempts_and_observations(receipts)
+    event = str(intended["event"])
+    expected_state_reasons: set[str] = set()
+    if event in {"reservation", HISTORICAL_IMPORT_RESERVATION_EVENT}:
+        expected_state_reasons.add("calibration_ledger_pending")
+    elif intended.get("schema_version") == BRACKET_SESSION_SCHEMA and (
+        event
+        in {
+            BRACKET_SESSION_OPEN_EVENT,
+            BRACKET_SESSION_SLOT_CLAIM_EVENT,
+        }
+        or event == BRACKET_SESSION_FINALIZATION_EVENT
+        and intended.get("slot") == "pre"
+    ):
+        expected_state_reasons.add("calibration_ledger_bracket_session_open")
+    if state_reasons != expected_state_reasons:
+        raise CalibrationLedgerError(
+            "append recovery refused: expected operation or session identity is invalid"
+        )
+
+    if intended.get("schema_version") == BRACKET_SESSION_SCHEMA:
+        session = next(
+            (
+                item
+                for item in sessions
+                if item.session_id == intended.get("session_id")
+            ),
+            None,
+        )
+        if session is None or any(
+            getattr(session, field) != intended.get(field)
+            for field in (
+                "session_id",
+                "window_id",
+                "plan_id",
+                "plan_sha256",
+                "evidence_root_id",
+                "runs_root",
+            )
+        ):
+            raise CalibrationLedgerError(
+                "append recovery refused: expected operation or session identity is invalid"
+            )
+        operation_matches = {
+            BRACKET_SESSION_OPEN_EVENT: (
+                session.capability_receipt_digest == intended["receipt_digest"]
+            ),
+            BRACKET_SESSION_SLOT_CLAIM_EVENT: session.state == "open",
+            BRACKET_SESSION_FINALIZATION_EVENT: (
+                intended.get("slot") in session.finalized_slots
+                and session.finalized_slots[str(intended["slot"])].receipt_digest
+                == intended["receipt_digest"]
+            ),
+            BRACKET_SESSION_ABORT_EVENT: (
+                session.abort_receipt_digest == intended["receipt_digest"]
+            ),
+        }.get(event, False)
+    else:
+        matching_observations = [
+            observation
+            for observation in observations
+            if observation.attempt_id == intended.get("attempt_id")
+            and observation.receipt_digest == intended["receipt_digest"]
+        ]
+        operation_matches = (
+            event in {"reservation", HISTORICAL_IMPORT_RESERVATION_EVENT}
+            or len(matching_observations) == 1
+        )
+    if not operation_matches:
+        raise CalibrationLedgerError(
+            "append recovery refused: expected operation or session identity is invalid"
+        )
+
+
 def _clear_append_journal(ledger_path: Path) -> None:
     try:
         _append_journal_path(ledger_path).unlink()
@@ -2377,6 +2479,11 @@ def _recover_journaled_append(
     offset = int(journal["ledger_offset"])
     payload = str(journal["payload"]).encode("utf-8")
     observed = len(raw) - offset
+    if observed == 0:
+        raise CalibrationLedgerError(
+            "append recovery refused: unstarted_or_abandoned_intent "
+            "(zero observed payload bytes)"
+        )
     missing = payload[observed:]
     if missing:
         handle.seek(0, os.SEEK_END)
@@ -2389,6 +2496,7 @@ def _recover_journaled_append(
         raise CalibrationLedgerError(
             "append recovery did not complete the ledger tail"
         )
+    _validate_reconstructed_append(completed, journal)
     _record_append_recovery(
         ledger_path,
         journal,
