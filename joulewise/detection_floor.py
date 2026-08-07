@@ -25,6 +25,7 @@ import json
 import math
 import stat
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -103,6 +104,8 @@ _CONSUMPTION_SEMANTICS_IDS = {
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 }
 _FLOOR_MINT_PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
+_FLOOR_MINT_PINSET_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pinset.v2"
+_FLOOR_MINT_TOOL_VERSION_V2 = "joulewise.floor_mint.generalized.v2"
 _FLOOR_MINT_PINSET_DIRECTORY = (
     Path(__file__).resolve().parents[1] / "scripts" / "floor_mint_pinsets"
 )
@@ -1364,6 +1367,7 @@ _PROVENANCE_KEYS = {
     "mint_tool_version",
     "implementation",
 }
+_PROVENANCE_OPTIONAL_KEYS = {"producer_calibration_plans"}
 _CALIBRATION_PLAN_KEYS = {
     "plan_id",
     "declared_calibration_scope",
@@ -1431,7 +1435,7 @@ def _is_hex(value, length: int = 64) -> bool:
 
 @dataclass(frozen=True)
 class _FloorMintPinsetProjection:
-    family_identity: tuple[str, str, str]
+    family_identities: frozenset[tuple[str, str, str]]
     evidence_root_ids: frozenset[str]
 
 
@@ -1453,6 +1457,101 @@ def _is_six_decimal_literal(value: object) -> bool:
         and (whole == "0" or not whole.startswith("0"))
         and len(fraction) == 6
         and fraction.isdigit()
+    )
+
+
+_V2_ROOT_KEYS = {
+    "schema_version", "mint_tool_version", "producer_plans", "aggregate"
+}
+_V2_PLAN_KEYS = {
+    "plan_id", "sha256", "declared_sha256", "sidecar_sha256", "relative_path",
+    "declared_calibration_scope", "artifact_calibration_scope",
+}
+_V2_PRODUCER_KEYS = {
+    "plan", "evidence_root_id", "component_artifact", "model_runtime_config",
+    "extraction_spec", "calibration_acceptance", "cells",
+}
+_V2_COMPONENT_ARTIFACT_KEYS = {"artifact_id", "sha256"}
+_V2_RUNTIME_KEYS = {
+    "model_artifact_sha256", "runtime_identity_sha256", "config_set_sha256"
+}
+_V2_EXTRACTION_KEYS = {"sha256", "member_count"}
+_V2_ACCEPTANCE_KEYS = {
+    "acceptance_id", "artifact_sha256", "derivation_sha256", "derivation_rule_id"
+}
+_V2_CELL_KEYS = {
+    "role", "cell_id", "transport_group_id", "condition_family_id",
+    "condition_family_sha256", "metric", "window_class", "target_precheck_path",
+    "allowed_consumer_condition_families", "absolute", "comparative",
+    "postcollection",
+}
+_V2_COMPONENT_KEYS = {
+    "evidence_root_id", "calibration_cell_id", "evaluation_basis_sha256",
+    "evaluation_basis_members", "extraction_spec_sha256",
+    "extraction_spec_members", "expected_n", "drift_allowance_j",
+    "order_manifest_id", "order_manifest_sha256", "consumption_semantics_id",
+    "members",
+}
+_V2_POSTCOLLECTION_KEYS = {
+    "absolute_evaluation_basis_sha256", "absolute_evaluation_basis_members",
+    "comparative_evaluation_basis_sha256", "comparative_evaluation_basis_members",
+    "pre_receipt_sha256", "pre_content_sha256", "post_receipt_sha256",
+    "post_content_sha256", "bracket_binding_sha256",
+    "terminal_ledger_head_sha256", "observed_drift_s", "allowance_rule",
+    "bracket_screen_s", "applied_allowance_s", "allowance_embedding_count",
+    "extraction_report_sha256", "absolute_floor_full_precision",
+    "comparative_floor_full_precision", "operative_floor_full_precision",
+    "absolute_floor_six_decimal", "comparative_floor_six_decimal",
+    "operative_floor_six_decimal",
+}
+_V2_AGGREGATE_KEYS = {
+    "artifact_id", "plan_set_id", "producer_set_sha256", "calibration_scope",
+    "source_class", "cell_composition_rule", "consumer_floor_rule",
+    "component_artifacts", "cell_ids", "transport_allowlists",
+}
+_V2_AGGREGATE_COMPONENT_KEYS = {
+    "plan_id", "artifact_id", "sha256", "producer_pin_sha256"
+}
+_V2_ALLOWLIST_KEYS = {
+    "transport_group_id", "cell_ids", "allowed_consumer_condition_families"
+}
+_V2_FAMILY_KEYS = {"condition_family_id", "condition_family_sha256"}
+_V2_MEMBER_KEYS = {"bundle_id", "config_sha256"}
+
+
+def _v2_exact_mapping(value: object, keys: set[str]) -> bool:
+    return isinstance(value, Mapping) and set(value) == keys
+
+
+def _v2_plain_decimal(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    whole, separator, fraction = value.partition(".")
+    return (
+        bool(whole)
+        and whole.isdigit()
+        and (whole == "0" or not whole.startswith("0"))
+        and (not separator or bool(fraction) and fraction.isdigit())
+    )
+
+
+def _v2_closed_family_list(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(
+            _v2_exact_mapping(row, _V2_FAMILY_KEYS)
+            and _is_trimmed_string(row.get("condition_family_id"))
+            and _is_hex(row.get("condition_family_sha256"))
+            for row in value
+        )
+        and len(
+            {
+                (row["condition_family_id"], row["condition_family_sha256"])
+                for row in value
+            }
+        )
+        == len(value)
     )
 
 
@@ -1526,11 +1625,350 @@ def _project_floor_mint_pinset(
         root_ids.append(component["evidence_root_id"])
 
     return _FloorMintPinsetProjection(
-        family_identity=(
-            value["mint_tool_version"],
-            plan["plan_id"],
-            plan["sha256"],
+        family_identities=frozenset(
+            {
+                (
+                    value["mint_tool_version"],
+                    plan["plan_id"],
+                    plan["sha256"],
+                )
+            }
         ),
+        evidence_root_ids=frozenset(root_ids),
+    )
+
+
+def _project_floor_mint_pinset_v2(
+    value: object,
+) -> _FloorMintPinsetProjection | None:
+    """Project a recursively closed final-stage v2 pinset.
+
+    Claim-side callers use this reader without importing the mint CLI, so it
+    must agree with the mint on nested closure and aggregate/cell allowlists.
+    """
+
+    if not _v2_exact_mapping(value, _V2_ROOT_KEYS):
+        return None
+    if value.get("schema_version") != _FLOOR_MINT_PINSET_SCHEMA_VERSION_V2:
+        return None
+    mint_tool_version = value.get("mint_tool_version")
+    producers = value.get("producer_plans")
+    aggregate = value.get("aggregate")
+    if (
+        mint_tool_version != _FLOOR_MINT_TOOL_VERSION_V2
+        or not isinstance(producers, list)
+        or len(producers) != 2
+        or not _v2_exact_mapping(aggregate, _V2_AGGREGATE_KEYS)
+    ):
+        return None
+    if (
+        not _is_trimmed_string(aggregate.get("artifact_id"))
+        or not _is_trimmed_string(aggregate.get("plan_set_id"))
+        or not _is_hex(aggregate.get("producer_set_sha256"))
+        or aggregate.get("calibration_scope") != "production_window"
+        or aggregate.get("source_class") != "prospective"
+        or aggregate.get("cell_composition_rule")
+        != "componentwise_max_never_sum.v1"
+        or aggregate.get("consumer_floor_rule") != "cross_stack_armwise_max.v1"
+    ):
+        return None
+    identities = {
+        (
+            mint_tool_version,
+            aggregate["plan_set_id"],
+            aggregate["producer_set_sha256"],
+        )
+    }
+    root_ids: set[str] = set()
+    plan_ids: list[str] = []
+    cell_ids: list[str] = []
+    group_ids: list[str] = []
+    component_artifact_ids: list[str] = []
+    component_artifact_hashes: list[str] = []
+    cell_allowlists: list[list[Mapping]] = []
+    for producer in producers:
+        if not _v2_exact_mapping(producer, _V2_PRODUCER_KEYS):
+            return None
+        plan = producer.get("plan")
+        cells = producer.get("cells")
+        root_id = producer.get("evidence_root_id")
+        if (
+            not _v2_exact_mapping(plan, _V2_PLAN_KEYS)
+            or not _is_trimmed_string(plan.get("plan_id"))
+            or not _is_hex(plan.get("sha256"))
+            or not _is_hex(plan.get("declared_sha256"))
+            or plan.get("declared_sha256") != plan.get("sha256")
+            or not _is_hex(plan.get("sidecar_sha256"))
+            or not _is_trimmed_string(plan.get("relative_path"))
+            or not _is_trimmed_string(plan.get("declared_calibration_scope"))
+            or plan.get("artifact_calibration_scope") != "production_window"
+            or not _is_trimmed_string(root_id)
+            or not isinstance(cells, list)
+            or len(cells) != 2
+        ):
+            return None
+        component_artifact = producer.get("component_artifact")
+        runtime = producer.get("model_runtime_config")
+        extraction = producer.get("extraction_spec")
+        acceptance = producer.get("calibration_acceptance")
+        if (
+            not _v2_exact_mapping(
+                component_artifact, _V2_COMPONENT_ARTIFACT_KEYS
+            )
+            or not _is_trimmed_string(component_artifact.get("artifact_id"))
+            or not _is_hex(component_artifact.get("sha256"))
+            or not _v2_exact_mapping(runtime, _V2_RUNTIME_KEYS)
+            or any(not _is_hex(item) for item in runtime.values())
+            or not _v2_exact_mapping(extraction, _V2_EXTRACTION_KEYS)
+            or not _is_hex(extraction.get("sha256"))
+            or not _is_positive_int(extraction.get("member_count"))
+            or not _v2_exact_mapping(acceptance, _V2_ACCEPTANCE_KEYS)
+            or not _is_trimmed_string(acceptance.get("acceptance_id"))
+            or not _is_hex(acceptance.get("artifact_sha256"))
+            or not _is_hex(acceptance.get("derivation_sha256"))
+            or not _is_trimmed_string(acceptance.get("derivation_rule_id"))
+        ):
+            return None
+        plan_ids.append(plan["plan_id"])
+        component_artifact_ids.append(component_artifact["artifact_id"])
+        component_artifact_hashes.append(component_artifact["sha256"])
+        identities.add((mint_tool_version, plan["plan_id"], plan["sha256"]))
+        root_ids.add(root_id)
+        roles: list[str] = []
+        producer_members: set[str] = set()
+        custody_pins: list[tuple[object, ...]] = []
+        for cell in cells:
+            if not _v2_exact_mapping(cell, _V2_CELL_KEYS):
+                return None
+            role = cell.get("role")
+            expected_metric = {
+                "decode": "phase_energy_j.decode",
+                "prefill": "phase_energy_j.prefill",
+            }.get(role)
+            if (
+                expected_metric is None
+                or cell.get("metric") != expected_metric
+                or cell.get("window_class") != "phase"
+                or cell.get("target_precheck_path") != ["phase", role]
+                or not _is_trimmed_string(cell.get("cell_id"))
+                or not _is_trimmed_string(cell.get("transport_group_id"))
+                or not _is_trimmed_string(cell.get("condition_family_id"))
+                or not _is_hex(cell.get("condition_family_sha256"))
+                or not _v2_closed_family_list(
+                    cell.get("allowed_consumer_condition_families")
+                )
+            ):
+                return None
+            roles.append(role)
+            cell_ids.append(cell["cell_id"])
+            group_ids.append(cell["transport_group_id"])
+            cell_allowlists.append(cell["allowed_consumer_condition_families"])
+            components = []
+            for component_name in ("absolute", "comparative"):
+                component = cell.get(component_name)
+                if (
+                    not _v2_exact_mapping(component, _V2_COMPONENT_KEYS)
+                    or component.get("evidence_root_id") != root_id
+                    or not _is_trimmed_string(component.get("calibration_cell_id"))
+                    or not _is_hex(component.get("evaluation_basis_sha256"))
+                    or not _is_positive_int(
+                        component.get("evaluation_basis_members")
+                    )
+                    or not _is_hex(component.get("extraction_spec_sha256"))
+                    or component.get("extraction_spec_sha256")
+                    != extraction["sha256"]
+                    or not _is_positive_int(
+                        component.get("extraction_spec_members")
+                    )
+                    or component.get("extraction_spec_members")
+                    != extraction["member_count"]
+                    or not _is_positive_int(component.get("expected_n"))
+                    or not _is_number(component.get("drift_allowance_j"))
+                    or component.get("drift_allowance_j") < 0
+                    or not _is_trimmed_string(component.get("order_manifest_id"))
+                    or not _is_hex(component.get("order_manifest_sha256"))
+                    or component.get("consumption_semantics_id")
+                    not in _CONSUMPTION_SEMANTICS_IDS
+                    or not isinstance(component.get("members"), list)
+                    or not component.get("members")
+                ):
+                    return None
+                member_ids: list[str] = []
+                for member in component["members"]:
+                    if (
+                        not _v2_exact_mapping(member, _V2_MEMBER_KEYS)
+                        or not _is_trimmed_string(member.get("bundle_id"))
+                        or not _is_hex(member.get("config_sha256"))
+                    ):
+                        return None
+                    member_ids.append(member["bundle_id"])
+                if len(member_ids) != len(set(member_ids)):
+                    return None
+                expected_member_count = component["expected_n"] * (
+                    1 if component_name == "absolute" else 4
+                )
+                if len(member_ids) != expected_member_count:
+                    return None
+                producer_members.update(member_ids)
+                components.append(component)
+            post = cell.get("postcollection")
+            if not _v2_exact_mapping(post, _V2_POSTCOLLECTION_KEYS):
+                return None
+            hash_fields = {
+                key for key in _V2_POSTCOLLECTION_KEYS if key.endswith("sha256")
+            }
+            if (
+                any(not _is_hex(post.get(key)) for key in hash_fields)
+                or not _is_positive_int(
+                    post.get("absolute_evaluation_basis_members")
+                )
+                or not _is_positive_int(
+                    post.get("comparative_evaluation_basis_members")
+                )
+                or post.get("allowance_rule")
+                != "max(observed_drift_s,0.010818)"
+                or post.get("bracket_screen_s") != "0.010818"
+                or type(post.get("allowance_embedding_count")) is not int
+                or post.get("allowance_embedding_count") != 1
+                or any(
+                    not _v2_plain_decimal(post.get(key))
+                    for key in (
+                        "observed_drift_s",
+                        "applied_allowance_s",
+                        "absolute_floor_full_precision",
+                        "comparative_floor_full_precision",
+                        "operative_floor_full_precision",
+                    )
+                )
+                or any(
+                    not _is_six_decimal_literal(post.get(key))
+                    or post.get(key) == "7.377086"
+                    for key in (
+                        "absolute_floor_six_decimal",
+                        "comparative_floor_six_decimal",
+                        "operative_floor_six_decimal",
+                    )
+                )
+                or post.get("absolute_evaluation_basis_sha256")
+                != components[0]["evaluation_basis_sha256"]
+                or post.get("absolute_evaluation_basis_members")
+                != components[0]["evaluation_basis_members"]
+                or post.get("comparative_evaluation_basis_sha256")
+                != components[1]["evaluation_basis_sha256"]
+                or post.get("comparative_evaluation_basis_members")
+                != components[1]["evaluation_basis_members"]
+            ):
+                return None
+            try:
+                observed_drift = Decimal(post["observed_drift_s"])
+                applied_allowance = Decimal(post["applied_allowance_s"])
+                absolute_full = Decimal(post["absolute_floor_full_precision"])
+                comparative_full = Decimal(
+                    post["comparative_floor_full_precision"]
+                )
+                operative_full = Decimal(post["operative_floor_full_precision"])
+            except InvalidOperation:
+                return None
+            if (
+                applied_allowance != max(observed_drift, Decimal("0.010818"))
+                or operative_full != max(absolute_full, comparative_full)
+            ):
+                return None
+            custody_pins.append(
+                tuple(
+                    post[key]
+                    for key in (
+                        "pre_receipt_sha256",
+                        "pre_content_sha256",
+                        "post_receipt_sha256",
+                        "post_content_sha256",
+                        "bracket_binding_sha256",
+                        "terminal_ledger_head_sha256",
+                        "observed_drift_s",
+                        "applied_allowance_s",
+                        "extraction_report_sha256",
+                    )
+                )
+            )
+        if set(roles) != {"decode", "prefill"} or len(set(roles)) != 2:
+            return None
+        if len(set(custody_pins)) != 1:
+            return None
+        if len(producer_members) != extraction["member_count"]:
+            return None
+    if (
+        len(set(plan_ids)) != 2
+        or len(cell_ids) != 4
+        or len(set(cell_ids)) != 4
+        or len(group_ids) != 4
+        or len(set(group_ids)) != 4
+        or aggregate.get("cell_ids") != cell_ids
+    ):
+        return None
+    aggregate_components = aggregate.get("component_artifacts")
+    aggregate_allowlists = aggregate.get("transport_allowlists")
+    if (
+        not isinstance(aggregate_components, list)
+        or len(aggregate_components) != 2
+        or not isinstance(aggregate_allowlists, list)
+        or len(aggregate_allowlists) != 4
+    ):
+        return None
+    for index, entry in enumerate(aggregate_components):
+        if (
+            not _v2_exact_mapping(entry, _V2_AGGREGATE_COMPONENT_KEYS)
+            or entry.get("plan_id") != plan_ids[index]
+            or entry.get("artifact_id") != component_artifact_ids[index]
+            or entry.get("sha256") != component_artifact_hashes[index]
+            or not _is_hex(entry.get("producer_pin_sha256"))
+        ):
+            return None
+    for index, entry in enumerate(aggregate_allowlists):
+        if (
+            not _v2_exact_mapping(entry, _V2_ALLOWLIST_KEYS)
+            or entry.get("transport_group_id") != group_ids[index]
+            or entry.get("cell_ids") != [cell_ids[index]]
+            or not _v2_closed_family_list(
+                entry.get("allowed_consumer_condition_families")
+            )
+            or entry.get("allowed_consumer_condition_families")
+            != cell_allowlists[index]
+        ):
+            return None
+    try:
+        producer_hashes = [
+            hashlib.sha256(
+                json.dumps(
+                    producer,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            for producer in producers
+        ]
+        producer_set_sha256 = hashlib.sha256(
+            json.dumps(
+                producers,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+    except (TypeError, ValueError):
+        return None
+    if (
+        producer_set_sha256 != aggregate["producer_set_sha256"]
+        or any(
+            entry["producer_pin_sha256"] != producer_hashes[index]
+            for index, entry in enumerate(aggregate_components)
+        )
+    ):
+        return None
+    return _FloorMintPinsetProjection(
+        family_identities=frozenset(identities),
         evidence_root_ids=frozenset(root_ids),
     )
 
@@ -1583,7 +2021,9 @@ def _read_floor_mint_pinset(
         return None, f"pinset is not valid UTF-8 JSON: {exc}"
     projection = _project_floor_mint_pinset(value)
     if projection is None:
-        return None, "pinset does not match the closed v1 schema"
+        projection = _project_floor_mint_pinset_v2(value)
+    if projection is None:
+        return None, "pinset does not match a closed final pinset schema"
     return projection, None
 
 
@@ -1595,6 +2035,8 @@ def _repository_floor_mint_pinsets(
     except OSError as exc:
         return [], f"artifact.pinset: repository pinset scan failed: {exc.strerror or type(exc).__name__}"
     for path in paths:
+        if path.name == "schema_v2.json":
+            continue
         projection, error = _read_floor_mint_pinset(path)
         if error is not None:
             return (
@@ -1649,7 +2091,7 @@ def _resolve_evidence_root_ids(
     matches = [
         candidate
         for candidate in candidates
-        if candidate is not None and candidate.family_identity == identity
+        if candidate is not None and identity in candidate.family_identities
     ]
     if not matches:
         return None, "artifact.pinset: no pinset matches artifact family identity"
@@ -1790,8 +2232,16 @@ def _validate_idle_drift_guard(guard, where, errors) -> None:
         errors.append(f"{where}.calibration_status: invalid status {status!r}")
 
 
-def _validate_provenance(provenance, where, errors) -> str | None:
-    if not _check_keys(provenance, _PROVENANCE_KEYS, where, errors):
+def _validate_provenance(
+    provenance, where, errors
+) -> frozenset[str] | None:
+    if not _check_keys_with_optional(
+        provenance,
+        _PROVENANCE_KEYS,
+        _PROVENANCE_OPTIONAL_KEYS,
+        where,
+        errors,
+    ):
         return None
 
     calibration_plan_sha256 = None
@@ -1857,7 +2307,59 @@ def _validate_provenance(provenance, where, errors) -> str | None:
             errors.append(
                 f"{where}.implementation.python_package: must be 'joulewise'"
             )
-    return calibration_plan_sha256
+    producer_plans = provenance.get("producer_calibration_plans")
+    if producer_plans is None:
+        return (
+            frozenset({calibration_plan_sha256})
+            if calibration_plan_sha256 is not None
+            else None
+        )
+    if provenance["mint_tool_version"] != _FLOOR_MINT_TOOL_VERSION_V2:
+        errors.append(
+            f"{where}.producer_calibration_plans: allowed only for the v2 multi-plan mint"
+        )
+        return None
+    if not isinstance(producer_plans, list) or len(producer_plans) < 2:
+        errors.append(
+            f"{where}.producer_calibration_plans: must contain at least two plans"
+        )
+        return None
+    producer_hashes: set[str] = set()
+    producer_ids: set[str] = set()
+    for index, producer in enumerate(producer_plans):
+        producer_where = f"{where}.producer_calibration_plans[{index}]"
+        if not _check_keys(
+            producer,
+            _CALIBRATION_PLAN_KEYS,
+            producer_where,
+            errors,
+        ):
+            continue
+        plan_id = producer["plan_id"]
+        plan_sha256 = producer["sha256"]
+        if not _is_trimmed_string(plan_id):
+            errors.append(f"{producer_where}.plan_id: must be a nonempty string")
+        elif plan_id in producer_ids:
+            errors.append(f"{producer_where}.plan_id: duplicate producer plan")
+        else:
+            producer_ids.add(plan_id)
+        if not _is_hex(plan_sha256):
+            errors.append(
+                f"{producer_where}.sha256: must be 64 lowercase hex chars"
+            )
+        elif plan_sha256 in producer_hashes:
+            errors.append(f"{producer_where}.sha256: duplicate producer plan hash")
+        else:
+            producer_hashes.add(plan_sha256)
+        if producer["declared_calibration_scope"] not in _CALIBRATION_SCOPES:
+            errors.append(
+                f"{producer_where}.declared_calibration_scope: must be recognized"
+            )
+        if not _is_trimmed_string(producer["relative_path"]):
+            errors.append(
+                f"{producer_where}.relative_path: must be a nonempty string"
+            )
+    return frozenset(producer_hashes) if producer_hashes else None
 
 
 def _validate_estimate_math(
@@ -2357,7 +2859,12 @@ def _validate_absolute(record, where, errors) -> None:
     )
 
 
-def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -> None:
+def _validate_comparative(
+    record,
+    where,
+    errors,
+    calibration_plan_sha256s: frozenset[str] | None = None,
+) -> None:
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
@@ -2400,7 +2907,10 @@ def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -
             errors.append(
                 f"{block_where}.calibration_plan_sha256: must be 64 lowercase hex chars"
             )
-        elif block["calibration_plan_sha256"] != calibration_plan_sha256:
+        elif (
+            calibration_plan_sha256s is None
+            or block["calibration_plan_sha256"] not in calibration_plan_sha256s
+        ):
             errors.append(
                 f"{block_where}.calibration_plan_sha256: does not match artifact provenance"
             )
@@ -2477,7 +2987,7 @@ def _validate_cell(
     cell,
     where,
     errors,
-    calibration_plan_sha256=None,
+    calibration_plan_sha256s: frozenset[str] | None = None,
     evidence_root_ids: frozenset[str] | None = None,
 ) -> None:
     if not _check_keys_with_optional(
@@ -2533,7 +3043,7 @@ def _validate_cell(
             cell["comparative"],
             f"{where}.comparative",
             errors,
-            calibration_plan_sha256,
+            calibration_plan_sha256s,
         )
     metric = cell["key"].get("metric") if isinstance(cell["key"], Mapping) else None
     expected_claim_family = (
@@ -2905,7 +3415,7 @@ def validate_floor_artifact(
         errors.append(pinset_error)
     if value["method"] != build_method_block():
         errors.append("artifact: method block does not match the canonical v1 method")
-    calibration_plan_sha256 = _validate_provenance(
+    calibration_plan_sha256s = _validate_provenance(
         value["provenance"],
         "artifact.provenance",
         errors,
@@ -2926,7 +3436,7 @@ def validate_floor_artifact(
             cell,
             where,
             errors,
-            calibration_plan_sha256,
+            calibration_plan_sha256s,
             evidence_root_ids,
         )
         if isinstance(cell, Mapping):
