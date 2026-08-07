@@ -19,6 +19,7 @@ from unittest import mock
 
 import joulewise.calibration_ledger as calibration_ledger
 from scripts import calibration_ledger_bootstrap as bootstrap_cli
+from scripts import reserve_calibration_window_bracket as bracket_session_cli
 from tests.test_calibration_bracketing import (
     _unissued_acceptance_fixture,
     _unissued_acceptance_fixture_bytes,
@@ -26,17 +27,22 @@ from tests.test_calibration_bracketing import (
 from joulewise.calibration_bracketing import (
     _canonical_sha256 as acceptance_canonical_sha256,
     _valid_acceptance_bound,
+    evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
+    BRACKET_SESSION_ABORT_EVENT,
+    BRACKET_SESSION_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA,
     HISTORICAL_IMPORT_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_RESERVATION_EVENT,
     HISTORICAL_IMPORT_TABLE_SCHEMA,
     LEDGER_SCHEMA,
     CalibrationLedgerError,
+    abort_bracket_session,
+    append_bracket_session_receipt,
     HistoricalImportDurabilityUncertain,
     append_pending_receipt,
     artifact_hashes,
@@ -46,12 +52,15 @@ from joulewise.calibration_ledger import (
     content_id_from_artifact_hashes,
     custody_manifest_bytes,
     finalize_attempt_receipt,
+    finalize_bracket_session_slot,
     generate_historical_custody_manifest,
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
     prepare_historical_import,
+    terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.schemas import CalibrationBracketingPolicy
 
 
 _REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
@@ -199,6 +208,63 @@ class CalibrationLedgerTests(unittest.TestCase):
             verify_custody=verify_custody,
         )
 
+    def _open_bracket_session(self, session_id: str = "session-alpha"):
+        return append_bracket_session_receipt(
+            self.ledger,
+            session_id=session_id,
+            window_id="window-alpha",
+            plan_id="plan-alpha",
+            plan_sha256="a" * 64,
+            evidence_root_id="evidence-alpha",
+            runs_root=self.root / "another-root",
+            slots={
+                "pre": {
+                    "attempt_id": f"{session_id}-pre",
+                    "custody_locator": str(
+                        self.root
+                        / "another-root"
+                        / "instrument_validation"
+                        / f"{session_id}-pre"
+                    ),
+                    "identity_epoch": self.epoch,
+                    "t1_bindings": self.t1,
+                },
+                "post": {
+                    "attempt_id": f"{session_id}-post",
+                    "custody_locator": str(
+                        self.root
+                        / "another-root"
+                        / "instrument_validation"
+                        / f"{session_id}-post"
+                    ),
+                    "identity_epoch": self.epoch,
+                    "t1_bindings": self.t1,
+                },
+            },
+            head_pin_path=self.pin,
+            require_committed_pin=False,
+        )
+
+    def _finalize_bracket_slot(self, session_id: str, slot: str):
+        attempt_id = f"{session_id}-{slot}"
+        custody = (
+            self.root / "another-root" / "instrument_validation" / attempt_id
+        )
+        if not custody.exists():
+            custody = self._custody(attempt_id)
+        return finalize_bracket_session_slot(
+            self.ledger,
+            session_id=session_id,
+            slot=slot,
+            disposition="valid",
+            custody_locator=str(custody),
+            artifact_sha256=artifact_hashes(custody),
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s="99.0" if slot == "pre" else "111.0",
+            exact_bound_lexeme_s="0.025",
+        )
+
     def _historical_custody(
         self,
         checkout: Path,
@@ -315,6 +381,79 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertIn("calibration_ledger_pending", snapshot.refusal_reasons)
         self.assertFalse(custody.exists())
 
+    def test_torn_session_finalization_recovers_append_only_then_governed_abort(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        custody = self._custody("session-alpha-pre")
+
+        def tear_final_line(handle, payload):
+            written = handle.write(payload[: max(1, len(payload) // 3)])
+            handle.flush()
+            calibration_ledger.os.fsync(handle.fileno())
+            self.assertGreater(written, 0)
+            raise OSError("simulated process death during ledger append")
+
+        with mock.patch.object(
+            calibration_ledger,
+            "_write_ledger_append_payload",
+            side_effect=tear_final_line,
+        ):
+            with self.assertRaisesRegex(OSError, "simulated process death"):
+                finalize_bracket_session_slot(
+                    self.ledger,
+                    session_id="session-alpha",
+                    slot="pre",
+                    disposition="systematic-invalid",
+                    custody_locator=str(custody),
+                    artifact_sha256=artifact_hashes(custody),
+                    identity_epoch=self.epoch,
+                    t1_bindings=self.t1,
+                    capture_wall_time_s="99.0",
+                    exact_bound_lexeme_s="0.035435840879704805",
+                )
+
+        torn_bytes = self.ledger.read_bytes()
+        torn_snapshot = self._snapshot()
+        self.assertIn(
+            "calibration_ledger_recovery_required",
+            torn_snapshot.refusal_reasons,
+        )
+        self.assertIn(
+            "calibration_ledger_bracket_session_open",
+            torn_snapshot.refusal_reasons,
+        )
+
+        abort_bracket_session(
+            self.ledger,
+            session_id="session-alpha",
+            reason="recover_torn_systematic_pre",
+        )
+        self.assertTrue(self.ledger.read_bytes().startswith(torn_bytes))
+        self.assertFalse(
+            calibration_ledger._append_journal_path(self.ledger).exists()
+        )
+        recovery_evidence = list(
+            self.root.glob("ledger.jsonl.recovery-*.json")
+        )
+        self.assertEqual(len(recovery_evidence), 1)
+        self.assertEqual(
+            json.loads(recovery_evidence[0].read_bytes())["event"],
+            "governed-torn-tail-recovery",
+        )
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        recovered = self._snapshot()
+        self.assertEqual(recovered.refusal_reasons, ())
+        self.assertEqual(recovered.bracket_sessions[0].state, "aborted")
+        self.assertEqual(
+            recovered.observations[0].disposition,
+            "systematic-invalid",
+        )
+
     def test_reservation_requires_complete_epoch_and_full_t1(self) -> None:
         with self.assertRaisesRegex(
             CalibrationLedgerError, "malformed receipt"
@@ -329,20 +468,39 @@ class CalibrationLedgerTests(unittest.TestCase):
                 require_committed_pin=False,
             )
 
-    def test_production_writer_reserves_before_capture_state_or_sampler(self) -> None:
-        source = (
-            Path(__file__).resolve().parents[1]
-            / "scripts"
-            / "validate_powermetrics_fiducial.py"
-        ).read_text(encoding="utf-8")
-        reservation = source.index("\n    append_pending_receipt(")
-        directory_creation = source.index('(out_dir / "raw").mkdir')
-        sampler_launch = source.index("process = subprocess.Popen(")
-        uncaught_finalizer = source.index("atexit.register(finalize_abandoned)")
+    def test_production_writer_reserves_or_validates_before_capture_state_or_sampler(
+        self,
+    ) -> None:
+        from scripts import validate_powermetrics_fiducial as writer
 
-        self.assertLess(reservation, directory_creation)
-        self.assertLess(reservation, sampler_launch)
-        self.assertLess(uncaught_finalizer, directory_creation)
+        custody = self.root / "behavioral-order" / "instrument_validation" / "attempt"
+        lifecycle = writer._CaptureLedgerLifecycle(
+            ledger_path=self.ledger,
+            head_pin_path=self.pin,
+            attempt_id="behavioral-order-attempt",
+            custody_locator=str(custody),
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            require_committed_pin=False,
+        )
+        real_append = writer.append_pending_receipt
+        observed_before_capture_state: list[bool] = []
+
+        def observe_reservation(*args, **kwargs):
+            observed_before_capture_state.append(not custody.exists())
+            return real_append(*args, **kwargs)
+
+        with mock.patch.object(
+            writer,
+            "append_pending_receipt",
+            side_effect=observe_reservation,
+        ):
+            lifecycle.begin()
+        self.assertEqual(observed_before_capture_state, [True])
+        self.assertFalse(custody.exists())
+        first = json.loads(self.ledger.read_text().splitlines()[0])
+        self.assertEqual(first["event"], "reservation")
+        self.assertEqual(first["disposition"], "pending")
 
     def test_proper_prefix_of_pinned_head_refuses_as_rollback(self) -> None:
         custody = self._custody("rollback")
@@ -427,6 +585,403 @@ class CalibrationLedgerTests(unittest.TestCase):
             require_committed_pin=False,
         )
         self.assertIn("calibration_ledger_baseline_missing", snapshot.refusal_reasons)
+
+    def test_bracket_session_happy_path_reserves_two_slots_under_one_pin(self) -> None:
+        capability = self._open_bracket_session()
+        self.assertEqual(capability["sequence"], 1)
+        self.assertEqual(tuple(capability["slots"]), ("pre", "post"))
+        self.assertEqual(
+            {slot["expected_time_role"] for slot in capability["slots"].values()},
+            {"pre", "post"},
+        )
+
+        pre = self._finalize_bracket_slot("session-alpha", "pre")
+        self.assertEqual(pre["sequence"], 2)
+        self.assertEqual(pre["event"], BRACKET_SESSION_FINALIZATION_EVENT)
+        post = self._finalize_bracket_slot("session-alpha", "post")
+        self.assertEqual(post["sequence"], 3)
+
+        pin = terminal_head_pin_for_session(
+            self.ledger, session_id="session-alpha"
+        )
+        self.assertEqual(pin["sequence"], post["sequence"])
+        self.assertEqual(pin["head_digest"], post["receipt_digest"])
+        self._write_pin(pin)
+        snapshot = self._snapshot()
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(snapshot.head_sequence, 3)
+        self.assertEqual(
+            [observation.bracket_slot for observation in snapshot.observations],
+            ["pre", "post"],
+        )
+        session = snapshot.bracket_session_by_id["session-alpha"]
+        self.assertEqual(session.state, "finalized")
+        self.assertEqual(set(session.finalized_slots), {"pre", "post"})
+
+    def test_bracket_session_refuses_reordered_duplicate_and_conflicting_slots(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        post_custody = self._custody("session-alpha-post")
+        with self.assertRaisesRegex(CalibrationLedgerError, "expected pre"):
+            finalize_bracket_session_slot(
+                self.ledger,
+                session_id="session-alpha",
+                slot="post",
+                disposition="valid",
+                custody_locator=str(post_custody),
+                artifact_sha256=artifact_hashes(post_custody),
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s="111.0",
+                exact_bound_lexeme_s="0.025",
+            )
+        self._finalize_bracket_slot("session-alpha", "pre")
+        with self.assertRaisesRegex(CalibrationLedgerError, "expected post"):
+            self._finalize_bracket_slot("session-alpha", "pre")
+
+        conflicting_t1 = dict(self.t1)
+        conflicting_t1["power_policy"] = "battery"
+        with self.assertRaisesRegex(CalibrationLedgerError, "reserved session binding"):
+            finalize_bracket_session_slot(
+                self.ledger,
+                session_id="session-alpha",
+                slot="post",
+                disposition="valid",
+                custody_locator=str(post_custody),
+                artifact_sha256=artifact_hashes(post_custody),
+                identity_epoch=self.epoch,
+                t1_bindings=conflicting_t1,
+                capture_wall_time_s="111.0",
+                exact_bound_lexeme_s="0.025",
+            )
+
+    def test_generic_head_pin_refuses_session_open_and_pre_receipts(self) -> None:
+        capability = self._open_bracket_session()
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "terminal_head_pin_for_session"
+        ):
+            head_pin_for_receipt(capability)
+        pre = self._finalize_bracket_slot("session-alpha", "pre")
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "terminal_head_pin_for_session"
+        ):
+            head_pin_for_receipt(pre)
+
+    def test_aborted_systematic_pre_remains_in_r2_universe_and_fires_trigger(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        custody = self._custody("session-alpha-pre")
+        finalize_bracket_session_slot(
+            self.ledger,
+            session_id="session-alpha",
+            slot="pre",
+            disposition="systematic-invalid",
+            custody_locator=str(custody),
+            artifact_sha256=artifact_hashes(custody),
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s="99.0",
+            exact_bound_lexeme_s="0.035435840879704805",
+        )
+        abort_bracket_session(
+            self.ledger,
+            session_id="session-alpha",
+            reason="pre_capture_systematic-invalid",
+        )
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        snapshot = self._snapshot()
+        self.assertEqual(len(snapshot.observations), 1)
+        self.assertEqual(snapshot.observations[0].disposition, "systematic-invalid")
+        self.assertEqual(snapshot.bracket_sessions[0].state, "aborted")
+
+        with mock.patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            result, reasons = evaluate_calibration_bracket(
+                (),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.t1,
+                policy=CalibrationBracketingPolicy(
+                    require_bracket=True,
+                    calibration_bracket_max_drift_s=0.010,
+                ),
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
+        self.assertIn(
+            "new_systematic_failure_challenges_preflight_screen",
+            result["acceptance"]["prospective_rederivation"][
+                "observed_triggers"
+            ],
+        )
+    def test_open_session_refuses_until_governed_abort_and_never_deletes_partial(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        pre = self._finalize_bracket_slot("session-alpha", "pre")
+        open_snapshot = self._snapshot()
+        self.assertIn(
+            "calibration_ledger_bracket_session_open",
+            open_snapshot.refusal_reasons,
+        )
+        self.assertEqual(
+            [observation.bracket_slot for observation in open_snapshot.observations],
+            [],
+        )
+
+        closure = abort_bracket_session(
+            self.ledger,
+            session_id="session-alpha",
+            reason="science_member_failed_before_post",
+        )
+        self.assertEqual(closure["event"], BRACKET_SESSION_ABORT_EVENT)
+        self.assertEqual(closure["finalized_slots"], ("pre",))
+        self.assertEqual(closure["unused_slots"], ("post",))
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        snapshot = self._snapshot()
+        self.assertEqual(snapshot.refusal_reasons, ())
+        self.assertEqual(
+            [observation.bracket_slot for observation in snapshot.observations],
+            ["pre"],
+        )
+        self.assertEqual(
+            snapshot.observations[0].observation_kind,
+            "bracket-session-aborted",
+        )
+        session = snapshot.bracket_session_by_id["session-alpha"]
+        self.assertEqual(session.state, "aborted")
+        self.assertEqual(session.finalized_slots["pre"].receipt_digest, pre["receipt_digest"])
+        with self.assertRaisesRegex(CalibrationLedgerError, "not open"):
+            abort_bracket_session(
+                self.ledger,
+                session_id="session-alpha",
+                reason="duplicate closure",
+            )
+
+    def test_bracket_session_open_requires_exact_committed_physical_head(self) -> None:
+        self._open_bracket_session()
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "physical ledger head differs from the committed pin"
+        ):
+            self._open_bracket_session("session-beta")
+
+    def test_bracket_reservation_cli_is_explicit_and_machine_readable(self) -> None:
+        epoch_path = self.root / "epoch.json"
+        t1_path = self.root / "t1.json"
+        epoch_path.write_text(json.dumps(self.epoch), encoding="utf-8")
+        t1_path.write_text(json.dumps(self.t1), encoding="utf-8")
+        argv = [
+            "--ledger",
+            str(self.ledger),
+            "--head-pin",
+            str(self.pin),
+            "--session-id",
+            "session-cli",
+            "--window-id",
+            "window-cli",
+            "--plan-id",
+            "plan-cli",
+            "--plan-sha256",
+            "b" * 64,
+            "--evidence-root-id",
+            "evidence-cli",
+            "--runs-root",
+            str(self.root / "cli-runs"),
+            "--pre-attempt-id",
+            "session-cli-pre",
+            "--post-attempt-id",
+            "session-cli-post",
+            "--pre-custody-locator",
+            str(self.root / "cli-runs" / "instrument_validation" / "session-cli-pre"),
+            "--post-custody-locator",
+            str(self.root / "cli-runs" / "instrument_validation" / "session-cli-post"),
+            "--identity-epoch-json",
+            str(epoch_path),
+            "--t1-bindings-json",
+            str(t1_path),
+            "--allow-uncommitted-pin-for-test",
+        ]
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(bracket_session_cli.main(argv), 0)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "validated_not_reserved")
+        self.assertFalse(self.ledger.exists())
+
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(bracket_session_cli.main([*argv, "--execute"]), 0)
+        output = json.loads(stdout.getvalue())
+        self.assertEqual(output["status"], "reserved")
+        self.assertEqual(output["receipt"]["event"], "bracket-session-open")
+        self.assertEqual(output["terminal_head_pin"], None)
+        self.assertTrue(self.ledger.is_file())
+
+    def test_bracket_reservation_cli_dry_run_and_execute_share_malformed_input_refusal(
+        self,
+    ) -> None:
+        epoch_path = self.root / "bad-cli-epoch.json"
+        t1_path = self.root / "bad-cli-t1.json"
+        epoch_path.write_text(json.dumps(self.epoch), encoding="utf-8")
+        t1_path.write_text(json.dumps(self.t1), encoding="utf-8")
+        runs_root = self.root / "bad-cli-runs"
+        argv = [
+            "--ledger", str(self.ledger),
+            "--head-pin", str(self.pin),
+            "--session-id", "session-bad-cli",
+            "--window-id", "",
+            "--plan-id", "plan-bad-cli",
+            "--plan-sha256", "b" * 64,
+            "--evidence-root-id", "evidence-bad-cli",
+            "--runs-root", str(runs_root),
+            "--pre-attempt-id", "session-bad-cli-pre",
+            "--post-attempt-id", "session-bad-cli-post",
+            "--pre-custody-locator",
+            str(runs_root / "instrument_validation" / "session-bad-cli-pre"),
+            "--post-custody-locator",
+            str(runs_root / "instrument_validation" / "session-bad-cli-post"),
+            "--identity-epoch-json", str(epoch_path),
+            "--t1-bindings-json", str(t1_path),
+            "--allow-uncommitted-pin-for-test",
+        ]
+        for execute in (False, True):
+            with self.subTest(execute=execute), mock.patch(
+                "sys.stderr", new_callable=io.StringIO
+            ) as stderr:
+                self.assertEqual(
+                    bracket_session_cli.main(
+                        [*argv, "--execute"] if execute else argv
+                    ),
+                    2,
+                )
+                self.assertIn("malformed", stderr.getvalue())
+        self.assertFalse(self.ledger.exists())
+
+    def test_terminal_session_head_refuses_rollback_and_nonterminal_extension(self) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        post = self._finalize_bracket_slot("session-alpha", "post")
+        lines = self.ledger.read_bytes().splitlines(keepends=True)
+        self.ledger.write_bytes(b"".join(lines[:-1]))
+        with self.assertRaisesRegex(CalibrationLedgerError, "open"):
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        self.ledger.write_bytes(b"".join(lines))
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        ordinary_custody = self._custody("later-ordinary")
+        pending = append_pending_receipt(
+            self.ledger,
+            attempt_id="later-ordinary",
+            custody_locator=str(ordinary_custody),
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            head_pin_path=self.pin,
+            require_committed_pin=False,
+        )
+        self.assertEqual(pending["sequence"], 4)
+        with self.assertRaisesRegex(CalibrationLedgerError, "pending"):
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+
+    def test_session_snapshot_loader_refuses_rollback_against_committed_terminal_pin(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        self._finalize_bracket_slot("session-alpha", "post")
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        self.assertEqual(self._snapshot().refusal_reasons, ())
+        lines = self.ledger.read_bytes().splitlines(keepends=True)
+        self.ledger.write_bytes(b"".join(lines[:-1]))
+
+        rolled_back = self._snapshot(verify_custody=False)
+        self.assertIn("calibration_ledger_rollback", rolled_back.refusal_reasons)
+        self.assertIn(
+            "calibration_ledger_bracket_session_open",
+            rolled_back.refusal_reasons,
+        )
+
+    def test_conflicting_session_identity_and_session_fork_refuse(self) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        post = self._finalize_bracket_slot("session-alpha", "post")
+        clean_lines = self.ledger.read_bytes().splitlines(keepends=True)
+
+        conflicting = json.loads(clean_lines[-1])
+        conflicting["window_id"] = "window-substituted"
+        conflicting["receipt_digest"] = canonical_sha256(
+            {
+                key: value
+                for key, value in conflicting.items()
+                if key != "receipt_digest"
+            }
+        )
+        self.ledger.write_bytes(
+            b"".join(clean_lines[:-1]) + canonical_json_bytes(conflicting) + b"\n"
+        )
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "terminal_head_pin_for_session"
+        ):
+            head_pin_for_receipt(conflicting)
+        self._write_pin(
+            {
+                "sequence": conflicting["sequence"],
+                "head_digest": conflicting["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        conflict_snapshot = self._snapshot(verify_custody=False)
+        self.assertIn(
+            "calibration_ledger_bracket_session_conflict",
+            conflict_snapshot.refusal_reasons,
+        )
+
+        forked = json.loads(clean_lines[-1])
+        forked["predecessor_digest"] = json.loads(clean_lines[0])[
+            "receipt_digest"
+        ]
+        forked["receipt_digest"] = canonical_sha256(
+            {
+                key: value
+                for key, value in forked.items()
+                if key != "receipt_digest"
+            }
+        )
+        self.ledger.write_bytes(
+            b"".join(clean_lines[:-1]) + canonical_json_bytes(forked) + b"\n"
+        )
+        self._write_pin(
+            {
+                "sequence": forked["sequence"],
+                "head_digest": forked["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        fork_snapshot = self._snapshot(verify_custody=False)
+        self.assertIn(
+            "calibration_ledger_chain_conflict", fork_snapshot.refusal_reasons
+        )
+        self.assertEqual(post["slot"], "post")
 
     def test_historical_import_cli_dry_run_is_byte_stable_and_writes_nothing(
         self,

@@ -39,6 +39,7 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import CalibrationBracketingPolicy
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
+BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 ACCEPTANCE_BOUND_SCHEMA = "joulewise.calibration_acceptance_bound.v2"
 ACCEPTANCE_FIXTURE_SCHEMA = (
     "joulewise.calibration_acceptance_bound.v2.fixture.v1"
@@ -87,6 +88,13 @@ class CalibrationCandidate:
     attempt_id: str | None = None
     content_id: str | None = None
     ledger_receipt_digest: str | None = None
+    bracket_session_id: str | None = None
+    bracket_slot: str | None = None
+    bracket_window_id: str | None = None
+    bracket_plan_id: str | None = None
+    bracket_plan_sha256: str | None = None
+    bracket_evidence_root_id: str | None = None
+    bracket_runs_root: str | None = None
 
     def descriptor(self) -> dict[str, Any]:
         bound = _candidate_decimal(self)
@@ -103,6 +111,13 @@ class CalibrationCandidate:
             "attempt_id": self.attempt_id,
             "content_id": self.content_id,
             "ledger_receipt_digest": self.ledger_receipt_digest,
+            "bracket_session_id": self.bracket_session_id,
+            "bracket_slot": self.bracket_slot,
+            "bracket_window_id": self.bracket_window_id,
+            "bracket_plan_id": self.bracket_plan_id,
+            "bracket_plan_sha256": self.bracket_plan_sha256,
+            "bracket_evidence_root_id": self.bracket_evidence_root_id,
+            "bracket_runs_root": self.bracket_runs_root,
         }
 
 
@@ -493,6 +508,201 @@ def _valid_sha256(value: Any) -> bool:
     )
 
 
+_BRACKET_BINDING_KEYS = {
+    "schema_version",
+    "ledger_schema",
+    "session_id",
+    "window_id",
+    "plan_id",
+    "plan_sha256",
+    "evidence_root_id",
+    "runs_root",
+    "capability_receipt_digest",
+    "terminal_head",
+    "endpoints",
+    "binding_digest",
+}
+_BRACKET_ENDPOINT_KEYS = {
+    "attempt_id",
+    "receipt_digest",
+    "content_digest",
+}
+
+
+def _binding_core(binding: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in binding.items() if key != "binding_digest"}
+
+
+def build_calibration_bracket_binding(
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    *,
+    session_id: str,
+    window_id: str,
+    plan_id: str,
+    plan_sha256: str,
+    evidence_root_id: str,
+    runs_root: Path | str,
+) -> dict[str, Any]:
+    """Bind one frozen window to its exact finalized session endpoints."""
+
+    if not isinstance(ledger_snapshot, CalibrationLedgerSnapshot) or not ledger_snapshot.valid:
+        raise ValueError("bracket binding requires a valid pinned ledger snapshot")
+    session = ledger_snapshot.bracket_session_by_id.get(session_id)
+    expected_identity = (
+        window_id,
+        plan_id,
+        plan_sha256,
+        evidence_root_id,
+        str(Path(runs_root).absolute()),
+    )
+    if (
+        session is None
+        or session.state != "finalized"
+        or (
+            session.window_id,
+            session.plan_id,
+            session.plan_sha256,
+            session.evidence_root_id,
+            session.runs_root,
+        )
+        != expected_identity
+    ):
+        raise ValueError("bracket session does not match the frozen window identity")
+    pre = session.finalized_slots.get("pre")
+    post = session.finalized_slots.get("post")
+    if (
+        pre is None
+        or post is None
+        or pre.disposition != "valid"
+        or post.disposition != "valid"
+        or pre.content_id is None
+        or post.content_id is None
+        or post.sequence != ledger_snapshot.head_sequence
+        or post.receipt_digest != ledger_snapshot.head_digest
+    ):
+        raise ValueError("bracket session endpoints are not valid at the terminal head")
+    binding: dict[str, Any] = {
+        "schema_version": BRACKET_BINDING_SCHEMA,
+        "ledger_schema": LEDGER_SCHEMA,
+        "session_id": session.session_id,
+        "window_id": session.window_id,
+        "plan_id": session.plan_id,
+        "plan_sha256": session.plan_sha256,
+        "evidence_root_id": session.evidence_root_id,
+        "runs_root": session.runs_root,
+        "capability_receipt_digest": session.capability_receipt_digest,
+        "terminal_head": {
+            "sequence": post.sequence,
+            "head_digest": post.receipt_digest,
+            "ledger_schema": LEDGER_SCHEMA,
+        },
+        "endpoints": {
+            role: {
+                "attempt_id": observation.attempt_id,
+                "receipt_digest": observation.receipt_digest,
+                "content_digest": observation.content_id,
+            }
+            for role, observation in (("pre", pre), ("post", post))
+        },
+    }
+    binding["binding_digest"] = _canonical_sha256(binding)
+    return binding
+
+
+def validate_calibration_bracket_binding(
+    binding: Mapping[str, Any],
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    *,
+    window_id: str | None = None,
+    plan_id: str | None = None,
+    plan_sha256: str | None = None,
+    evidence_root_id: str | None = None,
+    runs_root: Path | str | None = None,
+) -> tuple[LedgerObservation, LedgerObservation] | None:
+    """Return the exact authenticated pair, or ``None`` on any substitution."""
+
+    if (
+        not isinstance(binding, Mapping)
+        or set(binding) != _BRACKET_BINDING_KEYS
+        or binding.get("schema_version") != BRACKET_BINDING_SCHEMA
+        or binding.get("ledger_schema") != LEDGER_SCHEMA
+        or not _valid_sha256(binding.get("plan_sha256"))
+        or not _valid_sha256(binding.get("capability_receipt_digest"))
+        or not _valid_sha256(binding.get("binding_digest"))
+        or binding.get("binding_digest") != _canonical_sha256(_binding_core(binding))
+        or not isinstance(ledger_snapshot, CalibrationLedgerSnapshot)
+        or not ledger_snapshot.valid
+    ):
+        return None
+    if any(
+        not isinstance(value, str) or not value
+        for value in (window_id, plan_id, plan_sha256, evidence_root_id)
+    ) or runs_root is None:
+        return None
+    expected_runs_root = str(Path(runs_root).absolute())
+    for field, expected in (
+        ("window_id", window_id),
+        ("plan_id", plan_id),
+        ("plan_sha256", plan_sha256),
+        ("evidence_root_id", evidence_root_id),
+        ("runs_root", expected_runs_root),
+    ):
+        if binding.get(field) != expected:
+            return None
+    session = ledger_snapshot.bracket_session_by_id.get(str(binding.get("session_id")))
+    if (
+        session is None
+        or session.state != "finalized"
+        or binding.get("window_id") != session.window_id
+        or binding.get("plan_id") != session.plan_id
+        or binding.get("plan_sha256") != session.plan_sha256
+        or binding.get("evidence_root_id") != session.evidence_root_id
+        or binding.get("runs_root") != session.runs_root
+        or binding.get("capability_receipt_digest")
+        != session.capability_receipt_digest
+    ):
+        return None
+    terminal = binding.get("terminal_head")
+    endpoints = binding.get("endpoints")
+    if (
+        not isinstance(terminal, Mapping)
+        or set(terminal) != {"sequence", "head_digest", "ledger_schema"}
+        or terminal.get("ledger_schema") != LEDGER_SCHEMA
+        or isinstance(terminal.get("sequence"), bool)
+        or not isinstance(terminal.get("sequence"), int)
+        or not _valid_sha256(terminal.get("head_digest"))
+        or not isinstance(endpoints, Mapping)
+        or set(endpoints) != {"pre", "post"}
+    ):
+        return None
+    resolved: list[LedgerObservation] = []
+    for role in ("pre", "post"):
+        endpoint = endpoints.get(role)
+        observation = session.finalized_slots.get(role)
+        if (
+            not isinstance(endpoint, Mapping)
+            or set(endpoint) != _BRACKET_ENDPOINT_KEYS
+            or observation is None
+            or observation.disposition != "valid"
+            or observation.content_id is None
+            or endpoint.get("attempt_id") != observation.attempt_id
+            or endpoint.get("receipt_digest") != observation.receipt_digest
+            or endpoint.get("content_digest") != observation.content_id
+        ):
+            return None
+        resolved.append(observation)
+    post = resolved[1]
+    if (
+        terminal.get("sequence") != post.sequence
+        or terminal.get("head_digest") != post.receipt_digest
+        or post.sequence > len(ledger_snapshot.receipts)
+        or ledger_snapshot.receipts[post.sequence - 1].get("receipt_digest")
+        != post.receipt_digest
+    ):
+        return None
+    return resolved[0], resolved[1]
+
+
 def _binding_evidence_authentic(
     evidence: Mapping[str, Any], bindings: Mapping[str, Any]
 ) -> bool:
@@ -706,6 +916,13 @@ def _candidate_from_observation(
         attempt_id=observation.attempt_id,
         content_id=observation.content_id,
         ledger_receipt_digest=observation.receipt_digest,
+        bracket_session_id=observation.bracket_session_id,
+        bracket_slot=observation.bracket_slot,
+        bracket_window_id=observation.bracket_window_id,
+        bracket_plan_id=observation.bracket_plan_id,
+        bracket_plan_sha256=observation.bracket_plan_sha256,
+        bracket_evidence_root_id=observation.bracket_evidence_root_id,
+        bracket_runs_root=observation.bracket_runs_root,
     )
 
 
@@ -719,11 +936,25 @@ def discover_calibration_candidates(
     trusted writer or a rewrite of both Git and full ledger history.
     """
 
-    if not isinstance(ledger_snapshot, CalibrationLedgerSnapshot) or not ledger_snapshot.valid:
+    if (
+        not isinstance(ledger_snapshot, CalibrationLedgerSnapshot)
+        or not ledger_snapshot.valid
+        and not ledger_snapshot.is_governed_open_bracket_extension
+    ):
         return ()
+    finalized_session_ids = {
+        session.session_id
+        for session in ledger_snapshot.bracket_sessions
+        if session.state == "finalized"
+    }
     candidates: list[CalibrationCandidate] = []
     for observation in ledger_snapshot.observations:
-        if observation.disposition != "valid" or observation.is_historical_import:
+        if (
+            observation.disposition != "valid"
+            or observation.is_historical_import
+            or observation.bracket_session_id is not None
+            and observation.bracket_session_id not in finalized_session_ids
+        ):
             continue
         candidate = _candidate_from_observation(observation)
         if candidate is None:
@@ -790,6 +1021,12 @@ def evaluate_calibration_bracket(
     policy: CalibrationBracketingPolicy,
     acceptance_bound: Mapping[str, Any] | None = None,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    bracket_binding: Mapping[str, Any] | None = None,
+    bracket_window_id: str | None = None,
+    bracket_plan_id: str | None = None,
+    bracket_plan_sha256: str | None = None,
+    bracket_evidence_root_id: str | None = None,
+    bracket_runs_root: Path | str | None = None,
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Select a causal bracket and apply the provenance-bound D-079 budget."""
@@ -811,6 +1048,7 @@ def evaluate_calibration_bracket(
         "b_fiducial_s": None,
         "drift_s": None,
         "acceptance": None,
+        "bracket_binding": None,
         "status": "not_required" if not policy.require_bracket else "failed",
     }
     if not policy.require_bracket:
@@ -969,6 +1207,11 @@ def evaluate_calibration_bracket(
     if stale_fields:
         return result, ("calibration_acceptance_bound_stale",)
     observations_by_attempt = ledger_snapshot.observation_by_attempt
+    finalized_session_ids = {
+        session.session_id
+        for session in ledger_snapshot.bracket_sessions
+        if session.state == "finalized"
+    }
     registered_valid = {
         (
             observation.attempt_id,
@@ -978,6 +1221,10 @@ def evaluate_calibration_bracket(
         for observation in ledger_snapshot.observations
         if observation.disposition == "valid"
         and not observation.is_historical_import
+        and (
+            observation.bracket_session_id is None
+            or observation.bracket_session_id in finalized_session_ids
+        )
     }
     supplied_valid = {
         (
@@ -1007,8 +1254,76 @@ def evaluate_calibration_bracket(
             != observation.artifact_sha256.get("manifest.json")
             or candidate.evidence_sha256
             != observation.artifact_sha256.get("instrument_evidence.json")
+            or candidate.bracket_session_id != observation.bracket_session_id
+            or candidate.bracket_slot != observation.bracket_slot
+            or candidate.bracket_window_id != observation.bracket_window_id
+            or candidate.bracket_plan_id != observation.bracket_plan_id
+            or candidate.bracket_plan_sha256
+            != observation.bracket_plan_sha256
+            or candidate.bracket_evidence_root_id
+            != observation.bracket_evidence_root_id
+            or candidate.bracket_runs_root != observation.bracket_runs_root
         ):
             return result, ("calibration_ledger_off_ledger_artifact",)
+    has_session_candidates = any(
+        candidate.bracket_session_id is not None for candidate in candidates
+    )
+    bound_observations: tuple[LedgerObservation, LedgerObservation] | None = None
+    if has_session_candidates:
+        if (
+            bracket_binding is None
+            or not all(
+                isinstance(value, str) and bool(value)
+                for value in (
+                    bracket_window_id,
+                    bracket_plan_id,
+                    bracket_plan_sha256,
+                    bracket_evidence_root_id,
+                )
+            )
+            or bracket_runs_root is None
+        ):
+            return result, ("calibration_bracket_binding_missing",)
+        expected_runs_root = str(Path(bracket_runs_root).absolute())
+        bound_observations = validate_calibration_bracket_binding(
+            bracket_binding,
+            ledger_snapshot,
+            window_id=bracket_window_id,
+            plan_id=bracket_plan_id,
+            plan_sha256=bracket_plan_sha256,
+            evidence_root_id=bracket_evidence_root_id,
+            runs_root=expected_runs_root,
+        )
+        if bound_observations is None:
+            return result, ("calibration_bracket_binding_invalid",)
+        result["bracket_binding"] = {
+            "schema_version": BRACKET_BINDING_SCHEMA,
+            "binding_digest": bracket_binding["binding_digest"],
+            "session_id": bracket_binding["session_id"],
+            "window_id": bracket_binding["window_id"],
+            "plan_id": bracket_binding["plan_id"],
+            "plan_sha256": bracket_binding["plan_sha256"],
+            "evidence_root_id": bracket_binding["evidence_root_id"],
+            "runs_root": bracket_binding["runs_root"],
+        }
+        bound_session_id = str(bracket_binding["session_id"])
+        for candidate in candidates:
+            if candidate.bracket_session_id != bound_session_id:
+                continue
+            if (
+                candidate.bracket_window_id,
+                candidate.bracket_plan_id,
+                candidate.bracket_plan_sha256,
+                candidate.bracket_evidence_root_id,
+                candidate.bracket_runs_root,
+            ) != (
+                bracket_window_id,
+                bracket_plan_id,
+                bracket_plan_sha256,
+                bracket_evidence_root_id,
+                expected_runs_root,
+            ):
+                return result, ("calibration_bracket_binding_invalid",)
     # v2 remains an authenticated validation/reduction artifact, but only the
     # 59-pulse v3 protocol carries the governed 95/95 claim calibration.
     matching = [
@@ -1103,6 +1418,24 @@ def evaluate_calibration_bracket(
         observed_triggers.append(
             "new_systematic_failure_challenges_preflight_screen"
         )
+    # R2 trigger evaluation ranges over the observation universe, not the
+    # narrower bracket-candidate set.  A governed aborted PRE can therefore
+    # stale the acceptance artifact even when no eligible endpoint pair is
+    # available for this window.
+    observation_stale_triggers = [
+        trigger
+        for trigger in observed_triggers
+        if trigger == "new_systematic_failure_challenges_preflight_screen"
+    ]
+    if observation_stale_triggers:
+        result["acceptance"]["freshness"].update(
+            {
+                "status": "stale",
+                "reason": "prospective_rederivation_required",
+                "stale_triggers": observation_stale_triggers,
+            }
+        )
+        return result, ("calibration_acceptance_bound_stale",)
     causal_pre = [
         candidate for candidate in matching if candidate.capture_wall_time_s <= window_start_s
     ]
@@ -1126,8 +1459,17 @@ def evaluate_calibration_bracket(
             else "instrument_calibration_bracket_missing"
         )
         return result, (reason,)
-    pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
-    post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
+    if bound_observations is None:
+        pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
+        post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
+    else:
+        candidate_by_receipt = {
+            candidate.ledger_receipt_digest: candidate for candidate in matching
+        }
+        pre = candidate_by_receipt.get(bound_observations[0].receipt_digest)
+        post = candidate_by_receipt.get(bound_observations[1].receipt_digest)
+        if pre not in fresh_pre or post not in fresh_post:
+            return result, ("calibration_bracket_binding_invalid",)
     pre_decimal = matching_decimals[id(pre)]
     post_decimal = matching_decimals[id(post)]
     if (
@@ -1259,6 +1601,11 @@ def calibration_bracket_for_bundles(
     policy: CalibrationBracketingPolicy,
     *,
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    bracket_binding: Mapping[str, Any] | None = None,
+    bracket_window_id: str | None = None,
+    bracket_plan_id: str | None = None,
+    bracket_plan_sha256: str | None = None,
+    bracket_evidence_root_id: str | None = None,
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Use the runs root only for the evaluated window's T1/endpoints."""
@@ -1320,6 +1667,14 @@ def calibration_bracket_for_bundles(
         registered_valid = sum(
             observation.disposition == "valid"
             and not observation.is_historical_import
+            and (
+                observation.bracket_session_id is None
+                or any(
+                    session.session_id == observation.bracket_session_id
+                    and session.state == "finalized"
+                    for session in ledger_snapshot.bracket_sessions
+                )
+            )
             for observation in ledger_snapshot.observations
         )
         if ledger_snapshot.valid and len(candidates) != registered_valid:
@@ -1340,6 +1695,12 @@ def calibration_bracket_for_bundles(
         bindings=expected,
         policy=policy,
         ledger_snapshot=ledger_snapshot,
+        bracket_binding=bracket_binding,
+        bracket_window_id=bracket_window_id,
+        bracket_plan_id=bracket_plan_id,
+        bracket_plan_sha256=bracket_plan_sha256,
+        bracket_evidence_root_id=bracket_evidence_root_id,
+        bracket_runs_root=runs_root,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
 
@@ -1347,11 +1708,14 @@ def calibration_bracket_for_bundles(
 __all__ = [
     "ACCEPTANCE_BOUND_SCHEMA",
     "ACCEPTANCE_EVALUATION_SCHEMA",
+    "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
+    "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",
     "evaluate_calibration_bracket",
     "load_calibration_acceptance_bound",
     "load_calibration_candidate",
+    "validate_calibration_bracket_binding",
 ]

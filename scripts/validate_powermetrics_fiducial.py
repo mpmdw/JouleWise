@@ -34,6 +34,7 @@ import uuid
 from dataclasses import asdict, replace
 from decimal import Decimal
 from pathlib import Path
+from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -47,11 +48,21 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
 )
 from joulewise.clock import SystemClock  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
+    BRACKET_SESSION_OPEN_EVENT,
+    BRACKET_SESSION_SCHEMA,
+    BRACKET_SESSION_SLOTS,
     DEFAULT_LEDGER_PATH,
+    DEFAULT_HEAD_PIN_PATH,
+    CalibrationLedgerError,
+    abort_bracket_session,
     append_pending_receipt,
     artifact_hashes as ledger_artifact_hashes,
+    claim_bracket_session_slot,
     finalize_attempt_receipt,
+    finalize_bracket_session_slot,
     head_pin_for_receipt,
+    load_calibration_ledger_snapshot,
+    terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
@@ -275,7 +286,227 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
     return payload
 
 
-def main() -> int:
+def _validate_reserved_bracket_slot(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    slot: str,
+    attempt_id: str,
+    custody_locator: str,
+    identity_epoch: Mapping[str, Any],
+    t1_bindings: Mapping[str, Any],
+    require_committed_pin: bool = True,
+) -> None:
+    """Authenticate the exact predeclared slot before capture state exists."""
+
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_pin_path,
+        require_committed_pin=require_committed_pin,
+        verify_custody=True,
+    )
+    session = snapshot.bracket_session_by_id.get(session_id)
+    finalized_slots = set(session.finalized_slots) if session is not None else set()
+    expected_slot = (
+        "pre"
+        if not finalized_slots
+        else "post"
+        if finalized_slots == {"pre"}
+        else None
+    )
+    open_receipt = next(
+        (
+            receipt
+            for receipt in snapshot.receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+            and receipt.get("event") == BRACKET_SESSION_OPEN_EVENT
+            and receipt.get("session_id") == session_id
+        ),
+        None,
+    )
+    reserved = (
+        open_receipt.get("slots", {}).get(slot)
+        if isinstance(open_receipt, Mapping)
+        and isinstance(open_receipt.get("slots"), Mapping)
+        else None
+    )
+    if (
+        not snapshot.is_governed_open_bracket_extension
+        or session is None
+        or session.state != "open"
+        or slot not in BRACKET_SESSION_SLOTS
+        or slot != expected_slot
+        or session.slot_attempt_ids.get(slot) != attempt_id
+        or not isinstance(reserved, Mapping)
+        or reserved.get("attempt_id") != attempt_id
+        or reserved.get("custody_locator") != custody_locator
+        or dict(reserved.get("identity_epoch", {})) != dict(identity_epoch)
+        or dict(reserved.get("t1_bindings", {})) != dict(t1_bindings)
+    ):
+        raise CalibrationLedgerError(
+            "capture does not match the exact reserved bracket session slot"
+        )
+
+
+class _CaptureLedgerLifecycle:
+    """Route one writer attempt through ordinary or bracket-session APIs."""
+
+    def __init__(
+        self,
+        *,
+        ledger_path: Path,
+        head_pin_path: Path,
+        attempt_id: str,
+        custody_locator: str,
+        identity_epoch: Mapping[str, Any],
+        t1_bindings: Mapping[str, Any],
+        session_id: str | None = None,
+        slot: str | None = None,
+        require_committed_pin: bool = True,
+    ) -> None:
+        if (session_id is None) != (slot is None):
+            raise CalibrationLedgerError(
+                "bracket session id and slot must be supplied together"
+            )
+        self.ledger_path = Path(ledger_path)
+        self.head_pin_path = Path(head_pin_path)
+        self.attempt_id = attempt_id
+        self.custody_locator = custody_locator
+        self.identity_epoch: Mapping[str, Any] = identity_epoch
+        self.t1_bindings: Mapping[str, Any] = t1_bindings
+        self.capture_wall_time_s: str | None = None
+        self.exact_bound_lexeme_s: str | None = None
+        self.session_id = session_id
+        self.slot = slot
+        self.require_committed_pin = require_committed_pin
+        self.claim_id = uuid.uuid4().hex
+        self.begun = False
+        self.closed = False
+
+    @property
+    def is_bracket_session(self) -> bool:
+        return self.session_id is not None
+
+    def begin(self) -> None:
+        """Reserve ordinarily, or authenticate a previously reserved slot."""
+
+        if self.begun:
+            raise CalibrationLedgerError("capture ledger lifecycle already began")
+        if self.is_bracket_session:
+            assert self.session_id is not None and self.slot is not None
+            _validate_reserved_bracket_slot(
+                self.ledger_path,
+                self.head_pin_path,
+                session_id=self.session_id,
+                slot=self.slot,
+                attempt_id=self.attempt_id,
+                custody_locator=self.custody_locator,
+                identity_epoch=self.identity_epoch,
+                t1_bindings=self.t1_bindings,
+                require_committed_pin=self.require_committed_pin,
+            )
+            claim_bracket_session_slot(
+                self.ledger_path,
+                session_id=self.session_id,
+                slot=self.slot,
+                attempt_id=self.attempt_id,
+                claim_id=self.claim_id,
+            )
+        else:
+            append_pending_receipt(
+                self.ledger_path,
+                attempt_id=self.attempt_id,
+                custody_locator=self.custody_locator,
+                identity_epoch=self.identity_epoch,
+                t1_bindings=self.t1_bindings,
+                head_pin_path=self.head_pin_path,
+                require_committed_pin=self.require_committed_pin,
+            )
+        self.begun = True
+
+    def abandon(self, reason: str) -> Mapping[str, Any] | None:
+        """Best-effort governed closure for an interrupted writer."""
+
+        if not self.begun or self.closed:
+            return None
+        if self.is_bracket_session:
+            assert self.session_id is not None
+            receipt = abort_bracket_session(
+                self.ledger_path,
+                session_id=self.session_id,
+                reason=reason,
+            )
+        else:
+            receipt = finalize_attempt_receipt(
+                self.ledger_path,
+                attempt_id=self.attempt_id,
+                disposition="abandoned",
+                custody_locator=self.custody_locator,
+                artifact_sha256=ledger_artifact_hashes(
+                    Path(self.custody_locator)
+                ),
+                identity_epoch=self.identity_epoch,
+                t1_bindings=self.t1_bindings,
+                capture_wall_time_s=self.capture_wall_time_s,
+                exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+            )
+        self.closed = True
+        return receipt
+
+    def finalize(
+        self, disposition: str
+    ) -> tuple[Mapping[str, Any], dict[str, Any] | None]:
+        """Finalize the exact attempt and return any terminal head candidate."""
+
+        if not self.begun or self.closed:
+            raise CalibrationLedgerError("capture ledger lifecycle is not open")
+        artifacts = ledger_artifact_hashes(Path(self.custody_locator))
+        if self.is_bracket_session:
+            assert self.session_id is not None and self.slot is not None
+            receipt = finalize_bracket_session_slot(
+                self.ledger_path,
+                session_id=self.session_id,
+                slot=self.slot,
+                disposition=disposition,
+                custody_locator=self.custody_locator,
+                artifact_sha256=artifacts,
+                identity_epoch=self.identity_epoch,
+                t1_bindings=self.t1_bindings,
+                capture_wall_time_s=self.capture_wall_time_s,
+                exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+            )
+            if self.slot == "pre" and disposition != "valid":
+                receipt = abort_bracket_session(
+                    self.ledger_path,
+                    session_id=self.session_id,
+                    reason=f"pre_capture_{disposition}",
+                )
+            self.closed = True
+            head_pin = (
+                None
+                if self.slot == "pre" and disposition == "valid"
+                else terminal_head_pin_for_session(
+                    self.ledger_path, session_id=self.session_id
+                )
+            )
+            return receipt, head_pin
+        receipt = finalize_attempt_receipt(
+            self.ledger_path,
+            attempt_id=self.attempt_id,
+            disposition=disposition,
+            custody_locator=self.custody_locator,
+            artifact_sha256=artifacts,
+            identity_epoch=self.identity_epoch,
+            t1_bindings=self.t1_bindings,
+            capture_wall_time_s=self.capture_wall_time_s,
+            exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+        )
+        self.closed = True
+        return receipt, head_pin_for_receipt(receipt)
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--allow-live",
@@ -291,11 +522,38 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--pulse-count", type=int, default=PULSE_COUNT)
     parser.add_argument(
+        "--session-id",
+        help="predeclared two-slot bracket session id (requires --slot and --attempt-id)",
+    )
+    parser.add_argument(
+        "--slot",
+        choices=BRACKET_SESSION_SLOTS,
+        help="exact predeclared bracket slot to capture",
+    )
+    parser.add_argument(
+        "--attempt-id",
+        help="exact attempt id already reserved for the bracket slot",
+    )
+    parser.add_argument(
         "--power-policy",
         default=None,
         help="operator-recorded power policy identity (e.g. 'ac_high_power'); required",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    bracket_values = (args.session_id, args.slot, args.attempt_id)
+    bracket_mode = all(value is not None and value != "" for value in bracket_values)
+    if any(value is not None for value in bracket_values) and not bracket_mode:
+        print(
+            "refusing: --session-id, --slot, and --attempt-id must be supplied together",
+            file=sys.stderr,
+        )
+        return 2
+    if bracket_mode and (args.rederive_from is not None or args.output is not None):
+        print(
+            "refusing: bracket session parameters apply only to live capture",
+            file=sys.stderr,
+        )
+        return 2
     if not verify_frozen_protocol():
         print(
             "refusing: frozen powermetrics fiducial protocol is missing, "
@@ -331,7 +589,11 @@ def main() -> int:
     import mlx.core as mx  # noqa: PLC0415
 
     clock = SystemClock()
-    validation_id = time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    validation_id = (
+        args.attempt_id
+        if bracket_mode
+        else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    )
     out_dir = args.output_root / validation_id
     custody_locator = str(out_dir.resolve())
     planned_epoch = {
@@ -349,48 +611,35 @@ def main() -> int:
         "mlx_version": getattr(mx, "__version__", None),
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
     }
-    # D-109 reservation-first: this authenticated receipt precedes directory
-    # creation, sampler launch, and all hardware capture.  The mechanism
-    # closes workflow omission, unregistered evidence, and rollback/stale-head
-    # consumption; it does not resist a malicious trusted writer or a rewrite
-    # of both Git and complete ledger history.
-    append_pending_receipt(
-        DEFAULT_LEDGER_PATH,
+    # D-109 reservation-first: ordinary captures append here; D-117 bracket
+    # captures authenticate the exact slot that the bookend tool already
+    # reserved. Both paths run before directory creation, sampler launch, and
+    # all hardware capture.
+    ledger_lifecycle = _CaptureLedgerLifecycle(
+        ledger_path=DEFAULT_LEDGER_PATH,
+        head_pin_path=DEFAULT_HEAD_PIN_PATH,
         attempt_id=validation_id,
         custody_locator=custody_locator,
         identity_epoch=planned_epoch,
         t1_bindings=planned_t1,
+        session_id=args.session_id if bracket_mode else None,
+        slot=args.slot if bracket_mode else None,
     )
-    finalization_state: dict[str, object] = {
-        "finalized": False,
-        "identity_epoch": planned_epoch,
-        "t1_bindings": planned_t1,
-        "capture_wall_time_s": None,
-        "exact_bound_lexeme_s": None,
-    }
+    try:
+        ledger_lifecycle.begin()
+    except CalibrationLedgerError as exc:
+        print(f"refusing: {exc}", file=sys.stderr)
+        return 2
 
-    def finalize_abandoned() -> None:
-        """Best effort on ruled failures; a failed append leaves pending refusal."""
+    def finalize_abandoned(
+        reason: str = "writer_exit_before_slot_finalization",
+    ) -> None:
+        """Best effort; a failed closure leaves a fail-closed pending/open state."""
 
-        if finalization_state["finalized"]:
-            return
         try:
-            finalize_attempt_receipt(
-                DEFAULT_LEDGER_PATH,
-                attempt_id=validation_id,
-                disposition="abandoned",
-                custody_locator=custody_locator,
-                artifact_sha256=ledger_artifact_hashes(out_dir),
-                identity_epoch=finalization_state["identity_epoch"],
-                t1_bindings=finalization_state["t1_bindings"],
-                capture_wall_time_s=finalization_state["capture_wall_time_s"],
-                exact_bound_lexeme_s=finalization_state[
-                    "exact_bound_lexeme_s"
-                ],
-            )
-        except Exception:  # noqa: BLE001 - pending is the mandatory fail-closed state
+            ledger_lifecycle.abandon(reason)
+        except Exception:  # noqa: BLE001 - pending/open is mandatory fail-closed state
             return
-        finalization_state["finalized"] = True
 
     # An actual interpreter-level uncaught exception/interrupt finalizes when
     # possible. A hard crash between these two appends intentionally leaves
@@ -453,7 +702,7 @@ def main() -> int:
         time.sleep(0.05)
     if first_parse is None:
         process.terminate()
-        finalize_abandoned()
+        finalize_abandoned("powermetrics_never_ready")
         print("powermetrics never became ready", file=sys.stderr)
         return 1
     # D-078: wait for a native whole-second rollover before any workload.
@@ -461,7 +710,7 @@ def main() -> int:
         wait_for_preworkload_rollover(capture_path, process)
     except RuntimeError as exc:
         events.close()
-        finalize_abandoned()
+        finalize_abandoned(str(exc))
         print(f"refusing: {exc}", file=sys.stderr)
         return 1
     sampling_started = clock.stamp()
@@ -599,7 +848,7 @@ def main() -> int:
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
     }
-    finalization_state["identity_epoch"] = {
+    ledger_lifecycle.identity_epoch = {
         field: bindings.get(field)
         for field in (
             "os_build",
@@ -610,8 +859,8 @@ def main() -> int:
             "pulse_protocol_id",
         )
     }
-    finalization_state["t1_bindings"] = bindings
-    finalization_state["capture_wall_time_s"] = str(sampling_started.epoch_s)
+    ledger_lifecycle.t1_bindings = bindings
+    ledger_lifecycle.capture_wall_time_s = str(sampling_started.epoch_s)
     evidence_payload = instrument_evidence(
         detection,
         bindings=bindings,
@@ -658,7 +907,7 @@ def main() -> int:
         parse_int=str,
     )
     bound_lexeme = serialized_evidence.get("b_fiducial_s")
-    finalization_state["exact_bound_lexeme_s"] = (
+    ledger_lifecycle.exact_bound_lexeme_s = (
         bound_lexeme if isinstance(bound_lexeme, str) else None
     )
     disposition = "ordinary-invalid"
@@ -669,27 +918,23 @@ def main() -> int:
             and Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S
             else "valid"
         )
-    final_receipt = finalize_attempt_receipt(
-        DEFAULT_LEDGER_PATH,
-        attempt_id=validation_id,
-        disposition=disposition,
-        custody_locator=custody_locator,
-        artifact_sha256=ledger_artifact_hashes(out_dir),
-        identity_epoch=finalization_state["identity_epoch"],
-        t1_bindings=finalization_state["t1_bindings"],
-        capture_wall_time_s=finalization_state["capture_wall_time_s"],
-        exact_bound_lexeme_s=finalization_state["exact_bound_lexeme_s"],
-    )
-    finalization_state["finalized"] = True
+    _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
     atexit.unregister(finalize_abandoned)
-    print(json.dumps({
+    output = {
         "validation_id": validation_id,
         "status": evidence_payload["status"],
         "b_fiducial_s": evidence_payload["b_fiducial_s"],
         "output": str(out_dir),
-        "ledger_head_pin_candidate": head_pin_for_receipt(final_receipt),
+        "ledger_head_pin_candidate": head_pin_candidate,
         "claim_evaluation_blocked_until_pin_commit": True,
-    }, indent=2))
+    }
+    if bracket_mode:
+        output["bracket_session"] = {
+            "session_id": args.session_id,
+            "slot": args.slot,
+            "attempt_id": args.attempt_id,
+        }
+    print(json.dumps(output, indent=2))
     return 0 if disposition == "valid" else 1
 
 

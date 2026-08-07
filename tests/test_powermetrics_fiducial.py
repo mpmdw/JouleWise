@@ -10,7 +10,9 @@ from __future__ import annotations
 import math
 import json
 import hashlib
+import subprocess
 import tempfile
+import threading
 import unittest
 import sys
 from dataclasses import replace
@@ -18,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from joulewise import calibration_ledger as ledger_module
 from joulewise import powermetrics_fiducial as fiducial_module
 from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
@@ -923,6 +926,259 @@ class FrozenProtocolTests(unittest.TestCase):
                     "joulewise.analysis_engine.claims",
                     fromlist=["REDUCER_REASON_CODES"],
                 ).REDUCER_REASON_CODES,
+            )
+
+
+class WriterLedgerIntegrationTests(unittest.TestCase):
+    def _open_session(self, root: Path):
+        ledger = root / "ledger.jsonl"
+        pin = root / "head.json"
+        pin.write_text(
+            json.dumps(
+                {
+                    "sequence": 0,
+                    "head_digest": ledger_module.GENESIS_DIGEST,
+                    "ledger_schema": ledger_module.LEDGER_SCHEMA,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        epoch = {
+            "os_build": "25F84",
+            "hardware_model": "Mac15,9",
+            "power_policy": "ac_high_power",
+            "sampling_interval_ms": 100,
+            "estimator_revision": RESIDUAL_REGION_METHOD,
+            "pulse_protocol_id": PROTOCOL_ID,
+        }
+        t1 = {field: f"value-{field}" for field in ledger_module.T1_FIELDS}
+        t1.update(epoch)
+        custody = {
+            slot: root / "instrument_validation" / f"session-writer-{slot}"
+            for slot in ledger_module.BRACKET_SESSION_SLOTS
+        }
+        receipt = ledger_module.append_bracket_session_receipt(
+            ledger,
+            session_id="session-writer",
+            window_id="window-writer",
+            plan_id="plan-writer",
+            plan_sha256="a" * 64,
+            evidence_root_id="evidence-writer",
+            runs_root=root,
+            slots={
+                slot: {
+                    "attempt_id": f"session-writer-{slot}",
+                    "custody_locator": str(custody[slot]),
+                    "identity_epoch": epoch,
+                    "t1_bindings": t1,
+                }
+                for slot in ledger_module.BRACKET_SESSION_SLOTS
+            },
+            head_pin_path=pin,
+            require_committed_pin=False,
+        )
+        return ledger, pin, epoch, t1, custody, receipt
+
+    def _lifecycle(
+        self,
+        ledger: Path,
+        pin: Path,
+        epoch: dict,
+        t1: dict,
+        custody: dict[str, Path],
+        slot: str,
+    ) -> validation_script._CaptureLedgerLifecycle:
+        return validation_script._CaptureLedgerLifecycle(
+            ledger_path=ledger,
+            head_pin_path=pin,
+            attempt_id=f"session-writer-{slot}",
+            custody_locator=str(custody[slot]),
+            identity_epoch=epoch,
+            t1_bindings=t1,
+            session_id="session-writer",
+            slot=slot,
+            require_committed_pin=False,
+        )
+
+    def test_session_writer_authenticates_reservation_before_capture_without_ordinary_append(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, capability = self._open_session(
+                Path(tmp)
+            )
+            lifecycle = self._lifecycle(
+                ledger, pin, epoch, t1, custody, "pre"
+            )
+            with patch.object(validation_script, "append_pending_receipt") as ordinary:
+                lifecycle.begin()
+            ordinary.assert_not_called()
+            receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
+            self.assertEqual(receipts[0], capability)
+            self.assertEqual(
+                receipts[1]["event"],
+                ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            )
+            self.assertFalse(custody["pre"].exists())
+
+            mismatched = validation_script._CaptureLedgerLifecycle(
+                ledger_path=ledger,
+                head_pin_path=pin,
+                attempt_id="not-the-reserved-attempt",
+                custody_locator=str(custody["pre"]),
+                identity_epoch=epoch,
+                t1_bindings=t1,
+                session_id="session-writer",
+                slot="pre",
+                require_committed_pin=False,
+            )
+            with self.assertRaisesRegex(
+                ledger_module.CalibrationLedgerError, "exact reserved"
+            ):
+                mismatched.begin()
+            self.assertEqual(len(ledger.read_text().splitlines()), 2)
+
+    def test_concurrent_double_arm_accepts_exactly_one_and_loser_cannot_abort_winner(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, _capability = self._open_session(
+                Path(tmp)
+            )
+            lifecycles = [
+                self._lifecycle(ledger, pin, epoch, t1, custody, "pre")
+                for _index in range(2)
+            ]
+            barrier = threading.Barrier(2)
+            real_validate = validation_script._validate_reserved_bracket_slot
+
+            def synchronize_after_validation(*args, **kwargs):
+                real_validate(*args, **kwargs)
+                barrier.wait(timeout=5)
+
+            outcomes: list[tuple[str, object]] = []
+
+            def arm(lifecycle):
+                try:
+                    lifecycle.begin()
+                except Exception as exc:  # noqa: BLE001 - asserted below
+                    outcomes.append(("refused", exc))
+                else:
+                    outcomes.append(("accepted", lifecycle))
+
+            with patch.object(
+                validation_script,
+                "_validate_reserved_bracket_slot",
+                side_effect=synchronize_after_validation,
+            ):
+                threads = [
+                    threading.Thread(target=arm, args=(lifecycle,))
+                    for lifecycle in lifecycles
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=10)
+
+            accepted = [value for status, value in outcomes if status == "accepted"]
+            refused = [value for status, value in outcomes if status == "refused"]
+            self.assertEqual(len(accepted), 1)
+            self.assertEqual(len(refused), 1)
+            self.assertIn("calibration_ledger_bracket_slot_claimed", str(refused[0]))
+            loser = next(lifecycle for lifecycle in lifecycles if not lifecycle.begun)
+            self.assertIsNone(loser.abandon("losing_writer_exit"))
+            receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
+            self.assertFalse(
+                any(
+                    receipt.get("event") == ledger_module.BRACKET_SESSION_ABORT_EVENT
+                    for receipt in receipts
+                )
+            )
+            winner = accepted[0]
+            abort = winner.abandon("winning_writer_governed_abort")
+            self.assertEqual(abort["event"], ledger_module.BRACKET_SESSION_ABORT_EVENT)
+
+    def test_session_writer_process_death_leaves_claim_then_governed_abort_recovers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, _capability = self._open_session(
+                Path(tmp)
+            )
+            pre = self._lifecycle(ledger, pin, epoch, t1, custody, "pre")
+            with (
+                patch.object(validation_script, "append_pending_receipt") as reserve,
+                patch.object(validation_script, "finalize_attempt_receipt") as ordinary,
+            ):
+                pre.begin()
+                (custody["pre"] / "raw").mkdir(parents=True)
+                (custody["pre"] / "raw" / "powermetrics.plist").write_bytes(
+                    b"raw"
+                )
+                (custody["pre"] / "events.jsonl").write_text("{}\n")
+                (custody["pre"] / "power_trace.csv").write_text("header\n")
+                (custody["pre"] / "instrument_evidence.json").write_text("{}\n")
+                (custody["pre"] / "manifest.json").write_text("{}\n")
+                pre.capture_wall_time_s = "99.0"
+                pre.exact_bound_lexeme_s = "0.025"
+                _pre_receipt, pre_head = pre.finalize("valid")
+                self.assertIsNone(pre_head)
+
+            code = f"""
+import os
+from pathlib import Path
+from scripts.validate_powermetrics_fiducial import _CaptureLedgerLifecycle
+lifecycle = _CaptureLedgerLifecycle(
+    ledger_path=Path({str(ledger)!r}),
+    head_pin_path=Path({str(pin)!r}),
+    attempt_id='session-writer-post',
+    custody_locator={str(custody['post'])!r},
+    identity_epoch={epoch!r},
+    t1_bindings={t1!r},
+    session_id='session-writer',
+    slot='post',
+    require_committed_pin=False,
+)
+lifecycle.begin()
+os._exit(23)
+"""
+            died = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=Path(__file__).resolve().parents[1],
+                check=False,
+            )
+            self.assertEqual(died.returncode, 23)
+            crashed = ledger_module.load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                require_committed_pin=False,
+                verify_custody=True,
+            )
+            self.assertIn(
+                "calibration_ledger_bracket_session_open",
+                crashed.refusal_reasons,
+            )
+            abort = ledger_module.abort_bracket_session(
+                ledger,
+                session_id="session-writer",
+                reason="post_writer_process_died_after_claim",
+            )
+            reserve.assert_not_called()
+            ordinary.assert_not_called()
+            self.assertIsNotNone(abort)
+            self.assertEqual(abort["event"], ledger_module.BRACKET_SESSION_ABORT_EVENT)
+            self.assertEqual(abort["session_id"], "session-writer")
+            self.assertEqual(tuple(abort["finalized_slots"]), ("pre",))
+            self.assertEqual(tuple(abort["unused_slots"]), ("post",))
+            self.assertEqual(
+                abort["reason"], "post_writer_process_died_after_claim"
+            )
+            self.assertEqual(
+                ledger_module.terminal_head_pin_for_session(
+                    ledger, session_id="session-writer"
+                )["sequence"],
+                5,
             )
 
 

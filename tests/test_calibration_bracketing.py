@@ -23,17 +23,20 @@ from joulewise.calibration_bracketing import (
     CalibrationCandidate,
     _canonical_sha256,
     _valid_acceptance_bound,
+    build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     discover_calibration_candidates,
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
     load_calibration_candidate,
+    validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
     CalibrationLedgerSnapshot,
+    CalibrationBracketSession,
     LedgerObservation,
     bootstrap_historical_import,
     content_id_from_artifact_hashes,
@@ -863,6 +866,366 @@ class CalibrationBracketingTests(unittest.TestCase):
             capture_wall_time_s=capture_s,
             b_fiducial_s=bound_s,
             bindings=self.bindings if bindings is None else bindings,
+        )
+
+    def _bound_session_fixture(self):
+        specifications = (
+            ("neighbor-pre", 98.0, "0.025", None, None, 1),
+            ("neighbor-post", 112.0, "0.026", None, None, 2),
+            ("session-pre", 99.0, "0.024", "session-alpha", "pre", 4),
+            ("session-post", 111.0, "0.027", "session-alpha", "post", 5),
+        )
+        observations = []
+        candidates = []
+        for name, capture, bound, session_id, slot, sequence in specifications:
+            manifest = hashlib.sha256(f"manifest:{name}".encode()).hexdigest()
+            evidence = hashlib.sha256(f"evidence:{name}".encode()).hexdigest()
+            hashes = {
+                "manifest.json": manifest,
+                "instrument_evidence.json": evidence,
+            }
+            content_id = content_id_from_artifact_hashes(hashes)
+            receipt_digest = hashlib.sha256(f"receipt:{name}".encode()).hexdigest()
+            attempt_id = f"attempt-{name}"
+            candidate = replace(
+                self.candidate(name, capture, bound),
+                manifest_sha256=manifest,
+                evidence_sha256=evidence,
+                attempt_id=attempt_id,
+                content_id=content_id,
+                ledger_receipt_digest=receipt_digest,
+                bracket_session_id=session_id,
+                bracket_slot=slot,
+                bracket_window_id="window-alpha" if session_id else None,
+                bracket_plan_id="plan-alpha" if session_id else None,
+                bracket_plan_sha256="a" * 64 if session_id else None,
+                bracket_evidence_root_id="evidence-alpha" if session_id else None,
+                bracket_runs_root="/synthetic/root-alpha" if session_id else None,
+            )
+            candidates.append(candidate)
+            observations.append(
+                LedgerObservation(
+                    sequence=sequence,
+                    receipt_digest=receipt_digest,
+                    attempt_id=attempt_id,
+                    content_id=content_id,
+                    artifact_sha256=MappingProxyType(hashes),
+                    identity_epoch=MappingProxyType(
+                        {
+                            field: self.bindings[field]
+                            for field in (
+                                "os_build",
+                                "hardware_model",
+                                "power_policy",
+                                "sampling_interval_ms",
+                                "estimator_revision",
+                                "pulse_protocol_id",
+                            )
+                        }
+                    ),
+                    t1_bindings=MappingProxyType(dict(self.bindings)),
+                    capture_wall_time_s=str(capture),
+                    exact_bound_lexeme_s=bound,
+                    disposition="valid",
+                    custody_locator=f"/synthetic/{name}",
+                    observation_kind=(
+                        "bracket-session-finalized" if session_id else "live-capture"
+                    ),
+                    bracket_session_id=session_id,
+                    bracket_slot=slot,
+                    bracket_window_id="window-alpha" if session_id else None,
+                    bracket_plan_id="plan-alpha" if session_id else None,
+                    bracket_plan_sha256="a" * 64 if session_id else None,
+                    bracket_evidence_root_id="evidence-alpha" if session_id else None,
+                    bracket_runs_root=(
+                        "/synthetic/root-alpha" if session_id else None
+                    ),
+                )
+            )
+        by_slot = {
+            observation.bracket_slot: observation
+            for observation in observations
+            if observation.bracket_slot is not None
+        }
+        capability_digest = hashlib.sha256(b"capability-alpha").hexdigest()
+        session = CalibrationBracketSession(
+            session_id="session-alpha",
+            window_id="window-alpha",
+            plan_id="plan-alpha",
+            plan_sha256="a" * 64,
+            evidence_root_id="evidence-alpha",
+            runs_root="/synthetic/root-alpha",
+            capability_receipt_digest=capability_digest,
+            capability_sequence=3,
+            slot_attempt_ids=MappingProxyType(
+                {slot: observation.attempt_id for slot, observation in by_slot.items()}
+            ),
+            state="finalized",
+            finalized_slots=MappingProxyType(by_slot),
+        )
+        receipt_digests = [
+            observations[0].receipt_digest,
+            observations[1].receipt_digest,
+            capability_digest,
+            by_slot["pre"].receipt_digest,
+            by_slot["post"].receipt_digest,
+        ]
+        snapshot = CalibrationLedgerSnapshot(
+            ledger_schema=LEDGER_SCHEMA,
+            ledger_path=Path("synthetic-session-ledger.jsonl"),
+            head_sequence=5,
+            head_digest=by_slot["post"].receipt_digest,
+            receipts=tuple(
+                MappingProxyType({"receipt_digest": digest})
+                for digest in receipt_digests
+            ),
+            observations=tuple(sorted(observations, key=lambda item: item.sequence)),
+            refusal_reasons=(),
+            bracket_sessions=(session,),
+            baseline_sequence=0,
+            baseline_digest=GENESIS_DIGEST,
+        )
+        binding = build_calibration_bracket_binding(
+            snapshot,
+            session_id="session-alpha",
+            window_id="window-alpha",
+            plan_id="plan-alpha",
+            plan_sha256="a" * 64,
+            evidence_root_id="evidence-alpha",
+            runs_root="/synthetic/root-alpha",
+        )
+        return snapshot, candidates, binding
+
+    def test_exact_session_binding_selects_reserved_pair_not_neighbors(self) -> None:
+        snapshot, candidates, binding = self._bound_session_fixture()
+        resolved = validate_calibration_bracket_binding(
+            binding,
+            snapshot,
+            window_id="window-alpha",
+            plan_id="plan-alpha",
+            plan_sha256="a" * 64,
+            evidence_root_id="evidence-alpha",
+            runs_root="/synthetic/root-alpha",
+        )
+        self.assertIsNotNone(resolved)
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                bracket_binding=binding,
+                bracket_window_id="window-alpha",
+                bracket_plan_id="plan-alpha",
+                bracket_plan_sha256="a" * 64,
+                bracket_evidence_root_id="evidence-alpha",
+                bracket_runs_root="/synthetic/root-alpha",
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ())
+        self.assertEqual(result["pre"]["attempt_id"], "attempt-session-pre")
+        self.assertEqual(result["post"]["attempt_id"], "attempt-session-post")
+        self.assertEqual(
+            result["bracket_binding"]["binding_digest"],
+            binding["binding_digest"],
+        )
+
+    def test_l5_later_same_t1_calibration_from_another_runs_root_cannot_be_borrowed(
+        self,
+    ) -> None:
+        snapshot, candidates, binding = self._bound_session_fixture()
+        later_other_root = replace(
+            candidates[-1],
+            relative_path="/synthetic/root-beta/instrument_validation/later-post",
+            bracket_runs_root="/synthetic/root-beta",
+        )
+        supplied = [*candidates[:-1], later_other_root]
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            _result, reasons = _evaluate_calibration_bracket(
+                supplied,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                bracket_binding=binding,
+                bracket_window_id="window-alpha",
+                bracket_plan_id="plan-alpha",
+                bracket_plan_sha256="a" * 64,
+                bracket_evidence_root_id="evidence-alpha",
+                bracket_runs_root="/synthetic/root-alpha",
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("calibration_ledger_off_ledger_artifact",))
+
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            _result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                bracket_binding=binding,
+                bracket_window_id="window-alpha",
+                bracket_plan_id="plan-alpha",
+                bracket_plan_sha256="a" * 64,
+                bracket_evidence_root_id="evidence-alpha",
+                bracket_runs_root="/synthetic/root-beta",
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("calibration_bracket_binding_invalid",))
+
+    def test_session_candidates_refuse_missing_neighbor_substituted_or_cross_window_binding(
+        self,
+    ) -> None:
+        snapshot, candidates, binding = self._bound_session_fixture()
+        self.assertIsNone(validate_calibration_bracket_binding(binding, snapshot))
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            _result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("calibration_bracket_binding_missing",))
+
+        substituted = json.loads(json.dumps(binding))
+        substituted["endpoints"]["pre"] = {
+            "attempt_id": candidates[0].attempt_id,
+            "receipt_digest": candidates[0].ledger_receipt_digest,
+            "content_digest": candidates[0].content_id,
+        }
+        substituted["binding_digest"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in substituted.items()
+                if key != "binding_digest"
+            }
+        )
+        self.assertIsNone(
+            validate_calibration_bracket_binding(
+                substituted,
+                snapshot,
+                window_id="window-alpha",
+                plan_id="plan-alpha",
+                plan_sha256="a" * 64,
+                evidence_root_id="evidence-alpha",
+                runs_root="/synthetic/root-alpha",
+            )
+        )
+
+        cross_window = json.loads(json.dumps(binding))
+        cross_window["window_id"] = "window-beta"
+        cross_window["binding_digest"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in cross_window.items()
+                if key != "binding_digest"
+            }
+        )
+        self.assertIsNone(
+            validate_calibration_bracket_binding(
+                cross_window,
+                snapshot,
+                window_id="window-alpha",
+                plan_id="plan-alpha",
+                plan_sha256="a" * 64,
+                evidence_root_id="evidence-alpha",
+                runs_root="/synthetic/root-alpha",
+            )
+        )
+
+    def test_open_and_aborted_session_observations_never_leak_as_candidates(self) -> None:
+        snapshot, candidates, _binding = self._bound_session_fixture()
+        session = snapshot.bracket_sessions[0]
+        open_session = replace(
+            session,
+            state="open",
+            finalized_slots=MappingProxyType({"pre": session.finalized_slots["pre"]}),
+        )
+        open_snapshot = replace(
+            snapshot,
+            observations=tuple(
+                observation
+                for observation in snapshot.observations
+                if observation.bracket_slot != "post"
+            ),
+            bracket_sessions=(open_session,),
+            head_sequence=4,
+            head_digest=session.finalized_slots["pre"].receipt_digest,
+            receipts=(
+                *snapshot.receipts[:2],
+                MappingProxyType(
+                    {
+                        "event": "bracket-session-open",
+                        "session_id": "session-alpha",
+                        "predecessor_digest": snapshot.receipts[1]["receipt_digest"],
+                        "receipt_digest": session.capability_receipt_digest,
+                    }
+                ),
+                MappingProxyType(
+                    {
+                        "event": "bracket-session-slot-finalization",
+                        "session_id": "session-alpha",
+                        "receipt_digest": session.finalized_slots["pre"].receipt_digest,
+                    }
+                ),
+            ),
+            refusal_reasons=(
+                "calibration_ledger_bracket_session_open",
+                "calibration_ledger_head_mismatch",
+            ),
+            committed_head_sequence=2,
+            committed_head_digest=snapshot.receipts[1]["receipt_digest"],
+        )
+        by_attempt = {candidate.attempt_id: candidate for candidate in candidates}
+        with patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation: by_attempt[observation.attempt_id],
+        ):
+            open_candidates = discover_calibration_candidates(open_snapshot)
+        self.assertEqual(
+            [candidate.bracket_session_id for candidate in open_candidates],
+            [None, None],
+        )
+
+        aborted_session = replace(open_session, state="aborted")
+        aborted_snapshot = replace(
+            open_snapshot,
+            # Keep the finalized PRE in the R2 observation universe.  The
+            # discovery filter must consult governed session state instead of
+            # laundering a synthetic snapshot by assuming observations were
+            # pre-filtered by the loader.
+            observations=open_snapshot.observations,
+            bracket_sessions=(aborted_session,),
+            refusal_reasons=(),
+        )
+        with patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation: by_attempt[observation.attempt_id],
+        ):
+            discovered = discover_calibration_candidates(aborted_snapshot)
+        self.assertEqual(
+            [candidate.bracket_session_id for candidate in discovered],
+            [None, None],
         )
 
     def test_claim_window_passes_and_embeds_never_zero_allowance_once(self) -> None:
