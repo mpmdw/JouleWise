@@ -13,40 +13,58 @@ file instead.
 Last updated: 2026-08-07 — **LIVE SESSION (14h Ed window). Read this
 block first;** the 2026-08-06 checkpoint below is executed history.
 
-## ⏳ 2026-08-07 — paper-first session (LIVE; block 2, refreshed post-burn)
+## ⏳ 2026-08-07 — paper-first session (LIVE; block 3 — near-final state)
 
-**Landed this session (all on main):** **D-117** transcribed + index row
-(three prospective windows; supersession lines on D-110/D-113;
-CLAIMS_STATUS un-staled). **MVP paper draft COMPLETE — PR #110 MERGED**
-(`6a70707`): full structure, 18 refs, round-2 gauntlet (2 lenses +
-bibliography audit + xhigh fix round + delta re-audit + bench fidelity
-corrections incl. interval-average integration). **Plan-freeze design
-memo ratified** (`docs/process_traces/2026-08-07-d117-plan-freeze/` —
-U1-U10 work orders, gates 1-8, budgets 3.14/3.24/2.80 h). **Night-
-hardening register** (3 Sol lenses + paper-vs-code fidelity audit;
-R6 path-doubling live; L4/L5 ledger gaps; URGENT pre-window reason-code
-plumbing). **Paper-portfolio factory** (Ed-ordered burn): 24 Sol-fast
-proposals + 24 Opus counter-reviews + dual xhigh syntheses + magistrate
-ADJUDICATION (`docs/strategy/2026-08-07-paper-portfolio/`) — arc:
-MVP+WindowC → quantization BF16/Q4/Q8 → MoE stretch; 7 riders into MVP;
-Ed's ranked rulings ##1-7 in ADJUDICATION.md. **Three-night operator
-packet** (pre-freeze edition, `docs/strategy/2026-08-07-three-night-
-operator-packet.md`). Earlier: t3appup analysis banked; prefill
-feasibility custodied; C-049; skill-usage log.
+**ED'S RULINGS OWED (8; full text + recommendations in
+`docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`):** 1 Window C
+night (recommend FUND — §6's six characterization rows otherwise ship with
+no evidence); 2 reported-energy cells in alpha/beta (TIME-CRITICAL, must
+precede U5/U6 pack-hash freeze); 3 reason-code plumbing authorization
+(URGENT — only 14/44 refused occurrences have a reconstructable reason
+today; the nights will add more); 4 256-tok prefill arm (recommend NO);
+5 quantization posture; 6 calendar dates; 7 artifact scope + wall-meter vs
+second-unit; **8 NEW — the ratified `refusal_scope_spec.md` cites D-083 as
+its authority but D-083 is a different ruling and no decision-log row for
+the spec exists.**
 
-**IN FLIGHT (harvest, do not re-run):** U1 DONE-with-NEEDS_SCOPE →
-scope GRANTED → **U1b writer integration running** (worktree
-`<scratchpad>/u1`, branch impl/d117-u1-ledger-session, 79 focused tests
-green on the completed core). **U3 DONE** (pinset v2 + four-cell mint,
-v1 parity; worktree `<scratchpad>/u3`, branch impl/d117-u3-pinset-v2)
-— **two audit lenses running** (contract + execution). Next: U3 triage/
-fix/delta → PR; U1b harvest → audit → U2 (cold-gated) → U4; then U5-U7
-packs. **Ed's rulings owed:** ADJUDICATION.md ##1-7 (top: Window C
-night; reported-energy cells before pack freeze; reason-code plumbing).
+**DELIVERABLE SHIPPED:** MVP paper draft COMPLETE, PR #110 MERGED
+(`6a70707`). Run report: `docs/run_reports/2026-08-07-paper-first-session.md`.
+Council entry: C-050.
 
-**Worktrees:** `<scratchpad>/desk` (main, bookkeeping), `<scratchpad>/u1`,
-`<scratchpad>/u3`. Main tree: detached on merged paper branch — prune at
-close. Owed at close: run report, council entry, sweep, skill-usage.
+**U-UNIT STATE (three toolchain blockers before night one):**
+- **U1 — DONE, PR #111 OPEN.** Full gauntlet; 2691 tests green
+  lead-verified; second delta CLEAN with an explicit same-signature NO;
+  D-116 issued-prefix byte-identical. Merge on green under D-072.
+- **U3 — fix round 2 (FIX-1b/6b/8) committed**, full suite running at
+  hand-off; needs its DELTA (the authentication class survived round 1 as
+  "presence-only"; a THIRD survival goes to a design consult, not a fix
+  round — binding).
+- **U2 — COLD-GATE EXHIBIT pushed** (`impl/d117-u2-successor`), 12
+  contested choices tagged COLD-GATE-Q1..Q12 + the design brief's 12
+  questions. NOT a landing candidate; convene the rule-11 cold gate.
+- **U4 — amendment round in flight** (confirmed defects: stale sequence-85
+  oracle from a superseded memo model; one-sided allowance test).
+- **U8 — EVIDENCE ONLY, examination verdict REWORK.** Do NOT land the
+  runbook edit: §5B still licenses a cause-removal retry the two-slot
+  session cannot represent. Needs the zero-retry ruling + the S1-domain
+  ruling first.
+- **U5-U7 packs**: scout custodied (`U5-U7-PACK-SCOUT.md`); gated on U3+U10
+  vocabulary freeze and ruling #2.
+
+**BINDING RULES ADOPTED TODAY (bind all successors):** memo literals must
+be RE-DERIVED from landed branches (U1 superseded the memo's receipt
+model); no second-paper work touches the mint/pinset/detection_floor file
+set until U10 closes; every kill threshold is a multiple of a PROJECTED
+floor (7.3% of member mean precedent), never a joule literal, never 1x.
+
+**PORTFOLIO:** 24 directions adjudicated
+(`docs/strategy/2026-08-07-paper-portfolio/`). Arc: MVP + Window C ->
+quantization BF16/Q4/Q8 (**4 nights**, was 3) -> MoE stretch (**4 nights**,
+was 2-3). 7 riders folded into the MVP.
+
+**Worktrees:** `<scratchpad>/{desk,u1,u2,u3,u4,u8}` — prune after the
+branches land. Owed: U3 delta -> PR; U4 harvest; skill-usage log entry;
+consistency-correction verification.
 
 ## ✅ CHECKPOINT 2026-08-06 late — machine-move stop (resume script)
 
@@ -2209,6 +2227,12 @@ eliminated.
 | **7B floor** (`window_7bfloor_20260729`) | Qwen2.5 7B decode floor, collected 2026-07-29 | **PASSED** | CLAIM-BEARING; governed extraction clean (`all_cells_extractable` true). Floors: absolute 6.294380135190098 J, comparative 13.998036715259254 J; absolute-cell member mean 192.38623252628366 J (n=10). NOT yet minted — `MINT-GENERALIZE-01` is OPEN and unblocked as of 2026-08-02 (gauntlet closed PR #93; D-088 no-mint condition lifted), so these figures live only in prose plus the out-of-repo custody extraction until that mint runs |
 | **contrast** (`window_contrast_20260730`) | 40 contrast ABBA members + 7 references, 47 bundles, 1 supersession | **PASSED** | bracket drift 1.281 ms; contrast diagnostic 146.730349 J σ 0.241 (n=10 blocks) UNGATED — MANIFEST-CONTRAST-01 closed 2026-08-02 (PR #95); the gated claim now rides `MINT-GENERALIZE-01` then the D-095 chain |
 
+**2026-08-07 supersession (D-117):** the historical a10/re-mint and old
+C/D plan are retired. Claim authority can now arise only from the
+prospective alpha, beta, and gamma windows; the separately named Window C
+characterization night remains Ed ruling #1. The table above is retained
+unchanged as dated collection history, not present claim authority.
+
 Window B's cause is established and is NOT a clock problem: a GPU DVFM
 power ramp that the rectangular-pulse fiducial estimator aliases into an
 apparent onset shift (93.28% of the drift; the wall-clock term moved the
@@ -2502,7 +2526,11 @@ the top of this file.
 
 ## Current Verification
 
-- **Merged main at the PR #95 composed tree (2026-08-02, current):
+- **Current-main verification gap (2026-08-07): this document does not
+  assert a full-suite result on current main; verify directly before use.
+  The 2,689-test and 2,687-test results are branch results, not main
+  results, and are not promoted here.**
+- **Merged main at the PR #95 composed tree (2026-08-02, historical):
   full suite `Ran 2418 tests`, `OK (skipped=22)`, lead-run on the
   exact 94+95 integration tree merged as `200e6db`; verdict CI green
   on both merge pushes (all five jobs each).**
@@ -2688,6 +2716,9 @@ the top of this file.
   required loud six-bundle acceptance-gate skip; the lead corpus gate then
   PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
   and the post-merge full suite (OK, skipped=12).
+- **2026-08-07 tool-version note:** this document does not assert the current
+  installed tool versions; verify them directly before protocol use. The
+  following result is retained as historical verification context.
 - Claude Code 2.1.207, Codex CLI 0.144.0, and Node 23.7.0 pass the
   bidirectional protocol checker. Claude → Sol now uses `gpt-5.6-sol` with
   `high` fallback/default and task-triggered xhigh/ultra escalation; the
