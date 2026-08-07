@@ -1,0 +1,113 @@
+{
+  "schema_version": "joulewise.synthetic_calibration_live_three_window.v1",
+  "source_acceptance_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+  "issuance_equivalent_base": {
+    "receipt_count": 76,
+    "observation_count": 38,
+    "disposition_counts": {
+      "valid": 30,
+      "systematic-invalid": 2,
+      "ordinary-invalid": 6
+    },
+    "synthetic_additions_to_n19_derivation_corpus": {
+      "valid": 11,
+      "systematic-invalid": 2,
+      "ordinary-invalid": 6
+    }
+  },
+  "identity_epoch": {
+    "os_build": "synthetic-d117-os",
+    "hardware_model": "synthetic-d117-mac",
+    "power_policy": "synthetic-ac-high-power",
+    "sampling_interval_ms": 100,
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3"
+  },
+  "t1_bindings": {
+    "hardware_model": "synthetic-d117-mac",
+    "os_build": "synthetic-d117-os",
+    "powermetrics_sha256": "c2f8ef614953475fcc9af95b6aaaf1d5b8c43a0f4c682f72f56c6503945b3b94",
+    "sampling_interval_ms": 100,
+    "anchor_method_version": "powermetrics_native_second_censored_intersection_v1",
+    "mlx_version": "synthetic-mlx",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+    "power_policy": "synthetic-ac-high-power",
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1"
+  },
+  "windows": [
+    {
+      "name": "alpha",
+      "session_id": "session-d117-alpha",
+      "window_id": "plan-d117-floor-qwen25-1p5b-v1",
+      "plan_id": "plan-d117-floor-qwen25-1p5b-v1",
+      "plan_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
+      "runs_root": "/synthetic/d117/alpha",
+      "window_start_s": 105.0,
+      "window_end_s": 115.0,
+      "pre_capture_s": 100.0,
+      "post_capture_s": 120.0,
+      "pre_bound_s": "0.025000",
+      "post_bound_s": "0.026000"
+    },
+    {
+      "name": "beta",
+      "session_id": "session-d117-beta",
+      "window_id": "plan-d117-floor-qwen25-7b-v1",
+      "plan_id": "plan-d117-floor-qwen25-7b-v1",
+      "plan_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "evidence_root_id": "evidence-d117-floor-qwen25-7b-v1",
+      "runs_root": "/synthetic/d117/beta",
+      "window_start_s": 125.0,
+      "window_end_s": 135.0,
+      "pre_capture_s": 121.0,
+      "post_capture_s": 140.0,
+      "pre_bound_s": "0.026500",
+      "post_bound_s": "0.027000"
+    },
+    {
+      "name": "gamma",
+      "session_id": "session-d117-gamma",
+      "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-v1",
+      "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-v1",
+      "plan_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "evidence_root_id": "evidence-d117-contrast-qwen25-1p5b-vs-7b-v1",
+      "runs_root": "/synthetic/d117/gamma",
+      "window_start_s": 145.0,
+      "window_end_s": 155.0,
+      "pre_capture_s": 141.0,
+      "post_capture_s": 160.0,
+      "pre_bound_s": "0.028000",
+      "post_bound_s": "0.029000"
+    }
+  ],
+  "expected_live_extension": {
+    "session_count": 3,
+    "live_observation_count": 6,
+    "receipts_per_session": 3,
+    "terminal_sequence": 85,
+    "candidate_count": 6,
+    "imported_candidate_count": 0,
+    "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+    "never_zero_allowance_s": "0.010818"
+  },
+  "staged_successor_vectors": {
+    "range_expanding_live_observation": {
+      "bound_s": "0.040000",
+      "expected_trigger": "new_valid_same_identity_capture_expands_observed_range"
+    },
+    "d102_count_boundary": {
+      "additional_valid_observations": 2,
+      "expected_total_valid_same_epoch": 38,
+      "expected_trigger": "corpus_doubles_from_19_to_38"
+    },
+    "successor_prior_set_integrity": {
+      "mutations": [
+        "omit_authenticated_prefix_member",
+        "change_authenticated_prefix_member"
+      ],
+      "expected_outcome": "refuse"
+    }
+  }
+}
