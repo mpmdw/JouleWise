@@ -398,7 +398,7 @@
       }
     },
     "finalPostcollection": {
-      "description": "Every field is authenticated at mint: ledger receipt/content and terminal-head pins against the ledger snapshot and bracket binding; drift, allowance, full-precision values, and six-decimal renderings by exact string equality against the authenticated extraction report. The mint never renders a six-decimal value.",
+      "description": "Every field is authenticated by named equality checks at mint. Receipt/content pins are read from authenticated ledger observations, the terminal head from the authenticated bracket binding and ledger chain, bracket-binding and extraction-report hashes from the exact supplied artifact bytes, and observed drift/applied allowance plus floor values/renderings from the authenticated extraction report. Each six-decimal literal must also equal Decimal ROUND_HALF_EVEN .6f semantics for its full-precision pin; the mint verifies that relationship without producing or replacing the supplied literal.",
       "type": "object",
       "additionalProperties": false,
       "required": [

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import io
@@ -612,7 +613,7 @@ def _v2_component_pin(component: mint1.AuthenticatedComponent) -> dict:
         "evaluation_basis_members": component.evaluation_basis_member_count,
         "extraction_spec_sha256": component.spec_sha256,
         "extraction_spec_members": len(
-            set(generalized._v2_spec_member_ids(component.spec))
+            set(_fixture_spec_member_ids(component.spec))
         ),
         "expected_n": (
             len(component.members)
@@ -633,6 +634,27 @@ def _v2_component_pin(component: mint1.AuthenticatedComponent) -> dict:
             for member_row in component.members
         ],
     }
+
+
+def _fixture_spec_member_ids(spec: dict) -> tuple[str, ...]:
+    """Independent physical-member projection for the golden pin fixture."""
+
+    ids: list[str] = []
+    for cell in spec.get("cells", []):
+        if not isinstance(cell, dict):
+            continue
+        for row in cell.get("members", []):
+            if isinstance(row, dict) and isinstance(row.get("bundle_id"), str):
+                ids.append(row["bundle_id"])
+        for block in cell.get("blocks", []):
+            members = block.get("members") if isinstance(block, dict) else None
+            if isinstance(members, dict):
+                ids.extend(
+                    bundle_id
+                    for bundle_id in members.values()
+                    if isinstance(bundle_id, str)
+                )
+    return tuple(ids)
 
 
 def _v2_postcollection(
@@ -1071,6 +1093,10 @@ SYNTHETIC_PRODUCER_PIN_SHA256S = (
 SYNTHETIC_PRODUCER_SET_SHA256 = (
     "f58ed63311a5e62a1b61dc9c43c653c0caddc5aa201ae17533a28eabaa397c11"
 )
+CLI_COMPONENT_SHA256S = (
+    "77ec1d85330f48773f6f597cdff3df891a5382df0a7685d3e0ebc0c9555ef9b8",
+    "6b586ce5e430daa7defc88cadbd7dc05132dc401366f81272d40f2c8591f5c3f",
+)
 
 
 def _repair_v2_pinset_self_hashes(pinset: dict) -> None:
@@ -1109,6 +1135,267 @@ def freeze_synthetic_v2_pinset(
     )
     path, digest = write_pinset(root, pinset)
     return path, digest, inputs, ledger_snapshot
+
+
+def install_v2_cli_fixture(root: Path):
+    """Install file-backed v2 inputs and a narrow v1-core test adapter."""
+
+    pinset, source_inputs, _source_snapshot = synthetic_v2_fixture()
+    acceptance = next(iter(source_inputs.values())).calibration_acceptance
+    acceptance_path = root / "acceptance.json"
+    acceptance_path.write_text(
+        json.dumps(acceptance, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    acceptance_sha256 = file_sha256(acceptance_path)
+    ledger_path = root / "ledger.jsonl"
+    ledger_path.write_text("{}\n", encoding="utf-8")
+    head_path = root / "ledger.head.json"
+    head_path.write_text("{}\n", encoding="utf-8")
+
+    component_by_source = {}
+    manifest_producers = []
+    ledger_receipts = []
+    ledger_observations = []
+    ledger_sessions = {}
+    for producer_index, producer in enumerate(pinset["producer_plans"]):
+        plan_id = producer["plan"]["plan_id"]
+        source = source_inputs[plan_id]
+        plan_path = root / f"{plan_id}.json"
+        plan_path.write_text(
+            json.dumps(source.plan, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        plan_sha256 = file_sha256(plan_path)
+        sidecar_path = root / f"{plan_id}.sha256"
+        sidecar_path.write_text(
+            f"{plan_sha256}  {plan_path.name}\n",
+            encoding="utf-8",
+        )
+        producer["plan"].update(
+            {
+                "sha256": plan_sha256,
+                "declared_sha256": plan_sha256,
+                "sidecar_sha256": file_sha256(sidecar_path),
+            }
+        )
+        producer["calibration_acceptance"]["artifact_sha256"] = (
+            acceptance_sha256
+        )
+
+        evidence_root = root / f"{plan_id}-root"
+        evidence_root.mkdir()
+        binding, receipts, observations, session = _synthetic_bracket_evidence(
+            producer_index,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=producer["evidence_root_id"],
+            runs_root=evidence_root,
+            sequence_start=1 + 3 * producer_index,
+        )
+        ledger_receipts.extend(receipts)
+        ledger_observations.extend(observations)
+        ledger_sessions[session.session_id] = session
+        binding_path = root / f"{plan_id}.binding.json"
+        binding_path.write_text(
+            json.dumps(binding, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        binding_sha256 = file_sha256(binding_path)
+
+        role_inputs = {}
+        manifest_cells = []
+        for cell_pin in producer["cells"]:
+            role = cell_pin["role"]
+            source_cell = source.cells[role]
+            components = {}
+            component_paths = {}
+            for component_name, source_component in (
+                ("absolute", source_cell.absolute),
+                ("comparative", source_cell.comparative),
+            ):
+                label = f"{plan_id}-{role}-{component_name}"
+                report_path = root / f"{label}-report.json"
+                report_path.write_text(
+                    json.dumps(
+                        source_component.report,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                spec_path = root / f"{label}-spec.json"
+                spec_path.write_text(
+                    json.dumps(
+                        source_component.spec,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                order = {
+                    **source_component.order_manifest,
+                    "calibration_plan_sha256": plan_sha256,
+                }
+                order_path = root / f"{label}-order.json"
+                order_path.write_text(
+                    json.dumps(order, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                component = replace(
+                    source_component,
+                    report_sha256=file_sha256(report_path),
+                    spec_sha256=file_sha256(spec_path),
+                    order_manifest=order,
+                    order_manifest_sha256=file_sha256(order_path),
+                )
+                components[component_name] = component
+                component_paths[component_name] = {
+                    "evidence_root": str(evidence_root),
+                    "report": str(report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(order_path),
+                }
+                component_by_source[
+                    (
+                        component.calibration_cell_id,
+                        str(evidence_root.resolve()),
+                    )
+                ] = component
+                cell_pin[component_name] = _v2_component_pin(component)
+            cell_pin["postcollection"] = _v2_postcollection(
+                components["absolute"],
+                components["comparative"],
+                bracket_binding=binding,
+                bracket_binding_sha256=binding_sha256,
+                extraction_report_sha256=components[
+                    "absolute"
+                ].report_sha256,
+            )
+            role_inputs[role] = generalized.V2CellComponents(
+                absolute=components["absolute"],
+                comparative=components["comparative"],
+                allowed_consumer_condition_families=(
+                    source_cell.allowed_consumer_condition_families
+                ),
+            )
+            manifest_cells.append(
+                {
+                    "role": role,
+                    **component_paths,
+                    "allowed_consumer_condition_families": list(
+                        source_cell.allowed_consumer_condition_families
+                    ),
+                }
+            )
+        components = [
+            component
+            for role_input in role_inputs.values()
+            for component in (role_input.absolute, role_input.comparative)
+        ]
+        producer["extraction_spec"].update(
+            {
+                "sha256": components[0].spec_sha256,
+                "member_count": len(
+                    {
+                        member_row.bundle_id
+                        for component in components
+                        for member_row in component.members
+                    }
+                ),
+            }
+        )
+        manifest_producers.append(
+            {
+                "plan_id": plan_id,
+                "calibration_plan": str(plan_path),
+                "calibration_plan_sidecar": str(sidecar_path),
+                "bracket_binding": str(binding_path),
+                "cells": manifest_cells,
+            }
+        )
+
+    ledger_snapshot = SimpleNamespace(
+        valid=True,
+        ledger_schema="joulewise.calibration_observation_ledger.v1",
+        receipts=tuple(ledger_receipts),
+        observations=tuple(ledger_observations),
+        bracket_session_by_id=ledger_sessions,
+        head_sequence=len(ledger_receipts),
+        head_digest=ledger_receipts[-1]["receipt_digest"],
+    )
+    manifest_path = root / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.floor_mint_inputs.v2",
+                "calibration_acceptance": str(acceptance_path),
+                "calibration_ledger": str(ledger_path),
+                "calibration_ledger_head_pin": str(head_path),
+                "producer_plans": manifest_producers,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    original_core_loader = generalized._fresh_original_core
+
+    def load_test_core():
+        core = original_core_loader()
+
+        def load_acceptance(path):
+            if Path(path).read_bytes() != acceptance_path.read_bytes():
+                return None
+            return acceptance
+
+        def authenticate(paths, **kwargs):
+            source_key = (
+                paths.calibration_cell_id,
+                str(paths.evidence_root.resolve()),
+            )
+            expected = component_by_source.get(source_key)
+            if expected is None:
+                raise core.MintError("unexpected component cell/evidence root")
+            for path, expected_sha256 in (
+                (paths.report_path, expected.report_sha256),
+                (paths.spec_path, expected.spec_sha256),
+                (paths.order_manifest_path, expected.order_manifest_sha256),
+            ):
+                if file_sha256(path) != expected_sha256:
+                    raise core.MintError("component artifact bytes mismatch")
+            if kwargs.get("expected_basis_sha256") != (
+                expected.whole_window_evaluation_basis_sha256
+            ):
+                raise core.MintError("component basis dispatch mismatch")
+            if kwargs.get("expected_consumption_semantics_id") != (
+                expected.consumption_semantics_id
+            ):
+                raise core.MintError("component semantics dispatch mismatch")
+            if kwargs.get("calibration_ledger_snapshot") is not ledger_snapshot:
+                raise core.MintError("component ledger snapshot identity mismatch")
+            return expected
+
+        core.load_calibration_acceptance_bound = load_acceptance
+        core.load_calibration_ledger_snapshot = lambda **_kwargs: ledger_snapshot
+        core._authenticate_component = authenticate
+        core.bind_floor_artifact_evidence = lambda *_args, **_kwargs: {}
+        return core
+
+    for producer, entry, component_sha256 in zip(
+        pinset["producer_plans"],
+        pinset["aggregate"]["component_artifacts"],
+        CLI_COMPONENT_SHA256S,
+    ):
+        producer["component_artifact"]["sha256"] = component_sha256
+        entry["sha256"] = component_sha256
+    _repair_v2_pinset_self_hashes(pinset)
+    pinset_path, pinset_sha256 = write_pinset(root, pinset)
+    return pinset_path, pinset_sha256, manifest_path, load_test_core
 
 
 class PinsetTests(unittest.TestCase):
@@ -1190,12 +1477,25 @@ class V2PinsetAndMintTests(unittest.TestCase):
     def test_synthetic_hash_oracle_is_literal_and_builder_independent(
         self,
     ) -> None:
-        helper_source = inspect.getsource(freeze_synthetic_v2_pinset)
-        self.assertNotIn("_build_v2_artifacts", helper_source)
-        self.assertNotIn("_artifact_sha256", helper_source)
+        helper_source = "\n".join(
+            inspect.getsource(helper)
+            for helper in (
+                synthetic_v2_fixture,
+                freeze_synthetic_v2_pinset,
+                _repair_v2_pinset_self_hashes,
+                _fixture_spec_member_ids,
+            )
+        )
+        self.assertNotIn("generalized._", helper_source)
+        self.assertNotIn("generalized._build_v2_artifacts", helper_source)
+        self.assertNotIn("generalized._artifact_sha256", helper_source)
         self.assertTrue(
             all(value != "0" * 64 for value in SYNTHETIC_COMPONENT_SHA256S)
         )
+        self.assertTrue(
+            all(value != "0" * 64 for value in SYNTHETIC_PRODUCER_PIN_SHA256S)
+        )
+        self.assertNotEqual(SYNTHETIC_PRODUCER_SET_SHA256, "0" * 64)
 
     def test_desk_stage_is_structurally_disjoint_and_cannot_mint(self) -> None:
         final, _inputs, _ledger_snapshot = synthetic_v2_fixture()
@@ -1279,6 +1579,18 @@ class V2PinsetAndMintTests(unittest.TestCase):
         )
 
     def test_v2_mint_does_not_render_or_round_floor_literals(self) -> None:
+        source_tree = ast.parse(inspect.getsource(generalized))
+        formatted_values = [
+            node
+            for node in ast.walk(source_tree)
+            if isinstance(node, ast.FormattedValue)
+            and node.format_spec is not None
+        ]
+        self.assertEqual(
+            formatted_values,
+            [],
+            "v2 mint contains f-string formatting capable of deriving a literal",
+        )
         with tempfile.TemporaryDirectory() as tmp:
             path, digest, inputs, ledger_snapshot = (
                 freeze_synthetic_v2_pinset(Path(tmp))
@@ -1355,16 +1667,34 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     project_tree_state="clean",
                 )
 
-    def test_extraction_recorded_last_decimal_mismatch_refuses(self) -> None:
+    def test_floor_rendering_and_extraction_record_mismatches_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path, _digest, inputs, ledger_snapshot = (
                 freeze_synthetic_v2_pinset(root)
             )
             source = load_json(path)
-            for field, replacement in (
-                ("absolute_floor_six_decimal", "6.294381"),
-                ("absolute_floor_full_precision", "6.294380135190099"),
+            for field, replacement, message in (
+                (
+                    "absolute_floor_six_decimal",
+                    "6.294381",
+                    r"absolute_floor\.six_decimal must equal the \.6f rendering",
+                ),
+                (
+                    "comparative_floor_six_decimal",
+                    "13.998036",
+                    r"comparative_floor\.six_decimal must equal the \.6f rendering",
+                ),
+                (
+                    "operative_floor_six_decimal",
+                    "13.998036",
+                    r"operative_floor\.six_decimal must equal the \.6f rendering",
+                ),
+                (
+                    "absolute_floor_full_precision",
+                    "6.294380135190099",
+                    "absolute_floor_full_precision mismatch",
+                ),
             ):
                 with self.subTest(field=field):
                     candidate = copy.deepcopy(source)
@@ -1377,7 +1707,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     )
                     with self.assertRaisesRegex(
                         generalized.MintError,
-                        f"extraction-recorded {field} mismatch",
+                        message,
                     ):
                         generalized.mint_multi_cell_authenticated_artifact(
                             pinset_path=candidate_path,
@@ -1387,6 +1717,74 @@ class V2PinsetAndMintTests(unittest.TestCase):
                             project_commit="0" * 40,
                             project_tree_state="clean",
                         )
+
+    def test_coordinated_report_and_pin_change_refuses_against_floor_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, _digest, inputs, ledger_snapshot = (
+                freeze_synthetic_v2_pinset(root)
+            )
+            candidate = load_json(path)
+            producer = candidate["producer_plans"][0]
+            decode_post = producer["cells"][0]["postcollection"]
+            decode_post["absolute_floor_full_precision"] = "6.294381135190098"
+            decode_post["absolute_floor_six_decimal"] = "6.294381"
+
+            plan_id = producer["plan"]["plan_id"]
+            source = inputs[plan_id]
+            report = copy.deepcopy(source.cells["decode"].absolute.report)
+            report_row = next(
+                row
+                for row in report["floor_mint_postcollection"]["cells"]
+                if row["cell_id"] == producer["cells"][0]["cell_id"]
+            )
+            report_row["absolute_floor_full_precision"] = (
+                "6.294381135190098"
+            )
+            report_row["absolute_floor_six_decimal"] = "6.294381"
+            report_sha256 = _fixture_artifact_sha256(report)
+            for cell_pin in producer["cells"]:
+                cell_pin["postcollection"]["extraction_report_sha256"] = (
+                    report_sha256
+                )
+            updated_cells = {
+                role: generalized.V2CellComponents(
+                    absolute=replace(
+                        cell.absolute,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                    comparative=replace(
+                        cell.comparative,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                    allowed_consumer_condition_families=(
+                        cell.allowed_consumer_condition_families
+                    ),
+                )
+                for role, cell in source.cells.items()
+            }
+            coordinated_inputs = {
+                **inputs,
+                plan_id: replace(source, cells=updated_cells),
+            }
+            _repair_v2_pinset_self_hashes(candidate)
+            candidate_path, candidate_digest = write_pinset(root, candidate)
+            with self.assertRaisesRegex(
+                generalized.MintError,
+                "absolute full-precision value mismatch",
+            ):
+                generalized.mint_multi_cell_authenticated_artifact(
+                    pinset_path=candidate_path,
+                    pinset_sha256=candidate_digest,
+                    producer_inputs=coordinated_inputs,
+                    calibration_ledger_snapshot=ledger_snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
 
     def test_per_component_consumption_semantics_pin_is_evidence_bound(
         self,
@@ -1489,6 +1887,87 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 )
             self.assertEqual(exit_code, 2)
             self.assertIn("requires --v2-input-manifest", stderr.getvalue())
+
+    def test_production_cli_mints_and_names_every_custody_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_v2_cli_fixture(root)
+            )
+            source = load_json(pinset_path)
+
+            def cli_args(label: str, path: Path, digest: str) -> list[str]:
+                return [
+                    "--pinset",
+                    str(path),
+                    "--pinset-sha256",
+                    digest,
+                    "--v2-input-manifest",
+                    str(manifest_path),
+                    "--out",
+                    str(root / f"{label}-floor.json"),
+                    "--single-count-out",
+                    str(root / f"{label}-single-count.txt"),
+                    "--project-commit",
+                    "0" * 40,
+                    "--project-tree-state",
+                    "clean",
+                ]
+
+            with mock.patch.object(
+                generalized,
+                "_fresh_original_core",
+                side_effect=load_test_core,
+            ):
+                self.assertEqual(
+                    generalized.main(
+                        cli_args("correct", pinset_path, pinset_sha256)
+                    ),
+                    0,
+                )
+            self.assertTrue((root / "correct-floor.json").is_file())
+            self.assertTrue((root / "correct-single-count.txt").is_file())
+
+            mismatch_values = {
+                "pre_receipt_sha256": "0" * 64,
+                "pre_content_sha256": "0" * 64,
+                "post_receipt_sha256": "0" * 64,
+                "post_content_sha256": "0" * 64,
+                "bracket_binding_sha256": "0" * 64,
+                "terminal_ledger_head_sha256": "0" * 64,
+                "extraction_report_sha256": "0" * 64,
+                "observed_drift_s": "0.002000",
+                # Decimal-equivalent spelling preserves the never-zero rule
+                # while still testing exact report-string authentication.
+                "applied_allowance_s": "0.0108180",
+            }
+            for field, replacement in mismatch_values.items():
+                with self.subTest(field=field):
+                    candidate = copy.deepcopy(source)
+                    for cell in candidate["producer_plans"][0]["cells"]:
+                        cell["postcollection"][field] = replacement
+                    _repair_v2_pinset_self_hashes(candidate)
+                    candidate_path, candidate_digest = write_pinset(
+                        root, candidate
+                    )
+                    stderr = io.StringIO()
+                    with (
+                        mock.patch.object(
+                            generalized,
+                            "_fresh_original_core",
+                            side_effect=load_test_core,
+                        ),
+                        mock.patch("sys.stderr", stderr),
+                    ):
+                        exit_code = generalized.main(
+                            cli_args(field, candidate_path, candidate_digest)
+                        )
+                    self.assertEqual(exit_code, 2)
+                    self.assertIn(field, stderr.getvalue())
+                    self.assertFalse((root / f"{field}-floor.json").exists())
+                    self.assertFalse(
+                        (root / f"{field}-single-count.txt").exists()
+                    )
 
     def test_v2_input_manifest_routes_all_authenticated_evidence_files(
         self,

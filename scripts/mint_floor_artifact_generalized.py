@@ -22,7 +22,7 @@ import re
 import stat
 import sys
 from dataclasses import dataclass, replace
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
@@ -56,6 +56,7 @@ _ORIGINAL_MINT_PATH = Path(__file__).with_name("mint_floor_artifact.py")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 _SIX_DECIMAL_RE = re.compile(r"^(?:0|[1-9][0-9]*)\.[0-9]{6}$")
+_SIX_DECIMAL_QUANTUM = Decimal("0.000001")
 _EVIDENCE_ROOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _SEMANTICS_IDS = {
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -352,6 +353,29 @@ def _six_decimal(value: object, label: str) -> str:
     return value
 
 
+def _verify_six_decimal_rendering(
+    full_precision: object,
+    six_decimal: object,
+    *,
+    label: str,
+) -> None:
+    """Verify Decimal ``.6f`` semantics without rendering a mint literal."""
+
+    full = _decimal_text(full_precision, f"{label}.full_precision")
+    literal = _six_decimal(six_decimal, f"{label}.six_decimal")
+    with localcontext() as context:
+        context.prec = max(80, len(full.as_tuple().digits) + 7)
+        rounded = full.quantize(
+            _SIX_DECIMAL_QUANTUM,
+            rounding=ROUND_HALF_EVEN,
+        )
+    if Decimal(literal) != rounded:
+        raise MintError(
+            f"{label}.six_decimal must equal the .6f rendering of "
+            f"{label}.full_precision"
+        )
+
+
 def _member_pins(value: object, label: str) -> tuple[tuple[str, str], ...]:
     if not isinstance(value, list) or not value:
         raise MintError(f"{label} must be a nonempty array")
@@ -555,6 +579,12 @@ def _parse_v2_postcollection(value: object, label: str) -> None:
         "operative_floor_six_decimal",
     ):
         _six_decimal(row[name], f"{label}.{name}")
+    for component_name in ("absolute", "comparative", "operative"):
+        _verify_six_decimal_rendering(
+            row[f"{component_name}_floor_full_precision"],
+            row[f"{component_name}_floor_six_decimal"],
+            label=f"{label}.{component_name}_floor",
+        )
     if operative_full != max(absolute_full, comparative_full):
         raise MintError(
             f"{label}.operative_floor_full_precision must equal the armwise maximum, never a sum"
@@ -1663,6 +1693,19 @@ def _mapping_attribute(value: object, name: str) -> object:
     return getattr(value, name, None)
 
 
+def _require_postcollection_evidence_equal(
+    field: str,
+    pinned: object,
+    evidenced: object,
+    *,
+    source: str,
+) -> None:
+    if pinned != evidenced:
+        raise MintError(
+            f"postcollection_evidence_mismatch: {field} mismatch against {source}"
+        )
+
+
 def _v2_extraction_postcollection_record(
     component: Any,
     cell_id: str,
@@ -1724,6 +1767,12 @@ def _v2_extraction_postcollection_record(
         "operative_floor_six_decimal",
     ):
         _six_decimal(row[name], f"{label}.{name}")
+    for component_name in ("absolute", "comparative", "operative"):
+        _verify_six_decimal_rendering(
+            row[f"{component_name}_floor_full_precision"],
+            row[f"{component_name}_floor_six_decimal"],
+            label=f"{label}.{component_name}_floor",
+        )
     return row
 
 
@@ -2018,29 +2067,37 @@ def _v2_gate_postcollection(
         ledger_snapshot=ledger_snapshot,
     )
     expected_binding_sha256 = post["bracket_binding_sha256"]
-    if producer_inputs.bracket_binding_sha256 != expected_binding_sha256:
-        raise MintError(
-            "postcollection_evidence_mismatch: bracket-binding artifact sha256 mismatch"
-        )
+    _require_postcollection_evidence_equal(
+        "bracket_binding_sha256",
+        expected_binding_sha256,
+        producer_inputs.bracket_binding_sha256,
+        source="supplied bracket-binding artifact bytes",
+    )
     binding = producer_inputs.bracket_binding
-    endpoint_pins = {
-        "pre": (post["pre_receipt_sha256"], post["pre_content_sha256"]),
-        "post": (post["post_receipt_sha256"], post["post_content_sha256"]),
+    endpoint_fields = {
+        "pre": ("pre_receipt_sha256", "pre_content_sha256"),
+        "post": ("post_receipt_sha256", "post_content_sha256"),
     }
     for role, observation in (("pre", pre), ("post", post_observation)):
-        if endpoint_pins[role] != (
+        receipt_field, content_field = endpoint_fields[role]
+        _require_postcollection_evidence_equal(
+            receipt_field,
+            post[receipt_field],
             _mapping_attribute(observation, "receipt_digest"),
-            _mapping_attribute(observation, "content_id"),
-        ):
-            raise MintError(
-                f"postcollection_evidence_mismatch: {role} receipt/content pin mismatch"
-            )
-    if post["terminal_ledger_head_sha256"] != binding["terminal_head"][
-        "head_digest"
-    ]:
-        raise MintError(
-            "postcollection_evidence_mismatch: terminal ledger head pin mismatch"
+            source=f"authenticated ledger {role} observation",
         )
+        _require_postcollection_evidence_equal(
+            content_field,
+            post[content_field],
+            _mapping_attribute(observation, "content_id"),
+            source=f"authenticated ledger {role} observation",
+        )
+    _require_postcollection_evidence_equal(
+        "terminal_ledger_head_sha256",
+        post["terminal_ledger_head_sha256"],
+        binding["terminal_head"]["head_digest"],
+        source="authenticated bracket-binding terminal head",
+    )
     try:
         observed_drift = abs(
             _decimal_text(
@@ -2056,18 +2113,19 @@ def _v2_gate_postcollection(
         raise MintError(
             "postcollection_evidence_mismatch: ledger endpoint drift is not exact Decimal evidence"
         ) from exc
-    if observed_drift != _decimal_text(
-        post["observed_drift_s"], "postcollection.observed_drift_s"
-    ):
-        raise MintError(
-            "postcollection_evidence_mismatch: observed drift pin mismatch"
-        )
+    _require_postcollection_evidence_equal(
+        "observed_drift_s",
+        _decimal_text(post["observed_drift_s"], "postcollection.observed_drift_s"),
+        observed_drift,
+        source="authenticated ledger endpoint bounds",
+    )
     actual_components = (cell_inputs.absolute, cell_inputs.comparative)
-    if {component.report_sha256 for component in actual_components} != {
-        post["extraction_report_sha256"]
-    }:
-        raise MintError(
-            "postcollection_evidence_mismatch: extraction-report sha256 mismatch"
+    for component in actual_components:
+        _require_postcollection_evidence_equal(
+            "extraction_report_sha256",
+            post["extraction_report_sha256"],
+            component.report_sha256,
+            source=f"supplied {component.kind} extraction-report artifact bytes",
         )
     records = [
         _v2_extraction_postcollection_record(
@@ -2092,10 +2150,12 @@ def _v2_gate_postcollection(
         "comparative_floor_six_decimal",
         "operative_floor_six_decimal",
     ):
-        if post[name] != report_record[name]:
-            raise MintError(
-                f"postcollection_evidence_mismatch: extraction-recorded {name} mismatch"
-            )
+        _require_postcollection_evidence_equal(
+            name,
+            post[name],
+            report_record[name],
+            source="authenticated extraction-report record",
+        )
     actual_values = (
         cell_inputs.absolute.cell.get("floor", {}).get(
             "drift_widened_guarded_floor_j"
