@@ -380,6 +380,77 @@ prospective ruling made before the plan freeze:
 every refusal stays exactly as written. Calibration-only retry remains
 governed as written in §6 and is not changed by this member-level prohibition.
 
+### D-117 addendum — two-slot session capability before science
+
+This subsection is additive to the ratified §5A procedure. It does not
+renumber, replace, or relax any step above. For a D-117 frozen plan, perform
+these actions after the ordinary machine/clock preparation, the existing
+180-second settle, and the untouched-idle gate, but before any science member:
+
+- [ ] Set `REPO_ROOT`, `WINDOW_PLAN_ROOT`, and `RUNS_ROOT` to their fully
+  resolved absolute paths. Run the frozen-plan readiness validator and retain
+  its JSON receipt. Require an overall `PASS` and exit `0`; any `REFUSE`,
+  unreadable input, or check error ends the arm attempt.
+
+  ```sh
+  python3 "$REPO_ROOT/scripts/validate_frozen_plan_readiness.py" \
+    --plan-dir "$WINDOW_PLAN_ROOT" \
+    --evidence-root "$RUNS_ROOT" \
+    --repo "$REPO_ROOT"
+  ```
+
+- [ ] Reconfirm that the physical calibration-ledger head equals the
+  repository-committed head pin. Append exactly one two-slot
+  `calibration_window_bracket_session.v1` capability for this frozen plan and
+  evidence-root ID. Its session, `pre`, and `post` identifiers must be the
+  unclaimed identifiers already bound by `readiness-record.json`; do not mint
+  or substitute identifiers at launch time.
+- [ ] Capture the pre-calibration observation into the reserved `pre` slot and
+  finalize that slot before member one. Keep the `post` slot governed by the
+  session state machine; do not replace it with an ordinary reservation or a
+  neighboring window's observation.
+
+For D-117 windows, calibration retry count is zero. The cause-removal retry in
+the general §5B procedure does not authorize a second pre observation: a
+two-slot session has only its frozen `pre` and `post` slots. A failing pre
+observation receives the governed abort/closure and ends that window before
+science. Any future retry design requires prospectively numbered additional
+slots and a newly frozen plan; it is never improvised at the machine.
+
+### D-117 addendum — acceptance/trigger gate and closing bookend
+
+The D-102 trigger probe belongs immediately after the pre slot is finalized
+and before the bound corpus, references, or any science stage. Judge the new
+observation under the acceptance artifact that was current before capture;
+never fit an observation into the rule that judges itself.
+
+- [ ] Run the acceptance and D-102 successor-trigger probe over the finalized
+  pre observation. Continue only when it reports that the issued artifact is
+  current for the exact identity epoch and no successor trigger fired.
+- [ ] If identity, observed-range, valid-count, protocol/estimator, systematic,
+  unresolved, or unclassifiable evidence triggers a refusal, stop before
+  member one. Close or preserve the bracket session exactly as its frozen
+  state machine requires, commit the resulting ledger head, build and
+  authenticate the governed successor, then repeat readiness validation and
+  the pre-science gate. A successor cannot launder a systematic mismatch.
+- [ ] Emit the one-line arm message and walk away only after the readiness
+  receipt, session append, pre finalization, and trigger probe are all green.
+
+At closeout, capture the post observation before changing power, network-time,
+or workload state; finalize the reserved `post` slot (or write its governed
+abort closure); commit and authenticate the terminal ledger head; then emit
+the exact bracket binding and whole-window verdict from the same immutable
+ledger snapshot. Verify both evidence-root and bound-root backups, including
+return codes and hashes, before restoring network time.
+
+Automatic network time stays off and no manual clock adjustment occurs from
+the opening bookend through custody closeout. Because cooldown/cap arithmetic
+still uses wall-clock time, any in-window clock adjustment is a refusal and a
+recorded closeout deviation, not a value to repair. Never interrupt or kill a
+running whole-window verdict: it can legitimately exceed two minutes. Preserve
+and diagnose any natural nonzero result or dead lock; never delete the lock or
+relaunch while its recorded PID is live.
+
 ## 5B. Pre-flight calibration screen (D-079 clause 3)
 
 **What this catches, in plain language.** The pre-calibration measures how
