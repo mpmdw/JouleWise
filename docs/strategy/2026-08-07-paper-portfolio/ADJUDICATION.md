@@ -94,8 +94,21 @@ scope ruling surfaced; everything else duplicated the directed pool).
 | Window C (MVP §6 characterization) | 1 | ED RULING #1 |
 | Optional: KV-context designed extension | 1 | ED RULING (with #1) |
 | Optional: 256-tok prefill contrast | 1 | recommend NO for capstone (both syntheses) |
-| P2 quantization BF16/Q4/Q8 | 3 | after MVP; kill gates first |
-| Stretch MoE | 2-3 | desk gates first; Spring-class |
+| P2 quantization BF16/Q4/Q8 | **4** (was 3) | after MVP; kill gates first — see CORRECTION below |
+| Stretch MoE | **4** (was 2-3) | desk gates first; Spring-class — see CORRECTION below |
+
+**CORRECTION (2026-08-07, from the Opus re-examination of both gate plans;
+full record in `docs/process_traces/2026-08-07-plan-factory/`):** both
+second-paper night counts were understated in this adjudication. Quantization
+needs a FOURTH conversion arm (the existing Q4 artifact cannot be byte-matched
+by construction — it stores non-quantized parameters as F16 and carries no
+"mode" key), taking it to 4 nights. MoE needs independent floors for THREE
+arms (k=8, k=4, dense) = 150 members, arithmetically unreachable in two
+nights, so 4. Both corrections are ED-FACING because night counts are the
+budget he rules on. Two binding portfolio rules were also adopted: no
+second-paper work touches the mint/pinset/detection_floor file set until U10
+closes, and every kill threshold is a multiple of a PROJECTED floor (never a
+joule literal, never 1x).
 
 ## Ed's rulings (ranked; both syntheses' merged list)
 

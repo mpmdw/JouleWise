@@ -202,3 +202,64 @@ timing bound — that is a computed quantity from custodied inputs. It must NOT
 tabulate a "verdict without" column: a verdict is an ISSUED artifact, and a
 counterfactual verdict has no artifact behind it. State the arithmetic delta
 and what it would imply; never render a verdict that was never issued.
+
+## BINDING PORTFOLIO RULES (adopted from the quant/MoE re-examination)
+
+**R1 — No P2 or stretch-paper work may touch the mint / pinset /
+`detection_floor` file set until U10 closes.** Both second-paper plans
+independently rediscovered the same blocker; the cardinality limits are
+hardcoded in THREE places (schema_v2.json, the generalized mint, AND the
+consumer `detection_floor.py`, which additionally requires per-component
+roles exactly {"decode","prefill"} and pins cross_stack_armwise_max.v1 as
+a constant). A three-decode-cell aggregate therefore fails on cardinality
+AND on role pairing. Touching that file set before U10 puts the capstone's
+nights hostage to a second paper.
+
+**R2 — Every kill threshold is expressed as a MULTIPLE OF A PROJECTED
+FLOOR, never as a joule literal and never at 1x.** Projection basis: the
+one measured precedent, 13.998037 J comparative on a 192.386233 J member
+mean = 7.3% of member energy. This supersedes every "~5 J" and every bare
+joule gate in the portfolio's plans.
+
+## QUANTIZATION (P2) — REWORK (bounded), and the night count changes
+
+The plan has exactly two kill gates and NEITHER can return a decision:
+- **Gate 1 cannot PASS.** The existing Q4 artifact stores every
+  non-quantized parameter as F16 and its config carries NO "mode" key;
+  the plan converts at `--dtype bfloat16`, and mlx_lm 0.31.3 always writes
+  `"mode": "affine"`. Byte-identity with the existing artifact is
+  impossible BY CONSTRUCTION on two independent grounds, before converter
+  packing even enters. Fix: a three-way Q4-EQUIVALENCE verdict (not
+  byte-identity) plus a fourth `--dtype float16` conversion arm.
+- **Gate 2 cannot DECIDE.** With five off-window ABBA blocks the interval
+  is too wide for either branch to fire; "hold for Ed" is the near-certain
+  outcome. Fix: >=3x projected-floor Go rule (R2) and a FAIL_PRECISION
+  rule.
+- Move the 4-hour occupancy projection INTO Gate 1 (computable there from
+  the memo's 92.7 s / 147 min / 188.4 min structure) — one to two months
+  earlier than currently scheduled.
+- **NIGHT COUNT: 3 -> 4.** This is a portfolio number in ADJUDICATION, so
+  it is Ed's to accept, not an amendment I can make in place.
+- Correction to a carried fact: the `--hf-path/--revision` unexecutability
+  does NOT apply here — this plan resolves the SHA via the API and passes
+  a local snapshot dir, which is the correct workaround.
+
+## MoE (STRETCH) — ACCEPT WITH AMENDMENTS
+
+Technically the stronger document: every source citation verified exactly
+against the INSTALLED runtime (block L110, top_k L117, inds L131, scores
+L132, switch_mlp L136), the metadata-first-line check verified against
+real on-disk structure, and the disk precondition correctly FAILED against
+real numbers. Gates DG2/DG3/DG4 genuinely kill. Structural amendments:
+1. **No effect-size gate exists anywhere in DG1-DG4** — the most likely
+   killer sits BEHIND a 32-48 h runtime fork. Add DG2.5: projected-floor
+   sizing at >=3x, before the fork.
+2. Move the active-parameter-ratio check into DG1 (computable from the
+   remote index file with NO 17 GB download) — and note it is likely
+   marginal, since the dense partner is tied-embeddings and the MoE is not.
+3. **"Two-night minimum" is arithmetically unreachable** for three floored
+   arms (150 members against Alpha's 50 at 188.4 min). Honest number: 4.
+- Correction to a carried fact: the ~34 GB cache-then-mirror doubling does
+  NOT apply (hub 1.22.0 renames into place on the same filesystem); the
+  28 GiB / 97%-full disk finding STANDS and the second 17.2 GB mirror
+  remains impossible on that volume.
