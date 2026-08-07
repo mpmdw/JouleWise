@@ -9783,3 +9783,454 @@ whole_window_bundle_invalid
 whole_window_campaign_membership_unresolved
 DISTINCT_CODES=26
 
+codex
+# Refusal-mechanism census
+
+Scope: all top-level `runs_window_*/campaign_log.jsonl` and `runs*/campaign_log.jsonl` in `/Users/edr/code/JouleWise`, deduplicating the overlapping globs. The temporary session worktree contained no run corpora; Git identified this canonical worktree as the same repository. No repository files were changed.
+
+## 1. Verdict census
+
+The sweep covered 33 unique logs and 1,475 JSONL rows.
+
+- The two globs produced 60 raw path matches but only 33 unique files.
+- 27 were `runs_window_*` logs: 18 non-`_bound` roots and 9 `_bound` evidence roots.
+- 6 were `runs_recal*` logs.
+- 154 records were verdict-typed:
+
+  - 138 `campaign_verdict` rows. These encode collection/preflight state, not `passed`/`failed`: 92 `collection.verdict=usable`, 46 `invalid`; all 138 say claim readiness was `not_assessed`.
+  - 16 `idle_admission_whole_window_verdict` rows. These are the only literal pass/fail verdicts: **6 PASSED, 10 FAILED**.
+
+The 16 pass/fail rows cover 13 adjudicated window roots because a5 was re-verdict-ed three times and a8 twice. Taking the latest verdict per root gives **6 passed and 7 failed windows**. Five other non-bound `runs_window_*` roots are fragments/probes without a final whole-window verdict.
+
+## 2. Honest denominators
+
+| Denominator | Exact count |
+|---|---:|
+| Unique logs | 33 |
+| Adjudicated window roots | 13 |
+| Whole-window verdict rows | 16 |
+| All member log rows | 1,314 |
+| Skipped/reused rows, not new attempts | 141 |
+| Executed member-attempt rows | 1,173 |
+| Successful member outcomes | 1,130 |
+| Member-status failures | 43 |
+| Collection-refused member occurrences | **44** |
+| Distinct refused `(root, member_id)` identities | 38 |
+| Distinct executed `(root, member_id)` identities | 1,152 |
+| Extra executed retry attempts | 21, across 17 identities |
+| Supersession records | 7 |
+| Superseded attempts represented | **8** |
+
+The difference between 43 status failures and 44 collection refusals is real: one member executed successfully but was then refused by strict validation because the raw idle trace and uncertainty derivations disagreed with stored metadata.
+
+Prechecks have two separate denominators:
+
+- Campaign environment preflight: **138 occurrences**—136 admitted and 2 exceptionally rejected before member 1. All 138 nevertheless carry `preflight.status="pass"`, so `environment_guard.admitted` is the honest field. The two rejections contain three finding-code hits: `display_not_all_asleep` twice and `low_power_mode_enabled` once as unknown.
+- Member metric prechecks: 5,441 raw flag appearances, collapsing repeated verdict snapshots to **4,826 unique `(root, member_id, code)` occurrences**:
+
+  - **4,818 metric-local/by-design refusal-mechanism occurrences**, affecting 1,127 members.
+  - **8 exceptional global occurrences**, affecting 5 members: `clock_anchor_unresolved` ×3, `environment_admission_missing` ×4, and `environment_admission_failed` ×1.
+
+“By design” means the gate is deliberately metric-local under the [refusal-scope specification](/Users/edr/code/JouleWise/docs/phase_2/refusal_scope_spec.md:1); it does not mean every poor-quality metric was expected or desirable.
+
+## 3. Distinct refusal mechanisms
+
+There are **26 distinct machine-readable reason codes**. Grouping same-cause and downstream aliases yields these 10 mechanism families. Counts use their native denominator and therefore overlap across layers; they must not be summed.
+
+| Grouped mechanism | Exact observed occurrence count | Reason representation |
+|---|---:|---|
+| Window too short or undersampled | 1,135 member-code pairs across 1,127 members | Codes: `nonpositive_window_duration`, `insufficient_in_window_samples` |
+| Cadence evidence absent or inadequate | 1,464 pairs across 1,127 members | Codes: `cadence_ratio_unrecorded`, `cadence_ratio_below_threshold` |
+| Clock evidence inadequate | 1,127 metric-local clock-bound pairs, plus 3 exceptional unresolved-clock occurrences | Codes: `clock_bound_unrecorded`, `clock_bound_exceeds_quarter_window`, `clock_anchor_unresolved` |
+| Interpolation uncertainty absent | 8 pairs across 8 members | Code: `interpolation_bound_unrecorded` |
+| Anchor-envelope/fallback gate | 1,084 precheck pairs across 742 members; 3 collection-refused members | Codes: two `anchor_energy_envelope_*` codes and `anchor_fallback_member_unusable` |
+| Environment/admission interference | 2 pre-member campaign refusals; 5 exceptional member-precheck occurrences; 8 superseded contaminated attempts; 6 failed whole-window rows across 4 roots | Machine codes at precheck/verdict layers; the causal supersession explanations are free text |
+| Prompt-hash/suite-recording failure | 5 member refusals | Code `prompt_hash_check_error`, with free-text validation details |
+| Custody, validation, or membership failure | 9 failed verdict rows across 6 roots; additionally 1 successful execution refused by strict validation | Whole-window codes; the single post-run mismatch is free text only |
+| Instrument calibration missing or inconsistent | 3 failed verdict rows across 3 roots: 2 missing brackets and 1 calibration mismatch | Machine-readable codes |
+| NEG-8 bracket/drift failure | 8 failed verdict rows across 5 roots, containing 10 reason-code hits | Four codes: bracket missing, reference invalid, drift excessive, and drift stale |
+
+Thirty of the 44 refused member occurrences have **no causal reason at all** in these logs—only failed/invalid status. “Invalid unwaived member bundle” was not counted as a cause because it merely restates the verdict.
+
+Specific §5 claim checks:
+
+- Contaminated/environmentally interrupted attempts: **8**, documented by 7 supersession records.
+- Out-of-family calibration: **1** `instrument_calibration_mismatch` verdict.
+- Stale drift evidence: **2** failed verdict rows in 2 roots.
+- Unresolved clock anchors: **3** member precheck occurrences.
+- Active duplicate-occurrence refusal: **0**. The corpus contains 7 successful supersession records covering 8 replaced attempts, but no duplicate refusal.
+- Below-floor refusal: **0**. All 138 campaign verdicts leave claim readiness `not_assessed`; no log string matches `below_floor`.
+- Neither `duplicate` nor `below_floor` appears anywhere as a string in the swept logs.
+
+## 4. `{member_id → reason}` reconstructability
+
+Member identity must be scoped by root because names recur between campaigns.
+
+- Identity-level rate: **13 / 38 = 34.21052631578947%**.
+- Occurrence-level rate: **14 / 44 = 31.818181818181817%**.
+
+Occurrence-level breakdown:
+
+| Reason availability | Refused occurrences |
+|---|---:|
+| Machine-readable causal code | 8 |
+| Validation reason in free text only | 1 |
+| Supersession reason in free text only | 5 |
+| No causal reason reconstructable | **30** |
+
+Thus the campaign logs prove that refusals happened much more reliably than they explain why each member was refused.
+
+## 5. Paper-ready table: “The refusal record to date”
+
+| Refusal record to date | Observed record |
+|---|---|
+| Whole-window decisions | Thirteen window roots have final decisions: six passed and seven failed. The append-only logs contain sixteen decision rows because two windows were evaluated more than once; across those rows, six passed and ten failed. |
+| Member collection | There were 1,173 executed member attempts. Forty-four occurrences were refused: 43 failed during collection and one completed but failed strict evidence validation. |
+| Pre-window admission | Of 138 campaign prechecks, 136 admitted collection and two stopped before the first member because the machine was not in the required state. |
+| Environmental interruption | Seven supersession records preserve eight replaced attempts. Their explanations name background CPU activity, display/login disturbance, or an operator wake event. |
+| Calibration and drift | One verdict refused an inconsistent instrument calibration; two lacked a calibration bracket. NEG-8 bracket or drift evidence contributed to eight failed verdict rows across five window roots, including two stale-drift verdicts. |
+| Clock evidence | Three members carried an unresolved-clock-anchor refusal. Many shorter metric windows were also refused locally because their clock bound was absent or too large for that metric. |
+| Duplicate handling | Eight prior attempts were resolved through seven append-only supersession records. No active duplicate-occurrence refusal appears in this corpus. |
+| Below-floor effects | No below-floor claim refusal appears: claim readiness was not assessed in all 138 campaign verdict rows. |
+| Logging completeness | A causal member-level reason can be reconstructed for only 13 of 38 refused member identities, or 14 of 44 refused occurrences. Thirty refused occurrences retain status but no causal reason. |
+
+This is the defensible replacement for the broad claim currently in [§5](/Users/edr/code/JouleWise/docs/paper/draft-v1.md:143): the record supports contamination, calibration, drift, clock, custody, and supersession behavior, but not yet an observed below-floor or active-duplicate refusal.
+
+## Reproduction commands
+
+Path resolution:
+
+```zsh
+setopt null_glob
+cd /Users/edr/code/JouleWise
+files=(runs_window_*/campaign_log.jsonl runs*/campaign_log.jsonl)
+printf '%s\n' "${files[@]}" | sed '/^$/d' | LC_ALL=C sort -u
+printf 'RAW_MATCHES=%d\n' ${#files[@]}
+printf '%s\n' "${files[@]}" | sed '/^$/d' | LC_ALL=C sort -u | wc -l
+```
+
+Member denominators:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type==null) |
+     {file:$file,run_id,status,exit_code,
+      member_status:.members[0].status,
+      collection_classification:.members[0].collection_classification}' "$f"
+done |
+jq -s '{
+  member_log_rows:length,
+  executed_attempt_rows:(map(select(.status!="skipped"))|length),
+  skipped_reuse_rows:(map(select(.status=="skipped"))|length),
+  executed_by_member_status:
+    (map(select(.status!="skipped"))|
+     group_by(.member_status)|
+     map({status:.[0].member_status,n:length})),
+  distinct_executed_root_member_ids:
+    (map(select(.status!="skipped")|[.file,.run_id]|join("|"))|unique|length)
+}'
+```
+
+Whole-window verdicts:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type=="idle_admission_whole_window_verdict") |
+     {file:$file,timestamp,status,
+      conditions:(.idle_admission_core.conditions // [])}' "$f"
+done |
+jq -s '{
+  rows:length,
+  row_status:(group_by(.status)|map({status:.[0].status,n:length})),
+  latest_by_root:
+    (sort_by(.file,.timestamp)|group_by(.file)|map(last)|
+     group_by(.status)|map({status:.[0].status,n:length}))
+}'
+```
+
+Deduplicated member prechecks:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type=="campaign_verdict") |
+     .members[] as $m |
+     $m.claim_evidence_flags[]? |
+     {file:$file,bundle_id:$m.bundle_id,code:.}' "$f"
+done |
+jq -s '
+  unique_by(.file,.bundle_id,.code) as $u |
+  ["nonpositive_window_duration",
+   "insufficient_in_window_samples",
+   "cadence_ratio_unrecorded",
+   "cadence_ratio_below_threshold",
+   "clock_bound_unrecorded",
+   "clock_bound_exceeds_quarter_window",
+   "interpolation_bound_unrecorded",
+   "drift_term_unknown",
+   "idle_baseline_unrecorded",
+   "cooldown_cap_hit",
+   "anchor_energy_envelope_exceeds_quarter_metric",
+   "anchor_energy_envelope_unrecorded"] as $local |
+  {
+    unique_member_code_occurrences:($u|length),
+    by_design_local:
+      ($u|map(select(.code as $c|$local|index($c)))|length),
+    exceptional_global:
+      ($u|map(select(.code as $c|($local|index($c)|not)))|length)
+  }'
+```
+
+Supersessions:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c 'select(.record_type=="campaign_occurrence_supersession")' "$f"
+done |
+jq -s '{
+  records:length,
+  superseded_attempts:(map(.superseded_occurrences|length)|add),
+  reason_field_nonempty:
+    (map(select((.reason|type)=="string" and (.reason|length)>0))|length)
+}'
+```
+
+Absent claimed categories:
+
+```zsh
+for term in 'below[_ -]?floor' 'duplicate'; do
+  printf 'TERM=%s\n' "$term"
+  for f in ${(u)files}; do
+    jq -r --arg term "$term" \
+      '.. | strings | select(test($term;"i"))' "$f"
+  done | wc -l
+done
+```
+tokens used
+221,202
+# Refusal-mechanism census
+
+Scope: all top-level `runs_window_*/campaign_log.jsonl` and `runs*/campaign_log.jsonl` in `/Users/edr/code/JouleWise`, deduplicating the overlapping globs. The temporary session worktree contained no run corpora; Git identified this canonical worktree as the same repository. No repository files were changed.
+
+## 1. Verdict census
+
+The sweep covered 33 unique logs and 1,475 JSONL rows.
+
+- The two globs produced 60 raw path matches but only 33 unique files.
+- 27 were `runs_window_*` logs: 18 non-`_bound` roots and 9 `_bound` evidence roots.
+- 6 were `runs_recal*` logs.
+- 154 records were verdict-typed:
+
+  - 138 `campaign_verdict` rows. These encode collection/preflight state, not `passed`/`failed`: 92 `collection.verdict=usable`, 46 `invalid`; all 138 say claim readiness was `not_assessed`.
+  - 16 `idle_admission_whole_window_verdict` rows. These are the only literal pass/fail verdicts: **6 PASSED, 10 FAILED**.
+
+The 16 pass/fail rows cover 13 adjudicated window roots because a5 was re-verdict-ed three times and a8 twice. Taking the latest verdict per root gives **6 passed and 7 failed windows**. Five other non-bound `runs_window_*` roots are fragments/probes without a final whole-window verdict.
+
+## 2. Honest denominators
+
+| Denominator | Exact count |
+|---|---:|
+| Unique logs | 33 |
+| Adjudicated window roots | 13 |
+| Whole-window verdict rows | 16 |
+| All member log rows | 1,314 |
+| Skipped/reused rows, not new attempts | 141 |
+| Executed member-attempt rows | 1,173 |
+| Successful member outcomes | 1,130 |
+| Member-status failures | 43 |
+| Collection-refused member occurrences | **44** |
+| Distinct refused `(root, member_id)` identities | 38 |
+| Distinct executed `(root, member_id)` identities | 1,152 |
+| Extra executed retry attempts | 21, across 17 identities |
+| Supersession records | 7 |
+| Superseded attempts represented | **8** |
+
+The difference between 43 status failures and 44 collection refusals is real: one member executed successfully but was then refused by strict validation because the raw idle trace and uncertainty derivations disagreed with stored metadata.
+
+Prechecks have two separate denominators:
+
+- Campaign environment preflight: **138 occurrences**—136 admitted and 2 exceptionally rejected before member 1. All 138 nevertheless carry `preflight.status="pass"`, so `environment_guard.admitted` is the honest field. The two rejections contain three finding-code hits: `display_not_all_asleep` twice and `low_power_mode_enabled` once as unknown.
+- Member metric prechecks: 5,441 raw flag appearances, collapsing repeated verdict snapshots to **4,826 unique `(root, member_id, code)` occurrences**:
+
+  - **4,818 metric-local/by-design refusal-mechanism occurrences**, affecting 1,127 members.
+  - **8 exceptional global occurrences**, affecting 5 members: `clock_anchor_unresolved` ×3, `environment_admission_missing` ×4, and `environment_admission_failed` ×1.
+
+“By design” means the gate is deliberately metric-local under the [refusal-scope specification](/Users/edr/code/JouleWise/docs/phase_2/refusal_scope_spec.md:1); it does not mean every poor-quality metric was expected or desirable.
+
+## 3. Distinct refusal mechanisms
+
+There are **26 distinct machine-readable reason codes**. Grouping same-cause and downstream aliases yields these 10 mechanism families. Counts use their native denominator and therefore overlap across layers; they must not be summed.
+
+| Grouped mechanism | Exact observed occurrence count | Reason representation |
+|---|---:|---|
+| Window too short or undersampled | 1,135 member-code pairs across 1,127 members | Codes: `nonpositive_window_duration`, `insufficient_in_window_samples` |
+| Cadence evidence absent or inadequate | 1,464 pairs across 1,127 members | Codes: `cadence_ratio_unrecorded`, `cadence_ratio_below_threshold` |
+| Clock evidence inadequate | 1,127 metric-local clock-bound pairs, plus 3 exceptional unresolved-clock occurrences | Codes: `clock_bound_unrecorded`, `clock_bound_exceeds_quarter_window`, `clock_anchor_unresolved` |
+| Interpolation uncertainty absent | 8 pairs across 8 members | Code: `interpolation_bound_unrecorded` |
+| Anchor-envelope/fallback gate | 1,084 precheck pairs across 742 members; 3 collection-refused members | Codes: two `anchor_energy_envelope_*` codes and `anchor_fallback_member_unusable` |
+| Environment/admission interference | 2 pre-member campaign refusals; 5 exceptional member-precheck occurrences; 8 superseded contaminated attempts; 6 failed whole-window rows across 4 roots | Machine codes at precheck/verdict layers; the causal supersession explanations are free text |
+| Prompt-hash/suite-recording failure | 5 member refusals | Code `prompt_hash_check_error`, with free-text validation details |
+| Custody, validation, or membership failure | 9 failed verdict rows across 6 roots; additionally 1 successful execution refused by strict validation | Whole-window codes; the single post-run mismatch is free text only |
+| Instrument calibration missing or inconsistent | 3 failed verdict rows across 3 roots: 2 missing brackets and 1 calibration mismatch | Machine-readable codes |
+| NEG-8 bracket/drift failure | 8 failed verdict rows across 5 roots, containing 10 reason-code hits | Four codes: bracket missing, reference invalid, drift excessive, and drift stale |
+
+Thirty of the 44 refused member occurrences have **no causal reason at all** in these logs—only failed/invalid status. “Invalid unwaived member bundle” was not counted as a cause because it merely restates the verdict.
+
+Specific §5 claim checks:
+
+- Contaminated/environmentally interrupted attempts: **8**, documented by 7 supersession records.
+- Out-of-family calibration: **1** `instrument_calibration_mismatch` verdict.
+- Stale drift evidence: **2** failed verdict rows in 2 roots.
+- Unresolved clock anchors: **3** member precheck occurrences.
+- Active duplicate-occurrence refusal: **0**. The corpus contains 7 successful supersession records covering 8 replaced attempts, but no duplicate refusal.
+- Below-floor refusal: **0**. All 138 campaign verdicts leave claim readiness `not_assessed`; no log string matches `below_floor`.
+- Neither `duplicate` nor `below_floor` appears anywhere as a string in the swept logs.
+
+## 4. `{member_id → reason}` reconstructability
+
+Member identity must be scoped by root because names recur between campaigns.
+
+- Identity-level rate: **13 / 38 = 34.21052631578947%**.
+- Occurrence-level rate: **14 / 44 = 31.818181818181817%**.
+
+Occurrence-level breakdown:
+
+| Reason availability | Refused occurrences |
+|---|---:|
+| Machine-readable causal code | 8 |
+| Validation reason in free text only | 1 |
+| Supersession reason in free text only | 5 |
+| No causal reason reconstructable | **30** |
+
+Thus the campaign logs prove that refusals happened much more reliably than they explain why each member was refused.
+
+## 5. Paper-ready table: “The refusal record to date”
+
+| Refusal record to date | Observed record |
+|---|---|
+| Whole-window decisions | Thirteen window roots have final decisions: six passed and seven failed. The append-only logs contain sixteen decision rows because two windows were evaluated more than once; across those rows, six passed and ten failed. |
+| Member collection | There were 1,173 executed member attempts. Forty-four occurrences were refused: 43 failed during collection and one completed but failed strict evidence validation. |
+| Pre-window admission | Of 138 campaign prechecks, 136 admitted collection and two stopped before the first member because the machine was not in the required state. |
+| Environmental interruption | Seven supersession records preserve eight replaced attempts. Their explanations name background CPU activity, display/login disturbance, or an operator wake event. |
+| Calibration and drift | One verdict refused an inconsistent instrument calibration; two lacked a calibration bracket. NEG-8 bracket or drift evidence contributed to eight failed verdict rows across five window roots, including two stale-drift verdicts. |
+| Clock evidence | Three members carried an unresolved-clock-anchor refusal. Many shorter metric windows were also refused locally because their clock bound was absent or too large for that metric. |
+| Duplicate handling | Eight prior attempts were resolved through seven append-only supersession records. No active duplicate-occurrence refusal appears in this corpus. |
+| Below-floor effects | No below-floor claim refusal appears: claim readiness was not assessed in all 138 campaign verdict rows. |
+| Logging completeness | A causal member-level reason can be reconstructed for only 13 of 38 refused member identities, or 14 of 44 refused occurrences. Thirty refused occurrences retain status but no causal reason. |
+
+This is the defensible replacement for the broad claim currently in [§5](/Users/edr/code/JouleWise/docs/paper/draft-v1.md:143): the record supports contamination, calibration, drift, clock, custody, and supersession behavior, but not yet an observed below-floor or active-duplicate refusal.
+
+## Reproduction commands
+
+Path resolution:
+
+```zsh
+setopt null_glob
+cd /Users/edr/code/JouleWise
+files=(runs_window_*/campaign_log.jsonl runs*/campaign_log.jsonl)
+printf '%s\n' "${files[@]}" | sed '/^$/d' | LC_ALL=C sort -u
+printf 'RAW_MATCHES=%d\n' ${#files[@]}
+printf '%s\n' "${files[@]}" | sed '/^$/d' | LC_ALL=C sort -u | wc -l
+```
+
+Member denominators:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type==null) |
+     {file:$file,run_id,status,exit_code,
+      member_status:.members[0].status,
+      collection_classification:.members[0].collection_classification}' "$f"
+done |
+jq -s '{
+  member_log_rows:length,
+  executed_attempt_rows:(map(select(.status!="skipped"))|length),
+  skipped_reuse_rows:(map(select(.status=="skipped"))|length),
+  executed_by_member_status:
+    (map(select(.status!="skipped"))|
+     group_by(.member_status)|
+     map({status:.[0].member_status,n:length})),
+  distinct_executed_root_member_ids:
+    (map(select(.status!="skipped")|[.file,.run_id]|join("|"))|unique|length)
+}'
+```
+
+Whole-window verdicts:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type=="idle_admission_whole_window_verdict") |
+     {file:$file,timestamp,status,
+      conditions:(.idle_admission_core.conditions // [])}' "$f"
+done |
+jq -s '{
+  rows:length,
+  row_status:(group_by(.status)|map({status:.[0].status,n:length})),
+  latest_by_root:
+    (sort_by(.file,.timestamp)|group_by(.file)|map(last)|
+     group_by(.status)|map({status:.[0].status,n:length}))
+}'
+```
+
+Deduplicated member prechecks:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c --arg file "$f" \
+    'select(.record_type=="campaign_verdict") |
+     .members[] as $m |
+     $m.claim_evidence_flags[]? |
+     {file:$file,bundle_id:$m.bundle_id,code:.}' "$f"
+done |
+jq -s '
+  unique_by(.file,.bundle_id,.code) as $u |
+  ["nonpositive_window_duration",
+   "insufficient_in_window_samples",
+   "cadence_ratio_unrecorded",
+   "cadence_ratio_below_threshold",
+   "clock_bound_unrecorded",
+   "clock_bound_exceeds_quarter_window",
+   "interpolation_bound_unrecorded",
+   "drift_term_unknown",
+   "idle_baseline_unrecorded",
+   "cooldown_cap_hit",
+   "anchor_energy_envelope_exceeds_quarter_metric",
+   "anchor_energy_envelope_unrecorded"] as $local |
+  {
+    unique_member_code_occurrences:($u|length),
+    by_design_local:
+      ($u|map(select(.code as $c|$local|index($c)))|length),
+    exceptional_global:
+      ($u|map(select(.code as $c|($local|index($c)|not)))|length)
+  }'
+```
+
+Supersessions:
+
+```zsh
+for f in ${(u)files}; do
+  jq -c 'select(.record_type=="campaign_occurrence_supersession")' "$f"
+done |
+jq -s '{
+  records:length,
+  superseded_attempts:(map(.superseded_occurrences|length)|add),
+  reason_field_nonempty:
+    (map(select((.reason|type)=="string" and (.reason|length)>0))|length)
+}'
+```
+
+Absent claimed categories:
+
+```zsh
+for term in 'below[_ -]?floor' 'duplicate'; do
+  printf 'TERM=%s\n' "$term"
+  for f in ${(u)files}; do
+    jq -r --arg term "$term" \
+      '.. | strings | select(test($term;"i"))' "$f"
+  done | wc -l
+done
+```
