@@ -1,5 +1,9 @@
 # JouleWise: Detection Floors for LLM Inference Energy Measurement on Consumer Silicon
 
+## Abstract
+
+Published energy figures for large language model (LLM) inference rarely state the smallest difference the underlying measurement method could actually resolve. On consumer hardware the problem is acute: Apple's `powermetrics` utility reports processor power estimates without a laboratory meter, but its timing behavior at the boundary between prompt processing and token generation has not, to our knowledge, been validated in published work. We treat this software counter as a scientific instrument. JouleWise calibrates the instrument's timing attribution inside every measurement window using a bracketed pulse-train experiment, composes a *detection floor* for every reported result from measured repeatability, worst-case boundary attribution, and measured drift, and collects data under a fail-closed protocol that refuses a claim when its evidence is missing, stale, or below the floor. Characterizing the instrument this way produced a substantive finding: on the studied machine the method is *attribution-limited* — the uncertainty from placing power samples at phase boundaries exceeds ordinary run-to-run scatter, and more repetitions cannot average it away. All floors are therefore published with an explicit label naming the dominant term, and directional claims must clear both the floor and the claim-side measurement bound. We demonstrate the discipline with phase-resolved measurements of two model sizes on one named Apple-silicon stack, including a pre-registered model-size contrast and the refusal behavior on effects the instrument cannot resolve. **[DEMONSTRATION VALUES PENDING RE-ISSUED ARTIFACTS.]** The tool, protocol, and hash-bound evidence chain are open.
+
 ## 1. Introduction
 
 Energy numbers for large language model (LLM) inference now appear in leaderboards, systems papers, product comparisons, and policy debates. Published estimates for apparently similar queries can differ by an order of magnitude, yet the numbers are rarely accompanied by an error bar that says how small a difference the measurement method can actually distinguish. This omission is especially consequential on consumer hardware. Apple's `powermetrics` utility makes processor power estimates available without a laboratory meter and is therefore attractive for repeated experiments, but, to our knowledge, it has not been validated in published work as an instrument for separating the energy of LLM inference phases. Apple describes its outputs as estimates; treating them as exact readings can turn timing uncertainty at a phase boundary into a spurious energy difference.
@@ -161,9 +165,37 @@ Every resulting figure and table will identify the physical unit, operating-syst
 
 ## 7. Demonstration results (C-v)
 
-**[RESULT PENDING RE-MINT]**
+The demonstration asks a deliberately modest scientific question that the characterized instrument should be able to answer: on one named consumer stack, how does phase-resolved energy per request differ between two sizes of the same model family, and can each reported difference clear its own published floor? The two conditions are instruction-tuned models of the same family at roughly 1.5 and 7 billion parameters, both 4-bit quantized, served by the same runtime with an identical prompt (identical realized token identifiers under both tokenizers) and a fixed output budget. All demonstration measurements are collected in dedicated quiet windows under the full protocol of Section 5, with the floors of Section 4 minted from the same windows.
 
-This section will report phase-resolved gross joules per request for two model sizes, with tokenizer-scoped joules per prompt token and per output token as companion metrics. It will contain the pre-registered same-boundary model-size contrast, its interval, the complete floor decomposition, the claim-side bound, the effect-to-floor ratio, and the final resolvable/unresolved verdict. No demonstration energy value from the superseded mint is carried into this draft. A quantization ladder will be included only if it is collected under its own stack-specific floors and the frozen window budget permits it.
+### Pre-registered design
+
+Each model size receives its own floor cell per phase: an absolute-repeatability arm and a null A/B/B/A arm, both frozen before collection. The model-size contrast is a separate pre-registered comparison, computed within A/B/B/A blocks whose A and B are the two model sizes, on the frozen phase-energy metric. For a contrast between two measured quantities the uncertainty magnitudes add; the composed interval must clear the effective bar of Section 4 for a directional claim to be issued. Anything below the bar is reported as not resolvable.
+
+### Prospective workload sizing
+
+The sizing discipline of Section 8's paired minimum-detectable-effect lineage is applied before collection, and it changed the design. A desk analysis over earlier diagnostic (non-claim-bearing) captures indicated that at this stack's natural short prompt length, the model-size contrast for the *prompt-processing* phase would sit only marginally above the effective bar — close enough that the composed measurement interval would be expected to overlap it — while the *token-generation* contrast clears with a wide margin, and prompt-processing energy itself scales close to proportionally with prompt length on the smaller model. The pre-registered design therefore takes one of two declared forms, decided before quiet time: either the prompt is lengthened to a size projected to place the prompt-processing contrast well clear of the bar (roughly twice it), accepting that a longer prompt changes the estimand; or the prompt-processing phase is reported as floors only, the directional contrast is claimed for token generation alone, and the marginality is stated in Section 9 as a limitation of the instrument at natural prompt lengths. In neither form is the choice made after seeing claim data: the sizing decision, like every other design freedom, is frozen in the pre-registration for its window. This is the floor discipline working before any energy number is reported — an experiment the instrument could not adjudicate is redesigned or declined in advance rather than run and over-read.
+
+### Results
+
+**[RESULT PENDING RE-MINT — tables below are structural placeholders; no energy value from the superseded artifacts is carried into this draft.]**
+
+Per stack (each table row carries the full stack identity of Section 6):
+
+| Phase | Model | Gross J/request (interval) | J per prompt token | J per output token | Cell floor (labelled) | n |
+|---|---|---|---|---|---|---|
+| prompt processing | 1.5B | [PENDING] | [PENDING] | — | [PENDING] | [PENDING] |
+| prompt processing | 7B | [PENDING] | [PENDING] | — | [PENDING] | [PENDING] |
+| token generation | 1.5B | [PENDING] | — | [PENDING] | [PENDING] | [PENDING] |
+| token generation | 7B | [PENDING] | — | [PENDING] | [PENDING] | [PENDING] |
+
+Pre-registered contrasts:
+
+| Contrast | Effect (interval) | Effective bar | Effect-to-bar ratio | Verdict |
+|---|---|---|---|---|
+| token generation, 7B − 1.5B | [PENDING] | [PENDING] | [PENDING] | [PENDING] |
+| prompt processing, 7B − 1.5B | [PENDING or declared floors-only per the sizing decision] | [PENDING] | [PENDING] | [PENDING] |
+
+The narrative will state, for each contrast, whether the verdict was resolvable or refused, and will quote the refusal log where the protocol declined evidence. Joules per token are tokenizer-scoped companion metrics; they are never compared across tokenizers. A quantization ladder is included only if collected under its own stack-specific floors within the frozen window budget.
 
 ## 8. Related work
 
@@ -192,3 +224,25 @@ This emphasis changes the role of failed runs. A rejected admission, stale calib
 Split, or disaggregated, inference places prompt processing and token generation on different devices and transfers intermediate state between them. Revisiting Disaggregation Energy reports that the energy outcome depends on load, baseline, and transfer conditions on its evaluated two-graphics-processor node [RevisitingDisaggregationEnergy]. DualScale studies phase placement and per-phase power control on homogeneous server hardware [DualScale]. Prima.cpp includes whole-run energy and communication accounting but not a per-stage energy split [PrimaCPP], while SplitZip characterizes lossless transfer compression without making an energy claim [SplitZip].
 
 JouleWise does not claim a new split scheduler in this paper. Split inference is instead a demanding future demonstration of the instrument because it introduces two physical boundaries, a transfer interval, and clock alignment across devices. A valid comparison would have to measure both ends, name each boundary, and clear a pre-registered floor or calibrated bridge. Whether splitting saves energy remains an empirical outcome; the reusable contribution is a method that can issue, qualify, or refuse the result.
+
+## 9. Limitations
+
+**Attribution-limited resolution.** The dominant uncertainty on this stack is boundary placement, not scatter. Roughly one joule per phase member can be mis-assigned when calibrated timing uncertainty of tens of milliseconds meets a power swing of tens of watts, and repetitions do not reduce it. Every floor is published under the labelled path naming this term, and the effective bar for a phase contrast — floor plus claim-side bound — is several joules on this stack. Effects natural workloads produce below that bar, such as the prompt-processing model-size contrast at short prompt lengths (Section 7), are refused rather than reported, and the refusal is itself a finding about what this instrument class can support.
+
+**One unit, one stack, one boundary.** Every result is scoped to one physical machine, operating-system build, runtime and library stack, model artifact, quantization, tokenizer, sampling and output policy, telemetry backend, and measurement boundary. Nothing here ranks hardware classes or vendors, and the whole-system-on-chip boundary of `powermetrics` is not comparable to a graphics-board or wall boundary without a calibrated bridge.
+
+**No external meter.** The calibration validates timing attribution — whether samples near a commanded edge land inside or outside a phase integral. It does not validate the counter's absolute gain or whole-system scale; absolute joule values remain internal to the named software boundary. A wall-power instrument could test totals, but would still not adjudicate the division of a total between phases, which is exactly the question the pulse-train experiment answers.
+
+**Transfer assumptions.** The calibration pulses are graphics-processor matrix multiplications under light central-processor load; transferring their timing bound to sustained mixed-load inference is an explicit assumption, constrained by the in-window bracket and the empirical floor probes but not eliminated. The drift allowance is measured per window with no duration-scaling law, because the evidence does not identify one; longer windows than those characterized would need fresh drift evidence.
+
+**Sequential requests only.** Phase boundaries are well posed because one request runs at a time. Continuous batching, speculative decoding, and multi-request serving overlap phases by design and are out of scope; the method would need a defensible boundary definition before it could be extended there.
+
+**Operational constraints as evidence.** Claim-bearing windows require a machine quiescent to the admission gates — no interactive agent sessions, displays asleep, background work settled. Characterization captures of the idle environment (kept permanently non-claim) show a low but bursty floor whose excursions, not its mean, are the threat to a several-joule bar; idle subtraction cancels only the steady part. The zero-agent window rule is therefore load-bearing, and results collected outside it would not be admitted.
+
+## 10. Artifact availability (C-vi)
+
+JouleWise is an open tool. The repository contains the runner, calibration and reduction code, admission gates, verdict and extraction tooling, and the pre-registration and refusal records for the windows reported here. Every claim-bearing number is bound by cryptographic hash through a custody chain — raw power traces, runtime events, configurations, calibration brackets, drift references, supersession records, and the whole-window verdict — so a reader can re-reduce the published results from the archived evidence and verify that the exact member set the verdict bound is the set the claims consume. Superseded artifacts are retained with their supersession records rather than deleted. **[REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST.]**
+
+## 11. Conclusion
+
+A software power counter can support scientific claims about LLM inference energy on consumer hardware, but only inside an explicitly characterized operating domain. On the studied Apple-silicon stack, the domain boundary is set by timing attribution at phase edges, not by noise: the instrument resolves multi-joule effects between phases of a single request and must refuse smaller ones, including some contrasts that natural workloads actually produce. Treating that refusal as a published result — with the floor, its dominant term, and the evidence chain that licenses it — is the paper's central discipline, and it is what separates a calibrated instrument from a logging convenience. The method's components — in-window bracketed calibration, floors composed from measured terms with worst-case attribution, fail-closed collection with pre-registration, counterbalanced ordering, and hash-bound custody — are individually established practice; their contribution here is joint and operational, in a regime where the instrument is free but unvalidated. The immediate extensions are mechanical: more stacks, more model families, and an external meter for absolute totals. The interesting ones are the workloads whose phase structure is richer — speculative decoding, mixture-of-experts routing, split inference across devices — where energy attribution questions multiply and an instrument that knows what it cannot resolve becomes more valuable, not less.
