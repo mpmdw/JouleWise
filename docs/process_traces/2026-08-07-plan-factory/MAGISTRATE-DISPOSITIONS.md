@@ -131,3 +131,74 @@ the re-examination and the eventual prose:
 P1 and P7 are the two easiest variants to write fluently and the hardest
 to write correctly; the summed-threshold error reads as doctrine
 compliance to a skimming reviewer.
+
+## REASON-CODE PLUMBING — ACCEPT WITH AMENDMENTS + two magistrate rulings
+
+Verified good by the examiner against primary evidence: append-compatibility
+is real (every reader is field-selective; rows lacking a field are already a
+first-class case), the spec amendment is correctly treated as needing
+ratification, and the backfill is custody-safe (append-only annotations keyed
+by target row hash, conflicts refuse). Blocking amendments:
+
+1. **PIN THE FIELD PLACEMENT: top-level sibling, NOT inside
+   `idle_admission_core`.** The latter enters the six-key semantic-identity
+   projection and would turn every same-basis re-verdict into
+   `whole_window_verdict_conflict`. And the identity projection itself is
+   NOT to be edited to accommodate the field — test the key list to freeze
+   that.
+2. **Golden characterization test BEFORE the refactor**: pin the existing
+   `idle_admission_core_verdict` output by canonical sha256 first; all 13
+   proposed tests cover only the new field, so the old behavior is currently
+   unguarded days before the nights.
+3. **Operational trap to encode**: replay verification against a HISTORICAL
+   runs root APPENDS a campaign-log row and thereby breaks the issued
+   artifacts' whole-file `campaign_log_sha256` pin. Any backfill or replay
+   must work on copies, never on a pinned root.
+
+**MAGISTRATE RULING A (the examiner flagged this as not lieutenant-decidable):
+may the plumbing land ahead of the spec amendment? YES, SPLIT.** The CODE
+plumbing (top-level, additive, append-compatible) may land ahead — it captures
+evidence without changing any ratified semantics, and the three nights are
+what make it urgent. The SPEC AMENDMENT (bringing the shadow codes into the
+ratified spec's S1 domain) is a separate ratification and MUST NOT be assumed
+by the code: until ratified, the new reason codes live in an explicitly
+declared namespace OUTSIDE S1, frozen in one module tuple with an equality
+test. Landing the code does not pre-empt the ratification; it must not read
+as having done so.
+
+**GOVERNANCE HOLE FOUND (record it, do not paper over it):** the ratified
+`docs/phase_2/refusal_scope_spec.md` cites D-083 as its authority, but D-083
+is the B3 disclosure ruling, and the decision log contains NO row for the
+refusal-scope spec at all. The spec is operating as a ratified ONE-home with
+no ledger entry behind it. This needs an Ed/cold-gate ruling on its actual
+status before any S1-domain move is attempted — it is now item 8 on the
+rulings list.
+
+## PRICE-OF-NEVER-ZERO — ACCEPT WITH AMENDMENTS + one magistrate ruling
+
+The arithmetic is VERIFIED CORRECT — the examiner reproduced the operator
+order numerically against the retired mint (corner-widen -> guard ->
+per-component family-matched allowance -> max). Blocking amendments:
+
+1. **PAPER COLLISION (blocker).** `draft-v1.md` already has a section
+   "Measured, never-zero drift allowance" — and that is the NEG-8 ENERGY
+   allowance. The TIMING rule (D-102 pin 3) is introduced in §3. The plan
+   titles its subsection "the never-zero rule" and hangs the forward
+   reference off §4, so it would quantify one allowance while appearing to
+   quantify the other — and that error survives into print. Retitle to name
+   the TIMING allowance explicitly and attach it to §3's rule.
+2. Read `0.010818` from the issued acceptance artifact rather than
+   hardcoding it (this is the L4 defect class recurring).
+3. Probe the re-reduction seam FIRST; if it will not take an external bound,
+   the failure mode is a desk-script reimplementation of floor arithmetic
+   feeding the paper — which is unacceptable.
+4. The sensitivity artifact must be schema-INCOMPATIBLE with a floor artifact
+   (it can never be mistaken for one); prefill cells have no diagnostic
+   analogue (mint1 is decode-only) and wait on U3/U10.
+
+**MAGISTRATE RULING B: may a counterfactual verdict appear in the paper? NO.**
+The paper may report the floor ARITHMETIC with and without the never-zero
+timing bound — that is a computed quantity from custodied inputs. It must NOT
+tabulate a "verdict without" column: a verdict is an ISSUED artifact, and a
+counterfactual verdict has no artifact behind it. State the arithmetic delta
+and what it would imply; never render a verdict that was never issued.
