@@ -201,6 +201,22 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     return result
 
 
+def normalize_calibration_custody_path(path: Path | str) -> str:
+    """Return the lexical absolute spelling used by reservation and capture.
+
+    Custody identity is an exact ledger binding.  Resolving symlinks in only
+    one writer would therefore change that identity even when both spellings
+    name the same directory.
+    """
+
+    try:
+        return str(Path(path).absolute())
+    except (OSError, TypeError, ValueError) as exc:
+        raise CalibrationLedgerError(
+            "calibration custody path is malformed"
+        ) from exc
+
+
 def receipt_core(receipt: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in receipt.items() if key != "receipt_digest"}
 
@@ -2436,6 +2452,40 @@ def _locked_append(
         os.close(lock_descriptor)
 
 
+def recover_calibration_ledger_append(ledger_path: Path) -> Path | None:
+    """Complete one authenticated journaled append without adding a receipt.
+
+    The stable ledger lock is held through suffix completion, recovery
+    evidence publication, and journal removal.  ``None`` means no recovery
+    journal was present; otherwise the returned path is the durable evidence
+    object for the completed operation.
+    """
+
+    ledger_path = Path(ledger_path)
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_descriptor = _open_ledger_lock(ledger_path)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        journal, malformed = _read_append_journal(ledger_path)
+        if malformed:
+            raise CalibrationLedgerError("append recovery journal is malformed")
+        if journal is None:
+            return None
+        descriptor = os.open(
+            ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
+        )
+        try:
+            with os.fdopen(descriptor, "r+b", closefd=False) as handle:
+                handle.seek(0)
+                raw = handle.read()
+                _recover_journaled_append(ledger_path, handle, raw)
+        finally:
+            os.close(descriptor)
+        return _append_recovery_path(ledger_path, str(journal["operation_id"]))
+    finally:
+        os.close(lock_descriptor)
+
+
 def _authenticated_head_pin(
     head_pin_path: Path,
     *,
@@ -2469,8 +2519,8 @@ def validate_bracket_session_reservation_inputs(
     """Apply the exact same capability-input validation for dry-run/execute."""
 
     try:
-        normalized_runs_root = str(Path(runs_root).absolute())
-    except (OSError, TypeError, ValueError) as exc:
+        normalized_runs_root = normalize_calibration_custody_path(runs_root)
+    except CalibrationLedgerError as exc:
         raise CalibrationLedgerError("bracket session runs_root is malformed") from exc
     session_identity = {
         "session_id": session_id,
@@ -2490,9 +2540,9 @@ def validate_bracket_session_reservation_inputs(
             raise CalibrationLedgerError(f"{role} slot is malformed")
         custody_value = source.get("custody_locator")
         try:
-            custody = Path(str(custody_value)).absolute()
+            custody = Path(normalize_calibration_custody_path(custody_value))
             custody.relative_to(validation_root)
-        except (OSError, TypeError, ValueError) as exc:
+        except (CalibrationLedgerError, OSError, TypeError, ValueError) as exc:
             raise CalibrationLedgerError(
                 f"{role} custody locator is outside runs_root/instrument_validation"
             ) from exc
@@ -2631,7 +2681,9 @@ def claim_bracket_session_slot(
             and receipt.get("slot") == slot
         ]
         if existing:
-            raise CalibrationLedgerError("calibration_ledger_bracket_slot_claimed")
+            raise CalibrationLedgerError(
+                REFUSAL_TAXONOMY["calibration_ledger_bracket_slot_claimed"]
+            )
         open_receipt = next(
             receipt
             for receipt in receipts
@@ -2795,7 +2847,13 @@ def terminal_head_pin_for_session(
         raw = Path(ledger_path).read_bytes()
     except OSError as exc:
         raise CalibrationLedgerError("ledger is unreadable") from exc
-    receipts, parse_reasons = _parse_ledger(raw)
+    append_journal, malformed_journal = _read_append_journal(Path(ledger_path))
+    receipts, parse_reasons = _parse_ledger(
+        raw,
+        append_journal=append_journal,
+    )
+    if malformed_journal:
+        parse_reasons.add("calibration_ledger_malformed")
     observations, sessions, state_reasons = _attempts_and_observations(receipts)
     del observations
     reasons = parse_reasons | state_reasons
@@ -3024,7 +3082,9 @@ __all__ = [
     "generate_historical_custody_manifest",
     "head_pin_for_receipt",
     "load_calibration_ledger_snapshot",
+    "normalize_calibration_custody_path",
     "prepare_historical_import",
+    "recover_calibration_ledger_append",
     "terminal_head_pin_for_session",
     "validate_bracket_session_reservation_inputs",
 ]

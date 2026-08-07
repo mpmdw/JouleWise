@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import json
 import hashlib
+import signal
 import subprocess
 import tempfile
 import threading
@@ -17,7 +18,7 @@ import unittest
 import sys
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from joulewise import calibration_ledger as ledger_module
@@ -1085,7 +1086,12 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
             refused = [value for status, value in outcomes if status == "refused"]
             self.assertEqual(len(accepted), 1)
             self.assertEqual(len(refused), 1)
-            self.assertIn("calibration_ledger_bracket_slot_claimed", str(refused[0]))
+            self.assertIn(
+                ledger_module.REFUSAL_TAXONOMY[
+                    "calibration_ledger_bracket_slot_claimed"
+                ],
+                str(refused[0]),
+            )
             loser = next(lifecycle for lifecycle in lifecycles if not lifecycle.begun)
             self.assertIsNone(loser.abandon("losing_writer_exit"))
             receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
@@ -1180,6 +1186,205 @@ os._exit(23)
                 )["sequence"],
                 5,
             )
+
+    def test_post_slot_retry_recovers_crash_after_pre_append_before_clear(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, _capability = self._open_session(
+                Path(tmp)
+            )
+            pre = self._lifecycle(ledger, pin, epoch, t1, custody, "pre")
+            pre.begin()
+            (custody["pre"] / "raw").mkdir(parents=True)
+            (custody["pre"] / "raw" / "powermetrics.plist").write_bytes(b"raw")
+            (custody["pre"] / "events.jsonl").write_text("{}\n")
+            (custody["pre"] / "power_trace.csv").write_text("header\n")
+            (custody["pre"] / "instrument_evidence.json").write_text("{}\n")
+            (custody["pre"] / "manifest.json").write_text("{}\n")
+
+            code = f"""
+import os, signal
+from pathlib import Path
+import joulewise.calibration_ledger as module
+def kill_before_clear(_ledger_path):
+    os.kill(os.getpid(), signal.SIGKILL)
+module._clear_append_journal = kill_before_clear
+module.finalize_bracket_session_slot(
+    Path({str(ledger)!r}),
+    session_id="session-writer",
+    slot="pre",
+    disposition="valid",
+    custody_locator={str(custody['pre'])!r},
+    artifact_sha256=module.artifact_hashes(Path({str(custody['pre'])!r})),
+    identity_epoch={epoch!r},
+    t1_bindings={t1!r},
+    capture_wall_time_s="99.0",
+    exact_bound_lexeme_s="0.025",
+)
+"""
+            died = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=Path(__file__).resolve().parents[1],
+                check=False,
+            )
+            self.assertEqual(died.returncode, -signal.SIGKILL)
+            stranded = ledger_module.load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                require_committed_pin=False,
+                verify_custody=True,
+            )
+            self.assertIn(
+                "calibration_ledger_recovery_required",
+                stranded.refusal_reasons,
+            )
+            journal = json.loads(
+                ledger_module._append_journal_path(ledger).read_bytes()
+            )
+            with self.assertRaisesRegex(
+                ledger_module.CalibrationLedgerError,
+                "append recovery is required; retry this capture command",
+            ):
+                validation_script._validate_reserved_bracket_slot(
+                    ledger,
+                    pin,
+                    session_id="session-writer",
+                    slot="post",
+                    attempt_id="session-writer-post",
+                    custody_locator=str(custody["post"]),
+                    identity_epoch=epoch,
+                    t1_bindings=t1,
+                    require_committed_pin=False,
+                )
+
+            post = self._lifecycle(ledger, pin, epoch, t1, custody, "post")
+            post.begin()
+
+            self.assertTrue(post.begun)
+            self.assertFalse(ledger_module._append_journal_path(ledger).exists())
+            self.assertTrue(
+                ledger_module._append_recovery_path(
+                    ledger,
+                    journal["operation_id"],
+                ).is_file()
+            )
+            receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
+            self.assertEqual(
+                receipts[-1]["event"],
+                ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            )
+            self.assertEqual(receipts[-1]["slot"], "post")
+
+    def test_main_preserves_symlinked_custody_spelling_used_by_reservation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            physical_root = root / "physical-runs"
+            physical_root.mkdir()
+            symlinked_root = root / "symlinked-runs"
+            symlinked_root.symlink_to(physical_root, target_is_directory=True)
+            output_root = symlinked_root / "instrument_validation"
+            attempt_id = "session-writer-pre"
+            epoch = {
+                "os_build": "25F84",
+                "hardware_model": "Mac15,9",
+                "power_policy": "ac_high_power",
+                "sampling_interval_ms": 100,
+                "estimator_revision": RESIDUAL_REGION_METHOD,
+                "pulse_protocol_id": PROTOCOL_ID,
+            }
+            t1 = {field: f"value-{field}" for field in ledger_module.T1_FIELDS}
+            t1.update(epoch)
+            _session, normalized_slots = (
+                ledger_module.validate_bracket_session_reservation_inputs(
+                    session_id="session-writer",
+                    window_id="window-writer",
+                    plan_id="plan-writer",
+                    plan_sha256="a" * 64,
+                    evidence_root_id="evidence-writer",
+                    runs_root=symlinked_root,
+                    slots={
+                        slot: {
+                            "attempt_id": f"session-writer-{slot}",
+                            "custody_locator": str(
+                                output_root / f"session-writer-{slot}"
+                            ),
+                            "identity_epoch": epoch,
+                            "t1_bindings": t1,
+                        }
+                        for slot in ledger_module.BRACKET_SESSION_SLOTS
+                    },
+                )
+            )
+            expected_custody = normalized_slots["pre"]["custody_locator"]
+            observed: dict[str, str] = {}
+
+            class StopAfterCustodyCapture:
+                def __init__(self, **kwargs):
+                    observed["custody_locator"] = kwargs["custody_locator"]
+
+                def begin(self):
+                    raise ledger_module.CalibrationLedgerError(
+                        "stop after custody-path regression observation"
+                    )
+
+            mlx_package = ModuleType("mlx")
+            mlx_core = ModuleType("mlx.core")
+            mlx_core.__version__ = "synthetic"
+            mlx_package.core = mlx_core
+            with (
+                patch.dict(
+                    sys.modules,
+                    {"mlx": mlx_package, "mlx.core": mlx_core},
+                ),
+                patch.object(
+                    validation_script,
+                    "verify_frozen_protocol",
+                    return_value=True,
+                ),
+                patch.object(
+                    validation_script,
+                    "_sysctl_identity",
+                    side_effect=lambda name: (
+                        "25F84" if name == "kern.osversion" else "Mac15,9"
+                    ),
+                ),
+                patch.object(
+                    validation_script,
+                    "sha256_path",
+                    return_value="a" * 64,
+                ),
+                patch.object(
+                    validation_script,
+                    "SystemClock",
+                    return_value=SimpleNamespace(now=lambda: 0.0),
+                ),
+                patch.object(
+                    validation_script,
+                    "_CaptureLedgerLifecycle",
+                    StopAfterCustodyCapture,
+                ),
+            ):
+                return_code = validation_script.main(
+                    [
+                        "--allow-live",
+                        "--output-root",
+                        str(output_root),
+                        "--session-id",
+                        "session-writer",
+                        "--slot",
+                        "pre",
+                        "--attempt-id",
+                        attempt_id,
+                        "--power-policy",
+                        "ac_high_power",
+                    ]
+                )
+
+            self.assertEqual(return_code, 2)
+            self.assertEqual(observed["custody_locator"], expected_custody)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     finalize_bracket_session_slot,
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
+    normalize_calibration_custody_path,
+    recover_calibration_ledger_append,
     terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
@@ -306,6 +308,11 @@ def _validate_reserved_bracket_slot(
         require_committed_pin=require_committed_pin,
         verify_custody=True,
     )
+    if "calibration_ledger_recovery_required" in snapshot.refusal_reasons:
+        raise CalibrationLedgerError(
+            "calibration ledger append recovery is required; retry this capture "
+            "command so governed recovery completes before slot validation"
+        )
     session = snapshot.bracket_session_by_id.get(session_id)
     finalized_slots = set(session.finalized_slots) if session is not None else set()
     expected_slot = (
@@ -372,7 +379,9 @@ class _CaptureLedgerLifecycle:
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
-        self.custody_locator = custody_locator
+        self.custody_locator = normalize_calibration_custody_path(
+            custody_locator
+        )
         self.identity_epoch: Mapping[str, Any] = identity_epoch
         self.t1_bindings: Mapping[str, Any] = t1_bindings
         self.capture_wall_time_s: str | None = None
@@ -395,6 +404,15 @@ class _CaptureLedgerLifecycle:
             raise CalibrationLedgerError("capture ledger lifecycle already began")
         if self.is_bracket_session:
             assert self.session_id is not None and self.slot is not None
+            try:
+                recover_calibration_ledger_append(self.ledger_path)
+            except CalibrationLedgerError as exc:
+                raise CalibrationLedgerError(
+                    "calibration ledger append recovery is required but automatic "
+                    "governed recovery did not complete; preserve the ledger and "
+                    "journal, then retry this capture command after resolving the "
+                    f"reported recovery condition: {exc}"
+                ) from exc
             _validate_reserved_bracket_slot(
                 self.ledger_path,
                 self.head_pin_path,
@@ -595,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
         else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
     )
     out_dir = args.output_root / validation_id
-    custody_locator = str(out_dir.resolve())
+    custody_locator = normalize_calibration_custody_path(out_dir)
     planned_epoch = {
         "os_build": _sysctl_identity("kern.osversion"),
         "hardware_model": _sysctl_identity("hw.model"),
