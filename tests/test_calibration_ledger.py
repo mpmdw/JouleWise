@@ -454,6 +454,132 @@ class CalibrationLedgerTests(unittest.TestCase):
             "systematic-invalid",
         )
 
+    def _create_torn_session_finalization(self) -> dict:
+        self._open_bracket_session()
+        custody = self._custody("session-alpha-pre")
+
+        def tear_final_line(handle, payload):
+            written = handle.write(payload[: max(1, len(payload) // 3)])
+            handle.flush()
+            calibration_ledger.os.fsync(handle.fileno())
+            self.assertGreater(written, 0)
+            raise OSError("simulated process death during ledger append")
+
+        with mock.patch.object(
+            calibration_ledger,
+            "_write_ledger_append_payload",
+            side_effect=tear_final_line,
+        ):
+            with self.assertRaisesRegex(OSError, "simulated process death"):
+                finalize_bracket_session_slot(
+                    self.ledger,
+                    session_id="session-alpha",
+                    slot="pre",
+                    disposition="systematic-invalid",
+                    custody_locator=str(custody),
+                    artifact_sha256=artifact_hashes(custody),
+                    identity_epoch=self.epoch,
+                    t1_bindings=self.t1,
+                    capture_wall_time_s="99.0",
+                    exact_bound_lexeme_s="0.035435840879704805",
+                )
+        return json.loads(
+            calibration_ledger._append_journal_path(self.ledger).read_bytes()
+        )
+
+    def _abort_session_in_subprocess(self, *, kill_before_clear: bool):
+        source_root = Path(__file__).resolve().parents[1]
+        kill_patch = (
+            """
+def kill_before_clear(_ledger_path):
+    os.kill(os.getpid(), signal.SIGKILL)
+module._clear_append_journal = kill_before_clear
+"""
+            if kill_before_clear
+            else ""
+        )
+        code = f"""
+import os, signal
+from pathlib import Path
+import joulewise.calibration_ledger as module
+{kill_patch}
+module.abort_bracket_session(
+    Path({str(self.ledger)!r}),
+    session_id="session-alpha",
+    reason="recover_torn_systematic_pre",
+)
+"""
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=source_root,
+            check=False,
+            capture_output=True,
+        )
+
+    def test_recovery_is_idempotent_after_process_death_before_journal_clear(
+        self,
+    ) -> None:
+        journal = self._create_torn_session_finalization()
+
+        killed = self._abort_session_in_subprocess(kill_before_clear=True)
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        journal_path = calibration_ledger._append_journal_path(self.ledger)
+        self.assertTrue(journal_path.exists())
+        evidence_path = calibration_ledger._append_recovery_path(
+            self.ledger, journal["operation_id"]
+        )
+        evidence_before_retry = evidence_path.read_bytes()
+        evidence = json.loads(evidence_before_retry)
+        self.assertEqual(
+            evidence["observed_suffix_bytes"],
+            len(journal["payload"].encode("utf-8")),
+        )
+        self.assertEqual(evidence["recovered_bytes"], 0)
+
+        retried = self._abort_session_in_subprocess(kill_before_clear=False)
+        self.assertEqual(retried.returncode, 0, retried.stderr.decode())
+        self.assertFalse(journal_path.exists())
+        self.assertEqual(evidence_path.read_bytes(), evidence_before_retry)
+
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        recovered = self._snapshot()
+        self.assertEqual(recovered.refusal_reasons, ())
+        self.assertEqual(recovered.bracket_sessions[0].state, "aborted")
+        self.assertEqual(
+            recovered.observations[0].disposition,
+            "systematic-invalid",
+        )
+
+    def test_recovery_refuses_conflicting_existing_evidence(self) -> None:
+        journal = self._create_torn_session_finalization()
+        killed = self._abort_session_in_subprocess(kill_before_clear=True)
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        journal_path = calibration_ledger._append_journal_path(self.ledger)
+        evidence_path = calibration_ledger._append_recovery_path(
+            self.ledger, journal["operation_id"]
+        )
+        evidence = json.loads(evidence_path.read_bytes())
+        evidence["recovered_bytes"] = 1
+        mismatched = canonical_json_bytes(evidence) + b"\n"
+        evidence_path.write_bytes(mismatched)
+        ledger_before_retry = self.ledger.read_bytes()
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "append recovery evidence conflicts"
+        ):
+            abort_bracket_session(
+                self.ledger,
+                session_id="session-alpha",
+                reason="recover_torn_systematic_pre",
+            )
+        self.assertTrue(journal_path.exists())
+        self.assertEqual(self.ledger.read_bytes(), ledger_before_retry)
+        self.assertEqual(evidence_path.read_bytes(), mismatched)
+
     def test_reservation_requires_complete_epoch_and_full_t1(self) -> None:
         with self.assertRaisesRegex(
             CalibrationLedgerError, "malformed receipt"

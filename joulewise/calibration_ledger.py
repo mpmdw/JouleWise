@@ -2303,9 +2303,13 @@ def _record_append_recovery(
     ledger_path: Path,
     journal: Mapping[str, Any],
     *,
-    observed_suffix_bytes: int,
-    recovered_bytes: int,
+    ledger_tail: bytes,
 ) -> None:
+    payload_bytes = str(journal["payload"]).encode("utf-8")
+    if ledger_tail != payload_bytes:
+        raise CalibrationLedgerError(
+            "append recovery evidence cannot describe an incomplete ledger tail"
+        )
     evidence = {
         "schema_version": APPEND_RECOVERY_SCHEMA,
         "event": "governed-torn-tail-recovery",
@@ -2313,8 +2317,8 @@ def _record_append_recovery(
         "ledger_offset": journal["ledger_offset"],
         "predecessor_digest": journal["predecessor_digest"],
         "payload_sha256": journal["payload_sha256"],
-        "observed_suffix_bytes": observed_suffix_bytes,
-        "recovered_bytes": recovered_bytes,
+        "observed_suffix_bytes": len(ledger_tail),
+        "recovered_bytes": len(payload_bytes) - len(ledger_tail),
         "rule": "append_only_complete_journal_matching_suffix",
     }
     path = _append_recovery_path(ledger_path, str(journal["operation_id"]))
@@ -2363,11 +2367,16 @@ def _recover_journaled_append(
         _write_ledger_append_payload(handle, missing)
         handle.flush()
         os.fsync(handle.fileno())
+    handle.seek(0)
+    completed = handle.read()
+    if _journal_completed_raw(completed, journal) != completed:
+        raise CalibrationLedgerError(
+            "append recovery did not complete the ledger tail"
+        )
     _record_append_recovery(
         ledger_path,
         journal,
-        observed_suffix_bytes=observed,
-        recovered_bytes=len(missing),
+        ledger_tail=completed[offset:],
     )
     _clear_append_journal(ledger_path)
     return completed
