@@ -263,3 +263,58 @@ real numbers. Gates DG2/DG3/DG4 genuinely kill. Structural amendments:
   NOT apply (hub 1.22.0 renames into place on the same filesystem); the
   28 GiB / 97%-full disk finding STANDS and the second 17.2 GB mirror
   remains impossible on that volume.
+
+## U5-U7 CAMPAIGN PACKS — ACCEPT WITH AMENDMENTS (apex Fable examination)
+
+**The binding re-derivation rule worked.** The examiner verified every
+sampled oracle independently and, decisively, RECONSTRUCTED the two
+not-yet-existing prefill rider family files from the plan's field sketch
+and reproduced its expected byte AND domain SHAs exactly. The plan
+computed rather than guessed. It also correctly overrode the memo's stale
+three-receipt/85 model with the landed 5-receipt/91 truth and forbids
+those literals in pack bytes. A real mint defect was found and correctly
+located: the four-cell shared-bundle spec cannot pass today because
+`_spec_member_ids` collects 100 IDs while `_order_manifest_ids` rejects
+duplicates and `_validate_order` length-compares — repaired in the v1
+core, which the generalized script's signature-only pin will not break.
+
+**Sequencing ruled: GENERATE THE PACKS NOW**, before the U2 cold gate and
+before the mint un-barring. The plan correctly firewalls both out of pack
+BYTES (acceptance policy is semantic; gamma's artifact SHA is an arm-time
+attachment). ARMING is what waits: nights 1-2 on U1 F1/F2 + U2 +
+reason-code + U8; gamma additionally on the bar-lift and U10.
+
+**Amendments (the defects are silences, not errors):**
+1. **The mint BAR is unmentioned.** The execution order assumes U10 can
+   mint; it cannot until D117-POSTCOLLECTION-TRUST-01 lands, a delta
+   accepts, and the bar lifts. Gamma's night hard-depends on that chain —
+   write it into the order.
+2. **U2 is absent from the execution order** despite being a memo-F3 arm
+   blocker and a hard dependency of the U8 plan — and U2 does not exist
+   on main (its three files are only on the cold-gate exhibit branch).
+3. **Hard inter-plan contradiction:** the U8 plan requires U5-U7 to
+   freeze a LAUNCH-COMMAND REPRESENTATION; this plan's `plan_tree.json`
+   stage graph has none, so U8 as chartered would REFUSE the trees.
+   Resolve in the pack contract before U5 runs, not after U8 fails.
+4. **NEW WORK ORDER NEEDED — arm-time identity pin projection.** Nothing
+   charters the tool that computes projected `runtime_identity_sha256`,
+   `model_artifact_sha256`, and `config_set_sha256`. A wrong projection
+   means clean night data that is PERMANENTLY UNMINTABLE, because pins
+   cannot be re-declared after collection. This is a night-killer class
+   with no owner; register it before U5.
+5. Restore the memo's dropped desk check that the 50 bundles actually
+   CONTAIN a recorded prefill phase — `phase_energy_j` is an open dict
+   and nothing proves prefill is recorded for decode workloads.
+
+**Prefill rider design VERIFIED SOUND:** same bundles, no added members,
+achieved mechanically (identical workload profile; only family ID and
+metric differ); extraction duplicate rejection is per-cell; the pinset's
+member universe is a cross-cell set union checked against member_count=50.
+Landed U3 accepts it once U5's order repair lands.
+
+**Three highest night-loss risks (ranked):** gamma scheduled before the
+bar-lift -> U10 chain completes (structural, highest probability); a
+morning mint refusal on wrong arm-time identity pins (worst consequence —
+an irrecoverable floor night); a pre-bookend acceptance trigger with U2
+unbuilt, compounded by L4's copied-scalar screen (science runs all night,
+verdict refuses in the morning).
