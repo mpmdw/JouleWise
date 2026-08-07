@@ -15,6 +15,22 @@ block first;** the 2026-08-06 checkpoint below is executed history.
 
 ## ⏳ 2026-08-07 — paper-first session (LIVE; block 3 — near-final state)
 
+**CURRENT VERIFICATION (lead-replayed, unpiped, on MERGED MAIN at
+`48b7e59`, 2026-08-07):** `Ran 2733 tests` / `OK (skipped=86)`, exit 0.
+This supersedes every earlier "current verification" line in this file;
+prior figures (2,418-test PR #95 tree; the 2689/2691/2687 branch results)
+are BRANCH or HISTORICAL results and must not be quoted as main.
+
+**MERGED TODAY:** PR #111 (U1 bracket session), #112 (U3 pinset v2 +
+authenticated four-cell mint), #113 (U4 three-window regression).
+**D-118 RATIFIED** — the merge gate is now enumerated (11 items) and
+mechanically checked by a per-PR GATE LEDGER; D-072 self-merge is
+conditioned on that ledger being complete. Recorded honestly: these
+three merged BEFORE D-118 with an incomplete gate (no apex Fable diff
+gate, no prune lens, no Opus counter-review, and U4's post-delta fix
+skipped the final-head rule). All four missing layers were launched
+retroactively; findings are fixed FORWARD on main.
+
 **ED'S RULINGS OWED (8; full text + recommendations in
 `docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`):** 1 Window C
 night (recommend FUND — §6's six characterization rows otherwise ship with
