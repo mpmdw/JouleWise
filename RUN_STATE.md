@@ -13,36 +13,40 @@ file instead.
 Last updated: 2026-08-07 — **LIVE SESSION (14h Ed window). Read this
 block first;** the 2026-08-06 checkpoint below is executed history.
 
-## ⏳ 2026-08-07 — paper-first session (LIVE; interim block, refreshed mid-flight)
+## ⏳ 2026-08-07 — paper-first session (LIVE; block 2, refreshed post-burn)
 
-**Ed's directives this session:** (1) abandon t3 work; (2) MVP capstone
-paper FIRST, rest later; (3) 14h autonomous window; (4) three quiet
-nights + desk work accepted as the path → **D-117 transcribed+pushed**
-(D-110 re-mint order superseded; three prospective windows; prefill
-floors ride floor windows; contrast decode-only; 256-tok prefill arm
-still Ed's option); (5) Workflow license for non-serial desk work.
+**Landed this session (all on main):** **D-117** transcribed + index row
+(three prospective windows; supersession lines on D-110/D-113;
+CLAIMS_STATUS un-staled). **MVP paper draft COMPLETE — PR #110 MERGED**
+(`6a70707`): full structure, 18 refs, round-2 gauntlet (2 lenses +
+bibliography audit + xhigh fix round + delta re-audit + bench fidelity
+corrections incl. interval-average integration). **Plan-freeze design
+memo ratified** (`docs/process_traces/2026-08-07-d117-plan-freeze/` —
+U1-U10 work orders, gates 1-8, budgets 3.14/3.24/2.80 h). **Night-
+hardening register** (3 Sol lenses + paper-vs-code fidelity audit;
+R6 path-doubling live; L4/L5 ledger gaps; URGENT pre-window reason-code
+plumbing). **Paper-portfolio factory** (Ed-ordered burn): 24 Sol-fast
+proposals + 24 Opus counter-reviews + dual xhigh syntheses + magistrate
+ADJUDICATION (`docs/strategy/2026-08-07-paper-portfolio/`) — arc:
+MVP+WindowC → quantization BF16/Q4/Q8 → MoE stretch; 7 riders into MVP;
+Ed's ranked rulings ##1-7 in ADJUDICATION.md. **Three-night operator
+packet** (pre-freeze edition, `docs/strategy/2026-08-07-three-night-
+operator-packet.md`). Earlier: t3appup analysis banked; prefill
+feasibility custodied; C-049; skill-usage log.
 
-**DONE this session (all pushed):** checkpoint resume items 2-4 —
-T3-CHAR-PAIR r01/r02 analysis banked (`fc48b1b`, dormant floor 0.192 W,
-NON-CLAIM); prefill feasibility scout MARGINAL-at-128-tok custodied
-(`docs/process_traces/2026-08-07-prefill-feasibility/`); C-049 marathon
-council record (`03841c8`); skill-usage log; D-117 (`dbb9685`);
-CLAIMS_STATUS un-staled (`a1f0e19`).
+**IN FLIGHT (harvest, do not re-run):** U1 DONE-with-NEEDS_SCOPE →
+scope GRANTED → **U1b writer integration running** (worktree
+`<scratchpad>/u1`, branch impl/d117-u1-ledger-session, 79 focused tests
+green on the completed core). **U3 DONE** (pinset v2 + four-cell mint,
+v1 parity; worktree `<scratchpad>/u3`, branch impl/d117-u3-pinset-v2)
+— **two audit lenses running** (contract + execution). Next: U3 triage/
+fix/delta → PR; U1b harvest → audit → U2 (cold-gated) → U4; then U5-U7
+packs. **Ed's rulings owed:** ADJUDICATION.md ##1-7 (top: Window C
+night; reported-energy cells before pack freeze; reason-code plumbing).
 
-**IN FLIGHT (harvest, do not re-run):** (a) paper fix round on branch
-`impl/paper-mvp-complete` — Sol xhigh, WRITE_SCOPE
-docs/paper/draft-v1.md, closing round-2 findings (lens A 3 blockers:
-tense, two-gate rule collapse, prefill-marginality misstatement; lens B
-11; F-BIB-1) — review records + bibliography audit custodied on the
-branch (`3542265`, `1892edc`); on harvest: lead diff gate → delta
-re-audit → PR → merge on green (D-072). (b) Plan-freeze design consult
-(Sol xhigh, read-only, scratchpad desk worktree) for the three-window
-packet → on return: lead ratify → enforced-scope implementation units →
-adversarial review → PR(s). Then: three-night operator packet for Ed;
-end-of-session sweep + run report.
-
-**Worktrees:** `<session-scratchpad>/desk` (main, bookkeeping) — prune
-at close. Main tree holds `impl/paper-mvp-complete`.
+**Worktrees:** `<scratchpad>/desk` (main, bookkeeping), `<scratchpad>/u1`,
+`<scratchpad>/u3`. Main tree: detached on merged paper branch — prune at
+close. Owed at close: run report, council entry, sweep, skill-usage.
 
 ## ✅ CHECKPOINT 2026-08-06 late — machine-move stop (resume script)
 
