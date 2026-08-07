@@ -75,3 +75,59 @@ U2/U4/U8 speculative implementations were launched BEFORE this
 examination. They are evidence for the council, not landing candidates.
 U4's output must be re-gated against amendments 1-6 above; U8's output is
 superseded by the REWORK verdict and must not be landed on the runbook.
+
+## PROBES — ACCEPT WITH AMENDMENTS (22 named; full list in OPUS-EXAM-PROBES-PROSE.md)
+
+Probe A (spec-decode pilot) verified executable in principle: every cited
+mlx_lm CLI flag exists at the pin, the byte-identity check is PROVABLY
+sound (acceptance is exact-match; --temp 0 gives argmax before any
+sampler stage). Blocking amendments:
+1. `$OUT` is referenced but never assigned — the commands as written fail
+   on paste. (A1)
+2. The decision rule can fire on contradictory evidence ("either 7B
+   workload" closes even if the longer run shows a win) — make 7B/512
+   governing; a split between lengths is INCONCLUSIVE. (A2)
+3. **The chosen prompt is near-zero-entropy** ("count 1 to 1000"), so a
+   0.5B draft hits near-ceiling acceptance: the probe measures spec
+   decode's BEST case, the opposite of what a cheap kill-gate needs. Add
+   a frozen free-prose governing cell; keep the list prompt as a labelled
+   upper bound. (A3)
+4. **Write the inference assumption down**: E = P̄·t, so CLOSE is licensed
+   only under P̄_on >= R·P̄_off (near-certain, since spec-on does K draft
+   forwards plus one (K+1)-position target forward per emitted token) —
+   and state the converse, that a throughput WIN does not imply an energy
+   win. (A4)
+5. Fix the K-scope inconsistency (one K=3 result cannot close a
+   K-manipulation program) and record the generation_tps first-token
+   timer bias (~2% at N=128; conservative for CLOSE, anti-conservative
+   for SURVIVES). (A5, A8)
+
+Probe B (GPU cadence): the gate citation points at the WRONG DEVICE — the
+cited line is in the NVIDIA 3050 section; the 3080 Ti section carries
+R-006 (schedule only after Stage 3.0 verdicts + rehearsed runbook), so
+the gate is not merely "does Ed have access" and whether a non-claim
+characterization sits inside R-006 is a cold-gate question. Also: declare
+the emitted bound an explicit UPPER bound (NVML cannot separate DVFS ramp
+from sensor filter), and re-price ~1.5x (thermal re-admission is not
+free). Note for the funding decision: a PASS at 100 ms already forbids
+any stage shorter than ~400 ms under the plan's own rule — a boundary
+PASS may be operationally useless.
+
+## RESULTS_PROSE — examination VOID (stale input), re-run ordered
+
+The examiner read the pre-fix truncated copy and reported "no
+deliverable". Lead-verified against the completed file: the deliverable
+EXISTS (35 [VALUE] placeholders across the three variants plus the §6
+shell). Its derived ACCEPTANCE CONTRACT is adopted regardless and binds
+the re-examination and the eventual prose:
+- **P1** no summed-threshold leakage: F_cell + B_claim is DISCLOSURE
+  only; the interval is never compared to the sum.
+- **P5/P6** "not resolvable" is never written as "no difference"; and
+  Variant B must SPLIT into B1 (floor-gate refusal) and B2
+  (direction-gate refusal) because the sentences differ.
+- **P7** Variant C's natural framing is FALSE: under D-095's
+  cross_stack_armwise_max.v1, losing one floor window makes the contrast
+  NOT EVALUABLE, not "partially claimable".
+P1 and P7 are the two easiest variants to write fluently and the hardest
+to write correctly; the summed-threshold error reads as doctrine
+compliance to a skimming reviewer.
