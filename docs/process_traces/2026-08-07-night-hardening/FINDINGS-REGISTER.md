@@ -77,3 +77,23 @@ close) drift-evidence-in-verdict-hash scope; explain the policy JSON
   capture (~203 across historical windows) — a zero-night contamination
   desk-study substrate (P(asymmetric burst > 1 J / > 5 J) over real
   member durations).
+
+## Refusal census result (2026-08-07) — the plumbing item is now EVIDENCED
+
+Full census: `docs/process_traces/2026-08-07-meta-sweeps/REFUSAL-CENSUS.md`.
+Headline: 13 window roots with final decisions (6 passed / 7 failed; 16
+decision rows incl. re-evaluations = 6 passed / 10 failed); 1,173 member
+attempts with 44 refused occurrences; 138 campaign prechecks (136 admitted,
+2 stopped pre-first-member); 7 supersession records covering 8 replaced
+attempts; 26 distinct machine-readable reason codes grouping into 10
+mechanism families.
+
+**{member_id -> reason} reconstructability: 34.2% identity-level /
+31.8% occurrence-level — 30 of 44 refused occurrences have NO causal
+reason reconstructable.** The logs prove refusals happened far more
+reliably than they explain why. This is the quantitative case for the
+pre-window reason-code plumbing (Ed ruling #3): without it, the three
+D-117 nights will add more unexplained refusals to that denominator.
+
+The census's §5 table is drafted paper-ready for draft-v1.md §5 (it
+replaces qualitative refusal-log prose with the actual record).
