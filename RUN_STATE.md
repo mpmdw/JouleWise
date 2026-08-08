@@ -32,7 +32,13 @@ lane and two U5-U7 amendment closures.
    receipts; F1 reborn as ledger-only recovery; three rounds of sidecar
    work discarded. Implementation = NEW work order, full gauntlet,
    sequenced AFTER PR #115 merges (shared calibration_ledger.py).
-3. **U1 BRANCH SPLIT EXECUTED → PR #115 OPEN, NOT merge-eligible yet.**
+3. **U1 BRANCH SPLIT EXECUTED → PR #115 MERGED (post-checkpoint
+   update: the gate COMPLETED in-session — fix-round delta ACCEPT with
+   same-signature NO at count 1, lead post-fix replay 2738 OK unpiped,
+   independent Fable final-head PASS on `86d7f59`, CI 11/11; merged
+   under D-072 on the full 11-item ledger). F2 is FIXED ON MAIN. The
+   ARMING blocker below still stands. Original checkpoint text for the
+   record:**
    Port proven pure-subset of 880b6bc; two independent lenses (Sol
    delta + Opus counter-review) convergently caught a REAL P1 beyond
    the original delta (one-sided session endpoint served unbound) →
@@ -102,10 +108,13 @@ code) — the twice-recorded rule recurred; replay redone unpiped.
 the ONLY blocker on U5 pack-hash freeze; ruling 8 (refusal-scope spec
 governance) gates the reason-code spec lane.
 
-**Successor's order: (1) PR #115 gate completion → merge (F2 is live
-on main until then); (2) trust harvest → gauntlet → PR; (3) reasoncode
-gauntlet → PR; (4) recovery-shape implementation (after #115); (5) U2
-packet reassembly + rework; (6) packs on Ed ruling 2.**
+**Successor's order (updated post-merge): (1) trust gauntlet → PR
+(branch `impl/d117-postcollection-trust` @ 1b1e500; NOTE it pre-dates
+PR #115's bracketing changes — integration-tree before merge); (2)
+reasoncode gauntlet → PR; (3) recovery-shape implementation (PR #115
+is merged, surface is free) + the owed runbook manual-recovery
+procedure (ARMING blocker); (4) U2 packet reassembly + rework; (5)
+packs on Ed ruling 2.**
 
 **THE GOAL MAP:** `docs/strategy/HORIZONS.md` — H0 ship the capstone
 paper (current focus, everything waits on it) / H1 the ICPE version /
