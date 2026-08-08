@@ -13,16 +13,18 @@ are provided for anyone who wants the full evidence trail.
 - Repository state: `main` contains the repaired measurement instrument
   (D-078 phase 0), the audited screening and uncertainty-budget rules
   (D-078 clause 10; council C-045), and the first floor artifact minted
-  on 2026-07-30. D-110 has since made that artifact
-  **NON-CLAIM-BEARING** until it is re-derived under the repaired
-  calibration selector and reminted. A second instrument calibration
-  (the 7B model) passed overnight on 2026-07-29, but its mint is blocked
-  on the same repair chain.
+  on 2026-07-30. D-110 made that artifact non-claim-bearing; D-117 then
+  retired the historical re-derivation/remint path. **2026-08-07
+  supersession (D-117): the historical a10/re-mint and old C/D plan are
+  retired. Claim authority can now arise only from the prospective alpha,
+  beta, and gamma windows; the separately named Window C characterization
+  night remains Ed ruling #1.** The pre-genesis 7B calibration remains
+  diagnostic and design input for the fresh 7B floor window.
   The pre-registered head-to-head model comparison **collected and
   passed overnight on 2026-07-30→31** (40 paired measurements, every
   collection-quality gate green). Its result remains a preliminary
-  diagnostic, not a gated claim; D-110 blocks formal consumption until the
-  calibration repair and remint chain is complete. As of 2026-07-30 the
+  diagnostic, not a gated claim; D-117 requires the fresh prospective
+  alpha/beta/gamma sequence before formal claim consumption. As of 2026-07-30 the
   project's framing is **metrology-centric** (advisor-ratified): the measurement
   instrument itself is the product, and model comparisons serve as
   demonstration studies of what it can resolve. The first two nights of
@@ -46,9 +48,10 @@ are provided for anyone who wants the full evidence trail.
   measured run from that night has a genuinely unresolvable internal
   clock alignment, and the fail-closed design will not certify a night
   containing it. A judge-style review confirmed the refusal was the
-  instrument working as designed, not a bug. Whether that one run can
-  be formally set aside (or the night's remaining questions simply
-  re-measured in the next session) is a pending decision for Ed. Two genuine instrument findings also came out of
+  instrument working as designed, not a bug. **2026-08-05 supersession
+  (D-113): Window B is permanently non-claim-bearing; its
+  re-evaluation/license chain is retired and no set-aside or
+  claim-consumption decision remains pending.** Two genuine instrument findings also came out of
   those nights and will appear in the paper: the instrument's internal
   clock-alignment step operates with about a millisecond of margin —
   effectively a coin flip at the current capture length — and needs a
@@ -71,9 +74,12 @@ that artifact is not currently claim-bearing.** The D-078 phase-0 repair
 fixed the timing and calibration path on 2026-07-22; the drift-screen
 rules merged on 2026-07-25; the first fully clean measurement windows
 passed on 2026-07-25/26, and on 2026-07-30 the project minted its first
-floor artifact from them. D-110 later made that mint non-claim-bearing
-pending governed re-derivation and remint. A second calibration window
-(the 7B model) passed overnight on 2026-07-29, surviving two
+floor artifact from them. D-110 later made that mint non-claim-bearing,
+and D-117 retired its historical re-derivation/remint path. Claim authority
+can arise only from the prospective alpha, beta, and gamma windows; the
+separately named Window C characterization night remains Ed ruling #1. A
+second pre-genesis calibration window (the 7B model) passed overnight on
+2026-07-29, surviving two
 live contamination events that the admission gates caught and recovered
 from per the written playbook. The earlier a5-a8 windows (229 members)
 remain non-claim-bearing, instrument-proving evidence.
@@ -87,8 +93,8 @@ effect. This is the kind of demonstration the metrology framing calls for: a
 real effect the instrument resolves with enormous margin, measured under
 frozen, pre-registered rules. (Preliminary observation from the raw
 per-run summaries. The comparison's bookkeeping schema landed on
-2026-08-02, but D-110 blocks formal consumption until the calibration
-repair and remint chain is complete.) The same overnight session survived two
+2026-08-02, but D-117 requires a fresh prospective contrast window before
+formal consumption.) The same overnight session survived two
 background-process intrusions — macOS's own malware scanner — which the
 admission gates refused on the spot and the written recovery playbook
 turned into a completed window with zero lost science measurements.
@@ -487,9 +493,9 @@ commitment and ordering authority under D-070.
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
 | Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed | live execution eligibility comes from the state kernel; quiet-machine work also requires Ed and the clean hardware lane |
-| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | Window A open; production shakedown closed and the first floor artifact minted but non-claim-bearing under D-110; quiet-Mac execution remains | P2-037 claim adjudication and the live state kernel govern the next baseline step; needs Ed + quiet Mac |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | Window A open; production shakedown closed; the first floor artifact is non-claim-bearing and its historical re-mint path is retired under D-117; quiet-Mac execution remains | P2-037 claim adjudication and the live state kernel govern the next baseline step; needs Ed + quiet Mac |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
-| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented; governed calibration data exist | D-110's non-claim-bearing bar and remint conditions must be satisfied before any floor or downstream claim promotion |
+| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented; governed calibration data exist | D-117's prospective alpha, beta, and gamma windows must establish fresh authority before any floor or downstream claim promotion |
 
 Complete so far (all verifiable in the repository):
 
