@@ -20,9 +20,24 @@ EVENING block. Everything under those is executed history.**
 **OVERNIGHT RUN LIVE (D-123 license):** rulings D-122/D-123 transcribed;
 attribution debate adopted (means: signal-sizing only; contrasts:
 common-mode estimator replay ORDERED pre-freeze, promotion bar >=2x/2J).
-Streams in flight: trust tripwire delta + lead replay (merge-or-escalate
-on the same-signature ruling), recovery adversarial audit, common-mode
-replay, U2 exhibit rework (synthesis blockers). A `caffeinate -i -m`
+OVERNIGHT PROGRESS: trust tripwire delta RULED **same-signature NO —
+the operator-authored-authority class is DEAD** (authority terminates in
+authenticated ledger/session evidence, committed head pin, code-pinned
+D-079 acceptance, authenticated campaign evidence, extractor
+recomputation); FAIL only on two first-occurrence items (decisive
+regression bypasses the file-backed production entry; strict-parse
+over-scans unreferenced files) → **fix round 3 in flight**
+(`<scratchpad>/trust-fix3-out.md`; lead replay at fix-2 head banked:
+2747 OK unpiped). Recovery audit **FAIL — all three historical classes
+found alive as implementation misses** (bare-business-receipt admission
+after activation; junk+orphaned-finalization deletion-only state;
+count-only pin check; abandonment-head pin rejection; two
+non-discriminating test findings; two fixture-discipline P2s) → **fix
+round 1 in flight with dictated closures**
+(`<scratchpad>/recovery-fix-out.md`); ITS delta is a tripwire: any
+class alive again = count 2 = consult. Common-mode replay: bar HELD
+decisively → **D-124** (two-shared-edge estimator promoted-as-candidate,
+Ed-reversible). U2 exhibit rework still in flight. A `caffeinate -i -m`
 (pid recorded in session log, 12h cap) holds the LOCKED machine awake —
 it dies with the session; if a future QUIET WINDOW ever finds a stray
 caffeinate, kill it before arming. Workflow tool re-authorized by Ed
