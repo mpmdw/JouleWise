@@ -141,6 +141,7 @@ be re-derived by a future agent gets an entry here.
 | D-116 | D-079 calibration acceptance artifact ISSUED; ledger genesis import executed (seq 76 / head 08456d50…; issued sha 316113960c…; 30/2/6 dispositions); D-110 condition (b) SATISFIED → MINT-GENERALIZE-01 unblocked for re-mint; two-cold-gate history (plan HELD → consumer impl + gauntlet → bytes PROCEED, sequencing HOLD resolved by consumer-first merge); window_metrologyB calibration fiducials in completeness record are NOT a D-113 violation | executed (Fable magistrate, 2026-08-06; Ed pre-authorized) |
 | D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
 | D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
+| D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
 
 ---
 
@@ -7735,3 +7736,38 @@ alone.
 **Scope note:** a burn/liberal-delegation license (Ed, 2026-08-07)
 increases the volume of work fed INTO this gate. It never reduces the
 gate. If throughput and gate completeness conflict, throughput yields.
+
+## D-119: Claim-LANGUAGE rulings delegated to the magistrate, conservative-by-default, until Ed joins the draft loop
+
+**Date:** 2026-08-07 (Ed, in-thread, after the operator-attested
+adjudication: "it's a language issue not a software/hardware issue. yeah
+rule conservative on those, fable i trust you to rule on that for now
+until i start being in the loop on drafts"). **Status:** RATIFIED.
+
+**What is delegated.** How a claim is WORDED — the strength of a
+provenance/custody statement, whether a result is described as
+demonstrated vs designed, how a limitation is framed, which verb a
+guarantee gets. The magistrate rules these directly and records them,
+without waiting on Ed.
+
+**The standing rule for those rulings: CONSERVATIVE BY DEFAULT.** When
+two honest phrasings are available, take the weaker one. An overclaim in
+front of a metrology-expert advisor costs credibility that is expensive
+to rebuy; an underclaim costs a sentence. Where a stronger phrasing is
+actually warranted by evidence, it may be used — but the evidence is
+named in the same breath.
+
+**What is NOT delegated** (unchanged, still Ed's): what to MEASURE, what
+to fund with quiet nights, scope decisions, venue and calendar, anything
+irreversible, and any ruling that changes what the project claims to
+have DONE rather than how it says it.
+
+**Boundary case that prompted this:** the floor artifact's custody
+statement. The finding was that the paper implied third-party
+verifiability where the system provides tamper-evidence within a
+single-operator trust model. No measurement, instrument, calibration, or
+datum was affected — the fix was wording. That class is now magistrate
+territory.
+
+**Termination:** this delegation ends when Ed begins reviewing drafts
+directly. He may reverse any ruling at any time; none of them bind him.
