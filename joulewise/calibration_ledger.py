@@ -201,6 +201,22 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     return result
 
 
+def normalize_calibration_custody_path(path: Path | str) -> str:
+    """Return the lexical absolute spelling used by reservation and capture.
+
+    Custody identity is an exact ledger binding.  Resolving symlinks in only
+    one writer would therefore change that identity even when both spellings
+    name the same directory.
+    """
+
+    try:
+        return str(Path(path).absolute())
+    except (OSError, TypeError, ValueError) as exc:
+        raise CalibrationLedgerError(
+            "calibration custody path is malformed"
+        ) from exc
+
+
 def receipt_core(receipt: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in receipt.items() if key != "receipt_digest"}
 
@@ -2469,8 +2485,8 @@ def validate_bracket_session_reservation_inputs(
     """Apply the exact same capability-input validation for dry-run/execute."""
 
     try:
-        normalized_runs_root = str(Path(runs_root).absolute())
-    except (OSError, TypeError, ValueError) as exc:
+        normalized_runs_root = normalize_calibration_custody_path(runs_root)
+    except CalibrationLedgerError as exc:
         raise CalibrationLedgerError("bracket session runs_root is malformed") from exc
     session_identity = {
         "session_id": session_id,
@@ -2490,9 +2506,9 @@ def validate_bracket_session_reservation_inputs(
             raise CalibrationLedgerError(f"{role} slot is malformed")
         custody_value = source.get("custody_locator")
         try:
-            custody = Path(str(custody_value)).absolute()
+            custody = Path(normalize_calibration_custody_path(custody_value))
             custody.relative_to(validation_root)
-        except (OSError, TypeError, ValueError) as exc:
+        except (CalibrationLedgerError, OSError, TypeError, ValueError) as exc:
             raise CalibrationLedgerError(
                 f"{role} custody locator is outside runs_root/instrument_validation"
             ) from exc
@@ -2631,7 +2647,9 @@ def claim_bracket_session_slot(
             and receipt.get("slot") == slot
         ]
         if existing:
-            raise CalibrationLedgerError("calibration_ledger_bracket_slot_claimed")
+            raise CalibrationLedgerError(
+                REFUSAL_TAXONOMY["calibration_ledger_bracket_slot_claimed"]
+            )
         open_receipt = next(
             receipt
             for receipt in receipts
@@ -2795,7 +2813,13 @@ def terminal_head_pin_for_session(
         raw = Path(ledger_path).read_bytes()
     except OSError as exc:
         raise CalibrationLedgerError("ledger is unreadable") from exc
-    receipts, parse_reasons = _parse_ledger(raw)
+    append_journal, malformed_journal = _read_append_journal(Path(ledger_path))
+    receipts, parse_reasons = _parse_ledger(
+        raw,
+        append_journal=append_journal,
+    )
+    if malformed_journal:
+        parse_reasons.add("calibration_ledger_malformed")
     observations, sessions, state_reasons = _attempts_and_observations(receipts)
     del observations
     reasons = parse_reasons | state_reasons
@@ -3024,6 +3048,7 @@ __all__ = [
     "generate_historical_custody_manifest",
     "head_pin_for_receipt",
     "load_calibration_ledger_snapshot",
+    "normalize_calibration_custody_path",
     "prepare_historical_import",
     "terminal_head_pin_for_session",
     "validate_bracket_session_reservation_inputs",
