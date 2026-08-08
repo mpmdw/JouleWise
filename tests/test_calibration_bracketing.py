@@ -29,16 +29,19 @@ from joulewise.calibration_bracketing import (
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
     load_calibration_acceptance_bound,
     load_calibration_candidate,
+    probe_calibration_acceptance_trigger,
     validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
+    RECEIPT_SCHEMA,
     CalibrationLedgerSnapshot,
     CalibrationBracketSession,
     LedgerObservation,
     bootstrap_historical_import,
+    canonical_sha256 as ledger_canonical_sha256,
     content_id_from_artifact_hashes,
     load_calibration_ledger_snapshot,
 )
@@ -715,6 +718,207 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             result["acceptance"]["ledger_snapshot"]["baseline_sequence"], 76
         )
+
+    @unittest.skipUnless(
+        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
+        "lead-reviewed D-079 import inputs are unavailable",
+    )
+    def test_rehashed_terminal_receipt_twin_and_wrong_committed_pin_refuse(self) -> None:
+        def receipt(**fields) -> dict:
+            value = dict(fields)
+            value["receipt_digest"] = ledger_canonical_sha256(value)
+            return value
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            ledger = repo / "runs/calibration_observation_ledger.jsonl"
+            pin = repo / "configs/calibration/calibration_ledger_head.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(
+                json.dumps(
+                    {
+                        "sequence": 0,
+                        "head_digest": GENESIS_DIGEST,
+                        "ledger_schema": LEDGER_SCHEMA,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            plan = bootstrap_historical_import(
+                ledger,
+                head_pin_path=pin,
+                checkout_root=Path("/Users/edr"),
+                disposition_table_raw=_REAL_D079_TABLE.read_bytes(),
+                expected_disposition_table_sha256=_REAL_D079_TABLE_SHA256,
+                custody_manifest_raw=_REAL_D079_CUSTODY_MANIFEST.read_bytes(),
+                expected_custody_manifest_sha256=(
+                    _REAL_D079_CUSTODY_MANIFEST_SHA256
+                ),
+                execute=False,
+                require_committed_pin=False,
+                repo_root=repo,
+            )
+            epoch = dict(plan.receipts[-1]["identity_epoch"])
+            t1 = dict(plan.receipts[-1]["t1_bindings"])
+            reservation_sequence = plan.final_sequence + 1
+            finalization_sequence = reservation_sequence + 1
+            common = {
+                "schema_version": RECEIPT_SCHEMA,
+                "ledger_schema": LEDGER_SCHEMA,
+                "attempt_id": "forgery-probe-abandoned",
+                "content_id": None,
+                "artifact_sha256": {},
+                "identity_epoch": epoch,
+                "t1_bindings": t1,
+                "exact_bound_lexeme_s": None,
+                "custody_locator": "/authenticated/forgery-probe-abandoned",
+            }
+            reservation = receipt(
+                **common,
+                sequence=reservation_sequence,
+                predecessor_digest=plan.head_digest,
+                event="reservation",
+                capture_wall_time_s=None,
+                disposition="pending",
+            )
+            real_final = receipt(
+                **common,
+                sequence=finalization_sequence,
+                predecessor_digest=reservation["receipt_digest"],
+                event="finalization",
+                capture_wall_time_s=None,
+                disposition="abandoned",
+            )
+            forged_final = receipt(
+                **common,
+                sequence=finalization_sequence,
+                predecessor_digest=reservation["receipt_digest"],
+                event="finalization",
+                capture_wall_time_s="forged-but-well-formed",
+                disposition="abandoned",
+            )
+            self.assertNotEqual(
+                real_final["receipt_digest"], forged_final["receipt_digest"]
+            )
+            self.assertEqual(
+                forged_final["receipt_digest"],
+                ledger_canonical_sha256(
+                    {
+                        key: value
+                        for key, value in forged_final.items()
+                        if key != "receipt_digest"
+                    }
+                ),
+            )
+            encoded = lambda row: (
+                json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+            ).encode("utf-8")
+            ledger.parent.mkdir(parents=True)
+            ledger.write_bytes(
+                plan.ledger_bytes + encoded(reservation) + encoded(real_final)
+            )
+            real_pin = {
+                "sequence": finalization_sequence,
+                "head_digest": real_final["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+            pin.write_text(json.dumps(real_pin) + "\n", encoding="utf-8")
+            snapshot = load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                baseline_sequence=76,
+                baseline_digest=plan.head_digest,
+                require_committed_pin=False,
+                verify_custody=False,
+                repo_root=repo,
+            )
+            self.assertEqual(snapshot.refusal_reasons, ())
+            forged_snapshot = replace(
+                snapshot,
+                receipts=(*snapshot.receipts[:-1], forged_final),
+                head_digest=forged_final["receipt_digest"],
+                committed_head_digest=forged_final["receipt_digest"],
+            )
+            with patch(
+                "joulewise.calibration_bracketing._artifact_count_boundary",
+                side_effect=AssertionError("successor logic reached"),
+            ):
+                result = probe_calibration_acceptance_trigger(
+                    forged_snapshot,
+                    observed_identity_epoch=load_calibration_acceptance_bound()[
+                        "identity_epoch"
+                    ],
+                    require_committed_registry=False,
+                    verify_custody=False,
+                )
+            self.assertEqual(result["outcome"], "authentication_or_epoch_refusal")
+            self.assertEqual(
+                result["refusal_reasons"],
+                ["successor_terminal_no_content_receipt_malformed"],
+            )
+
+            pin.write_text(
+                json.dumps(
+                    {
+                        **real_pin,
+                        "head_digest": forged_final["receipt_digest"],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(
+                ["git", "config", "user.email", "tests@joulewise.invalid"],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "JouleWise tests"],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "add", pin.relative_to(repo).as_posix()],
+                cwd=repo,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", "commit wrong head pin"],
+                cwd=repo,
+                check=True,
+            )
+            wrong_pin_snapshot = load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                baseline_sequence=76,
+                baseline_digest=plan.head_digest,
+                require_committed_pin=True,
+                verify_custody=False,
+                repo_root=repo,
+            )
+            self.assertIn(
+                "calibration_ledger_head_mismatch",
+                wrong_pin_snapshot.refusal_reasons,
+            )
+            with patch(
+                "joulewise.calibration_bracketing._artifact_count_boundary",
+                side_effect=AssertionError("successor logic reached"),
+            ):
+                result = probe_calibration_acceptance_trigger(
+                    wrong_pin_snapshot,
+                    observed_identity_epoch=load_calibration_acceptance_bound()[
+                        "identity_epoch"
+                    ],
+                    require_committed_registry=False,
+                    verify_custody=False,
+                )
+            self.assertEqual(result["outcome"], "authentication_or_epoch_refusal")
+            self.assertEqual(
+                result["refusal_reasons"],
+                ["calibration_ledger_prefix_not_authenticated"],
+            )
 
     def test_import_marker_is_excluded_by_discovery_and_trigger_paths(self) -> None:
         candidates = [
@@ -1462,39 +1666,69 @@ class CalibrationBracketingTests(unittest.TestCase):
             self.candidate("post", 111.0, "0.021"),
         ]
         snapshot, registered = _fixture_snapshot(candidates)
-        artifact = _unissued_acceptance_fixture()
-        artifact["decimal_derivation"]["ratified_operatives"][
-            "max_budgetable_excess_s"
-        ] = "0"
-        artifact["derivation_sha256"] = _canonical_sha256(
-            {
-                key: value
-                for key, value in artifact.items()
-                if key != "derivation_sha256"
-            }
-        )
-        self.assertFalse(_valid_acceptance_bound(artifact))
-        with patch(
-            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=artifact,
+        cases = {
+            "zero-cap": {
+                "max_budgetable_excess_s": "0",
+            },
+            "negative-screen-with-exact-cap": {
+                "bracket_screen_s": "-0.001",
+                "max_budgetable_excess_s": "0.013093166090593858",
+            },
+            "screen-above-ceiling": {
+                "bracket_screen_s": "0.02",
+                "maximum_budgetable_drift_s": "0.01",
+                "max_budgetable_excess_s": "-0.01",
+            },
+            "nonfinite-screen": {"bracket_screen_s": "NaN"},
+            "nonfinite-ceiling": {"maximum_budgetable_drift_s": "Infinity"},
+            "nonfinite-cap": {"max_budgetable_excess_s": "-Infinity"},
+        }
+        for missing in (
+            "bracket_screen_s",
+            "maximum_budgetable_drift_s",
+            "max_budgetable_excess_s",
         ):
-            result, reasons = _evaluate_calibration_bracket(
-                registered,
-                window_start_s=100.0,
-                window_end_s=110.0,
-                bindings=self.bindings,
-                policy=self.policy,
-                ledger_snapshot=snapshot,
-                _allow_unissued_fixture=True,
-            )
-        self.assertEqual(reasons, ("invalid_acceptance_arithmetic",))
-        self.assertEqual(
-            result["acceptance"]["drift"]["status"],
-            "invalid_acceptance_arithmetic",
-        )
-        self.assertIsNone(result["acceptance"]["preflight"])
-        self.assertIsNone(result["calibration_drift_allowance_s"])
-        self.assertNotIn("allowance", result["acceptance"])
+            cases[f"missing-{missing}"] = {missing: None}
+        for name, changes in cases.items():
+            with self.subTest(name=name):
+                artifact = _unissued_acceptance_fixture()
+                operatives = artifact["decimal_derivation"]["ratified_operatives"]
+                for field, value in changes.items():
+                    if value is None:
+                        operatives.pop(field)
+                    else:
+                        operatives[field] = value
+                artifact["derivation_sha256"] = _canonical_sha256(
+                    {
+                        key: value
+                        for key, value in artifact.items()
+                        if key != "derivation_sha256"
+                    }
+                )
+                self.assertFalse(_valid_acceptance_bound(artifact))
+                if name.startswith("missing-"):
+                    continue
+                with patch(
+                    "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                    return_value=artifact,
+                ):
+                    result, reasons = _evaluate_calibration_bracket(
+                        registered,
+                        window_start_s=100.0,
+                        window_end_s=110.0,
+                        bindings=self.bindings,
+                        policy=self.policy,
+                        ledger_snapshot=snapshot,
+                        _allow_unissued_fixture=True,
+                    )
+                self.assertEqual(reasons, ("invalid_acceptance_arithmetic",))
+                self.assertEqual(
+                    result["acceptance"]["drift"]["status"],
+                    "invalid_acceptance_arithmetic",
+                )
+                self.assertIsNone(result["acceptance"]["preflight"])
+                self.assertIsNone(result["calibration_drift_allowance_s"])
+                self.assertNotIn("allowance", result["acceptance"])
 
     def test_t1_mismatched_candidate_remains_ineligible_under_d079_v2(self) -> None:
         mismatched = dict(self.bindings)

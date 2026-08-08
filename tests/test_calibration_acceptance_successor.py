@@ -1,21 +1,32 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import os
+import stat
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import joulewise.calibration_bracketing as bracketing
 from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
     LEDGER_SCHEMA,
+    RECEIPT_SCHEMA,
     CalibrationBracketSession,
     CalibrationLedgerSnapshot,
     LedgerObservation,
+    bootstrap_historical_import,
+    canonical_sha256,
+    content_id_from_artifact_hashes,
+    load_calibration_ledger_snapshot,
 )
 from scripts import build_calibration_acceptance_successor as successor
 
@@ -26,10 +37,51 @@ ACCEPTANCE_PATH = (
 )
 REGISTRY_PATH = bracketing.DEFAULT_ACCEPTANCE_REGISTRY_PATH
 PARENT_HEAD = "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
+REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
+REAL_D079_CUSTODY_MANIFEST = Path("/private/tmp/d079-custody-manifest.lead.json")
+REAL_D079_TABLE_SHA256 = (
+    "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
+)
+REAL_D079_CUSTODY_MANIFEST_SHA256 = (
+    "99cbf3df7aef3b81839f40272a529eb137bf2f21276e2a1d07788c764035f078"
+)
 
 
 def _digest(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
+
+
+def _receipt(**fields: object) -> dict:
+    value = dict(fields)
+    value["receipt_digest"] = canonical_sha256(value)
+    return value
+
+
+def _real_import_plan(ledger: Path, pin: Path):
+    pin.parent.mkdir(parents=True, exist_ok=True)
+    pin.write_text(
+        json.dumps(
+            {
+                "sequence": 0,
+                "head_digest": GENESIS_DIGEST,
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return bootstrap_historical_import(
+        ledger,
+        head_pin_path=pin,
+        checkout_root=Path("/Users/edr"),
+        disposition_table_raw=REAL_D079_TABLE.read_bytes(),
+        expected_disposition_table_sha256=REAL_D079_TABLE_SHA256,
+        custody_manifest_raw=REAL_D079_CUSTODY_MANIFEST.read_bytes(),
+        expected_custody_manifest_sha256=REAL_D079_CUSTODY_MANIFEST_SHA256,
+        execute=False,
+        require_committed_pin=False,
+        repo_root=ledger.parents[1],
+    )
 
 
 def _parent_artifact() -> dict:
@@ -295,17 +347,48 @@ class RegistryTrustAnchorTests(unittest.TestCase):
         self.assertEqual(counts, {"valid": 30, "systematic-invalid": 2, "ordinary-invalid": 6})
         self.assertEqual(active["ledger_cutoff"]["sequence"], 76)
 
-    def test_registry_rejects_multiple_active_duplicate_and_cycle(self) -> None:
+    def test_registry_rejects_multiple_active_without_a_cycle(self) -> None:
         registry = json.loads(REGISTRY_PATH.read_bytes())
-        duplicate = json.loads(json.dumps(registry["entries"][0]))
-        duplicate["generation"] = 2
-        duplicate["acceptance_id"] = "duplicate"
-        duplicate["artifact_path"] = "configs/calibration/duplicate.json"
-        duplicate["parent_acceptance_id"] = duplicate["acceptance_id"]
-        duplicate["parent_artifact_sha256"] = duplicate["artifact_sha256"]
-        registry["entries"].append(duplicate)
+        parent = registry["entries"][0]
+        child = {
+            **json.loads(json.dumps(parent)),
+            "acceptance_id": "child",
+            "artifact_path": "configs/calibration/child.json",
+            "artifact_schema": bracketing.ACCEPTANCE_SUCCESSOR_SCHEMA,
+            "generation": 2,
+            "parent_acceptance_id": parent["acceptance_id"],
+            "parent_artifact_sha256": parent["artifact_sha256"],
+            "count_boundary_rule": bracketing.SUCCESSOR_COUNT_BOUNDARY_RULE,
+            "ledger_cutoff": {
+                **parent["ledger_cutoff"],
+                "sequence": parent["ledger_cutoff"]["sequence"] + 1,
+                "head_digest": "1" * 64,
+            },
+        }
+        registry["entries"].append(child)
         self.assertFalse(bracketing._valid_registry(registry))
-        registry["entries"][0]["active"] = False
+
+    def test_registry_rejects_self_cycle_without_multiple_active_entries(self) -> None:
+        registry = json.loads(REGISTRY_PATH.read_bytes())
+        parent = registry["entries"][0]
+        child = {
+            **json.loads(json.dumps(parent)),
+            "acceptance_id": "self-cycle",
+            "artifact_path": "configs/calibration/self-cycle.json",
+            "artifact_schema": bracketing.ACCEPTANCE_SUCCESSOR_SCHEMA,
+            "generation": 2,
+            "active": True,
+            "parent_acceptance_id": "self-cycle",
+            "parent_artifact_sha256": parent["artifact_sha256"],
+            "count_boundary_rule": bracketing.SUCCESSOR_COUNT_BOUNDARY_RULE,
+            "ledger_cutoff": {
+                **parent["ledger_cutoff"],
+                "sequence": parent["ledger_cutoff"]["sequence"] + 1,
+                "head_digest": "2" * 64,
+            },
+        }
+        parent["active"] = False
+        registry["entries"].append(child)
         self.assertFalse(bracketing._valid_registry(registry))
 
     def test_registry_rejects_traversal_absolute_and_duplicate_paths(self) -> None:
@@ -315,6 +398,29 @@ class RegistryTrustAnchorTests(unittest.TestCase):
                 changed = json.loads(json.dumps(registry))
                 changed["entries"][0]["artifact_path"] = path
                 self.assertFalse(bracketing._valid_registry(changed))
+        parent = registry["entries"][0]
+        child = {
+            **json.loads(json.dumps(parent)),
+            "acceptance_id": "duplicate-path-child",
+            "artifact_schema": bracketing.ACCEPTANCE_SUCCESSOR_SCHEMA,
+            "generation": 2,
+            "active": True,
+            "parent_acceptance_id": parent["acceptance_id"],
+            "parent_artifact_sha256": parent["artifact_sha256"],
+            "count_boundary_rule": bracketing.SUCCESSOR_COUNT_BOUNDARY_RULE,
+            "ledger_cutoff": {
+                **parent["ledger_cutoff"],
+                "sequence": parent["ledger_cutoff"]["sequence"] + 1,
+                "head_digest": "3" * 64,
+            },
+        }
+        parent["active"] = False
+        registry["entries"].append(child)
+        self.assertEqual(
+            registry["entries"][0]["artifact_path"],
+            registry["entries"][1]["artifact_path"],
+        )
+        self.assertFalse(bracketing._valid_registry(registry))
 
     def test_registry_requires_committed_bytes_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -622,16 +728,13 @@ class DecimalDerivationTests(unittest.TestCase):
             derived["rounding"]["preflight_level_screen"]["source_rule"],
             bracketing.SUCCESSOR_PREFLIGHT_SCREEN_RULE,
         )
-        quantized_maximum = Decimal(
-            derived["source_statistics"]["maximum_s"]
-        ).quantize(Decimal("0.000000000000001"), rounding=bracketing.ROUND_HALF_EVEN)
         self.assertGreater(
             Decimal(derived["source_statistics"]["prediction_95_two_draw_s"]),
             Decimal(derived["source_statistics"]["maximum_s"]),
         )
         self.assertEqual(
-            Decimal(derived["ratified_operatives"]["preflight_level_screen_s"]),
-            quantized_maximum,
+            derived["ratified_operatives"]["preflight_level_screen_s"],
+            "0.000000000000000",
         )
 
     def test_negative_nonfinite_and_binary_float_inputs_refuse(self) -> None:
@@ -815,6 +918,28 @@ class DecimalDerivationTests(unittest.TestCase):
             ):
                 bracketing.derive_successor_decimal_derivation(members)
 
+    def test_screen_strictly_above_ceiling_refuses_without_clamping(self) -> None:
+        members = [
+            {
+                "content_id": f"{index:064x}",
+                "b_fiducial_s": "0" if index <= 9 else "1",
+            }
+            for index in range(1, 20)
+        ]
+
+        def reversed_quantiles(probability: str, *_args, **_kwargs) -> Decimal:
+            return Decimal("4" if probability == "0.975" else "3")
+
+        with patch.object(
+            bracketing,
+            "decimal_student_t_quantile",
+            side_effect=reversed_quantiles,
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "^successor_screen_exceeds_budget_ceiling$"
+            ):
+                bracketing.derive_successor_decimal_derivation(members)
+
 
 class SuccessorBuilderTests(unittest.TestCase):
     def test_actual_30_trigger_inventory_retains_n19_basis_and_excludes_window_b(self) -> None:
@@ -846,6 +971,11 @@ class SuccessorBuilderTests(unittest.TestCase):
         }
         self.assertEqual(len(trigger_ids), 30)
         self.assertEqual(len(basis_ids), 19)
+        expected_basis_ids = {
+            content_by_attempt[member["member_id"]]
+            for member in parent["derivation_corpus"]["members"]
+        }
+        self.assertEqual(basis_ids, expected_basis_ids)
         self.assertTrue(
             {content_by_attempt[attempt] for attempt in window_b_attempts}
             .isdisjoint(basis_ids)
@@ -890,6 +1020,219 @@ class SuccessorBuilderTests(unittest.TestCase):
         self.assertNotIn("parent_judgment_policy", build.successor_probe)
         self.assertEqual(build.artifact["lineage"]["parent_acceptance_id"], "d079_calibration_acceptance_v2_n19")
         self.assertIn(_digest("live-content-0"), build.artifact["lineage"]["trigger_judgment"]["new_content_ids"])
+
+    def test_absorbed_basis_additions_must_equal_parent_judgment(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0, bound="0.02"),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        tampered = json.loads(json.dumps(build.artifact))
+        tampered["lineage"]["trigger_judgment"]["new_content_ids"] = []
+        tampered["derivation_sha256"] = bracketing._canonical_sha256(
+            {
+                key: value
+                for key, value in tampered.items()
+                if key != "derivation_sha256"
+            }
+        )
+        tampered_bytes = successor._pretty_json_bytes(tampered)
+        registry = json.loads(json.dumps(build.registry))
+        active = next(entry for entry in registry["entries"] if entry["active"])
+        active["artifact_sha256"] = hashlib.sha256(tampered_bytes).hexdigest()
+        active["derivation_sha256"] = tampered["derivation_sha256"]
+        self.assertFalse(bracketing._valid_acceptance_bound(tampered))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for entry in registry["entries"]:
+                destination = root / entry["artifact_path"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(
+                    tampered_bytes
+                    if entry["acceptance_id"] == tampered["acceptance_id"]
+                    else (REPO_ROOT / entry["artifact_path"]).read_bytes()
+                )
+            registry_path = (
+                root / "configs/calibration/calibration_acceptance_registry.json"
+            )
+            registry_path.write_bytes(successor._pretty_json_bytes(registry))
+            with patch.object(bracketing, "_valid_acceptance_bound", return_value=True):
+                with self.assertRaisesRegex(
+                    bracketing.CalibrationAcceptanceRegistryRefusal,
+                    "acceptance_registry_derivation_basis_invalid",
+                ):
+                    bracketing.load_calibration_acceptance_registry(
+                        registry_path, repo_root=root, require_committed=False
+                    )
+
+    def test_generation_two_artifact_records_boundary_38(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0, bound="0.02"),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        self.assertEqual(build.artifact["lineage"]["generation"], 2)
+        self.assertEqual(bracketing._artifact_count_boundary(build.artifact), 38)
+
+    def test_trigger_count_is_not_derived_from_a_fixed_nonbasis_gap(self) -> None:
+        parent = _parent_artifact()
+        parent_basis = {
+            member["member_id"] for member in parent["derivation_corpus"]["members"]
+        }
+        demoted = next(
+            row
+            for row in parent["prior_observation_set"]["observations"]
+            if row["disposition"] == "valid" and row["attempt_id"] not in parent_basis
+        )
+        demoted["disposition"] = "ordinary-invalid"
+        parent["backfill_candidate"]["candidate_inventory"]["valid"] -= 1
+        parent["backfill_candidate"]["candidate_inventory"][
+            "ordinary-invalid"
+        ] += 1
+        parent["derivation_sha256"] = bracketing._canonical_sha256(
+            {
+                key: value
+                for key, value in parent.items()
+                if key != "derivation_sha256"
+            }
+        )
+        parent_bytes = successor._pretty_json_bytes(parent)
+        registry = json.loads(REGISTRY_PATH.read_bytes())
+        registry["entries"][0]["artifact_sha256"] = hashlib.sha256(
+            parent_bytes
+        ).hexdigest()
+        registry["entries"][0]["derivation_sha256"] = parent["derivation_sha256"]
+        observations = [
+            replace(observation, disposition="ordinary-invalid")
+            if observation.attempt_id == demoted["attempt_id"]
+            else observation
+            for observation in _parent_observations()
+        ]
+        base = _snapshot((_new_observation(0, bound="0.02"),))
+        snapshot = replace(
+            base,
+            observations=tuple(observations) + (base.observations[-1],),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parent_path = root / registry["entries"][0]["artifact_path"]
+            parent_path.parent.mkdir(parents=True)
+            parent_path.write_bytes(parent_bytes)
+            registry_path = parent_path.parent / REGISTRY_PATH.name
+            registry_path.write_bytes(successor._pretty_json_bytes(registry))
+            build = successor.build_calibration_acceptance_successor(
+                snapshot,
+                observed_identity_epoch=parent["identity_epoch"],
+                registry_path=registry_path,
+                repo_root=root,
+                require_committed_registry=False,
+                verify_custody=False,
+            )
+        trigger_count = build.artifact["prospective_rederivation"]["count_trigger"][
+            "source_trigger_count"
+        ]
+        derivation_count = build.artifact["derivation_corpus"]["n"]
+        self.assertEqual(trigger_count - derivation_count, 10)
+
+    @unittest.skipUnless(
+        REAL_D079_TABLE.is_file() and REAL_D079_CUSTODY_MANIFEST.is_file(),
+        "lead-reviewed D-079 import inputs are unavailable",
+    )
+    def test_builder_uses_loaded_real_reservation_finalization_cadence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger = root / "runs/calibration_observation_ledger.jsonl"
+            pin = root / "configs/calibration/calibration_ledger_head.json"
+            plan = _real_import_plan(ledger, pin)
+            epoch = dict(_parent_artifact()["identity_epoch"])
+            t1 = dict(plan.receipts[-1]["t1_bindings"])
+            reservation_sequence = plan.final_sequence + 1
+            finalization_sequence = reservation_sequence + 1
+            artifacts = {
+                "manifest.json": _digest("real-cadence-manifest"),
+                "instrument_evidence.json": _digest("real-cadence-evidence"),
+            }
+            reservation = _receipt(
+                schema_version=RECEIPT_SCHEMA,
+                ledger_schema=LEDGER_SCHEMA,
+                sequence=reservation_sequence,
+                predecessor_digest=plan.head_digest,
+                event="reservation",
+                attempt_id="real-cadence-live",
+                content_id=None,
+                artifact_sha256={},
+                identity_epoch=epoch,
+                t1_bindings=t1,
+                capture_wall_time_s=None,
+                exact_bound_lexeme_s=None,
+                disposition="pending",
+                custody_locator="/authenticated/real-cadence-live",
+            )
+            finalization = _receipt(
+                schema_version=RECEIPT_SCHEMA,
+                ledger_schema=LEDGER_SCHEMA,
+                sequence=finalization_sequence,
+                predecessor_digest=reservation["receipt_digest"],
+                event="finalization",
+                attempt_id="real-cadence-live",
+                content_id=content_id_from_artifact_hashes(artifacts),
+                artifact_sha256=artifacts,
+                identity_epoch=epoch,
+                t1_bindings=t1,
+                capture_wall_time_s="1000",
+                exact_bound_lexeme_s="0.0200000000000000001",
+                disposition="valid",
+                custody_locator="/authenticated/real-cadence-live",
+            )
+            ledger.parent.mkdir(parents=True)
+            encoded = lambda row: (
+                json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+            ).encode("utf-8")
+            ledger.write_bytes(
+                plan.ledger_bytes + encoded(reservation) + encoded(finalization)
+            )
+            pin.write_bytes(
+                successor._pretty_json_bytes(
+                    {
+                        "sequence": finalization_sequence,
+                        "head_digest": finalization["receipt_digest"],
+                        "ledger_schema": LEDGER_SCHEMA,
+                    }
+                )
+            )
+            snapshot = load_calibration_ledger_snapshot(
+                ledger,
+                pin,
+                baseline_sequence=76,
+                baseline_digest=plan.head_digest,
+                require_committed_pin=False,
+                verify_custody=False,
+                repo_root=root,
+            )
+            self.assertEqual(snapshot.refusal_reasons, ())
+            build = successor.build_calibration_acceptance_successor(
+                snapshot,
+                observed_identity_epoch=epoch,
+                require_committed_registry=False,
+                verify_custody=False,
+            )
+        self.assertEqual(
+            build.artifact["ledger_cutoff"]["sequence"], finalization_sequence
+        )
+        self.assertEqual(build.head_pin["sequence"], finalization_sequence)
+        self.assertIn(
+            f"_s{finalization_sequence}_", f"_{build.artifact['acceptance_id']}_"
+        )
+        new_content_id = content_id_from_artifact_hashes(artifacts)
+        member = next(
+            row
+            for row in build.artifact["derivation_corpus"]["members"]
+            if row["content_id"] == new_content_id
+        )
+        self.assertEqual(member["finalization_sequence"], finalization_sequence)
 
     def test_repeated_and_shuffled_builds_are_byte_identical(self) -> None:
         snapshot = _snapshot((_new_observation(0, bound="0.02"),))
@@ -1078,6 +1421,262 @@ class SuccessorBuilderTests(unittest.TestCase):
                 )
             self.assertEqual(artifact.read_text(encoding="utf-8"), "occupied")
             self.assertEqual(registry.read_bytes(), before)
+
+    def test_faults_before_ref_advance_restore_prior_authority(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        original_replace = os.replace
+        original_run = subprocess.run
+        cases = (
+            "after_artifact_replace",
+            "after_registry_replace",
+            "before_commit_tree",
+            "after_commit_tree",
+            "before_update_ref",
+        )
+        for fault in cases:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                registry, _ = _init_publication_repo(root)
+                artifact = root / build.artifact_path
+                old_registry_bytes = registry.read_bytes()
+                old_head = original_run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                replace_count = 0
+
+                def injected_replace(source, destination):
+                    nonlocal replace_count
+                    original_replace(source, destination)
+                    replace_count += 1
+                    if (
+                        fault == "after_artifact_replace"
+                        and Path(destination).resolve(strict=False)
+                        == artifact.resolve(strict=False)
+                    ) or (
+                        fault == "after_registry_replace"
+                        and Path(destination).resolve(strict=False)
+                        == registry.resolve(strict=False)
+                    ):
+                        raise OSError(fault)
+
+                def injected_run(command, *args, **kwargs):
+                    operation = command[1] if len(command) > 1 else ""
+                    if fault == "before_commit_tree" and operation == "commit-tree":
+                        raise subprocess.CalledProcessError(1, command)
+                    if fault == "before_update_ref" and operation == "update-ref":
+                        raise subprocess.CalledProcessError(1, command)
+                    completed = original_run(command, *args, **kwargs)
+                    if fault == "after_commit_tree" and operation == "commit-tree":
+                        raise subprocess.CalledProcessError(1, command)
+                    return completed
+
+                with patch.object(successor.os, "replace", side_effect=injected_replace), patch.object(
+                    successor.subprocess, "run", side_effect=injected_run
+                ):
+                    with self.assertRaises((OSError, ValueError)):
+                        successor.publish_successor(
+                            build,
+                            artifact_destination=artifact,
+                            registry_destination=registry,
+                            expected_registry_bytes=old_registry_bytes,
+                            repo_root=root,
+                        )
+                self.assertGreaterEqual(replace_count, 1)
+                self.assertEqual(registry.read_bytes(), old_registry_bytes)
+                self.assertFalse(artifact.exists())
+                self.assertEqual(
+                    original_run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=root,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip(),
+                    old_head,
+                )
+                loaded = bracketing.load_calibration_acceptance_registry(
+                    registry, repo_root=root, require_committed=True
+                )
+                self.assertEqual(
+                    bracketing._active_registry_entry(loaded)["acceptance_id"],
+                    "d079_calibration_acceptance_v2_n19",
+                )
+
+    def test_failed_publication_preserves_identical_prepublished_artifact(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        original_replace = os.replace
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry, _ = _init_publication_repo(root)
+            artifact = root / build.artifact_path
+            artifact.write_bytes(build.artifact_bytes)
+            old_registry_bytes = registry.read_bytes()
+
+            def fail_after_registry(source, destination):
+                original_replace(source, destination)
+                if Path(destination).resolve(strict=False) == registry.resolve(
+                    strict=False
+                ):
+                    raise OSError("after_registry_replace")
+
+            with patch.object(
+                successor.os, "replace", side_effect=fail_after_registry
+            ):
+                with self.assertRaises(OSError):
+                    successor.publish_successor(
+                        build,
+                        artifact_destination=artifact,
+                        registry_destination=registry,
+                        expected_registry_bytes=old_registry_bytes,
+                        repo_root=root,
+                    )
+            self.assertEqual(registry.read_bytes(), old_registry_bytes)
+            self.assertEqual(artifact.read_bytes(), build.artifact_bytes)
+            loaded = bracketing.load_calibration_acceptance_registry(
+                registry, repo_root=root, require_committed=True
+            )
+            self.assertEqual(
+                bracketing._active_registry_entry(loaded)["acceptance_id"],
+                "d079_calibration_acceptance_v2_n19",
+            )
+
+    def test_publication_fsyncs_both_stage_files_and_both_directory_mutations(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        original_fsync = os.fsync
+        sync_kinds: list[str] = []
+
+        def observed_fsync(descriptor: int) -> None:
+            mode = os.fstat(descriptor).st_mode
+            sync_kinds.append("directory" if stat.S_ISDIR(mode) else "file")
+            original_fsync(descriptor)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry, _ = _init_publication_repo(root)
+            artifact = root / build.artifact_path
+            with patch.object(successor.os, "fsync", side_effect=observed_fsync):
+                successor.publish_successor(
+                    build,
+                    artifact_destination=artifact,
+                    registry_destination=registry,
+                    expected_registry_bytes=registry.read_bytes(),
+                    repo_root=root,
+                )
+        self.assertEqual(sync_kinds.count("file"), 2)
+        self.assertEqual(sync_kinds.count("directory"), 2)
+
+    def test_post_update_ref_verification_failure_keeps_successor_authoritative(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry, _ = _init_publication_repo(root)
+            artifact = root / build.artifact_path
+            old_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            with patch.object(
+                successor,
+                "load_calibration_acceptance_registry",
+                side_effect=ValueError("verification fault"),
+            ):
+                with self.assertRaises(successor.SuccessorDurabilityUncertain):
+                    successor.publish_successor(
+                        build,
+                        artifact_destination=artifact,
+                        registry_destination=registry,
+                        expected_registry_bytes=registry.read_bytes(),
+                        repo_root=root,
+                    )
+            new_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self.assertNotEqual(new_head, old_head)
+            self.assertEqual(registry.read_bytes(), build.registry_bytes)
+            self.assertEqual(artifact.read_bytes(), build.artifact_bytes)
+            loaded = bracketing.load_calibration_acceptance_registry(
+                registry, repo_root=root, require_committed=True
+            )
+            self.assertEqual(
+                bracketing._active_registry_entry(loaded)["acceptance_id"],
+                build.artifact["acceptance_id"],
+            )
+
+    def test_cli_returns_3_for_post_commit_durability_uncertainty(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry = root / "registry.json"
+            observed = root / "observed.json"
+            registry.write_bytes(REGISTRY_PATH.read_bytes())
+            observed.write_text(
+                json.dumps(_parent_artifact()["identity_epoch"]), encoding="utf-8"
+            )
+            args = SimpleNamespace(
+                ledger=root / "ledger.jsonl",
+                head_pin=root / "pin.json",
+                registry=registry,
+                repo_root=root,
+                observed_identity=observed,
+                issue=True,
+                artifact_out=root / build.artifact_path,
+                registry_out=registry,
+            )
+            parser = SimpleNamespace(parse_args=lambda _argv: args)
+            stderr = io.StringIO()
+            with patch.object(successor, "_parser", return_value=parser), patch.object(
+                successor, "load_calibration_acceptance_registry", return_value=build.registry
+            ), patch.object(
+                successor,
+                "_load_parent_artifact",
+                return_value=(build.registry["entries"][0], _parent_artifact()),
+            ), patch.object(
+                successor, "load_calibration_ledger_snapshot", return_value=_snapshot()
+            ), patch.object(
+                successor, "build_calibration_acceptance_successor", return_value=build
+            ), patch.object(
+                successor,
+                "publish_successor",
+                side_effect=successor.SuccessorDurabilityUncertain("post-commit"),
+            ), redirect_stderr(stderr):
+                self.assertEqual(successor.main([]), 3)
+            self.assertIn("committed_durability_uncertain", stderr.getvalue())
 
     def test_publication_co_lands_both_paths_and_verifies_committed_mode(self) -> None:
         build = successor.build_calibration_acceptance_successor(

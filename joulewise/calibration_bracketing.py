@@ -1040,6 +1040,8 @@ def load_calibration_acceptance_registry(
             or artifact_basis_ids is None
             or artifact_basis_ids
             != parent_basis_ids | post_cutoff_valid_ids
+            or artifact_basis_ids - parent_basis_ids
+            != set(lineage["trigger_judgment"]["new_content_ids"])
         ):
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_derivation_basis_invalid"
@@ -1444,6 +1446,14 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
             != representative["instrument_evidence_sha256"]
         ):
             return False
+    parent_cutoff_sequence = lineage["parent_ledger_cutoff"]["sequence"]
+    absorbed_post_parent_ids = {
+        member["content_id"]
+        for member in corpus["members"]
+        if member["finalization_sequence"] > parent_cutoff_sequence
+    }
+    if absorbed_post_parent_ids != set(judgment["new_content_ids"]):
+        return False
     try:
         envelope = derivation.get("lineage_envelope")
         if not isinstance(envelope, Mapping):
