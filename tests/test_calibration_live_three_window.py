@@ -67,13 +67,13 @@ _USE_WINDOW_BINDING = object()
 _USE_WINDOW_RUNS_ROOT = object()
 _ISSUANCE_BASE_SEQUENCE = 76
 _LIVE_SESSION_COUNT = 3
-_PRODUCTION_OPERATIONS_PER_SESSION = 1 + 2 * len(BRACKET_SESSION_SLOTS)
-_PRODUCTION_RECEIPTS_PER_SESSION = (
-    _PRODUCTION_OPERATIONS_PER_SESSION * APPEND_RECORDS_PER_OPERATION
+_OPERATIONS_PER_SESSION = 1 + 2 * len(BRACKET_SESSION_SLOTS)
+_PHYSICAL_RECORDS_PER_SESSION = (
+    _OPERATIONS_PER_SESSION * APPEND_RECORDS_PER_OPERATION
 )
 _EXPECTED_TERMINAL_SEQUENCE = (
     _ISSUANCE_BASE_SEQUENCE
-    + _LIVE_SESSION_COUNT * _PRODUCTION_RECEIPTS_PER_SESSION
+    + _LIVE_SESSION_COUNT * _PHYSICAL_RECORDS_PER_SESSION
 )
 
 
@@ -917,7 +917,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     snapshot.head_sequence,
-                    self.base_sequence + index * _PRODUCTION_RECEIPTS_PER_SESSION,
+                    self.base_sequence + index * _PHYSICAL_RECORDS_PER_SESSION,
                 )
                 self.assertEqual(pin_value["sequence"], snapshot.head_sequence)
                 self.assertEqual(pin_value["head_digest"], snapshot.head_digest)
@@ -960,12 +960,19 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self.assertEqual(self.snapshot.head_sequence, _EXPECTED_TERMINAL_SEQUENCE)
         self.assertEqual(
             len(live),
-            expected["session_count"] * _PRODUCTION_RECEIPTS_PER_SESSION,
+            expected["session_count"] * _PHYSICAL_RECORDS_PER_SESSION,
         )
+        # The fixture predates the intent protocol and names its semantic
+        # operation count ``receipts_per_session``. Keep that historical
+        # oracle distinct from the physical append cadence.
         self.assertEqual(
             receipt_model["receipts_per_session"],
-            _PRODUCTION_OPERATIONS_PER_SESSION,
+            _OPERATIONS_PER_SESSION,
         )
+        self.assertEqual(len(receipt_model["events"]), _OPERATIONS_PER_SESSION)
+        self.assertEqual(_OPERATIONS_PER_SESSION, 5)
+        self.assertEqual(APPEND_RECORDS_PER_OPERATION, 2)
+        self.assertEqual(_PHYSICAL_RECORDS_PER_SESSION, 10)
         for window in self.windows.values():
             rows = [
                 row
@@ -985,7 +992,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 if row.get("schema_version") == CONTROL_SCHEMA
                 and row.get("event") == APPEND_INTENT_EVENT
             ]
-            self.assertEqual(len(rows), _PRODUCTION_RECEIPTS_PER_SESSION)
+            self.assertEqual(len(rows), _PHYSICAL_RECORDS_PER_SESSION)
             self.assertEqual(
                 len(intent_rows),
                 len(business_rows) * (APPEND_RECORDS_PER_OPERATION - 1),

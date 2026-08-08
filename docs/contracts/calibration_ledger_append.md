@@ -111,13 +111,31 @@ chain. For each candidate record it applies these rules in order:
 5. A business receipt closes the active intent only when its complete semantic
    core matches. Control receipts are ignored by the observation and bracket
    reducers but remain in the physical chain and head pin.
-6. An issued prefix with no control receipts remains admissible. Once the
-   writer appends an intent, all new business writes use this protocol.
+6. An issued prefix with no control receipts remains admissible. The first
+   admitted control receipt is the activation boundary; after it, every
+   business receipt must close an active intent. A bare business receipt after
+   activation is refused as `calibration_ledger_ungoverned_business` even when
+   its shape, sequence, predecessor, and business transition would otherwise
+   validate.
+
+The maximal admitted chain defines the residue boundary. Every byte after that
+boundary is residue, including a complete chain-shaped receipt preceded by
+junk or any other byte that prevents it from extending the head. Such an
+orphaned receipt is not a valid record and is included in one whole-range
+abandonment. If an active intent commits that receipt's semantic target,
+deterministic intent recovery takes precedence over operator abandonment.
 
 An unresolved valid intent or terminal residue yields
 `calibration_ledger_recovery_required`. Terminal reads and claim evaluation
 refuse that state. A clean abandonment control receipt is evidence, not an
 unresolved observation.
+
+Terminal session status is determined from business receipts. Once the
+session's POST finalization or governed business abort is terminal, any
+authenticated trailing control receipts remain part of the physical head and
+the emitted terminal pin pins that final physical control receipt. A later
+business receipt is not a trailing-control extension and prevents terminal-pin
+emission.
 
 ## State machine
 
@@ -167,10 +185,13 @@ serializes parsing, recovery, intent creation, and target finalization.
 
 The CLI accepts no payload, journal source, target JSON, or byte range.
 `abandon-tail` always begins at the parser's first byte after the maximal valid
-chain. It refuses when the maximal chain is behind the committed pin, when a
-valid intent is active, or when the proposed range would cross a valid intent
-or finalization. Operators cannot abandon a committed head, an admitted
-receipt, or an irrevocable business operation.
+chain. Before appending, it verifies that the digest at the pin's exact
+sequence equals the committed digest; a same-sequence sibling is not the
+committed head. It refuses when that pinned head is absent or a valid intent is
+active. Because the residue starts only after the maximal admitted chain, the
+whole range may include later chain-shaped orphan bytes without crossing a
+valid record. Operators cannot abandon a committed head, an admitted receipt,
+or an irrevocable business operation.
 
 The ordinary powermetrics writer calls the same `repair` implementation before
 slot validation and makes one outer retry with the same stable operation

@@ -131,6 +131,7 @@ REFUSAL_TAXONOMY: Mapping[str, str] = MappingProxyType(
         "calibration_ledger_rollback": "the physical ledger is a proper prefix of the pinned head",
         "calibration_ledger_recovery_required": "the ledger has an unresolved append intent or non-admitted tail residue",
         "calibration_ledger_operation_conflict": "an operation key conflicts with its durable target commitment",
+        "calibration_ledger_ungoverned_business": "a business receipt after protocol activation has no completed append intent",
         "calibration_ledger_baseline_missing": "the acceptance cutoff is not in the current chain",
         "calibration_ledger_custody_invalid": "receipt-bound evidence bytes are absent or hash-invalid",
         "calibration_ledger_snapshot_required": "claim evaluation did not receive one immutable snapshot",
@@ -1106,6 +1107,7 @@ def _control_state_admits(
     receipts: Sequence[Mapping[str, Any]],
     offset: int,
     active_intent: Mapping[str, Any] | None,
+    protocol_active: bool,
     expected_sequence: int,
     predecessor_digest: str,
 ) -> tuple[bool, Mapping[str, Any] | None]:
@@ -1145,7 +1147,7 @@ def _control_state_admits(
         )
         return valid, active_intent
     if active_intent is None:
-        return True, None
+        return not protocol_active, None
     target = _intent_target_receipt(
         active_intent,
         sequence=expected_sequence,
@@ -1211,6 +1213,7 @@ def _scan_physical_ledger(raw: bytes) -> _PhysicalLedger:
     predecessor = GENESIS_DIGEST
     expected_sequence = 1
     active_intent: Mapping[str, Any] | None = None
+    protocol_active = False
     seen_digests: set[str] = set()
     terminal_failure = "calibration_ledger_malformed"
     while offset < len(raw):
@@ -1231,6 +1234,7 @@ def _scan_physical_ledger(raw: bytes) -> _PhysicalLedger:
                 receipts=receipts,
                 offset=offset,
                 active_intent=active_intent,
+                protocol_active=protocol_active,
                 expected_sequence=expected_sequence,
                 predecessor_digest=predecessor,
             )
@@ -1241,12 +1245,21 @@ def _scan_physical_ledger(raw: bytes) -> _PhysicalLedger:
             seen_digests.add(predecessor)
             expected_sequence += 1
             active_intent = next_intent
+            protocol_active = (
+                protocol_active or value.get("schema_version") == CONTROL_SCHEMA
+            )
             offset = line_end + 1
             continue
         if shape_valid and not chain_valid:
             terminal_failure = "calibration_ledger_chain_conflict"
         elif chain_valid and not state_valid:
-            terminal_failure = "calibration_ledger_operation_conflict"
+            terminal_failure = (
+                "calibration_ledger_ungoverned_business"
+                if protocol_active
+                and active_intent is None
+                and value.get("schema_version") != CONTROL_SCHEMA
+                else "calibration_ledger_operation_conflict"
+            )
         bridge = _matching_abandonment_bridge(
             raw,
             residue_start=offset,
@@ -1262,6 +1275,7 @@ def _scan_physical_ledger(raw: bytes) -> _PhysicalLedger:
         predecessor = str(abandonment["receipt_digest"])
         seen_digests.add(predecessor)
         expected_sequence += 1
+        protocol_active = True
         offset = next_offset
         terminal_failure = "calibration_ledger_malformed"
     residue = raw[offset:]
@@ -3020,31 +3034,17 @@ def repair_calibration_ledger(
         os.close(lock_descriptor)
 
 
-def _residue_contains_protected_record(
-    residue: bytes, *, expected_sequence: int, predecessor_digest: str
+def _physical_chain_contains_pin(
+    receipts: Sequence[Mapping[str, Any]], pin: tuple[int, str]
 ) -> bool:
-    start = 0
-    while start < len(residue):
-        line_end = residue.find(b"\n", start)
-        if line_end < 0:
-            break
-        value = _decode_line(residue, start, line_end)
-        if (
-            value is not None
-            and _valid_receipt_shape(value)
-            and value.get("sequence") == expected_sequence
-            and value.get("predecessor_digest") == predecessor_digest
-            and value.get("event")
-            in {
-                APPEND_INTENT_EVENT,
-                "finalization",
-                HISTORICAL_IMPORT_FINALIZATION_EVENT,
-                BRACKET_SESSION_FINALIZATION_EVENT,
-            }
-        ):
-            return True
-        start = line_end + 1
-    return False
+    sequence, digest = pin
+    if sequence == 0:
+        return digest == GENESIS_DIGEST
+    return (
+        len(receipts) >= sequence
+        and receipts[sequence - 1].get("sequence") == sequence
+        and receipts[sequence - 1].get("receipt_digest") == digest
+    )
 
 
 def abandon_calibration_ledger_tail(
@@ -3078,9 +3078,10 @@ def abandon_calibration_ledger_tail(
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 raw = handle.read()
                 physical = _scan_physical_ledger(raw)
-                if len(physical.receipts) < pin[0]:
+                if not _physical_chain_contains_pin(physical.receipts, pin):
                     raise CalibrationLedgerError(
-                        "operator abandonment cannot cross the committed head"
+                        "operator abandonment requires the committed head digest "
+                        "at its pinned sequence"
                     )
                 if physical.active_intent is not None:
                     raise CalibrationLedgerError(
@@ -3088,19 +3089,6 @@ def abandon_calibration_ledger_tail(
                     )
                 if not physical.residue:
                     return _inspection_from_physical(physical)
-                predecessor = (
-                    str(physical.receipts[-1]["receipt_digest"])
-                    if physical.receipts
-                    else GENESIS_DIGEST
-                )
-                if _residue_contains_protected_record(
-                    physical.residue,
-                    expected_sequence=len(physical.receipts) + 1,
-                    predecessor_digest=predecessor,
-                ):
-                    raise CalibrationLedgerError(
-                        "operator abandonment cannot cross a valid intent or finalization"
-                    )
                 raw = _append_abandonment(
                     handle,
                     raw,
@@ -3647,9 +3635,20 @@ def terminal_head_pin_for_session(
         if session.state == "finalized"
         else session.abort_receipt_digest
     )
-    final = receipts[-1] if receipts else None
-    if final is None or final["receipt_digest"] != terminal_digest:
+    terminal_index = next(
+        (
+            index
+            for index, receipt in enumerate(receipts)
+            if receipt.get("receipt_digest") == terminal_digest
+        ),
+        None,
+    )
+    if terminal_index is None or any(
+        receipt.get("schema_version") != CONTROL_SCHEMA
+        for receipt in receipts[terminal_index + 1 :]
+    ):
         raise CalibrationLedgerError("session closure is not the terminal ledger head")
+    final = receipts[-1]
     return _head_pin_for_valid_receipt(final)
 
 

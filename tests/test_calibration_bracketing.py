@@ -874,16 +874,61 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def _bound_session_fixture(self):
-        specifications = (
-            ("neighbor-pre", 98.0, "0.025", None, None, 1),
-            ("neighbor-post", 112.0, "0.026", None, None, 2),
-            ("session-pre", 99.0, "0.024", "session-alpha", "pre", 4),
-            ("session-post", 111.0, "0.027", "session-alpha", "post", 5),
+        operations = (
+            {
+                "operation_id": "neighbor-pre",
+                "kind": "observation",
+                "capture": 98.0,
+                "bound": "0.025",
+                "session_id": None,
+                "slot": None,
+            },
+            {
+                "operation_id": "neighbor-post",
+                "kind": "observation",
+                "capture": 112.0,
+                "bound": "0.026",
+                "session_id": None,
+                "slot": None,
+            },
+            {
+                "operation_id": "session-open",
+                "kind": "session-open",
+            },
+            {
+                "operation_id": "session-pre",
+                "kind": "observation",
+                "capture": 99.0,
+                "bound": "0.024",
+                "session_id": "session-alpha",
+                "slot": "pre",
+            },
+            {
+                "operation_id": "session-post",
+                "kind": "observation",
+                "capture": 111.0,
+                "bound": "0.027",
+                "session_id": "session-alpha",
+                "slot": "post",
+            },
         )
+        operation_sequences = {
+            specification["operation_id"]: (
+                operation_number * APPEND_RECORDS_PER_OPERATION
+            )
+            for operation_number, specification in enumerate(operations, start=1)
+        }
         observations = []
         candidates = []
-        for name, capture, bound, session_id, slot, operation_number in specifications:
-            sequence = operation_number * APPEND_RECORDS_PER_OPERATION
+        for specification in operations:
+            if specification["kind"] != "observation":
+                continue
+            name = specification["operation_id"]
+            capture = specification["capture"]
+            bound = specification["bound"]
+            session_id = specification["session_id"]
+            slot = specification["slot"]
+            sequence = operation_sequences[name]
             manifest = hashlib.sha256(f"manifest:{name}".encode()).hexdigest()
             evidence = hashlib.sha256(f"evidence:{name}".encode()).hexdigest()
             hashes = {
@@ -954,7 +999,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             if observation.bracket_slot is not None
         }
         capability_digest = hashlib.sha256(b"capability-alpha").hexdigest()
-        capability_sequence = 3 * APPEND_RECORDS_PER_OPERATION
+        capability_sequence = operation_sequences["session-open"]
         session = CalibrationBracketSession(
             session_id="session-alpha",
             window_id="window-alpha",
@@ -970,43 +1015,50 @@ class CalibrationBracketingTests(unittest.TestCase):
             state="finalized",
             finalized_slots=MappingProxyType(by_slot),
         )
-        business_receipts = [
-            {
-                "schema_version": "synthetic-observation",
-                "event": "finalization",
-                "sequence": observations[0].sequence,
-                "receipt_digest": observations[0].receipt_digest,
-            },
-            {
-                "schema_version": "synthetic-observation",
-                "event": "finalization",
-                "sequence": observations[1].sequence,
-                "receipt_digest": observations[1].receipt_digest,
-            },
-            {
-                "schema_version": "synthetic-bracket-session",
-                "event": BRACKET_SESSION_OPEN_EVENT,
-                "session_id": "session-alpha",
-                "sequence": capability_sequence,
-                "receipt_digest": capability_digest,
-            },
-            {
-                "schema_version": "synthetic-bracket-session",
-                "event": BRACKET_SESSION_FINALIZATION_EVENT,
-                "session_id": "session-alpha",
-                "slot": "pre",
-                "sequence": by_slot["pre"].sequence,
-                "receipt_digest": by_slot["pre"].receipt_digest,
-            },
-            {
-                "schema_version": "synthetic-bracket-session",
-                "event": BRACKET_SESSION_FINALIZATION_EVENT,
-                "session_id": "session-alpha",
-                "slot": "post",
-                "sequence": by_slot["post"].sequence,
-                "receipt_digest": by_slot["post"].receipt_digest,
-            },
-        ]
+        observations_by_attempt = {
+            observation.attempt_id: observation for observation in observations
+        }
+        business_receipts = []
+        for specification in operations:
+            if specification["kind"] == "session-open":
+                business_receipts.append(
+                    {
+                        "schema_version": "synthetic-bracket-session",
+                        "event": BRACKET_SESSION_OPEN_EVENT,
+                        "session_id": "session-alpha",
+                        "sequence": operation_sequences[
+                            specification["operation_id"]
+                        ],
+                        "receipt_digest": capability_digest,
+                    }
+                )
+                continue
+            observation = observations_by_attempt[
+                f"attempt-{specification['operation_id']}"
+            ]
+            session_id = specification["session_id"]
+            business_receipts.append(
+                {
+                    "schema_version": (
+                        "synthetic-bracket-session"
+                        if session_id
+                        else "synthetic-observation"
+                    ),
+                    "event": (
+                        BRACKET_SESSION_FINALIZATION_EVENT
+                        if session_id
+                        else "finalization"
+                    ),
+                    **({"session_id": session_id} if session_id else {}),
+                    **(
+                        {"slot": specification["slot"]}
+                        if specification["slot"]
+                        else {}
+                    ),
+                    "sequence": observation.sequence,
+                    "receipt_digest": observation.receipt_digest,
+                }
+            )
         if APPEND_RECORDS_PER_OPERATION != 2:
             raise AssertionError("synthetic fixture needs the adopted intent-target pair")
         physical_receipts = []

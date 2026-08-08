@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import io
+import inspect
 import json
 import hashlib
 from pathlib import Path
@@ -2142,18 +2143,28 @@ module.bootstrap_historical_import(
 
     def _persist_reservation_intent(self, attempt_id: str = "operation-a"):
         custody = self.root / attempt_id
-
-        def stop_after_intent(stage):
-            if stage == "intent":
-                raise OSError("crash after intent fsync")
-
-        with mock.patch.object(
-            calibration_ledger,
-            "_after_ledger_fsync",
-            side_effect=stop_after_intent,
-        ):
-            with self.assertRaisesRegex(OSError, "intent fsync"):
-                self._reserve(attempt_id, custody)
+        target = calibration_ledger._new_receipt(
+            sequence=1,
+            predecessor_digest=GENESIS_DIGEST,
+            event="reservation",
+            attempt_id=attempt_id,
+            content_id=None,
+            artifacts={},
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s=None,
+            exact_bound_lexeme_s=None,
+            disposition="pending",
+            custody_locator=str(custody),
+        )
+        target_core = calibration_ledger._target_core(target)
+        intent = calibration_ledger._new_append_intent(
+            receipts=[],
+            byte_offset=0,
+            target_core=target_core,
+            operation_key=calibration_ledger._operation_key_for_core(target_core),
+        )
+        self.ledger.write_bytes(canonical_json_bytes(intent) + b"\n")
         physical = calibration_ledger._scan_physical_ledger(
             self.ledger.read_bytes()
         )
@@ -2244,17 +2255,244 @@ module.bootstrap_historical_import(
                         abandonment["sequence"], business[-1]["sequence"]
                     )
 
+    def test_bare_business_pair_after_protocol_activation_is_named_refusal(
+        self,
+    ) -> None:
+        governed_custody = self._custody("governed-operation")
+        self._reserve("governed-operation", governed_custody)
+        self._finalize("governed-operation", governed_custody)
+        physical = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        self._write_pin(
+            {
+                "sequence": len(physical.receipts),
+                "head_digest": physical.receipts[-1]["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+
+        foreign_custody = self._custody("foreign-bare-operation")
+        reservation = calibration_ledger._new_receipt(
+            sequence=len(physical.receipts) + 1,
+            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+            event="reservation",
+            attempt_id="foreign-bare-operation",
+            content_id=None,
+            artifacts={},
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s=None,
+            exact_bound_lexeme_s=None,
+            disposition="pending",
+            custody_locator=str(foreign_custody),
+        )
+        hashes = artifact_hashes(foreign_custody)
+        finalization = calibration_ledger._new_receipt(
+            sequence=reservation["sequence"] + 1,
+            predecessor_digest=reservation["receipt_digest"],
+            event="finalization",
+            attempt_id="foreign-bare-operation",
+            content_id=content_id_from_artifact_hashes(hashes),
+            artifacts=hashes,
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s="100.0",
+            exact_bound_lexeme_s="0.025",
+            disposition="valid",
+            custody_locator=str(foreign_custody),
+        )
+        with self.ledger.open("ab") as handle:
+            handle.write(canonical_json_bytes(reservation) + b"\n")
+            handle.write(canonical_json_bytes(finalization) + b"\n")
+
+        snapshot = self._snapshot(verify_custody=False)
+        self.assertIn(
+            "calibration_ledger_ungoverned_business",
+            snapshot.refusal_reasons,
+        )
+        self.assertNotIn(
+            "foreign-bare-operation", snapshot.observation_by_attempt
+        )
+
+    def test_operator_abandons_junk_and_orphaned_finalization_as_one_residue(
+        self,
+    ) -> None:
+        custody = self._custody("orphaned-finalization")
+        reservation = self._reserve("orphaned-finalization", custody)
+        physical = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        self._write_pin(
+            {
+                "sequence": len(physical.receipts),
+                "head_digest": physical.receipts[-1]["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        hashes = artifact_hashes(custody)
+        orphan = calibration_ledger._new_receipt(
+            sequence=len(physical.receipts) + 1,
+            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+            event="finalization",
+            attempt_id=reservation["attempt_id"],
+            content_id=content_id_from_artifact_hashes(hashes),
+            artifacts=hashes,
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s="100.0",
+            exact_bound_lexeme_s="0.025",
+            disposition="valid",
+            custody_locator=str(custody),
+        )
+        residue = b"junk\n" + canonical_json_bytes(orphan) + b"\n"
+        with self.ledger.open("ab") as handle:
+            handle.write(residue)
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "operator-attested abandon-tail"
+        ):
+            calibration_ledger.repair_calibration_ledger(self.ledger)
+        result = calibration_ledger.abandon_calibration_ledger_tail(
+            self.ledger,
+            operator_identity="night-operator",
+            attestation_reason="junk broke the chain before the orphaned receipt",
+            head_pin_path=self.pin,
+            require_committed_pin=False,
+        )
+        self.assertEqual(result.state, "clean")
+        final = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        abandonment = final.receipts[-1]
+        self.assertEqual(abandonment["residue_length"], len(residue))
+        self.assertEqual(
+            abandonment["residue_sha256"], hashlib.sha256(residue).hexdigest()
+        )
+        self.assertFalse(
+            any(
+                row.get("event") == "finalization"
+                and row.get("attempt_id") == "orphaned-finalization"
+                for row in final.receipts
+            )
+        )
+
+    def test_operator_abandonment_refuses_same_sequence_sibling_of_pin(
+        self,
+    ) -> None:
+        def reservation(attempt_id: str) -> dict:
+            return calibration_ledger._new_receipt(
+                sequence=1,
+                predecessor_digest=GENESIS_DIGEST,
+                event="reservation",
+                attempt_id=attempt_id,
+                content_id=None,
+                artifacts={},
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s=None,
+                exact_bound_lexeme_s=None,
+                disposition="pending",
+                custody_locator=str(self.root / attempt_id),
+            )
+
+        pinned = reservation("pinned-head")
+        sibling = reservation("same-sequence-sibling")
+        self.assertNotEqual(pinned["receipt_digest"], sibling["receipt_digest"])
+        self._write_pin(
+            {
+                "sequence": pinned["sequence"],
+                "head_digest": pinned["receipt_digest"],
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        original = canonical_json_bytes(sibling) + b"\nterminal-residue"
+        self.ledger.write_bytes(original)
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "committed head digest"
+        ):
+            calibration_ledger.abandon_calibration_ledger_tail(
+                self.ledger,
+                operator_identity="night-operator",
+                attestation_reason="must authenticate the pinned digest",
+                head_pin_path=self.pin,
+                require_committed_pin=False,
+            )
+        self.assertEqual(self.ledger.read_bytes(), original)
+
+    def test_terminal_pin_includes_authenticated_trailing_abandonment(self) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        self._finalize_bracket_slot("session-alpha", "post")
+        self._write_pin(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+        )
+        with self.ledger.open("ab") as handle:
+            handle.write(b"post-terminal-residue")
+        result = calibration_ledger.abandon_calibration_ledger_tail(
+            self.ledger,
+            operator_identity="night-operator",
+            attestation_reason="authenticate residue after terminal post",
+            head_pin_path=self.pin,
+            require_committed_pin=False,
+        )
+        self.assertEqual(result.state, "clean")
+        physical = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        abandonment = physical.receipts[-1]
+        self.assertEqual(abandonment["event"], calibration_ledger.ABANDONMENT_EVENT)
+        pin = terminal_head_pin_for_session(
+            self.ledger, session_id="session-alpha"
+        )
+        self.assertEqual(pin["sequence"], abandonment["sequence"])
+        self.assertEqual(pin["head_digest"], abandonment["receipt_digest"])
+
     def test_intent_commitment_mutation_and_operator_crossing_fail_closed(self) -> None:
         _custody, physical = self._persist_reservation_intent()
         intent = dict(physical.active_intent or {})
         target_core = dict(intent["target_core"])
-        target_core["attempt_id"] = "foreign-operation"
+        target_core["custody_locator"] = str(self.root / "substituted-custody")
+        self.assertEqual(
+            calibration_ledger._operation_key_for_core(target_core),
+            intent["operation_key"],
+        )
         intent["target_core"] = target_core
         intent["receipt_digest"] = calibration_ledger._receipt_digest(intent)
         self.ledger.write_bytes(canonical_json_bytes(intent) + b"\n")
-        inspected = calibration_ledger.inspect_calibration_ledger(self.ledger)
-        self.assertEqual(inspected.state, "residue")
-        self.assertEqual(inspected.head_sequence, 0)
+
+        def assert_content_binding_refuses() -> None:
+            inspected = calibration_ledger.inspect_calibration_ledger(self.ledger)
+            self.assertEqual(inspected.state, "residue")
+            self.assertEqual(inspected.head_sequence, 0)
+
+        assert_content_binding_refuses()
+        validator_source = inspect.getsource(
+            calibration_ledger._valid_control_receipt_shape
+        )
+        binding_check = (
+            '            and canonical_sha256(target_core) '
+            '== receipt["target_core_sha256"]\n'
+        )
+        self.assertEqual(validator_source.count(binding_check), 1)
+        mutant_source = validator_source.replace(binding_check, "")
+        mutant_namespace = dict(calibration_ledger.__dict__)
+        exec(compile(mutant_source, "<content-binding-mutant>", "exec"), mutant_namespace)
+        mutant_validator = mutant_namespace["_valid_control_receipt_shape"]
+        with mock.patch.object(
+            calibration_ledger,
+            "_valid_control_receipt_shape",
+            mutant_validator,
+        ):
+            with self.assertRaises(AssertionError):
+                assert_content_binding_refuses()
+            mutant_inspection = calibration_ledger.inspect_calibration_ledger(
+                self.ledger
+            )
+            self.assertEqual(mutant_inspection.state, "intent")
+            self.assertEqual(mutant_inspection.head_sequence, 1)
 
         self.ledger.write_bytes(
             canonical_json_bytes(physical.active_intent) + b"\n"
@@ -2268,56 +2506,92 @@ module.bootstrap_historical_import(
                 require_committed_pin=False,
             )
 
-    def test_crash_boundaries_converge_without_deleting_bytes(self) -> None:
+    def test_sigkill_at_all_six_append_points_converges_without_deletion(
+        self,
+    ) -> None:
         cases = (
             "during-intent",
             "after-intent-fsync",
             "during-target",
             "after-target-fsync",
+            "during-abandonment",
+            "after-abandonment-fsync",
         )
+        repo_root = Path(__file__).resolve().parents[1]
         for case in cases:
             with self.subTest(case=case):
                 self.ledger.unlink(missing_ok=True)
-                calls = 0
-                real_write = calibration_ledger._write_ledger_append_payload
+                abandonment_case = "abandonment" in case
+                attempt_id = (
+                    "abandon-crash" if abandonment_case else "crash-boundary"
+                )
+                if abandonment_case:
+                    self._persist_reservation_intent(attempt_id)
+                    with self.ledger.open("ab") as handle:
+                        handle.write(b"foreign-tail")
+                action = (
+                    f"ledger.repair_calibration_ledger(Path({str(self.ledger)!r}))"
+                    if abandonment_case
+                    else f"""
+ledger.append_pending_receipt(
+    Path({str(self.ledger)!r}),
+    attempt_id={attempt_id!r},
+    custody_locator={str(self.root / 'crash')!r},
+    identity_epoch={self.epoch!r},
+    t1_bindings={self.t1!r},
+    head_pin_path=Path({str(self.pin)!r}),
+    require_committed_pin=False,
+)
+"""
+                )
+                child_code = f"""
+import os
+from pathlib import Path
+import signal
+import joulewise.calibration_ledger as ledger
 
-                def crash_write(handle, payload):
-                    nonlocal calls
-                    calls += 1
-                    crash_call = 1 if case == "during-intent" else 2
-                    if case.startswith("during") and calls == crash_call:
-                        handle.write(payload[: max(1, len(payload) // 3)])
-                        handle.flush()
-                        calibration_ledger.os.fsync(handle.fileno())
-                        raise OSError(case)
-                    return real_write(handle, payload)
+case = {case!r}
+write_calls = [0]
+real_write = ledger._write_ledger_append_payload
 
-                def crash_after(stage):
-                    if case == "after-intent-fsync" and stage == "intent":
-                        raise OSError(case)
-                    if case == "after-target-fsync" and stage == "target":
-                        raise OSError(case)
+def crash_write(handle, payload):
+    write_calls[0] += 1
+    crash_call = 1 if case in {{'during-intent', 'during-abandonment'}} else 2
+    if case.startswith('during-') and write_calls[0] == crash_call:
+        handle.write(payload[:max(1, len(payload) // 3)])
+        handle.flush()
+        os.fsync(handle.fileno())
+        os.kill(os.getpid(), signal.SIGKILL)
+    return real_write(handle, payload)
 
-                with (
-                    mock.patch.object(
-                        calibration_ledger,
-                        "_write_ledger_append_payload",
-                        side_effect=crash_write,
-                    ),
-                    mock.patch.object(
-                        calibration_ledger,
-                        "_after_ledger_fsync",
-                        side_effect=crash_after,
-                    ),
-                ):
-                    with self.assertRaisesRegex(OSError, case):
-                        self._reserve("crash-boundary", self.root / "crash")
+def crash_after(stage):
+    expected = {{
+        'after-intent-fsync': 'intent',
+        'after-target-fsync': 'target',
+        'after-abandonment-fsync': 'abandonment',
+    }}.get(case)
+    if stage == expected:
+        os.kill(os.getpid(), signal.SIGKILL)
+
+ledger._write_ledger_append_payload = crash_write
+ledger._after_ledger_fsync = crash_after
+{action}
+raise SystemExit('crash hook was not reached')
+"""
+                killed = subprocess.run(
+                    [sys.executable, "-c", child_code],
+                    cwd=repo_root,
+                    check=False,
+                )
+                self.assertEqual(killed.returncode, -signal.SIGKILL)
+
                 before = self.ledger.read_bytes()
                 calibration_ledger.repair_calibration_ledger(self.ledger)
                 after = self.ledger.read_bytes()
                 self.assertTrue(after.startswith(before))
                 final = calibration_ledger._scan_physical_ledger(after)
                 self.assertFalse(final.reasons)
+                self.assertIsNone(final.active_intent)
                 business = [
                     row
                     for row in final.receipts
@@ -2334,64 +2608,14 @@ module.bootstrap_historical_import(
                         )
                     )
                 else:
-                    self.assertEqual(business[-1]["attempt_id"], "crash-boundary")
-                    retry = self._reserve("crash-boundary", self.root / "crash")
+                    self.assertEqual([row["attempt_id"] for row in business], [attempt_id])
+                    retry_custody = (
+                        self.root / attempt_id
+                        if abandonment_case
+                        else self.root / "crash"
+                    )
+                    retry = self._reserve(attempt_id, retry_custody)
                     self.assertEqual(retry, business[-1])
-
-    def test_abandonment_crash_boundaries_bind_enlarged_residue_then_finalize(
-        self,
-    ) -> None:
-        for case in ("during-abandonment", "after-abandonment-fsync"):
-            with self.subTest(case=case):
-                self.ledger.unlink(missing_ok=True)
-                _custody, physical = self._persist_reservation_intent(
-                    "abandon-crash"
-                )
-                self.ledger.write_bytes(self.ledger.read_bytes() + b"foreign-tail")
-                real_write = calibration_ledger._write_ledger_append_payload
-
-                def crash_write(handle, payload):
-                    if case == "during-abandonment":
-                        handle.write(payload[: max(1, len(payload) // 3)])
-                        handle.flush()
-                        calibration_ledger.os.fsync(handle.fileno())
-                        raise OSError(case)
-                    return real_write(handle, payload)
-
-                def crash_after(stage):
-                    if case == "after-abandonment-fsync" and stage == "abandonment":
-                        raise OSError(case)
-
-                with (
-                    mock.patch.object(
-                        calibration_ledger,
-                        "_write_ledger_append_payload",
-                        side_effect=crash_write,
-                    ),
-                    mock.patch.object(
-                        calibration_ledger,
-                        "_after_ledger_fsync",
-                        side_effect=crash_after,
-                    ),
-                ):
-                    with self.assertRaisesRegex(OSError, case):
-                        calibration_ledger.repair_calibration_ledger(self.ledger)
-                before = self.ledger.read_bytes()
-                calibration_ledger.repair_calibration_ledger(self.ledger)
-                after = self.ledger.read_bytes()
-                self.assertTrue(after.startswith(before))
-                final = calibration_ledger._scan_physical_ledger(after)
-                self.assertFalse(final.reasons)
-                self.assertIsNone(final.active_intent)
-                self.assertEqual(
-                    [
-                        row.get("attempt_id")
-                        for row in final.receipts
-                        if row.get("schema_version")
-                        != calibration_ledger.CONTROL_SCHEMA
-                    ],
-                    ["abandon-crash"],
-                )
 
     def test_legacy_journal_is_hashed_archived_and_never_replayed(self) -> None:
         legacy = calibration_ledger._legacy_append_journal_path(self.ledger)
