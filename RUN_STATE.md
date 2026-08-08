@@ -40,7 +40,64 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶ T0 SESSION 2026-08-08 (40h window) — mid-session state (updated ~afternoon)
+## ▶▶ T0 SESSION FINAL CHECKPOINT (2026-08-08 ~13:40, Ed stop order) — /clear-SAFE; SUCCESSOR STARTS HERE
+
+**Nothing in flight. Zero live codex processes. All branches pushed.**
+Session scratchpad (prompts/reports/consult copies + checkpoint-notes.md):
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad`.
+Worktrees {trust,recovery,u2rework} under `…/377d50a5-…/scratchpad/` —
+clean, branches pushed, safe to lose.
+
+**SUCCESSOR ORDER (Phase A continuation; D-128 mandate governs):**
+1. **TRUST (mint bar):** round 2 was KILLED mid-run at ~4h22 by Ed's
+   stop order; partial state banked `1cae2bc` (pushed). Core round-2
+   work landed in-tree (authentication_io, custody_store fixture 38
+   content-IDs, conversions); report thin/absent — TRUST NOTHING
+   without the round-2 proofs (reduce.py SHA 5118849d… revert proof,
+   ABA regression, absent-mode parity, fixture hash census, authentic
+   unpatched mint, bidirectional auditor equality). Resume per
+   trust2-prompt.final.md + RULING-CONSULT.md from the checkpoint diff
+   (fresh session; --resume ambiguous after consults ran in that cwd).
+   ⚠ NEW RULING NEEDED FIRST: the fixture is 3.1GB (38×83MB plists);
+   GitHub warned on push. Adjudicate substrate (LFS / thinned traces /
+   generated-at-test-time) BEFORE more fixture work or any PR.
+2. **RECOVERY (arming blocker):** FIX-1..13 ALL CLOSED, banked
+   `468e0a6` (pushed), full suite 2770 OK in-run. Next: fresh gauntlet
+   delta with THREE explicit questions — unexecuted-proof class
+   (count 1), inspect-as-permission class (count 1), and the
+   orphan-reaping finding (checkpoint-notes.md: harness leaked 8
+   spinning SIGKILL children, lead-killed; verify reaping + whether it
+   distorted suite timing). Then lead replay → integration-tree with
+   post-trust main → PR → CI → D-121 → merge discharges ARMING BLOCKER.
+3. **U2: FROZEN at count 3** (branch 5b00200; U2-FROZEN-COUNT3.md is
+   the cold-gate packet). Post-window item. Do not touch outside a
+   cold gate.
+4. **D-127/D-128:** consult custodied `daf9644` (assessed sound,
+   adoption = build session's first move; recovery lands FIRST).
+   D-128 standing mandate: run the loop until a defensible paper.
+5. **Owed bookkeeping (first desk block):** council log C-051 +
+   skill-usage log + session run report (this block is the interim
+   record); consistency sweep after the next merge wave.
+
+**HARDWARE-FOOTPRINT items (Ed directive, task #8 + memory):**
+405GB stale codex-run-v3 scope snapshots purged (88%→43% disk);
+wrapper retention patch written but REVERTED after its test suite
+failed assertion 61 (patched copy: ~/.local/bin/codex-run-v3.patched-
+20260808-DEFERRED; known-good restored + verified; determine whether
+assertion 61 fails PRE-patch before re-landing). Ed authorized codex
+tooling changes for machine-health. Audit scope in task #8: snapshot
+content (exclude runs_* corpora?), enforced-scope launch discipline,
+orphan reaping, full-suite frequency, disk checks in fleet-health
+cadence.
+
+**MERGED to main this session:** results-prose template + linter
+(`1e6fa16`, class ruled dead after 4 deltas — ready for alpha
+numbers). **Decisions minted:** D-126 (U2 synthesis), D-127 (autonomous
+loop, ratified), D-128 (standing run-the-loop mandate). **Rulings
+custodied on main:** trust F1/F2 (`fe85b09`), recovery witness-scope
+(`6981d2b`), D-127 consult (`daf9644`).
+
+## ▶ T0 SESSION 2026-08-08 (40h window) — mid-session state (SUPERSEDED by the final checkpoint above; kept as history)
 
 - Session scratchpad (prompts, scopes, consult copies, out-files):
   `/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad` (SP).
