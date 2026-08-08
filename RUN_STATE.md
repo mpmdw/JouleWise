@@ -22,7 +22,11 @@ executed history except where the EVENING block says otherwise.
   magistrate's OWN contextual final review is the TERMINAL merge-gate
   item (D-118 item 12) — after every other pass INCLUDING CI,
   non-delegable; subagent Fable passes count only as earlier items.
-- **Reasoncode: PR #116 OPEN, gate complete through item 9.** Fix round
+- **Reasoncode: PR #116 MERGED** under the FULL 12-item D-121 gate
+  (CI 11/11; magistrate terminal review PASS at `fc93ec1`, recorded in
+  the PR ledger). The reason-code plumbing is ON MAIN for the three
+  nights; only the spec-ratification lane (Ed ruling 8 + S1-domain +
+  SF2 waiver code) remains. Original status line:** Fix round
   1 landed (`fc93ec1`): degrade-not-raise on the emitter (the crash was
   REACHABLE under producer drift — delta proved a synthetic drift case
   crashed the parent), discriminating dedup regression, whitespace
