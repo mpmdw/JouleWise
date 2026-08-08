@@ -40,9 +40,17 @@ amendment sits under a not-in-force banner). No fix round 2;
 exit-completeness design consult IN FLIGHT
 (`<scratchpad>/exits-consult-out.md`). The recovery branch's custody
 core is CLEAN (no path admits a control receipt as evidence) — the
-class lives in the operator/liveness layer. TRUST: fix round 3 landed
-(`ad16fb2`, replay 2748 OK unpiped); delta4 IN FLIGHT — on ACCEPT:
-PR -> CI -> D-121 terminal review -> merge lifts the mint bar.
+class lives in the operator/liveness layer. TRUST: delta4 FAILED — both
+round-3 classes at COUNT 2 (regression still substitutes the
+production chain; strict-parse both under- and over-scans) → the
+trigger FIRED here too
+(docs/process_traces/2026-08-08-trust-scoping-escalation/ESCALATION.md);
+registration-at-read consult IN FLIGHT
+(`<scratchpad>/trust-scoping-consult-out.md`). The custody-authority
+class stays DEAD; the MINT BAR STAYS UP tonight — the trust merge
+waits for the consult-shaped rework + full gate. THREE consults now
+in flight (exits, q1q13, trust-scoping): the night's remaining spend
+is consult-harvest -> terminating-shape reworks, not fix-round churn.
 
 OVERNIGHT PROGRESS: trust tripwire delta RULED **same-signature NO —
 the operator-authored-authority class is DEAD** (authority terminates in
