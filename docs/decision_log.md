@@ -143,6 +143,7 @@ be re-derived by a future agent gets an entry here.
 | D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
 | D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
 | D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
+| D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
 
 ---
 
@@ -7807,3 +7808,34 @@ terminal slot puts the accountable reviewer at the accountable moment.
 
 **Ledger form:** item 12 reads "Magistrate final review — <head sha>,
 <verdict>, <one-line disposition of any deferred items>."
+
+
+## D-122: Prefill contrast IN SCOPE — 256-token prospectively frozen arm on gamma (Ed ruling 4)
+
+**Date:** 2026-08-08 (Ed, in-thread: the small-prefill measurability
+problem is answered by sizing up the workloads; "I don't want a decode
+only paper/scope if at all possible"). **Status:** RATIFIED. Reverses
+the adjudication's RECOMMEND-no; Ed's apex authority controls.
+
+**Evidence basis (labelled NON-CLAIM sizing scout,
+docs/process_traces/2026-08-07-prefill-feasibility/):** at the
+historical 128-token prompt the best ABBA estimate of the 7B-1.5B
+prefill delta is 5.809930 J against the ~5 J practical bar (D-078/D-083
+composition) — 16% point headroom with the diagnostic interval's lower
+side below the bar: MARGINAL. Proportional sensitivity for a 256-token
+prompt projects ~11.619860 J, comfortably clear. No historical 7B
+corpus above 128 prompt tokens exists, so 256-tok is a sizing
+projection, not demonstrated evidence — which is acceptable because the
+arm is PROSPECTIVELY FROZEN and the claim machinery fails closed.
+
+**Consequences:**
+1. Gamma's campaign pack gains a 256-token prefill ABBA arm (frozen
+   prompt, frozen member/minute budget — lands in the U7 pack under the
+   adopted stage_launch.v1 contract). Night budget grows; the operator
+   packet states the new duration.
+2. Prefill FLOOR cells continue to ride alpha/beta unchanged (D-117).
+3. If the collected contrast lands below the decision bar, the verdict
+   refuses per doctrine and the marginality analysis publishes as
+   prospective sizing evidence — never a quiet omission.
+4. The D-117 clause "contrast decode-only by default; 256-tok arm stays
+   Ed's option" is SUPERSEDED by this exercise of that option.
