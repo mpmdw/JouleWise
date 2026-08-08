@@ -46,7 +46,22 @@ executed history except where the EVENING block says otherwise.
   THE CLASS: same-signature at count 2 → ESCALATION CONSULT, mandatory,
   no round 3. Then: fresh delta → replay → PR → CI → D-121 terminal
   review → merge; the v2 mint bar lifts only then.
-- Recovery implementation still in flight (`<scratchpad>/recovery-out.md`).
+- **Recovery implementation: round 1 returned NEEDS_SCOPE (correct
+  early-return)** — the adopted intent protocol inherently DOUBLES the
+  physical receipt cadence (every business receipt gains a durable
+  intent receipt; a five-operation bracket session becomes ten
+  physical receipts), breaking two out-of-scope positional fixture
+  sets (U4's live-three-window regression and a bracketing fixture).
+  **Magistrate ruled: cadence change is a consequence of the ADOPTED
+  design, not a defect; scope expansion APPROVED for both test files
+  with derived-count discipline (no positional hard-coding — the U4
+  amendments' own rule). Resume in flight**
+  (`<scratchpad>/recovery-resume-launch.log`, report appends to
+  `recovery-out.md`). **BINDING DOWNSTREAM NOTE: the '5-receipt/91'
+  oracle the U5-U7 pack plans re-derived is STALE once recovery lands —
+  pack generation must re-derive receipt-model oracles from the
+  recovery branch (packs are unfrozen pending Ed ruling 2, so no
+  regeneration cost if sequenced recovery-first).**
 
 ### EXTENDED WINDOW (+90min, same evening) — trust + reasoncode gauntlets advanced; three Sol streams in flight at final close
 
