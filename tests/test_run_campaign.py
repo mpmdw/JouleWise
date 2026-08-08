@@ -2032,6 +2032,27 @@ class RunCampaignTests(unittest.TestCase):
             "admitted": True,
         }
         calibration_snapshot, _candidates = _fixture_snapshot([])
+
+        def passing_core_evaluation(evaluations, policy_binding, **_kwargs):
+            return run_campaign_module._IdleAdmissionCoreEvaluation(
+                core={
+                    "schema_version": run_campaign_module.IDLE_ADMISSION_CORE_SCHEMA,
+                    "policy_sha256": policy_binding.sha256,
+                    "members": [
+                        {
+                            "bundle_id": evaluation.bundle_id,
+                            "cpu_admission": {"decision": "admitted"},
+                        }
+                        for evaluation in evaluations
+                    ],
+                    "adapter_wattage_continuity": {"decision": "stable"},
+                    "neg8_bracket": {"decision": "passed"},
+                    "instrument_calibration_bracket": None,
+                    "conditions": [],
+                },
+                member_failures=(),
+            )
+
         with tempfile.TemporaryDirectory() as tmp:
             runs_dir = Path(tmp) / "runs"
             log_path = runs_dir / "campaign_log.jsonl"
@@ -2068,6 +2089,11 @@ class RunCampaignTests(unittest.TestCase):
                     "_load_calibration_snapshot_for_evaluation",
                     return_value=calibration_snapshot,
                 ),
+                patch.object(
+                    run_campaign_module,
+                    "_idle_admission_core_evaluation",
+                    side_effect=passing_core_evaluation,
+                ) as core_evaluation,
                 patch(
                     "joulewise.calibration_bracketing."
                     "load_calibration_acceptance_bound",
@@ -2095,7 +2121,10 @@ class RunCampaignTests(unittest.TestCase):
             if row.get("record_type") == "idle_admission_whole_window_verdict"
         ]
         self.assertEqual(len(whole), 1)
+        core_evaluation.assert_called_once()
+        self.assertEqual(whole[0]["status"], "passed")
         self.assertFalse(whole[0]["claim_licensing"])
+        self.assertEqual(whole[0]["member_failures"], [])
         self.assertEqual(
             whole[0]["idle_admission_core"]["schema_version"],
             run_campaign_module.IDLE_ADMISSION_CORE_SCHEMA,
@@ -7186,6 +7215,146 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             run_campaign_module._idle_admission_claim_barrier_reasons(core),
         )
 
+    def test_idle_admission_core_verdict_golden_characterization(self) -> None:
+        binding = self._binding()
+        core = run_campaign_module.idle_admission_core_verdict(
+            [self._member("golden-member", records=_clean_idle_records())],
+            binding,
+            evaluation_timestamp_s=1_786_118_400.0,
+        )
+
+        self.assertEqual(
+            canonical_sha256(core),
+            "e7df882bc294a55756f3d791829657eb207d0ca82d4c2208ad6493d029fd7a87",
+        )
+
+    def test_prospective_member_failure_namespace_is_frozen(self) -> None:
+        self.assertEqual(
+            run_campaign_module.PROSPECTIVE_MEMBER_FAILURE_REASON_CODES,
+            (
+                "cpu_admission_unenforced",
+                "cpu_baseline_sample_count_insufficient",
+                "cpu_baseline_telemetry_malformed",
+                "cpu_baseline_telemetry_missing",
+                "cpu_busy_ratio_p95_exceeded",
+                "environment_admission_failed",
+                "environment_admission_missing",
+                "gpu_idle_admission_not_passed",
+                "gpu_idle_admission_unknown",
+                "idle_admission_attempt_ledger_invalid",
+                "processor_combined_power_w_p95_exceeded",
+                "thermal_pressure_elevated_in_window",
+                "whole_window_bundle_invalid",
+            ),
+        )
+
+    def test_member_failures_map_environment_ledger_and_cpu_to_member(
+        self,
+    ) -> None:
+        binding = self._binding()
+        member = self._member(
+            "mapped-member", records=_clean_idle_records()
+        )
+        with (
+            patch.object(
+                run_campaign_module,
+                "_current_member_environment_refusals",
+                return_value=("environment_admission_failed",),
+            ),
+            patch.object(
+                run_campaign_module,
+                "_final_idle_admission_attempt",
+                return_value=None,
+            ),
+        ):
+            result = run_campaign_module._idle_admission_core_evaluation(
+                [member], binding
+            )
+
+        self.assertEqual(
+            [
+                (failure["member_id"], failure["reason_code"])
+                for failure in result.member_failures
+            ],
+            [
+                ("mapped-member", "cpu_baseline_telemetry_missing"),
+                ("mapped-member", "environment_admission_failed"),
+                (
+                    "mapped-member",
+                    "idle_admission_attempt_ledger_invalid",
+                ),
+            ],
+        )
+        self.assertTrue(
+            all(
+                failure["detail"]
+                and len(failure["detail"])
+                <= run_campaign_module.MEMBER_FAILURE_DETAIL_MAX_CHARS
+                for failure in result.member_failures
+            )
+        )
+
+    def test_member_failures_are_complete_deduplicated_and_sorted(self) -> None:
+        binding = self._binding()
+        records = [
+            {
+                "processor_combined_power_w": 1.2,
+                "clusters": [
+                    {
+                        "cpus": [
+                            {"idle_ratio": 0.05, "down_ratio": 0.0}
+                        ]
+                    }
+                ],
+            }
+            for _ in range(5)
+        ]
+        members = [
+            self._member(bundle_id, records=records)
+            for bundle_id in ("z-member", "a-member")
+        ]
+        with patch.object(
+            run_campaign_module,
+            "_current_member_environment_refusals",
+            return_value=(
+                "environment_admission_failed",
+                "environment_admission_failed",
+            ),
+        ):
+            result = run_campaign_module._idle_admission_core_evaluation(
+                members, binding
+            )
+
+        observed = [
+            (failure["member_id"], failure["reason_code"])
+            for failure in result.member_failures
+        ]
+        expected = [
+            (member_id, reason_code)
+            for member_id in ("a-member", "z-member")
+            for reason_code in (
+                "cpu_busy_ratio_p95_exceeded",
+                "environment_admission_failed",
+                "processor_combined_power_w_p95_exceeded",
+            )
+        ]
+        self.assertEqual(observed, expected)
+        self.assertEqual(len(observed), len(set(observed)))
+
+    def test_global_neg8_condition_has_no_fabricated_member_failure(
+        self,
+    ) -> None:
+        binding = self._binding()
+        result = run_campaign_module._idle_admission_core_evaluation(
+            [self._member("clean-member", records=_clean_idle_records())],
+            binding,
+        )
+
+        self.assertIn(
+            "neg8_bracket_not_evaluated", result.core["conditions"]
+        )
+        self.assertEqual(result.member_failures, ())
+
     def test_clean_members_pass_with_stable_wattage_and_neg8_bracket(self) -> None:
         binding = self._binding()
         drift_bound = self._drift_bound()
@@ -8391,6 +8560,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             verdict["record_type"], "idle_admission_whole_window_verdict"
         )
         self.assertEqual(verdict["status"], "passed")
+        self.assertEqual(verdict["member_failures"], [])
         self.assertEqual(
             verdict["idle_admission_core"]["neg8_bracket"]["decision"],
             "passed",
@@ -8602,6 +8772,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "whole_window_bundle_invalid",
             verdict["idle_admission_core"]["conditions"],
         )
+        self.assertEqual(verdict["member_failures"], [])
 
     def test_whole_window_invalid_reference_is_excluded_and_cannot_pass(self) -> None:
         binding = self._binding()
@@ -8647,6 +8818,17 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(
             verdict["excluded_bundles"][0]["bundle_id"], bundle_ids[0]
         )
+        self.assertEqual(
+            [
+                (failure["member_id"], failure["reason_code"])
+                for failure in verdict["member_failures"]
+            ],
+            [(bundle_ids[0], "whole_window_bundle_invalid")],
+        )
+        self.assertIn(
+            "quarantined reference",
+            verdict["member_failures"][0]["detail"],
+        )
         self.assertIn(
             "whole_window_bundle_invalid",
             verdict["idle_admission_core"]["conditions"],
@@ -8686,6 +8868,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertIn(
             "neg8_bracket_missing",
             verdict["idle_admission_core"]["conditions"],
+        )
+        self.assertEqual(
+            {
+                failure["reason_code"]
+                for failure in verdict["member_failures"]
+            },
+            {"whole_window_bundle_invalid"},
         )
 
 

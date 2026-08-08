@@ -126,8 +126,10 @@ from joulewise.output_identity import (  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+    MEMBER_FAILURE_DETAIL_MAX_CHARS,
     MINTED_CONSUMPTION_SEMANTICS_ID,
     OCCURRENCE_SUPERSESSION_SCHEMA,
+    PROSPECTIVE_MEMBER_FAILURE_REASON_CODES,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
     build_evaluation_basis,
@@ -3784,6 +3786,117 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 
 
+@dataclass(frozen=True)
+class _IdleAdmissionCoreEvaluation:
+    core: dict[str, Any]
+    member_failures: tuple[dict[str, str], ...]
+
+
+def _bounded_member_failure_detail(detail: str) -> str:
+    """Bound one deterministic diagnostic without losing truncation identity."""
+
+    if not detail:
+        raise ValueError("member-failure detail must be non-empty")
+    if len(detail) <= MEMBER_FAILURE_DETAIL_MAX_CHARS:
+        return detail
+    suffix = ";detail_sha256=" + hashlib.sha256(detail.encode("utf-8")).hexdigest()
+    return detail[: MEMBER_FAILURE_DETAIL_MAX_CHARS - len(suffix)] + suffix
+
+
+def _member_failure_record(
+    member_id: str, reason_code: str, detail: str
+) -> dict[str, str]:
+    if reason_code not in PROSPECTIVE_MEMBER_FAILURE_REASON_CODES:
+        raise ValueError(
+            "undeclared prospective member-failure reason code: "
+            f"{reason_code}"
+        )
+    return {
+        "member_id": member_id,
+        "reason_code": reason_code,
+        "detail": _bounded_member_failure_detail(detail),
+    }
+
+
+def _canonical_member_failures(
+    failures: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    by_pair: dict[tuple[str, str], dict[str, str]] = {}
+    for failure in failures:
+        record = {
+            "member_id": failure["member_id"],
+            "reason_code": failure["reason_code"],
+            "detail": failure["detail"],
+        }
+        pair = (record["member_id"], record["reason_code"])
+        previous = by_pair.setdefault(pair, record)
+        if previous != record:
+            raise ValueError(
+                "conflicting prospective member-failure detail for "
+                f"{pair[0]}/{pair[1]}"
+            )
+    return sorted(
+        by_pair.values(),
+        key=lambda record: (
+            record["member_id"],
+            record["reason_code"],
+            record["detail"],
+        ),
+    )
+
+
+def _environment_member_failure_detail(
+    evaluation: MemberEvaluation, reason_code: str
+) -> str:
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    admission = metadata.get("environment_admission")
+    payload = {
+        "claim_reason": (
+            admission.get("claim_reason") if isinstance(admission, dict) else None
+        ),
+        "decision": (
+            admission.get("decision") if isinstance(admission, dict) else None
+        ),
+        "reason_code": reason_code,
+        "source": "whole_window_environment_validation",
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _cpu_member_failure_detail(cpu_admission: Mapping[str, Any]) -> str:
+    payload = {
+        key: cpu_admission.get(key)
+        for key in (
+            "decision",
+            "sample_count",
+            "cpu_busy_ratio_p95",
+            "processor_combined_power_w_p95",
+            "gpu_admitted",
+        )
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _excluded_member_failure(evaluation: MemberEvaluation) -> dict[str, str]:
+    detail = json.dumps(
+        {
+            "collection_integrity_flags": list(
+                evaluation.collection_integrity_flags
+            ),
+            "status": evaluation.status,
+            "strict_valid": evaluation.strict_valid,
+            "validation_problems": list(evaluation.validation_problems),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _member_failure_record(
+        evaluation.bundle_id,
+        "whole_window_bundle_invalid",
+        detail,
+    )
+
+
 def _current_member_environment_refusals(
     evaluation: MemberEvaluation,
 ) -> tuple[str, ...]:
@@ -4091,7 +4204,7 @@ def _load_calibration_snapshot_for_evaluation() -> CalibrationLedgerSnapshot:
     )
 
 
-def idle_admission_core_verdict(
+def _idle_admission_core_evaluation(
     evaluations: Sequence[MemberEvaluation],
     policy_binding: CampaignPolicyBinding,
     *,
@@ -4100,8 +4213,8 @@ def idle_admission_core_verdict(
     neg8_drift_bound: Mapping[str, Any] | None = None,
     evaluation_timestamp_s: float | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
-) -> dict[str, Any]:
-    """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
+) -> _IdleAdmissionCoreEvaluation:
+    """Evaluate the core and prospective per-member diagnostic surface.
 
     Everything here is recorded data with stable named conditions; the
     collection verdict and exit code are unchanged by this section.  Live
@@ -4124,7 +4237,7 @@ def idle_admission_core_verdict(
         # Named condition, not an abort: pre-extension sidecars remain
         # valid, but the verdict says the CPU-aware admission never ran.
         section["conditions"] = ["idle_admission_extension_unconfigured"]
-        return section
+        return _IdleAdmissionCoreEvaluation(section, ())
     section["extension"] = {
         "schema_version": extension.schema_version,
         "policy_version": extension.policy_version,
@@ -4132,6 +4245,7 @@ def idle_admission_core_verdict(
         "sha256": extension.sha256(),
     }
     conditions: set[str] = set()
+    member_failures: list[dict[str, str]] = []
     adapter_observations: list[dict[str, Any]] = []
     neg8_references: dict[
         str,
@@ -4146,8 +4260,11 @@ def idle_admission_core_verdict(
         ],
     ] = {"start": [], "midpoint": [], "end": []}
     for evaluation in evaluations:
-        current_environment_reasons = _current_member_environment_refusals(evaluation)
+        current_environment_reasons = set(
+            _current_member_environment_refusals(evaluation)
+        )
         conditions.update(current_environment_reasons)
+        environment_reasons = set(current_environment_reasons)
         if isinstance(evaluation.metadata, dict):
             adapters = evaluation.metadata.get("adapters")
             telemetry = (
@@ -4157,12 +4274,31 @@ def idle_admission_core_verdict(
                 telemetry.get("name") if isinstance(telemetry, dict) else None
             )
             if telemetry_name != "mock" and not current_environment_reasons:
-                conditions.update(
+                post_run_reasons = set(
                     post_run_environment_refusals(evaluation.metadata)
                 )
+                conditions.update(post_run_reasons)
+                environment_reasons.update(post_run_reasons)
+        for reason_code in sorted(environment_reasons):
+            member_failures.append(
+                _member_failure_record(
+                    evaluation.bundle_id,
+                    reason_code,
+                    _environment_member_failure_detail(
+                        evaluation, reason_code
+                    ),
+                )
+            )
         attempt = _final_idle_admission_attempt(evaluation)
         if attempt is None:
             conditions.add("idle_admission_attempt_ledger_invalid")
+            member_failures.append(
+                _member_failure_record(
+                    evaluation.bundle_id,
+                    "idle_admission_attempt_ledger_invalid",
+                    "final idle-admission attempt ledger is missing, malformed, or inconsistent",
+                )
+            )
         records = (
             _load_idle_rich_telemetry(evaluation.bundle_path, attempt)
             if attempt is not None
@@ -4174,6 +4310,14 @@ def idle_admission_core_verdict(
             gpu_admitted=_gpu_admission_outcome(evaluation),
         )
         conditions.update(cpu_admission["conditions"])
+        for reason_code in cpu_admission["conditions"]:
+            member_failures.append(
+                _member_failure_record(
+                    evaluation.bundle_id,
+                    reason_code,
+                    _cpu_member_failure_detail(cpu_admission),
+                )
+            )
         member_observations = _adapter_observations_for(evaluation)
         adapter_observations.extend(member_observations)
         section["members"].append(
@@ -4318,7 +4462,33 @@ def idle_admission_core_verdict(
         if extension.claim_bearing:
             conditions.update(calibration_reasons)
     section["conditions"] = sorted(conditions)
-    return section
+    return _IdleAdmissionCoreEvaluation(
+        section,
+        tuple(_canonical_member_failures(member_failures)),
+    )
+
+
+def idle_admission_core_verdict(
+    evaluations: Sequence[MemberEvaluation],
+    policy_binding: CampaignPolicyBinding,
+    *,
+    whole_window: bool = False,
+    runs_root: Path | None = None,
+    neg8_drift_bound: Mapping[str, Any] | None = None,
+    evaluation_timestamp_s: float | None = None,
+    calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+) -> dict[str, Any]:
+    """Compatibility wrapper returning the unchanged core-only surface."""
+
+    return _idle_admission_core_evaluation(
+        evaluations,
+        policy_binding,
+        whole_window=whole_window,
+        runs_root=runs_root,
+        neg8_drift_bound=neg8_drift_bound,
+        evaluation_timestamp_s=evaluation_timestamp_s,
+        calibration_ledger_snapshot=calibration_ledger_snapshot,
+    ).core
 
 
 def _whole_window_member(
@@ -5252,7 +5422,7 @@ def _run_whole_window_verdict_locked(
         }
         if len(consumption_provenance) != len(included):
             raise ValueError("authenticated survivor consumption provenance is incomplete")
-    core = idle_admission_core_verdict(
+    core_evaluation = _idle_admission_core_evaluation(
         included,
         policy_binding,
         whole_window=True,
@@ -5263,6 +5433,13 @@ def _run_whole_window_verdict_locked(
             if consumption_session is not None
             else _load_calibration_snapshot_for_evaluation()
         ),
+    )
+    core = core_evaluation.core
+    member_failures = _canonical_member_failures(
+        [
+            *core_evaluation.member_failures,
+            *(_excluded_member_failure(evaluation) for evaluation in excluded),
+        ]
     )
     core_conditions = set(core.get("conditions", []))
     core_conditions.update(selection_conditions)
@@ -5339,6 +5516,7 @@ def _run_whole_window_verdict_locked(
             }
             for evaluation in excluded
         ],
+        "member_failures": member_failures,
         "idle_admission_core": core,
     }
     if membership.salvage_dangler_exclusion is not None:
@@ -6754,7 +6932,7 @@ def run_axi_spec_campaign(
             calibration_ledger_snapshot = (
                 _load_calibration_snapshot_for_evaluation()
             )
-            core = idle_admission_core_verdict(
+            core_evaluation = _idle_admission_core_evaluation(
                 selected_evaluations,
                 policy_binding,
                 whole_window=True,
@@ -6762,6 +6940,7 @@ def run_axi_spec_campaign(
                 neg8_drift_bound=neg8_drift_bound,
                 calibration_ledger_snapshot=calibration_ledger_snapshot,
             )
+            core = core_evaluation.core
             extension = policy_binding.idle_admission_extension
             core_reasons = _idle_admission_claim_barrier_reasons(core)
             whole_status = (
@@ -6809,6 +6988,7 @@ def run_axi_spec_campaign(
                 "campaign_policy": policy_binding.to_metadata(),
                 "bundle_ids": [row.bundle_id for row in selected_evaluations],
                 "excluded_bundles": [],
+                "member_failures": list(core_evaluation.member_failures),
                 "source_campaign_manifests": descriptors,
                 "idle_admission_core": core,
             }
