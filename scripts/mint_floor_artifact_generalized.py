@@ -3133,15 +3133,15 @@ def _strict_v2_recursive_json_inputs(
     evidence_root: Path,
     *,
     label: str,
+    referenced_bundle_ids: set[str],
 ) -> Mapping[str, str]:
-    """Strict-parse every JSON document reached by whole-window replay.
+    """Strict-parse the JSON documents reached by whole-window replay.
 
-    The whole-window verifier authenticates hashes and semantics.  This
-    preflight supplies the orthogonal JSON grammar guarantee for the complete
-    JSON/JSONL evidence-root inventory, which includes recursively
-    dereferenced manifests, attempt records, cooldown records, and bundle
-    evidence. Supersession quarantine is outside that root by construction,
-    so the three authenticated quarantine documents are added explicitly.
+    Authentication starts at the campaign log, follows only verdict rows that
+    overlap the component members, and then follows their source manifests,
+    attempt-ledger selections, basis occurrences, supersession custody, and
+    referenced bundle directories. A JSON-looking sibling elsewhere in the
+    runs root is not an input merely because it shares the directory tree.
     The returned byte map is checked again after replay so strict parsing and
     semantic authentication cannot observe different snapshots.
     """
@@ -3152,53 +3152,72 @@ def _strict_v2_recursive_json_inputs(
     def remember(path: Path, raw: bytes) -> None:
         observed[str(path.resolve())] = hashlib.sha256(raw).hexdigest()
 
+    parsed: dict[Path, Any] = {}
+
     def parse_json(path: Path, document_label: str) -> Any:
+        resolved = path.resolve(strict=False)
+        if resolved in parsed:
+            return parsed[resolved]
         value, raw = _strict_json_file(path, document_label)
         remember(path, raw)
+        parsed[resolved] = value
         return value
 
     def parse_jsonl(path: Path, document_label: str) -> list[Any]:
+        resolved = path.resolve(strict=False)
+        if resolved in parsed:
+            cached = parsed[resolved]
+            return cached if isinstance(cached, list) else []
         raw = _strict_json_lines_file(path, document_label)
         remember(path, raw)
         try:
             lines = raw.decode("utf-8").splitlines()
         except UnicodeDecodeError as exc:  # already checked; retain one boundary
             raise MintError(f"{document_label} is not valid UTF-8 JSONL") from exc
-        return [
+        rows = [
             _strict_json_value(line.encode("utf-8"), f"{document_label} line {index}")
             for index, line in enumerate(lines, start=1)
             if line.strip()
         ]
+        parsed[resolved] = rows
+        return rows
 
-    try:
-        inventory = sorted(
-            (
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix in {".json", ".jsonl"}
-            ),
-            key=lambda path: path.as_posix(),
+    def rooted_path(text: object) -> Path | None:
+        if not isinstance(text, str) or not text:
+            return None
+        candidate = Path(text)
+        if candidate.is_absolute():
+            return None
+        resolved = (root / candidate).resolve(strict=False)
+        return resolved if root in resolved.parents else None
+
+    def descriptor_path(value: object) -> Path | None:
+        return rooted_path(value.get("path")) if isinstance(value, Mapping) else None
+
+    def quarantine_documents(value: object) -> None:
+        if not isinstance(value, Mapping):
+            return
+        quarantine = value.get("quarantine")
+        quarantine_path = (
+            Path(quarantine["path"])
+            if isinstance(quarantine, Mapping)
+            and isinstance(quarantine.get("path"), str)
+            else None
         )
-    except OSError as exc:
-        raise MintError(
-            f"{label} recursive JSON inventory cannot be read: "
-            f"{exc.strerror or type(exc).__name__}"
-        ) from exc
-    for path in inventory:
-        relative = path.relative_to(root).as_posix()
-        category = (
-            "campaign manifest"
-            if relative.startswith("campaign_manifests/")
-            else "recursive JSON"
-        )
-        if path.suffix == ".jsonl":
-            parse_jsonl(path, f"{label} {category}L {relative}")
-        else:
-            parse_json(path, f"{label} {category} {relative}")
+        if quarantine_path is None:
+            return
+        for name in ("config.json", "metadata.json", "summary_metrics.json"):
+            parse_json(
+                quarantine_path / name,
+                f"{label} supersession quarantine {name}",
+            )
 
     campaign_path = root / "campaign_log.jsonl"
     campaign_rows = parse_jsonl(campaign_path, f"{label} campaign log")
-
+    manifest_paths: set[Path] = set()
+    bundle_paths: set[Path] = {
+        root / bundle_id for bundle_id in referenced_bundle_ids
+    }
     for row in campaign_rows:
         if not isinstance(row, Mapping):
             continue
@@ -3207,19 +3226,158 @@ def _strict_v2_recursive_json_inputs(
             or row.get("schema_version")
             == "joulewise.campaign_occurrence_supersession.v1"
         )
-        quarantine = row.get("quarantine") if is_supersession else None
-        quarantine_path = (
-            Path(quarantine["path"])
-            if isinstance(quarantine, Mapping)
-            and isinstance(quarantine.get("path"), str)
+        if is_supersession:
+            quarantine_documents(row)
+        row_bundle_ids = row.get("bundle_ids")
+        if (
+            row.get("record_type") != "idle_admission_whole_window_verdict"
+            or not isinstance(row_bundle_ids, list)
+            or not referenced_bundle_ids.intersection(
+                item for item in row_bundle_ids if isinstance(item, str)
+            )
+        ):
+            continue
+        provenance = row.get("row_provenance")
+        descriptors = (
+            provenance.get("source_campaign_manifests")
+            if isinstance(provenance, Mapping)
             else None
         )
-        if quarantine_path is not None:
-            for name in ("config.json", "metadata.json", "summary_metrics.json"):
-                parse_json(
-                    quarantine_path / name,
-                    f"{label} supersession quarantine {name}",
+        if isinstance(descriptors, list):
+            manifest_paths.update(
+                path
+                for descriptor in descriptors
+                if (path := descriptor_path(descriptor)) is not None
+            )
+        basis = row.get("evaluation_basis")
+        occurrences = (
+            basis.get("member_occurrences")
+            if isinstance(basis, Mapping)
+            else None
+        )
+        if isinstance(occurrences, list):
+            for occurrence in occurrences:
+                if not isinstance(occurrence, Mapping):
+                    continue
+                bundle_path = rooted_path(occurrence.get("bundle_path"))
+                if bundle_path is not None:
+                    bundle_paths.add(bundle_path)
+                source_path = descriptor_path(occurrence.get("source_manifest"))
+                if source_path is not None:
+                    manifest_paths.add(source_path)
+        supersessions = row.get("occurrence_supersessions")
+        if isinstance(supersessions, list):
+            for supersession in supersessions:
+                quarantine_documents(supersession)
+                if not isinstance(supersession, Mapping):
+                    continue
+                occurrences_by_kind = (
+                    [supersession.get("selected_occurrence")],
+                    supersession.get("superseded_occurrences"),
                 )
+                for occurrence_values in occurrences_by_kind:
+                    if not isinstance(occurrence_values, list):
+                        continue
+                    manifest_paths.update(
+                        path
+                        for occurrence in occurrence_values
+                        if isinstance(occurrence, Mapping)
+                        and (
+                            path := descriptor_path(
+                                occurrence.get("source_manifest")
+                            )
+                        )
+                        is not None
+                    )
+        exclusion = row.get("salvage_dangler_exclusion")
+        if isinstance(exclusion, Mapping):
+            for key in ("closure", "membership_binding"):
+                descriptor = exclusion.get(key)
+                path_text = (
+                    descriptor.get("path")
+                    if isinstance(descriptor, Mapping)
+                    else None
+                )
+                if isinstance(path_text, str):
+                    parse_json(
+                        Path(path_text),
+                        f"{label} salvage {key.replace('_', ' ')}",
+                    )
+
+    for manifest_path in sorted(manifest_paths, key=lambda path: path.as_posix()):
+        relative = manifest_path.relative_to(root).as_posix()
+        manifest = parse_json(
+            manifest_path,
+            f"{label} campaign manifest {relative}",
+        )
+        if not isinstance(manifest, Mapping):
+            continue
+        selection = manifest.get("attempt_ledger_selection")
+        if isinstance(selection, Mapping):
+            ledger_path = rooted_path(selection.get("attempt_ledger_path"))
+            analysis_path = rooted_path(selection.get("analysis_manifest_path"))
+            if ledger_path is not None:
+                parse_jsonl(ledger_path, f"{label} attempt ledger")
+                for directory, directory_label in (
+                    (ledger_path.parent / "dispatch_receipts", "dispatch receipt"),
+                    (ledger_path.parent / "strict_validation", "strict evidence"),
+                ):
+                    try:
+                        evidence_paths = sorted(directory.glob("*.json"))
+                    except OSError as exc:
+                        raise MintError(
+                            f"{label} {directory_label} inventory cannot be read: "
+                            f"{exc.strerror or type(exc).__name__}"
+                        ) from exc
+                    for evidence_path in evidence_paths:
+                        parse_json(evidence_path, f"{label} {directory_label}")
+            if analysis_path is not None:
+                parse_json(analysis_path, f"{label} attempt analysis manifest")
+            selected = selection.get("selected_bundles")
+            if isinstance(selected, list):
+                bundle_paths.update(
+                    path
+                    for descriptor in selected
+                    if (path := descriptor_path(descriptor)) is not None
+                )
+        else:
+            members = manifest.get("members")
+            if isinstance(members, list):
+                for member in members:
+                    bundle_ids = (
+                        member.get("bundle_ids")
+                        if isinstance(member, Mapping)
+                        and member.get("execution") in {"invoked", "existing"}
+                        else None
+                    )
+                    if isinstance(bundle_ids, list):
+                        bundle_paths.update(
+                            root / bundle_id
+                            for bundle_id in bundle_ids
+                            if isinstance(bundle_id, str) and bundle_id
+                        )
+
+    for bundle_path in sorted(bundle_paths, key=lambda path: path.as_posix()):
+        try:
+            inventory = sorted(
+                path
+                for path in bundle_path.rglob("*")
+                if path.is_file() and path.suffix in {".json", ".jsonl"}
+            )
+        except OSError as exc:
+            raise MintError(
+                f"{label} consumed bundle JSON inventory cannot be read: "
+                f"{exc.strerror or type(exc).__name__}"
+            ) from exc
+        for path in inventory:
+            relative = path.relative_to(bundle_path).as_posix()
+            document_label = (
+                f"{label} consumed bundle {bundle_path.name} {relative}"
+            )
+            if path.suffix == ".jsonl":
+                parse_jsonl(path, document_label)
+            else:
+                parse_json(path, document_label)
     return observed
 
 
@@ -3412,6 +3570,7 @@ def _authenticate_v2_inputs(
         component_paths: dict[tuple[str, str], ComponentInputs] = {}
         preflight_hashes: dict[tuple[str, str], tuple[str, str, str, str]] = {}
         producer_evidence_root: Path | None = None
+        producer_referenced_bundle_ids: set[str] = set()
         strict_seen: set[Path] = set()
         for cell_pins in producer["cells"]:
             role = cell_pins["role"]
@@ -3469,6 +3628,7 @@ def _authenticate_v2_inputs(
                         or Path(bundle_id).name != bundle_id
                     ):
                         raise MintError("v2 extraction spec has an unsafe bundle id")
+                    producer_referenced_bundle_ids.add(bundle_id)
                     bundle_path = paths.evidence_root / bundle_id
                     for name in ("config.json", "metadata.json", "summary_metrics.json"):
                         candidate = bundle_path / name
@@ -3490,6 +3650,7 @@ def _authenticate_v2_inputs(
         recursive_json_before = _strict_v2_recursive_json_inputs(
             producer_evidence_root,
             label=f"producer {plan_id!r}",
+            referenced_bundle_ids=producer_referenced_bundle_ids,
         )
 
         authenticated_cells: dict[str, V2CellComponents] = {}
@@ -3591,6 +3752,7 @@ def _authenticate_v2_inputs(
         recursive_json_after = _strict_v2_recursive_json_inputs(
             producer_evidence_root,
             label=f"producer {plan_id!r}",
+            referenced_bundle_ids=producer_referenced_bundle_ids,
         )
         if recursive_json_after != recursive_json_before:
             raise MintError(

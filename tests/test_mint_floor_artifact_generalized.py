@@ -21,8 +21,19 @@ from joulewise.detection_floor import (
 )
 from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
+    build_calibration_bracket_binding,
     load_calibration_acceptance_bound,
 )
+from joulewise.calibration_ledger import (
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    append_bracket_session_receipt,
+    artifact_hashes,
+    finalize_bracket_session_slot,
+    load_calibration_ledger_snapshot,
+    terminal_head_pin_for_session,
+)
+from joulewise.campaign_provenance import campaign_provenance_attestation
 from joulewise.floor_extraction import (
     CellReport,
     MemberReport,
@@ -31,9 +42,17 @@ from joulewise.floor_extraction import (
     validate_extraction_spec,
 )
 from joulewise.whole_window import (
+    ADAPTER_CONTINUITY_SCHEMA,
+    IDLE_ADMISSION_CORE_SCHEMA,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    NEG8_BRACKET_SCHEMA,
+    WHOLE_WINDOW_SCHEMA,
+    AuthenticatedConsumptionSession,
+    build_row_provenance,
+    whole_window_refusal_reasons,
 )
+from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 from scripts import mint_floor_artifact as mint1
 from scripts import mint_floor_artifact_generalized as generalized
 from tests.test_mint_floor_artifact import (
@@ -1275,6 +1294,53 @@ def freeze_production_extracted_v2_pinset(
     for producer in pinset["producer_plans"]:
         plan_id = producer["plan"]["plan_id"]
         source = source_inputs[plan_id]
+
+        def role_scoped_component(
+            component: mint1.AuthenticatedComponent,
+            role: str,
+        ) -> mint1.AuthenticatedComponent:
+            if role == "decode":
+                return component
+            renamed = {
+                member.bundle_id: f"{member.bundle_id}-{role}"
+                for member in component.members
+            }
+            spec_cell = copy.deepcopy(component.spec_cell)
+            for member in spec_cell.get("members", []):
+                member["bundle_id"] = renamed[member["bundle_id"]]
+                member["slot"] = renamed.get(member.get("slot"), member.get("slot"))
+            for block in spec_cell.get("blocks", []):
+                block["members"] = {
+                    position: renamed[bundle_id]
+                    for position, bundle_id in block["members"].items()
+                }
+            return replace(
+                component,
+                spec_cell=spec_cell,
+                members=tuple(
+                    replace(member, bundle_id=renamed[member.bundle_id])
+                    for member in component.members
+                ),
+            )
+
+        prefill = source.cells["prefill"]
+        source = replace(
+            source,
+            cells={
+                **source.cells,
+                "prefill": generalized.V2CellComponents(
+                    absolute=role_scoped_component(
+                        prefill.absolute, "prefill"
+                    ),
+                    comparative=role_scoped_component(
+                        prefill.comparative, "prefill"
+                    ),
+                    allowed_consumer_condition_families=(
+                        prefill.allowed_consumer_condition_families
+                    ),
+                ),
+            },
+        )
         evidence_root = root / f"production-extractor-{plan_id}"
         evidence_root.mkdir()
         spec_cells = [
@@ -1300,6 +1366,10 @@ def freeze_production_extracted_v2_pinset(
             "schema_version": mint1.EXTRACTION_SPEC_SCHEMA_VERSION,
             "cells": spec_cells,
         }
+        (evidence_root / "production-extraction-spec.json").write_text(
+            json.dumps(spec, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         bundle_rows: dict[str, dict] = {}
         for role in ("decode", "prefill"):
             cell = source.cells[role]
@@ -1350,7 +1420,11 @@ def freeze_production_extracted_v2_pinset(
             # fixture explicitly supplies a permissive strict validator, so a
             # config-unbound wire keeps the synthetic bundle outside the live
             # telemetry predicate while still exercising report generation.
-            config = {}
+            config = {
+                "run_id": bundle_id,
+                "run_metadata": {"tags": tags},
+                "hardware_target": {"telemetry_backend": "mock"},
+            }
             value = row["value"]
             width = row["width"]
             summary = {
@@ -1442,6 +1516,12 @@ def freeze_production_extracted_v2_pinset(
             report = extract_cells(
                 evidence_root,
                 spec,
+                evaluation_basis_sha256=(
+                    source.cells[
+                        "decode"
+                    ].absolute.whole_window_evaluation_basis_sha256
+                ),
+                consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
                 hash_bundles=True,
                 strict_validator=lambda _path, _strict: [],
             )
@@ -1494,8 +1574,13 @@ def freeze_production_extracted_v2_pinset(
                     component,
                     report=report,
                     report_sha256=report_sha256,
+                    spec=spec,
+                    spec_sha256=file_sha256(
+                        evidence_root / "production-extraction-spec.json"
+                    ),
                     cell=report_cell,
                     members=updated_members,
+                    evaluation_basis_member_count=len(bundle_rows),
                     widths_j=tuple(
                         report_cell["floor"]["admissible_half_widths_j"]
                     ),
@@ -1551,7 +1636,14 @@ def freeze_production_extracted_v2_pinset(
                 }
             )
             cell_pin["postcollection"] = postcollection
-        producer["extraction_spec"]["member_count"] = len(bundle_rows)
+        producer["extraction_spec"].update(
+            {
+                "sha256": file_sha256(
+                    evidence_root / "production-extraction-spec.json"
+                ),
+                "member_count": len(bundle_rows),
+            }
+        )
 
     for producer in pinset["producer_plans"]:
         for cell_pin in producer["cells"]:
@@ -1582,6 +1674,708 @@ def freeze_production_extracted_v2_pinset(
     _repair_v2_pinset_self_hashes(pinset)
     final_path, final_digest = write_pinset(root, pinset)
     return final_path, final_digest, extracted_inputs, ledger_snapshot
+
+
+def install_production_extracted_v2_cli_fixture(root: Path):
+    """Install extractor-produced inputs behind the production v2 CLI."""
+
+    provisional_path, _digest, extracted_inputs, _snapshot = (
+        freeze_production_extracted_v2_pinset(root)
+    )
+    pinset = load_json(provisional_path)
+    acceptance_path = root / "production-acceptance.json"
+    acceptance_path.write_bytes(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes())
+    acceptance = load_calibration_acceptance_bound(acceptance_path)
+    assert acceptance is not None
+
+    ledger_path = root / "production-ledger.jsonl"
+    head_path = root / "production-ledger.head.json"
+    head_path.write_text(
+        json.dumps(
+            {
+                "sequence": 0,
+                "head_digest": GENESIS_DIGEST,
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    epoch = {
+        "os_build": "fixture-os",
+        "hardware_model": "fixture-hardware",
+        "power_policy": "fixture-power-policy",
+        "sampling_interval_ms": 100,
+        "estimator_revision": "fixture-estimator",
+        "pulse_protocol_id": "fixture-pulse",
+    }
+    t1 = {field: f"fixture-{field}" for field in V2_BINDING_FIELDS}
+    t1.update(epoch)
+    authenticated_inputs: dict[str, generalized.V2ProducerInputs] = {}
+    manifest_producers = []
+
+    def custody(evidence_root: Path, attempt_id: str) -> Path:
+        path = evidence_root / "instrument_validation" / attempt_id
+        (path / "raw").mkdir(parents=True)
+        (path / "raw" / "powermetrics.plist").write_bytes(
+            f"raw-{attempt_id}".encode("utf-8")
+        )
+        (path / "events.jsonl").write_text(
+            json.dumps({"timestamp_s": 1.0}) + "\n",
+            encoding="utf-8",
+        )
+        (path / "instrument_evidence.json").write_text(
+            json.dumps({"attempt_id": attempt_id}) + "\n",
+            encoding="utf-8",
+        )
+        (path / "manifest.json").write_text(
+            json.dumps({"attempt_id": attempt_id}) + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    for producer_index, producer in enumerate(pinset["producer_plans"]):
+        plan_id = producer["plan"]["plan_id"]
+        source = extracted_inputs[plan_id]
+        evidence_root = Path(source.cells["decode"].absolute.report["runs_root"])
+        plan_path = root / f"{plan_id}.production-plan.json"
+        plan_path.write_text(
+            json.dumps(source.plan, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        plan_sha256 = file_sha256(plan_path)
+        sidecar_path = root / f"{plan_id}.production-plan.sha256"
+        sidecar_path.write_text(
+            f"{plan_sha256}  {plan_path.name}\n",
+            encoding="utf-8",
+        )
+        sidecar_sha256 = file_sha256(sidecar_path)
+
+        session_id = f"production-session-{producer_index}"
+        window_id = f"production-window-{producer_index}"
+        slot_paths = {
+            role: custody(evidence_root, f"{session_id}-{role}")
+            for role in ("pre", "post")
+        }
+        append_bracket_session_receipt(
+            ledger_path,
+            session_id=session_id,
+            window_id=window_id,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=producer["evidence_root_id"],
+            runs_root=evidence_root,
+            slots={
+                role: {
+                    "attempt_id": f"{session_id}-{role}",
+                    "custody_locator": str(slot_paths[role]),
+                    "identity_epoch": epoch,
+                    "t1_bindings": t1,
+                }
+                for role in ("pre", "post")
+            },
+            head_pin_path=head_path,
+            require_committed_pin=False,
+        )
+        for role, exact_bound in (("pre", "0.020000"), ("post", "0.021000")):
+            finalize_bracket_session_slot(
+                ledger_path,
+                session_id=session_id,
+                slot=role,
+                disposition="valid",
+                custody_locator=str(slot_paths[role]),
+                artifact_sha256=artifact_hashes(slot_paths[role]),
+                identity_epoch=epoch,
+                t1_bindings=t1,
+                capture_wall_time_s=("1.0" if role == "pre" else "2.0"),
+                exact_bound_lexeme_s=exact_bound,
+            )
+        terminal_pin = terminal_head_pin_for_session(
+            ledger_path,
+            session_id=session_id,
+        )
+        head_path.write_text(
+            json.dumps(terminal_pin) + "\n",
+            encoding="utf-8",
+        )
+        interim_snapshot = load_calibration_ledger_snapshot(
+            ledger_path,
+            head_path,
+            require_committed_pin=False,
+            verify_custody=False,
+        )
+        assert interim_snapshot.valid
+        binding = build_calibration_bracket_binding(
+            interim_snapshot,
+            session_id=session_id,
+            window_id=window_id,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=producer["evidence_root_id"],
+            runs_root=evidence_root,
+        )
+        binding_path = root / f"{plan_id}.production-binding.json"
+        binding_path.write_text(
+            json.dumps(binding, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        binding_sha256 = file_sha256(binding_path)
+        session = interim_snapshot.bracket_session_by_id[session_id]
+        observations = tuple(
+            session.finalized_slots[role] for role in ("pre", "post")
+        )
+        verdict_bracket = _synthetic_verdict_bracket(list(observations))
+
+        spec_path = evidence_root / "production-extraction-spec.json"
+        spec = load_json(spec_path)
+        spec_sha256 = file_sha256(spec_path)
+        ordered_bundle_ids = list(dict.fromkeys(mint1._spec_member_ids(spec)))
+        order = {
+            **source.cells["decode"].absolute.order_manifest,
+            "plan_id": plan_id,
+            "calibration_plan_sha256": plan_sha256,
+            "executed_order": [
+                {"run_id": bundle_id} for bundle_id in ordered_bundle_ids
+            ],
+        }
+        order_path = evidence_root / "order-manifest.json"
+        order_path.write_text(
+            json.dumps(order, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        order_sha256 = file_sha256(order_path)
+        for bundle_id in ordered_bundle_ids:
+            config_path = evidence_root / bundle_id / "config.json"
+            config = load_json(config_path)
+            tags = config["run_metadata"]["tags"]
+            config["run_metadata"]["tags"] = [
+                (
+                    f"calibration-plan-sha256={plan_sha256}"
+                    if tag.startswith("calibration-plan-sha256=")
+                    else tag
+                )
+                for tag in tags
+            ]
+            config_path.write_text(
+                json.dumps(config, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        cooldowns = {
+            bundle_id: {
+                "result": "recovered",
+                "verified": True,
+                "manifest": f"{plan_id}-production-extractor",
+            }
+            for bundle_id in ordered_bundle_ids
+        }
+        allowance_record = dict(
+            source.cells["decode"].absolute.whole_window_drift_allowance
+        )
+        with (
+            mock.patch(
+                "joulewise.floor_extraction.campaign_cooldown_evidence",
+                return_value=cooldowns,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._whole_window_extraction_refusals",
+                return_value=(),
+            ),
+            mock.patch(
+                "joulewise.floor_extraction.whole_window_drift_allowances",
+                return_value=SimpleNamespace(
+                    status="allowances",
+                    allowances={"gross_energy": allowance_record},
+                ),
+            ),
+        ):
+            report = extract_cells(
+                evidence_root,
+                spec,
+                evaluation_basis_sha256=(
+                    source.cells[
+                        "decode"
+                    ].absolute.whole_window_evaluation_basis_sha256
+                ),
+                consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                hash_bundles=True,
+                strict_validator=lambda _path, _strict: [],
+            )
+        profile_errors = validate_d117_mint_consumption_report(report)
+        if profile_errors:
+            raise AssertionError(profile_errors)
+        report_path = evidence_root / "extraction-report.json"
+        report_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        basis_sha256 = source.cells[
+            "decode"
+        ].absolute.whole_window_evaluation_basis_sha256
+        basis_count = source.cells[
+            "decode"
+        ].absolute.evaluation_basis_member_count
+        basis_ids = [
+            *ordered_bundle_ids,
+            *(
+                f"{plan_id}-reference-{index}"
+                for index in range(basis_count - len(ordered_bundle_ids))
+            ),
+        ]
+        policy_sha256 = "a" * 64
+        manifest_dir = evidence_root / "campaign_manifests"
+        manifest_dir.mkdir(exist_ok=True)
+        source_manifest_path = manifest_dir / "production-source.json"
+        source_manifest = {
+            "schema_version": "joulewise.campaign_provenance.v2",
+            "session_id": f"production-source-{producer_index}",
+            "campaign_policy": {"sha256": policy_sha256},
+            "members": [
+                {
+                    "execution": "invoked",
+                    "run_id": f"production-source-{producer_index}",
+                    "bundle_ids": basis_ids,
+                }
+            ],
+        }
+        source_manifest_path.write_text(
+            json.dumps(source_manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        source_manifest_raw = source_manifest_path.read_bytes()
+        attestation = campaign_provenance_attestation(
+            manifest_path=source_manifest_path,
+            raw_manifest_bytes=source_manifest_raw,
+            manifest=source_manifest,
+            timestamp="2026-08-07T12:00:00Z",
+        )
+        verdict = {
+            "record_type": "idle_admission_whole_window_verdict",
+            "schema_version": WHOLE_WINDOW_SCHEMA,
+            "status": "passed",
+            "campaign_policy": {"sha256": policy_sha256},
+            "bundle_ids": basis_ids,
+            "idle_admission_core": {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": policy_sha256,
+                "members": [
+                    {
+                        "bundle_id": bundle_id,
+                        "cpu_admission": {"decision": "admitted"},
+                    }
+                    for bundle_id in basis_ids
+                ],
+                "adapter_wattage_continuity": {
+                    "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                    "decision": "stable",
+                },
+                "neg8_bracket": {
+                    "schema_version": NEG8_BRACKET_SCHEMA,
+                    "decision": "passed",
+                    "policy": {"require_bracket": True},
+                },
+            },
+        }
+        verdict["row_provenance"] = build_row_provenance(
+            policy_sha256=policy_sha256,
+            bundle_ids=basis_ids,
+            source_manifests=[
+                {
+                    "path": "campaign_manifests/production-source.json",
+                    "sha256": hashlib.sha256(source_manifest_raw).hexdigest(),
+                }
+            ],
+        )
+        basis_row = {
+            "evaluation_basis": {
+                "sha256": basis_sha256,
+                "member_occurrences": [
+                    {"bundle_id": bundle_id, "bundle_path": bundle_id}
+                    for bundle_id in basis_ids
+                ],
+                "calibration_bracket_set": verdict_bracket,
+            }
+        }
+        campaign_path = evidence_root / "campaign_log.jsonl"
+        campaign_path.write_text(
+            "".join(
+                json.dumps(row) + "\n"
+                for row in (attestation, verdict, basis_row)
+            ),
+            encoding="utf-8",
+        )
+        campaign_sha256 = file_sha256(campaign_path)
+        report_sha256 = file_sha256(report_path)
+        report_value = load_json(report_path)
+        report_cells = {
+            row["cell_id"]: row for row in report_value["cells"]
+        }
+
+        role_inputs = {}
+        manifest_cells = []
+        for cell_pin in producer["cells"]:
+            role = cell_pin["role"]
+            source_cell = source.cells[role]
+            components = {}
+            component_paths = {}
+            for component_name, component in (
+                ("absolute", source_cell.absolute),
+                ("comparative", source_cell.comparative),
+            ):
+                report_cell = report_cells[component.calibration_cell_id]
+                report_members = {
+                    row["bundle_id"]: row for row in report_cell["members"]
+                }
+                updated = replace(
+                    component,
+                    report=report_value,
+                    report_sha256=report_sha256,
+                    spec=spec,
+                    spec_sha256=spec_sha256,
+                    order_manifest=order,
+                    order_manifest_sha256=order_sha256,
+                    campaign_log_sha256=campaign_sha256,
+                    cell=report_cell,
+                    spec_cell=next(
+                        row
+                        for row in spec["cells"]
+                        if row["cell_id"] == component.calibration_cell_id
+                    ),
+                    members=tuple(
+                        replace(
+                            member,
+                            bundle_sha256=report_members[member.bundle_id][
+                                "bundle_sha256"
+                            ],
+                            config_sha256=report_members[member.bundle_id][
+                                "config_sha256"
+                            ],
+                            metric_value_j=report_members[member.bundle_id][
+                                "metric_value_j"
+                            ],
+                        )
+                        for member in component.members
+                    ),
+                    widths_j=tuple(
+                        report_cell["floor"]["admissible_half_widths_j"]
+                    ),
+                    consumption_semantics_id=report_value[
+                        "consumption_semantics_id"
+                    ],
+                    scientific_config_identity_sha256=hashlib.sha256(
+                        b'{"synthetic":"same"}'
+                    ).hexdigest(),
+                    whole_window_calibration_bracket=verdict_bracket,
+                )
+                components[component_name] = updated
+                component_paths[component_name] = {
+                    "evidence_root": str(evidence_root),
+                    "report": str(report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(order_path),
+                }
+                cell_pin[component_name] = _v2_component_pin(updated)
+            family_binding = components["absolute"].spec_cell[
+                "condition_family_definitions"
+            ]["all"]
+            allowlist = [
+                {
+                    "condition_family_id": family_binding[
+                        "condition_family_id"
+                    ],
+                    "condition_family_sha256": family_binding[
+                        "condition_family_sha256"
+                    ],
+                }
+            ]
+            cell_pin.update(
+                {
+                    "condition_family_id": family_binding[
+                        "condition_family_id"
+                    ],
+                    "condition_family_sha256": family_binding[
+                        "condition_family_sha256"
+                    ],
+                    "allowed_consumer_condition_families": allowlist,
+                }
+            )
+            for transport in pinset["aggregate"]["transport_allowlists"]:
+                if (
+                    transport["transport_group_id"]
+                    == cell_pin["transport_group_id"]
+                ):
+                    transport["allowed_consumer_condition_families"] = allowlist
+            postcollection = _v2_postcollection(
+                components["absolute"],
+                components["comparative"],
+                bracket_binding=binding,
+                bracket_binding_sha256=binding_sha256,
+                extraction_report_sha256=report_sha256,
+            )
+            absolute_floor = str(
+                components["absolute"].cell["floor"][
+                    "drift_widened_guarded_floor_j"
+                ]
+            )
+            comparative_floor = str(
+                components["comparative"].cell["floor"][
+                    "drift_widened_guarded_floor_j"
+                ]
+            )
+            operative_floor = str(
+                max(float(absolute_floor), float(comparative_floor))
+            )
+            postcollection.update(
+                {
+                    "absolute_floor_full_precision": absolute_floor,
+                    "comparative_floor_full_precision": comparative_floor,
+                    "operative_floor_full_precision": operative_floor,
+                    "absolute_floor_six_decimal": f"{float(absolute_floor):.6f}",
+                    "comparative_floor_six_decimal": (
+                        f"{float(comparative_floor):.6f}"
+                    ),
+                    "operative_floor_six_decimal": f"{float(operative_floor):.6f}",
+                }
+            )
+            cell_pin["postcollection"] = postcollection
+            role_inputs[role] = generalized.V2CellComponents(
+                absolute=components["absolute"],
+                comparative=components["comparative"],
+                allowed_consumer_condition_families=(family_binding,),
+            )
+            manifest_cells.append(
+                {
+                    "role": role,
+                    **component_paths,
+                    "allowed_consumer_condition_families": [family_binding],
+                }
+            )
+        plan = {**source.plan, "plan_id": plan_id}
+        authenticated_inputs[plan_id] = replace(
+            source,
+            plan=plan,
+            cells=role_inputs,
+            evidence_root=evidence_root,
+            plan_sha256=plan_sha256,
+            plan_declared_sha256=plan_sha256,
+            plan_sidecar_sha256=sidecar_sha256,
+            calibration_acceptance=acceptance,
+            calibration_acceptance_sha256=file_sha256(acceptance_path),
+            bracket_binding=binding,
+            bracket_binding_sha256=binding_sha256,
+            authenticated_pre_observation=observations[0],
+            authenticated_post_observation=observations[1],
+            calibration_allowance_projection={
+                **generalized.issued_calibration_allowance_projection(
+                    acceptance,
+                    pre_exact_bound_lexeme_s="0.020000",
+                    post_exact_bound_lexeme_s="0.021000",
+                ),
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+            },
+        )
+        producer["plan"].update(
+            {
+                "sha256": plan_sha256,
+                "declared_sha256": plan_sha256,
+                "sidecar_sha256": sidecar_sha256,
+            }
+        )
+        producer["extraction_spec"].update(
+            {"sha256": spec_sha256, "member_count": len(ordered_bundle_ids)}
+        )
+        producer["model_runtime_config"]["config_set_sha256"] = hashlib.sha256(
+            b'{"synthetic":"same"}'
+        ).hexdigest()
+        manifest_producers.append(
+            {
+                "plan_id": plan_id,
+                "calibration_plan": str(plan_path),
+                "calibration_plan_sidecar": str(sidecar_path),
+                "bracket_binding": str(binding_path),
+                "cells": manifest_cells,
+            }
+        )
+
+    ledger_snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_path,
+        require_committed_pin=False,
+        verify_custody=False,
+    )
+    assert ledger_snapshot.valid
+    for producer in pinset["producer_plans"]:
+        for cell in producer["cells"]:
+            cell["postcollection"]["terminal_ledger_head_sha256"] = (
+                ledger_snapshot.head_digest
+            )
+    _repair_v2_pinset_self_hashes(pinset)
+    provisional_path, provisional_digest = write_pinset(root, pinset)
+    loaded = generalized.load_pinset(provisional_path, provisional_digest)
+    assert isinstance(loaded, generalized.V2Pinset)
+    _artifact, components = generalized._build_v2_artifacts(
+        pinset=loaded,
+        pinset_path=provisional_path,
+        pinset_sha256=provisional_digest,
+        producer_inputs=authenticated_inputs,
+        calibration_ledger_snapshot=ledger_snapshot,
+        project_commit="0" * 40,
+        project_tree_state="clean",
+    )
+    for producer, aggregate, component in zip(
+        pinset["producer_plans"],
+        pinset["aggregate"]["component_artifacts"],
+        components,
+    ):
+        component_sha256 = generalized._artifact_sha256(component)
+        producer["component_artifact"]["sha256"] = component_sha256
+        aggregate["sha256"] = component_sha256
+    _repair_v2_pinset_self_hashes(pinset)
+    pinset_path, pinset_sha256 = write_pinset(root, pinset)
+    manifest_path = root / "production-input-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.floor_mint_inputs.v2",
+                "calibration_acceptance": str(acceptance_path),
+                "calibration_ledger": str(ledger_path),
+                "calibration_ledger_head_pin": str(head_path),
+                "producer_plans": manifest_producers,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    original_core_loader = generalized._fresh_original_core
+
+    def load_test_core():
+        core = original_core_loader()
+        original_authenticate = core._authenticate_component
+
+        def authenticate(paths, **kwargs):
+            kwargs["strict_validator"] = lambda _path, _strict: []
+
+            def production_consumption(
+                runs_root,
+                referenced_bundle_ids,
+                evaluation_basis_sha256,
+                **consumption_kwargs,
+            ):
+                session = AuthenticatedConsumptionSession(
+                    runs_root,
+                    referenced_bundle_ids,
+                    evaluation_basis_sha256=evaluation_basis_sha256,
+                    consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+                    calibration_ledger_snapshot=consumption_kwargs.get(
+                        "calibration_ledger_snapshot"
+                    ),
+                )
+                session._prepared = True
+                session._preparation_identity = tuple(
+                    sorted(
+                        (
+                            bundle_id,
+                            str((Path(runs_root) / bundle_id).resolve()),
+                        )
+                        for bundle_id in referenced_bundle_ids
+                    )
+                )
+                session._summaries = {
+                    bundle_id: load_json(
+                        Path(runs_root) / bundle_id / "summary_metrics.json"
+                    )
+                    for bundle_id in referenced_bundle_ids
+                }
+                with (
+                    mock.patch(
+                        "joulewise.whole_window._registered_bracket_policy",
+                        return_value={"require_bracket": True},
+                    ),
+                    mock.patch(
+                        "joulewise.whole_window._derived_neg8_decision",
+                        return_value=("passed", None),
+                    ),
+                ):
+                    reasons = whole_window_refusal_reasons(
+                        runs_root,
+                        referenced_bundle_ids,
+                        evaluation_basis_sha256=evaluation_basis_sha256,
+                        consumption_session=session,
+                        consumption_semantics_id=(
+                            MINTED_CONSUMPTION_SEMANTICS_ID
+                        ),
+                    )
+                if reasons:
+                    raise core.MintError(
+                        "authenticated whole-window consumption refused: "
+                        + reasons[0]
+                    )
+                return session._summaries, MINTED_CONSUMPTION_SEMANTICS_ID
+
+            return original_authenticate(
+                paths,
+                **kwargs,
+                consumption_authenticator=production_consumption,
+                allowance_deriver=_synthetic_allowances,
+            )
+
+        core._authenticate_component = authenticate
+        core._derive_stack_identity = lambda _config, _metadata: stack_identity()
+        core.scientific_config_identity = lambda _config: {"synthetic": "same"}
+        core.load_calibration_ledger_snapshot = lambda **kwargs: (
+            load_calibration_ledger_snapshot(
+                kwargs["ledger_path"],
+                kwargs["head_pin_path"],
+                require_committed_pin=False,
+                verify_custody=False,
+            )
+        )
+        core.bind_floor_artifact_evidence = lambda *_args, **_kwargs: {}
+        return core
+
+    with mock.patch.object(
+        generalized,
+        "_fresh_original_core",
+        side_effect=load_test_core,
+    ):
+        loaded = generalized.load_pinset(pinset_path, pinset_sha256)
+        assert isinstance(loaded, generalized.V2Pinset)
+        file_inputs, _roots, file_snapshot = generalized._authenticate_v2_inputs(
+            pinset=loaded,
+            pinset_path=pinset_path,
+            pinset_sha256=pinset_sha256,
+            input_manifest_path=manifest_path,
+            strict_validator=lambda _path, _strict: [],
+            consumption_semantics_id=None,
+        )
+        _artifact, file_components = generalized._build_v2_artifacts(
+            pinset=loaded,
+            pinset_path=pinset_path,
+            pinset_sha256=pinset_sha256,
+            producer_inputs=file_inputs,
+            calibration_ledger_snapshot=file_snapshot,
+            project_commit="0" * 40,
+            project_tree_state="clean",
+        )
+    for producer, aggregate, component in zip(
+        pinset["producer_plans"],
+        pinset["aggregate"]["component_artifacts"],
+        file_components,
+    ):
+        component_sha256 = generalized._artifact_sha256(component)
+        producer["component_artifact"]["sha256"] = component_sha256
+        aggregate["sha256"] = component_sha256
+    _repair_v2_pinset_self_hashes(pinset)
+    pinset_path, pinset_sha256 = write_pinset(root, pinset)
+
+    return (
+        pinset_path,
+        pinset_sha256,
+        manifest_path,
+        load_test_core,
+    )
 
 
 def install_v2_cli_fixture(root: Path):
@@ -2247,9 +3041,19 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 "path": "campaign_manifests/duplicate.json",
                 "sha256": hashlib.sha256(raw).hexdigest(),
             }
+            report_path = Path(
+                input_manifest["producer_plans"][0]["cells"][0]["absolute"][
+                    "report"
+                ]
+            )
+            referenced_bundle_id = load_json(report_path)["cells"][0][
+                "members"
+            ][0]["bundle_id"]
             (evidence_root / "campaign_log.jsonl").write_text(
                 json.dumps(
                     {
+                        "record_type": "idle_admission_whole_window_verdict",
+                        "bundle_ids": [referenced_bundle_id],
                         "row_provenance": {
                             "source_campaign_manifests": [descriptor]
                         }
@@ -2283,6 +3087,79 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     strict_validator=lambda _path, _strict: [],
                     consumption_semantics_id=None,
                 )
+
+    def test_unreferenced_junk_json_in_runs_root_does_not_refuse_mint(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_v2_cli_fixture(root)
+            )
+            input_manifest = load_json(manifest_path)
+            evidence_root = Path(
+                input_manifest["producer_plans"][0]["cells"][0]["absolute"][
+                    "evidence_root"
+                ]
+            )
+            (evidence_root / "unreferenced-junk.json").write_bytes(
+                b'{"duplicate": 1, "duplicate": NaN}\n'
+            )
+
+            def validate_binding(binding, snapshot, **_kwargs):
+                return tuple(
+                    next(
+                        observation
+                        for observation in snapshot.observations
+                        if observation.receipt_digest
+                        == binding["endpoints"][role]["receipt_digest"]
+                    )
+                    for role in ("pre", "post")
+                )
+
+            with (
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "validate_calibration_bracket_binding",
+                    side_effect=validate_binding,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=load_test_core,
+                ),
+            ):
+                exit_code = generalized.main(
+                    [
+                        "--pinset",
+                        str(pinset_path),
+                        "--pinset-sha256",
+                        pinset_sha256,
+                        "--v2-input-manifest",
+                        str(manifest_path),
+                        "--out",
+                        str(root / "floor.json"),
+                        "--single-count-out",
+                        str(root / "single-count.txt"),
+                        "--project-commit",
+                        "0" * 40,
+                        "--project-tree-state",
+                        "clean",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((root / "floor.json").is_file())
+            self.assertTrue((root / "single-count.txt").is_file())
 
     def test_each_genuine_source_mutation_has_a_domain_specific_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2499,93 +3376,182 @@ class V2PinsetAndMintTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            path, digest, inputs, ledger_snapshot = (
-                freeze_production_extracted_v2_pinset(root)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_production_extracted_v2_cli_fixture(root)
             )
-            authentic = generalized.mint_multi_cell_authenticated_artifact(
-                pinset_path=path,
-                pinset_sha256=digest,
-                producer_inputs=inputs,
-                calibration_ledger_snapshot=ledger_snapshot,
-                project_commit="0" * 40,
-                project_tree_state="clean",
-            )
-            self.assertEqual(len(authentic["cells"]), 4)
-            candidate = load_json(path)
-            producer = candidate["producer_plans"][0]
-            plan_id = producer["plan"]["plan_id"]
-            source = inputs[plan_id]
-            report = copy.deepcopy(source.cells["decode"].absolute.report)
-            self.assertIn("production-extractor-", report["runs_root"])
-            self.assertEqual(len(report["cells"]), 4)
-            report["floor_mint_postcollection"] = {
-                "observed_drift_s": "0.002000",
-                "applied_allowance_s": "0.010818",
-                "absolute_floor_six_decimal": "6.294381",
-                "comparative_floor_six_decimal": "13.998038",
-                "operative_floor_six_decimal": "13.998038",
-            }
-            for report_cell in report["cells"]:
-                report_cell["floor"]["drift_widened_guarded_floor_j"] += 0.000001
-                report_cell["operative_floor_j"] += 0.000001
-            report_sha256 = _fixture_artifact_sha256(report)
-            for cell_pin in producer["cells"]:
-                post = cell_pin["postcollection"]
-                post.update(
-                    {
-                        "pre_receipt_sha256": "0" * 64,
-                        "pre_content_sha256": "1" * 64,
-                        "post_receipt_sha256": "2" * 64,
-                        "post_content_sha256": "3" * 64,
-                        "bracket_binding_sha256": "4" * 64,
-                        "terminal_ledger_head_sha256": "5" * 64,
-                        "observed_drift_s": "0.002000",
-                        "applied_allowance_s": "0.010818",
-                        "extraction_report_sha256": report_sha256,
-                        "absolute_floor_full_precision": "6.294381135190098",
-                        "comparative_floor_full_precision": "13.998037715259254",
-                        "operative_floor_full_precision": "13.998037715259254",
-                        "absolute_floor_six_decimal": "6.294381",
-                        "comparative_floor_six_decimal": "13.998038",
-                        "operative_floor_six_decimal": "13.998038",
-                    }
-                )
-            updated_cells = {
-                role: generalized.V2CellComponents(
-                    absolute=replace(
-                        cell.absolute,
-                        report=report,
-                        report_sha256=report_sha256,
-                    ),
-                    comparative=replace(
-                        cell.comparative,
-                        report=report,
-                        report_sha256=report_sha256,
-                    ),
-                    allowed_consumer_condition_families=(
-                        cell.allowed_consumer_condition_families
-                    ),
-                )
-                for role, cell in source.cells.items()
-            }
-            coordinated_inputs = {
-                **inputs,
-                plan_id: replace(source, cells=updated_cells),
-            }
-            _repair_v2_pinset_self_hashes(candidate)
-            candidate_path, candidate_digest = write_pinset(root, candidate)
-            with self.assertRaisesRegex(
-                generalized.MintError,
-                "unknown keys.*floor_mint_postcollection",
+            input_manifest = load_json(manifest_path)
+            source_pinset = load_json(pinset_path)
+
+            def cli_args(
+                label: str,
+                path: Path = pinset_path,
+                digest: str = pinset_sha256,
+            ) -> list[str]:
+                return [
+                    "--pinset",
+                    str(path),
+                    "--pinset-sha256",
+                    digest,
+                    "--v2-input-manifest",
+                    str(manifest_path),
+                    "--out",
+                    str(root / f"{label}-floor.json"),
+                    "--single-count-out",
+                    str(root / f"{label}-single-count.txt"),
+                    "--project-commit",
+                    "0" * 40,
+                    "--project-tree-state",
+                    "clean",
+                ]
+
+            with (
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=load_test_core,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_authenticate_v2_inputs",
+                    wraps=generalized._authenticate_v2_inputs,
+                ) as authenticate_inputs,
             ):
-                generalized.mint_multi_cell_authenticated_artifact(
-                    pinset_path=candidate_path,
-                    pinset_sha256=candidate_digest,
-                    producer_inputs=coordinated_inputs,
-                    calibration_ledger_snapshot=ledger_snapshot,
-                    project_commit="0" * 40,
-                    project_tree_state="clean",
+                self.assertEqual(generalized.main(cli_args("authentic")), 0)
+                self.assertTrue((root / "authentic-floor.json").is_file())
+                self.assertEqual(
+                    len(load_json(root / "authentic-floor.json")["cells"]),
+                    4,
                 )
+                self.assertGreater(authenticate_inputs.call_count, 0)
+
+                first_manifest_producer = input_manifest["producer_plans"][0]
+                report_path = Path(
+                    first_manifest_producer["cells"][0]["absolute"]["report"]
+                )
+                original_report_raw = report_path.read_bytes()
+                attacked_report = load_json(report_path)
+                self.assertIn(
+                    "production-extractor-", attacked_report["runs_root"]
+                )
+                self.assertEqual(len(attacked_report["cells"]), 4)
+                report_cells = {
+                    cell["cell_id"]: cell for cell in attacked_report["cells"]
+                }
+                for report_cell in attacked_report["cells"]:
+                    report_cell["floor"][
+                        "drift_widened_guarded_floor_j"
+                    ] += 0.000001
+                    report_cell["operative_floor_j"] += 0.000001
+                report_path.write_text(
+                    json.dumps(attacked_report, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                attacked_report_sha256 = file_sha256(report_path)
+                attacked_pinset = copy.deepcopy(source_pinset)
+                for cell_pin in attacked_pinset["producer_plans"][0]["cells"]:
+                    absolute_floor = report_cells[
+                        cell_pin["absolute"]["calibration_cell_id"]
+                    ]["floor"]["drift_widened_guarded_floor_j"]
+                    comparative_floor = report_cells[
+                        cell_pin["comparative"]["calibration_cell_id"]
+                    ]["floor"]["drift_widened_guarded_floor_j"]
+                    operative_floor = max(absolute_floor, comparative_floor)
+                    cell_pin["postcollection"].update(
+                        {
+                            "extraction_report_sha256": attacked_report_sha256,
+                            "absolute_floor_full_precision": str(absolute_floor),
+                            "comparative_floor_full_precision": str(
+                                comparative_floor
+                            ),
+                            "operative_floor_full_precision": str(operative_floor),
+                            "absolute_floor_six_decimal": f"{absolute_floor:.6f}",
+                            "comparative_floor_six_decimal": (
+                                f"{comparative_floor:.6f}"
+                            ),
+                            "operative_floor_six_decimal": (
+                                f"{operative_floor:.6f}"
+                            ),
+                        }
+                    )
+                _repair_v2_pinset_self_hashes(attacked_pinset)
+                attacked_path, attacked_digest = write_pinset(
+                    root, attacked_pinset
+                )
+                stderr = io.StringIO()
+                with mock.patch("sys.stderr", stderr):
+                    exit_code = generalized.main(
+                        cli_args("coordinated", attacked_path, attacked_digest)
+                    )
+                self.assertEqual(exit_code, 2)
+                self.assertIn(
+                    "report cell floor differs from authenticated absolute member evidence",
+                    stderr.getvalue(),
+                )
+                self.assertFalse((root / "coordinated-floor.json").exists())
+                report_path.write_bytes(original_report_raw)
+                clean_path, clean_digest = write_pinset(root, source_pinset)
+
+                evidence_paths = {
+                    "acceptance": Path(input_manifest["calibration_acceptance"]),
+                    "ledger": Path(input_manifest["calibration_ledger"]),
+                    "binding": Path(
+                        first_manifest_producer["bracket_binding"]
+                    ),
+                    "verdict": Path(attacked_report["runs_root"])
+                    / "campaign_log.jsonl",
+                }
+                expected_messages = {
+                    "acceptance": "calibration acceptance evidence is not authenticated",
+                    "ledger": "calibration ledger snapshot is not authenticated",
+                    "binding": "bracket binding failed authenticated validation",
+                    "verdict": "campaign log must contain exactly one evaluation basis",
+                }
+                for label, evidence_path in evidence_paths.items():
+                    with self.subTest(source=label):
+                        original_raw = evidence_path.read_bytes()
+                        if label == "ledger":
+                            evidence_path.write_bytes(original_raw + b"{}\n")
+                        elif label == "verdict":
+                            rows = [
+                                json.loads(line)
+                                for line in original_raw.decode("utf-8").splitlines()
+                            ]
+                            basis_row = next(
+                                row for row in rows if "evaluation_basis" in row
+                            )
+                            basis_row["evaluation_basis"]["sha256"] = "f" * 64
+                            evidence_path.write_text(
+                                "".join(
+                                    json.dumps(row) + "\n" for row in rows
+                                ),
+                                encoding="utf-8",
+                            )
+                        else:
+                            value = json.loads(original_raw)
+                            value["attack_marker"] = label
+                            evidence_path.write_text(
+                                json.dumps(value) + "\n", encoding="utf-8"
+                            )
+                        stderr = io.StringIO()
+                        with mock.patch("sys.stderr", stderr):
+                            source_exit_code = generalized.main(
+                                cli_args(label, clean_path, clean_digest)
+                            )
+                        self.assertEqual(source_exit_code, 2)
+                        self.assertIn(
+                            expected_messages[label], stderr.getvalue()
+                        )
+                        evidence_path.write_bytes(original_raw)
 
     def test_verdict_bracket_refuses_repin_to_earlier_authentic_session(
         self,
