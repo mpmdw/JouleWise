@@ -10,10 +10,34 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-08 — **FINAL WRAP of the 2026-08-07/08 evening
-double-window. A NEW SESSION STARTS HERE: read, in order, (1) the
-SUCCESSOR SCRIPT immediately below, (2) the D-121 ERA block, (3) the
-EVENING block. Everything under those is executed history.**
+Last updated: 2026-08-08 morning — **THE 40-HOUR WINDOW IS LIVE
+(D-125). A NEW SESSION STARTS HERE:**
+
+## ▶▶ RESUME SCRIPT FOR THE 40-HOUR WINDOW (post-/clear; read FIRST)
+
+**THE PLAN OF RECORD IS `docs/strategy/2026-08-08-40h-plan.md` — read
+it in full and execute from the earliest incomplete item.** In one
+line: Phase A (trust/recovery/writer-literal/estimator/U11/U2 reworks —
+ALL DESIGNS ADOPTED, consult memos custodied and cited in the plan;
+execution + full D-118/D-121 gates) → Phase B (packs generated AND
+frozen; Ed rulings D-122/D-123 in hand) → Phase C (Window ALPHA night 1,
+BETA night 2, gamma if hours remain; Ed does §5A taps only). Morning
+mints put the FIRST MEASURED NUMBERS in the paper.
+
+Standing context that survives /clear: D-121 terminal magistrate
+review binds every merge; the same-signature escalation trigger is
+armed (three fired 2026-08-07/08 — consult, never round three); Sol
+fast tier on all read-only runs; codex-run-v3 for enforced-WRITE_SCOPE
+implementations (prompt needs a literal `WRITE_SCOPE: [...]` line;
+CODEX_APP_BRIDGE=off for concurrent bridge runs); review agents get
+isolation:worktree and a no-checkout line; never gate on a piped test;
+quiet windows need a caffeinate-free machine (kill any stray
+keep-alive before arming). Ed's remaining owed rulings: the original
+8 minus 2/4 (ruled as D-122/D-123); ruling 8 still gates the
+reason-code SPEC lane only.
+
+The MORNING STATE block below records how the overnight ended;
+everything under it is executed history.
 
 ## ▶ MORNING STATE 2026-08-08 (overnight run complete — READ THIS FIRST)
 

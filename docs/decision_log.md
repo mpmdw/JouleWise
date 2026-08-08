@@ -146,6 +146,7 @@ be re-derived by a future agent gets an entry here.
 | D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
 | D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
 | D-124 | Common-mode ABBA contrast estimator PROMOTED-AS-CANDIDATE in the TWO-SHARED-EDGE form (shared onset + shared offset parameters, adversarial per-bundle residuals) after the ordered current-semantics replay HELD the bar decisively (a5 decode: worst-case default 8.611855 J vs joint-sweep 1.632422 J, two-shared-edge 1.869502 J — all NON-CLAIM); registration conditions bind (named estimator + named stationarity transfer assumption with evidence; pre-registration in the D-117 packs BEFORE claim data; identical treatment on calibration and consuming contrast; allowance exactly once; full D-118/D-121 gate; issued artifact untouched); the evidentiary limit of the transfer assumption is registered and rides the paper's limitations | adopted (magistrate under the D-123 overnight license; Ed may reverse — flagged for morning review) |
+| D-125 | Ed morning ratification batch (2026-08-08): D-124 common-mode estimator SIGNED OFF ("if instrument gets better, yes"); the Q1+Q13 lineage-envelope adoption RATIFIED on trust ("i trust your decisions there"), with the magistrate's clarification on record that this is successor calibration-acceptance arithmetic (not workload profiles) and only ever strengthens the 0.010818 floor — D-117 cl.1 is accordingly AMENDED for successors to "genesis lower bound + lineage-envelope rule" (the consult's transcription condition is met; freeze-until-ruled ends); 40-hour work window granted — plan of record at docs/strategy/2026-08-08-40h-plan.md | ratified (Ed, in-thread 2026-08-08 morning; transcribed by the magistrate) |
 
 ---
 
@@ -7911,3 +7912,30 @@ artifact is not reopened and no raw calibration corpus is voided.
 merges (shared floor_extraction/estimator surface) and BEFORE pack
 freeze (the packs name the estimator identity). FLOOR-COMMONMODE-01's
 kernel row sharpens to this form.
+
+
+## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window
+
+**Date:** 2026-08-08 morning. **Status:** RATIFIED (Ed, in-thread).
+
+1. **D-124 signed off.** Ed's condition ("if instrument gets better")
+   is exactly the property: the two-shared-edge common-mode estimator
+   tightens comparative floors 4-5x on repo-demonstrated evidence, under
+   the full registration conditions of D-124. FLOOR-COMMONMODE-01's
+   implementation must land through the full gate BEFORE pack freeze so
+   the estimator identity pre-registers in pack bytes.
+2. **Q1+Q13 envelope adoption ratified on trust.** Magistrate
+   clarification recorded: this governs SUCCESSOR calibration-acceptance
+   arithmetic (drift screen + budget ceiling derivation), not workload
+   profiles; screens/ceilings become lineage-monotone t-family envelopes
+   inheriting the genesis screen 0.010818 as a lower bound — the
+   allowance can only strengthen. With Ed's ratification the consult's
+   transcription condition is met: **D-117 clause 1 is AMENDED for
+   successor artifacts** from "every mint uses max(drift, 0.010818)" to
+   "genesis lower bound + lineage-envelope rule"; the genesis literal
+   remains binding as the floor and for every mint under the issued
+   artifact. Freeze-until-ruled ends.
+3. **The 40-hour window.** Ed grants ~40 continuous hours including
+   quiet-window nights (Ed available for §5A arm/disarm taps). The plan
+   of record is `docs/strategy/2026-08-08-40h-plan.md`; RUN_STATE points
+   to it as the resume script across /clear.
