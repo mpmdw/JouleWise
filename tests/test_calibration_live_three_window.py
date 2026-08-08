@@ -26,9 +26,13 @@ from joulewise.calibration_bracketing import (
     validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (
+    APPEND_INTENT_EVENT,
+    APPEND_RECORDS_PER_OPERATION,
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SLOT_CLAIM_EVENT,
+    BRACKET_SESSION_SLOTS,
+    CONTROL_SCHEMA,
     GOVERNED_ARTIFACTS,
     HISTORICAL_IMPORT_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_RESERVATION_EVENT,
@@ -63,7 +67,10 @@ _USE_WINDOW_BINDING = object()
 _USE_WINDOW_RUNS_ROOT = object()
 _ISSUANCE_BASE_SEQUENCE = 76
 _LIVE_SESSION_COUNT = 3
-_PRODUCTION_RECEIPTS_PER_SESSION = 5
+_PRODUCTION_OPERATIONS_PER_SESSION = 1 + 2 * len(BRACKET_SESSION_SLOTS)
+_PRODUCTION_RECEIPTS_PER_SESSION = (
+    _PRODUCTION_OPERATIONS_PER_SESSION * APPEND_RECORDS_PER_OPERATION
+)
 _EXPECTED_TERMINAL_SEQUENCE = (
     _ISSUANCE_BASE_SEQUENCE
     + _LIVE_SESSION_COUNT * _PRODUCTION_RECEIPTS_PER_SESSION
@@ -560,17 +567,67 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self.pin.write_bytes(_pin_bytes(pin))
         return self._load_snapshot()
 
-    @staticmethod
-    def _rechain(receipts: list[dict]) -> list[dict]:
+    @classmethod
+    def _rechain(cls, receipts: list[dict]) -> list[dict]:
+        sources = copy.deepcopy(receipts)
         result: list[dict] = []
         predecessor = "0" * 64
-        for sequence, source in enumerate(receipts, start=1):
+        byte_offset = 0
+        ledger_id = canonical_sha256(
+            {
+                "ledger_schema": LEDGER_SCHEMA,
+                "lineage_anchor_sequence": 1 if sources else 0,
+                "lineage_anchor_digest": (
+                    sources[0]["receipt_digest"] if sources else "0" * 64
+                ),
+            }
+        )
+        for source_index, source in enumerate(sources):
+            sequence = source_index + 1
             row = copy.deepcopy(source)
             row["sequence"] = sequence
             row["predecessor_digest"] = predecessor
+            if (
+                row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+            ):
+                target_index = source_index + APPEND_RECORDS_PER_OPERATION - 1
+                if (
+                    target_index >= len(sources)
+                    or sources[target_index].get("schema_version") == CONTROL_SCHEMA
+                ):
+                    raise AssertionError("fixture intent lacks its semantic target")
+                target_core = cls._target_core(sources[target_index])
+                operation_key = cls._operation_key(target_core)
+                base_head = {
+                    "sequence": sequence - 1,
+                    "digest": predecessor,
+                    "byte_offset": byte_offset,
+                }
+                target_core_sha256 = canonical_sha256(target_core)
+                row.update(
+                    {
+                        "ledger_id": ledger_id,
+                        "base_head": base_head,
+                        "operation_key": operation_key,
+                        "target_schema_version": target_core["schema_version"],
+                        "target_event": target_core["event"],
+                        "target_core": target_core,
+                        "target_core_sha256": target_core_sha256,
+                        "operation_id": canonical_sha256(
+                            {
+                                "ledger_id": ledger_id,
+                                "base_head": base_head,
+                                "operation_key": operation_key,
+                                "target_core_sha256": target_core_sha256,
+                            }
+                        ),
+                    }
+                )
             row = _receipt(row)
             result.append(row)
             predecessor = row["receipt_digest"]
+            byte_offset += len(canonical_json_bytes(row)) + 1
         return result
 
     @staticmethod
@@ -595,6 +652,51 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             and row.get("event") == event
             and (slot is None or row.get("slot") == slot)
         )
+
+    def _intent_index(
+        self, session_id: str, event: str, slot: str | None = None
+    ) -> int:
+        return next(
+            index
+            for index, row in enumerate(self.receipts)
+            if row.get("schema_version") == CONTROL_SCHEMA
+            and row.get("event") == APPEND_INTENT_EVENT
+            and row.get("target_core", {}).get("session_id") == session_id
+            and row.get("target_core", {}).get("event") == event
+            and (
+                slot is None
+                or row.get("target_core", {}).get("slot") == slot
+            )
+        )
+
+    def _operation_indexes(
+        self, session_id: str, event: str, slot: str | None = None
+    ) -> tuple[int, ...]:
+        return tuple(
+            sorted(
+                (
+                    self._intent_index(session_id, event, slot),
+                    self._receipt_index(session_id, event, slot),
+                )
+            )
+        )
+
+    @staticmethod
+    def _target_core(row: dict) -> dict:
+        return {
+            key: copy.deepcopy(value)
+            for key, value in row.items()
+            if key not in {"sequence", "predecessor_digest", "receipt_digest"}
+        }
+
+    @staticmethod
+    def _operation_key(target_core: dict) -> dict:
+        return {
+            "event": target_core["event"],
+            "session_id": target_core.get("session_id"),
+            "slot": target_core.get("slot"),
+            "attempt_id": target_core.get("attempt_id"),
+        }
 
     def test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions(
         self,
@@ -862,13 +964,34 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
         self.assertEqual(
             receipt_model["receipts_per_session"],
-            _PRODUCTION_RECEIPTS_PER_SESSION,
+            _PRODUCTION_OPERATIONS_PER_SESSION,
         )
-        for index, window in enumerate(self.windows.values()):
-            start = index * _PRODUCTION_RECEIPTS_PER_SESSION
-            rows = live[start : start + _PRODUCTION_RECEIPTS_PER_SESSION]
+        for window in self.windows.values():
+            rows = [
+                row
+                for row in live
+                if row.get("session_id") == window["session_id"]
+                or row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+                and row.get("target_core", {}).get("session_id")
+                == window["session_id"]
+            ]
+            business_rows = [
+                row for row in rows if row.get("schema_version") != CONTROL_SCHEMA
+            ]
+            intent_rows = [
+                row
+                for row in rows
+                if row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+            ]
+            self.assertEqual(len(rows), _PRODUCTION_RECEIPTS_PER_SESSION)
             self.assertEqual(
-                [row["event"] for row in rows],
+                len(intent_rows),
+                len(business_rows) * (APPEND_RECORDS_PER_OPERATION - 1),
+            )
+            self.assertEqual(
+                [row["event"] for row in business_rows],
                 [
                     BRACKET_SESSION_OPEN_EVENT,
                     BRACKET_SESSION_SLOT_CLAIM_EVENT,
@@ -877,10 +1000,17 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                     BRACKET_SESSION_FINALIZATION_EVENT,
                 ],
             )
-            self.assertEqual({row["session_id"] for row in rows}, {window["session_id"]})
             self.assertEqual(
-                [row["slot"] for row in rows[1:]],
+                {row["session_id"] for row in business_rows},
+                {window["session_id"]},
+            )
+            self.assertEqual(
+                [row["slot"] for row in business_rows[1:]],
                 ["pre", "pre", "post", "post"],
+            )
+            self.assertEqual(
+                [row["target_event"] for row in intent_rows],
+                [row["event"] for row in business_rows],
             )
         live_observations = [
             observation
@@ -1016,34 +1146,41 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self,
     ) -> None:
         alpha_session = self.windows["alpha"]["session_id"]
-        post_claim = self._receipt_index(
+        post_claim = self._operation_indexes(
             alpha_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
         )
-        post_final = self._receipt_index(
+        post_final = self._operation_indexes(
             alpha_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
         )
         session_open = self._receipt_index(
             alpha_session, BRACKET_SESSION_OPEN_EVENT
         )
         variants: dict[str, list[dict]] = {}
-        variants["missing"] = (
-            self.receipts[:post_final] + self.receipts[post_final + 1 :]
+        variants["missing"] = self._rechain(
+            [
+                row
+                for index, row in enumerate(self.receipts)
+                if index not in post_final
+            ]
         )
-        variants["duplicate"] = (
-            self.receipts[: post_final + 1]
-            + [copy.deepcopy(self.receipts[post_final])]
-            + self.receipts[post_final + 1 :]
+        duplicate_at = max(post_final) + 1
+        variants["duplicate"] = self._rechain(
+            self.receipts[:duplicate_at]
+            + [copy.deepcopy(self.receipts[index]) for index in post_final]
+            + self.receipts[duplicate_at:]
         )
         reordered = copy.deepcopy(self.receipts)
-        reordered[post_claim], reordered[post_final] = (
-            reordered[post_final],
-            reordered[post_claim],
-        )
-        variants["reordered"] = reordered
+        operation_positions = (*post_claim, *post_final)
+        reordered_rows = [
+            *[copy.deepcopy(self.receipts[index]) for index in post_final],
+            *[copy.deepcopy(self.receipts[index]) for index in post_claim],
+        ]
+        for index, row in zip(operation_positions, reordered_rows, strict=True):
+            reordered[index] = row
+        variants["reordered"] = self._rechain(reordered)
         conflicting = copy.deepcopy(self.receipts)
         conflicting[session_open]["window_id"] = "conflicting-alpha-window"
-        conflicting[session_open] = _receipt(conflicting[session_open])
-        variants["conflicting"] = conflicting
+        variants["conflicting"] = self._rechain(conflicting)
 
         for name, receipts in variants.items():
             with self.subTest(vector=name):
@@ -1052,23 +1189,33 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                     {
                         "calibration_ledger_chain_conflict",
                         "calibration_ledger_bracket_session_conflict",
+                        "calibration_ledger_bracket_session_open",
+                        "calibration_ledger_operation_conflict",
                     }
                     & set(snapshot.refusal_reasons)
                 )
 
     def test_refuses_open_or_abandoned_session_without_governed_closure(self) -> None:
-        open_snapshot = self._variant_snapshot(self.receipts[:-1])
+        gamma_session = self.windows["gamma"]["session_id"]
+        post_final = self._operation_indexes(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
+        )
+        open_snapshot = self._variant_snapshot(
+            copy.deepcopy(self.receipts[: min(post_final)])
+        )
         self.assertIn(
             "calibration_ledger_bracket_session_open",
             open_snapshot.refusal_reasons,
         )
 
-        gamma_session = self.windows["gamma"]["session_id"]
-        post_claim = self._receipt_index(
+        post_claim = self._operation_indexes(
             gamma_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
         )
-        abandoned = copy.deepcopy(self.receipts[:post_claim])
-        abandoned[-1]["disposition"] = "abandoned"
+        abandoned = copy.deepcopy(self.receipts[: min(post_claim)])
+        pre_final = self._receipt_index(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "pre"
+        )
+        abandoned[pre_final]["disposition"] = "abandoned"
         abandoned = self._rechain(abandoned)
         abandoned_snapshot = self._variant_snapshot(abandoned)
         self.assertIn(
@@ -1087,8 +1234,13 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         mismatch = self._variant_snapshot(self.receipts, mismatch_pin)
         self.assertIn("calibration_ledger_head_mismatch", mismatch.refusal_reasons)
 
+        gamma_session = self.windows["gamma"]["session_id"]
+        post_final = self._operation_indexes(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
+        )
         rollback = self._variant_snapshot(
-            self.receipts[:-1], json.loads(self.final_pin_bytes)
+            copy.deepcopy(self.receipts[: min(post_final)]),
+            json.loads(self.final_pin_bytes),
         )
         self.assertIn("calibration_ledger_rollback", rollback.refusal_reasons)
 

@@ -1015,9 +1015,9 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 lifecycle.begin()
             ordinary.assert_not_called()
             receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
-            self.assertEqual(receipts[0], capability)
+            self.assertEqual(receipts[1], capability)
             self.assertEqual(
-                receipts[1]["event"],
+                receipts[3]["event"],
                 ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
             )
             self.assertFalse(custody["pre"].exists())
@@ -1037,7 +1037,7 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 ledger_module.CalibrationLedgerError, "exact reserved"
             ):
                 mismatched.begin()
-            self.assertEqual(len(ledger.read_text().splitlines()), 2)
+            self.assertEqual(len(ledger.read_text().splitlines()), 4)
 
     def test_concurrent_double_arm_accepts_exactly_one_and_loser_cannot_abort_winner(
         self,
@@ -1085,12 +1085,7 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
             refused = [value for status, value in outcomes if status == "refused"]
             self.assertEqual(len(accepted), 1)
             self.assertEqual(len(refused), 1)
-            self.assertIn(
-                ledger_module.REFUSAL_TAXONOMY[
-                    "calibration_ledger_bracket_slot_claimed"
-                ],
-                str(refused[0]),
-            )
+            self.assertIn("operation key conflicts", str(refused[0]))
             loser = next(lifecycle for lifecycle in lifecycles if not lifecycle.begun)
             self.assertIsNone(loser.abandon("losing_writer_exit"))
             receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
@@ -1183,7 +1178,7 @@ os._exit(23)
                 ledger_module.terminal_head_pin_for_session(
                     ledger, session_id="session-writer"
                 )["sequence"],
-                5,
+                10,
             )
 
     def test_main_preserves_symlinked_custody_spelling_used_by_reservation(
@@ -1295,6 +1290,61 @@ os._exit(23)
 
             self.assertEqual(return_code, 2)
             self.assertEqual(observed["custody_locator"], expected_custody)
+
+    def test_writer_repairs_before_slot_validation_and_retries_same_claim_once(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, _capability = self._open_session(
+                Path(tmp)
+            )
+            lifecycle = self._lifecycle(
+                ledger, pin, epoch, t1, custody, "pre"
+            )
+            events: list[str] = []
+            claim_ids: list[str] = []
+            real_repair = validation_script.repair_calibration_ledger
+            real_validate = validation_script._validate_reserved_bracket_slot
+            real_claim = validation_script.claim_bracket_session_slot
+
+            def observe_repair(*args, **kwargs):
+                events.append("repair")
+                return real_repair(*args, **kwargs)
+
+            def observe_validate(*args, **kwargs):
+                events.append("validate")
+                return real_validate(*args, **kwargs)
+
+            def fail_then_claim(*args, **kwargs):
+                claim_ids.append(kwargs["claim_id"])
+                if len(claim_ids) == 1:
+                    raise ledger_module.CalibrationLedgerError(
+                        "calibration_ledger_recovery_required"
+                    )
+                return real_claim(*args, **kwargs)
+
+            with (
+                patch.object(
+                    validation_script,
+                    "repair_calibration_ledger",
+                    side_effect=observe_repair,
+                ),
+                patch.object(
+                    validation_script,
+                    "_validate_reserved_bracket_slot",
+                    side_effect=observe_validate,
+                ),
+                patch.object(
+                    validation_script,
+                    "claim_bracket_session_slot",
+                    side_effect=fail_then_claim,
+                ),
+            ):
+                lifecycle.begin()
+            self.assertEqual(events[:2], ["repair", "validate"])
+            self.assertEqual(events, ["repair", "validate", "repair", "validate"])
+            self.assertEqual(len(claim_ids), 2)
+            self.assertEqual(claim_ids[0], claim_ids[1])
 
 
 if __name__ == "__main__":

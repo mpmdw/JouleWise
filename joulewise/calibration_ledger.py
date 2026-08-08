@@ -13,13 +13,12 @@ one capability and append an exclusive slot-claim before either writer creates
 capture state.  Evaluation consumes one frozen snapshot whose physical head
 must equal the repository-committed head pin.
 
-Ordinary appends use a crash-recovery sidecar beside the ledger.  The writer
-fsyncs a complete intended ledger line to the sidecar before touching the
-ledger, appends and fsyncs the ledger, then removes the sidecar.  A loader only
-recognizes a torn final line when its bytes are an exact prefix of that
-authenticated sidecar payload.  The next governed writer completes only the
-missing suffix (never deletes ledger bytes) and durably records a separate
-recovery-evidence JSON object before clearing the sidecar.
+Every new business append is preceded by an immutable in-ledger intent.  The
+intent binds the ledger lineage and exact physical head, a stable operation
+key, and the complete semantic target.  Recovery obtains the target only from
+that intent.  Non-admitted tail bytes are never deleted: a following
+abandonment control receipt authenticates their exact physical range before
+the committed target is reconstructed.
 """
 
 from __future__ import annotations
@@ -49,8 +48,14 @@ BRACKET_SESSION_SLOT_CLAIM_EVENT = "bracket-session-slot-claim"
 BRACKET_SESSION_FINALIZATION_EVENT = "bracket-session-slot-finalization"
 BRACKET_SESSION_ABORT_EVENT = "bracket-session-abort"
 BRACKET_SESSION_SLOTS = ("pre", "post")
-APPEND_JOURNAL_SCHEMA = "joulewise.calibration_ledger_append_journal.v1"
-APPEND_RECOVERY_SCHEMA = "joulewise.calibration_ledger_append_recovery.v1"
+CONTROL_SCHEMA = "joulewise.calibration_ledger_control.v1"
+APPEND_INTENT_EVENT = "append-intent"
+ABANDONMENT_EVENT = "abandon-tail"
+APPEND_POLICY_REVISION = "d117-ledger-resident-v1"
+# Every governed semantic append is represented by one durable intent followed
+# by its committed target.  Consumers that model physical ledger cadence must
+# derive it from this protocol constant instead of hard-coding row counts.
+APPEND_RECORDS_PER_OPERATION = 2
 HISTORICAL_IMPORT_TABLE_SCHEMA = (
     "joulewise.calibration_historical_import_table.v1"
 )
@@ -124,7 +129,8 @@ REFUSAL_TAXONOMY: Mapping[str, str] = MappingProxyType(
         "calibration_ledger_head_uncommitted": "the head pin differs from the Git HEAD bytes",
         "calibration_ledger_head_mismatch": "the physical head differs from the committed pin",
         "calibration_ledger_rollback": "the physical ledger is a proper prefix of the pinned head",
-        "calibration_ledger_recovery_required": "the final ledger line is a journal-authenticated torn append requiring governed recovery",
+        "calibration_ledger_recovery_required": "the ledger has an unresolved append intent or non-admitted tail residue",
+        "calibration_ledger_operation_conflict": "an operation key conflicts with its durable target commitment",
         "calibration_ledger_baseline_missing": "the acceptance cutoff is not in the current chain",
         "calibration_ledger_custody_invalid": "receipt-bound evidence bytes are absent or hash-invalid",
         "calibration_ledger_snapshot_required": "claim evaluation did not receive one immutable snapshot",
@@ -313,14 +319,28 @@ class CalibrationLedgerSnapshot:
         if len(open_sessions) != 1:
             return False
         session = open_sessions[0]
-        if session.capability_sequence != self.committed_head_sequence + 1:
-            return False
         tail = self.receipts[self.committed_head_sequence :]
+        business_tail = [
+            row for row in tail if row.get("schema_version") != CONTROL_SCHEMA
+        ]
         return bool(
             tail
-            and tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
-            and tail[0].get("predecessor_digest") == self.committed_head_digest
-            and all(row.get("session_id") == session.session_id for row in tail)
+            and business_tail
+            and business_tail[0].get("event") == BRACKET_SESSION_OPEN_EVENT
+            and business_tail[0].get("sequence") == session.capability_sequence
+            and all(
+                (
+                    row.get("schema_version") == CONTROL_SCHEMA
+                    and (
+                        row.get("event") == ABANDONMENT_EVENT
+                        or row.get("event") == APPEND_INTENT_EVENT
+                        and row.get("target_core", {}).get("session_id")
+                        == session.session_id
+                    )
+                )
+                or row.get("session_id") == session.session_id
+                for row in tail
+            )
         )
 
     @property
@@ -404,6 +424,37 @@ class HistoricalImportDurabilityUncertain(CalibrationLedgerError):
 
 
 @dataclass(frozen=True)
+class CalibrationLedgerInspection:
+    """Physical recovery state of one locked or immutable ledger view."""
+
+    state: str
+    ledger_id: str
+    head_sequence: int
+    head_digest: str
+    valid_end_offset: int
+    residue_start_offset: int
+    residue_length: int
+    residue_sha256: str
+    active_operation_id: str | None
+    active_operation_key: Mapping[str, Any] | None
+    target_core_sha256: str | None
+    legacy_journal_path: str | None = None
+    legacy_journal_sha256: str | None = None
+
+
+@dataclass
+class _PhysicalLedger:
+    receipts: list[Mapping[str, Any]]
+    offsets: list[int]
+    valid_end_offset: int
+    residue_start_offset: int
+    residue: bytes
+    active_intent: Mapping[str, Any] | None
+    ledger_id: str
+    reasons: set[str]
+
+
+@dataclass(frozen=True)
 class _HistoricalCandidate:
     attempt_id: str
     content_id: str
@@ -465,6 +516,45 @@ _CHAIN_KEYS = frozenset(
         "predecessor_digest",
         "event",
         "receipt_digest",
+    }
+)
+_INTENT_KEYS = _CHAIN_KEYS | {
+    "ledger_id",
+    "base_head",
+    "operation_key",
+    "target_schema_version",
+    "target_event",
+    "target_core",
+    "target_core_sha256",
+    "operation_id",
+}
+_ABANDONMENT_KEYS = _CHAIN_KEYS | {
+    "abandoned_predecessor_sequence",
+    "abandoned_predecessor_digest",
+    "residue_start_offset",
+    "residue_length",
+    "residue_sha256",
+    "receipt_offset",
+    "reason_code",
+    "known_operation_id",
+    "known_target_core_sha256",
+    "actor_type",
+    "actor_identity",
+    "policy_revision",
+    "attestation_reason",
+    "legacy_journal",
+}
+_OPERATION_KEY_KEYS = frozenset(
+    {"event", "session_id", "slot", "attempt_id"}
+)
+_BASE_HEAD_KEYS = frozenset({"sequence", "digest", "byte_offset"})
+_LEGACY_JOURNAL_KEYS = frozenset(
+    {
+        "path",
+        "length",
+        "sha256",
+        "observed_tail_hex",
+        "observed_tail_sha256",
     }
 )
 _SESSION_IDENTITY_KEYS = frozenset(
@@ -651,9 +741,163 @@ def _valid_session_receipt_shape(receipt: Mapping[str, Any]) -> bool:
     )
 
 
+def _target_core(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Return semantic receipt content, excluding chain-placement fields."""
+
+    return {
+        key: _jsonable(value)
+        for key, value in receipt.items()
+        if key not in {"sequence", "predecessor_digest", "receipt_digest"}
+    }
+
+
+def _operation_key_for_core(target_core: Mapping[str, Any]) -> dict[str, Any]:
+    event = target_core.get("event")
+    schema = target_core.get("schema_version")
+    session_id = target_core.get("session_id") if schema == BRACKET_SESSION_SCHEMA else None
+    slot = target_core.get("slot") if schema == BRACKET_SESSION_SCHEMA else None
+    attempt_id = target_core.get("attempt_id")
+    if event == BRACKET_SESSION_OPEN_EVENT:
+        attempt_id = None
+    if event == BRACKET_SESSION_ABORT_EVENT:
+        slot = None
+        attempt_id = None
+    return {
+        "event": event,
+        "session_id": session_id,
+        "slot": slot,
+        "attempt_id": attempt_id,
+    }
+
+
+def _valid_operation_key(value: object) -> bool:
+    if not isinstance(value, Mapping) or set(value) != _OPERATION_KEY_KEYS:
+        return False
+    return (
+        isinstance(value.get("event"), str)
+        and bool(value.get("event"))
+        and all(
+            item is None or isinstance(item, str) and bool(item)
+            for item in (
+                value.get("session_id"),
+                value.get("slot"),
+                value.get("attempt_id"),
+            )
+        )
+    )
+
+
+def _valid_legacy_journal_metadata(value: object) -> bool:
+    if not isinstance(value, Mapping) or set(value) != _LEGACY_JOURNAL_KEYS:
+        return False
+    try:
+        observed_tail = bytes.fromhex(str(value.get("observed_tail_hex", "")))
+    except ValueError:
+        return False
+    length = value.get("length")
+    return (
+        isinstance(value.get("path"), str)
+        and bool(value["path"])
+        and isinstance(length, int)
+        and not isinstance(length, bool)
+        and length >= len(observed_tail)
+        and len(observed_tail) <= 64
+        and _is_sha256(value.get("sha256"))
+        and _is_sha256(value.get("observed_tail_sha256"))
+        and hashlib.sha256(observed_tail).hexdigest()
+        == value["observed_tail_sha256"]
+    )
+
+
+def _valid_control_receipt_shape(receipt: Mapping[str, Any]) -> bool:
+    if not _valid_chain_fields(receipt, CONTROL_SCHEMA):
+        return False
+    event = receipt.get("event")
+    if event == APPEND_INTENT_EVENT:
+        base = receipt.get("base_head")
+        operation_key = receipt.get("operation_key")
+        target_core = receipt.get("target_core")
+        if (
+            set(receipt) != _INTENT_KEYS
+            or not _is_sha256(receipt.get("ledger_id"))
+            or not isinstance(base, Mapping)
+            or set(base) != _BASE_HEAD_KEYS
+            or isinstance(base.get("sequence"), bool)
+            or not isinstance(base.get("sequence"), int)
+            or int(base.get("sequence", -1)) < 0
+            or not _is_sha256(base.get("digest"))
+            or isinstance(base.get("byte_offset"), bool)
+            or not isinstance(base.get("byte_offset"), int)
+            or int(base.get("byte_offset", -1)) < 0
+            or not _valid_operation_key(operation_key)
+            or not isinstance(target_core, Mapping)
+            or not isinstance(receipt.get("target_schema_version"), str)
+            or not isinstance(receipt.get("target_event"), str)
+            or not _is_sha256(receipt.get("target_core_sha256"))
+            or not _is_sha256(receipt.get("operation_id"))
+        ):
+            return False
+        return (
+            target_core.get("schema_version") == receipt["target_schema_version"]
+            and target_core.get("event") == receipt["target_event"]
+            and _operation_key_for_core(target_core) == dict(operation_key)
+            and canonical_sha256(target_core) == receipt["target_core_sha256"]
+            and set(target_core).isdisjoint(
+                {"sequence", "predecessor_digest", "receipt_digest"}
+            )
+            and receipt["operation_id"] == _operation_id(
+                ledger_id=str(receipt["ledger_id"]),
+                base_head=base,
+                operation_key=operation_key,
+                target_core_sha256=str(receipt["target_core_sha256"]),
+            )
+        )
+    if event != ABANDONMENT_EVENT or set(receipt) != _ABANDONMENT_KEYS:
+        return False
+    legacy = receipt.get("legacy_journal")
+    return (
+        isinstance(receipt.get("abandoned_predecessor_sequence"), int)
+        and not isinstance(receipt.get("abandoned_predecessor_sequence"), bool)
+        and int(receipt["abandoned_predecessor_sequence"]) >= 0
+        and _is_sha256(receipt.get("abandoned_predecessor_digest"))
+        and isinstance(receipt.get("residue_start_offset"), int)
+        and not isinstance(receipt.get("residue_start_offset"), bool)
+        and int(receipt["residue_start_offset"]) >= 0
+        and isinstance(receipt.get("residue_length"), int)
+        and not isinstance(receipt.get("residue_length"), bool)
+        and int(receipt["residue_length"]) >= 0
+        and _is_sha256(receipt.get("residue_sha256"))
+        and isinstance(receipt.get("receipt_offset"), int)
+        and not isinstance(receipt.get("receipt_offset"), bool)
+        and int(receipt["receipt_offset"]) >= 0
+        and isinstance(receipt.get("reason_code"), str)
+        and bool(receipt["reason_code"])
+        and (
+            receipt.get("known_operation_id") is None
+            or _is_sha256(receipt.get("known_operation_id"))
+        )
+        and (
+            receipt.get("known_target_core_sha256") is None
+            or _is_sha256(receipt.get("known_target_core_sha256"))
+        )
+        and receipt.get("actor_type") in {"engine", "operator"}
+        and isinstance(receipt.get("actor_identity"), str)
+        and bool(receipt["actor_identity"])
+        and receipt.get("policy_revision") == APPEND_POLICY_REVISION
+        and isinstance(receipt.get("attestation_reason"), str)
+        and bool(receipt["attestation_reason"])
+        and (
+            legacy is None
+            or _valid_legacy_journal_metadata(legacy)
+        )
+    )
+
+
 def _valid_receipt_shape(receipt: object) -> bool:
     if not isinstance(receipt, Mapping):
         return False
+    if receipt.get("schema_version") == CONTROL_SCHEMA:
+        return _valid_control_receipt_shape(receipt)
     if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA:
         return _valid_session_receipt_shape(receipt)
     sequence = receipt.get("sequence")
@@ -792,143 +1036,254 @@ def _committed_pin_bytes(path: Path, repo_root: Path) -> bytes | None:
     return completed.stdout
 
 
-def _append_journal_path(ledger_path: Path) -> Path:
+def _legacy_append_journal_path(ledger_path: Path) -> Path:
     ledger = Path(ledger_path)
     return ledger.with_name(f"{ledger.name}.append-journal")
 
 
-def _append_recovery_path(ledger_path: Path, operation_id: str) -> Path:
-    ledger = Path(ledger_path)
-    return ledger.with_name(f"{ledger.name}.recovery-{operation_id}.json")
+def _operation_id(
+    *,
+    ledger_id: str,
+    base_head: Mapping[str, Any],
+    operation_key: Mapping[str, Any],
+    target_core_sha256: str,
+) -> str:
+    return canonical_sha256(
+        {
+            "ledger_id": ledger_id,
+            "base_head": dict(base_head),
+            "operation_key": dict(operation_key),
+            "target_core_sha256": target_core_sha256,
+        }
+    )
 
 
-def _journal_core(value: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: item for key, item in value.items() if key != "operation_id"}
+def _derived_ledger_id(receipts: Sequence[Mapping[str, Any]]) -> str:
+    for receipt in receipts:
+        if receipt.get("event") == APPEND_INTENT_EVENT:
+            return str(receipt["ledger_id"])
+    anchor_sequence = 1 if receipts else 0
+    anchor_digest = (
+        str(receipts[0]["receipt_digest"]) if receipts else GENESIS_DIGEST
+    )
+    return canonical_sha256(
+        {
+            "ledger_schema": LEDGER_SCHEMA,
+            "lineage_anchor_sequence": anchor_sequence,
+            "lineage_anchor_digest": anchor_digest,
+        }
+    )
 
 
-def _valid_append_journal(value: object) -> bool:
-    if not isinstance(value, Mapping) or set(value) != {
-        "schema_version",
-        "event",
-        "ledger_offset",
-        "predecessor_digest",
-        "payload",
-        "payload_sha256",
-        "operation_id",
-    }:
-        return False
-    offset = value.get("ledger_offset")
-    payload_text = value.get("payload")
-    if (
-        value.get("schema_version") != APPEND_JOURNAL_SCHEMA
-        or value.get("event") != "prepare-append"
-        or isinstance(offset, bool)
-        or not isinstance(offset, int)
-        or offset < 0
-        or not _is_sha256(value.get("predecessor_digest"))
-        or not isinstance(payload_text, str)
-        or not payload_text.endswith("\n")
-        or not _is_sha256(value.get("payload_sha256"))
-        or not _is_sha256(value.get("operation_id"))
-    ):
-        return False
-    payload = payload_text.encode("utf-8")
+def _intent_target_receipt(
+    intent: Mapping[str, Any], *, sequence: int, predecessor_digest: str
+) -> dict[str, Any]:
+    target = dict(intent["target_core"])
+    target["sequence"] = sequence
+    target["predecessor_digest"] = predecessor_digest
+    target["receipt_digest"] = _receipt_digest(target)
+    return target
+
+
+def _known_intent_matches(
+    abandonment: Mapping[str, Any], active_intent: Mapping[str, Any] | None
+) -> bool:
+    if active_intent is None:
+        return (
+            abandonment.get("known_operation_id") is None
+            and abandonment.get("known_target_core_sha256") is None
+        )
     return (
-        hashlib.sha256(payload).hexdigest() == value.get("payload_sha256")
-        and canonical_sha256(_journal_core(value)) == value.get("operation_id")
+        abandonment.get("known_operation_id") == active_intent.get("operation_id")
+        and abandonment.get("known_target_core_sha256")
+        == active_intent.get("target_core_sha256")
     )
 
 
-def _read_append_journal(ledger_path: Path) -> tuple[Mapping[str, Any] | None, bool]:
-    path = _append_journal_path(ledger_path)
+def _control_state_admits(
+    value: Mapping[str, Any],
+    *,
+    receipts: Sequence[Mapping[str, Any]],
+    offset: int,
+    active_intent: Mapping[str, Any] | None,
+    expected_sequence: int,
+    predecessor_digest: str,
+) -> tuple[bool, Mapping[str, Any] | None]:
+    event = value.get("event")
+    if event == APPEND_INTENT_EVENT:
+        base = value["base_head"]
+        target = _intent_target_receipt(
+            value,
+            sequence=expected_sequence + 1,
+            predecessor_digest=str(value["receipt_digest"]),
+        )
+        valid = (
+            active_intent is None
+            and value["ledger_id"] == _derived_ledger_id(receipts)
+            and base["sequence"] == expected_sequence - 1
+            and base["digest"] == predecessor_digest
+            and base["byte_offset"] == offset
+            and not any(
+                receipt.get("event") == APPEND_INTENT_EVENT
+                and dict(receipt["operation_key"]) == dict(value["operation_key"])
+                for receipt in receipts
+            )
+            and _valid_receipt_shape(target)
+            and _target_state_transition_is_valid(receipts, target)
+        )
+        return valid, value if valid else active_intent
+    if event == ABANDONMENT_EVENT:
+        valid = (
+            value["abandoned_predecessor_sequence"] == expected_sequence - 1
+            and value["abandoned_predecessor_digest"] == predecessor_digest
+            and value["residue_length"] == 0
+            and value["residue_start_offset"] == offset
+            and value["receipt_offset"] == offset
+            and value["residue_sha256"] == hashlib.sha256(b"").hexdigest()
+            and _known_intent_matches(value, active_intent)
+            and value.get("legacy_journal") is not None
+        )
+        return valid, active_intent
+    if active_intent is None:
+        return True, None
+    target = _intent_target_receipt(
+        active_intent,
+        sequence=expected_sequence,
+        predecessor_digest=predecessor_digest,
+    )
+    return value == target, None if value == target else active_intent
+
+
+def _decode_line(raw: bytes, start: int, end: int) -> Mapping[str, Any] | None:
     try:
-        raw = path.read_bytes()
-    except FileNotFoundError:
-        return None, False
-    except OSError:
-        return None, True
-    try:
-        value = json.loads(raw)
+        value = json.loads(raw[start:end].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return None, True
-    if not _valid_append_journal(value):
-        return None, True
-    return _frozen_mapping(value), False
-
-
-def _journal_completed_raw(
-    raw: bytes, journal: Mapping[str, Any]
-) -> bytes | None:
-    """Return the intended complete bytes only for one exact torn suffix."""
-
-    offset = int(journal["ledger_offset"])
-    payload = str(journal["payload"]).encode("utf-8")
-    if offset > len(raw):
         return None
-    prefix = raw[:offset]
-    suffix = raw[offset:]
-    if offset and not prefix.endswith(b"\n"):
-        return None
-    prefix_receipts, prefix_reasons = _parse_ledger(prefix)
-    predecessor = (
-        str(prefix_receipts[-1]["receipt_digest"])
-        if prefix_receipts
-        else GENESIS_DIGEST
-    )
-    if prefix_reasons or predecessor != journal["predecessor_digest"]:
-        return None
-    if not payload.startswith(suffix):
-        return None
-    return prefix + payload
+    return value if isinstance(value, Mapping) else None
 
 
-def _parse_ledger(
+def _matching_abandonment_bridge(
     raw: bytes,
     *,
-    append_journal: Mapping[str, Any] | None = None,
-) -> tuple[list[Mapping[str, Any]], set[str]]:
+    residue_start: int,
+    expected_sequence: int,
+    predecessor_digest: str,
+    active_intent: Mapping[str, Any] | None,
+) -> tuple[Mapping[str, Any], int, int] | None:
+    candidate = raw.find(b"\n", residue_start)
+    while candidate >= 0 and candidate + 1 < len(raw):
+        receipt_offset = candidate + 1
+        line_end = raw.find(b"\n", receipt_offset)
+        if line_end < 0:
+            return None
+        value = _decode_line(raw, receipt_offset, line_end)
+        if (
+            value is not None
+            and _valid_control_receipt_shape(value)
+            and value.get("event") == ABANDONMENT_EVENT
+            and value.get("sequence") == expected_sequence
+            and value.get("predecessor_digest") == predecessor_digest
+            and value.get("receipt_offset") == receipt_offset
+            and value.get("residue_start_offset") == residue_start
+            and value.get("abandoned_predecessor_sequence")
+            == expected_sequence - 1
+            and value.get("abandoned_predecessor_digest") == predecessor_digest
+            and _known_intent_matches(value, active_intent)
+        ):
+            residue_end = residue_start + int(value["residue_length"])
+            delimiter = raw[residue_end:receipt_offset]
+            residue = raw[residue_start:residue_end]
+            if (
+                residue_end <= receipt_offset
+                and delimiter in {b"", b"\n"}
+                and hashlib.sha256(residue).hexdigest() == value["residue_sha256"]
+            ):
+                return value, receipt_offset, line_end + 1
+        candidate = raw.find(b"\n", candidate + 1)
+    return None
+
+
+def _scan_physical_ledger(raw: bytes) -> _PhysicalLedger:
     receipts: list[Mapping[str, Any]] = []
+    offsets: list[int] = []
     reasons: set[str] = set()
-    if append_journal is not None:
-        completed = _journal_completed_raw(raw, append_journal)
-        if completed is None:
-            return receipts, {"calibration_ledger_malformed"}
-        raw = completed
-        reasons.add("calibration_ledger_recovery_required")
-    if not raw:
-        return receipts, reasons
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return receipts, {"calibration_ledger_malformed"}
-    if not text.endswith("\n"):
-        reasons.add("calibration_ledger_malformed")
+    offset = 0
     predecessor = GENESIS_DIGEST
     expected_sequence = 1
+    active_intent: Mapping[str, Any] | None = None
     seen_digests: set[str] = set()
-    for line in text.splitlines():
-        if not line.strip():
-            reasons.add("calibration_ledger_malformed")
+    terminal_failure = "calibration_ledger_malformed"
+    while offset < len(raw):
+        line_end = raw.find(b"\n", offset)
+        value = _decode_line(raw, offset, line_end) if line_end >= 0 else None
+        shape_valid = value is not None and _valid_receipt_shape(value)
+        chain_valid = bool(
+            shape_valid
+            and value["sequence"] == expected_sequence
+            and value["predecessor_digest"] == predecessor
+            and value["receipt_digest"] not in seen_digests
+        )
+        state_valid = False
+        next_intent = active_intent
+        if chain_valid:
+            state_valid, next_intent = _control_state_admits(
+                value,
+                receipts=receipts,
+                offset=offset,
+                active_intent=active_intent,
+                expected_sequence=expected_sequence,
+                predecessor_digest=predecessor,
+            )
+        if chain_valid and state_valid:
+            receipts.append(value)
+            offsets.append(offset)
+            predecessor = str(value["receipt_digest"])
+            seen_digests.add(predecessor)
+            expected_sequence += 1
+            active_intent = next_intent
+            offset = line_end + 1
             continue
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            reasons.add("calibration_ledger_malformed")
-            continue
-        if not _valid_receipt_shape(value):
-            reasons.add("calibration_ledger_malformed")
-            continue
-        if (
-            value["sequence"] != expected_sequence
-            or value["predecessor_digest"] != predecessor
-            or value["receipt_digest"] in seen_digests
-        ):
-            reasons.add("calibration_ledger_chain_conflict")
-        expected_sequence += 1
-        predecessor = value["receipt_digest"]
+        if shape_valid and not chain_valid:
+            terminal_failure = "calibration_ledger_chain_conflict"
+        elif chain_valid and not state_valid:
+            terminal_failure = "calibration_ledger_operation_conflict"
+        bridge = _matching_abandonment_bridge(
+            raw,
+            residue_start=offset,
+            expected_sequence=expected_sequence,
+            predecessor_digest=predecessor,
+            active_intent=active_intent,
+        )
+        if bridge is None:
+            break
+        abandonment, receipt_offset, next_offset = bridge
+        receipts.append(abandonment)
+        offsets.append(receipt_offset)
+        predecessor = str(abandonment["receipt_digest"])
         seen_digests.add(predecessor)
-        receipts.append(value)
-    return receipts, reasons
+        expected_sequence += 1
+        offset = next_offset
+        terminal_failure = "calibration_ledger_malformed"
+    residue = raw[offset:]
+    if residue:
+        reasons.update({terminal_failure, "calibration_ledger_recovery_required"})
+    elif active_intent is not None:
+        reasons.add("calibration_ledger_recovery_required")
+    return _PhysicalLedger(
+        receipts=receipts,
+        offsets=offsets,
+        valid_end_offset=offset,
+        residue_start_offset=offset,
+        residue=residue,
+        active_intent=active_intent,
+        ledger_id=_derived_ledger_id(receipts),
+        reasons=reasons,
+    )
+
+
+def _parse_ledger(raw: bytes) -> tuple[list[Mapping[str, Any]], set[str]]:
+    physical = _scan_physical_ledger(raw)
+    return physical.receipts, physical.reasons
 
 
 def _observation_from_receipt(
@@ -1125,6 +1480,8 @@ def _attempts_and_observations(
     finalized: dict[str, Mapping[str, Any]] = {}
     reasons: set[str] = set()
     for receipt in receipts:
+        if receipt.get("schema_version") == CONTROL_SCHEMA:
+            continue
         if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA:
             continue
         attempt_id = str(receipt["attempt_id"])
@@ -1224,6 +1581,21 @@ def _attempts_and_observations(
     return observations, sessions, reasons
 
 
+def _target_state_transition_is_valid(
+    receipts: Sequence[Mapping[str, Any]], target: Mapping[str, Any]
+) -> bool:
+    fatal = {
+        "calibration_ledger_attempt_conflict",
+        "calibration_ledger_bracket_session_conflict",
+        "calibration_ledger_content_conflict",
+    }
+    _observations, _sessions, before = _attempts_and_observations(receipts)
+    _observations, _sessions, after = _attempts_and_observations(
+        [*receipts, target]
+    )
+    return not ((after & fatal) - (before & fatal))
+
+
 def _custody_reasons(
     observations: Sequence[LedgerObservation], repo_root: Path
 ) -> set[str]:
@@ -1304,13 +1676,7 @@ def load_calibration_ledger_snapshot(
         and _committed_pin_bytes(head_pin_path, repo_root) != pin_raw
     ):
         reasons.add("calibration_ledger_head_uncommitted")
-    append_journal, malformed_journal = _read_append_journal(ledger_path)
-    receipts, parse_reasons = _parse_ledger(
-        raw,
-        append_journal=append_journal,
-    )
-    if malformed_journal:
-        parse_reasons.add("calibration_ledger_malformed")
+    receipts, parse_reasons = _parse_ledger(raw)
     reasons.update(parse_reasons)
     physical_sequence = len(receipts)
     physical_digest = (
@@ -2255,152 +2621,514 @@ def bootstrap_historical_import(
     return plan
 
 
-def _atomic_private_write(path: Path, payload: bytes) -> None:
-    """Publish one fsynced sidecar without exposing partial bytes."""
-
-    path = Path(path)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            descriptor = -1
-            written = handle.write(payload)
-            if written != len(payload):
-                raise OSError("short sidecar write")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        temporary = Path()
-        _fsync_parent_directory(path.parent)
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        if temporary != Path():
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
-
-
-def _prepare_append_journal(
-    ledger_path: Path,
-    *,
-    ledger_offset: int,
-    predecessor_digest: str,
-    payload: bytes,
-) -> Mapping[str, Any]:
-    journal: dict[str, Any] = {
-        "schema_version": APPEND_JOURNAL_SCHEMA,
-        "event": "prepare-append",
-        "ledger_offset": ledger_offset,
-        "predecessor_digest": predecessor_digest,
-        "payload": payload.decode("utf-8"),
-        "payload_sha256": hashlib.sha256(payload).hexdigest(),
-    }
-    journal["operation_id"] = canonical_sha256(journal)
-    path = _append_journal_path(ledger_path)
-    if path.exists():
-        raise CalibrationLedgerError("an append recovery journal is already active")
-    _atomic_private_write(path, canonical_json_bytes(journal) + b"\n")
-    return _frozen_mapping(journal)
-
-
 def _write_ledger_append_payload(handle: BinaryIO, payload: bytes) -> None:
-    """Single injectable append boundary used by torn-write regressions."""
+    """Single injectable physical append boundary used by crash regressions."""
 
     written = handle.write(payload)
     if written != len(payload):
         raise OSError("short ledger append")
 
 
-def _record_append_recovery(
-    ledger_path: Path,
-    journal: Mapping[str, Any],
+def _after_ledger_fsync(stage: str) -> None:
+    """Injectable post-fsync crash boundary; intentionally a no-op."""
+
+    del stage
+
+
+def _append_and_fsync(handle: BinaryIO, payload: bytes, *, stage: str) -> None:
+    handle.seek(0, os.SEEK_END)
+    _write_ledger_append_payload(handle, payload)
+    handle.flush()
+    os.fsync(handle.fileno())
+    _after_ledger_fsync(stage)
+
+
+def _new_append_intent(
     *,
-    ledger_tail: bytes,
-) -> None:
-    payload_bytes = str(journal["payload"]).encode("utf-8")
-    if ledger_tail != payload_bytes:
-        raise CalibrationLedgerError(
-            "append recovery evidence cannot describe an incomplete ledger tail"
-        )
-    evidence = {
-        "schema_version": APPEND_RECOVERY_SCHEMA,
-        "event": "governed-torn-tail-recovery",
-        "operation_id": journal["operation_id"],
-        "ledger_offset": journal["ledger_offset"],
-        "predecessor_digest": journal["predecessor_digest"],
-        "payload_sha256": journal["payload_sha256"],
-        "observed_suffix_bytes": len(ledger_tail),
-        "recovered_bytes": len(payload_bytes) - len(ledger_tail),
-        "rule": "append_only_complete_journal_matching_suffix",
+    receipts: Sequence[Mapping[str, Any]],
+    byte_offset: int,
+    target_core: Mapping[str, Any],
+    operation_key: Mapping[str, Any],
+) -> dict[str, Any]:
+    predecessor = (
+        str(receipts[-1]["receipt_digest"]) if receipts else GENESIS_DIGEST
+    )
+    base_head = {
+        "sequence": len(receipts),
+        "digest": predecessor,
+        "byte_offset": byte_offset,
     }
-    path = _append_recovery_path(ledger_path, str(journal["operation_id"]))
-    payload = canonical_json_bytes(evidence) + b"\n"
-    if path.exists():
-        try:
-            if path.read_bytes() == payload:
-                return
-        except OSError as exc:
-            raise CalibrationLedgerError(
-                "append recovery evidence is unreadable"
-            ) from exc
-        raise CalibrationLedgerError("append recovery evidence conflicts")
-    _atomic_private_write(path, payload)
+    target_commitment = canonical_sha256(target_core)
+    ledger_id = _derived_ledger_id(receipts)
+    receipt: dict[str, Any] = {
+        "schema_version": CONTROL_SCHEMA,
+        "ledger_schema": LEDGER_SCHEMA,
+        "sequence": len(receipts) + 1,
+        "predecessor_digest": predecessor,
+        "event": APPEND_INTENT_EVENT,
+        "ledger_id": ledger_id,
+        "base_head": base_head,
+        "operation_key": dict(operation_key),
+        "target_schema_version": target_core["schema_version"],
+        "target_event": target_core["event"],
+        "target_core": _jsonable(target_core),
+        "target_core_sha256": target_commitment,
+        "operation_id": _operation_id(
+            ledger_id=ledger_id,
+            base_head=base_head,
+            operation_key=operation_key,
+            target_core_sha256=target_commitment,
+        ),
+    }
+    receipt["receipt_digest"] = _receipt_digest(receipt)
+    return receipt
 
 
-def _clear_append_journal(ledger_path: Path) -> None:
+def _legacy_journal_metadata(path: Path) -> Mapping[str, Any]:
     try:
-        _append_journal_path(ledger_path).unlink()
-        _fsync_parent_directory(Path(ledger_path).parent)
+        raw = path.read_bytes()
     except OSError as exc:
-        raise CalibrationLedgerError("append journal could not be cleared") from exc
+        raise CalibrationLedgerError("legacy append journal is unreadable") from exc
+    tail = raw[-64:]
+    return {
+        "path": str(path),
+        "length": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "observed_tail_hex": tail.hex(),
+        "observed_tail_sha256": hashlib.sha256(tail).hexdigest(),
+    }
 
 
-def _recover_journaled_append(
+def _new_abandonment_receipt(
+    *,
+    receipts: Sequence[Mapping[str, Any]],
+    residue_start_offset: int,
+    residue: bytes,
+    receipt_offset: int,
+    reason_code: str,
+    active_intent: Mapping[str, Any] | None,
+    actor_type: str,
+    actor_identity: str,
+    attestation_reason: str,
+    legacy_journal: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    predecessor = (
+        str(receipts[-1]["receipt_digest"]) if receipts else GENESIS_DIGEST
+    )
+    receipt: dict[str, Any] = {
+        "schema_version": CONTROL_SCHEMA,
+        "ledger_schema": LEDGER_SCHEMA,
+        "sequence": len(receipts) + 1,
+        "predecessor_digest": predecessor,
+        "event": ABANDONMENT_EVENT,
+        "abandoned_predecessor_sequence": len(receipts),
+        "abandoned_predecessor_digest": predecessor,
+        "residue_start_offset": residue_start_offset,
+        "residue_length": len(residue),
+        "residue_sha256": hashlib.sha256(residue).hexdigest(),
+        "receipt_offset": receipt_offset,
+        "reason_code": reason_code,
+        "known_operation_id": (
+            active_intent.get("operation_id") if active_intent else None
+        ),
+        "known_target_core_sha256": (
+            active_intent.get("target_core_sha256") if active_intent else None
+        ),
+        "actor_type": actor_type,
+        "actor_identity": actor_identity,
+        "policy_revision": APPEND_POLICY_REVISION,
+        "attestation_reason": attestation_reason,
+        "legacy_journal": (
+            dict(legacy_journal) if legacy_journal is not None else None
+        ),
+    }
+    receipt["receipt_digest"] = _receipt_digest(receipt)
+    return receipt
+
+
+def _append_abandonment(
+    handle: BinaryIO,
+    raw: bytes,
+    physical: _PhysicalLedger,
+    *,
+    reason_code: str,
+    actor_type: str,
+    actor_identity: str,
+    attestation_reason: str,
+    legacy_journal: Mapping[str, Any] | None = None,
+) -> bytes:
+    residue = physical.residue
+    separator = b"" if not residue or residue.endswith(b"\n") else b"\n"
+    receipt_offset = len(raw) + len(separator)
+    receipt = _new_abandonment_receipt(
+        receipts=physical.receipts,
+        residue_start_offset=physical.residue_start_offset,
+        residue=residue,
+        receipt_offset=receipt_offset,
+        reason_code=reason_code,
+        active_intent=physical.active_intent,
+        actor_type=actor_type,
+        actor_identity=actor_identity,
+        attestation_reason=attestation_reason,
+        legacy_journal=legacy_journal,
+    )
+    payload = separator + canonical_json_bytes(receipt) + b"\n"
+    _append_and_fsync(handle, payload, stage="abandonment")
+    return raw + payload
+
+
+def _migrate_legacy_journal(
     ledger_path: Path,
     handle: BinaryIO,
     raw: bytes,
-) -> bytes:
-    journal, malformed = _read_append_journal(ledger_path)
-    if malformed:
-        raise CalibrationLedgerError("append recovery journal is malformed")
-    if journal is None:
-        return raw
-    completed = _journal_completed_raw(raw, journal)
-    if completed is None:
-        raise CalibrationLedgerError(
-            "torn ledger tail does not match the append recovery journal"
-        )
-    offset = int(journal["ledger_offset"])
-    payload = str(journal["payload"]).encode("utf-8")
-    observed = len(raw) - offset
-    missing = payload[observed:]
-    if missing:
-        handle.seek(0, os.SEEK_END)
-        _write_ledger_append_payload(handle, missing)
-        handle.flush()
-        os.fsync(handle.fileno())
-    handle.seek(0)
-    completed = handle.read()
-    if _journal_completed_raw(completed, journal) != completed:
-        raise CalibrationLedgerError(
-            "append recovery did not complete the ledger tail"
-        )
-    _record_append_recovery(
-        ledger_path,
-        journal,
-        ledger_tail=completed[offset:],
+    physical: _PhysicalLedger,
+) -> tuple[bytes, _PhysicalLedger]:
+    path = _legacy_append_journal_path(ledger_path)
+    if not path.exists():
+        return raw, physical
+    metadata = _legacy_journal_metadata(path)
+    already_recorded = any(
+        receipt.get("event") == ABANDONMENT_EVENT
+        and isinstance(receipt.get("legacy_journal"), Mapping)
+        and receipt["legacy_journal"].get("sha256") == metadata["sha256"]
+        and receipt["legacy_journal"].get("path") == metadata["path"]
+        for receipt in physical.receipts
     )
-    _clear_append_journal(ledger_path)
-    return completed
+    if already_recorded:
+        _archive_legacy_journal(path, str(metadata["sha256"]))
+        return raw, physical
+    if physical.residue:
+        return raw, physical
+    raw = _append_abandonment(
+        handle,
+        raw,
+        physical,
+        reason_code="legacy-journal-observed-never-replayed",
+        actor_type="engine",
+        actor_identity="joulewise.calibration_ledger",
+        attestation_reason=(
+            "legacy sidecar bytes were hashed and preserved without payload replay"
+        ),
+        legacy_journal=metadata,
+    )
+    _archive_legacy_journal(path, str(metadata["sha256"]))
+    return raw, _scan_physical_ledger(raw)
+
+
+def _archive_legacy_journal(path: Path, digest: str) -> Path:
+    archive = path.with_name(f"{path.name}.archived-{digest[:16]}")
+    if archive.exists():
+        raise CalibrationLedgerError("legacy append journal archive conflicts")
+    try:
+        os.replace(path, archive)
+        _fsync_parent_directory(path.parent)
+    except OSError as exc:
+        raise CalibrationLedgerError(
+            "legacy append journal could not be archived"
+        ) from exc
+    return archive
+
+
+def _repair_locked(
+    ledger_path: Path,
+    handle: BinaryIO,
+    raw: bytes,
+    *,
+    engine_identity: str,
+    attestation_reason: str,
+) -> tuple[bytes, _PhysicalLedger]:
+    for _step in range(8):
+        physical = _scan_physical_ledger(raw)
+        raw, physical = _migrate_legacy_journal(
+            ledger_path, handle, raw, physical
+        )
+        if physical.residue:
+            if physical.active_intent is not None:
+                target = _intent_target_receipt(
+                    physical.active_intent,
+                    sequence=len(physical.receipts) + 1,
+                    predecessor_digest=str(
+                        physical.receipts[-1]["receipt_digest"]
+                    ),
+                )
+                target_payload = canonical_json_bytes(target) + b"\n"
+                if target_payload.startswith(physical.residue):
+                    missing = target_payload[len(physical.residue) :]
+                    if missing:
+                        _append_and_fsync(handle, missing, stage="target")
+                        raw += missing
+                    continue
+                raw = _append_abandonment(
+                    handle,
+                    raw,
+                    physical,
+                    reason_code="intent-target-mismatch",
+                    actor_type="engine",
+                    actor_identity=engine_identity,
+                    attestation_reason=attestation_reason,
+                )
+                continue
+            if not raw.endswith(b"\n"):
+                raw = _append_abandonment(
+                    handle,
+                    raw,
+                    physical,
+                    reason_code="torn-uncommitted-record",
+                    actor_type="engine",
+                    actor_identity=engine_identity,
+                    attestation_reason=attestation_reason,
+                )
+                continue
+            raise CalibrationLedgerError(
+                "ledger tail requires operator-attested abandon-tail"
+            )
+        if physical.active_intent is not None:
+            predecessor = str(physical.receipts[-1]["receipt_digest"])
+            target = _intent_target_receipt(
+                physical.active_intent,
+                sequence=len(physical.receipts) + 1,
+                predecessor_digest=predecessor,
+            )
+            if not _valid_receipt_shape(target):
+                raise CalibrationLedgerError(
+                    "durable append intent commits a malformed target"
+                )
+            payload = canonical_json_bytes(target) + b"\n"
+            _append_and_fsync(handle, payload, stage="target")
+            raw += payload
+            continue
+        return raw, physical
+    raise CalibrationLedgerError("ledger recovery did not converge")
+
+
+def _completed_operation(
+    receipts: Sequence[Mapping[str, Any]], operation_selector: Any
+) -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
+    for index, receipt in enumerate(receipts):
+        if (
+            receipt.get("event") == APPEND_INTENT_EVENT
+            and operation_selector(receipt["operation_key"])
+        ):
+            for candidate in receipts[index + 1 :]:
+                if candidate.get("schema_version") == CONTROL_SCHEMA:
+                    continue
+                if _target_core(candidate) == dict(receipt["target_core"]):
+                    return receipt, candidate
+                break
+    return None
+
+
+def _inspection_from_physical(
+    physical: _PhysicalLedger,
+    *,
+    legacy_path: Path | None = None,
+) -> CalibrationLedgerInspection:
+    active = physical.active_intent
+    if physical.residue:
+        state = "residue"
+    elif active is not None:
+        state = "intent"
+    else:
+        state = "clean"
+    legacy_sha: str | None = None
+    if legacy_path is not None and legacy_path.exists():
+        legacy_sha = str(_legacy_journal_metadata(legacy_path)["sha256"])
+    return CalibrationLedgerInspection(
+        state=state,
+        ledger_id=physical.ledger_id,
+        head_sequence=len(physical.receipts),
+        head_digest=(
+            str(physical.receipts[-1]["receipt_digest"])
+            if physical.receipts
+            else GENESIS_DIGEST
+        ),
+        valid_end_offset=physical.valid_end_offset,
+        residue_start_offset=physical.residue_start_offset,
+        residue_length=len(physical.residue),
+        residue_sha256=hashlib.sha256(physical.residue).hexdigest(),
+        active_operation_id=(
+            str(active["operation_id"]) if active is not None else None
+        ),
+        active_operation_key=(
+            _frozen_mapping(active["operation_key"])
+            if active is not None
+            else None
+        ),
+        target_core_sha256=(
+            str(active["target_core_sha256"]) if active is not None else None
+        ),
+        legacy_journal_path=(
+            str(legacy_path)
+            if legacy_path is not None and legacy_path.exists()
+            else None
+        ),
+        legacy_journal_sha256=legacy_sha,
+    )
+
+
+def inspect_calibration_ledger(
+    ledger_path: Path = DEFAULT_LEDGER_PATH,
+) -> CalibrationLedgerInspection:
+    """Inspect physical recovery state without changing any byte."""
+
+    ledger = Path(ledger_path)
+    try:
+        raw = ledger.read_bytes() if ledger.exists() else b""
+    except OSError as exc:
+        raise CalibrationLedgerError("physical ledger is unreadable") from exc
+    return _inspection_from_physical(
+        _scan_physical_ledger(raw),
+        legacy_path=_legacy_append_journal_path(ledger),
+    )
+
+
+def repair_calibration_ledger(
+    ledger_path: Path = DEFAULT_LEDGER_PATH,
+    *,
+    engine_identity: str = "joulewise.recovery-engine",
+    attestation_reason: str = "deterministic ledger-only recovery",
+) -> CalibrationLedgerInspection:
+    """Converge every mechanically recoverable state under the ledger lock."""
+
+    if not engine_identity or not attestation_reason:
+        raise CalibrationLedgerError(
+            "recovery identity and attestation reason must be nonempty"
+        )
+    ledger = Path(ledger_path)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    lock_descriptor = _open_ledger_lock(ledger)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            with os.fdopen(descriptor, "r+b", closefd=False) as handle:
+                raw = handle.read()
+                raw, physical = _repair_locked(
+                    ledger,
+                    handle,
+                    raw,
+                    engine_identity=engine_identity,
+                    attestation_reason=attestation_reason,
+                )
+                return _inspection_from_physical(
+                    physical,
+                    legacy_path=_legacy_append_journal_path(ledger),
+                )
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(lock_descriptor)
+
+
+def _residue_contains_protected_record(
+    residue: bytes, *, expected_sequence: int, predecessor_digest: str
+) -> bool:
+    start = 0
+    while start < len(residue):
+        line_end = residue.find(b"\n", start)
+        if line_end < 0:
+            break
+        value = _decode_line(residue, start, line_end)
+        if (
+            value is not None
+            and _valid_receipt_shape(value)
+            and value.get("sequence") == expected_sequence
+            and value.get("predecessor_digest") == predecessor_digest
+            and value.get("event")
+            in {
+                APPEND_INTENT_EVENT,
+                "finalization",
+                HISTORICAL_IMPORT_FINALIZATION_EVENT,
+                BRACKET_SESSION_FINALIZATION_EVENT,
+            }
+        ):
+            return True
+        start = line_end + 1
+    return False
+
+
+def abandon_calibration_ledger_tail(
+    ledger_path: Path = DEFAULT_LEDGER_PATH,
+    *,
+    operator_identity: str,
+    attestation_reason: str,
+    reason_code: str = "operator-attested-tail-abandonment",
+    head_pin_path: Path = DEFAULT_HEAD_PIN_PATH,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> CalibrationLedgerInspection:
+    """Authenticate only the residue after the maximal valid chain."""
+
+    if not operator_identity or not attestation_reason or not reason_code:
+        raise CalibrationLedgerError(
+            "operator identity, reason code, and attestation reason are required"
+        )
+    pin = _authenticated_head_pin(
+        Path(head_pin_path),
+        require_committed_pin=require_committed_pin,
+        repo_root=Path(repo_root),
+    )
+    ledger = Path(ledger_path)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    lock_descriptor = _open_ledger_lock(ledger)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            with os.fdopen(descriptor, "r+b", closefd=False) as handle:
+                raw = handle.read()
+                physical = _scan_physical_ledger(raw)
+                if len(physical.receipts) < pin[0]:
+                    raise CalibrationLedgerError(
+                        "operator abandonment cannot cross the committed head"
+                    )
+                if physical.active_intent is not None:
+                    raise CalibrationLedgerError(
+                        "a durable append intent is irrevocable; run deterministic repair"
+                    )
+                if not physical.residue:
+                    return _inspection_from_physical(physical)
+                predecessor = (
+                    str(physical.receipts[-1]["receipt_digest"])
+                    if physical.receipts
+                    else GENESIS_DIGEST
+                )
+                if _residue_contains_protected_record(
+                    physical.residue,
+                    expected_sequence=len(physical.receipts) + 1,
+                    predecessor_digest=predecessor,
+                ):
+                    raise CalibrationLedgerError(
+                        "operator abandonment cannot cross a valid intent or finalization"
+                    )
+                raw = _append_abandonment(
+                    handle,
+                    raw,
+                    physical,
+                    reason_code=reason_code,
+                    actor_type="operator",
+                    actor_identity=operator_identity,
+                    attestation_reason=attestation_reason,
+                )
+                final = _scan_physical_ledger(raw)
+                if final.residue or final.active_intent is not None:
+                    raise CalibrationLedgerError(
+                        "operator abandonment did not produce a clean ledger"
+                    )
+                return _inspection_from_physical(final)
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(lock_descriptor)
 
 
 def _locked_append(
     ledger_path: Path,
     build: Any,
+    *,
+    operation_key: Mapping[str, Any] | None,
+    completed_matches: Any,
+    operation_selector: Any | None = None,
 ) -> Mapping[str, Any]:
     ledger_path = Path(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2414,38 +3142,62 @@ def _locked_append(
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 handle.seek(0)
                 raw = handle.read()
-                raw = _recover_journaled_append(ledger_path, handle, raw)
-                receipts, reasons = _parse_ledger(raw)
-                if reasons:
-                    raise CalibrationLedgerError(", ".join(sorted(reasons)))
-                receipt = build(receipts)
-                if not _valid_receipt_shape(receipt):
+                raw, physical = _repair_locked(
+                    ledger_path,
+                    handle,
+                    raw,
+                    engine_identity="joulewise.calibration_ledger",
+                    attestation_reason="automatic deterministic append recovery",
+                )
+                selector = operation_selector or (
+                    lambda key: dict(key) == dict(operation_key or {})
+                )
+                completed = _completed_operation(physical.receipts, selector)
+                if completed is not None:
+                    intent, target = completed
+                    if not completed_matches(intent["target_core"]):
+                        raise CalibrationLedgerError(
+                            REFUSAL_TAXONOMY[
+                                "calibration_ledger_operation_conflict"
+                            ]
+                        )
+                    return _frozen_mapping(target)
+                receipt = build(physical.receipts)
+                if not _valid_receipt_shape(receipt) or receipt.get(
+                    "schema_version"
+                ) == CONTROL_SCHEMA:
                     raise CalibrationLedgerError(
                         "writer constructed a malformed receipt"
                     )
-                payload = canonical_json_bytes(receipt) + b"\n"
-                _prepare_append_journal(
-                    ledger_path,
-                    ledger_offset=len(raw),
-                    predecessor_digest=str(
-                        receipts[-1]["receipt_digest"]
-                        if receipts
-                        else GENESIS_DIGEST
-                    ),
-                    payload=payload,
+                target_core = _target_core(receipt)
+                actual_operation_key = _operation_key_for_core(target_core)
+                if operation_key is not None and actual_operation_key != dict(operation_key):
+                    raise CalibrationLedgerError(
+                        "writer operation key does not match target semantics"
+                    )
+                intent = _new_append_intent(
+                    receipts=physical.receipts,
+                    byte_offset=len(raw),
+                    target_core=target_core,
+                    operation_key=actual_operation_key,
                 )
-                handle.seek(0, os.SEEK_END)
-                try:
-                    _write_ledger_append_payload(handle, payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                except Exception:
-                    # The durable journal is intentionally retained.  No
-                    # ledger byte is removed; a later governed writer can
-                    # complete only the journal-matching suffix.
-                    raise
-                _clear_append_journal(ledger_path)
-                return _frozen_mapping(receipt)
+                intent_payload = canonical_json_bytes(intent) + b"\n"
+                _append_and_fsync(handle, intent_payload, stage="intent")
+                raw += intent_payload
+                target = _intent_target_receipt(
+                    intent,
+                    sequence=len(physical.receipts) + 2,
+                    predecessor_digest=str(intent["receipt_digest"]),
+                )
+                target_payload = canonical_json_bytes(target) + b"\n"
+                _append_and_fsync(handle, target_payload, stage="target")
+                raw += target_payload
+                final = _scan_physical_ledger(raw)
+                if final.reasons or final.active_intent is not None:
+                    raise CalibrationLedgerError(
+                        "ledger append did not reach a clean finalized state"
+                    )
+                return _frozen_mapping(target)
         finally:
             os.close(descriptor)
     finally:
@@ -2604,7 +3356,22 @@ def append_bracket_session_receipt(
             fields={"slots": normalized_slots},
         )
 
-    return _locked_append(Path(ledger_path), build)
+    expected_core = _target_core(
+        _new_bracket_session_record(
+            sequence=1,
+            predecessor_digest=GENESIS_DIGEST,
+            event=BRACKET_SESSION_OPEN_EVENT,
+            session_identity=session_identity,
+            fields={"slots": normalized_slots},
+        )
+    )
+    operation_key = _operation_key_for_core(expected_core)
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=operation_key,
+        completed_matches=lambda core: dict(core) == expected_core,
+    )
 
 
 def claim_bracket_session_slot(
@@ -2671,7 +3438,24 @@ def claim_bracket_session_slot(
             },
         )
 
-    return _locked_append(Path(ledger_path), build)
+    operation_key = {
+        "event": BRACKET_SESSION_SLOT_CLAIM_EVENT,
+        "session_id": session_id,
+        "slot": slot,
+        "attempt_id": attempt_id,
+    }
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=operation_key,
+        completed_matches=lambda core: (
+            core.get("event") == BRACKET_SESSION_SLOT_CLAIM_EVENT
+            and core.get("session_id") == session_id
+            and core.get("slot") == slot
+            and core.get("attempt_id") == attempt_id
+            and core.get("claim_id") == claim_id
+        ),
+    )
 
 
 def finalize_bracket_session_slot(
@@ -2750,7 +3534,28 @@ def finalize_bracket_session_slot(
             },
         )
 
-    return _locked_append(Path(ledger_path), build)
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=None,
+        operation_selector=lambda key: (
+            key.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+            and key.get("session_id") == session_id
+            and key.get("slot") == slot
+        ),
+        completed_matches=lambda core: (
+            core.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+            and core.get("session_id") == session_id
+            and core.get("slot") == slot
+            and core.get("disposition") == disposition
+            and core.get("custody_locator") == custody_locator
+            and dict(core.get("artifact_sha256", {})) == dict(sorted(artifacts.items()))
+            and dict(core.get("identity_epoch", {})) == normalized_epoch
+            and dict(core.get("t1_bindings", {})) == normalized_t1
+            and core.get("capture_wall_time_s") == capture_wall_time_s
+            and core.get("exact_bound_lexeme_s") == exact_bound_lexeme_s
+        ),
+    )
 
 
 def abort_bracket_session(
@@ -2799,7 +3604,22 @@ def abort_bracket_session(
             },
         )
 
-    return _locked_append(Path(ledger_path), build)
+    operation_key = {
+        "event": BRACKET_SESSION_ABORT_EVENT,
+        "session_id": session_id,
+        "slot": None,
+        "attempt_id": None,
+    }
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=operation_key,
+        completed_matches=lambda core: (
+            core.get("event") == BRACKET_SESSION_ABORT_EVENT
+            and core.get("session_id") == session_id
+            and core.get("reason") == reason
+        ),
+    )
 
 
 def terminal_head_pin_for_session(
@@ -2813,13 +3633,7 @@ def terminal_head_pin_for_session(
         raw = Path(ledger_path).read_bytes()
     except OSError as exc:
         raise CalibrationLedgerError("ledger is unreadable") from exc
-    append_journal, malformed_journal = _read_append_journal(Path(ledger_path))
-    receipts, parse_reasons = _parse_ledger(
-        raw,
-        append_journal=append_journal,
-    )
-    if malformed_journal:
-        parse_reasons.add("calibration_ledger_malformed")
+    receipts, parse_reasons = _parse_ledger(raw)
     observations, sessions, state_reasons = _attempts_and_observations(receipts)
     del observations
     reasons = parse_reasons | state_reasons
@@ -2911,7 +3725,29 @@ def append_pending_receipt(
             custody_locator=custody_locator,
         )
 
-    return _locked_append(Path(ledger_path), build)
+    expected_core = _target_core(
+        _new_receipt(
+            sequence=1,
+            predecessor_digest=GENESIS_DIGEST,
+            event="reservation",
+            attempt_id=attempt_id,
+            content_id=None,
+            artifacts={},
+            identity_epoch=identity_epoch,
+            t1_bindings=t1_bindings,
+            capture_wall_time_s=None,
+            exact_bound_lexeme_s=None,
+            disposition="pending",
+            custody_locator=custody_locator,
+        )
+    )
+    operation_key = _operation_key_for_core(expected_core)
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=operation_key,
+        completed_matches=lambda core: dict(core) == expected_core,
+    )
 
 
 def finalize_attempt_receipt(
@@ -2982,7 +3818,29 @@ def finalize_attempt_receipt(
             custody_locator=custody_locator,
         )
 
-    return _locked_append(Path(ledger_path), build)
+    expected_core = _target_core(
+        _new_receipt(
+            sequence=1,
+            predecessor_digest=GENESIS_DIGEST,
+            event="finalization",
+            attempt_id=attempt_id,
+            content_id=content_id,
+            artifacts=artifacts,
+            identity_epoch=identity_epoch,
+            t1_bindings=t1_bindings,
+            capture_wall_time_s=capture_wall_time_s,
+            exact_bound_lexeme_s=exact_bound_lexeme_s,
+            disposition=disposition,
+            custody_locator=custody_locator,
+        )
+    )
+    operation_key = _operation_key_for_core(expected_core)
+    return _locked_append(
+        Path(ledger_path),
+        build,
+        operation_key=operation_key,
+        completed_matches=lambda core: dict(core) == expected_core,
+    )
 
 
 def _head_pin_for_valid_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
@@ -2998,6 +3856,8 @@ def _head_pin_for_valid_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     """Emit a pin for an ordinary receipt, never a mid-session receipt."""
 
+    if receipt.get("event") == APPEND_INTENT_EVENT:
+        raise CalibrationLedgerError("an unresolved append intent cannot be pinned")
     if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA:
         raise CalibrationLedgerError(
             "bracket session receipts require terminal_head_pin_for_session"
@@ -3006,7 +3866,11 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "ABANDONMENT_EVENT",
     "ALL_DISPOSITIONS",
+    "APPEND_INTENT_EVENT",
+    "APPEND_POLICY_REVISION",
+    "APPEND_RECORDS_PER_OPERATION",
     "BRACKET_SESSION_ABORT_EVENT",
     "BRACKET_SESSION_FINALIZATION_EVENT",
     "BRACKET_SESSION_OPEN_EVENT",
@@ -3014,6 +3878,7 @@ __all__ = [
     "BRACKET_SESSION_SCHEMA",
     "BRACKET_SESSION_SLOTS",
     "CONTENT_ID_ARTIFACTS",
+    "CONTROL_SCHEMA",
     "DEFAULT_HEAD_PIN_PATH",
     "DEFAULT_LEDGER_PATH",
     "FINAL_DISPOSITIONS",
@@ -3029,12 +3894,14 @@ __all__ = [
     "RECEIPT_SCHEMA",
     "REFUSAL_TAXONOMY",
     "CalibrationLedgerError",
+    "CalibrationLedgerInspection",
     "CalibrationBracketSession",
     "CalibrationLedgerSnapshot",
     "HistoricalImportDurabilityUncertain",
     "HistoricalImportPlan",
     "LedgerObservation",
     "append_pending_receipt",
+    "abandon_calibration_ledger_tail",
     "append_bracket_session_receipt",
     "claim_bracket_session_slot",
     "abort_bracket_session",
@@ -3047,9 +3914,11 @@ __all__ = [
     "finalize_bracket_session_slot",
     "generate_historical_custody_manifest",
     "head_pin_for_receipt",
+    "inspect_calibration_ledger",
     "load_calibration_ledger_snapshot",
     "normalize_calibration_custody_path",
     "prepare_historical_import",
+    "repair_calibration_ledger",
     "terminal_head_pin_for_session",
     "validate_bracket_session_reservation_inputs",
 ]

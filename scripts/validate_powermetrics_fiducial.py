@@ -63,6 +63,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
     normalize_calibration_custody_path,
+    repair_calibration_ledger,
     terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
@@ -396,6 +397,39 @@ class _CaptureLedgerLifecycle:
 
         if self.begun:
             raise CalibrationLedgerError("capture ledger lifecycle already began")
+        repair_calibration_ledger(
+            self.ledger_path,
+            engine_identity="validate_powermetrics_fiducial",
+            attestation_reason="automatic pre-capture ledger recovery",
+        )
+        failure: CalibrationLedgerError | None = None
+        for attempt in range(2):
+            try:
+                self._begin_once()
+                self.begun = True
+                return
+            except CalibrationLedgerError as exc:
+                failure = exc
+                if attempt or any(
+                    marker in str(exc)
+                    for marker in (
+                        "exclusive writer claim",
+                        "operation key conflicts",
+                        "exact reserved bracket session slot",
+                    )
+                ):
+                    break
+                repair_calibration_ledger(
+                    self.ledger_path,
+                    engine_identity="validate_powermetrics_fiducial",
+                    attestation_reason="one-shot writer retry recovery",
+                )
+        assert failure is not None
+        raise failure
+
+    def _begin_once(self) -> None:
+        """Perform one stable-identity reservation or slot-claim attempt."""
+
         if self.is_bracket_session:
             assert self.session_id is not None and self.slot is not None
             _validate_reserved_bracket_slot(
@@ -426,7 +460,6 @@ class _CaptureLedgerLifecycle:
                 head_pin_path=self.head_pin_path,
                 require_committed_pin=self.require_committed_pin,
             )
-        self.begun = True
 
     def abandon(self, reason: str) -> Mapping[str, Any] | None:
         """Best-effort governed closure for an interrupted writer."""

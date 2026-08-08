@@ -20,6 +20,7 @@ from unittest import mock
 import joulewise.calibration_ledger as calibration_ledger
 from scripts import calibration_ledger_bootstrap as bootstrap_cli
 from scripts import reserve_calibration_window_bracket as bracket_session_cli
+from scripts import recover_calibration_ledger as recovery_cli
 from tests.test_calibration_bracketing import (
     _unissued_acceptance_fixture,
     _unissued_acceptance_fixture_bytes,
@@ -381,23 +382,20 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertIn("calibration_ledger_pending", snapshot.refusal_reasons)
         self.assertFalse(custody.exists())
 
-    def test_torn_session_finalization_recovers_append_only_then_governed_abort(
+    def test_unresolved_session_intent_refuses_terminal_read_then_repairs_append_only(
         self,
     ) -> None:
         self._open_bracket_session()
         custody = self._custody("session-alpha-pre")
 
-        def tear_final_line(handle, payload):
-            written = handle.write(payload[: max(1, len(payload) // 3)])
-            handle.flush()
-            calibration_ledger.os.fsync(handle.fileno())
-            self.assertGreater(written, 0)
-            raise OSError("simulated process death during ledger append")
+        def stop_after_intent(stage):
+            if stage == "intent":
+                raise OSError("simulated process death after intent fsync")
 
         with mock.patch.object(
             calibration_ledger,
-            "_write_ledger_append_payload",
-            side_effect=tear_final_line,
+            "_after_ledger_fsync",
+            side_effect=stop_after_intent,
         ):
             with self.assertRaisesRegex(OSError, "simulated process death"):
                 finalize_bracket_session_slot(
@@ -414,15 +412,14 @@ class CalibrationLedgerTests(unittest.TestCase):
                 )
 
         torn_bytes = self.ledger.read_bytes()
-        torn_snapshot = self._snapshot()
-        self.assertIn(
-            "calibration_ledger_recovery_required",
-            torn_snapshot.refusal_reasons,
-        )
-        self.assertIn(
-            "calibration_ledger_bracket_session_open",
-            torn_snapshot.refusal_reasons,
-        )
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, "calibration_ledger_recovery_required"
+        ):
+            terminal_head_pin_for_session(
+                self.ledger, session_id="session-alpha"
+            )
+
+        calibration_ledger.repair_calibration_ledger(self.ledger)
 
         abort_bracket_session(
             self.ledger,
@@ -430,17 +427,6 @@ class CalibrationLedgerTests(unittest.TestCase):
             reason="recover_torn_systematic_pre",
         )
         self.assertTrue(self.ledger.read_bytes().startswith(torn_bytes))
-        self.assertFalse(
-            calibration_ledger._append_journal_path(self.ledger).exists()
-        )
-        recovery_evidence = list(
-            self.root.glob("ledger.jsonl.recovery-*.json")
-        )
-        self.assertEqual(len(recovery_evidence), 1)
-        self.assertEqual(
-            json.loads(recovery_evidence[0].read_bytes())["event"],
-            "governed-torn-tail-recovery",
-        )
         self._write_pin(
             terminal_head_pin_for_session(
                 self.ledger, session_id="session-alpha"
@@ -454,195 +440,68 @@ class CalibrationLedgerTests(unittest.TestCase):
             "systematic-invalid",
         )
 
-    def _create_torn_session_finalization(self) -> dict:
-        self._open_bracket_session()
-        custody = self._custody("session-alpha-pre")
+    def test_recovery_and_completed_operation_retry_are_idempotent(self) -> None:
+        custody, _physical = self._persist_reservation_intent("idempotent")
+        first = calibration_ledger.repair_calibration_ledger(self.ledger)
+        bytes_after_first = self.ledger.read_bytes()
+        second = calibration_ledger.repair_calibration_ledger(self.ledger)
+        self.assertEqual(second, first)
+        self.assertEqual(self.ledger.read_bytes(), bytes_after_first)
+        repeated = self._reserve("idempotent", custody)
+        self.assertEqual(repeated["attempt_id"], "idempotent")
+        self.assertEqual(self.ledger.read_bytes(), bytes_after_first)
 
-        def tear_final_line(handle, payload):
-            written = handle.write(payload[: max(1, len(payload) // 3)])
-            handle.flush()
-            calibration_ledger.os.fsync(handle.fileno())
-            self.assertGreater(written, 0)
-            raise OSError("simulated process death during ledger append")
+    def test_same_operation_key_with_different_target_fails_closed(self) -> None:
+        custody = self.root / "conflict"
+        self._reserve("conflict", custody)
+        with self.assertRaisesRegex(CalibrationLedgerError, "operation key conflicts"):
+            append_pending_receipt(
+                self.ledger,
+                attempt_id="conflict",
+                custody_locator=str(self.root / "different"),
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                head_pin_path=self.pin,
+                require_committed_pin=False,
+            )
+
+    def test_terminal_session_pin_refuses_complete_unresolved_intent(self) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        custody = self._custody("session-alpha-post")
+
+        def stop_after_intent(stage):
+            if stage == "intent":
+                raise OSError("post intent durable")
 
         with mock.patch.object(
-            calibration_ledger,
-            "_write_ledger_append_payload",
-            side_effect=tear_final_line,
+            calibration_ledger, "_after_ledger_fsync", side_effect=stop_after_intent
         ):
-            with self.assertRaisesRegex(OSError, "simulated process death"):
+            with self.assertRaisesRegex(OSError, "post intent"):
                 finalize_bracket_session_slot(
                     self.ledger,
                     session_id="session-alpha",
-                    slot="pre",
-                    disposition="systematic-invalid",
+                    slot="post",
+                    disposition="valid",
                     custody_locator=str(custody),
                     artifact_sha256=artifact_hashes(custody),
                     identity_epoch=self.epoch,
                     t1_bindings=self.t1,
-                    capture_wall_time_s="99.0",
-                    exact_bound_lexeme_s="0.035435840879704805",
+                    capture_wall_time_s="111.0",
+                    exact_bound_lexeme_s="0.025",
                 )
-        return json.loads(
-            calibration_ledger._append_journal_path(self.ledger).read_bytes()
-        )
-
-    def _abort_session_in_subprocess(self, *, kill_before_clear: bool):
-        source_root = Path(__file__).resolve().parents[1]
-        kill_patch = (
-            """
-def kill_before_clear(_ledger_path):
-    os.kill(os.getpid(), signal.SIGKILL)
-module._clear_append_journal = kill_before_clear
-"""
-            if kill_before_clear
-            else ""
-        )
-        code = f"""
-import os, signal
-from pathlib import Path
-import joulewise.calibration_ledger as module
-{kill_patch}
-module.abort_bracket_session(
-    Path({str(self.ledger)!r}),
-    session_id="session-alpha",
-    reason="recover_torn_systematic_pre",
-)
-"""
-        return subprocess.run(
-            [sys.executable, "-c", code],
-            cwd=source_root,
-            check=False,
-            capture_output=True,
-        )
-
-    def _finalize_post_in_subprocess_before_journal_clear(self):
-        source_root = Path(__file__).resolve().parents[1]
-        custody = self._custody("session-alpha-post")
-        code = f"""
-import os, signal
-from pathlib import Path
-import joulewise.calibration_ledger as module
-def kill_before_clear(_ledger_path):
-    os.kill(os.getpid(), signal.SIGKILL)
-module._clear_append_journal = kill_before_clear
-module.finalize_bracket_session_slot(
-    Path({str(self.ledger)!r}),
-    session_id="session-alpha",
-    slot="post",
-    disposition="valid",
-    custody_locator={str(custody)!r},
-    artifact_sha256=module.artifact_hashes(Path({str(custody)!r})),
-    identity_epoch={self.epoch!r},
-    t1_bindings={self.t1!r},
-    capture_wall_time_s="111.0",
-    exact_bound_lexeme_s="0.025",
-)
-"""
-        return subprocess.run(
-            [sys.executable, "-c", code],
-            cwd=source_root,
-            check=False,
-            capture_output=True,
-        )
-
-    def test_recovery_is_idempotent_after_process_death_before_journal_clear(
-        self,
-    ) -> None:
-        journal = self._create_torn_session_finalization()
-
-        killed = self._abort_session_in_subprocess(kill_before_clear=True)
-        self.assertEqual(killed.returncode, -signal.SIGKILL)
-        journal_path = calibration_ledger._append_journal_path(self.ledger)
-        self.assertTrue(journal_path.exists())
-        evidence_path = calibration_ledger._append_recovery_path(
-            self.ledger, journal["operation_id"]
-        )
-        evidence_before_retry = evidence_path.read_bytes()
-        evidence = json.loads(evidence_before_retry)
-        self.assertEqual(
-            evidence["observed_suffix_bytes"],
-            len(journal["payload"].encode("utf-8")),
-        )
-        self.assertEqual(evidence["recovered_bytes"], 0)
-
-        retried = self._abort_session_in_subprocess(kill_before_clear=False)
-        self.assertEqual(retried.returncode, 0, retried.stderr.decode())
-        self.assertFalse(journal_path.exists())
-        self.assertEqual(evidence_path.read_bytes(), evidence_before_retry)
-
-        self._write_pin(
-            terminal_head_pin_for_session(
-                self.ledger, session_id="session-alpha"
-            )
-        )
-        recovered = self._snapshot()
-        self.assertEqual(recovered.refusal_reasons, ())
-        self.assertEqual(recovered.bracket_sessions[0].state, "aborted")
-        self.assertEqual(
-            recovered.observations[0].disposition,
-            "systematic-invalid",
-        )
-
-    def test_recovery_refuses_conflicting_existing_evidence(self) -> None:
-        journal = self._create_torn_session_finalization()
-        killed = self._abort_session_in_subprocess(kill_before_clear=True)
-        self.assertEqual(killed.returncode, -signal.SIGKILL)
-        journal_path = calibration_ledger._append_journal_path(self.ledger)
-        evidence_path = calibration_ledger._append_recovery_path(
-            self.ledger, journal["operation_id"]
-        )
-        evidence = json.loads(evidence_path.read_bytes())
-        evidence["recovered_bytes"] = 1
-        mismatched = canonical_json_bytes(evidence) + b"\n"
-        evidence_path.write_bytes(mismatched)
-        ledger_before_retry = self.ledger.read_bytes()
-
         with self.assertRaisesRegex(
-            CalibrationLedgerError, "append recovery evidence conflicts"
+            CalibrationLedgerError, "calibration_ledger_recovery_required"
         ):
-            abort_bracket_session(
-                self.ledger,
-                session_id="session-alpha",
-                reason="recover_torn_systematic_pre",
-            )
-        self.assertTrue(journal_path.exists())
-        self.assertEqual(self.ledger.read_bytes(), ledger_before_retry)
-        self.assertEqual(evidence_path.read_bytes(), mismatched)
+            terminal_head_pin_for_session(self.ledger, session_id="session-alpha")
 
-    def test_terminal_session_pin_refuses_complete_tail_with_stale_journal(
-        self,
-    ) -> None:
+    def test_terminal_session_pin_classifies_nonadmitted_residue(self) -> None:
         self._open_bracket_session()
-        self._finalize_bracket_slot("session-alpha", "pre")
-        killed = self._finalize_post_in_subprocess_before_journal_clear()
-        self.assertEqual(killed.returncode, -signal.SIGKILL)
-        self.assertTrue(
-            calibration_ledger._append_journal_path(self.ledger).exists()
-        )
-
+        self.ledger.write_bytes(self.ledger.read_bytes() + b"malformed-residue")
         with self.assertRaisesRegex(
-            CalibrationLedgerError,
-            "calibration_ledger_recovery_required",
+            CalibrationLedgerError, "calibration_ledger_recovery_required"
         ):
-            terminal_head_pin_for_session(
-                self.ledger,
-                session_id="session-alpha",
-            )
-
-    def test_terminal_session_pin_classifies_journal_authenticated_torn_tail(
-        self,
-    ) -> None:
-        self._create_torn_session_finalization()
-
-        with self.assertRaisesRegex(
-            CalibrationLedgerError,
-            "calibration_ledger_recovery_required",
-        ):
-            terminal_head_pin_for_session(
-                self.ledger,
-                session_id="session-alpha",
-            )
+            terminal_head_pin_for_session(self.ledger, session_id="session-alpha")
 
     def test_reservation_requires_complete_epoch_and_full_t1(self) -> None:
         with self.assertRaisesRegex(
@@ -688,7 +547,7 @@ module.finalize_bracket_session_slot(
             lifecycle.begin()
         self.assertEqual(observed_before_capture_state, [True])
         self.assertFalse(custody.exists())
-        first = json.loads(self.ledger.read_text().splitlines()[0])
+        first = json.loads(self.ledger.read_text().splitlines()[1])
         self.assertEqual(first["event"], "reservation")
         self.assertEqual(first["disposition"], "pending")
 
@@ -730,8 +589,8 @@ module.finalize_bracket_session_slot(
         self.assertNotIn(
             "calibration_ledger_attempt_conflict", snapshot.refusal_reasons
         )
-        self.assertNotIn("calibration_ledger_head_mismatch", snapshot.refusal_reasons)
-        self.assertEqual(sibling["receipt_digest"], snapshot.head_digest)
+        self.assertIn("calibration_ledger_head_mismatch", snapshot.refusal_reasons)
+        self.assertEqual(final["receipt_digest"], snapshot.head_digest)
         self.assertNotEqual(final["receipt_digest"], sibling["receipt_digest"])
 
     def test_content_bearing_abandoned_receipt_is_unresolved_evidence(self) -> None:
@@ -750,9 +609,9 @@ module.finalize_bracket_session_slot(
     def test_finalization_is_single_transition(self) -> None:
         custody = self._custody("single")
         self._reserve("single", custody)
-        self._finalize("single", custody)
-        with self.assertRaisesRegex(CalibrationLedgerError, "uniquely pending"):
-            self._finalize("single", custody)
+        first = self._finalize("single", custody)
+        retry = self._finalize("single", custody)
+        self.assertEqual(retry, first)
 
     def test_missing_or_changed_custody_bytes_refuse(self) -> None:
         custody = self._custody("custody")
@@ -778,7 +637,7 @@ module.finalize_bracket_session_slot(
 
     def test_bracket_session_happy_path_reserves_two_slots_under_one_pin(self) -> None:
         capability = self._open_bracket_session()
-        self.assertEqual(capability["sequence"], 1)
+        self.assertEqual(capability["sequence"], 2)
         self.assertEqual(tuple(capability["slots"]), ("pre", "post"))
         self.assertEqual(
             {slot["expected_time_role"] for slot in capability["slots"].values()},
@@ -786,10 +645,10 @@ module.finalize_bracket_session_slot(
         )
 
         pre = self._finalize_bracket_slot("session-alpha", "pre")
-        self.assertEqual(pre["sequence"], 2)
+        self.assertEqual(pre["sequence"], 4)
         self.assertEqual(pre["event"], BRACKET_SESSION_FINALIZATION_EVENT)
         post = self._finalize_bracket_slot("session-alpha", "post")
-        self.assertEqual(post["sequence"], 3)
+        self.assertEqual(post["sequence"], 6)
 
         pin = terminal_head_pin_for_session(
             self.ledger, session_id="session-alpha"
@@ -799,7 +658,7 @@ module.finalize_bracket_session_slot(
         self._write_pin(pin)
         snapshot = self._snapshot()
         self.assertEqual(snapshot.refusal_reasons, ())
-        self.assertEqual(snapshot.head_sequence, 3)
+        self.assertEqual(snapshot.head_sequence, 6)
         self.assertEqual(
             [observation.bracket_slot for observation in snapshot.observations],
             ["pre", "post"],
@@ -827,8 +686,8 @@ module.finalize_bracket_session_slot(
                 exact_bound_lexeme_s="0.025",
             )
         self._finalize_bracket_slot("session-alpha", "pre")
-        with self.assertRaisesRegex(CalibrationLedgerError, "expected post"):
-            self._finalize_bracket_slot("session-alpha", "pre")
+        repeated = self._finalize_bracket_slot("session-alpha", "pre")
+        self.assertEqual(repeated["slot"], "pre")
 
         conflicting_t1 = dict(self.t1)
         conflicting_t1["power_policy"] = "battery"
@@ -954,7 +813,7 @@ module.finalize_bracket_session_slot(
         session = snapshot.bracket_session_by_id["session-alpha"]
         self.assertEqual(session.state, "aborted")
         self.assertEqual(session.finalized_slots["pre"].receipt_digest, pre["receipt_digest"])
-        with self.assertRaisesRegex(CalibrationLedgerError, "not open"):
+        with self.assertRaisesRegex(CalibrationLedgerError, "operation key conflicts"):
             abort_bracket_session(
                 self.ledger,
                 session_id="session-alpha",
@@ -1083,7 +942,7 @@ module.finalize_bracket_session_slot(
             head_pin_path=self.pin,
             require_committed_pin=False,
         )
-        self.assertEqual(pending["sequence"], 4)
+        self.assertEqual(pending["sequence"], 8)
         with self.assertRaisesRegex(CalibrationLedgerError, "pending"):
             terminal_head_pin_for_session(
                 self.ledger, session_id="session-alpha"
@@ -1142,7 +1001,7 @@ module.finalize_bracket_session_slot(
         )
         conflict_snapshot = self._snapshot(verify_custody=False)
         self.assertIn(
-            "calibration_ledger_bracket_session_conflict",
+            "calibration_ledger_operation_conflict",
             conflict_snapshot.refusal_reasons,
         )
 
@@ -1321,6 +1180,12 @@ module.finalize_bracket_session_slot(
                 _REAL_D079_CUSTODY_MANIFEST_SHA256
             ),
         )
+        issued_receipts, issued_reasons = calibration_ledger._parse_ledger(
+            plan.ledger_bytes
+        )
+        self.assertEqual(issued_reasons, set())
+        self.assertEqual(len(issued_receipts), 76)
+        self.assertEqual(issued_receipts[-1]["receipt_digest"], plan.head_digest)
         source = _unissued_acceptance_fixture()
         reversed_source = dict(reversed(tuple(source.items())))
         canonical_artifact = bootstrap_cli._issued_acceptance_artifact(
@@ -2153,7 +2018,7 @@ module.bootstrap_historical_import(
         self.assertFalse(snapshot.observations[0].is_historical_import)
         self.assertEqual(
             {receipt["event"] for receipt in snapshot.receipts},
-            {"reservation", "finalization"},
+            {"append-intent", "reservation", "finalization"},
         )
 
     def test_historical_import_manifest_pins_head_and_subset_roots_refuse(
@@ -2274,6 +2139,364 @@ module.bootstrap_historical_import(
             plan.head_digest,
             "ac4426e4bbc961256116221f1fad7b9580968f072209bda14e875df897ea19e0",
         )
+
+    def _persist_reservation_intent(self, attempt_id: str = "operation-a"):
+        custody = self.root / attempt_id
+
+        def stop_after_intent(stage):
+            if stage == "intent":
+                raise OSError("crash after intent fsync")
+
+        with mock.patch.object(
+            calibration_ledger,
+            "_after_ledger_fsync",
+            side_effect=stop_after_intent,
+        ):
+            with self.assertRaisesRegex(OSError, "intent fsync"):
+                self._reserve(attempt_id, custody)
+        physical = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        self.assertIsNotNone(physical.active_intent)
+        return custody, physical
+
+    def test_closure_regression_same_head_foreign_prefix_never_admitted(self) -> None:
+        _custody, physical = self._persist_reservation_intent()
+        intent_raw = self.ledger.read_bytes()
+        intent = physical.active_intent
+        assert intent is not None
+        target_a = calibration_ledger._intent_target_receipt(
+            intent,
+            sequence=len(physical.receipts) + 1,
+            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+        )
+        bytes_a = canonical_json_bytes(target_a) + b"\n"
+        target_b = calibration_ledger._new_receipt(
+            sequence=target_a["sequence"],
+            predecessor_digest=target_a["predecessor_digest"],
+            event="reservation",
+            attempt_id="operation-b",
+            content_id=None,
+            artifacts={},
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s=None,
+            exact_bound_lexeme_s=None,
+            disposition="pending",
+            custody_locator=str(self.root / "operation-b"),
+        )
+        bytes_b = canonical_json_bytes(target_b) + b"\n"
+        shared = 0
+        for left, right in zip(bytes_a, bytes_b):
+            if left != right:
+                break
+            shared += 1
+        self.assertGreater(shared, 0)
+        variants = {
+            "zero": b"",
+            "one-shared": bytes_b[:1],
+            "several-shared": bytes_b[: min(shared, 17)],
+            "len-minus-one": bytes_a[:-1],
+            "foreign-fragment": bytes_b[: min(len(bytes_b), shared + 1)],
+            "foreign-complete": bytes_b,
+        }
+        for name, injected in variants.items():
+            with self.subTest(name=name):
+                self.ledger.write_bytes(intent_raw + injected)
+                before = self.ledger.read_bytes()
+                with mock.patch.object(
+                    calibration_ledger,
+                    "_legacy_journal_metadata",
+                    side_effect=AssertionError("sidecar must not be read"),
+                ):
+                    result = calibration_ledger.repair_calibration_ledger(
+                        self.ledger
+                    )
+                after = self.ledger.read_bytes()
+                self.assertEqual(result.state, "clean")
+                self.assertTrue(after.startswith(before))
+                parsed = calibration_ledger._scan_physical_ledger(after)
+                business = [
+                    row
+                    for row in parsed.receipts
+                    if row.get("schema_version")
+                    != calibration_ledger.CONTROL_SCHEMA
+                ]
+                self.assertEqual(
+                    [row.get("attempt_id") for row in business],
+                    ["operation-a"],
+                )
+                abandonments = [
+                    row
+                    for row in parsed.receipts
+                    if row.get("event") == calibration_ledger.ABANDONMENT_EVENT
+                ]
+                mismatches = not bytes_a.startswith(injected)
+                self.assertEqual(bool(abandonments), mismatches)
+                if mismatches:
+                    abandonment = abandonments[-1]
+                    self.assertEqual(abandonment["residue_length"], len(injected))
+                    self.assertEqual(
+                        abandonment["residue_sha256"],
+                        hashlib.sha256(injected).hexdigest(),
+                    )
+                    self.assertLess(
+                        abandonment["sequence"], business[-1]["sequence"]
+                    )
+
+    def test_intent_commitment_mutation_and_operator_crossing_fail_closed(self) -> None:
+        _custody, physical = self._persist_reservation_intent()
+        intent = dict(physical.active_intent or {})
+        target_core = dict(intent["target_core"])
+        target_core["attempt_id"] = "foreign-operation"
+        intent["target_core"] = target_core
+        intent["receipt_digest"] = calibration_ledger._receipt_digest(intent)
+        self.ledger.write_bytes(canonical_json_bytes(intent) + b"\n")
+        inspected = calibration_ledger.inspect_calibration_ledger(self.ledger)
+        self.assertEqual(inspected.state, "residue")
+        self.assertEqual(inspected.head_sequence, 0)
+
+        self.ledger.write_bytes(
+            canonical_json_bytes(physical.active_intent) + b"\n"
+        )
+        with self.assertRaisesRegex(CalibrationLedgerError, "irrevocable"):
+            calibration_ledger.abandon_calibration_ledger_tail(
+                self.ledger,
+                operator_identity="night-operator",
+                attestation_reason="must not cross the durable intent",
+                head_pin_path=self.pin,
+                require_committed_pin=False,
+            )
+
+    def test_crash_boundaries_converge_without_deleting_bytes(self) -> None:
+        cases = (
+            "during-intent",
+            "after-intent-fsync",
+            "during-target",
+            "after-target-fsync",
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                self.ledger.unlink(missing_ok=True)
+                calls = 0
+                real_write = calibration_ledger._write_ledger_append_payload
+
+                def crash_write(handle, payload):
+                    nonlocal calls
+                    calls += 1
+                    crash_call = 1 if case == "during-intent" else 2
+                    if case.startswith("during") and calls == crash_call:
+                        handle.write(payload[: max(1, len(payload) // 3)])
+                        handle.flush()
+                        calibration_ledger.os.fsync(handle.fileno())
+                        raise OSError(case)
+                    return real_write(handle, payload)
+
+                def crash_after(stage):
+                    if case == "after-intent-fsync" and stage == "intent":
+                        raise OSError(case)
+                    if case == "after-target-fsync" and stage == "target":
+                        raise OSError(case)
+
+                with (
+                    mock.patch.object(
+                        calibration_ledger,
+                        "_write_ledger_append_payload",
+                        side_effect=crash_write,
+                    ),
+                    mock.patch.object(
+                        calibration_ledger,
+                        "_after_ledger_fsync",
+                        side_effect=crash_after,
+                    ),
+                ):
+                    with self.assertRaisesRegex(OSError, case):
+                        self._reserve("crash-boundary", self.root / "crash")
+                before = self.ledger.read_bytes()
+                calibration_ledger.repair_calibration_ledger(self.ledger)
+                after = self.ledger.read_bytes()
+                self.assertTrue(after.startswith(before))
+                final = calibration_ledger._scan_physical_ledger(after)
+                self.assertFalse(final.reasons)
+                business = [
+                    row
+                    for row in final.receipts
+                    if row.get("schema_version")
+                    != calibration_ledger.CONTROL_SCHEMA
+                ]
+                if case == "during-intent":
+                    self.assertEqual(business, [])
+                    self.assertTrue(
+                        any(
+                            row.get("event")
+                            == calibration_ledger.ABANDONMENT_EVENT
+                            for row in final.receipts
+                        )
+                    )
+                else:
+                    self.assertEqual(business[-1]["attempt_id"], "crash-boundary")
+                    retry = self._reserve("crash-boundary", self.root / "crash")
+                    self.assertEqual(retry, business[-1])
+
+    def test_abandonment_crash_boundaries_bind_enlarged_residue_then_finalize(
+        self,
+    ) -> None:
+        for case in ("during-abandonment", "after-abandonment-fsync"):
+            with self.subTest(case=case):
+                self.ledger.unlink(missing_ok=True)
+                _custody, physical = self._persist_reservation_intent(
+                    "abandon-crash"
+                )
+                self.ledger.write_bytes(self.ledger.read_bytes() + b"foreign-tail")
+                real_write = calibration_ledger._write_ledger_append_payload
+
+                def crash_write(handle, payload):
+                    if case == "during-abandonment":
+                        handle.write(payload[: max(1, len(payload) // 3)])
+                        handle.flush()
+                        calibration_ledger.os.fsync(handle.fileno())
+                        raise OSError(case)
+                    return real_write(handle, payload)
+
+                def crash_after(stage):
+                    if case == "after-abandonment-fsync" and stage == "abandonment":
+                        raise OSError(case)
+
+                with (
+                    mock.patch.object(
+                        calibration_ledger,
+                        "_write_ledger_append_payload",
+                        side_effect=crash_write,
+                    ),
+                    mock.patch.object(
+                        calibration_ledger,
+                        "_after_ledger_fsync",
+                        side_effect=crash_after,
+                    ),
+                ):
+                    with self.assertRaisesRegex(OSError, case):
+                        calibration_ledger.repair_calibration_ledger(self.ledger)
+                before = self.ledger.read_bytes()
+                calibration_ledger.repair_calibration_ledger(self.ledger)
+                after = self.ledger.read_bytes()
+                self.assertTrue(after.startswith(before))
+                final = calibration_ledger._scan_physical_ledger(after)
+                self.assertFalse(final.reasons)
+                self.assertIsNone(final.active_intent)
+                self.assertEqual(
+                    [
+                        row.get("attempt_id")
+                        for row in final.receipts
+                        if row.get("schema_version")
+                        != calibration_ledger.CONTROL_SCHEMA
+                    ],
+                    ["abandon-crash"],
+                )
+
+    def test_legacy_journal_is_hashed_archived_and_never_replayed(self) -> None:
+        legacy = calibration_ledger._legacy_append_journal_path(self.ledger)
+        legacy_payload = b'{"payload":"foreign-operation"}\n'
+        legacy.write_bytes(legacy_payload)
+        result = calibration_ledger.repair_calibration_ledger(self.ledger)
+        self.assertEqual(result.state, "clean")
+        self.assertFalse(legacy.exists())
+        archives = list(self.root.glob("ledger.jsonl.append-journal.archived-*"))
+        self.assertEqual(len(archives), 1)
+        self.assertEqual(archives[0].read_bytes(), legacy_payload)
+        parsed = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        abandonment = parsed.receipts[-1]
+        self.assertEqual(abandonment["event"], calibration_ledger.ABANDONMENT_EVENT)
+        self.assertEqual(
+            abandonment["legacy_journal"]["sha256"],
+            hashlib.sha256(legacy_payload).hexdigest(),
+        )
+        self.assertFalse(
+            any(row.get("attempt_id") == "foreign-operation" for row in parsed.receipts)
+        )
+
+    def test_issued_shape_76_receipt_prefix_authenticates_without_controls(self) -> None:
+        receipts: list[dict] = []
+        predecessor = GENESIS_DIGEST
+        for index in range(38):
+            attempt_id = f"issued-prefix-{index:02d}"
+            reservation = calibration_ledger._new_receipt(
+                sequence=len(receipts) + 1,
+                predecessor_digest=predecessor,
+                event=HISTORICAL_IMPORT_RESERVATION_EVENT,
+                attempt_id=attempt_id,
+                content_id=None,
+                artifacts={},
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s=None,
+                exact_bound_lexeme_s=None,
+                disposition="pending",
+                custody_locator=f"/issued/{attempt_id}",
+                historical_import_input_sha256={
+                    "disposition_table": "d" * 64,
+                    "custody_manifest": "c" * 64,
+                },
+            )
+            receipts.append(reservation)
+            predecessor = reservation["receipt_digest"]
+            artifacts = {
+                "instrument_evidence.json": f"{index + 1:064x}",
+                "manifest.json": f"{index + 101:064x}",
+            }
+            final = calibration_ledger._new_receipt(
+                sequence=len(receipts) + 1,
+                predecessor_digest=predecessor,
+                event=HISTORICAL_IMPORT_FINALIZATION_EVENT,
+                attempt_id=attempt_id,
+                content_id=content_id_from_artifact_hashes(artifacts),
+                artifacts=artifacts,
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s="99.0",
+                exact_bound_lexeme_s="0.025",
+                disposition="valid",
+                custody_locator=f"/issued/{attempt_id}",
+            )
+            receipts.append(final)
+            predecessor = final["receipt_digest"]
+        raw = b"".join(canonical_json_bytes(row) + b"\n" for row in receipts)
+        parsed, reasons = calibration_ledger._parse_ledger(raw)
+        self.assertEqual(reasons, set())
+        self.assertEqual(len(parsed), 76)
+        self.assertFalse(
+            any(row.get("schema_version") == calibration_ledger.CONTROL_SCHEMA for row in parsed)
+        )
+
+    def test_recovery_cli_has_no_payload_source_and_governs_operator_tail(self) -> None:
+        parser = recovery_cli.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["repair", "--payload", "foreign.json"])
+        self.ledger.write_bytes(b"complete-but-malformed\n")
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+            code = recovery_cli.main(
+                [
+                    "--ledger",
+                    str(self.ledger),
+                    "--head-pin",
+                    str(self.pin),
+                    "--allow-uncommitted-head-pin",
+                    "abandon-tail",
+                    "--operator-identity",
+                    "night-operator",
+                    "--attestation-reason",
+                    "inspected malformed terminal bytes at 02:00",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(output.getvalue())
+        self.assertEqual(payload["inspection"]["state"], "clean")
+        parsed = calibration_ledger._scan_physical_ledger(
+            self.ledger.read_bytes()
+        )
+        self.assertEqual(parsed.receipts[-1]["actor_type"], "operator")
+        self.assertEqual(parsed.receipts[-1]["residue_start_offset"], 0)
 
 
 if __name__ == "__main__":

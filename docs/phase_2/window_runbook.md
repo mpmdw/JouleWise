@@ -1007,3 +1007,39 @@ and the a10 recorded deviation". The question is whether a post calibration
 that fails for a reason other than `clock_anchor_unresolved` may be retried
 once after a settle, or must abort the window as the current text requires.
 Undecided; the current text stands.
+
+### D-117 amendment
+
+This additive amendment governs calibration-ledger append recovery and closes
+the recorded ARMING blocker. It does not replace or relax any ratified window
+gate above.
+
+Automatic ledger-only recovery is staged before bracket reservation and before
+each PRE or POST slot is validated. The powermetrics writer invokes the same
+deterministic repair path and makes at most one outer retry with the same
+operation identity. Do not create capture state or start a sampler until that
+pre-slot recovery and validation succeeds.
+
+At 2 a.m., use only these commands, from the clean measurement checkout:
+
+```sh
+.venv/bin/python scripts/recover_calibration_ledger.py inspect
+.venv/bin/python scripts/recover_calibration_ledger.py repair
+.venv/bin/python scripts/recover_calibration_ledger.py abandon-tail \
+  --operator-identity "$OPERATOR_ID" \
+  --attestation-reason "$ATTESTATION_REASON"
+```
+
+- Run `inspect` first. `clean` may proceed; `intent` or `residue` must not arm.
+- Run deterministic `repair` next. It obtains target bytes only from the locked
+  ledger. It accepts no payload or journal source.
+- Use `abandon-tail` only when `repair` explicitly requires operator-attested
+  abandonment. The identity and reason must be truthful and nonempty. Inspect
+  again afterward, then run `repair` once more if instructed.
+- Never truncate, overwrite, edit, or delete ledger bytes. Never delete a
+  recovery artifact to make a refusal disappear.
+- A legacy `.append-journal` is never replayed. Recovery records its whole-file
+  SHA-256 and observed tail in an abandonment receipt and preserves or archives
+  the file. Do not supply it to any command.
+- Do not reserve, capture PRE/POST, or arm a window until inspection is clean
+  and no unrecorded legacy journal remains.
