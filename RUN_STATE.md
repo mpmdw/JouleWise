@@ -16,6 +16,42 @@ executed history except where the EVENING block says otherwise.
 
 ## ✅ CHECKPOINT 2026-08-07 EVENING — 3.5h magistrate window (READ THIS FIRST)
 
+### EXTENDED WINDOW (+90min, same evening) — trust + reasoncode gauntlets advanced; three Sol streams in flight at final close
+
+- **Trust branch (`impl/d117-postcollection-trust`) @ `4fcb687`, pushed:**
+  integration-merged with post-#115 main (2745 full-suite OK unpiped,
+  lead-run); Opus counter-review DONE: PASS-WITH-SHOULD-FIX, no
+  blockers, deletion complete, #115 seam clean, assurance qualifier
+  byte-exact. Fix round 1 APPLIED at the bench: paper §5/§11 corrected
+  (branch had falsified the "mint does not run git" sentence);
+  origin/main containment records unknown instead of refusing; field
+  renamed `mint_commit_contained_in_origin_main` with a PROVEN golden
+  fixture-review (reverse-rename byte-reproduces every old golden on
+  synthetic AND CLI paths; cascaded producer pins/set re-derived);
+  dirty-tree refusal names paths; **D-120 transcribed on the branch**
+  (index row + body; docs tests green). **OWED before PR/merge:**
+  harvest `<scratchpad>/trust-audit-out.md` (Sol adversarial per-field
+  authority walk, IN FLIGHT at close — it gates everything), fix-round
+  delta over `049df4b..4fcb687`, final-head pass, full replay at head,
+  CI. Deferred with record (counter-review S4/S6/N1-N3): opaque
+  binding-refusal message, labelled-floor profile coverage, allowance
+  nit, terminal-head fallback nit, duplicated literal nit.
+- **Reasoncode branch:** Opus counter-review DONE: PASS-WITH-SHOULD-FIX,
+  no blockers — identity seam PROVEN byte-equivalent (20k-row fuzz, 0
+  mismatches), round-trip exact (30k emissions). SF1 (producer-union
+  subset test — uncaught ValueError could suppress a verdict row if the
+  frozen tuple drifts) + SF2 (waived members invisible in the new
+  surface) + 4 nits NOT yet applied — they are the successor's fix
+  round, with `<scratchpad>/reasoncode-audit-out.md` (Sol audit, IN
+  FLIGHT at close) to fold in. Lead full replay: `<scratchpad>/reasoncode-lead-replay.log`.
+- **Recovery implementation** (`impl/d117-ledger-recovery`, worktree
+  `<scratchpad>/recovery`): Sol xhigh IN FLIGHT at close implementing
+  the adopted ledger-resident intent/finalize/abandon shape incl. the
+  runbook D-117 amendment (which discharges the arming blocker).
+  Report lands at `<scratchpad>/recovery-out.md`; if the process died,
+  the worktree diff is the artifact — commit ungated + gauntlet.
+
+
 **Executed this window (all pushed):** resume items 1, 2 (both
 consults), 3, and 5 of the /clear checkpoint, plus the reason-code code
 lane and two U5-U7 amendment closures.
