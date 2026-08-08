@@ -75,13 +75,15 @@ lane and two U5-U7 amendment closures.
    S1-domain question remains).
 
 **IN FLIGHT AT CLOSE (harvest, do not re-run):**
-- **D117-POSTCOLLECTION-TRUST-01 implementation** — Sol xhigh,
-  worktree `<session-scratchpad>/trust`, branch
-  `impl/d117-postcollection-trust`, WRITE_SCOPE = the consult §5
-  surface minus draft-v1.md/ledger. Report `<scratchpad>/trust-out.md`
-  when done; if the process died at session end, the WORKTREE DIFF is
-  the artifact — commit it UNGATED like reasoncode and gauntlet next
-  session. The v2 mint stays BARRED until this lands + delta + gate.
+- **D117-POSTCOLLECTION-TRUST-01: HARVESTED at close** — Sol xhigh run
+  came back CLEAN/complete (full suite OK in-run, scope passed);
+  committed UNGATED as `impl/d117-postcollection-trust` @ `1b1e500`
+  (pushed; 10 files, +1671/-543, incl. the production-path golden
+  fixture). **D-118 gauntlet owed before any PR; the v2 mint stays
+  BARRED until this lands gated.** Report custodied at
+  `<scratchpad>/trust-out.md`. Note for the gauntlet: this branch
+  touches calibration_bracketing.py + its tests, as does PR #115 —
+  integration-tree the pair before whichever merges second.
 - **PR #115 fix-round delta + full replay** (item 3 above).
 - Session scratchpad: `/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad`
   (worktrees split/trust/reasoncode live there; prompts + all Sol
