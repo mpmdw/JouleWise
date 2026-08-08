@@ -1484,6 +1484,14 @@ def evaluate_calibration_bracket(
     if bound_observations is None:
         pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
         post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
+        # Session observations are reserved to bracket their own window via an
+        # exact binding; they never serve as unbound endpoints, even one-sided
+        # (a lone causally-eligible slot must not stand in for a neighbour).
+        if (
+            pre.bracket_session_id is not None
+            or post.bracket_session_id is not None
+        ):
+            return result, ("calibration_bracket_binding_missing",)
     else:
         candidate_by_receipt = {
             candidate.ledger_receipt_digest: candidate for candidate in matching
