@@ -516,6 +516,36 @@ module.abort_bracket_session(
             capture_output=True,
         )
 
+    def _finalize_post_in_subprocess_before_journal_clear(self):
+        source_root = Path(__file__).resolve().parents[1]
+        custody = self._custody("session-alpha-post")
+        code = f"""
+import os, signal
+from pathlib import Path
+import joulewise.calibration_ledger as module
+def kill_before_clear(_ledger_path):
+    os.kill(os.getpid(), signal.SIGKILL)
+module._clear_append_journal = kill_before_clear
+module.finalize_bracket_session_slot(
+    Path({str(self.ledger)!r}),
+    session_id="session-alpha",
+    slot="post",
+    disposition="valid",
+    custody_locator={str(custody)!r},
+    artifact_sha256=module.artifact_hashes(Path({str(custody)!r})),
+    identity_epoch={self.epoch!r},
+    t1_bindings={self.t1!r},
+    capture_wall_time_s="111.0",
+    exact_bound_lexeme_s="0.025",
+)
+"""
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=source_root,
+            check=False,
+            capture_output=True,
+        )
+
     def test_recovery_is_idempotent_after_process_death_before_journal_clear(
         self,
     ) -> None:
@@ -579,6 +609,40 @@ module.abort_bracket_session(
         self.assertTrue(journal_path.exists())
         self.assertEqual(self.ledger.read_bytes(), ledger_before_retry)
         self.assertEqual(evidence_path.read_bytes(), mismatched)
+
+    def test_terminal_session_pin_refuses_complete_tail_with_stale_journal(
+        self,
+    ) -> None:
+        self._open_bracket_session()
+        self._finalize_bracket_slot("session-alpha", "pre")
+        killed = self._finalize_post_in_subprocess_before_journal_clear()
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        self.assertTrue(
+            calibration_ledger._append_journal_path(self.ledger).exists()
+        )
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError,
+            "calibration_ledger_recovery_required",
+        ):
+            terminal_head_pin_for_session(
+                self.ledger,
+                session_id="session-alpha",
+            )
+
+    def test_terminal_session_pin_classifies_journal_authenticated_torn_tail(
+        self,
+    ) -> None:
+        self._create_torn_session_finalization()
+
+        with self.assertRaisesRegex(
+            CalibrationLedgerError,
+            "calibration_ledger_recovery_required",
+        ):
+            terminal_head_pin_for_session(
+                self.ledger,
+                session_id="session-alpha",
+            )
 
     def test_reservation_requires_complete_epoch_and_full_t1(self) -> None:
         with self.assertRaisesRegex(
