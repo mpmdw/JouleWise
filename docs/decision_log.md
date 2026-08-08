@@ -144,6 +144,7 @@ be re-derived by a future agent gets an entry here.
 | D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
 | D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
 | D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
+| D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
 
 ---
 
@@ -7839,3 +7840,33 @@ arm is PROSPECTIVELY FROZEN and the claim machinery fails closed.
    prospective sizing evidence — never a quiet omission.
 4. The D-117 clause "contrast decode-only by default; 256-tok arm stays
    Ed's option" is SUPERSEDED by this exercise of that option.
+
+
+## D-123: Ruling 2 YES + the signal-size doctrine + the overnight license (Ed, 2026-08-08)
+
+**Date:** 2026-08-08, in-thread, Ed's last exchange before an ~12h
+autonomous overnight window. **Status:** RATIFIED.
+
+1. **Reported-energy cells: YES.** The alpha/beta packs pre-register
+   reader-facing phase-energy means alongside the floor cells — same 50
+   members, zero added collection — conditional on the pack-gate check
+   proving the addition leaves every floor computation byte-identical.
+   Ed's framing accepted: what freezes is the PROCEDURE (measurand +
+   reduction method), never the number; exploration stays allowed and
+   labelled.
+2. **Signal-size doctrine (standing preference).** Ed: making the
+   workload bigger is "basically free to the instrument" — the
+   legitimate knob against the fixed ~1 J attribution blur is effect
+   size, not averaging. Apply wherever free: D-122's 256-token prefill
+   arm is the first exercise; future designs default to sized-up
+   signals unless sizing destabilizes a proven design or breaks
+   comparability with pinned claims.
+3. **Attribution debate ordered.** A bounded Sol consult on whether
+   phase ATTRIBUTION itself can be improved within the ruled instrument
+   scope (no instrument-improvement program). If the answer is "no
+   headroom beyond signal sizing," that is recorded and the question
+   closes.
+4. **Overnight license.** ~12h autonomous; goal "keep working until
+   you've got a defensible paper"; Sol liberal on fast tier; the
+   magistrate (Fable) oversees — D-121 terminal reviews bind every
+   merge; Opus lenses continue ("other eyes never hurt").
