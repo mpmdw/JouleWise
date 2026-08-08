@@ -224,8 +224,12 @@ containing it refuses as an unknown top-level key. This profile is v2-only, so
 the historical v1 mint remains byte-identical.
 
 Postcollection verification is domain separated. Ledger observations plus the
-validated bracket binding own receipt/content custody and terminality. The
-exact code-pinned issued acceptance artifact owns the allowance rule and
+validated bracket binding own receipt/content custody and terminality, while
+the authenticated whole-window verdict owns which session, window, and exact
+pre/post endpoints the binding is allowed to name. The binding is checked
+against that verdict projection before ledger validation and can never supply
+its own expected window. The exact code-pinned issued acceptance artifact owns
+the allowance rule and
 screen. The authenticated whole-window verdict owns evaluation-basis identity,
 complete membership, and drift evidence. Authenticated bundle/report members
 and the governed estimator own absolute and comparative floors. The mint owns
@@ -240,7 +244,11 @@ domain evidence and compares it with independently frozen pins. It never
 invents, selects, defaults, generates, or fills missing pins. Before parsing
 evidence, the production v2 route derives actual Git `HEAD`, requires a clean
 tree, checks the caller's claim, and records whether `origin/main` contains the
-head. All inputs reject duplicate JSON keys and non-finite numbers.
+head. It separately derives the commit that last changed the authenticated
+ledger head-pin file and records whether `origin/main` contains that commit;
+either containment may be unknown and neither is a refusal. All inputs,
+including recursively reached campaign manifests, attempt evidence, and
+supersession custody, reject duplicate JSON keys and non-finite numbers.
 
 The v2 artifact's provenance requires the assurance profile
 `single_authority_hash_bound_replay.v1` with

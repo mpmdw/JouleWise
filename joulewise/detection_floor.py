@@ -1382,7 +1382,10 @@ _IMPLEMENTATION_KEYS = {
     "project_tree_state",
     "python_package",
 }
-_IMPLEMENTATION_OPTIONAL_KEYS = {"mint_commit_contained_in_origin_main"}
+_IMPLEMENTATION_OPTIONAL_KEYS = {
+    "mint_commit_contained_in_origin_main",
+    "head_pin_commit_contained_in_origin_main",
+}
 _ASSURANCE_KEYS = {
     "profile_id",
     "independent_attestation",
@@ -2331,22 +2334,28 @@ def _validate_provenance(
             errors.append(
                 f"{where}.implementation.python_package: must be 'joulewise'"
             )
-        key_present = "mint_commit_contained_in_origin_main" in implementation
-        contains_head = implementation.get(
-            "mint_commit_contained_in_origin_main"
-        )
-        if is_v2 and not (
-            key_present and (contains_head is None or isinstance(contains_head, bool))
+        for containment_key in (
+            "mint_commit_contained_in_origin_main",
+            "head_pin_commit_contained_in_origin_main",
         ):
-            errors.append(
-                f"{where}.implementation.mint_commit_contained_in_origin_main: "
-                "required boolean-or-null for the v2 mint"
-            )
-        if not is_v2 and key_present:
-            errors.append(
-                f"{where}.implementation.mint_commit_contained_in_origin_main: "
-                "allowed only for the v2 mint"
-            )
+            key_present = containment_key in implementation
+            contains_commit = implementation.get(containment_key)
+            if is_v2 and not (
+                key_present
+                and (
+                    contains_commit is None
+                    or isinstance(contains_commit, bool)
+                )
+            ):
+                errors.append(
+                    f"{where}.implementation.{containment_key}: "
+                    "required boolean-or-null for the v2 mint"
+                )
+            if not is_v2 and key_present:
+                errors.append(
+                    f"{where}.implementation.{containment_key}: "
+                    "allowed only for the v2 mint"
+                )
     assurance = provenance.get("assurance")
     if is_v2:
         if not _check_keys(

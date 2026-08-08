@@ -174,6 +174,12 @@ class AuthenticatedComponent:
     source_regime: Mapping[str, Any]
     scientific_config_identity_sha256: str
     backend: str
+    # The authenticated whole-window verdict owns the bracket that covered
+    # this component.  Generalized v2 consumers use this exact basis record
+    # to prevent a supplied bracket binding from choosing its own window.
+    # Historical v1 records did not retain the projection in memory, so the
+    # optional default preserves their construction and artifact bytes.
+    whole_window_calibration_bracket: Mapping[str, Any] | None = None
 
 
 def _sha256(raw: bytes) -> str:
@@ -754,10 +760,10 @@ def _verify_report_widths(
         )
 
 
-def _evaluation_basis_members(
+def _authenticated_evaluation_basis(
     rows: Sequence[Mapping[str, Any]], expected_sha256: str
-) -> frozenset[str]:
-    member_sets: list[frozenset[str]] = []
+) -> Mapping[str, Any]:
+    matching_bases: list[Mapping[str, Any]] = []
     for row in rows:
         basis = row.get("evaluation_basis")
         if not isinstance(basis, Mapping) or basis.get("sha256") != expected_sha256:
@@ -772,12 +778,21 @@ def _evaluation_basis_members(
         member_ids = [item["bundle_id"] for item in occurrences]
         if len(member_ids) != len(set(member_ids)):
             raise MintError("evaluation basis contains duplicate member occurrences")
-        member_sets.append(frozenset(member_ids))
-    if len(member_sets) != 1:
+        matching_bases.append(basis)
+    if len(matching_bases) != 1:
         raise MintError(
             f"campaign log must contain exactly one evaluation basis {expected_sha256}"
         )
-    return member_sets[0]
+    return matching_bases[0]
+
+
+def _evaluation_basis_members(
+    rows: Sequence[Mapping[str, Any]], expected_sha256: str
+) -> frozenset[str]:
+    basis = _authenticated_evaluation_basis(rows, expected_sha256)
+    return frozenset(
+        item["bundle_id"] for item in basis["member_occurrences"]
+    )
 
 
 def _order_manifest_ids(order_manifest: Mapping[str, Any]) -> list[str]:
@@ -1126,8 +1141,11 @@ def _authenticate_component(
         paths.evidence_root / "campaign_log.jsonl", "campaign log"
     )
     campaign_log_sha256 = _sha256(campaign_raw)
-    basis_members = _evaluation_basis_members(
+    evaluation_basis = _authenticated_evaluation_basis(
         campaign_rows, expected_basis_sha256
+    )
+    basis_members = frozenset(
+        item["bundle_id"] for item in evaluation_basis["member_occurrences"]
     )
     if not set(spec_ids).issubset(basis_members):
         raise MintError(
@@ -1232,6 +1250,13 @@ def _authenticate_component(
         source_regime=regime,
         scientific_config_identity_sha256=scientific_hash,
         backend=backend,
+        whole_window_calibration_bracket=(
+            dict(evaluation_basis["calibration_bracket_set"])
+            if isinstance(
+                evaluation_basis.get("calibration_bracket_set"), Mapping
+            )
+            else None
+        ),
     )
 
 

@@ -179,9 +179,9 @@ wire. Its presence in a D-117 report is an unknown-top-level-key refusal.
 
 | Frozen postcollection pin | Authoritative verification source |
 |---|---|
-| Pre/post receipt digests | Finalized endpoints returned by `validate_calibration_bracket_binding` over the authenticated ledger snapshot |
-| Pre/post content digests | Receipt-bound ledger observation content IDs, recomputed from calibration artifacts by the ledger subsystem |
-| Bracket-binding SHA | SHA-256 of the exact supplied binding bytes plus complete validation of that binding against the ledger |
+| Pre/post receipt digests | Verdict-owned bracket endpoints cross-checked against the finalized observations returned by `validate_calibration_bracket_binding` over the authenticated ledger snapshot |
+| Pre/post content digests | Verdict-owned endpoint content IDs cross-checked against receipt-bound ledger observation content IDs, which the ledger subsystem recomputes from calibration artifacts |
+| Bracket-binding SHA | SHA-256 of the exact supplied binding bytes plus a session/window/endpoint cross-check against the authenticated verdict bracket and complete validation against the ledger |
 | Terminal ledger head | Git-committed head pin and authenticated ledger snapshot; the binding copy is only a cross-check |
 | Observed drift | Exact-Decimal absolute difference between authenticated pre/post bound lexemes |
 | Allowance rule, screen, applied allowance, embedding count | Exact code-pinned issued D-079 acceptance artifact and its authenticated rule; applied allowance is `max(observed, accepted screen)` and the count is exactly one |
@@ -232,17 +232,24 @@ bytes remain frozen. Every listed set is closed, so any other key refuses.
 1. Derive actual Git `HEAD`, require a clean tree, compare any claimed commit,
    and record whether `origin/main` contains the mint head.
 2. Reject duplicate keys and non-finite numbers in every parsed input, with
-   exact-byte re-reads at TOCTOU boundaries.
+   exact-byte re-reads at TOCTOU boundaries, including recursively reached
+   campaign manifests, attempt records, and supersession evidence.
 3. Authenticate the issued acceptance artifact against its exact code pin and
    internal derivation.
 4. Load the ledger against the Git-committed terminal head and acceptance
    cutoff; reject malformed chains, rollback, stale/uncommitted heads, open
-   sessions, and invalid custody.
-5. Validate bracket plan, window, evidence root, runs root, session, slots,
-   content IDs, and terminality through the bracketing API.
-6. Recompute exact-Decimal drift and the issued-rule allowance.
-7. Authenticate the whole-window verdict, policy, bracket, attempts,
-   supersessions, bundle bytes, and complete evaluation membership.
+   sessions, and invalid custody. After that authentication identifies the
+   head-pin path, derive the commit that last changed it and separately record
+   whether `origin/main` contains that commit. Either containment may be
+   unknown and neither gates issuance.
+5. Authenticate the whole-window verdict, policy, verdict-owned calibration
+   bracket, attempts, supersessions, bundle bytes, and complete evaluation
+   membership.
+6. Derive the expected session/window/endpoints from that verdict bracket,
+   refuse any supplied binding that disagrees, then validate plan, evidence
+   root, runs root, slots, content IDs, and terminality through the bracketing
+   API. The binding never supplies its own expected window.
+7. Recompute exact-Decimal drift and the issued-rule allowance.
 8. Apply the recursively closed D-117 report profile.
 9. Treat report cells as caches: reauthenticate members, metrics, widths,
    semantics, and allowance, then recompute every mint-relevant floor.

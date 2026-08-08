@@ -250,6 +250,21 @@ class V2ProducerInputs:
     calibration_allowance_projection: Mapping[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class V2VerdictBracket:
+    """Bracket identity projected from authenticated whole-window verdicts."""
+
+    session_id: str
+    window_id: str
+    plan_id: str
+    plan_sha256: str
+    evidence_root_id: str
+    runs_root: str
+    endpoint_attempt_ids: tuple[str, str]
+    endpoint_receipt_sha256s: tuple[str, str]
+    endpoint_content_sha256s: tuple[str, str]
+
+
 def _object(
     value: object,
     label: str,
@@ -1219,6 +1234,48 @@ def _actual_v2_git_state() -> tuple[str, bool | None]:
     return head, contained_result.returncode == 0
 
 
+def _head_pin_commit_containment_in_origin_main(
+    head_pin_path: Path,
+) -> bool | None:
+    """Record containment of the commit that last changed one head-pin."""
+
+    try:
+        relative = Path(head_pin_path).resolve().relative_to(REPO_ROOT.resolve())
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(
+                ("git", "-C", str(REPO_ROOT), *args),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return subprocess.CompletedProcess(args, 1, "", "")
+
+    if run("rev-parse", "--verify", "origin/main^{commit}").returncode != 0:
+        return None
+    commit_result = run(
+        "log",
+        "-1",
+        "--format=%H",
+        "--",
+        relative.as_posix(),
+    )
+    commit = commit_result.stdout.strip()
+    if (
+        commit_result.returncode != 0
+        or re.fullmatch(r"[0-9a-f]{40}", commit) is None
+    ):
+        return None
+    contained_result = run("merge-base", "--is-ancestor", commit, "origin/main")
+    if contained_result.returncode not in (0, 1):
+        return None
+    return contained_result.returncode == 0
+
+
 def load_pinset(path: Path, expected_sha256: str) -> MintPinset | V2Pinset:
     """Authenticate exact bytes, then enforce the disjoint final pinset schema."""
 
@@ -1640,6 +1697,41 @@ def _artifact_sha256(artifact: Mapping[str, Any]) -> str:
     return hashlib.sha256(_artifact_payload(artifact)).hexdigest()
 
 
+def _artifact_sha256_containment_variants(
+    artifact: Mapping[str, Any],
+) -> frozenset[str]:
+    """Hash one artifact under every non-gating containment observation.
+
+    Both Git-containment fields are required provenance, but lookup failure is
+    explicitly allowed and neither fact gates issuance. Component byte pins
+    therefore bind the fields' presence and every other byte while accepting
+    any honest boolean/null observation made at mint time.
+    """
+
+    provenance = artifact.get("provenance")
+    implementation = (
+        provenance.get("implementation")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    keys = (
+        "mint_commit_contained_in_origin_main",
+        "head_pin_commit_contained_in_origin_main",
+    )
+    if not isinstance(implementation, Mapping) or any(
+        key not in implementation for key in keys
+    ):
+        return frozenset({_artifact_sha256(artifact)})
+    variants: set[str] = set()
+    for values in itertools.product((False, True, None), repeat=len(keys)):
+        candidate = copy.deepcopy(dict(artifact))
+        candidate_implementation = candidate["provenance"]["implementation"]
+        for key, value in zip(keys, values):
+            candidate_implementation[key] = value
+        variants.add(_artifact_sha256(candidate))
+    return frozenset(variants)
+
+
 def _v2_producer_hashes(pinset: V2Pinset) -> tuple[tuple[str, ...], str]:
     producers = pinset.value["producer_plans"]
     producer_hashes = tuple(_canonical_json_sha256(row) for row in producers)
@@ -1810,6 +1902,176 @@ def _require_postcollection_evidence_equal(
         )
 
 
+def _v2_component_verdict_bracket(
+    component: Any,
+    *,
+    label: str,
+) -> V2VerdictBracket:
+    bracket = getattr(component, "whole_window_calibration_bracket", None)
+    if not isinstance(bracket, Mapping):
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            f"missing authenticated bracket basis for {label}"
+        )
+    endpoints = tuple(bracket.get(role) for role in ("pre", "post"))
+    if any(not isinstance(endpoint, Mapping) for endpoint in endpoints):
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            f"has malformed endpoints for {label}"
+        )
+    pre, post = endpoints
+    assert isinstance(pre, Mapping) and isinstance(post, Mapping)
+    common_fields = (
+        ("bracket_session_id", "session_id"),
+        ("bracket_window_id", "window_id"),
+        ("bracket_plan_id", "plan_id"),
+        ("bracket_plan_sha256", "plan_sha256"),
+        ("bracket_evidence_root_id", "evidence_root_id"),
+        ("bracket_runs_root", "runs_root"),
+    )
+    common: dict[str, str] = {}
+    for source_field, projected_field in common_fields:
+        pre_value = pre.get(source_field)
+        post_value = post.get(source_field)
+        if (
+            not isinstance(pre_value, str)
+            or not pre_value
+            or pre_value != post_value
+        ):
+            raise MintError(
+                "postcollection_evidence_mismatch: verdict/bracket cross-check "
+                f"disagrees on {source_field} for {label}"
+            )
+        common[projected_field] = pre_value
+    if pre.get("bracket_slot") != "pre" or post.get("bracket_slot") != "post":
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            f"has invalid endpoint slots for {label}"
+        )
+
+    def pair(field: str) -> tuple[str, str]:
+        values = (pre.get(field), post.get(field))
+        if any(not isinstance(value, str) or not value for value in values):
+            raise MintError(
+                "postcollection_evidence_mismatch: verdict/bracket cross-check "
+                f"has invalid {field} for {label}"
+            )
+        return values  # type: ignore[return-value]
+
+    return V2VerdictBracket(
+        **common,
+        endpoint_attempt_ids=pair("attempt_id"),
+        endpoint_receipt_sha256s=pair("ledger_receipt_digest"),
+        endpoint_content_sha256s=pair("content_id"),
+    )
+
+
+def _v2_verdict_bracket(
+    *,
+    producer: Mapping[str, Any],
+    inputs: V2ProducerInputs,
+) -> V2VerdictBracket:
+    brackets = [
+        _v2_component_verdict_bracket(
+            component,
+            label=f"{role}.{kind}",
+        )
+        for role, cell in sorted(inputs.cells.items())
+        for kind, component in (
+            ("absolute", cell.absolute),
+            ("comparative", cell.comparative),
+        )
+    ]
+    if not brackets or any(bracket != brackets[0] for bracket in brackets[1:]):
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            "does not identify one whole-window bracket"
+        )
+    expected = brackets[0]
+    plan = producer["plan"]
+    if (
+        expected.plan_id,
+        expected.plan_sha256,
+        expected.evidence_root_id,
+    ) != (
+        plan["plan_id"],
+        plan["sha256"],
+        producer["evidence_root_id"],
+    ) or Path(expected.runs_root).resolve() != inputs.evidence_root.resolve():
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            "disagrees with authenticated plan/evidence-root owners"
+        )
+    return expected
+
+
+def _v2_crosscheck_binding_against_verdict(
+    binding: Mapping[str, Any],
+    expected: V2VerdictBracket,
+) -> None:
+    for field in (
+        "session_id",
+        "window_id",
+        "plan_id",
+        "plan_sha256",
+        "evidence_root_id",
+        "runs_root",
+    ):
+        if binding.get(field) != getattr(expected, field):
+            raise MintError(
+                "postcollection_evidence_mismatch: verdict/bracket cross-check "
+                f"refused binding {field}"
+            )
+    endpoints = binding.get("endpoints")
+    if not isinstance(endpoints, Mapping):
+        raise MintError(
+            "postcollection_evidence_mismatch: verdict/bracket cross-check "
+            "refused malformed binding endpoints"
+        )
+    for index, role in enumerate(("pre", "post")):
+        endpoint = endpoints.get(role)
+        if not isinstance(endpoint, Mapping):
+            raise MintError(
+                "postcollection_evidence_mismatch: verdict/bracket cross-check "
+                f"refused malformed {role} endpoint"
+            )
+        expected_endpoint = {
+            "attempt_id": expected.endpoint_attempt_ids[index],
+            "receipt_digest": expected.endpoint_receipt_sha256s[index],
+            "content_digest": expected.endpoint_content_sha256s[index],
+        }
+        if dict(endpoint) != expected_endpoint:
+            raise MintError(
+                "postcollection_evidence_mismatch: verdict/bracket cross-check "
+                f"refused binding {role} endpoint"
+            )
+
+
+def _v2_allowance_projection(
+    inputs: V2ProducerInputs,
+    pre: Any,
+    post: Any,
+) -> Mapping[str, Any]:
+    projection = issued_calibration_allowance_projection(
+        inputs.calibration_acceptance,
+        pre_exact_bound_lexeme_s=str(
+            _mapping_attribute(pre, "exact_bound_lexeme_s")
+        ),
+        post_exact_bound_lexeme_s=str(
+            _mapping_attribute(post, "exact_bound_lexeme_s")
+        ),
+    )
+    if projection is None:
+        raise MintError(
+            "postcollection_evidence_mismatch: issued acceptance allowance is not derivable"
+        )
+    pin_projection = dict(projection)
+    pin_projection["allowance_rule"] = (
+        f"max(observed_drift_s,{pin_projection['bracket_screen_s']})"
+    )
+    return pin_projection
+
+
 def _v2_authenticate_bracket_binding(
     *,
     producer: Mapping[str, Any],
@@ -1822,10 +2084,12 @@ def _v2_authenticate_bracket_binding(
         raise MintError(
             f"postcollection_evidence_mismatch: {label} bracket binding is malformed"
         )
+    expected = _v2_verdict_bracket(producer=producer, inputs=inputs)
+    _v2_crosscheck_binding_against_verdict(binding, expected)
     resolved = validate_calibration_bracket_binding(
         binding,
         ledger_snapshot,
-        window_id=binding.get("window_id"),
+        window_id=expected.window_id,
         plan_id=producer["plan"]["plan_id"],
         plan_sha256=producer["plan"]["sha256"],
         evidence_root_id=producer["evidence_root_id"],
@@ -1836,24 +2100,7 @@ def _v2_authenticate_bracket_binding(
             f"postcollection_evidence_mismatch: {label} bracket binding failed authenticated validation"
         )
     pre, post = resolved
-    projection = issued_calibration_allowance_projection(
-        inputs.calibration_acceptance,
-        pre_exact_bound_lexeme_s=str(
-            _mapping_attribute(pre, "exact_bound_lexeme_s")
-        ),
-        post_exact_bound_lexeme_s=str(
-            _mapping_attribute(post, "exact_bound_lexeme_s")
-        ),
-    )
-    if projection is None:
-        raise MintError(
-            f"postcollection_evidence_mismatch: {label} issued acceptance allowance is not derivable"
-        )
-    pin_projection = dict(projection)
-    pin_projection["allowance_rule"] = (
-        f"max(observed_drift_s,{pin_projection['bracket_screen_s']})"
-    )
-    return pre, post, pin_projection
+    return pre, post, _v2_allowance_projection(inputs, pre, post)
 
 
 def _v2_gate_producer_inventory(
@@ -1938,9 +2185,45 @@ def _v2_gate_postcollection(
         and producer_inputs.authenticated_post_observation is not None
         and producer_inputs.calibration_allowance_projection is not None
     ):
+        expected_bracket = _v2_verdict_bracket(
+            producer=producer,
+            inputs=producer_inputs,
+        )
+        _v2_crosscheck_binding_against_verdict(
+            producer_inputs.bracket_binding,
+            expected_bracket,
+        )
         pre = producer_inputs.authenticated_pre_observation
         post_observation = producer_inputs.authenticated_post_observation
-        allowance_projection = producer_inputs.calibration_allowance_projection
+        for index, observation in enumerate((pre, post_observation)):
+            role = ("pre", "post")[index]
+            observed_endpoint = (
+                _mapping_attribute(observation, "attempt_id"),
+                _mapping_attribute(observation, "receipt_digest"),
+                _mapping_attribute(observation, "content_id"),
+            )
+            expected_endpoint = (
+                expected_bracket.endpoint_attempt_ids[index],
+                expected_bracket.endpoint_receipt_sha256s[index],
+                expected_bracket.endpoint_content_sha256s[index],
+            )
+            if observed_endpoint != expected_endpoint:
+                raise MintError(
+                    "postcollection_evidence_mismatch: verdict/bracket "
+                    f"cross-check refused authenticated {role} endpoint"
+                )
+        allowance_projection = _v2_allowance_projection(
+            producer_inputs,
+            pre,
+            post_observation,
+        )
+        if dict(producer_inputs.calibration_allowance_projection) != dict(
+            allowance_projection
+        ):
+            raise MintError(
+                "postcollection_evidence_mismatch: cached calibration "
+                "allowance differs from authenticated endpoint derivation"
+            )
     else:
         pre, post_observation, allowance_projection = (
             _v2_authenticate_bracket_binding(
@@ -2224,7 +2507,8 @@ def _mint_v2_cell_artifact(
     plan: Mapping[str, Any],
     project_commit: str,
     project_tree_state: str,
-    origin_main_contains_head: bool,
+    origin_main_contains_head: bool | None,
+    head_pin_commit_contained_in_origin_main: bool | None,
     absolute: Any,
     comparative: Any,
 ) -> Mapping[str, Any]:
@@ -2331,6 +2615,9 @@ def _mint_v2_cell_artifact(
                 "mint_commit_contained_in_origin_main": (
                     origin_main_contains_head
                 ),
+                "head_pin_commit_contained_in_origin_main": (
+                    head_pin_commit_contained_in_origin_main
+                ),
                 "python_package": "joulewise",
             },
         },
@@ -2355,7 +2642,8 @@ def _build_v2_artifacts(
     calibration_ledger_snapshot: Any,
     project_commit: str,
     project_tree_state: str,
-    origin_main_contains_head: bool = False,
+    origin_main_contains_head: bool | None = False,
+    head_pin_commit_contained_in_origin_main: bool | None = False,
 ) -> tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]:
     """Build the combined artifact and its two deterministic components.
 
@@ -2436,6 +2724,9 @@ def _build_v2_artifacts(
                     project_commit=project_commit,
                     project_tree_state=project_tree_state,
                     origin_main_contains_head=origin_main_contains_head,
+                    head_pin_commit_contained_in_origin_main=(
+                        head_pin_commit_contained_in_origin_main
+                    ),
                 )
             except core.MintError as exc:
                 raise MintError(str(exc)) from exc
@@ -2703,8 +2994,10 @@ def _validate_v2_artifact_binding(
                 component["transport_groups"]
             ) != 2:
                 continue
-            observed_component_sha256 = _artifact_sha256(component)
-            if observed_component_sha256 != component_pin["sha256"]:
+            observed_component_sha256s = (
+                _artifact_sha256_containment_variants(component)
+            )
+            if component_pin["sha256"] not in observed_component_sha256s:
                 errors.append(
                     "artifact: component artifact hash mismatch for "
                     f"{component_pin['plan_id']!r}"
@@ -2740,7 +3033,9 @@ def mint_multi_cell_authenticated_artifact(
         zip(components, loaded.value["aggregate"]["component_artifacts"])
     ):
         observed = _artifact_sha256(component)
-        if observed != expected["sha256"]:
+        if expected["sha256"] not in _artifact_sha256_containment_variants(
+            component
+        ):
             raise MintError(
                 "aggregate/component hash mismatch: component artifact "
                 f"{index} expected {expected['sha256']}, observed {observed}"
@@ -2834,6 +3129,100 @@ def _load_v2_ledger_snapshot(
     )
 
 
+def _strict_v2_recursive_json_inputs(
+    evidence_root: Path,
+    *,
+    label: str,
+) -> Mapping[str, str]:
+    """Strict-parse every JSON document reached by whole-window replay.
+
+    The whole-window verifier authenticates hashes and semantics.  This
+    preflight supplies the orthogonal JSON grammar guarantee for the complete
+    JSON/JSONL evidence-root inventory, which includes recursively
+    dereferenced manifests, attempt records, cooldown records, and bundle
+    evidence. Supersession quarantine is outside that root by construction,
+    so the three authenticated quarantine documents are added explicitly.
+    The returned byte map is checked again after replay so strict parsing and
+    semantic authentication cannot observe different snapshots.
+    """
+
+    root = Path(evidence_root).resolve()
+    observed: dict[str, str] = {}
+
+    def remember(path: Path, raw: bytes) -> None:
+        observed[str(path.resolve())] = hashlib.sha256(raw).hexdigest()
+
+    def parse_json(path: Path, document_label: str) -> Any:
+        value, raw = _strict_json_file(path, document_label)
+        remember(path, raw)
+        return value
+
+    def parse_jsonl(path: Path, document_label: str) -> list[Any]:
+        raw = _strict_json_lines_file(path, document_label)
+        remember(path, raw)
+        try:
+            lines = raw.decode("utf-8").splitlines()
+        except UnicodeDecodeError as exc:  # already checked; retain one boundary
+            raise MintError(f"{document_label} is not valid UTF-8 JSONL") from exc
+        return [
+            _strict_json_value(line.encode("utf-8"), f"{document_label} line {index}")
+            for index, line in enumerate(lines, start=1)
+            if line.strip()
+        ]
+
+    try:
+        inventory = sorted(
+            (
+                path
+                for path in root.rglob("*")
+                if path.is_file() and path.suffix in {".json", ".jsonl"}
+            ),
+            key=lambda path: path.as_posix(),
+        )
+    except OSError as exc:
+        raise MintError(
+            f"{label} recursive JSON inventory cannot be read: "
+            f"{exc.strerror or type(exc).__name__}"
+        ) from exc
+    for path in inventory:
+        relative = path.relative_to(root).as_posix()
+        category = (
+            "campaign manifest"
+            if relative.startswith("campaign_manifests/")
+            else "recursive JSON"
+        )
+        if path.suffix == ".jsonl":
+            parse_jsonl(path, f"{label} {category}L {relative}")
+        else:
+            parse_json(path, f"{label} {category} {relative}")
+
+    campaign_path = root / "campaign_log.jsonl"
+    campaign_rows = parse_jsonl(campaign_path, f"{label} campaign log")
+
+    for row in campaign_rows:
+        if not isinstance(row, Mapping):
+            continue
+        is_supersession = (
+            row.get("record_type") == "campaign_occurrence_supersession"
+            or row.get("schema_version")
+            == "joulewise.campaign_occurrence_supersession.v1"
+        )
+        quarantine = row.get("quarantine") if is_supersession else None
+        quarantine_path = (
+            Path(quarantine["path"])
+            if isinstance(quarantine, Mapping)
+            and isinstance(quarantine.get("path"), str)
+            else None
+        )
+        if quarantine_path is not None:
+            for name in ("config.json", "metadata.json", "summary_metrics.json"):
+                parse_json(
+                    quarantine_path / name,
+                    f"{label} supersession quarantine {name}",
+                )
+    return observed
+
+
 def _authenticate_v2_inputs(
     *,
     pinset: V2Pinset,
@@ -2842,12 +3231,17 @@ def _authenticate_v2_inputs(
     input_manifest_path: Path,
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None,
+    input_manifest: Mapping[str, Any] | None = None,
 ) -> tuple[
     Mapping[str, V2ProducerInputs],
     Mapping[str, Path],
     Any,
 ]:
-    manifest = _load_v2_input_manifest(input_manifest_path)
+    manifest = (
+        input_manifest
+        if input_manifest is not None
+        else _load_v2_input_manifest(input_manifest_path)
+    )
     rows = manifest["producer_plans"]
     if len(rows) != len(pinset.value["producer_plans"]):
         raise MintError("v2 input manifest must contain every producer plan exactly once")
@@ -3093,25 +3487,9 @@ def _authenticate_v2_inputs(
                 )
         if producer_evidence_root is None:
             raise MintError(f"producer {plan_id!r} has no authenticated evidence root")
-
-        binding_inputs = V2ProducerInputs(
-            plan=dict(plan),
-            cells={},
-            evidence_root=producer_evidence_root,
-            plan_sha256=hashlib.sha256(plan_raw).hexdigest(),
-            plan_declared_sha256=sidecar_parts[0],
-            plan_sidecar_sha256=hashlib.sha256(sidecar_raw).hexdigest(),
-            calibration_acceptance=dict(acceptance),
-            calibration_acceptance_sha256=acceptance_sha256,
-            bracket_binding=dict(bracket_binding),
-            bracket_binding_sha256=hashlib.sha256(bracket_raw).hexdigest(),
-        )
-        authenticated_pre, authenticated_post, allowance_projection = (
-            _v2_authenticate_bracket_binding(
-                producer=producer,
-                inputs=binding_inputs,
-                ledger_snapshot=ledger_snapshot,
-            )
+        recursive_json_before = _strict_v2_recursive_json_inputs(
+            producer_evidence_root,
+            label=f"producer {plan_id!r}",
         )
 
         authenticated_cells: dict[str, V2CellComponents] = {}
@@ -3191,7 +3569,7 @@ def _authenticate_v2_inputs(
                     "explicit v2 consumption semantics dispatch contradicts "
                     "per-component pins"
                 )
-        result[plan_id] = V2ProducerInputs(
+        authenticated_inputs = V2ProducerInputs(
             plan=dict(plan),
             cells=authenticated_cells,
             evidence_root=producer_evidence_root,
@@ -3202,6 +3580,25 @@ def _authenticate_v2_inputs(
             calibration_acceptance_sha256=acceptance_sha256,
             bracket_binding=dict(bracket_binding),
             bracket_binding_sha256=hashlib.sha256(bracket_raw).hexdigest(),
+        )
+        authenticated_pre, authenticated_post, allowance_projection = (
+            _v2_authenticate_bracket_binding(
+                producer=producer,
+                inputs=authenticated_inputs,
+                ledger_snapshot=ledger_snapshot,
+            )
+        )
+        recursive_json_after = _strict_v2_recursive_json_inputs(
+            producer_evidence_root,
+            label=f"producer {plan_id!r}",
+        )
+        if recursive_json_after != recursive_json_before:
+            raise MintError(
+                f"producer {plan_id!r} recursive whole-window JSON inputs "
+                "changed during authentication"
+            )
+        result[plan_id] = replace(
+            authenticated_inputs,
             authenticated_pre_observation=authenticated_pre,
             authenticated_post_observation=authenticated_post,
             calibration_allowance_projection=dict(allowance_projection),
@@ -3234,6 +3631,13 @@ def mint_multi_cell_floor_artifact(
     if not isinstance(loaded, V2Pinset):
         raise MintError("multi-cell floor mint requires a final v2 pinset")
     _validate_v2_pin_hashes(loaded)
+    input_manifest = _load_v2_input_manifest(input_manifest_path)
+    head_pin_path = Path(
+        _string(
+            input_manifest["calibration_ledger_head_pin"],
+            "v2 input manifest.calibration_ledger_head_pin",
+        )
+    )
     inputs, evidence_roots, ledger_snapshot = _authenticate_v2_inputs(
         pinset=loaded,
         pinset_path=pinset_path,
@@ -3241,6 +3645,12 @@ def mint_multi_cell_floor_artifact(
         input_manifest_path=input_manifest_path,
         strict_validator=strict_validator,
         consumption_semantics_id=consumption_semantics_id,
+        input_manifest=input_manifest,
+    )
+    # The path has now participated in successful ledger authentication;
+    # derive its last-changing commit only after that domain owner accepts it.
+    head_pin_commit_contained = (
+        _head_pin_commit_containment_in_origin_main(head_pin_path)
     )
     artifact, components = _build_v2_artifacts(
         pinset=loaded,
@@ -3251,6 +3661,9 @@ def mint_multi_cell_floor_artifact(
         project_commit=actual_head,
         project_tree_state="clean",
         origin_main_contains_head=origin_main_contains_head,
+        head_pin_commit_contained_in_origin_main=(
+            head_pin_commit_contained
+        ),
     )
     for producer, component, expected in zip(
         loaded.value["producer_plans"],
@@ -3258,7 +3671,9 @@ def mint_multi_cell_floor_artifact(
         loaded.value["aggregate"]["component_artifacts"],
     ):
         observed = _artifact_sha256(component)
-        if observed != expected["sha256"]:
+        if expected["sha256"] not in _artifact_sha256_containment_variants(
+            component
+        ):
             raise MintError(
                 "aggregate/component hash mismatch: component artifact "
                 f"{expected['plan_id']!r} expected {expected['sha256']}, observed {observed}"
