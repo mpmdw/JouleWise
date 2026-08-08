@@ -30,6 +30,10 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.authentication_io import (
+    read_authentication_input,
+    sha256_authentication_input,
+)
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -325,11 +329,11 @@ def complete_bundle_sha256(path: Path) -> str:
             raise ValueError(
                 f"calibration bundle member is not a regular file: {relative}"
             )
-        digest = hashlib.sha256()
         try:
-            with candidate.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
+            digest = sha256_authentication_input(
+                candidate,
+                label=f"complete bundle {root.name} member {relative}",
+            )
         except OSError as exc:
             raise ValueError(
                 f"cannot read calibration bundle member {relative}: {exc}"
@@ -337,7 +341,7 @@ def complete_bundle_sha256(path: Path) -> str:
         records.append(
             {
                 "path": relative,
-                "sha256": digest.hexdigest(),
+                "sha256": digest,
                 "size_bytes": file_stat.st_size,
             }
         )
@@ -2025,7 +2029,9 @@ def _read_floor_mint_pinset(
     if not stat.S_ISREG(file_stat.st_mode):
         return None, "pinset file must be a regular file"
     try:
-        raw = path.read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="floor mint pinset validator read"
+        )
     except OSError as exc:
         return None, f"cannot read pinset file: {exc.strerror or type(exc).__name__}"
     if expected_sha256 is not None:

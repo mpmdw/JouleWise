@@ -25,6 +25,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.analysis_engine.inputs import scientific_config_identity  # noqa: E402
+from joulewise.authentication_io import (  # noqa: E402
+    V2AuthenticationInputError,
+    read_authentication_input,
+    sha256_authentication_input,
+)
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     STACK_IDENTITY_DOMAIN,
@@ -188,7 +193,9 @@ def _sha256(raw: bytes) -> str:
 
 def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="json", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
     try:
@@ -202,7 +209,9 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
 
 def _load_json_lines(path: Path, label: str) -> tuple[list[Mapping[str, Any]], bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="jsonl", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
     rows: list[Mapping[str, Any]] = []
@@ -271,7 +280,9 @@ def _metric_value(summary: Mapping[str, Any]) -> float:
 
 def _sha256_file(path: Path, label: str) -> str:
     try:
-        return _sha256(path.read_bytes())
+        return sha256_authentication_input(path, label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
 

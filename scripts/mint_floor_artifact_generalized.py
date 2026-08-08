@@ -38,6 +38,12 @@ from joulewise.whole_window import (  # noqa: E402
     MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
 )
+from joulewise.authentication_io import (  # noqa: E402
+    V2AuthenticationInputError,
+    V2AuthenticationReadSession,
+    active_v2_authentication_session,
+    read_authentication_input,
+)
 from joulewise.calibration_bracketing import (  # noqa: E402
     issued_calibration_allowance_projection,
     validate_calibration_bracket_binding,
@@ -1169,7 +1175,9 @@ def _strict_json_value(raw: bytes, label: str) -> Any:
 
 def _strict_json_file(path: Path, label: str) -> tuple[Any, bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="json", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(
             f"{label} cannot be read: {exc.strerror or type(exc).__name__}"
@@ -1179,7 +1187,9 @@ def _strict_json_file(path: Path, label: str) -> tuple[Any, bytes]:
 
 def _strict_json_lines_file(path: Path, label: str) -> bytes:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="jsonl", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(
             f"{label} cannot be read: {exc.strerror or type(exc).__name__}"
@@ -1290,7 +1300,9 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset | V2Pinset:
     if not stat.S_ISREG(file_stat.st_mode):
         raise MintError("pinset must be a regular file")
     try:
-        raw = path.read_bytes()
+        raw = read_authentication_input(path, grammar="json", label="pinset")
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"pinset cannot be read: {exc.strerror or type(exc).__name__}") from exc
     actual = hashlib.sha256(raw).hexdigest()
@@ -3052,7 +3064,11 @@ def mint_multi_cell_authenticated_artifact(
 
 def _load_v2_input_manifest(path: Path) -> Mapping[str, Any]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="v2 input manifest"
+        )
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(
             f"v2 input manifest cannot be read: {exc.strerror or type(exc).__name__}"
@@ -3129,258 +3145,6 @@ def _load_v2_ledger_snapshot(
     )
 
 
-def _strict_v2_recursive_json_inputs(
-    evidence_root: Path,
-    *,
-    label: str,
-    referenced_bundle_ids: set[str],
-) -> Mapping[str, str]:
-    """Strict-parse the JSON documents reached by whole-window replay.
-
-    Authentication starts at the campaign log, follows only verdict rows that
-    overlap the component members, and then follows their source manifests,
-    attempt-ledger selections, basis occurrences, supersession custody, and
-    referenced bundle directories. A JSON-looking sibling elsewhere in the
-    runs root is not an input merely because it shares the directory tree.
-    The returned byte map is checked again after replay so strict parsing and
-    semantic authentication cannot observe different snapshots.
-    """
-
-    root = Path(evidence_root).resolve()
-    observed: dict[str, str] = {}
-
-    def remember(path: Path, raw: bytes) -> None:
-        observed[str(path.resolve())] = hashlib.sha256(raw).hexdigest()
-
-    parsed: dict[Path, Any] = {}
-
-    def parse_json(path: Path, document_label: str) -> Any:
-        resolved = path.resolve(strict=False)
-        if resolved in parsed:
-            return parsed[resolved]
-        value, raw = _strict_json_file(path, document_label)
-        remember(path, raw)
-        parsed[resolved] = value
-        return value
-
-    def parse_jsonl(path: Path, document_label: str) -> list[Any]:
-        resolved = path.resolve(strict=False)
-        if resolved in parsed:
-            cached = parsed[resolved]
-            return cached if isinstance(cached, list) else []
-        raw = _strict_json_lines_file(path, document_label)
-        remember(path, raw)
-        try:
-            lines = raw.decode("utf-8").splitlines()
-        except UnicodeDecodeError as exc:  # already checked; retain one boundary
-            raise MintError(f"{document_label} is not valid UTF-8 JSONL") from exc
-        rows = [
-            _strict_json_value(line.encode("utf-8"), f"{document_label} line {index}")
-            for index, line in enumerate(lines, start=1)
-            if line.strip()
-        ]
-        parsed[resolved] = rows
-        return rows
-
-    def rooted_path(text: object) -> Path | None:
-        if not isinstance(text, str) or not text:
-            return None
-        candidate = Path(text)
-        if candidate.is_absolute():
-            return None
-        resolved = (root / candidate).resolve(strict=False)
-        return resolved if root in resolved.parents else None
-
-    def descriptor_path(value: object) -> Path | None:
-        return rooted_path(value.get("path")) if isinstance(value, Mapping) else None
-
-    def quarantine_documents(value: object) -> None:
-        if not isinstance(value, Mapping):
-            return
-        quarantine = value.get("quarantine")
-        quarantine_path = (
-            Path(quarantine["path"])
-            if isinstance(quarantine, Mapping)
-            and isinstance(quarantine.get("path"), str)
-            else None
-        )
-        if quarantine_path is None:
-            return
-        for name in ("config.json", "metadata.json", "summary_metrics.json"):
-            parse_json(
-                quarantine_path / name,
-                f"{label} supersession quarantine {name}",
-            )
-
-    campaign_path = root / "campaign_log.jsonl"
-    campaign_rows = parse_jsonl(campaign_path, f"{label} campaign log")
-    manifest_paths: set[Path] = set()
-    bundle_paths: set[Path] = {
-        root / bundle_id for bundle_id in referenced_bundle_ids
-    }
-    for row in campaign_rows:
-        if not isinstance(row, Mapping):
-            continue
-        is_supersession = (
-            row.get("record_type") == "campaign_occurrence_supersession"
-            or row.get("schema_version")
-            == "joulewise.campaign_occurrence_supersession.v1"
-        )
-        if is_supersession:
-            quarantine_documents(row)
-        row_bundle_ids = row.get("bundle_ids")
-        if (
-            row.get("record_type") != "idle_admission_whole_window_verdict"
-            or not isinstance(row_bundle_ids, list)
-            or not referenced_bundle_ids.intersection(
-                item for item in row_bundle_ids if isinstance(item, str)
-            )
-        ):
-            continue
-        provenance = row.get("row_provenance")
-        descriptors = (
-            provenance.get("source_campaign_manifests")
-            if isinstance(provenance, Mapping)
-            else None
-        )
-        if isinstance(descriptors, list):
-            manifest_paths.update(
-                path
-                for descriptor in descriptors
-                if (path := descriptor_path(descriptor)) is not None
-            )
-        basis = row.get("evaluation_basis")
-        occurrences = (
-            basis.get("member_occurrences")
-            if isinstance(basis, Mapping)
-            else None
-        )
-        if isinstance(occurrences, list):
-            for occurrence in occurrences:
-                if not isinstance(occurrence, Mapping):
-                    continue
-                bundle_path = rooted_path(occurrence.get("bundle_path"))
-                if bundle_path is not None:
-                    bundle_paths.add(bundle_path)
-                source_path = descriptor_path(occurrence.get("source_manifest"))
-                if source_path is not None:
-                    manifest_paths.add(source_path)
-        supersessions = row.get("occurrence_supersessions")
-        if isinstance(supersessions, list):
-            for supersession in supersessions:
-                quarantine_documents(supersession)
-                if not isinstance(supersession, Mapping):
-                    continue
-                occurrences_by_kind = (
-                    [supersession.get("selected_occurrence")],
-                    supersession.get("superseded_occurrences"),
-                )
-                for occurrence_values in occurrences_by_kind:
-                    if not isinstance(occurrence_values, list):
-                        continue
-                    manifest_paths.update(
-                        path
-                        for occurrence in occurrence_values
-                        if isinstance(occurrence, Mapping)
-                        and (
-                            path := descriptor_path(
-                                occurrence.get("source_manifest")
-                            )
-                        )
-                        is not None
-                    )
-        exclusion = row.get("salvage_dangler_exclusion")
-        if isinstance(exclusion, Mapping):
-            for key in ("closure", "membership_binding"):
-                descriptor = exclusion.get(key)
-                path_text = (
-                    descriptor.get("path")
-                    if isinstance(descriptor, Mapping)
-                    else None
-                )
-                if isinstance(path_text, str):
-                    parse_json(
-                        Path(path_text),
-                        f"{label} salvage {key.replace('_', ' ')}",
-                    )
-
-    for manifest_path in sorted(manifest_paths, key=lambda path: path.as_posix()):
-        relative = manifest_path.relative_to(root).as_posix()
-        manifest = parse_json(
-            manifest_path,
-            f"{label} campaign manifest {relative}",
-        )
-        if not isinstance(manifest, Mapping):
-            continue
-        selection = manifest.get("attempt_ledger_selection")
-        if isinstance(selection, Mapping):
-            ledger_path = rooted_path(selection.get("attempt_ledger_path"))
-            analysis_path = rooted_path(selection.get("analysis_manifest_path"))
-            if ledger_path is not None:
-                parse_jsonl(ledger_path, f"{label} attempt ledger")
-                for directory, directory_label in (
-                    (ledger_path.parent / "dispatch_receipts", "dispatch receipt"),
-                    (ledger_path.parent / "strict_validation", "strict evidence"),
-                ):
-                    try:
-                        evidence_paths = sorted(directory.glob("*.json"))
-                    except OSError as exc:
-                        raise MintError(
-                            f"{label} {directory_label} inventory cannot be read: "
-                            f"{exc.strerror or type(exc).__name__}"
-                        ) from exc
-                    for evidence_path in evidence_paths:
-                        parse_json(evidence_path, f"{label} {directory_label}")
-            if analysis_path is not None:
-                parse_json(analysis_path, f"{label} attempt analysis manifest")
-            selected = selection.get("selected_bundles")
-            if isinstance(selected, list):
-                bundle_paths.update(
-                    path
-                    for descriptor in selected
-                    if (path := descriptor_path(descriptor)) is not None
-                )
-        else:
-            members = manifest.get("members")
-            if isinstance(members, list):
-                for member in members:
-                    bundle_ids = (
-                        member.get("bundle_ids")
-                        if isinstance(member, Mapping)
-                        and member.get("execution") in {"invoked", "existing"}
-                        else None
-                    )
-                    if isinstance(bundle_ids, list):
-                        bundle_paths.update(
-                            root / bundle_id
-                            for bundle_id in bundle_ids
-                            if isinstance(bundle_id, str) and bundle_id
-                        )
-
-    for bundle_path in sorted(bundle_paths, key=lambda path: path.as_posix()):
-        try:
-            inventory = sorted(
-                path
-                for path in bundle_path.rglob("*")
-                if path.is_file() and path.suffix in {".json", ".jsonl"}
-            )
-        except OSError as exc:
-            raise MintError(
-                f"{label} consumed bundle JSON inventory cannot be read: "
-                f"{exc.strerror or type(exc).__name__}"
-            ) from exc
-        for path in inventory:
-            relative = path.relative_to(bundle_path).as_posix()
-            document_label = (
-                f"{label} consumed bundle {bundle_path.name} {relative}"
-            )
-            if path.suffix == ".jsonl":
-                parse_jsonl(path, document_label)
-            else:
-                parse_json(path, document_label)
-    return observed
-
-
 def _authenticate_v2_inputs(
     *,
     pinset: V2Pinset,
@@ -3438,7 +3202,13 @@ def _authenticate_v2_inputs(
     if not isinstance(acceptance, Mapping):
         raise MintError("v2 calibration acceptance evidence is not authenticated")
     try:
-        acceptance_after = acceptance_path.read_bytes()
+        acceptance_after = read_authentication_input(
+            acceptance_path,
+            grammar="json",
+            label="v2 calibration acceptance re-read",
+        )
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(
             "v2 calibration acceptance cannot be re-read after authentication: "
@@ -3474,8 +3244,20 @@ def _authenticate_v2_inputs(
     if not bool(getattr(ledger_snapshot, "valid", False)):
         raise MintError("v2 calibration ledger snapshot is not authenticated")
     try:
-        if ledger_path.read_bytes() != ledger_raw or head_pin_path.read_bytes() != head_raw:
+        ledger_after = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label="v2 calibration ledger re-read",
+        )
+        head_after = read_authentication_input(
+            head_pin_path,
+            grammar="json",
+            label="v2 calibration ledger head-pin re-read",
+        )
+        if ledger_after != ledger_raw or head_after != head_raw:
             raise MintError("v2 calibration ledger changed during authentication")
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError("v2 calibration ledger cannot be re-read") from exc
 
@@ -3506,8 +3288,14 @@ def _authenticate_v2_inputs(
             )
         )
         try:
-            sidecar_raw = sidecar_path.read_bytes()
+            sidecar_raw = read_authentication_input(
+                sidecar_path,
+                grammar="raw",
+                label=f"producer {plan_id!r} plan sidecar",
+            )
             sidecar_text = sidecar_raw.decode("utf-8")
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
         except OSError as exc:
             raise MintError(
                 f"producer {plan_id!r} plan sidecar cannot be read: "
@@ -3568,10 +3356,7 @@ def _authenticate_v2_inputs(
             )
 
         component_paths: dict[tuple[str, str], ComponentInputs] = {}
-        preflight_hashes: dict[tuple[str, str], tuple[str, str, str, str]] = {}
         producer_evidence_root: Path | None = None
-        producer_referenced_bundle_ids: set[str] = set()
-        strict_seen: set[Path] = set()
         for cell_pins in producer["cells"]:
             role = cell_pins["role"]
             cell_row = cell_rows[role]
@@ -3599,60 +3384,8 @@ def _authenticate_v2_inputs(
                         f"producer {plan_id!r} components map to multiple evidence roots"
                     )
                 producer_evidence_root = paths.evidence_root
-                report_value, report_raw = _strict_json_file(
-                    paths.report_path,
-                    f"producer {plan_id}.{role}.{component_name} extraction report",
-                )
-                spec_value, spec_raw = _strict_json_file(
-                    paths.spec_path,
-                    f"producer {plan_id}.{role}.{component_name} extraction spec",
-                )
-                order_value, order_raw = _strict_json_file(
-                    paths.order_manifest_path,
-                    f"producer {plan_id}.{role}.{component_name} order manifest",
-                )
-                if not all(
-                    isinstance(value, Mapping)
-                    for value in (report_value, spec_value, order_value)
-                ):
-                    raise MintError("v2 component JSON inputs must be objects")
-                campaign_path = paths.evidence_root / "campaign_log.jsonl"
-                campaign_raw = _strict_json_lines_file(
-                    campaign_path,
-                    f"producer {plan_id} campaign log",
-                )
-                for bundle_id in _v2_spec_member_ids(spec_value):
-                    if (
-                        not isinstance(bundle_id, str)
-                        or not bundle_id
-                        or Path(bundle_id).name != bundle_id
-                    ):
-                        raise MintError("v2 extraction spec has an unsafe bundle id")
-                    producer_referenced_bundle_ids.add(bundle_id)
-                    bundle_path = paths.evidence_root / bundle_id
-                    for name in ("config.json", "metadata.json", "summary_metrics.json"):
-                        candidate = bundle_path / name
-                        resolved_candidate = candidate.resolve(strict=False)
-                        if resolved_candidate not in strict_seen:
-                            _strict_json_file(
-                                candidate,
-                                f"producer {plan_id} bundle {bundle_id} {name}",
-                            )
-                            strict_seen.add(resolved_candidate)
-                preflight_hashes[(role, component_name)] = (
-                    hashlib.sha256(report_raw).hexdigest(),
-                    hashlib.sha256(spec_raw).hexdigest(),
-                    hashlib.sha256(order_raw).hexdigest(),
-                    hashlib.sha256(campaign_raw).hexdigest(),
-                )
         if producer_evidence_root is None:
             raise MintError(f"producer {plan_id!r} has no authenticated evidence root")
-        recursive_json_before = _strict_v2_recursive_json_inputs(
-            producer_evidence_root,
-            label=f"producer {plan_id!r}",
-            referenced_bundle_ids=producer_referenced_bundle_ids,
-        )
-
         authenticated_cells: dict[str, V2CellComponents] = {}
         for cell_pins in producer["cells"]:
             role = cell_pins["role"]
@@ -3697,17 +3430,6 @@ def _authenticate_v2_inputs(
                     )
                 except core.MintError as exc:
                     raise MintError(str(exc)) from exc
-                expected_hashes = preflight_hashes[(role, component_name)]
-                observed_hashes = (
-                    component.report_sha256,
-                    component.spec_sha256,
-                    component.order_manifest_sha256,
-                    component.campaign_log_sha256,
-                )
-                if observed_hashes != expected_hashes:
-                    raise MintError(
-                        f"producer {plan_id}.{role}.{component_name} input changed during authentication"
-                    )
                 authenticated.append(component)
             families = cell_row["allowed_consumer_condition_families"]
             if not isinstance(families, list):
@@ -3749,16 +3471,6 @@ def _authenticate_v2_inputs(
                 ledger_snapshot=ledger_snapshot,
             )
         )
-        recursive_json_after = _strict_v2_recursive_json_inputs(
-            producer_evidence_root,
-            label=f"producer {plan_id!r}",
-            referenced_bundle_ids=producer_referenced_bundle_ids,
-        )
-        if recursive_json_after != recursive_json_before:
-            raise MintError(
-                f"producer {plan_id!r} recursive whole-window JSON inputs "
-                "changed during authentication"
-            )
         result[plan_id] = replace(
             authenticated_inputs,
             authenticated_pre_observation=authenticated_pre,
@@ -3781,6 +3493,49 @@ def mint_multi_cell_floor_artifact(
     consumption_semantics_id: str | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
+
+    if active_v2_authentication_session() is not None:
+        return _mint_multi_cell_floor_artifact_active(
+            pinset_path=pinset_path,
+            pinset_sha256=pinset_sha256,
+            input_manifest_path=input_manifest_path,
+            floor_path=floor_path,
+            statement_path=statement_path,
+            project_commit=project_commit,
+            project_tree_state=project_tree_state,
+            strict_validator=strict_validator,
+            consumption_semantics_id=consumption_semantics_id,
+        )
+    try:
+        with V2AuthenticationReadSession():
+            return _mint_multi_cell_floor_artifact_active(
+                pinset_path=pinset_path,
+                pinset_sha256=pinset_sha256,
+                input_manifest_path=input_manifest_path,
+                floor_path=floor_path,
+                statement_path=statement_path,
+                project_commit=project_commit,
+                project_tree_state=project_tree_state,
+                strict_validator=strict_validator,
+                consumption_semantics_id=consumption_semantics_id,
+            )
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
+
+
+def _mint_multi_cell_floor_artifact_active(
+    *,
+    pinset_path: Path,
+    pinset_sha256: str,
+    input_manifest_path: Path,
+    floor_path: Path,
+    statement_path: Path,
+    project_commit: str,
+    project_tree_state: str,
+    strict_validator: StrictValidator,
+    consumption_semantics_id: str | None = None,
+) -> Mapping[str, Any]:
+    """Implementation body; caller guarantees one active v2 read session."""
 
     actual_head, origin_main_contains_head = _actual_v2_git_state()
     if project_commit != actual_head:
@@ -3928,24 +3683,30 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parser().parse_args(argv)
     try:
+        if args.v2_input_manifest is not None:
+            with V2AuthenticationReadSession():
+                loaded = load_pinset(args.pinset, args.pinset_sha256)
+                if not isinstance(loaded, V2Pinset):
+                    raise MintError(
+                        "--v2-input-manifest requires a final v2 pinset"
+                    )
+                mint_multi_cell_floor_artifact(
+                    pinset_path=args.pinset,
+                    pinset_sha256=args.pinset_sha256,
+                    input_manifest_path=args.v2_input_manifest,
+                    floor_path=args.out,
+                    statement_path=args.single_count_out,
+                    project_commit=args.project_commit,
+                    project_tree_state=args.project_tree_state,
+                    strict_validator=lambda path, strict: validate_bundle(
+                        path, strict=strict
+                    ),
+                    consumption_semantics_id=args.consumption_semantics_id,
+                )
+            return 0
         loaded = load_pinset(args.pinset, args.pinset_sha256)
         if isinstance(loaded, V2Pinset):
-            if args.v2_input_manifest is None:
-                raise MintError("final v2 pinset requires --v2-input-manifest")
-            mint_multi_cell_floor_artifact(
-                pinset_path=args.pinset,
-                pinset_sha256=args.pinset_sha256,
-                input_manifest_path=args.v2_input_manifest,
-                floor_path=args.out,
-                statement_path=args.single_count_out,
-                project_commit=args.project_commit,
-                project_tree_state=args.project_tree_state,
-                strict_validator=lambda path, strict: validate_bundle(
-                    path, strict=strict
-                ),
-                consumption_semantics_id=args.consumption_semantics_id,
-            )
-            return 0
+            raise MintError("final v2 pinset requires --v2-input-manifest")
         legacy_fields = {
             "--artifact-id": args.artifact_id,
             "--calibration-plan": args.calibration_plan,
@@ -3997,7 +3758,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             consumption_semantics_id=args.consumption_semantics_id,
         )
-    except MintError as exc:
+    except (MintError, V2AuthenticationInputError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

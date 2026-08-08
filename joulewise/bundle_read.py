@@ -40,6 +40,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from joulewise.authentication_io import (
+    open_authentication_input,
+    read_authentication_input,
+    read_authentication_text,
+)
 from joulewise.axi_decode_config import (
     AXI_CONFIG_EXTENSION,
     COMMON_REQUEST_IDENTITY_KEYS,
@@ -279,7 +284,11 @@ class BundleReader:
                 return self._cache["events"]
             events: list[dict[str, Any]] = []
             try:
-                text = path.read_text()
+                text = read_authentication_text(
+                    path,
+                    grammar="jsonl",
+                    label=f"bundle {self._path.name} events",
+                )
             except OSError as exc:
                 raise BundleReadError(f"events.jsonl cannot be read: {exc}") from exc
             for index, line in enumerate(text.splitlines()):
@@ -318,7 +327,12 @@ class BundleReader:
                 self._cache["trace_rows"] = []
                 return self._cache["trace_rows"]
             try:
-                with path.open(newline="") as handle:
+                with open_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=f"bundle {self._path.name} power trace",
+                    newline="",
+                ) as handle:
                     self._cache["trace_rows"] = list(csv.DictReader(handle))
             except OSError as exc:
                 raise BundleReadError(f"power_trace.csv cannot be read: {exc}") from exc
@@ -367,7 +381,11 @@ class BundleReader:
             if not path.is_file():
                 return None
             try:
-                self._cache[key] = path.read_bytes()
+                self._cache[key] = read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=f"bundle {self._path.name} raw artifact {name}",
+                )
             except OSError as exc:
                 raise BundleReadError(f"raw/{name} cannot be read: {exc}") from exc
         return self._cache[key]
@@ -401,7 +419,11 @@ class BundleReader:
                 raise BundleReadError(f"request_roster.json does not re-validate: {exc}") from exc
             path = self._path / "request_roster.json"
             try:
-                raw_bytes = path.read_bytes()
+                raw_bytes = read_authentication_input(
+                    path,
+                    grammar="json",
+                    label=f"bundle {self._path.name} request roster",
+                )
             except OSError as exc:
                 raise BundleReadError(f"request_roster.json cannot be read: {exc}") from exc
             if raw_bytes != roster.to_bytes():
@@ -739,7 +761,13 @@ class BundleReader:
             if name in missing:
                 continue
             try:
-                parsed[name] = json.loads((path / name).read_text())
+                parsed[name] = json.loads(
+                    read_authentication_text(
+                        path / name,
+                        grammar="json",
+                        label=f"bundle {path.name} {name}",
+                    )
+                )
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 problems.append(f"{name} is not valid JSON: {exc}")
 
@@ -776,7 +804,13 @@ class BundleReader:
     def _strict_json(self, name: str) -> Any:
         path = self._path / name
         try:
-            return json.loads(path.read_text())
+            return json.loads(
+                read_authentication_text(
+                    path,
+                    grammar="json",
+                    label=f"bundle {self._path.name} {name}",
+                )
+            )
         except FileNotFoundError as exc:
             raise BundleReadError(f"missing required artifact: {name}") from exc
         except OSError as exc:
@@ -790,7 +824,12 @@ class BundleReader:
             return self._cache[key]
         path = self._path / name
         try:
-            text = path.read_text(encoding="utf-8")
+            text = read_authentication_text(
+                path,
+                grammar="jsonl",
+                label=f"bundle {self._path.name} {name}",
+                encoding="utf-8",
+            )
         except OSError as exc:
             raise BundleReadError(f"{name} cannot be read: {exc}") from exc
         rows: list[dict[str, Any]] = []
@@ -821,7 +860,13 @@ class BundleReader:
         key = f"tolerant:{name}"
         if key not in self._cache:
             try:
-                value = json.loads((self._path / name).read_text())
+                value = json.loads(
+                    read_authentication_text(
+                        self._path / name,
+                        grammar="json",
+                        label=f"bundle {self._path.name} {name}",
+                    )
+                )
             except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 value = None
             self._cache[key] = value if isinstance(value, dict) else None
@@ -1002,7 +1047,11 @@ def axi_v2_validation_problems(
     except BundleReadError as exc:
         return problems + [_axi_problem("request_roster_invalid", str(exc))]
     try:
-        roster_bytes = (reader.path / "request_roster.json").read_bytes()
+        roster_bytes = read_authentication_input(
+            reader.path / "request_roster.json",
+            grammar="json",
+            label=f"AXI bundle {reader.path.name} request roster",
+        )
     except OSError as exc:
         return problems + [_axi_problem("request_roster_invalid", str(exc))]
     roster_hash = axi_sha256_bytes(roster_bytes)
@@ -1176,7 +1225,11 @@ def axi_v2_validation_problems(
                 else None
             )
             try:
-                response_bytes = response_mirror.read_bytes()
+                response_bytes = read_authentication_input(
+                    response_mirror,
+                    grammar="raw",
+                    label=f"AXI bundle {reader.path.name} response mirror",
+                )
             except OSError as exc:
                 problems.append(
                     _axi_problem(
@@ -1465,7 +1518,13 @@ def _check_config_sha256(path: Path, metadata: dict[str, Any]) -> list[str]:
     if not isinstance(expected, str):
         return [f"metadata.config_sha256 is not a string: {expected!r}"]
     try:
-        actual = hashlib.sha256((path / "config.json").read_bytes()).hexdigest()
+        actual = hashlib.sha256(
+            read_authentication_input(
+                path / "config.json",
+                grammar="json",
+                label=f"bundle {path.name} config hash",
+            )
+        ).hexdigest()
     except FileNotFoundError:
         return []
     except OSError as exc:
@@ -1743,7 +1802,13 @@ def _suite_problems(
         return problems
 
     try:
-        raw_manifest = json.loads((reader.path / "suite_manifest.json").read_text())
+        raw_manifest = json.loads(
+            read_authentication_text(
+                reader.path / "suite_manifest.json",
+                grammar="json",
+                label=f"suite bundle {reader.path.name} manifest",
+            )
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return [f"suite_manifest.json is not valid JSON: {exc}"]
     try:
@@ -2340,7 +2405,11 @@ def _suite_item_records(path: Path) -> tuple[list[dict[str, Any]] | None, list[s
     if not suite_items_path.is_file():
         return None, ["outputs/suite_items.jsonl is missing for suite bundle"]
     try:
-        text = suite_items_path.read_text()
+        text = read_authentication_text(
+            suite_items_path,
+            grammar="jsonl",
+            label=f"suite bundle {suite_items_path.parent.parent.name} items",
+        )
     except OSError as exc:
         return None, [f"outputs/suite_items.jsonl cannot be read: {exc}"]
     records: list[dict[str, Any]] = []
@@ -2633,7 +2702,11 @@ def _check_events(events_path: Path) -> list[str]:
     numeric ``timestamp_s``; non-decreasing timestamps; the last event is
     ``run_finalized``."""
     try:
-        text = events_path.read_text()
+        text = read_authentication_text(
+            events_path,
+            grammar="jsonl",
+            label=f"bundle {events_path.parent.name} events validation",
+        )
     except OSError as exc:
         return [f"events.jsonl cannot be read: {exc}"]
     lines = [line for line in text.splitlines() if line.strip()]
@@ -2697,7 +2770,12 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
             return ["power_trace.csv is required when status is succeeded but is missing"]
         return []
     try:
-        with trace_path.open(newline="") as handle:
+        with open_authentication_input(
+            trace_path,
+            grammar="raw",
+            label=f"bundle {trace_path.parent.name} power-trace validation",
+            newline="",
+        ) as handle:
             header = next(csv.reader(handle), None)
     except OSError as exc:
         return [f"power_trace.csv cannot be read: {exc}"]
@@ -2718,7 +2796,12 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
         except ValueError as exc:
             problems.append(str(exc))
     try:
-        with trace_path.open(newline="") as handle:
+        with open_authentication_input(
+            trace_path,
+            grammar="raw",
+            label=f"bundle {trace_path.parent.name} power-trace validation",
+            newline="",
+        ) as handle:
             reader = csv.DictReader(handle)
             rows = list(reader)
     except OSError as exc:

@@ -231,9 +231,11 @@ bytes remain frozen. Every listed set is closed, so any other key refuses.
 
 1. Derive actual Git `HEAD`, require a clean tree, compare any claimed commit,
    and record whether `origin/main` contains the mint head.
-2. Reject duplicate keys and non-finite numbers in every parsed input, with
-   exact-byte re-reads at TOCTOU boundaries, including recursively reached
-   campaign manifests, attempt records, and supersession evidence.
+2. Start the v2 authentication-read session before the first pinset or input
+   manifest byte is read. Reject duplicate keys and non-finite numbers at the
+   same read call that returns every reached JSON/JSONL input, and register
+   non-JSON evidence as raw. Every re-read is a real filesystem read and must
+   match the path's first registered SHA-256 before its bytes are returned.
 3. Authenticate the issued acceptance artifact against its exact code pin and
    internal derivation.
 4. Load the ledger against the Git-committed terminal head and acceptance
@@ -256,7 +258,62 @@ bytes remain frozen. Every listed set is closed, so any other key refuses.
 10. Compare every required frozen pin with its domain-owned projection. A
     missing, placeholder, or disagreeing pin refuses; none is generated.
 11. Construct all four cells, recompute component/cross-stack maxima, validate,
-    bind back to source bytes, and create outputs exclusively.
+    bind back to source bytes, complete post-bind validation while the read
+    session remains active, and create outputs exclusively.
+
+### Registration-at-read trust boundary
+
+The generalized v2 mint has one context-scoped authentication input registry.
+Every application-level byte read used to authenticate, hash, validate,
+rederive, or bind an input enters that registry atomically at the read call.
+The first record for a filesystem path contains its normalized path, SHA-256,
+wire grammar, and read count; later reads increment the count only after their
+newly read bytes match the first SHA-256. A change refuses with
+`v2_authentication_input_changed`. The Git-committed head-pin blob is recorded
+under the virtual identity `git:HEAD:<relative-path>` and follows the same
+strict JSON rule.
+
+Registry records have two semantic classes:
+
+- `json` and `jsonl` records are registered only after UTF-8 parsing succeeds
+  with duplicate keys and non-finite numbers forbidden. A `.json` or `.jsonl`
+  path cannot be requested as raw merely because a caller needs only its hash.
+- `raw` records cover every other reached byte source, including sidecars,
+  CSV, plist, estimator source pins, and other binary evidence. Streaming large
+  raw inputs finish through the same registration primitive.
+
+The authentication call graph is the only discovery mechanism. There is no
+parallel recursive traversal and no second equality oracle. Missing optional
+paths are probes rather than byte reads and have no path-plus-SHA record. An
+AST build guard rejects direct readable I/O in the marked v2 authentication
+surface outside the central reader. The production regression additionally
+audits low-level opens beneath its fixture/evidence roots and requires every
+actually opened input to appear in the registry.
+
+The session is v2-only. With no active session, shared readers preserve their
+historical parsing, exceptions, and output, and v1 golden artifacts remain
+byte-identical.
+
+### No-substitution production regression
+
+The decisive D-117 regression invokes the production extractor and generalized
+v2 CLI in a clean temporary Git worktree. It may construct temporary files and
+commits with real filesystem and Git operations, but it may not patch or
+substitute extraction, strict validation, authentication, allowance
+derivation, ledger custody, committed-pin checks, Git state or containment,
+evidence binding, or output creation. In particular, a synthetic
+`_fresh_original_core` adapter cannot supply production-path evidence.
+
+The regression first proves an authentic mint succeeds. Its coordinated attack
+then exercises every memo-§8 leg, asserts the first owning refusal stage, checks
+genuine-source SHA inventories both after construction and after refusal, and
+proves that neither output exists. Shadow-removal variants must expose the
+step-9 report-cache refusal and step-10 frozen-pin refusal beneath the step-8
+unknown-key refusal. A separate mutation matrix must make each authenticated
+domain—acceptance, ledger, committed pin, binding, verdict, campaign, attempt
+custody, primary bundles, and report cache—refuse in its own domain. Synthetic
+adapters may support separately labelled unit tests, but may never become a
+replacement authority for this regression.
 
 Every v2 artifact carries the required provenance assurance profile
 `single_authority_hash_bound_replay.v1`, with

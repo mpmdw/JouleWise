@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
@@ -166,7 +167,13 @@ def _candidate_decimal(candidate: CalibrationCandidate) -> Decimal | None:
 def _current_estimator_code_sha256() -> dict[str, str] | None:
     try:
         return {
-            relative: hashlib.sha256((_REPO_ROOT / relative).read_bytes()).hexdigest()
+            relative: hashlib.sha256(
+                read_authentication_input(
+                    _REPO_ROOT / relative,
+                    grammar="raw",
+                    label=f"calibration estimator code {relative}",
+                )
+            ).hexdigest()
             for relative in ESTIMATOR_CODE_PATHS
         }
     except OSError:
@@ -449,7 +456,9 @@ def load_calibration_acceptance_bound(
     """Load the file-pinned D-102 acceptance artifact fail-closed."""
 
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="calibration acceptance artifact"
+        )
     except OSError:
         return None
     return _acceptance_bound_from_authenticated_bytes(raw)
@@ -818,7 +827,11 @@ def load_calibration_candidate(
     try:
         directory = Path(directory).resolve(strict=True)
         relative = directory.relative_to(root).as_posix()
-        manifest_raw = (directory / "manifest.json").read_bytes()
+        manifest_raw = read_authentication_input(
+            directory / "manifest.json",
+            grammar="json",
+            label=f"calibration candidate {directory.name} manifest",
+        )
         manifest = json.loads(manifest_raw)
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
         return None
@@ -837,7 +850,11 @@ def load_calibration_candidate(
         try:
             member = (directory / name).resolve(strict=True)
             member.relative_to(directory)
-            raw = member.read_bytes()
+            raw = read_authentication_input(
+                member,
+                grammar="raw",
+                label=f"calibration candidate {directory.name} artifact {name}",
+            )
         except (OSError, ValueError):
             return None
         if not _valid_sha256(expected) or hashlib.sha256(raw).hexdigest() != expected:

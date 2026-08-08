@@ -38,6 +38,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO
 
+from joulewise.authentication_io import (
+    ingest_git_authentication_input,
+    read_authentication_input,
+    read_authentication_input_nofollow,
+)
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 
 
@@ -197,7 +202,13 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     for relative in GOVERNED_ARTIFACTS:
         path = root / relative
         if path.is_file():
-            result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+            result[relative] = hashlib.sha256(
+                read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=f"calibration custody artifact {relative}",
+                )
+            ).hexdigest()
     return result
 
 
@@ -789,7 +800,12 @@ def _committed_pin_bytes(path: Path, repo_root: Path) -> bytes | None:
         )
     except (OSError, subprocess.CalledProcessError):
         return None
-    return completed.stdout
+    return ingest_git_authentication_input(
+        relative,
+        completed.stdout,
+        grammar="json",
+        label="Git-committed calibration ledger head pin",
+    )
 
 
 def _append_journal_path(ledger_path: Path) -> Path:
@@ -842,7 +858,9 @@ def _valid_append_journal(value: object) -> bool:
 def _read_append_journal(ledger_path: Path) -> tuple[Mapping[str, Any] | None, bool]:
     path = _append_journal_path(ledger_path)
     try:
-        raw = path.read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="calibration ledger append journal"
+        )
     except FileNotFoundError:
         return None, False
     except OSError:
@@ -1238,7 +1256,16 @@ def _custody_reasons(
         for relative, expected in observation.artifact_sha256.items():
             path = root / relative
             try:
-                actual = hashlib.sha256(path.read_bytes()).hexdigest()
+                actual = hashlib.sha256(
+                    read_authentication_input(
+                        path,
+                        grammar="raw",
+                        label=(
+                            f"calibration ledger custody {observation.attempt_id} "
+                            f"artifact {relative}"
+                        ),
+                    )
+                ).hexdigest()
             except OSError:
                 return {"calibration_ledger_custody_invalid"}
             if actual != expected:
@@ -1270,7 +1297,11 @@ def load_calibration_ledger_snapshot(
     head_pin_path = Path(head_pin_path)
     reasons: set[str] = set()
     try:
-        pin_raw = head_pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            head_pin_path,
+            grammar="json",
+            label="physical calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         pin_raw = b""
@@ -1282,7 +1313,11 @@ def load_calibration_ledger_snapshot(
     else:
         pinned_sequence, pinned_digest = pin
     try:
-        raw = ledger_path.read_bytes()
+        raw = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label="physical calibration observation ledger",
+        )
     except OSError:
         raw = b""
         if pinned_sequence > 0:
@@ -1617,49 +1652,17 @@ def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
 
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
     root = _assert_absolute_nonsymlink_directory(directory)
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    directory_flags = flags | getattr(os, "O_DIRECTORY", 0) | nofollow
-    descriptor = os.open(root, directory_flags)
     try:
-        components = Path(relative).parts
-        if not components or any(item in {"", ".", ".."} for item in components):
-            raise CalibrationLedgerError("governed artifact path is not contained")
-        parent = descriptor
-        owned_parent = False
-        try:
-            for component in components[:-1]:
-                child = os.open(component, directory_flags, dir_fd=parent)
-                if owned_parent:
-                    os.close(parent)
-                parent = child
-                owned_parent = True
-            artifact = os.open(components[-1], flags | nofollow, dir_fd=parent)
-            try:
-                if not stat.S_ISREG(os.fstat(artifact).st_mode):
-                    raise CalibrationLedgerError(
-                        f"governed artifact is not a regular file: {root / relative}"
-                    )
-                chunks: list[bytes] = []
-                while True:
-                    chunk = os.read(artifact, 1024 * 1024)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                return b"".join(chunks)
-            finally:
-                os.close(artifact)
-        finally:
-            if owned_parent:
-                os.close(parent)
-    except CalibrationLedgerError:
-        raise
-    except OSError as exc:
+        return read_authentication_input_nofollow(
+            root,
+            relative,
+            grammar="raw",
+            label=f"governed calibration artifact {root / relative}",
+        )
+    except (OSError, ValueError) as exc:
         raise CalibrationLedgerError(
             f"governed artifact is unreadable without symlink traversal: {root / relative}"
         ) from exc
-    finally:
-        os.close(descriptor)
 
 
 def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
@@ -2028,7 +2031,11 @@ def _require_genesis_bootstrap_state(
     allow_nonempty_pending_plan: bool = False,
 ) -> bool:
     try:
-        pin_raw = Path(head_pin_path).read_bytes()
+        pin_raw = read_authentication_input(
+            head_pin_path,
+            grammar="json",
+            label="genesis calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError("head pin is unreadable") from exc
@@ -2041,7 +2048,15 @@ def _require_genesis_bootstrap_state(
         raise CalibrationLedgerError("head pin is not committed at Git HEAD")
     path = Path(ledger_path)
     try:
-        raw = path.read_bytes() if path.exists() else b""
+        raw = (
+            read_authentication_input(
+                path,
+                grammar="jsonl",
+                label="genesis calibration observation ledger",
+            )
+            if path.exists()
+            else b""
+        )
     except OSError as exc:
         raise CalibrationLedgerError("physical ledger is unreadable") from exc
     if raw:
@@ -2341,7 +2356,11 @@ def _record_append_recovery(
     payload = canonical_json_bytes(evidence) + b"\n"
     if path.exists():
         try:
-            if path.read_bytes() == payload:
+            if read_authentication_input(
+                path,
+                grammar="json",
+                label="calibration append recovery evidence",
+            ) == payload:
                 return
         except OSError as exc:
             raise CalibrationLedgerError(
@@ -2460,7 +2479,11 @@ def _authenticated_head_pin(
 ) -> tuple[int, str]:
     pin_path = Path(head_pin_path)
     try:
-        pin_raw = pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            pin_path,
+            grammar="json",
+            label="authenticated calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError("head pin is unreadable") from exc
@@ -2810,7 +2833,11 @@ def terminal_head_pin_for_session(
     """Return the sole terminal pin candidate after post or governed abort."""
 
     try:
-        raw = Path(ledger_path).read_bytes()
+        raw = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label=f"calibration ledger for bracket session {session_id}",
+        )
     except OSError as exc:
         raise CalibrationLedgerError("ledger is unreadable") from exc
     append_journal, malformed_journal = _read_append_journal(Path(ledger_path))
@@ -2861,7 +2888,11 @@ def append_pending_receipt(
         raise CalibrationLedgerError("attempt_id must be nonempty")
     pin_path = Path(head_pin_path)
     try:
-        pin_raw = pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            pin_path,
+            grammar="json",
+            label="calibration ledger head pin for receipt reservation",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError("head pin is unreadable") from exc

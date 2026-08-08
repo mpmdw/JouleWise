@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import (
     BundleReader,
     BundleReadError,
@@ -1226,7 +1227,11 @@ def _verify_instrument_calibration(
         ):
             return None, "instrument_calibration_invalid"
         try:
-            manifest_raw = manifest_file.read_bytes()
+            manifest_raw = read_authentication_input(
+                manifest_file,
+                grammar="json",
+                label="instrument calibration custody manifest",
+            )
             manifest = json.loads(manifest_raw)
         except (OSError, UnicodeDecodeError, ValueError):
             return None, "instrument_calibration_invalid"
@@ -1249,7 +1254,11 @@ def _verify_instrument_calibration(
             ):
                 return None, "instrument_calibration_invalid"
             try:
-                member_raw = member.read_bytes()
+                member_raw = read_authentication_input(
+                    member,
+                    grammar="raw",
+                    label=f"instrument calibration custody artifact {relative}",
+                )
             except OSError:
                 return None, "instrument_calibration_invalid"
             if hashlib.sha256(member_raw).hexdigest() != expected_sha256:
@@ -1292,7 +1301,11 @@ def _verify_instrument_calibration(
         if not artifact_file.is_file():
             return None, "instrument_calibration_artifact_missing"
     try:
-        raw = artifact_file.read_bytes()
+        raw = read_authentication_input(
+            artifact_file,
+            grammar="json",
+            label="instrument calibration evidence",
+        )
     except OSError:
         return None, "instrument_calibration_artifact_unreadable"
     if hashlib.sha256(raw).hexdigest() != artifact_sha256:
@@ -1469,7 +1482,11 @@ def _verify_instrument_calibration(
     for relative in ("raw/powermetrics.plist", "events.jsonl"):
         referenced = artifact_dir / relative
         try:
-            referenced_raw = referenced.read_bytes()
+            referenced_raw = read_authentication_input(
+                referenced,
+                grammar="raw",
+                label=f"instrument calibration primary evidence {relative}",
+            )
         except OSError:
             return None, "instrument_calibration_invalid"
         if hashlib.sha256(referenced_raw).hexdigest() != artifact_hashes[relative]:
@@ -1777,7 +1794,13 @@ def _derive_anchor_context(
     )
 
     try:
-        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+        raw_records = parse_powermetrics_records(
+            read_authentication_input(
+                raw_path,
+                grammar="raw",
+                label=f"bundle {reader.path.name} raw powermetrics capture",
+            )
+        )
     except (OSError, ValueError):
         return _unresolved_anchor_context("raw_capture_unparseable")
     derivation = derive_powermetrics_anchor_v2(
