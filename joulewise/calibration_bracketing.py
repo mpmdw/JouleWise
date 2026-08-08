@@ -652,10 +652,16 @@ def build_calibration_bracket_binding(
         or post.disposition != "valid"
         or pre.content_id is None
         or post.content_id is None
-        or post.sequence != ledger_snapshot.head_sequence
-        or post.receipt_digest != ledger_snapshot.head_digest
+        or post.sequence > ledger_snapshot.head_sequence
+        or post.sequence > len(ledger_snapshot.receipts)
+        or ledger_snapshot.receipts[post.sequence - 1].get(
+            "receipt_digest"
+        )
+        != post.receipt_digest
     ):
-        raise ValueError("bracket session endpoints are not valid at the terminal head")
+        raise ValueError(
+            "bracket session endpoints are not valid in the authenticated ledger"
+        )
     binding: dict[str, Any] = {
         "schema_version": BRACKET_BINDING_SCHEMA,
         "ledger_schema": LEDGER_SCHEMA,

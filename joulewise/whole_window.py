@@ -45,6 +45,7 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import (
+    build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
 )
@@ -400,6 +401,7 @@ class AuthenticatedConsumptionSession:
         evaluation_basis_sha256: str | None = None,
         consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+        calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
     ) -> None:
         if consumption_semantics_id not in {
@@ -415,6 +417,7 @@ class AuthenticatedConsumptionSession:
         self.evaluation_basis_sha256 = evaluation_basis_sha256
         self.consumption_semantics_id = consumption_semantics_id
         self.calibration_ledger_snapshot = calibration_ledger_snapshot
+        self.calibration_bracket_binding = calibration_bracket_binding
         self._allow_unissued_calibration_fixture = (
             _allow_unissued_calibration_fixture
         )
@@ -452,6 +455,88 @@ class AuthenticatedConsumptionSession:
     @property
     def ready(self) -> bool:
         return self._prepared and not self.refusal_reasons
+
+    def _basis_bracket_binding(self) -> Mapping[str, Any] | None:
+        """Recover one exact session binding from the authenticated basis wire.
+
+        A current verdict persists the full pre/post session descriptors in
+        ``calibration_bracket_set``.  Those descriptors are selectors only:
+        the authenticated ledger snapshot remains senior and the rebuilt
+        binding must validate back to its unique finalized session.
+        """
+
+        if isinstance(self.calibration_bracket_binding, Mapping):
+            return self.calibration_bracket_binding
+        if (
+            not isinstance(self.evaluation_basis_sha256, str)
+            or not isinstance(self.calibration_ledger_snapshot, CalibrationLedgerSnapshot)
+        ):
+            return None
+        try:
+            rows = [
+                json.loads(line)
+                for line in read_authentication_text(
+                    self.runs_root / "campaign_log.jsonl",
+                    grammar="jsonl",
+                    label="whole-window bracket-binding campaign log",
+                    encoding="utf-8",
+                ).splitlines()
+                if line.strip()
+            ]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        candidates: list[Mapping[str, Any]] = []
+        for row in rows:
+            basis = row.get("evaluation_basis") if isinstance(row, Mapping) else None
+            if (
+                isinstance(basis, Mapping)
+                and basis.get("sha256") == self.evaluation_basis_sha256
+                and isinstance(basis.get("calibration_bracket_set"), Mapping)
+            ):
+                candidates.append(basis["calibration_bracket_set"])
+        if len(candidates) != 1:
+            return None
+        pre = candidates[0].get("pre")
+        post = candidates[0].get("post")
+        descriptor_fields = (
+            "bracket_session_id",
+            "bracket_window_id",
+            "bracket_plan_id",
+            "bracket_plan_sha256",
+            "bracket_evidence_root_id",
+            "bracket_runs_root",
+        )
+        if (
+            not isinstance(pre, Mapping)
+            or not isinstance(post, Mapping)
+            or any(pre.get(field) != post.get(field) for field in descriptor_fields)
+            or pre.get("bracket_slot") != "pre"
+            or post.get("bracket_slot") != "post"
+        ):
+            return None
+        try:
+            binding = build_calibration_bracket_binding(
+                self.calibration_ledger_snapshot,
+                session_id=str(pre["bracket_session_id"]),
+                window_id=str(pre["bracket_window_id"]),
+                plan_id=str(pre["bracket_plan_id"]),
+                plan_sha256=str(pre["bracket_plan_sha256"]),
+                evidence_root_id=str(pre["bracket_evidence_root_id"]),
+                runs_root=str(pre["bracket_runs_root"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+        for role, descriptor in (("pre", pre), ("post", post)):
+            endpoint = binding["endpoints"][role]
+            if (
+                endpoint["attempt_id"] != descriptor.get("attempt_id")
+                or endpoint["receipt_digest"]
+                != descriptor.get("ledger_receipt_digest")
+                or endpoint["content_digest"] != descriptor.get("content_id")
+            ):
+                return None
+        self.calibration_bracket_binding = binding
+        return binding
 
     def _fail_global(self, reasons: set[str] | tuple[str, ...]) -> None:
         """Clear every authenticated cache when any global refusal exists."""
@@ -506,7 +591,11 @@ class AuthenticatedConsumptionSession:
             )
             return
 
-        if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+        bracket_binding = self._basis_bracket_binding()
+        if (
+            self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID
+            and bracket_binding is None
+        ):
             for bundle_id, path in sorted(bundle_paths.items()):
                 stored_summary = _read_json_object(path / "summary_metrics.json")
                 if not isinstance(stored_summary, Mapping):
@@ -522,6 +611,27 @@ class AuthenticatedConsumptionSession:
             [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
             policy.calibration_bracketing,
             ledger_snapshot=self.calibration_ledger_snapshot,
+            bracket_binding=bracket_binding,
+            bracket_window_id=(
+                bracket_binding.get("window_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_plan_id=(
+                bracket_binding.get("plan_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_plan_sha256=(
+                bracket_binding.get("plan_sha256")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_evidence_root_id=(
+                bracket_binding.get("evidence_root_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
             _allow_unissued_fixture=self._allow_unissued_calibration_fixture,
         )
         self.calibration_bracket = bracket
@@ -538,6 +648,16 @@ class AuthenticatedConsumptionSession:
             self._fail_global(reasons)
             return
         operative_bound = float(raw_bound)
+        if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+            for bundle_id, path in sorted(bundle_paths.items()):
+                stored_summary = _read_json_object(path / "summary_metrics.json")
+                if not isinstance(stored_summary, Mapping):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                else:
+                    self._summaries[bundle_id] = stored_summary
+            if reasons:
+                self._fail_global(reasons)
+            return
         self.operative_fiducial_bound_s = operative_bound
 
         physics_cache: dict[str, float] = {}

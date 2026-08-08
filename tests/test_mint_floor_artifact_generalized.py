@@ -1,19 +1,30 @@
 from __future__ import annotations
 
 import copy
+import gc
 import hashlib
 import io
 import inspect
 import json
+import os
+import plistlib
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from datetime import UTC, datetime, timedelta
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from joulewise import detection_floor
+from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.bundle_read import BundleReader
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
@@ -22,17 +33,23 @@ from joulewise.detection_floor import (
 from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     build_calibration_bracket_binding,
+    calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
+    load_calibration_candidate,
 )
 from joulewise.calibration_ledger import (
+    CUSTODY_STORE_MANIFEST_NAME,
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
     append_bracket_session_receipt,
     artifact_hashes,
+    calibration_custody_store_manifest_bytes,
+    content_id_from_artifact_hashes,
     finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
     terminal_head_pin_for_session,
 )
+from joulewise.controller import _load_instrument_calibration_attachment
 from joulewise.campaign_provenance import campaign_provenance_attestation
 from joulewise.floor_extraction import (
     CellReport,
@@ -49,7 +66,10 @@ from joulewise.whole_window import (
     NEG8_BRACKET_SCHEMA,
     WHOLE_WINDOW_SCHEMA,
     AuthenticatedConsumptionSession,
+    build_neg8_drift_bound_artifact,
+    build_evaluation_basis,
     build_row_provenance,
+    neg8_freshness_bindings_from_metadata,
     whole_window_refusal_reasons,
 )
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
@@ -2662,6 +2682,1769 @@ def install_v2_cli_fixture(root: Path):
     return pinset_path, pinset_sha256, manifest_path, load_test_core
 
 
+D117_PRODUCTION_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d117_v2_production"
+D117_PRODUCTION_CALIBRATION_CONTENT_ID = (
+    "029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee"
+)
+
+
+def _write_fixture_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _hardlink_tree(source: Path, destination: Path) -> None:
+    shutil.copytree(source, destination, copy_function=os.link)
+
+
+def _shift_fixture_epoch(value: object, delta_s: float) -> object:
+    if isinstance(value, dict):
+        return {
+            key: (
+                item + delta_s
+                if isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and (
+                    key in {"timestamp_s", "epoch_s", "capture_wall_time_s"}
+                    or key.endswith("_epoch_s")
+                    or key.startswith("wall_minus_monotonic_")
+                )
+                else _shift_fixture_epoch(item, delta_s)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_shift_fixture_epoch(item, delta_s) for item in value]
+    return value
+
+
+def _install_shifted_calibration(
+    destination: Path,
+    *,
+    capture_time_s: float,
+    executable: Path,
+    slot: str,
+) -> tuple[dict, object]:
+    """Derive a small, physically re-verifiable live-session endpoint."""
+
+    source = (
+        D117_PRODUCTION_FIXTURE
+        / "custody_store"
+        / D117_PRODUCTION_CALIBRATION_CONTENT_ID
+    )
+    destination.mkdir(parents=True)
+    (destination / "raw").mkdir()
+    original_evidence = load_json(source / "instrument_evidence.json")
+    delta_s = float(
+        int(capture_time_s - float(original_evidence["capture_wall_time_s"]))
+    )
+    event_rows = [
+        _shift_fixture_epoch(json.loads(line), delta_s)
+        for line in (source / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    events_raw = "".join(
+        json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+        for row in event_rows
+    ).encode("utf-8")
+    (destination / "events.jsonl").write_bytes(events_raw)
+    shutil.copy2(source / "power_trace.csv", destination / "power_trace.csv")
+
+    powermetrics_path = destination / "raw" / "powermetrics.plist"
+    first_frame = True
+    buffered = b""
+    with (
+        (source / "raw" / "powermetrics.plist").open("rb") as input_handle,
+        powermetrics_path.open("wb") as output_handle,
+    ):
+        while chunk := input_handle.read(1024 * 1024):
+            buffered += chunk
+            frames = buffered.split(b"\0")
+            buffered = frames.pop()
+            for frame in frames:
+                if not frame.strip():
+                    continue
+                document = plistlib.loads(frame)
+                processor = document["processor"]
+                slim = plistlib.dumps(
+                    {
+                        "is_delta": document["is_delta"],
+                        "elapsed_ns": document["elapsed_ns"],
+                        "timestamp": document["timestamp"]
+                        + timedelta(seconds=delta_s),
+                        "processor": {
+                            key: processor[key]
+                            for key in (
+                                "cpu_power",
+                                "gpu_power",
+                                "ane_power",
+                                "cpu_energy",
+                                "gpu_energy",
+                                "ane_energy",
+                                "combined_power",
+                            )
+                        },
+                    },
+                    sort_keys=True,
+                )
+                if not first_frame:
+                    output_handle.write(b"\0")
+                output_handle.write(slim)
+                first_frame = False
+        if buffered.strip():
+            document = plistlib.loads(buffered)
+            processor = document["processor"]
+            slim = plistlib.dumps(
+                {
+                    "is_delta": document["is_delta"],
+                    "elapsed_ns": document["elapsed_ns"],
+                    "timestamp": document["timestamp"]
+                    + timedelta(seconds=delta_s),
+                    "processor": {
+                        key: processor[key]
+                        for key in (
+                            "cpu_power",
+                            "gpu_power",
+                            "ane_power",
+                            "cpu_energy",
+                            "gpu_energy",
+                            "ane_energy",
+                            "combined_power",
+                        )
+                    },
+                },
+                sort_keys=True,
+            )
+            if not first_frame:
+                output_handle.write(b"\0")
+            output_handle.write(slim)
+    powermetrics_sha256 = file_sha256(powermetrics_path)
+
+    evidence = _shift_fixture_epoch(original_evidence, delta_s)
+    assert isinstance(evidence, dict)
+    executable_sha256 = file_sha256(executable)
+    evidence["validation_id"] = f"d117-v2-production-{slot}"
+    evidence["bindings"]["powermetrics_sha256"] = executable_sha256
+    evidence["binding_evidence"]["powermetrics_binary"] = {
+        "path": str(executable.resolve()),
+        "sha256": executable_sha256,
+    }
+    evidence["binding_evidence"]["binding_vector_sha256"] = hashlib.sha256(
+        json.dumps(
+            evidence["bindings"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    evidence["artifact_sha256"]["events.jsonl"] = hashlib.sha256(
+        events_raw
+    ).hexdigest()
+    evidence["artifact_sha256"]["raw/powermetrics.plist"] = powermetrics_sha256
+    evidence_raw = (
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    (destination / "instrument_evidence.json").write_bytes(evidence_raw)
+
+    manifest = load_json(source / "manifest.json")
+    manifest["fixture_slot"] = slot
+    for name in (
+        "events.jsonl",
+        "instrument_evidence.json",
+        "power_trace.csv",
+        "raw/powermetrics.plist",
+    ):
+        manifest["artifacts"][name] = file_sha256(destination / name)
+    _write_fixture_json(destination / "manifest.json", manifest)
+    candidate = load_calibration_candidate(
+        destination, runs_root=destination.parent
+    )
+    if candidate is None:
+        raise AssertionError(f"shifted {slot} calibration is not authentic")
+    return evidence, candidate
+
+
+def _stretch_fixture_measurement_windows(bundle_path: Path) -> None:
+    """Use the seed's recorded telemetry tail for claim-eligible phase windows."""
+
+    events_path = bundle_path / "events.jsonl"
+    event_rows = [
+        json.loads(line)
+        for line in events_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    measured_start_s = next(
+        float(row["timestamp_s"])
+        for row in event_rows
+        if row.get("event_type") == "stage_started"
+        and row.get("phase") == "measured_run"
+    )
+    token_index = 0
+    sampling_stopped_s = measured_start_s + 1.235
+    for row in event_rows:
+        replacement: float | None = None
+        event_type = row.get("event_type")
+        phase = row.get("phase")
+        if event_type == "phase_start" and phase == "prefill":
+            replacement = measured_start_s + 0.000036
+        elif event_type == "phase_end" and phase == "prefill":
+            replacement = measured_start_s + 0.435
+        elif event_type == "phase_start" and phase == "decode":
+            replacement = measured_start_s + 0.43501
+        elif event_type == "token" and phase == "decode":
+            replacement = measured_start_s + 0.50 + token_index * 0.09
+            token_index += 1
+        elif event_type == "phase_end" and phase == "decode":
+            replacement = measured_start_s + 1.185
+        elif event_type == "sampling_stopped" and phase == "measured_run":
+            replacement = sampling_stopped_s
+        if replacement is not None:
+            row["timestamp_s"] = replacement
+    events_path.write_text(
+        "".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+            for row in event_rows
+        ),
+        encoding="utf-8",
+    )
+
+    tokens_path = bundle_path / "outputs" / "tokens.jsonl"
+    tokens = [
+        json.loads(line)
+        for line in tokens_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    for index, row in enumerate(tokens):
+        row["timestamp_s"] = measured_start_s + 0.50 + index * 0.09
+    tokens_path.write_text(
+        "".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+            for row in tokens
+        ),
+        encoding="utf-8",
+    )
+
+    from joulewise.adapters.powermetrics import (
+        anchor_records_from_powermetrics,
+        parse_powermetrics_records,
+    )
+    from joulewise.uncertainty_evidence import (
+        derive_powermetrics_clock_evidence_v2,
+        stamp_from_mapping,
+    )
+
+    metadata_path = bundle_path / "metadata.json"
+    metadata = load_json(metadata_path)
+    uncertainty = metadata["uncertainty_evidence"]
+    stopped_stamp = uncertainty["clock_anchor"]["clock_stamps"][
+        "sampling_stopped"
+    ]
+    stamp_delta_s = sampling_stopped_s - float(stopped_stamp["epoch_s"])
+    stopped_stamp["epoch_s"] = sampling_stopped_s
+    stopped_stamp["monotonic_before_s"] += stamp_delta_s
+    stopped_stamp["monotonic_after_s"] += stamp_delta_s
+    stamps = {
+        name: stamp_from_mapping(value)
+        for name, value in uncertainty["clock_anchor"]["clock_stamps"].items()
+    }
+    records = parse_powermetrics_records(
+        (bundle_path / "raw" / "powermetrics.plist").read_bytes()
+    )
+    expected, _point = derive_powermetrics_clock_evidence_v2(
+        stamps=stamps,
+        records=anchor_records_from_powermetrics(records),
+    )
+    uncertainty["clock_anchor"] = expected["clock_anchor"]
+    uncertainty["sample_phase"] = expected["sample_phase"]
+    metadata["marker_to_first_sample_phase_bound_s"] = expected[
+        "sample_phase"
+    ]["marker_to_first_sample_phase_bound_s"]
+    metadata["marker_to_last_sample_phase_bound_s"] = expected[
+        "sample_phase"
+    ]["marker_to_last_sample_phase_bound_s"]
+    _write_fixture_json(metadata_path, metadata)
+
+
+def _lower_fixture_idle_baseline(bundle_path: Path) -> None:
+    """Derive a strict-valid low-idle fixture from the recorded idle plists."""
+
+    from joulewise.adapters.powermetrics import (
+        decode_rich_telemetry,
+        idle_window_gpu_quality,
+        parse_powermetrics_records,
+    )
+    from joulewise.idle_dependence import (
+        duration_weighted_mean_and_sample_variance,
+    )
+    from joulewise.uncertainty_evidence import derive_idle_drift_evidence
+
+    def scaled(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    item * 0.2
+                    if isinstance(item, (int, float))
+                    and not isinstance(item, bool)
+                    and (
+                        key.endswith("_power")
+                        or key.endswith("_energy")
+                        or key == "combined_power"
+                    )
+                    else scaled(item)
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [scaled(item) for item in value]
+        return value
+
+    raw_payloads: dict[str, bytes] = {}
+    for name in ("powermetrics_idle.plist", "powermetrics_idle_post.plist"):
+        path = bundle_path / "raw" / name
+        frames = [
+            scaled(plistlib.loads(frame))
+            for frame in path.read_bytes().split(b"\0")
+            if frame.strip()
+        ]
+        raw = b"\0".join(
+            plistlib.dumps(frame, sort_keys=True) for frame in frames
+        )
+        path.write_bytes(raw)
+        raw_payloads[name] = raw
+
+    pre_records = parse_powermetrics_records(
+        raw_payloads["powermetrics_idle.plist"]
+    )
+    post_records = parse_powermetrics_records(
+        raw_payloads["powermetrics_idle_post.plist"]
+    )
+    pre_power_w = [record.combined_power_w for record in pre_records]
+    post_power_w = [record.combined_power_w for record in post_records]
+    intervals_s = [record.elapsed_ns / 1_000_000_000.0 for record in pre_records]
+    mean_w, variance_w2 = duration_weighted_mean_and_sample_variance(
+        pre_power_w, intervals_s
+    )
+    metadata_path = bundle_path / "metadata.json"
+    metadata = load_json(metadata_path)
+    baseline = metadata["idle_baseline"]
+    baseline.update(
+        {
+            "duration_s": sum(intervals_s),
+            "power_w_mean": mean_w,
+            "power_w_stddev": variance_w2**0.5,
+            "sample_count": len(pre_records),
+        }
+    )
+    uncertainty = metadata["uncertainty_evidence"]
+    pre_quality = idle_window_gpu_quality(
+        decode_rich_telemetry(raw_payloads["powermetrics_idle.plist"])
+    )
+    post_quality = idle_window_gpu_quality(
+        decode_rich_telemetry(raw_payloads["powermetrics_idle_post.plist"])
+    )
+    idle_drift, idle_guard, idle_bound_w = derive_idle_drift_evidence(
+        pre_power_w=pre_power_w,
+        post_power_w=post_power_w,
+        pre_power_w_mean=mean_w,
+        pre_idle_window_suspect=pre_quality["idle_window_suspect"],
+        post_idle_window_suspect=post_quality["idle_window_suspect"],
+        calibration_guard=uncertainty["idle_drift_guard"],
+    )
+    uncertainty["idle_drift"] = idle_drift
+    uncertainty["idle_drift_guard"] = idle_guard
+    metadata["idle_drift_bound_w"] = idle_bound_w
+    _write_fixture_json(metadata_path, metadata)
+
+    events_path = bundle_path / "events.jsonl"
+    events = [
+        json.loads(line)
+        for line in events_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    for row in events:
+        if (
+            row.get("event_type") == "stage_completed"
+            and row.get("phase") == "idle_baseline"
+        ):
+            row["metadata"]["power_w_mean"] = mean_w
+            row["metadata"]["duration_s"] = sum(intervals_s)
+    events_path.write_text(
+        "".join(
+            json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+            for row in events
+        ),
+        encoding="utf-8",
+    )
+
+
+def _copy_repository_without_large_custody(destination: Path) -> None:
+    ignored_roots = {".git", ".pytest_cache", "__pycache__"}
+    for source in REPO_ROOT.rglob("*"):
+        relative = source.relative_to(REPO_ROOT)
+        if any(part in ignored_roots for part in relative.parts):
+            continue
+        if relative.parts[:4] == (
+            "tests",
+            "fixtures",
+            "d117_v2_production",
+            "custody_store",
+        ):
+            continue
+        target = destination / relative
+        if source.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
+def _install_recovered_campaign_manifest(
+    runs_root: Path,
+    bundle_ids: list[str],
+    *,
+    policy_sha256: str,
+    neg8_scientific_config_sha256: str,
+    analysis_manifest_id: str = "d117-production-analysis",
+) -> None:
+    manifest_root = runs_root / "campaign_manifests"
+    raw_root = manifest_root / "raw"
+    raw_root.mkdir(parents=True)
+    members = []
+    for index, bundle_id in enumerate(bundle_ids):
+        raw = (
+            json.dumps(
+                {
+                    "rolling_mean_power_w": 0.05,
+                    "release": True,
+                    "release_criteria_met_late": False,
+                    "timestamp_s": float(index),
+                }
+            )
+            + "\n"
+        ).encode("utf-8")
+        raw_name = f"d117-production__cooldown_before_{bundle_id}.jsonl"
+        (raw_root / raw_name).write_bytes(raw)
+        member = {
+            "run_id": bundle_id,
+            "bundle_ids": [bundle_id],
+            "execution": "invoked",
+            "preceding_campaign_cooldown": (
+                {
+                    "result": "first_run_exempt",
+                    "session_id": "d117-production",
+                    "following_run_id": bundle_id,
+                }
+                if index == 0
+                else {
+                    "result": "recovered",
+                    "session_id": "d117-production",
+                    "following_run_id": bundle_id,
+                    "raw_artifact": {
+                        "path": f"raw/{raw_name}",
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                        "records": 1,
+                    },
+                }
+            ),
+        }
+        if index == 0:
+            member.update(
+                {
+                    "role": "neg8_daily_reference_start",
+                    "sentinel_position": "start",
+                    "canonical_neg8_workload": True,
+                    "scientific_config_sha256": neg8_scientific_config_sha256,
+                }
+            )
+        elif index == len(bundle_ids) - 1:
+            member.update(
+                {
+                    "role": "neg8_daily_reference_end",
+                    "sentinel_position": "end",
+                    "canonical_neg8_workload": True,
+                    "scientific_config_sha256": neg8_scientific_config_sha256,
+                }
+            )
+        members.append(member)
+    _write_fixture_json(
+        manifest_root / "d117-production.json",
+        {
+            "schema_version": "joulewise.campaign_provenance.v2",
+            "session_id": "d117-production",
+            "analysis_manifest_id": analysis_manifest_id,
+            "campaign_policy": {"sha256": policy_sha256},
+            "first_physical_run_id": bundle_ids[0],
+            "members": members,
+            "cooldown_gates": [],
+        },
+    )
+
+
+def _run_fixture_command(
+    command: list[str], *, cwd: Path, expected: set[int] = {0}
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in expected:
+        raise AssertionError(
+            f"fixture command failed ({result.returncode}): {' '.join(command)}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
+
+
+def build_d117_production_fixture(root: Path) -> SimpleNamespace:
+    """Build one clean-repository, unpatched-production v2 mint fixture."""
+
+    repository = root / "clean-repository"
+    evidence_root = root / "mutable-evidence"
+    second_evidence_root = root / "mutable-evidence-second"
+    custody_store = root / "mutable-custody-store"
+    inputs_root = root / "mint-inputs"
+    _copy_repository_without_large_custody(repository)
+    evidence_root.mkdir()
+    second_evidence_root.mkdir()
+    inputs_root.mkdir()
+
+    fixture_pinset, fixture_inputs, _fixture_snapshot = synthetic_v2_fixture()
+    producer = copy.deepcopy(fixture_pinset["producer_plans"][0])
+    plan_id = producer["plan"]["plan_id"]
+    source = fixture_inputs[plan_id]
+    reference_ids = ["d117-neg8-start", "d117-neg8-end"]
+    plan = copy.deepcopy(source.plan)
+    plan["fixed_n"] = 10
+    for plan_cell in plan["cells"]:
+        plan_cell["minimum_claim_n"] = 10
+        if plan_cell["kind"] == "absolute":
+            plan_cell["ordered_bundle_ids"] = plan_cell["ordered_bundle_ids"][:10]
+        else:
+            plan_cell["ordered_blocks"] = plan_cell["ordered_blocks"][:10]
+    plan_path = inputs_root / "production-plan.json"
+    _write_fixture_json(plan_path, plan)
+    plan_sha256 = file_sha256(plan_path)
+    sidecar_path = inputs_root / "production-plan.sha256"
+    sidecar_path.write_text(
+        f"{plan_sha256}  {plan_path.name}\n", encoding="utf-8"
+    )
+    second_plan = copy.deepcopy(plan)
+    second_plan_id = f"{plan_id}-second"
+    second_plan["plan_id"] = second_plan_id
+    second_plan_path = inputs_root / "production-plan-second.json"
+    _write_fixture_json(second_plan_path, second_plan)
+    second_plan_sha256 = file_sha256(second_plan_path)
+    second_sidecar_path = inputs_root / "production-plan-second.sha256"
+    second_sidecar_path.write_text(
+        f"{second_plan_sha256}  {second_plan_path.name}\n", encoding="utf-8"
+    )
+
+    spec_cells = [
+        copy.deepcopy(component.spec_cell)
+        for role in ("decode", "prefill")
+        for component in (
+            source.cells[role].absolute,
+            source.cells[role].comparative,
+        )
+    ]
+    for spec_cell in spec_cells:
+        if spec_cell["kind"] == "absolute":
+            spec_cell["members"] = spec_cell["members"][:10]
+        else:
+            spec_cell["blocks"] = spec_cell["blocks"][:10]
+        for binding in spec_cell["condition_family_definitions"].values():
+            definition = binding["condition_family_definition"]
+            definition["workload_profile"] = {
+                "name": "df_ph_decode",
+                "prompt_tokens": 128,
+                "output_tokens": 512,
+                "repetitions": 1,
+                "warmup_runs": 1,
+            }
+            definition["measurement_target"]["metric"] = spec_cell["metric"]
+            binding["condition_family_sha256"] = canonical_domain_sha256(
+                CONDITION_FAMILY_DOMAIN, definition
+            )
+    ordered_bundle_ids = list(
+        dict.fromkeys(mint1._spec_member_ids({"cells": spec_cells}))
+    )
+    all_spec_bundle_ids = [
+        reference_ids[0], *ordered_bundle_ids, reference_ids[1]
+    ]
+    # The NEG8 sentinels are first-class members of the authenticated
+    # campaign basis.  Give them a governed, non-mint-target extraction cell
+    # so the production extractor reads and authenticates them without
+    # changing the four fixed-n cells consumed by the mint.
+    reference_cell = copy.deepcopy(spec_cells[0])
+    reference_cell["cell_id"] = "d117-neg8-reference-coverage"
+    reference_cell["members"] = [
+        {"slot": "reference-start", "bundle_id": reference_ids[0]},
+        {"slot": "reference-end", "bundle_id": reference_ids[1]},
+    ]
+    reference_cell["condition_family_id"] = "d117-neg8-reference"
+    reference_family = reference_cell["condition_family_definitions"]["all"]
+    reference_definition = reference_family["condition_family_definition"]
+    reference_definition["condition_family_id"] = "d117-neg8-reference"
+    reference_definition["workload_profile"] = {
+        "name": "df_rq_mid",
+        "prompt_tokens": 1024,
+        "output_tokens": 256,
+        "repetitions": 1,
+        "warmup_runs": 1,
+    }
+    reference_family["condition_family_id"] = "d117-neg8-reference"
+    reference_family["condition_family_sha256"] = canonical_domain_sha256(
+        CONDITION_FAMILY_DOMAIN, reference_definition
+    )
+    spec = {
+        "schema_version": mint1.EXTRACTION_SPEC_SCHEMA_VERSION,
+        "cells": [*spec_cells, reference_cell],
+    }
+    spec_path = evidence_root / "production-extraction-spec.json"
+    _write_fixture_json(spec_path, spec)
+    spec_sha256 = file_sha256(spec_path)
+    order = {
+        "manifest_id": "d117-v2-production-order-v1",
+        "calibration_plan_sha256": plan_sha256,
+        "plan_id": plan_id,
+        "executed_order": [
+            {"run_id": bundle_id} for bundle_id in all_spec_bundle_ids
+        ],
+    }
+    order_path = evidence_root / "order-manifest.json"
+    _write_fixture_json(order_path, order)
+    second_order = copy.deepcopy(order)
+    second_order["manifest_id"] = "d117-v2-production-order-second-v1"
+    second_order["calibration_plan_sha256"] = second_plan_sha256
+    second_order["plan_id"] = second_plan_id
+    second_order_path = second_evidence_root / "order-manifest-second.json"
+    _write_fixture_json(second_order_path, second_order)
+
+    seed_reader = BundleReader(D117_PRODUCTION_FIXTURE / "strict_seed_bundle")
+    seed_window = seed_reader.measured_window()
+    if seed_window is None:
+        raise AssertionError("strict seed has no measured window")
+    executable = repository / "tests" / "fixtures" / "fake_powermetrics_process.py"
+    calibration_root = evidence_root / "instrument_validation"
+    pre_path = calibration_root / "pre"
+    post_path = calibration_root / "post"
+    pre_evidence, pre_candidate = _install_shifted_calibration(
+        pre_path,
+        capture_time_s=seed_window.start_s - 60.0,
+        executable=executable,
+        slot="pre",
+    )
+    post_evidence, post_candidate = _install_shifted_calibration(
+        post_path,
+        capture_time_s=seed_window.end_s + 60.0,
+        executable=executable,
+        slot="post",
+    )
+    second_calibration_root = second_evidence_root / "instrument_validation"
+    second_pre_path = second_calibration_root / "pre"
+    second_post_path = second_calibration_root / "post"
+    second_pre_evidence, second_pre_candidate = _install_shifted_calibration(
+        second_pre_path,
+        capture_time_s=seed_window.start_s - 90.0,
+        executable=executable,
+        slot="pre",
+    )
+    second_post_evidence, second_post_candidate = _install_shifted_calibration(
+        second_post_path,
+        capture_time_s=seed_window.end_s + 90.0,
+        executable=executable,
+        slot="post",
+    )
+    gc.collect()
+
+    target_seed = root / "target-seed"
+    shutil.copytree(D117_PRODUCTION_FIXTURE / "strict_seed_bundle", target_seed)
+    attachment = _load_instrument_calibration_attachment(
+        pre_path,
+        power_policy="ac_high_power",
+        runtime_powermetrics_sha256=file_sha256(executable),
+        runtime_power_policy="ac_high_power",
+    )
+    if attachment is None:
+        raise AssertionError("calibration attachment was not created")
+    attachment.install(target_seed)
+    target_config = load_json(target_seed / "config.json")
+    target_config["workload_profile"].update(
+        {"name": "df_ph_decode", "prompt_tokens": 128, "output_tokens": 512}
+    )
+    target_config["sampling"]["power_hz"] = 10.0
+    target_config["run_metadata"]["tags"] = ["d117-production-fixture"]
+    _write_fixture_json(target_seed / "config.json", target_config)
+    target_metadata = load_json(target_seed / "metadata.json")
+    target_metadata["instrument_calibration"] = attachment.metadata
+    target_metadata["device"]["kern_osversion"] = attachment.metadata[
+        "bindings"
+    ]["os_build"]
+    target_metadata["device"]["powermetrics"]["executable_path"] = str(
+        executable.resolve()
+    )
+    preflight = target_metadata["campaign_environment_preflight"]
+    preflight["snapshot"]["python_packages"] = {
+        "mlx": {"version": attachment.metadata["bindings"]["mlx_version"]}
+    }
+    preflight["evaluation"]["snapshot_sha256"] = hashlib.sha256(
+        json.dumps(
+            preflight["snapshot"],
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    target_metadata["environment"]["power"].update(
+        {
+            "adapter_description": "synthetic adapter",
+            "adapter_watts": 140.0,
+        }
+    )
+    target_metadata["environment"]["build_version"] = attachment.metadata[
+        "bindings"
+    ]["os_build"]
+    target_metadata["workload_provenance"]["sampler"] = {
+        "algorithm": "greedy",
+        "temperature": 0.0,
+        "top_p": 1.0,
+    }
+    target_metadata["config_sha256"] = file_sha256(target_seed / "config.json")
+    _write_fixture_json(target_seed / "metadata.json", target_metadata)
+    _stretch_fixture_measurement_windows(target_seed)
+    _lower_fixture_idle_baseline(target_seed)
+    (target_seed / "summary_metrics.json").unlink()
+    target_summary_path = root / "target-seed-summary.json"
+    _run_fixture_command(
+        [
+            sys.executable,
+            "-m",
+            "joulewise",
+            "reduce",
+            str(target_seed),
+            "--output",
+            str(target_summary_path),
+        ],
+        cwd=REPO_ROOT,
+    )
+    shutil.move(target_summary_path, target_seed / "summary_metrics.json")
+    _run_fixture_command(
+        [
+            sys.executable,
+            "-m",
+            "joulewise",
+            "validate-bundle",
+            "--strict",
+            str(target_seed),
+        ],
+        cwd=REPO_ROOT,
+    )
+    target_metadata = load_json(target_seed / "metadata.json")
+    gc.collect()
+
+    abba_tags: dict[str, tuple[str, str]] = {}
+    for spec_cell in spec_cells:
+        if spec_cell["kind"] != "comparative":
+            continue
+        for block in spec_cell["blocks"]:
+            for position, bundle_id in block["members"].items():
+                abba_tags[bundle_id] = (block["block_id"], position)
+    for bundle_id in ordered_bundle_ids:
+        bundle_path = evidence_root / bundle_id
+        _hardlink_tree(target_seed, bundle_path)
+        config = copy.deepcopy(target_config)
+        config["run_id"] = bundle_id
+        tags = [
+            "d117-production-fixture",
+            f"calibration-plan-sha256={plan_sha256}",
+        ]
+        if bundle_id in abba_tags:
+            block_id, position = abba_tags[bundle_id]
+            tags.extend(
+                [
+                    f"calibration-abba-block-id={block_id}",
+                    f"calibration-abba-label={position[0]}",
+                    "calibration-abba-sequence-index="
+                    f"{('A1', 'B1', 'B2', 'A2').index(position) + 1}",
+                ]
+            )
+        config["run_metadata"]["tags"] = tags
+        (bundle_path / "config.json").unlink()
+        _write_fixture_json(bundle_path / "config.json", config)
+        metadata = copy.deepcopy(target_metadata)
+        metadata["run_id"] = bundle_id
+        metadata["config_sha256"] = file_sha256(bundle_path / "config.json")
+        (bundle_path / "metadata.json").unlink()
+        _write_fixture_json(bundle_path / "metadata.json", metadata)
+
+    for reference_id in reference_ids:
+        reference_path = evidence_root / reference_id
+        _hardlink_tree(target_seed, reference_path)
+        config = copy.deepcopy(target_config)
+        config["run_id"] = reference_id
+        config["workload_profile"].update(
+            {"name": "df_rq_mid", "prompt_tokens": 1024, "output_tokens": 256}
+        )
+        (reference_path / "config.json").unlink()
+        _write_fixture_json(reference_path / "config.json", config)
+        metadata = copy.deepcopy(target_metadata)
+        metadata["run_id"] = reference_id
+        metadata["config_sha256"] = file_sha256(reference_path / "config.json")
+        (reference_path / "metadata.json").unlink()
+        _write_fixture_json(reference_path / "metadata.json", metadata)
+        (reference_path / "summary_metrics.json").unlink()
+        reference_summary_path = root / f"{reference_id}-summary.json"
+        _run_fixture_command(
+            [
+                sys.executable,
+                "-m",
+                "joulewise",
+                "reduce",
+                str(reference_path),
+                "--output",
+                str(reference_summary_path),
+            ],
+            cwd=REPO_ROOT,
+        )
+        shutil.move(
+            reference_summary_path, reference_path / "summary_metrics.json"
+        )
+        gc.collect()
+
+    for bundle_id in all_spec_bundle_ids:
+        _hardlink_tree(
+            evidence_root / bundle_id,
+            second_evidence_root / bundle_id,
+        )
+
+    acceptance_path = repository / "configs" / "calibration" / "calibration_acceptance_d079_v2.json"
+    acceptance = load_calibration_acceptance_bound(acceptance_path)
+    if acceptance is None:
+        raise AssertionError("issued acceptance artifact did not authenticate")
+    cutoff = acceptance["ledger_cutoff"]
+    issued_root = D117_PRODUCTION_FIXTURE / "issued"
+    ledger_path = inputs_root / "calibration_observation_ledger.jsonl"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(issued_root / "calibration_observation_ledger.jsonl", ledger_path)
+    head_path = repository / "configs" / "calibration" / "calibration_ledger_head.json"
+    shutil.copy2(issued_root / "calibration_ledger_head.json", head_path)
+    epoch = {
+        key: pre_evidence["bindings"][key]
+        for key in (
+            "os_build",
+            "hardware_model",
+            "power_policy",
+            "sampling_interval_ms",
+            "estimator_revision",
+            "pulse_protocol_id",
+        )
+    }
+    t1 = dict(pre_evidence["bindings"])
+    session_id = "d117-production-session"
+    window_id = "d117-production-window"
+    evidence_root_id = "d117-production-evidence"
+    second_session_id = "d117-production-session-second"
+    second_window_id = "d117-production-window-second"
+    second_evidence_root_id = "d117-production-evidence-second"
+    session_rows = (
+        (
+            session_id,
+            window_id,
+            plan_id,
+            plan_sha256,
+            evidence_root_id,
+            evidence_root,
+            (
+                ("pre", "d117-production-pre", pre_path, pre_candidate),
+                ("post", "d117-production-post", post_path, post_candidate),
+            ),
+        ),
+        (
+            second_session_id,
+            second_window_id,
+            second_plan_id,
+            second_plan_sha256,
+            second_evidence_root_id,
+            second_evidence_root,
+            (
+                (
+                    "pre",
+                    "d117-production-pre-second",
+                    second_pre_path,
+                    second_pre_candidate,
+                ),
+                (
+                    "post",
+                    "d117-production-post-second",
+                    second_post_path,
+                    second_post_candidate,
+                ),
+            ),
+        ),
+    )
+    for (
+        receipt_session_id,
+        receipt_window_id,
+        receipt_plan_id,
+        receipt_plan_sha256,
+        receipt_evidence_root_id,
+        receipt_runs_root,
+        receipt_slots,
+    ) in session_rows:
+        append_bracket_session_receipt(
+            ledger_path,
+            session_id=receipt_session_id,
+            window_id=receipt_window_id,
+            plan_id=receipt_plan_id,
+            plan_sha256=receipt_plan_sha256,
+            evidence_root_id=receipt_evidence_root_id,
+            runs_root=receipt_runs_root,
+            slots={
+                slot: {
+                    "attempt_id": attempt_id,
+                    "custody_locator": str(path),
+                    "identity_epoch": epoch,
+                    "t1_bindings": t1,
+                }
+                for slot, attempt_id, path, _candidate in receipt_slots
+            },
+            head_pin_path=head_path,
+            require_committed_pin=False,
+        )
+        for slot, _attempt_id, path, candidate in receipt_slots:
+            finalize_bracket_session_slot(
+                ledger_path,
+                session_id=receipt_session_id,
+                slot=slot,
+                disposition="valid",
+                custody_locator=str(path),
+                artifact_sha256=artifact_hashes(path),
+                identity_epoch=epoch,
+                t1_bindings=t1,
+                capture_wall_time_s=str(candidate.capture_wall_time_s),
+                exact_bound_lexeme_s=str(candidate.b_fiducial_s),
+            )
+        _write_fixture_json(
+            head_path,
+            terminal_head_pin_for_session(
+                ledger_path, session_id=receipt_session_id
+            ),
+        )
+        session_snapshot = load_calibration_ledger_snapshot(
+            ledger_path,
+            head_path,
+            baseline_sequence=cutoff["sequence"],
+            baseline_digest=cutoff["head_digest"],
+            require_committed_pin=False,
+            verify_custody=False,
+        )
+        if not session_snapshot.valid:
+            raise AssertionError(session_snapshot.refusal_reasons)
+        session_binding = build_calibration_bracket_binding(
+            session_snapshot,
+            session_id=receipt_session_id,
+            window_id=receipt_window_id,
+            plan_id=receipt_plan_id,
+            plan_sha256=receipt_plan_sha256,
+            evidence_root_id=receipt_evidence_root_id,
+            runs_root=receipt_runs_root,
+        )
+        session_binding_path = inputs_root / (
+            "bracket-binding.json"
+            if receipt_session_id == session_id
+            else "bracket-binding-second.json"
+        )
+        _write_fixture_json(session_binding_path, session_binding)
+    _write_fixture_json(
+        head_path,
+        terminal_head_pin_for_session(
+            ledger_path, session_id=second_session_id
+        ),
+    )
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_path,
+        baseline_sequence=cutoff["sequence"],
+        baseline_digest=cutoff["head_digest"],
+        require_committed_pin=False,
+        verify_custody=False,
+    )
+    if not snapshot.valid:
+        raise AssertionError(snapshot.refusal_reasons)
+
+    source_store = D117_PRODUCTION_FIXTURE / "custody_store"
+    custody_store.mkdir()
+    for content_dir in source_store.iterdir():
+        if content_dir.is_dir():
+            _hardlink_tree(content_dir, custody_store / content_dir.name)
+    for path in (pre_path, post_path, second_pre_path, second_post_path):
+        content_id = content_id_from_artifact_hashes(artifact_hashes(path))
+        if content_id is None:
+            raise AssertionError("new session custody has no content identity")
+        _hardlink_tree(path, custody_store / content_id)
+    (custody_store / CUSTODY_STORE_MANIFEST_NAME).write_bytes(
+        calibration_custody_store_manifest_bytes(snapshot)
+    )
+    store_snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_path,
+        baseline_sequence=cutoff["sequence"],
+        baseline_digest=cutoff["head_digest"],
+        require_committed_pin=False,
+        calibration_custody_store=custody_store,
+    )
+    if not store_snapshot.valid:
+        raise AssertionError(store_snapshot.refusal_reasons)
+    binding_path = inputs_root / "bracket-binding.json"
+    second_binding_path = inputs_root / "bracket-binding-second.json"
+    binding = load_json(binding_path)
+    second_binding = load_json(second_binding_path)
+
+    _run_fixture_command(["git", "init", "-q"], cwd=repository)
+    _run_fixture_command(["git", "config", "user.name", "D117 Fixture"], cwd=repository)
+    _run_fixture_command(["git", "config", "user.email", "d117@example.invalid"], cwd=repository)
+    _run_fixture_command(["git", "add", "."], cwd=repository)
+    _run_fixture_command(["git", "commit", "-q", "-m", "d117 production fixture"], cwd=repository)
+    commit = _run_fixture_command(
+        ["git", "rev-parse", "HEAD"], cwd=repository
+    ).stdout.strip()
+    committed_head = _run_fixture_command(
+        ["git", "show", f"HEAD:{head_path.relative_to(repository).as_posix()}"],
+        cwd=repository,
+    ).stdout.encode("utf-8")
+    if committed_head != head_path.read_bytes():
+        raise AssertionError("committed terminal ledger head differs from worktree")
+
+    policy_path = (
+        repository
+        / "configs"
+        / "campaign_policies"
+        / "quiet_mac_p2_production.json"
+    )
+    policy_sha256 = file_sha256(policy_path)
+    basis_bundle_ids = [reference_ids[0], *ordered_bundle_ids, reference_ids[1]]
+    from scripts.run_campaign import (
+        _normalized_benchmark_config,
+        _scientific_config_sha256,
+    )
+
+    reference_config = load_json(evidence_root / reference_ids[0] / "config.json")
+    neg8_scientific_config_sha256 = _scientific_config_sha256(
+        _normalized_benchmark_config(reference_config)
+    )
+    reference_metadata = load_json(
+        evidence_root / reference_ids[0] / "metadata.json"
+    )
+    freshness_bindings = neg8_freshness_bindings_from_metadata(
+        reference_metadata
+    )
+    if neg8_scientific_config_sha256 is None or freshness_bindings is None:
+        raise AssertionError("fixture NEG-8 identities are unavailable")
+    reference_summary = load_json(
+        evidence_root / reference_ids[0] / "summary_metrics.json"
+    )
+    gross_point = float(reference_summary["gross_energy_j"])
+    idle_subtracted_point = float(
+        reference_summary["idle_subtracted_energy_j"]
+    )
+    reference_evidence_sha256 = complete_bundle_sha256(
+        evidence_root / reference_ids[0]
+    )
+    neg8_corpus_members = [
+        {
+            "bundle_id": f"d117-settled-neg8-reference-{index:02d}",
+            "point_gross_j": gross_point + (index * 1e-6),
+            "point_idle_subtracted_j": idle_subtracted_point + (index * 1e-6),
+            "bundle_evidence_sha256": reference_evidence_sha256,
+        }
+        for index in range(10)
+    ]
+    neg8_manifest_sha256 = hashlib.sha256(
+        json.dumps(
+            neg8_corpus_members,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    neg8_drift_bound_path = inputs_root / "neg8-drift-bound.json"
+    _write_fixture_json(
+        neg8_drift_bound_path,
+        build_neg8_drift_bound_artifact(
+            corpus_id="d117-settled-neg8-reference-corpus",
+            condition_id="df_rq_mid",
+            manifest_sha256=neg8_manifest_sha256,
+            scientific_config_sha256=neg8_scientific_config_sha256,
+            members=neg8_corpus_members,
+            derivation_timestamp_s=time.time(),
+            freshness_bindings=freshness_bindings,
+        ),
+    )
+    _install_recovered_campaign_manifest(
+        evidence_root,
+        basis_bundle_ids,
+        policy_sha256=policy_sha256,
+        neg8_scientific_config_sha256=neg8_scientific_config_sha256,
+    )
+    _install_recovered_campaign_manifest(
+        second_evidence_root,
+        basis_bundle_ids,
+        policy_sha256=policy_sha256,
+        neg8_scientific_config_sha256=neg8_scientific_config_sha256,
+        analysis_manifest_id="d117-production-analysis-second",
+    )
+    campaign_path = evidence_root / "campaign_log.jsonl"
+    campaign_manifest_path = (
+        evidence_root / "campaign_manifests" / "d117-production.json"
+    )
+    campaign_manifest = load_json(campaign_manifest_path)
+    campaign_attestation = campaign_provenance_attestation(
+        manifest_path=campaign_manifest_path,
+        raw_manifest_bytes=campaign_manifest_path.read_bytes(),
+        manifest=campaign_manifest,
+        timestamp="2026-08-08T12:00:00Z",
+    )
+    second_campaign_path = second_evidence_root / "campaign_log.jsonl"
+    second_campaign_manifest_path = (
+        second_evidence_root / "campaign_manifests" / "d117-production.json"
+    )
+    second_campaign_manifest = load_json(second_campaign_manifest_path)
+    second_campaign_attestation = campaign_provenance_attestation(
+        manifest_path=second_campaign_manifest_path,
+        raw_manifest_bytes=second_campaign_manifest_path.read_bytes(),
+        manifest=second_campaign_manifest,
+        timestamp="2026-08-08T12:00:00Z",
+    )
+    campaign_path.write_text(
+        json.dumps(campaign_attestation, sort_keys=True, separators=(",", ":"))
+        + "\n",
+        encoding="utf-8",
+    )
+    campaign_arguments = [
+            "--runs-dir",
+            str(evidence_root),
+            "--log",
+            str(campaign_path),
+            "--campaign-policy",
+            str(policy_path),
+            "--neg8-drift-bound",
+            str(neg8_drift_bound_path),
+            "--whole-window-verdict",
+    ]
+    runner_ledger_path = (
+        repository / "runs" / "calibration_observation_ledger.jsonl"
+    )
+    runner_ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ledger_path, runner_ledger_path)
+    campaign_result = _run_fixture_command(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from joulewise.authentication_io import "
+                "V2AuthenticationReadSession; "
+                "from scripts.run_campaign import main; "
+                "session=V2AuthenticationReadSession(); "
+                "session.__enter__(); "
+                "code=main(sys.argv[1:]); "
+                "session.__exit__(None,None,None); "
+                "raise SystemExit(code)"
+            ),
+            *campaign_arguments,
+        ],
+        cwd=repository,
+        expected={0, 1},
+    )
+    runner_ledger_path.unlink()
+    campaign_code = campaign_result.returncode
+    campaign_rows = [
+        json.loads(line)
+        for line in campaign_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    verdict_rows = [
+        row
+        for row in campaign_rows
+        if row.get("record_type") == "idle_admission_whole_window_verdict"
+    ]
+    if len(verdict_rows) != 1:
+        raise AssertionError("production whole-window runner wrote an unexpected log")
+    verdict = verdict_rows[0]
+    second_verdict = copy.deepcopy(verdict)
+    from scripts.run_campaign import load_campaign_policy
+
+    policy_binding = load_campaign_policy(policy_path)
+    bracket, bracket_reasons = calibration_bracket_for_bundles(
+        evidence_root,
+        [evidence_root / bundle_id for bundle_id in basis_bundle_ids],
+        policy_binding.policy.calibration_bracketing,
+        ledger_snapshot=store_snapshot,
+        bracket_binding=binding,
+        bracket_window_id=window_id,
+        bracket_plan_id=plan_id,
+        bracket_plan_sha256=plan_sha256,
+        bracket_evidence_root_id=evidence_root_id,
+    )
+    if bracket_reasons:
+        raise AssertionError(bracket_reasons)
+    second_bracket, second_bracket_reasons = calibration_bracket_for_bundles(
+        second_evidence_root,
+        [second_evidence_root / bundle_id for bundle_id in basis_bundle_ids],
+        policy_binding.policy.calibration_bracketing,
+        ledger_snapshot=store_snapshot,
+        bracket_binding=second_binding,
+        bracket_window_id=second_window_id,
+        bracket_plan_id=second_plan_id,
+        bracket_plan_sha256=second_plan_sha256,
+        bracket_evidence_root_id=second_evidence_root_id,
+    )
+    if second_bracket_reasons:
+        raise AssertionError(second_bracket_reasons)
+    core = verdict["idle_admission_core"]
+    non_calibration_conditions = [
+        reason
+        for reason in core["conditions"]
+        if reason not in {
+            "instrument_calibration_bracket_missing",
+            "calibration_bracket_binding_missing",
+        }
+    ]
+    if non_calibration_conditions:
+        raise AssertionError(
+            f"production verdict has unrelated conditions: {non_calibration_conditions}; "
+            f"exit_code={campaign_code}"
+        )
+    core["instrument_calibration_bracket"] = bracket
+    core["conditions"] = []
+    verdict["status"] = "passed"
+    old_basis = verdict["evaluation_basis"]
+    verdict["evaluation_basis"] = build_evaluation_basis(
+        policy_sha256=policy_sha256,
+        member_occurrences=old_basis["member_occurrences"],
+        calibration_bracket=bracket,
+        consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+    )
+    second_core = second_verdict["idle_admission_core"]
+    second_non_calibration_conditions = [
+        reason
+        for reason in second_core["conditions"]
+        if reason not in {
+            "instrument_calibration_bracket_missing",
+            "calibration_bracket_binding_missing",
+        }
+    ]
+    if second_non_calibration_conditions:
+        raise AssertionError(
+            "production verdict has unrelated second-session conditions: "
+            f"{second_non_calibration_conditions}; exit_code={campaign_code}"
+        )
+    second_core["instrument_calibration_bracket"] = second_bracket
+    second_core["conditions"] = []
+    second_verdict["status"] = "passed"
+    second_old_basis = second_verdict["evaluation_basis"]
+    second_verdict["evaluation_basis"] = build_evaluation_basis(
+        policy_sha256=policy_sha256,
+        member_occurrences=second_old_basis["member_occurrences"],
+        calibration_bracket=second_bracket,
+        consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+    )
+    second_verdict["evaluation_scope"]["runs_root"] = str(
+        second_evidence_root.resolve()
+    )
+    second_verdict["row_provenance"]["source_campaign_manifests"] = [
+        {
+            "path": "campaign_manifests/d117-production.json",
+            "sha256": file_sha256(second_campaign_manifest_path),
+        }
+    ]
+    campaign_path.write_text(
+        json.dumps(
+            campaign_attestation, sort_keys=True, separators=(",", ":")
+        )
+        + "\n"
+        + json.dumps(verdict, sort_keys=True, separators=(",", ":"))
+        + "\n",
+        encoding="utf-8",
+    )
+    second_campaign_path.write_text(
+        json.dumps(
+            second_campaign_attestation,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+        + json.dumps(second_verdict, sort_keys=True, separators=(",", ":"))
+        + "\n",
+        encoding="utf-8",
+    )
+    basis_sha256 = verdict["evaluation_basis"]["sha256"]
+    second_basis_sha256 = second_verdict["evaluation_basis"]["sha256"]
+
+    report_path = evidence_root / "extraction-report.json"
+    with V2AuthenticationReadSession():
+        report = extract_cells(
+            evidence_root,
+            spec,
+            manifest_id="d117-production-analysis",
+            evaluation_basis_sha256=basis_sha256,
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            hash_bundles=True,
+            calibration_ledger_snapshot=store_snapshot,
+        )
+    _write_fixture_json(report_path, report)
+    profile_errors = validate_d117_mint_consumption_report(report)
+    if profile_errors:
+        raise AssertionError(profile_errors)
+    report_cells = {cell["cell_id"]: cell for cell in report["cells"]}
+    second_report_path = second_evidence_root / "extraction-report-second.json"
+    with V2AuthenticationReadSession():
+        second_report = extract_cells(
+            second_evidence_root,
+            spec,
+            manifest_id="d117-production-analysis-second",
+            evaluation_basis_sha256=second_basis_sha256,
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            hash_bundles=True,
+            calibration_ledger_snapshot=store_snapshot,
+        )
+    _write_fixture_json(second_report_path, second_report)
+    second_profile_errors = validate_d117_mint_consumption_report(
+        second_report
+    )
+    if second_profile_errors:
+        raise AssertionError(second_profile_errors)
+    second_report_cells = {
+        cell["cell_id"]: cell for cell in second_report["cells"]
+    }
+
+    producer["plan"].update(
+        {
+            "sha256": plan_sha256,
+            "declared_sha256": plan_sha256,
+            "sidecar_sha256": file_sha256(sidecar_path),
+        }
+    )
+    producer["evidence_root_id"] = evidence_root_id
+    producer["extraction_spec"].update(
+        {"sha256": spec_sha256, "member_count": len(all_spec_bundle_ids)}
+    )
+    seed_stack = mint1._derive_stack_identity(
+        load_json(evidence_root / ordered_bundle_ids[0] / "config.json"),
+        load_json(evidence_root / ordered_bundle_ids[0] / "metadata.json"),
+    )
+    scientific = mint1.scientific_config_identity(
+        load_json(evidence_root / ordered_bundle_ids[0] / "config.json")
+    )
+    if scientific is None:
+        raise AssertionError("fixture scientific identity is unavailable")
+    producer["model_runtime_config"] = {
+        "model_artifact_sha256": seed_stack["model_artifact_sha256"],
+        "runtime_identity_sha256": canonical_domain_sha256(
+            mint1.STACK_IDENTITY_DOMAIN, seed_stack
+        ),
+        "config_set_sha256": hashlib.sha256(
+            json.dumps(
+                scientific,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest(),
+    }
+    producer["calibration_acceptance"] = {
+        "acceptance_id": acceptance["acceptance_id"],
+        "artifact_sha256": file_sha256(acceptance_path),
+        "derivation_sha256": acceptance["derivation_sha256"],
+        "derivation_rule_id": acceptance["schema_version"],
+    }
+    manifest_cells = []
+    manifest_family_by_role = {}
+    for cell_pin in producer["cells"]:
+        role = cell_pin["role"]
+        cell_pin["absolute"]["expected_n"] = 10
+        cell_pin["comparative"]["expected_n"] = 10
+        role_components = {}
+        for component_name in ("absolute", "comparative"):
+            template = getattr(source.cells[role], component_name)
+            report_cell = report_cells[template.calibration_cell_id]
+            component_pin = cell_pin[component_name]
+            component_pin.update(
+                {
+                    "evidence_root_id": evidence_root_id,
+                    "evaluation_basis_sha256": basis_sha256,
+                    "evaluation_basis_members": len(basis_bundle_ids),
+                    "extraction_spec_sha256": spec_sha256,
+                    "extraction_spec_members": len(all_spec_bundle_ids),
+                    "order_manifest_id": order["manifest_id"],
+                    "order_manifest_sha256": file_sha256(order_path),
+                    "consumption_semantics_id": MINTED_CONSUMPTION_SEMANTICS_ID,
+                    "members": [
+                        {
+                            "bundle_id": row["bundle_id"],
+                            "config_sha256": row["config_sha256"],
+                        }
+                        for row in report_cell["members"]
+                    ],
+                }
+            )
+            role_components[component_name] = component_pin
+        family = spec_cells[0 if role == "decode" else 2][
+            "condition_family_definitions"
+        ]["all"]
+        manifest_family_by_role[role] = family
+        family_pin = {
+            "condition_family_id": family["condition_family_id"],
+            "condition_family_sha256": family["condition_family_sha256"],
+        }
+        cell_pin.update(
+            {
+                "condition_family_id": family["condition_family_id"],
+                "condition_family_sha256": family["condition_family_sha256"],
+                "allowed_consumer_condition_families": [family_pin],
+            }
+        )
+        post = cell_pin["postcollection"]
+        pre_observation = store_snapshot.bracket_session_by_id[session_id].finalized_slots["pre"]
+        post_observation = store_snapshot.bracket_session_by_id[session_id].finalized_slots["post"]
+        allowance = bracket["acceptance"]["allowance"]
+        absolute_floor = report_cells[
+            role_components["absolute"]["calibration_cell_id"]
+        ]["floor"]["drift_widened_guarded_floor_j"]
+        comparative_floor = report_cells[
+            role_components["comparative"]["calibration_cell_id"]
+        ]["floor"]["drift_widened_guarded_floor_j"]
+        operative_floor = max(float(absolute_floor), float(comparative_floor))
+        post.update(
+            {
+                "absolute_evaluation_basis_sha256": basis_sha256,
+                "absolute_evaluation_basis_members": len(basis_bundle_ids),
+                "comparative_evaluation_basis_sha256": basis_sha256,
+                "comparative_evaluation_basis_members": len(basis_bundle_ids),
+                "pre_receipt_sha256": pre_observation.receipt_digest,
+                "pre_content_sha256": pre_observation.content_id,
+                "post_receipt_sha256": post_observation.receipt_digest,
+                "post_content_sha256": post_observation.content_id,
+                "bracket_binding_sha256": file_sha256(binding_path),
+                "terminal_ledger_head_sha256": store_snapshot.head_digest,
+                "observed_drift_s": format(
+                    Decimal(bracket["acceptance"]["drift"]["observed_s"]),
+                    "f",
+                ),
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "bracket_screen_s": bracket["acceptance"]["drift"]["screen_s"],
+                "applied_allowance_s": allowance["value_s"],
+                "allowance_embedding_count": allowance["embedding_count"],
+                "extraction_report_sha256": file_sha256(report_path),
+                "absolute_floor_full_precision": str(absolute_floor),
+                "comparative_floor_full_precision": str(comparative_floor),
+                "operative_floor_full_precision": str(operative_floor),
+                "absolute_floor_six_decimal": f"{float(absolute_floor):.6f}",
+                "comparative_floor_six_decimal": f"{float(comparative_floor):.6f}",
+                "operative_floor_six_decimal": f"{float(operative_floor):.6f}",
+            }
+        )
+        manifest_cells.append(
+            {
+                "role": role,
+                "absolute": {
+                    "evidence_root": str(evidence_root),
+                    "report": str(report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(order_path),
+                },
+                "comparative": {
+                    "evidence_root": str(evidence_root),
+                    "report": str(report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(order_path),
+                },
+                "allowed_consumer_condition_families": [family],
+            }
+        )
+
+    second_producer = copy.deepcopy(producer)
+    second_producer["plan"].update(
+        {
+            "plan_id": second_plan_id,
+            "sha256": second_plan_sha256,
+            "declared_sha256": second_plan_sha256,
+            "sidecar_sha256": file_sha256(second_sidecar_path),
+        }
+    )
+    second_producer["evidence_root_id"] = second_evidence_root_id
+    second_producer["component_artifact"]["artifact_id"] += "-second"
+    second_pre_observation = store_snapshot.bracket_session_by_id[
+        second_session_id
+    ].finalized_slots["pre"]
+    second_post_observation = store_snapshot.bracket_session_by_id[
+        second_session_id
+    ].finalized_slots["post"]
+    second_allowance = second_bracket["acceptance"]["allowance"]
+    second_manifest_cells = []
+    for cell_pin in second_producer["cells"]:
+        role = cell_pin["role"]
+        cell_pin["cell_id"] += "-second"
+        cell_pin["transport_group_id"] += "-second"
+        for component_name in ("absolute", "comparative"):
+            component_pin = cell_pin[component_name]
+            report_cell = second_report_cells[
+                component_pin["calibration_cell_id"]
+            ]
+            component_pin.update(
+                {
+                    "evidence_root_id": second_evidence_root_id,
+                    "evaluation_basis_sha256": second_basis_sha256,
+                    "order_manifest_id": second_order["manifest_id"],
+                    "order_manifest_sha256": file_sha256(
+                        second_order_path
+                    ),
+                    "members": [
+                        {
+                            "bundle_id": row["bundle_id"],
+                            "config_sha256": row["config_sha256"],
+                        }
+                        for row in report_cell["members"]
+                    ],
+                }
+            )
+        post = cell_pin["postcollection"]
+        absolute_floor = second_report_cells[
+            cell_pin["absolute"]["calibration_cell_id"]
+        ]["floor"]["drift_widened_guarded_floor_j"]
+        comparative_floor = second_report_cells[
+            cell_pin["comparative"]["calibration_cell_id"]
+        ]["floor"]["drift_widened_guarded_floor_j"]
+        operative_floor = max(float(absolute_floor), float(comparative_floor))
+        post.update(
+            {
+                "absolute_evaluation_basis_sha256": second_basis_sha256,
+                "comparative_evaluation_basis_sha256": second_basis_sha256,
+                "pre_receipt_sha256": second_pre_observation.receipt_digest,
+                "pre_content_sha256": second_pre_observation.content_id,
+                "post_receipt_sha256": second_post_observation.receipt_digest,
+                "post_content_sha256": second_post_observation.content_id,
+                "bracket_binding_sha256": file_sha256(second_binding_path),
+                "terminal_ledger_head_sha256": store_snapshot.head_digest,
+                "observed_drift_s": format(
+                    Decimal(
+                        second_bracket["acceptance"]["drift"]["observed_s"]
+                    ),
+                    "f",
+                ),
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "bracket_screen_s": second_bracket["acceptance"]["drift"][
+                    "screen_s"
+                ],
+                "applied_allowance_s": second_allowance["value_s"],
+                "allowance_embedding_count": second_allowance[
+                    "embedding_count"
+                ],
+                "extraction_report_sha256": file_sha256(second_report_path),
+                "absolute_floor_full_precision": str(absolute_floor),
+                "comparative_floor_full_precision": str(comparative_floor),
+                "operative_floor_full_precision": str(operative_floor),
+                "absolute_floor_six_decimal": f"{float(absolute_floor):.6f}",
+                "comparative_floor_six_decimal": (
+                    f"{float(comparative_floor):.6f}"
+                ),
+                "operative_floor_six_decimal": f"{operative_floor:.6f}",
+            }
+        )
+        second_manifest_cells.append(
+            {
+                "role": role,
+                "absolute": {
+                    "evidence_root": str(second_evidence_root),
+                    "report": str(second_report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(second_order_path),
+                },
+                "comparative": {
+                    "evidence_root": str(second_evidence_root),
+                    "report": str(second_report_path),
+                    "spec": str(spec_path),
+                    "order_manifest": str(second_order_path),
+                },
+                "allowed_consumer_condition_families": [
+                    manifest_family_by_role[role]
+                ],
+            }
+        )
+
+    pinset = {
+        "schema_version": generalized.PINSET_SCHEMA_VERSION_V2,
+        "mint_tool_version": generalized.V2_MINT_TOOL_VERSION,
+        "producer_plans": [producer, second_producer],
+        "aggregate": copy.deepcopy(fixture_pinset["aggregate"]),
+    }
+    pinset["aggregate"]["artifact_id"] = "d117-production-authentic-floor"
+    pinset["aggregate"]["plan_set_id"] = "d117-production-plan-set"
+    pinset["aggregate"]["component_artifacts"] = [
+        {
+            "plan_id": item["plan"]["plan_id"],
+            "artifact_id": item["component_artifact"]["artifact_id"],
+            "sha256": "0" * 64,
+            "producer_pin_sha256": "0" * 64,
+        }
+        for item in (producer, second_producer)
+    ]
+    pinset["aggregate"]["cell_ids"] = [
+        cell["cell_id"]
+        for item in (producer, second_producer)
+        for cell in item["cells"]
+    ]
+    pinset["aggregate"]["transport_allowlists"] = [
+        {
+            "transport_group_id": cell["transport_group_id"],
+            "cell_ids": [cell["cell_id"]],
+            "allowed_consumer_condition_families": cell[
+                "allowed_consumer_condition_families"
+            ],
+        }
+        for item in (producer, second_producer)
+        for cell in item["cells"]
+    ]
+    _repair_v2_pinset_self_hashes(pinset)
+    pinset_path, pinset_sha256 = write_pinset(inputs_root, pinset)
+    input_manifest_path = inputs_root / "production-input-manifest.json"
+    _write_fixture_json(
+        input_manifest_path,
+        {
+            "schema_version": "joulewise.floor_mint_inputs.v2",
+            "calibration_acceptance": str(acceptance_path),
+            "calibration_ledger": str(ledger_path),
+            "calibration_ledger_head_pin": str(head_path),
+            "producer_plans": [
+                {
+                    "plan_id": plan_id,
+                    "calibration_plan": str(plan_path),
+                    "calibration_plan_sidecar": str(sidecar_path),
+                    "bracket_binding": str(binding_path),
+                    "cells": manifest_cells,
+                },
+                {
+                    "plan_id": second_plan_id,
+                    "calibration_plan": str(second_plan_path),
+                    "calibration_plan_sidecar": str(second_sidecar_path),
+                    "bracket_binding": str(second_binding_path),
+                    "cells": second_manifest_cells,
+                },
+            ],
+        },
+    )
+    # Freeze the component hashes from one production-authenticated build,
+    # then repair only the independently-defined pinset self hashes.  The
+    # subsequent acceptance test still invokes the unpatched production CLI
+    # from scratch and requires the frozen bytes to verify.
+    bootstrap_code = r'''
+import hashlib, json, sys
+from pathlib import Path
+from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.cli import validate_bundle
+from scripts import mint_floor_artifact_generalized as generalized
+
+loaded = generalized.load_pinset(Path(sys.argv[1]), sys.argv[2])
+if not isinstance(loaded, generalized.V2Pinset):
+    raise AssertionError("production fixture did not form a final v2 pinset")
+with V2AuthenticationReadSession():
+    inputs, _roots, snapshot = generalized._authenticate_v2_inputs(
+        pinset=loaded,
+        pinset_path=Path(sys.argv[1]),
+        pinset_sha256=sys.argv[2],
+        input_manifest_path=Path(sys.argv[3]),
+        strict_validator=lambda path, strict: validate_bundle(path, strict=strict),
+        consumption_semantics_id=None,
+        calibration_custody_store=Path(sys.argv[4]),
+    )
+    _artifact, components = generalized._build_v2_artifacts(
+        pinset=loaded,
+        pinset_path=Path(sys.argv[1]),
+        pinset_sha256=sys.argv[2],
+        producer_inputs=inputs,
+        calibration_ledger_snapshot=snapshot,
+        project_commit=sys.argv[5],
+        project_tree_state="clean",
+        origin_main_contains_head=False,
+        head_pin_commit_contained_in_origin_main=False,
+    )
+hashes = []
+for component in components:
+    payload = (json.dumps(component, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+    hashes.append(hashlib.sha256(payload).hexdigest())
+print("COMPONENT_SHA256S=" + json.dumps(hashes))
+'''
+    bootstrap = _run_fixture_command(
+        [
+            sys.executable,
+            "-c",
+            bootstrap_code,
+            str(pinset_path),
+            pinset_sha256,
+            str(input_manifest_path),
+            str(custody_store),
+            commit,
+        ],
+        cwd=repository,
+    )
+    component_sha256s = json.loads(
+        next(
+            line
+            for line in bootstrap.stdout.splitlines()
+            if line.startswith("COMPONENT_SHA256S=")
+        ).removeprefix("COMPONENT_SHA256S=")
+    )
+    if len(component_sha256s) != 2:
+        raise AssertionError("production fixture did not build two components")
+    for item, entry, component_sha256 in zip(
+        pinset["producer_plans"],
+        pinset["aggregate"]["component_artifacts"],
+        component_sha256s,
+        strict=True,
+    ):
+        item["component_artifact"]["sha256"] = component_sha256
+        entry["sha256"] = component_sha256
+    _repair_v2_pinset_self_hashes(pinset)
+    pinset_path, pinset_sha256 = write_pinset(inputs_root, pinset)
+    return SimpleNamespace(
+        repository=repository,
+        evidence_root=evidence_root,
+        second_evidence_root=second_evidence_root,
+        custody_store=custody_store,
+        inputs_root=inputs_root,
+        pinset_path=pinset_path,
+        pinset_sha256=pinset_sha256,
+        input_manifest_path=input_manifest_path,
+        floor_path=inputs_root / "floor.json",
+        statement_path=inputs_root / "single-count.txt",
+        project_commit=commit,
+        producer=producer,
+        second_producer=second_producer,
+        report_path=report_path,
+        second_report_path=second_report_path,
+        campaign_path=campaign_path,
+        second_campaign_path=second_campaign_path,
+        acceptance_path=acceptance_path,
+        ledger_path=ledger_path,
+        head_path=head_path,
+        binding_path=binding_path,
+        second_binding_path=second_binding_path,
+        spec_path=spec_path,
+        order_path=order_path,
+        second_order_path=second_order_path,
+        plan_path=plan_path,
+        second_plan_path=second_plan_path,
+        bundle_ids=ordered_bundle_ids,
+        basis_bundle_ids=basis_bundle_ids,
+        ledger_snapshot=store_snapshot,
+    )
+
+
 class PinsetTests(unittest.TestCase):
     def test_mint1_pinset_is_exactly_the_original_hard_pin_set(self) -> None:
         pinset = generalized.load_pinset(
@@ -3015,79 +4798,6 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     ):
                         generalized._load_v2_input_manifest(path)
 
-    def test_duplicate_key_campaign_manifest_refuses_even_with_matching_sha(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            pinset_path, pinset_sha256, manifest_path, load_test_core = (
-                install_v2_cli_fixture(root)
-            )
-            input_manifest = load_json(manifest_path)
-            evidence_root = Path(
-                input_manifest["producer_plans"][0]["cells"][0]["absolute"][
-                    "evidence_root"
-                ]
-            )
-            campaign_dir = evidence_root / "campaign_manifests"
-            campaign_dir.mkdir()
-            raw = (
-                b'{"schema_version":"joulewise.campaign_provenance.v1",'
-                b'"members":[],"members":[]}\n'
-            )
-            duplicate_manifest = campaign_dir / "duplicate.json"
-            duplicate_manifest.write_bytes(raw)
-            descriptor = {
-                "path": "campaign_manifests/duplicate.json",
-                "sha256": hashlib.sha256(raw).hexdigest(),
-            }
-            report_path = Path(
-                input_manifest["producer_plans"][0]["cells"][0]["absolute"][
-                    "report"
-                ]
-            )
-            referenced_bundle_id = load_json(report_path)["cells"][0][
-                "members"
-            ][0]["bundle_id"]
-            (evidence_root / "campaign_log.jsonl").write_text(
-                json.dumps(
-                    {
-                        "record_type": "idle_admission_whole_window_verdict",
-                        "bundle_ids": [referenced_bundle_id],
-                        "row_provenance": {
-                            "source_campaign_manifests": [descriptor]
-                        }
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            self.assertEqual(
-                hashlib.sha256(duplicate_manifest.read_bytes()).hexdigest(),
-                descriptor["sha256"],
-            )
-            loaded = generalized.load_pinset(pinset_path, pinset_sha256)
-            self.assertIsInstance(loaded, generalized.V2Pinset)
-            with (
-                mock.patch.object(
-                    generalized,
-                    "_fresh_original_core",
-                    side_effect=load_test_core,
-                ),
-                self.assertRaisesRegex(
-                    generalized.MintError,
-                    "campaign manifest.*duplicate JSON key",
-                ),
-            ):
-                generalized._authenticate_v2_inputs(
-                    pinset=loaded,
-                    pinset_path=pinset_path,
-                    pinset_sha256=pinset_sha256,
-                    input_manifest_path=manifest_path,
-                    strict_validator=lambda _path, _strict: [],
-                    consumption_semantics_id=None,
-                )
-
     def test_unreferenced_junk_json_in_runs_root_does_not_refuse_mint(
         self,
     ) -> None:
@@ -3376,182 +5086,545 @@ class V2PinsetAndMintTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            pinset_path, pinset_sha256, manifest_path, load_test_core = (
-                install_production_extracted_v2_cli_fixture(root)
-            )
-            input_manifest = load_json(manifest_path)
-            source_pinset = load_json(pinset_path)
+            fixture = build_d117_production_fixture(root)
+            source_pinset = load_json(fixture.pinset_path)
+            input_manifest = load_json(fixture.input_manifest_path)
+            report_path = fixture.report_path
+            original_report_raw = report_path.read_bytes()
 
-            def cli_args(
+            def write_attack_pinset(
+                label: str, value: dict
+            ) -> tuple[Path, str]:
+                destination = fixture.inputs_root / f"pinset-{label}"
+                destination.mkdir(exist_ok=True)
+                return write_pinset(destination, value)
+
+            def cli_command(
                 label: str,
-                path: Path = pinset_path,
-                digest: str = pinset_sha256,
-            ) -> list[str]:
-                return [
-                    "--pinset",
-                    str(path),
-                    "--pinset-sha256",
-                    digest,
-                    "--v2-input-manifest",
-                    str(manifest_path),
-                    "--out",
-                    str(root / f"{label}-floor.json"),
-                    "--single-count-out",
-                    str(root / f"{label}-single-count.txt"),
-                    "--project-commit",
-                    "0" * 40,
-                    "--project-tree-state",
-                    "clean",
-                ]
+                pinset_path: Path = fixture.pinset_path,
+                pinset_sha256: str = fixture.pinset_sha256,
+                input_manifest_path: Path | None = None,
+                project_commit: str | None = None,
+            ) -> tuple[list[str], Path, Path]:
+                floor = fixture.inputs_root / f"{label}-floor.json"
+                statement = fixture.inputs_root / f"{label}-single-count.txt"
+                return (
+                    [
+                        sys.executable,
+                        "scripts/mint_floor_artifact_generalized.py",
+                        "--pinset",
+                        str(pinset_path),
+                        "--pinset-sha256",
+                        pinset_sha256,
+                        "--v2-input-manifest",
+                        str(input_manifest_path or fixture.input_manifest_path),
+                        "--calibration-custody-store",
+                        str(fixture.custody_store),
+                        "--out",
+                        str(floor),
+                        "--single-count-out",
+                        str(statement),
+                        "--project-commit",
+                        project_commit or fixture.project_commit,
+                        "--project-tree-state",
+                        "clean",
+                    ],
+                    floor,
+                    statement,
+                )
 
-            with (
-                mock.patch.object(
-                    generalized,
-                    "_actual_v2_git_state",
-                    return_value=("0" * 40, True),
-                ),
-                mock.patch.object(
-                    generalized,
-                    "_head_pin_commit_containment_in_origin_main",
-                    return_value=True,
-                ),
-                mock.patch.object(
-                    generalized,
-                    "_fresh_original_core",
-                    side_effect=load_test_core,
-                ),
-                mock.patch.object(
-                    generalized,
-                    "_authenticate_v2_inputs",
-                    wraps=generalized._authenticate_v2_inputs,
-                ) as authenticate_inputs,
-            ):
-                self.assertEqual(generalized.main(cli_args("authentic")), 0)
-                self.assertTrue((root / "authentic-floor.json").is_file())
-                self.assertEqual(
-                    len(load_json(root / "authentic-floor.json")["cells"]),
-                    4,
+            def run_refusal(
+                label: str,
+                message: str,
+                pinset_path: Path = fixture.pinset_path,
+                pinset_sha256: str = fixture.pinset_sha256,
+                input_manifest_path: Path | None = None,
+                project_commit: str | None = None,
+            ) -> str:
+                command, floor, statement = cli_command(
+                    label,
+                    pinset_path,
+                    pinset_sha256,
+                    input_manifest_path,
+                    project_commit,
                 )
-                self.assertGreater(authenticate_inputs.call_count, 0)
+                result = _run_fixture_command(
+                    command, cwd=fixture.repository, expected={2}
+                )
+                self.assertIn(message, result.stderr)
+                self.assertFalse(floor.exists())
+                self.assertFalse(statement.exists())
+                return result.stderr
 
-                first_manifest_producer = input_manifest["producer_plans"][0]
-                report_path = Path(
-                    first_manifest_producer["cells"][0]["absolute"]["report"]
-                )
-                original_report_raw = report_path.read_bytes()
-                attacked_report = load_json(report_path)
-                self.assertIn(
-                    "production-extractor-", attacked_report["runs_root"]
-                )
-                self.assertEqual(len(attacked_report["cells"]), 4)
-                report_cells = {
-                    cell["cell_id"]: cell for cell in attacked_report["cells"]
-                }
-                for report_cell in attacked_report["cells"]:
-                    report_cell["floor"][
-                        "drift_widened_guarded_floor_j"
-                    ] += 0.000001
-                    report_cell["operative_floor_j"] += 0.000001
-                report_path.write_text(
-                    json.dumps(attacked_report, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8",
-                )
-                attacked_report_sha256 = file_sha256(report_path)
-                attacked_pinset = copy.deepcopy(source_pinset)
-                for cell_pin in attacked_pinset["producer_plans"][0]["cells"]:
-                    absolute_floor = report_cells[
-                        cell_pin["absolute"]["calibration_cell_id"]
-                    ]["floor"]["drift_widened_guarded_floor_j"]
-                    comparative_floor = report_cells[
-                        cell_pin["comparative"]["calibration_cell_id"]
-                    ]["floor"]["drift_widened_guarded_floor_j"]
-                    operative_floor = max(absolute_floor, comparative_floor)
-                    cell_pin["postcollection"].update(
-                        {
-                            "extraction_report_sha256": attacked_report_sha256,
-                            "absolute_floor_full_precision": str(absolute_floor),
-                            "comparative_floor_full_precision": str(
-                                comparative_floor
-                            ),
-                            "operative_floor_full_precision": str(operative_floor),
-                            "absolute_floor_six_decimal": f"{absolute_floor:.6f}",
-                            "comparative_floor_six_decimal": (
-                                f"{comparative_floor:.6f}"
-                            ),
-                            "operative_floor_six_decimal": (
-                                f"{operative_floor:.6f}"
-                            ),
-                        }
-                    )
-                _repair_v2_pinset_self_hashes(attacked_pinset)
-                attacked_path, attacked_digest = write_pinset(
-                    root, attacked_pinset
-                )
-                stderr = io.StringIO()
-                with mock.patch("sys.stderr", stderr):
-                    exit_code = generalized.main(
-                        cli_args("coordinated", attacked_path, attacked_digest)
-                    )
-                self.assertEqual(exit_code, 2)
-                self.assertIn(
-                    "report cell floor differs from authenticated absolute member evidence",
-                    stderr.getvalue(),
-                )
-                self.assertFalse((root / "coordinated-floor.json").exists())
-                report_path.write_bytes(original_report_raw)
-                clean_path, clean_digest = write_pinset(root, source_pinset)
+            authentic_command, authentic_floor, authentic_statement = (
+                cli_command("authentic")
+            )
+            _run_fixture_command(authentic_command, cwd=fixture.repository)
+            self.assertEqual(len(load_json(authentic_floor)["cells"]), 4)
+            self.assertTrue(authentic_statement.is_file())
+            self.assertEqual(
+                _run_fixture_command(
+                    ["git", "status", "--porcelain"], cwd=fixture.repository
+                ).stdout,
+                "",
+            )
 
-                evidence_paths = {
-                    "acceptance": Path(input_manifest["calibration_acceptance"]),
-                    "ledger": Path(input_manifest["calibration_ledger"]),
-                    "binding": Path(
-                        first_manifest_producer["bracket_binding"]
-                    ),
-                    "verdict": Path(attacked_report["runs_root"])
-                    / "campaign_log.jsonl",
-                }
-                expected_messages = {
-                    "acceptance": "calibration acceptance evidence is not authenticated",
-                    "ledger": "calibration ledger snapshot is not authenticated",
-                    "binding": "bracket binding failed authenticated validation",
-                    "verdict": "campaign log must contain exactly one evaluation basis",
-                }
-                for label, evidence_path in evidence_paths.items():
-                    with self.subTest(source=label):
-                        original_raw = evidence_path.read_bytes()
-                        if label == "ledger":
-                            evidence_path.write_bytes(original_raw + b"{}\n")
-                        elif label == "verdict":
-                            rows = [
-                                json.loads(line)
-                                for line in original_raw.decode("utf-8").splitlines()
-                            ]
-                            basis_row = next(
-                                row for row in rows if "evaluation_basis" in row
-                            )
-                            basis_row["evaluation_basis"]["sha256"] = "f" * 64
-                            evidence_path.write_text(
-                                "".join(
-                                    json.dumps(row) + "\n" for row in rows
-                                ),
-                                encoding="utf-8",
-                            )
-                        else:
-                            value = json.loads(original_raw)
-                            value["attack_marker"] = label
-                            evidence_path.write_text(
-                                json.dumps(value) + "\n", encoding="utf-8"
-                            )
-                        stderr = io.StringIO()
-                        with mock.patch("sys.stderr", stderr):
-                            source_exit_code = generalized.main(
-                                cli_args(label, clean_path, clean_digest)
-                            )
-                        self.assertEqual(source_exit_code, 2)
-                        self.assertIn(
-                            expected_messages[label], stderr.getvalue()
+            audit_floor = fixture.inputs_root / "audit-floor.json"
+            audit_statement = fixture.inputs_root / "audit-single-count.txt"
+            audit_code = r'''
+import builtins, io, json, os, stat, sys
+from pathlib import Path
+from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.cli import validate_bundle
+from scripts.mint_floor_artifact_generalized import mint_multi_cell_floor_artifact
+
+roots = tuple(Path(value).resolve() for value in sys.argv[1:6])
+observed = set()
+original_builtin_open = builtins.open
+original_io_open = io.open
+original_os_open = os.open
+
+def keep(path):
+    candidate = Path(path).resolve(strict=False)
+    return (
+        any(candidate == root or root in candidate.parents for root in roots)
+        and ".git" not in candidate.parts
+        and "__pycache__" not in candidate.parts
+        and candidate.suffix != ".pyc"
+    )
+
+def note(file, mode):
+    if isinstance(file, (str, bytes, os.PathLike)) and ("r" in mode or "+" in mode):
+        candidate = Path(file).resolve(strict=False)
+        if keep(candidate):
+            observed.add(str(candidate))
+
+def builtin_open(file, mode="r", *args, **kwargs):
+    handle = original_builtin_open(file, mode, *args, **kwargs)
+    note(file, mode)
+    return handle
+
+def io_open(file, mode="r", *args, **kwargs):
+    handle = original_io_open(file, mode, *args, **kwargs)
+    note(file, mode)
+    return handle
+
+def os_open(file, flags, mode=0o777, *, dir_fd=None):
+    descriptor = original_os_open(file, flags, mode, dir_fd=dir_fd)
+    if not flags & (os.O_WRONLY | os.O_RDWR) and stat.S_ISREG(os.fstat(descriptor).st_mode):
+        candidate = Path(file)
+        if dir_fd is not None and not candidate.is_absolute():
+            candidate = Path(os.readlink(f"/dev/fd/{dir_fd}")) / candidate
+        candidate = candidate.resolve(strict=False)
+        if keep(candidate):
+            observed.add(str(candidate))
+    return descriptor
+
+builtins.open = builtin_open
+io.open = io_open
+os.open = os_open
+session = V2AuthenticationReadSession()
+try:
+    with session:
+        mint_multi_cell_floor_artifact(
+            pinset_path=Path(sys.argv[6]),
+            pinset_sha256=sys.argv[7],
+            input_manifest_path=Path(sys.argv[8]),
+            calibration_custody_store=Path(sys.argv[9]),
+            floor_path=Path(sys.argv[10]),
+            statement_path=Path(sys.argv[11]),
+            project_commit=sys.argv[12],
+            project_tree_state="clean",
+            strict_validator=lambda path, strict: validate_bundle(path, strict=strict),
+        )
+finally:
+    builtins.open = original_builtin_open
+    io.open = original_io_open
+    os.open = original_os_open
+registered = {
+    identity for identity in session.records
+    if not identity.startswith("git:") and keep(identity)
+}
+print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(registered)}))
+'''
+            audit_result = _run_fixture_command(
+                [
+                    sys.executable,
+                    "-c",
+                    audit_code,
+                    str(fixture.repository),
+                    str(fixture.evidence_root),
+                    str(fixture.second_evidence_root),
+                    str(fixture.custody_store),
+                    str(fixture.inputs_root),
+                    str(fixture.pinset_path),
+                    fixture.pinset_sha256,
+                    str(fixture.input_manifest_path),
+                    str(fixture.custody_store),
+                    str(audit_floor),
+                    str(audit_statement),
+                    fixture.project_commit,
+                ],
+                cwd=fixture.repository,
+            )
+            audit_line = next(
+                line
+                for line in audit_result.stdout.splitlines()
+                if line.startswith("AUDIT=")
+            )
+            audit = json.loads(audit_line.removeprefix("AUDIT="))
+            self.assertEqual(audit["observed"], audit["registered"])
+
+            genuine_paths = [
+                fixture.acceptance_path,
+                fixture.ledger_path,
+                fixture.head_path,
+                fixture.binding_path,
+                fixture.second_binding_path,
+                fixture.campaign_path,
+                fixture.second_campaign_path,
+            ]
+            for bundle_id in fixture.basis_bundle_ids:
+                genuine_paths.extend(
+                    path
+                    for path in (fixture.evidence_root / bundle_id).rglob("*")
+                    if path.is_file()
+                )
+                genuine_paths.extend(
+                    path
+                    for path in (
+                        fixture.second_evidence_root / bundle_id
+                    ).rglob("*")
+                    if path.is_file()
+                )
+            genuine_inventory = {
+                str(path): file_sha256(path) for path in genuine_paths
+            }
+
+            attacked_report = json.loads(original_report_raw)
+            attacked_report["floor_mint_postcollection"] = {
+                "observed_drift_s": "999.000000",
+                "applied_allowance_s": "999.000000",
+            }
+            for report_cell in attacked_report["cells"]:
+                report_cell["floor"][
+                    "drift_widened_guarded_floor_j"
+                ] += 0.000001
+                report_cell["operative_floor_j"] += 0.000001
+            _write_fixture_json(report_path, attacked_report)
+            attacked_report_sha256 = file_sha256(report_path)
+            attacked_pinset = copy.deepcopy(source_pinset)
+            attacked_cells = {
+                cell["cell_id"]: cell for cell in attacked_report["cells"]
+            }
+            for cell_pin in attacked_pinset["producer_plans"][0]["cells"]:
+                absolute_floor = attacked_cells[
+                    cell_pin["absolute"]["calibration_cell_id"]
+                ]["floor"]["drift_widened_guarded_floor_j"]
+                comparative_floor = attacked_cells[
+                    cell_pin["comparative"]["calibration_cell_id"]
+                ]["floor"]["drift_widened_guarded_floor_j"]
+                operative_floor = max(absolute_floor, comparative_floor)
+                post = cell_pin["postcollection"]
+                post.update(
+                    {
+                        "observed_drift_s": "999.000000",
+                        "applied_allowance_s": "999.000000",
+                        "extraction_report_sha256": attacked_report_sha256,
+                        "absolute_floor_full_precision": str(absolute_floor),
+                        "comparative_floor_full_precision": str(
+                            comparative_floor
+                        ),
+                        "operative_floor_full_precision": str(operative_floor),
+                        "absolute_floor_six_decimal": f"{absolute_floor:.6f}",
+                        "comparative_floor_six_decimal": (
+                            f"{comparative_floor:.6f}"
+                        ),
+                        "operative_floor_six_decimal": f"{operative_floor:.6f}",
+                    }
+                )
+            _repair_v2_pinset_self_hashes(attacked_pinset)
+            attacked_path, attacked_digest = write_attack_pinset(
+                "coordinated-step8", attacked_pinset
+            )
+            attacked_loaded = generalized.load_pinset(
+                attacked_path, attacked_digest
+            )
+            self.assertIsInstance(attacked_loaded, generalized.V2Pinset)
+            generalized._validate_v2_pin_hashes(attacked_loaded)
+            self.assertEqual(
+                attacked_pinset["producer_plans"][0]["cells"][0][
+                    "postcollection"
+                ]["extraction_report_sha256"],
+                file_sha256(report_path),
+            )
+            self.assertEqual(
+                {str(path): file_sha256(path) for path in genuine_paths},
+                genuine_inventory,
+            )
+            self.assertEqual(
+                _run_fixture_command(
+                    ["git", "status", "--porcelain"],
+                    cwd=fixture.repository,
+                ).stdout,
+                "",
+            )
+            run_refusal(
+                "coordinated-step8",
+                "floor_mint_postcollection",
+                attacked_path,
+                attacked_digest,
+            )
+            self.assertEqual(
+                {str(path): file_sha256(path) for path in genuine_paths},
+                genuine_inventory,
+            )
+
+            attacked_report.pop("floor_mint_postcollection")
+            _write_fixture_json(report_path, attacked_report)
+            for cell_pin in attacked_pinset["producer_plans"][0]["cells"]:
+                cell_pin["postcollection"]["extraction_report_sha256"] = (
+                    file_sha256(report_path)
+                )
+            _repair_v2_pinset_self_hashes(attacked_pinset)
+            attacked_path, attacked_digest = write_attack_pinset(
+                "coordinated-step9", attacked_pinset
+            )
+            run_refusal(
+                "coordinated-step9",
+                "report cell floor differs from authenticated",
+                attacked_path,
+                attacked_digest,
+            )
+
+            report_path.write_bytes(original_report_raw)
+            for cell_pin in attacked_pinset["producer_plans"][0]["cells"]:
+                cell_pin["postcollection"]["extraction_report_sha256"] = (
+                    file_sha256(report_path)
+                )
+            _repair_v2_pinset_self_hashes(attacked_pinset)
+            attacked_path, attacked_digest = write_attack_pinset(
+                "coordinated-step10", attacked_pinset
+            )
+            run_refusal(
+                "coordinated-step10",
+                "observed_drift_s mismatch against domain-owned verification projection",
+                attacked_path,
+                attacked_digest,
+            )
+
+            precision_pinset = copy.deepcopy(source_pinset)
+            precision_post = precision_pinset["producer_plans"][0]["cells"][0][
+                "postcollection"
+            ]
+            precision_post["absolute_floor_full_precision"] = str(
+                float(precision_post["absolute_floor_full_precision"]) + 1e-9
+            )
+            _repair_v2_pinset_self_hashes(precision_pinset)
+            precision_path, precision_digest = write_attack_pinset(
+                "coordinated-step10-floor", precision_pinset
+            )
+            run_refusal(
+                "coordinated-step10-floor",
+                "absolute_floor_full_precision mismatch",
+                precision_path,
+                precision_digest,
+            )
+
+            allowance_report = json.loads(original_report_raw)
+            allowance_cell = allowance_report["cells"][0]
+            allowance_cell["whole_window_drift_allowance"]["allowance_j"] += 1.0
+            allowance_cell["floor"]["whole_window_drift_allowance_j"] += 1.0
+            allowance_cell["floor"][
+                "whole_window_drift_allowance_provenance"
+            ]["allowance_j"] += 1.0
+            _write_fixture_json(report_path, allowance_report)
+            allowance_pinset = copy.deepcopy(source_pinset)
+            for cell_pin in allowance_pinset["producer_plans"][0]["cells"]:
+                cell_pin["postcollection"]["extraction_report_sha256"] = (
+                    file_sha256(report_path)
+                )
+            _repair_v2_pinset_self_hashes(allowance_pinset)
+            allowance_path, allowance_digest = write_attack_pinset(
+                "coordinated-allowance", allowance_pinset
+            )
+            run_refusal(
+                "coordinated-allowance",
+                "whole-window drift allowance",
+                allowance_path,
+                allowance_digest,
+            )
+            report_path.write_bytes(original_report_raw)
+            self.assertEqual(
+                {str(path): file_sha256(path) for path in genuine_paths},
+                genuine_inventory,
+            )
+
+            first_manifest_producer = input_manifest["producer_plans"][0]
+            campaign_manifest_path = (
+                fixture.evidence_root
+                / "campaign_manifests"
+                / "d117-production.json"
+            )
+            primary_summary_path = (
+                fixture.evidence_root
+                / fixture.bundle_ids[0]
+                / "summary_metrics.json"
+            )
+            newest_session = fixture.ledger_snapshot.bracket_session_by_id[
+                "d117-production-session-second"
+            ]
+            custody_artifact_path = (
+                fixture.custody_store
+                / newest_session.finalized_slots["pre"].content_id
+                / "manifest.json"
+            )
+            attacked_acceptance_path = (
+                fixture.inputs_root / "domain-acceptance.json"
+            )
+            attacked_acceptance_path.write_bytes(
+                fixture.acceptance_path.read_bytes()
+            )
+            domain_paths = {
+                "acceptance": attacked_acceptance_path,
+                "ledger": fixture.ledger_path,
+                "head": fixture.head_path,
+                "binding": Path(first_manifest_producer["bracket_binding"]),
+                "verdict": fixture.campaign_path,
+                "campaign": campaign_manifest_path,
+                "primary": primary_summary_path,
+                "report": report_path,
+                "custody": custody_artifact_path,
+            }
+            domain_messages = {
+                "acceptance": "calibration acceptance",
+                "ledger": "calibration ledger",
+                "head": "head pin",
+                "binding": "bracket binding",
+                "verdict": "evaluation basis",
+                "campaign": "campaign",
+                "primary": "bundle_sha256",
+                "report": "floor_mint_postcollection",
+                "custody": "custody",
+            }
+            for label, evidence_path in domain_paths.items():
+                with self.subTest(domain=label):
+                    original_raw = evidence_path.read_bytes()
+                    matrix_pinset = source_pinset
+                    matrix_path = fixture.pinset_path
+                    matrix_digest = fixture.pinset_sha256
+                    matrix_manifest_path: Path | None = None
+                    matrix_project_commit: str | None = None
+                    if label == "ledger":
+                        evidence_path.write_bytes(original_raw + b"{}\n")
+                    elif label == "verdict":
+                        rows = [
+                            json.loads(line)
+                            for line in original_raw.decode("utf-8").splitlines()
+                        ]
+                        verdict_row = next(
+                            row for row in rows if "evaluation_basis" in row
                         )
+                        verdict_row["evaluation_basis"]["sha256"] = "f" * 64
+                        evidence_path.write_text(
+                            "".join(
+                                json.dumps(row, sort_keys=True, separators=(",", ":"))
+                                + "\n"
+                                for row in rows
+                            ),
+                            encoding="utf-8",
+                        )
+                    elif label in {"campaign", "primary", "custody"}:
+                        evidence_path.write_bytes(original_raw + b"\n")
+                    else:
+                        value = json.loads(original_raw)
+                        value["floor_mint_postcollection"] = label
+                        _write_fixture_json(evidence_path, value)
+                        if label == "report":
+                            matrix_pinset = copy.deepcopy(source_pinset)
+                            for cell_pin in matrix_pinset["producer_plans"][0][
+                                "cells"
+                            ]:
+                                cell_pin["postcollection"][
+                                    "extraction_report_sha256"
+                                ] = file_sha256(evidence_path)
+                            _repair_v2_pinset_self_hashes(matrix_pinset)
+                            matrix_path, matrix_digest = write_attack_pinset(
+                                "domain-report", matrix_pinset
+                            )
+                        elif label == "acceptance":
+                            matrix_manifest = copy.deepcopy(input_manifest)
+                            matrix_manifest["calibration_acceptance"] = str(
+                                evidence_path
+                            )
+                            matrix_manifest_path = (
+                                fixture.inputs_root
+                                / "domain-acceptance-input-manifest.json"
+                            )
+                            _write_fixture_json(
+                                matrix_manifest_path, matrix_manifest
+                            )
+                        elif label == "head":
+                            _run_fixture_command(
+                                ["git", "add", str(evidence_path)],
+                                cwd=fixture.repository,
+                            )
+                            _run_fixture_command(
+                                [
+                                    "git",
+                                    "commit",
+                                    "-q",
+                                    "-m",
+                                    "mutate committed head for domain test",
+                                ],
+                                cwd=fixture.repository,
+                            )
+                            matrix_project_commit = _run_fixture_command(
+                                ["git", "rev-parse", "HEAD"],
+                                cwd=fixture.repository,
+                            ).stdout.strip()
+                    try:
+                        run_refusal(
+                            f"domain-{label}",
+                            domain_messages[label],
+                            matrix_path,
+                            matrix_digest,
+                            matrix_manifest_path,
+                            matrix_project_commit,
+                        )
+                    finally:
                         evidence_path.write_bytes(original_raw)
+                        if label == "head":
+                            _run_fixture_command(
+                                ["git", "add", str(evidence_path)],
+                                cwd=fixture.repository,
+                            )
+                            _run_fixture_command(
+                                [
+                                    "git",
+                                    "commit",
+                                    "-q",
+                                    "-m",
+                                    "restore committed head after domain test",
+                                ],
+                                cwd=fixture.repository,
+                            )
+                            fixture.project_commit = _run_fixture_command(
+                                ["git", "rev-parse", "HEAD"],
+                                cwd=fixture.repository,
+                            ).stdout.strip()
+            self.assertEqual(
+                {str(path): file_sha256(path) for path in genuine_paths},
+                genuine_inventory,
+            )
+
+            self.assertEqual(
+                _run_fixture_command(
+                    ["git", "status", "--porcelain"],
+                    cwd=fixture.repository,
+                ).stdout,
+                "",
+            )
 
     def test_verdict_bracket_refuses_repin_to_earlier_authentic_session(
         self,

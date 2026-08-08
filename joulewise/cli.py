@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from joulewise.authentication_io import (
+    active_v2_authentication_session,
     read_authentication_input,
     read_authentication_text,
 )
@@ -413,6 +414,12 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
+    authentication_session = active_v2_authentication_session()
+    physics_cache = (
+        authentication_session.instrument_calibration_physics_cache
+        if authentication_session is not None
+        else None
+    )
     axi_selected = (
         isinstance(raw_config, dict)
         and raw_config.get("schema_extensions")
@@ -453,6 +460,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             fresh = reduce_bundle(
                 reader.path,
                 reducer_version=comparison_axi_version,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
         except (ValueError, SchemaError) as exc:
             return [
@@ -537,11 +545,13 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             reduce_bundle(
                 reader.path,
                 reducer_version=SUMMARY_REDUCER_VERSION,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
             if comparison_reducer_version is None
             else reduce_bundle(
                 reader.path,
                 reducer_version=comparison_reducer_version,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
         )
         # The fresh current derivation is the raw/metadata authority. Inspect it

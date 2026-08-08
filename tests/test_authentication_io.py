@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import builtins
 import hashlib
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from joulewise.authentication_io import (
     read_authentication_input,
     read_authentication_input_nofollow,
     sha256_authentication_input,
+    v2_authentication_path,
 )
 
 
@@ -42,6 +44,16 @@ NON_AUTHENTICATION_WRITERS = {
     "_open_ledger_lock",
     "bootstrap_historical_import",
 }
+ISSUED_REDUCE_SHA256 = (
+    "5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615"
+)
+ISSUED_REDUCE_DIRECT_READS = (
+    "_derive_anchor_context:1780:read_bytes",
+    "_verify_instrument_calibration:1229:read_bytes",
+    "_verify_instrument_calibration:1252:read_bytes",
+    "_verify_instrument_calibration:1295:read_bytes",
+    "_verify_instrument_calibration:1472:read_bytes",
+)
 
 
 class V2AuthenticationReadSessionTests(unittest.TestCase):
@@ -204,8 +216,82 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
                 raw,
             )
 
+    def test_path_capability_preserves_derivation_and_readable_operations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            nested = root / "nested"
+            nested.mkdir()
+            path = nested / "input.json"
+            raw = b'{"value":1}\n'
+            path.write_bytes(raw)
+            self.assertIs(type(v2_authentication_path(root)), type(root))
+            with V2AuthenticationReadSession() as session:
+                capability = v2_authentication_path(root)
+                derived = (capability / "nested" / "input.json").resolve()
+                self.assertIs(type(derived), type(capability))
+                self.assertIs(type(derived.parent), type(capability))
+                self.assertEqual(derived.read_bytes(), raw)
+                self.assertEqual(derived.read_text(), raw.decode("utf-8"))
+                with derived.open("rb") as handle:
+                    self.assertEqual(handle.read(), raw)
+                record = session.records[str(path.resolve())]
+                self.assertEqual(record.grammar, "json")
+                self.assertEqual(record.read_count, 3)
+
+    def test_issued_reducer_aba_read_refuses_transient_bytes(self) -> None:
+        from joulewise.bundle_read import BundleReader
+        from joulewise.reduce import _derive_anchor_context
+
+        fixture = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / "bundle"
+            shutil.copytree(fixture, bundle)
+            raw_path = bundle / "raw" / "powermetrics.plist"
+            authentic = raw_path.read_bytes()
+            transient = authentic.replace(b"2026-", b"2025-", 1)
+            self.assertNotEqual(transient, authentic)
+            reader = BundleReader(bundle)
+            metadata = reader.metadata()
+            with V2AuthenticationReadSession() as session:
+                # The boundary sees A, just as the rejected pre-hash design did.
+                read_authentication_input(raw_path, grammar="raw", label="boundary A")
+                raw_path.write_bytes(transient)
+                try:
+                    with self.assertRaisesRegex(
+                        V2AuthenticationInputError,
+                        V2_AUTHENTICATION_INPUT_CHANGED,
+                    ):
+                        _derive_anchor_context(
+                            reader,
+                            metadata,
+                            reducer_version="0.5.2",
+                        )
+                finally:
+                    # Restore A before the hypothetical post-return boundary.
+                    raw_path.write_bytes(authentic)
+                self.assertEqual(raw_path.read_bytes(), authentic)
+                self.assertEqual(
+                    session.records[str(raw_path.resolve())].read_count,
+                    1,
+                )
+
 
 class AuthenticationSurfaceGuardTests(unittest.TestCase):
+    def test_issued_reducer_sha_and_five_direct_reads_are_characterized(self) -> None:
+        path = REPO_ROOT / "joulewise" / "reduce.py"
+        raw = path.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), ISSUED_REDUCE_SHA256)
+        self.assertEqual(
+            direct_read_violations(
+                raw.decode("utf-8"),
+                marked_functions={
+                    "_verify_instrument_calibration",
+                    "_derive_anchor_context",
+                },
+            ),
+            ISSUED_REDUCE_DIRECT_READS,
+        )
+
     def test_marked_v2_surface_has_no_direct_readable_io(self) -> None:
         violations: list[str] = []
         for relative in AUTHENTICATION_SURFACE:
@@ -216,13 +302,15 @@ class AuthenticationSurfaceGuardTests(unittest.TestCase):
                 for node in ast.walk(tree)
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             } - NON_AUTHENTICATION_WRITERS
-            violations.extend(
-                f"{relative}:{item}"
-                for item in direct_read_violations(
-                    source,
-                    marked_functions=names,
-                )
-            )
+            direct = direct_read_violations(source, marked_functions=names)
+            source_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+            if (relative, source_sha256) == (
+                "joulewise/reduce.py",
+                ISSUED_REDUCE_SHA256,
+            ):
+                self.assertEqual(direct, ISSUED_REDUCE_DIRECT_READS)
+                continue
+            violations.extend(f"{relative}:{item}" for item in direct)
         self.assertEqual(violations, [])
 
     def test_guard_distinguishes_readable_and_output_only_open(self) -> None:

@@ -1,0 +1,1040 @@
+{
+  "all_pulses_detected": false,
+  "anchor_method_version": "powermetrics_native_second_censored_intersection_v1",
+  "artifact_sha256": {
+    "events.jsonl": "10e9035731a2d54a9469c66318568b6f2e91a0ac3fecdbfad94dfb62c22bf0fc",
+    "power_trace.csv": "cbb01b679edd7dd5677f31babb0d462dacc1aba0a203aec022f775799dd32b1e",
+    "raw/powermetrics.plist": "c39bc0c6c55a3deabdffdf8bfdad95e061fb464def586edafdc19dbd1d8ea5c2"
+  },
+  "b_fiducial_s": null,
+  "baseline_w": 0.0,
+  "binding_evidence": {
+    "binding_vector_sha256": "3b5ac00c61352b81b303610a60371d94f95b93011e6146d715ee4ce1fd8e3d0c",
+    "power_policy": {
+      "id": "ac_high_power"
+    },
+    "powermetrics_binary": {
+      "path": "/usr/bin/powermetrics",
+      "sha256": "d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69"
+    },
+    "schema_version": "joulewise.instrument_binding_evidence.v1"
+  },
+  "bindings": {
+    "anchor_method_version": "powermetrics_native_second_censored_intersection_v1",
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "hardware_model": "Mac15,9",
+    "mlx_version": "0.31.2",
+    "os_build": "25F84",
+    "power_policy": "ac_high_power",
+    "powermetrics_sha256": "d1dccad0d0a8016d38bd584bdae283566723096162f06ef663debb4a5762fe69",
+    "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+    "sampling_interval_ms": 100
+  },
+  "capture_wall_time_s": 1785571687.154851,
+  "clock_anchor": {
+    "clock_stamps": {
+      "first_parse": {
+        "epoch_s": 1785571686.804157,
+        "monotonic_after_s": 1071773.311642875,
+        "monotonic_before_s": 1071773.311641708,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "post_parse": {
+        "epoch_s": 1785571883.9474702,
+        "monotonic_after_s": 1071970.457312541,
+        "monotonic_before_s": 1071970.457311916,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "pre_spawn": {
+        "epoch_s": 1785571685.722303,
+        "monotonic_after_s": 1071772.22977575,
+        "monotonic_before_s": 1071772.229774791,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "sampling_started": {
+        "epoch_s": 1785571687.154851,
+        "monotonic_after_s": 1071773.662341166,
+        "monotonic_before_s": 1071773.662340416,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      },
+      "sampling_stopped": {
+        "epoch_s": 1785571883.942639,
+        "monotonic_after_s": 1071970.452482125,
+        "monotonic_before_s": 1071970.452481375,
+        "monotonic_resolution_s": 4.166666666666666e-08,
+        "wall_resolution_s": 1.0000000000000002e-06
+      }
+    },
+    "detail": "native_intersection_empty",
+    "method": "powermetrics_native_second_censored_intersection_v1",
+    "reason": "clock_anchor_unresolved",
+    "status": "unknown"
+  },
+  "clock_anchor_resolved": false,
+  "max_age_s": 86400,
+  "protocol_id": "powermetrics_pulse_fiducial_v3",
+  "pulse_count": 59,
+  "pulses": [
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 0,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 1,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 2,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 3,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 4,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 5,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 6,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 7,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 8,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 9,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 10,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 11,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0162922,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 12,
+      "reasons": [
+        "plateau_below_minimum"
+      ],
+      "robust_snr": 16.2922
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 13,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 14,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 15,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 16,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 17,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 18,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 19,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 20,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 21,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 22,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 23,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 24,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 25,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 26,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 27,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 28,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 29,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 30,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 31,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0317845,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 32,
+      "reasons": [
+        "plateau_below_minimum"
+      ],
+      "robust_snr": 31.7845
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 33,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 34,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 35,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 36,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 37,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 38,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 39,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 40,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 41,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 42,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 43,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 44,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 45,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 46,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 47,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 48,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 49,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 50,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 51,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.08196780000000001,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 52,
+      "reasons": [
+        "plateau_below_minimum"
+      ],
+      "robust_snr": 81.96780000000001
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 53,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 54,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 55,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 56,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 57,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    },
+    {
+      "amplitude_w": 0.0,
+      "delta_off_s": null,
+      "delta_on_s": null,
+      "detected": false,
+      "offset_residual_lower_s": null,
+      "offset_residual_upper_s": null,
+      "onset_residual_lower_s": null,
+      "onset_residual_upper_s": null,
+      "pulse_index": 58,
+      "reasons": [
+        "plateau_below_minimum",
+        "robust_snr_below_minimum"
+      ],
+      "robust_snr": 0.0
+    }
+  ],
+  "reasons": [
+    "clock_anchor_unresolved",
+    "not_all_pulses_detected",
+    "pulse_detection_incomplete"
+  ],
+  "residual_median_s_diagnostic_only": null,
+  "residual_p95_s_diagnostic_only": null,
+  "residual_region_coverage_assumption": "Analytic interval branch-and-bound encloses the complete accepted two-dimensional joint loss region. A cell is discarded only when its rigorous overlap-model loss lower bound exceeds the tolerance; all retained cell extents are included through the stated coverage resolution. This is deterministic coverage, not a probabilistic confidence region.",
+  "residual_region_coverage_resolution_s": 0.0001,
+  "residual_region_method": "joint_loss_sublevel_interval_branch_v2",
+  "robust_sigma_w": 0.001,
+  "schema_version": "joulewise.instrument_evidence.v1",
+  "spurious_plateau_count": 0,
+  "status": "invalid",
+  "validation_id": "20260801T010805-ff3fdc88"
+}

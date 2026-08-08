@@ -2078,6 +2078,14 @@ def _v2_allowance_projection(
             "postcollection_evidence_mismatch: issued acceptance allowance is not derivable"
         )
     pin_projection = dict(projection)
+    for field in (
+        "observed_drift_s",
+        "bracket_screen_s",
+        "applied_allowance_s",
+    ):
+        pin_projection[field] = format(
+            Decimal(str(pin_projection[field])), "f"
+        )
     pin_projection["allowance_rule"] = (
         f"max(observed_drift_s,{pin_projection['bracket_screen_s']})"
     )
@@ -2523,6 +2531,7 @@ def _mint_v2_cell_artifact(
     head_pin_commit_contained_in_origin_main: bool | None,
     absolute: Any,
     comparative: Any,
+    calibration_ledger_snapshot: Any,
 ) -> Mapping[str, Any]:
     """Construct one v2 cell without invoking either v1 literal derivation."""
 
@@ -2606,33 +2615,41 @@ def _mint_v2_cell_artifact(
             }
         ],
     )
+    provenance = {
+        "calibration_plan": {
+            "plan_id": plan["plan_id"],
+            "declared_calibration_scope": plan_pins[
+                "declared_calibration_scope"
+            ],
+            "relative_path": relative_plan,
+            "sha256": plan_pins["sha256"],
+        },
+        "mint_tool_version": V2_MINT_TOOL_VERSION,
+        "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
+        "implementation": {
+            "project_commit": project_commit,
+            "project_tree_state": project_tree_state,
+            "mint_commit_contained_in_origin_main": (
+                origin_main_contains_head
+            ),
+            "head_pin_commit_contained_in_origin_main": (
+                head_pin_commit_contained_in_origin_main
+            ),
+            "python_package": "joulewise",
+        },
+    }
+    custody_store_provenance = core._expected_custody_store_provenance(
+        calibration_ledger_snapshot
+    )
+    if custody_store_provenance is not None:
+        provenance["calibration_custody_store"] = dict(
+            custody_store_provenance
+        )
     artifact = core.build_floor_artifact(
         artifact_id=producer["component_artifact"]["artifact_id"],
         calibration_scope=plan_pins["artifact_calibration_scope"],
         source_class="prospective",
-        provenance={
-            "calibration_plan": {
-                "plan_id": plan["plan_id"],
-                "declared_calibration_scope": plan_pins[
-                    "declared_calibration_scope"
-                ],
-                "relative_path": relative_plan,
-                "sha256": plan_pins["sha256"],
-            },
-            "mint_tool_version": V2_MINT_TOOL_VERSION,
-            "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
-            "implementation": {
-                "project_commit": project_commit,
-                "project_tree_state": project_tree_state,
-                "mint_commit_contained_in_origin_main": (
-                    origin_main_contains_head
-                ),
-                "head_pin_commit_contained_in_origin_main": (
-                    head_pin_commit_contained_in_origin_main
-                ),
-                "python_package": "joulewise",
-            },
-        },
+        provenance=provenance,
         cells=[cell],
         transport_groups=[group],
     )
@@ -2733,6 +2750,9 @@ def _build_v2_artifacts(
                     plan=inputs.plan,
                     absolute=cell_inputs.absolute,
                     comparative=cell_inputs.comparative,
+                    calibration_ledger_snapshot=(
+                        calibration_ledger_snapshot
+                    ),
                     project_commit=project_commit,
                     project_tree_state=project_tree_state,
                     origin_main_contains_head=origin_main_contains_head,
@@ -2788,23 +2808,31 @@ def _build_v2_artifacts(
     implementation = copy.deepcopy(
         component_artifacts[0]["provenance"]["implementation"]
     )
+    aggregate_provenance = {
+        "calibration_plan": {
+            "plan_id": aggregate["plan_set_id"],
+            "declared_calibration_scope": "production_window",
+            "relative_path": Path(pinset_path).name,
+            "sha256": aggregate["producer_set_sha256"],
+        },
+        "producer_calibration_plans": producer_plan_records,
+        "mint_tool_version": V2_MINT_TOOL_VERSION,
+        "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
+        "implementation": implementation,
+    }
+    custody_store_provenance = component_artifacts[0]["provenance"].get(
+        "calibration_custody_store"
+    )
+    if custody_store_provenance is not None:
+        aggregate_provenance["calibration_custody_store"] = copy.deepcopy(
+            custody_store_provenance
+        )
     artifact = {
         **copy.deepcopy(component_artifacts[0]),
         "artifact_id": aggregate["artifact_id"],
         "calibration_scope": aggregate["calibration_scope"],
         "source_class": aggregate["source_class"],
-        "provenance": {
-            "calibration_plan": {
-                "plan_id": aggregate["plan_set_id"],
-                "declared_calibration_scope": "production_window",
-                "relative_path": Path(pinset_path).name,
-                "sha256": aggregate["producer_set_sha256"],
-            },
-            "producer_calibration_plans": producer_plan_records,
-            "mint_tool_version": V2_MINT_TOOL_VERSION,
-            "assurance": copy.deepcopy(V2_ASSURANCE_PROFILE),
-            "implementation": implementation,
-        },
+        "provenance": aggregate_provenance,
         "cells": all_cells,
         "transport_groups": all_groups,
     }
@@ -2992,6 +3020,10 @@ def _validate_v2_artifact_binding(
                     provenance.get("implementation")
                 ),
             }
+            if provenance.get("calibration_custody_store") is not None:
+                component["provenance"]["calibration_custody_store"] = (
+                    copy.deepcopy(provenance["calibration_custody_store"])
+                )
             component["cells"] = [
                 copy.deepcopy(cell_by_id[cell_id])
                 for cell_id in producer_cell_ids
@@ -3127,6 +3159,7 @@ def _load_v2_ledger_snapshot(
     acceptance: Mapping[str, Any],
     ledger_path: Path,
     head_pin_path: Path,
+    calibration_custody_store: Path | None = None,
 ) -> Any:
     cutoff = (
         acceptance.get("ledger_cutoff")
@@ -3142,6 +3175,7 @@ def _load_v2_ledger_snapshot(
         baseline_digest=(
             cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
         ),
+        calibration_custody_store=calibration_custody_store,
     )
 
 
@@ -3154,6 +3188,7 @@ def _authenticate_v2_inputs(
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None,
     input_manifest: Mapping[str, Any] | None = None,
+    calibration_custody_store: Path | None = None,
 ) -> tuple[
     Mapping[str, V2ProducerInputs],
     Mapping[str, Path],
@@ -3240,6 +3275,7 @@ def _authenticate_v2_inputs(
         acceptance=acceptance,
         ledger_path=ledger_path,
         head_pin_path=head_pin_path,
+        calibration_custody_store=calibration_custody_store,
     )
     if not bool(getattr(ledger_snapshot, "valid", False)):
         raise MintError("v2 calibration ledger snapshot is not authenticated")
@@ -3427,6 +3463,7 @@ def _authenticate_v2_inputs(
                             component_name
                         ]["consumption_semantics_id"],
                         calibration_ledger_snapshot=ledger_snapshot,
+                        calibration_bracket_binding=bracket_binding,
                     )
                 except core.MintError as exc:
                     raise MintError(str(exc)) from exc
@@ -3491,6 +3528,7 @@ def mint_multi_cell_floor_artifact(
     project_tree_state: str,
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None = None,
+    calibration_custody_store: Path | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
 
@@ -3505,6 +3543,7 @@ def mint_multi_cell_floor_artifact(
             project_tree_state=project_tree_state,
             strict_validator=strict_validator,
             consumption_semantics_id=consumption_semantics_id,
+            calibration_custody_store=calibration_custody_store,
         )
     try:
         with V2AuthenticationReadSession():
@@ -3518,6 +3557,7 @@ def mint_multi_cell_floor_artifact(
                 project_tree_state=project_tree_state,
                 strict_validator=strict_validator,
                 consumption_semantics_id=consumption_semantics_id,
+                calibration_custody_store=calibration_custody_store,
             )
     except V2AuthenticationInputError as exc:
         raise MintError(str(exc)) from exc
@@ -3534,6 +3574,7 @@ def _mint_multi_cell_floor_artifact_active(
     project_tree_state: str,
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None = None,
+    calibration_custody_store: Path | None = None,
 ) -> Mapping[str, Any]:
     """Implementation body; caller guarantees one active v2 read session."""
 
@@ -3563,6 +3604,7 @@ def _mint_multi_cell_floor_artifact_active(
         strict_validator=strict_validator,
         consumption_semantics_id=consumption_semantics_id,
         input_manifest=input_manifest,
+        calibration_custody_store=calibration_custody_store,
     )
     # The path has now participated in successful ledger authentication;
     # derive its last-changing commit only after that domain owner accepts it.
@@ -3625,6 +3667,9 @@ def _mint_multi_cell_floor_artifact_active(
                     evidence_roots,
                     strict_validator=strict_validator,
                     calibration_ledger_snapshot=ledger_snapshot,
+                    calibration_bracket_binding=(
+                        producer_inputs.bracket_binding
+                    ),
                 )
             except core.MintError as exc:
                 raise MintError(str(exc)) from exc
@@ -3651,6 +3696,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--single-count-out", required=True, type=Path)
     parser.add_argument("--v2-input-manifest", type=Path)
+    parser.add_argument("--calibration-custody-store", type=Path)
     parser.add_argument("--calibration-plan", type=Path)
     parser.add_argument("--calibration-plan-relative-path")
     parser.add_argument("--absolute-root", type=Path)
@@ -3702,11 +3748,18 @@ def main(argv: list[str] | None = None) -> int:
                         path, strict=strict
                     ),
                     consumption_semantics_id=args.consumption_semantics_id,
+                    calibration_custody_store=(
+                        args.calibration_custody_store
+                    ),
                 )
             return 0
         loaded = load_pinset(args.pinset, args.pinset_sha256)
         if isinstance(loaded, V2Pinset):
             raise MintError("final v2 pinset requires --v2-input-manifest")
+        if args.calibration_custody_store is not None:
+            raise MintError(
+                "--calibration-custody-store requires --v2-input-manifest"
+            )
         legacy_fields = {
             "--artifact-id": args.artifact_id,
             "--calibration-plan": args.calibration_plan,

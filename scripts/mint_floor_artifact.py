@@ -64,6 +64,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
+    CUSTODY_STORE_MANIFEST_SCHEMA,
     CalibrationLedgerSnapshot,
     load_calibration_ledger_snapshot,
 )
@@ -531,6 +532,7 @@ def _authenticated_consumption_summaries(
     target_bundle_ids: set[str],
     consumption_semantics_id: str | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -542,6 +544,7 @@ def _authenticated_consumption_summaries(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         ),
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        calibration_bracket_binding=calibration_bracket_binding,
     )
     reasons = whole_window_refusal_reasons(
         runs_root,
@@ -1047,6 +1050,7 @@ def _authenticate_component(
     allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
     expected_consumption_semantics_id: str | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> AuthenticatedComponent:
     if calibration_ledger_snapshot is None:
         acceptance = load_calibration_acceptance_bound()
@@ -1115,6 +1119,7 @@ def _authenticate_component(
         target_bundle_ids=target_ids,
         consumption_semantics_id=expected_consumption_semantics_id,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        calibration_bracket_binding=calibration_bracket_binding,
     )
     if semantics != actual_semantics:
         raise MintError(
@@ -1697,6 +1702,43 @@ def _binding_cache_key(
     return (str(root.resolve()), basis_sha256, tuple(members))
 
 
+def _expected_custody_store_provenance(
+    snapshot: CalibrationLedgerSnapshot,
+) -> Mapping[str, str] | None:
+    manifest_sha256 = getattr(snapshot, "custody_store_manifest_sha256", None)
+    manifest_schema = getattr(snapshot, "custody_store_manifest_schema", None)
+    if manifest_sha256 is None and manifest_schema is None:
+        return None
+    if (
+        manifest_schema != CUSTODY_STORE_MANIFEST_SCHEMA
+        or not isinstance(manifest_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", manifest_sha256) is None
+    ):
+        raise MintError("authenticated custody-store snapshot provenance is invalid")
+    return {
+        "schema_version": manifest_schema,
+        "manifest_sha256": manifest_sha256,
+    }
+
+
+def _validate_custody_store_provenance(
+    artifact: Mapping[str, Any],
+    snapshot: CalibrationLedgerSnapshot,
+) -> None:
+    provenance = artifact.get("provenance")
+    observed = (
+        provenance.get("calibration_custody_store")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    expected = _expected_custody_store_provenance(snapshot)
+    if observed != expected:
+        raise MintError(
+            "artifact custody-store provenance differs from the authenticated "
+            "calibration ledger snapshot"
+        )
+
+
 def bind_floor_artifact_evidence(
     artifact: Mapping[str, Any],
     floor_path: Path,
@@ -1704,6 +1746,7 @@ def bind_floor_artifact_evidence(
     *,
     strict_validator: StrictValidator,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
     """Rebind a constructed artifact to plan, campaign, and bundle bytes.
 
@@ -1732,6 +1775,7 @@ def bind_floor_artifact_evidence(
         raise MintError(f"cannot bind invalid floor artifact: {validator_errors[0]}")
     _assert_path_independent(artifact)
     provenance = artifact.get("provenance")
+    _validate_custody_store_provenance(artifact, calibration_ledger_snapshot)
     plan_pin = (
         provenance.get("calibration_plan")
         if isinstance(provenance, Mapping)
@@ -1809,6 +1853,7 @@ def bind_floor_artifact_evidence(
                         },
                         consumption_semantics_id=semantics,
                         calibration_ledger_snapshot=calibration_ledger_snapshot,
+                        calibration_bracket_binding=calibration_bracket_binding,
                     )
                 )
                 if actual_semantics != semantics:

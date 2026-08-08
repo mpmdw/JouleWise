@@ -1371,7 +1371,11 @@ _PROVENANCE_KEYS = {
     "mint_tool_version",
     "implementation",
 }
-_PROVENANCE_OPTIONAL_KEYS = {"producer_calibration_plans", "assurance"}
+_PROVENANCE_OPTIONAL_KEYS = {
+    "producer_calibration_plans",
+    "assurance",
+    "calibration_custody_store",
+}
 _CALIBRATION_PLAN_KEYS = {
     "plan_id",
     "declared_calibration_scope",
@@ -1396,6 +1400,10 @@ _ASSURANCE_KEYS = {
     "establishes",
     "does_not_establish",
 }
+_CALIBRATION_CUSTODY_STORE_KEYS = {"schema_version", "manifest_sha256"}
+_CALIBRATION_CUSTODY_STORE_SCHEMA = (
+    "joulewise.calibration_custody_store_manifest.v1"
+)
 _V2_ASSURANCE_PROFILE = {
     "profile_id": "single_authority_hash_bound_replay.v1",
     "independent_attestation": False,
@@ -2376,6 +2384,29 @@ def _validate_provenance(
             )
     elif assurance is not None:
         errors.append(f"{where}.assurance: allowed only for the v2 mint")
+    custody_store = provenance.get("calibration_custody_store")
+    if custody_store is not None:
+        custody_where = f"{where}.calibration_custody_store"
+        if not is_v2:
+            errors.append(
+                f"{custody_where}: allowed only for the v2 mint"
+            )
+        elif _check_keys(
+            custody_store,
+            _CALIBRATION_CUSTODY_STORE_KEYS,
+            custody_where,
+            errors,
+        ):
+            if custody_store["schema_version"] != (
+                _CALIBRATION_CUSTODY_STORE_SCHEMA
+            ):
+                errors.append(
+                    f"{custody_where}.schema_version: invalid custody store schema"
+                )
+            if not _is_hex(custody_store["manifest_sha256"]):
+                errors.append(
+                    f"{custody_where}.manifest_sha256: must be 64 lowercase hex chars"
+                )
     producer_plans = provenance.get("producer_calibration_plans")
     if producer_plans is None:
         return (

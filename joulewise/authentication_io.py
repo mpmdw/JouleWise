@@ -53,6 +53,87 @@ _ACTIVE_SESSION: ContextVar[V2AuthenticationReadSession | None] = ContextVar(
 )
 
 
+class V2AuthenticationPath(type(Path())):
+    """A ``Path`` capability whose readable operations register returned bytes.
+
+    ``pathlib`` preserves concrete subclasses through ``/``, ``parent``, and
+    ``resolve``.  Those are the derivations used by the issued-pinned reducer,
+    so an injected bundle root remains registration-aware all the way to the
+    reducer's historical direct reads.  The methods retain ordinary ``Path``
+    behavior when no v2 session is active.
+    """
+
+    __slots__ = ()
+
+    def read_bytes(self) -> bytes:
+        session = _ACTIVE_SESSION.get()
+        if session is None:
+            return super().read_bytes()
+        return session.read(
+            Path(self),
+            grammar="raw",
+            label=f"v2 path capability {self}",
+        )
+
+    def read_text(
+        self,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        session = _ACTIVE_SESSION.get()
+        if session is None:
+            return super().read_text(encoding=encoding, errors=errors)
+        raw = session.read(
+            Path(self),
+            grammar="raw",
+            label=f"v2 path capability {self}",
+        )
+        return raw.decode(encoding or "utf-8", errors or "strict")
+
+    def open(
+        self,
+        mode: str = "r",
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> BinaryIO | TextIO:
+        session = _ACTIVE_SESSION.get()
+        readable = "r" in mode or "+" in mode
+        if session is None or not readable:
+            return super().open(
+                mode=mode,
+                buffering=buffering,
+                encoding=encoding,
+                errors=errors,
+                newline=newline,
+            )
+        if any(flag in mode for flag in ("w", "a", "x", "+")):
+            raise ValueError("V2AuthenticationPath only supports read modes")
+        raw = session.read(
+            Path(self),
+            grammar="raw",
+            label=f"v2 path capability {self}",
+        )
+        buffer = io.BytesIO(raw)
+        if "b" in mode:
+            return buffer
+        return io.TextIOWrapper(
+            buffer,
+            encoding=encoding or "utf-8",
+            errors=errors or "strict",
+            newline=newline,
+        )
+
+
+def v2_authentication_path(path: Path | str) -> Path:
+    """Inject a registration-aware path only for an active v2 session."""
+
+    if _ACTIVE_SESSION.get() is None:
+        return Path(path)
+    return V2AuthenticationPath(path)
+
+
 def _duplicate_key(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -168,6 +249,7 @@ class V2AuthenticationReadSession:
         self._records: dict[str, AuthenticationInputRecord] = {}
         self._lock = threading.RLock()
         self._token: Token[V2AuthenticationReadSession | None] | None = None
+        self.instrument_calibration_physics_cache: dict[str, float] = {}
 
     def __enter__(self) -> V2AuthenticationReadSession:
         if self._token is not None:
@@ -509,6 +591,7 @@ def direct_read_violations(
 
 __all__ = [
     "AuthenticationInputRecord",
+    "V2AuthenticationPath",
     "V2AuthenticationInputError",
     "V2AuthenticationReadSession",
     "V2_AUTHENTICATION_INPUT_CHANGED",
@@ -520,4 +603,5 @@ __all__ = [
     "read_authentication_input_nofollow",
     "read_authentication_text",
     "sha256_authentication_input",
+    "v2_authentication_path",
 ]

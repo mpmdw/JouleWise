@@ -286,13 +286,56 @@ The authentication call graph is the only discovery mechanism. There is no
 parallel recursive traversal and no second equality oracle. Missing optional
 paths are probes rather than byte reads and have no path-plus-SHA record. An
 AST build guard rejects direct readable I/O in the marked v2 authentication
-surface outside the central reader. The production regression additionally
+surface outside the central reader. The issued-pinned
+`joulewise/reduce.py` is the sole exact exception: its bytes must hash to
+`5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615`,
+and the guard characterizes exactly its five historical direct `read_bytes`
+calls in `_verify_instrument_calibration` and `_derive_anchor_context`.
+`BundleReader` supplies a registration-aware `Path` capability only while a
+v2 session is active; readable operations register the exact returned bytes,
+and `/`, `parent`, and `resolve` preserve the capability. Any reducer byte or
+callsite change loses the exact exception. The production regression additionally
 audits low-level opens beneath its fixture/evidence roots and requires every
 actually opened input to appear in the registry.
 
 The session is v2-only. With no active session, shared readers preserve their
 historical parsing, exceptions, and output, and v1 golden artifacts remain
 byte-identical.
+
+### Content-addressed calibration custody store
+
+The generalized v2 CLI accepts the optional production input
+`--calibration-custody-store ROOT`. Its absence selects the historical
+receipt-locator behavior without changing v1 or v2 bytes. Its presence selects
+one all-or-nothing mode: every custody-bearing final observation is read only
+from `ROOT/<receipt.content_id>/`; receipt locators remain authenticated ledger
+bytes but are never resolution fallbacks.
+
+`ROOT/manifest.json` has the canonical UTF-8 JSON wire below: sorted keys,
+compact separators, one trailing newline, no duplicate keys, and no non-finite
+numbers. All object key sets are closed. `contents` is sorted by `content_id`;
+each `artifact_sha256` object contains exactly the five governed names from
+`GOVERNED_ARTIFACTS`, sorted lexically.
+
+```json
+{"contents":[{"artifact_sha256":{"events.jsonl":"<sha256>","instrument_evidence.json":"<sha256>","manifest.json":"<sha256>","power_trace.csv":"<sha256>","raw/powermetrics.plist":"<sha256>"},"content_id":"<sha256>"}],"ledger":{"head_digest":"<sha256>","head_sequence":76,"schema_version":"joulewise.calibration_observation_ledger.v1"},"schema_version":"joulewise.calibration_custody_store_manifest.v1"}
+```
+
+The manifest never supplies identities or hashes. The loader derives the
+entire expected value from the authenticated ledger snapshot and requires
+exact equality before resolving any content directory. It refuses in the
+`calibration_ledger_custody_invalid` domain on null or duplicate content
+identity, an incomplete five-hash vector, missing content/artifact, symlink,
+non-regular member, digest mismatch, manifest mismatch, or any attempted
+legacy/store mixture. Reads are contained and no-follow. Extra filesystem
+entries are neither traversed nor registered.
+
+The manifest's exact SHA-256 and schema travel on
+`CalibrationLedgerSnapshot`. When store mode is active they are emitted as
+`provenance.calibration_custody_store.{schema_version,manifest_sha256}` on
+each component and the aggregate artifact. Evidence binding compares that
+block to the authenticated snapshot before re-binding member evidence;
+disclosure without equality is a refusal.
 
 ### No-substitution production regression
 

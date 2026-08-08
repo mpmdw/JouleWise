@@ -44,6 +44,7 @@ from joulewise.authentication_io import (
     open_authentication_input,
     read_authentication_input,
     read_authentication_text,
+    v2_authentication_path,
 )
 from joulewise.axi_decode_config import (
     AXI_CONFIG_EXTENSION,
@@ -237,7 +238,7 @@ class BundleReader:
 
     @property
     def path(self) -> Path:
-        return self._path
+        return v2_authentication_path(self._path)
 
     def is_frozen_legacy_identity(self) -> bool:
         metadata = self.raw_metadata()

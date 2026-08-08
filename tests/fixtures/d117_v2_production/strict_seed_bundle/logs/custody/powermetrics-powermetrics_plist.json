@@ -1,0 +1,7 @@
+{
+  "artifacts": [
+    "raw/powermetrics.plist"
+  ],
+  "custody_token": "powermetrics-powermetrics_plist",
+  "schema_version": 1
+}

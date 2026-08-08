@@ -39,6 +39,7 @@ from types import MappingProxyType
 from typing import Any, BinaryIO
 
 from joulewise.authentication_io import (
+    V2AuthenticationInputError,
     ingest_git_authentication_input,
     read_authentication_input,
     read_authentication_input_nofollow,
@@ -62,6 +63,10 @@ HISTORICAL_IMPORT_TABLE_SCHEMA = (
 HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA = (
     "joulewise.calibration_historical_import_custody_manifest.v1"
 )
+CUSTODY_STORE_MANIFEST_SCHEMA = (
+    "joulewise.calibration_custody_store_manifest.v1"
+)
+CUSTODY_STORE_MANIFEST_NAME = "manifest.json"
 HISTORICAL_IMPORT_EVENT_PREFIX = "historical-import-v1"
 HISTORICAL_IMPORT_RESERVATION_EVENT = (
     f"{HISTORICAL_IMPORT_EVENT_PREFIX}-reservation"
@@ -287,6 +292,8 @@ class CalibrationLedgerSnapshot:
     baseline_digest: str | None = None
     committed_head_sequence: int | None = None
     committed_head_digest: str | None = None
+    custody_store_manifest_schema: str | None = None
+    custody_store_manifest_sha256: str | None = None
 
     @property
     def valid(self) -> bool:
@@ -1273,6 +1280,175 @@ def _custody_reasons(
     return set()
 
 
+def _custody_observations(
+    observations: Sequence[LedgerObservation],
+    bracket_sessions: Sequence[CalibrationBracketSession],
+) -> list[LedgerObservation]:
+    result = list(observations)
+    seen_attempt_ids = {observation.attempt_id for observation in result}
+    for session in bracket_sessions:
+        result.extend(
+            observation
+            for observation in session.finalized_slots.values()
+            if observation.attempt_id not in seen_attempt_ids
+        )
+        seen_attempt_ids.update(
+            observation.attempt_id for observation in session.finalized_slots.values()
+        )
+    return result
+
+
+def _custody_store_manifest_projection(
+    *,
+    ledger_schema: str,
+    head_sequence: int,
+    head_digest: str,
+    observations: Sequence[LedgerObservation],
+) -> Mapping[str, Any] | None:
+    """Derive the store declaration solely from authenticated ledger rows."""
+
+    contents: list[dict[str, Any]] = []
+    seen_content_ids: set[str] = set()
+    for observation in observations:
+        artifacts = dict(observation.artifact_sha256)
+        if not artifacts and observation.disposition == "abandoned":
+            continue
+        content_id = observation.content_id
+        if (
+            not _is_sha256(content_id)
+            or content_id in seen_content_ids
+            or set(artifacts) != set(GOVERNED_ARTIFACTS)
+            or any(not _is_sha256(value) for value in artifacts.values())
+        ):
+            return None
+        seen_content_ids.add(content_id)
+        contents.append(
+            {
+                "content_id": content_id,
+                "artifact_sha256": {
+                    name: artifacts[name] for name in sorted(GOVERNED_ARTIFACTS)
+                },
+            }
+        )
+    contents.sort(key=lambda row: row["content_id"])
+    return {
+        "schema_version": CUSTODY_STORE_MANIFEST_SCHEMA,
+        "ledger": {
+            "schema_version": ledger_schema,
+            "head_sequence": head_sequence,
+            "head_digest": head_digest,
+        },
+        "contents": contents,
+    }
+
+
+def calibration_custody_store_manifest(
+    snapshot: CalibrationLedgerSnapshot,
+) -> Mapping[str, Any]:
+    """Return the canonical ledger-derived declaration for one snapshot."""
+
+    projection = _custody_store_manifest_projection(
+        ledger_schema=snapshot.ledger_schema,
+        head_sequence=snapshot.head_sequence,
+        head_digest=snapshot.head_digest,
+        observations=_custody_observations(
+            snapshot.observations, snapshot.bracket_sessions
+        ),
+    )
+    if projection is None:
+        raise CalibrationLedgerError(
+            "calibration snapshot cannot define a unique complete custody store"
+        )
+    return projection
+
+
+def calibration_custody_store_manifest_bytes(
+    snapshot: CalibrationLedgerSnapshot,
+) -> bytes:
+    """Serialize the one canonical store manifest wire format."""
+
+    return canonical_json_bytes(calibration_custody_store_manifest(snapshot)) + b"\n"
+
+
+def _strict_custody_store_manifest(raw: bytes) -> Mapping[str, Any] | None:
+    def reject_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate JSON key")
+            value[key] = item
+        return value
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite JSON number {value!r}")
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=reject_duplicate,
+            parse_constant=reject_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(value, Mapping):
+        return None
+    if raw != canonical_json_bytes(value) + b"\n":
+        return None
+    return value
+
+
+def _custody_store_reasons(
+    observations: Sequence[LedgerObservation],
+    *,
+    store_root: Path,
+    ledger_schema: str,
+    head_sequence: int,
+    head_digest: str,
+) -> tuple[set[str], str | None]:
+    expected_manifest = _custody_store_manifest_projection(
+        ledger_schema=ledger_schema,
+        head_sequence=head_sequence,
+        head_digest=head_digest,
+        observations=observations,
+    )
+    if expected_manifest is None:
+        return {"calibration_ledger_custody_invalid"}, None
+    try:
+        manifest_raw = read_authentication_input_nofollow(
+            store_root,
+            CUSTODY_STORE_MANIFEST_NAME,
+            grammar="json",
+            label="calibration custody store manifest",
+        )
+    except (OSError, ValueError, V2AuthenticationInputError):
+        return {"calibration_ledger_custody_invalid"}, None
+    manifest = _strict_custody_store_manifest(manifest_raw)
+    if manifest is None or dict(manifest) != dict(expected_manifest):
+        return {"calibration_ledger_custody_invalid"}, None
+    manifest_sha256 = hashlib.sha256(manifest_raw).hexdigest()
+    for observation in observations:
+        artifacts = dict(observation.artifact_sha256)
+        if not artifacts and observation.disposition == "abandoned":
+            continue
+        assert observation.content_id is not None
+        for relative in GOVERNED_ARTIFACTS:
+            try:
+                raw = read_authentication_input_nofollow(
+                    store_root,
+                    f"{observation.content_id}/{relative}",
+                    grammar="raw",
+                    label=(
+                        f"calibration custody store {observation.content_id} "
+                        f"artifact {relative}"
+                    ),
+                )
+            except (OSError, ValueError, V2AuthenticationInputError):
+                return {"calibration_ledger_custody_invalid"}, manifest_sha256
+            if hashlib.sha256(raw).hexdigest() != artifacts[relative]:
+                return {"calibration_ledger_custody_invalid"}, manifest_sha256
+    return set(), manifest_sha256
+
+
 def load_calibration_ledger_snapshot(
     ledger_path: Path = DEFAULT_LEDGER_PATH,
     head_pin_path: Path = DEFAULT_HEAD_PIN_PATH,
@@ -1282,6 +1458,7 @@ def load_calibration_ledger_snapshot(
     require_committed_pin: bool = True,
     verify_custody: bool = True,
     repo_root: Path = REPO_ROOT,
+    calibration_custody_store: Path | None = None,
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -1378,16 +1555,21 @@ def load_calibration_ledger_snapshot(
         receipts
     )
     reasons.update(state_reasons)
-    if verify_custody:
-        custody_observations = list(observations)
-        custody_attempt_ids = {observation.attempt_id for observation in observations}
-        for session in bracket_sessions:
-            custody_observations.extend(
-                observation
-                for observation in session.finalized_slots.values()
-                if observation.attempt_id not in custody_attempt_ids
-            )
+    custody_store_manifest_sha256: str | None = None
+    custody_observations = _custody_observations(observations, bracket_sessions)
+    if calibration_custody_store is not None and not verify_custody:
+        reasons.add("calibration_ledger_custody_invalid")
+    elif verify_custody and calibration_custody_store is None:
         reasons.update(_custody_reasons(custody_observations, repo_root))
+    elif verify_custody:
+        store_reasons, custody_store_manifest_sha256 = _custody_store_reasons(
+            custody_observations,
+            store_root=Path(calibration_custody_store),
+            ledger_schema=LEDGER_SCHEMA,
+            head_sequence=physical_sequence,
+            head_digest=physical_digest,
+        )
+        reasons.update(store_reasons)
     return CalibrationLedgerSnapshot(
         ledger_schema=LEDGER_SCHEMA,
         ledger_path=ledger_path,
@@ -1401,6 +1583,12 @@ def load_calibration_ledger_snapshot(
         baseline_digest=baseline_digest,
         committed_head_sequence=pinned_sequence,
         committed_head_digest=pinned_digest,
+        custody_store_manifest_schema=(
+            CUSTODY_STORE_MANIFEST_SCHEMA
+            if calibration_custody_store is not None
+            else None
+        ),
+        custody_store_manifest_sha256=custody_store_manifest_sha256,
     )
 
 
@@ -3037,6 +3225,8 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "CUSTODY_STORE_MANIFEST_NAME",
+    "CUSTODY_STORE_MANIFEST_SCHEMA",
     "ALL_DISPOSITIONS",
     "BRACKET_SESSION_ABORT_EVENT",
     "BRACKET_SESSION_FINALIZATION_EVENT",
@@ -3070,6 +3260,8 @@ __all__ = [
     "claim_bracket_session_slot",
     "abort_bracket_session",
     "artifact_hashes",
+    "calibration_custody_store_manifest",
+    "calibration_custody_store_manifest_bytes",
     "bootstrap_historical_import",
     "custody_manifest_bytes",
     "canonical_sha256",

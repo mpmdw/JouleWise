@@ -1,0 +1,32 @@
+{"timestamp_s": 1786206670.947639, "event_type": "run_started", "phase": "run", "message": "run seed started", "metadata": {"run_id": "seed"}}
+{"timestamp_s": 1786206670.947658, "event_type": "stage_started", "phase": "validate", "message": "stage validate started", "metadata": {}}
+{"timestamp_s": 1786206670.947756, "event_type": "stage_completed", "phase": "validate", "message": "stage validate completed", "metadata": {"transport": "local", "runtime": "mock", "telemetry": "powermetrics"}}
+{"timestamp_s": 1786206670.94776, "event_type": "stage_started", "phase": "prepare", "message": "stage prepare started", "metadata": {}}
+{"timestamp_s": 1786206670.947822, "event_type": "stage_completed", "phase": "prepare", "message": "stage prepare completed", "metadata": {}}
+{"timestamp_s": 1786206670.9478242, "event_type": "stage_started", "phase": "idle_baseline", "message": "stage idle_baseline started", "metadata": {}}
+{"timestamp_s": 1786206674.155008, "event_type": "stage_completed", "phase": "idle_baseline", "message": "stage idle_baseline completed", "metadata": {"power_w_mean": 0.46916166134386217, "duration_s": 1.786351777, "admission_attempts": 1, "admission_decision": "admitted"}}
+{"timestamp_s": 1786206674.1550138, "event_type": "stage_started", "phase": "warmup", "message": "stage warmup started", "metadata": {}}
+{"timestamp_s": 1786206674.215053, "event_type": "stage_completed", "phase": "warmup", "message": "stage warmup completed", "metadata": {"warmup_runs": 1, "warmup_seconds": 0.0}}
+{"timestamp_s": 1786206674.21506, "event_type": "stage_started", "phase": "measured_run", "message": "stage measured_run started", "metadata": {}}
+{"timestamp_s": 1786206674.215082, "event_type": "sampling_started", "phase": "measured_run", "message": "telemetry sampling confirmed active", "metadata": {}}
+{"timestamp_s": 1786206674.215096, "event_type": "phase_start", "phase": "prefill", "message": "mock prefill started", "metadata": {}}
+{"timestamp_s": 1786206674.257111, "event_type": "phase_end", "phase": "prefill", "message": "mock prefill completed", "metadata": {}}
+{"timestamp_s": 1786206674.2571142, "event_type": "phase_start", "phase": "decode", "message": "mock decode started", "metadata": {}}
+{"timestamp_s": 1786206674.2721238, "event_type": "token", "phase": "decode", "message": "mock token 0", "metadata": {"index": 0}}
+{"timestamp_s": 1786206674.287138, "event_type": "token", "phase": "decode", "message": "mock token 1", "metadata": {"index": 1}}
+{"timestamp_s": 1786206674.299187, "event_type": "token", "phase": "decode", "message": "mock token 2", "metadata": {"index": 2}}
+{"timestamp_s": 1786206674.314206, "event_type": "token", "phase": "decode", "message": "mock token 3", "metadata": {"index": 3}}
+{"timestamp_s": 1786206674.329216, "event_type": "token", "phase": "decode", "message": "mock token 4", "metadata": {"index": 4}}
+{"timestamp_s": 1786206674.344224, "event_type": "token", "phase": "decode", "message": "mock token 5", "metadata": {"index": 5}}
+{"timestamp_s": 1786206674.359235, "event_type": "token", "phase": "decode", "message": "mock token 6", "metadata": {"index": 6}}
+{"timestamp_s": 1786206674.3742452, "event_type": "token", "phase": "decode", "message": "mock token 7", "metadata": {"index": 7}}
+{"timestamp_s": 1786206674.374248, "event_type": "phase_end", "phase": "decode", "message": "mock decode completed", "metadata": {}}
+{"timestamp_s": 1786206674.374321, "event_type": "sampling_stopped", "phase": "measured_run", "message": "measured window stopped; telemetry tail retained outside window", "metadata": {}}
+{"timestamp_s": 1786206676.207344, "event_type": "stage_completed", "phase": "measured_run", "message": "stage measured_run completed", "metadata": {"sample_count": 225, "runtime_event_count": 12}}
+{"timestamp_s": 1786206676.2073631, "event_type": "stage_started", "phase": "idle_drift_sentinel", "message": "stage idle_drift_sentinel started", "metadata": {}}
+{"timestamp_s": 1786206678.612472, "event_type": "stage_completed", "phase": "idle_drift_sentinel", "message": "stage idle_drift_sentinel completed", "metadata": {"status": "bounded", "duration_requested_s": 1.786351777}}
+{"timestamp_s": 1786206678.612483, "event_type": "stage_started", "phase": "cleanup", "message": "stage cleanup started", "metadata": {}}
+{"timestamp_s": 1786206678.612591, "event_type": "stage_completed", "phase": "cleanup", "message": "stage cleanup completed", "metadata": {"cleanup_ok": true}}
+{"timestamp_s": 1786206678.612593, "event_type": "stage_started", "phase": "reduce", "message": "stage reduce started", "metadata": {}}
+{"timestamp_s": 1786206680.699687, "event_type": "stage_completed", "phase": "reduce", "message": "stage reduce completed", "metadata": {}}
+{"timestamp_s": 1786206680.700162, "event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}

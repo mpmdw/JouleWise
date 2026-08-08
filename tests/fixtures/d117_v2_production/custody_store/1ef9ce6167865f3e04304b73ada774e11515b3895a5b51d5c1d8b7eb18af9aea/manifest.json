@@ -1,0 +1,12 @@
+{
+  "artifacts": {
+    "events.jsonl": "fbb3d05c9185ed416d9c138fc63dc32d56b1cd465059007962f9273b53dce671",
+    "instrument_evidence.json": "e0d525e0923f88572f7530f447a3bc8e889ef80a47d662840b86c40b4a35f285",
+    "power_trace.csv": "d98b5748b2150b7a80b7a5de1bb6338a5e794a7b8d40eac04efd9f002f9c88ef",
+    "raw/powermetrics.plist": "ed13e60dcfe12d7ce3900798dfbafb7936baa3700cdf58d0f6c1d0fc1790a4b8"
+  },
+  "protocol_id": "powermetrics_pulse_fiducial_v3",
+  "pulse_count": 59,
+  "schema_version": "joulewise.instrument_validation_manifest.v1",
+  "validation_id": "20260725T055825-b10cb348"
+}
