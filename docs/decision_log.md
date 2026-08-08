@@ -145,6 +145,7 @@ be re-derived by a future agent gets an entry here.
 | D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
 | D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
 | D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
+| D-124 | Common-mode ABBA contrast estimator PROMOTED-AS-CANDIDATE in the TWO-SHARED-EDGE form (shared onset + shared offset parameters, adversarial per-bundle residuals) after the ordered current-semantics replay HELD the bar decisively (a5 decode: worst-case default 8.611855 J vs joint-sweep 1.632422 J, two-shared-edge 1.869502 J — all NON-CLAIM); registration conditions bind (named estimator + named stationarity transfer assumption with evidence; pre-registration in the D-117 packs BEFORE claim data; identical treatment on calibration and consuming contrast; allowance exactly once; full D-118/D-121 gate; issued artifact untouched); the evidentiary limit of the transfer assumption is registered and rides the paper's limitations | adopted (magistrate under the D-123 overnight license; Ed may reverse — flagged for morning review) |
 
 ---
 
@@ -7870,3 +7871,43 @@ autonomous overnight window. **Status:** RATIFIED.
    you've got a defensible paper"; Sol liberal on fast tier; the
    magistrate (Fable) oversees — D-121 terminal reviews bind every
    merge; Opus lenses continue ("other eyes never hurt").
+
+
+## D-124: Common-mode contrast estimator — promoted as the registered candidate (two-shared-edge form)
+
+**Date:** 2026-08-08 overnight (magistrate adjudication under the D-123
+license; Ed-reversible, flagged for morning). **Trigger:** Ed's
+attribution debate (D-123 item 3) -> adopted memo -> ordered replay.
+
+**Evidence (NON-CLAIM, custodied at
+docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md):**
+on the exact a5 decode ABBA corpus under CURRENT issued semantics, the
+worst-case-sum default composes an 8.611855 J comparative floor; the
+common-mode joint sweep gives 1.632422 J; the more faithful
+two-shared-edge variant 1.869502 J. The promotion bar (>=2x or >=2 J)
+holds by every variant. Material for D-117: the prefill contrast's
+~11.6 J projected signal is thin against an 8.6 J-class worst-case
+floor and comfortable against a ~1.9 J-class common-mode floor.
+
+**What is promoted:** the TWO-SHARED-EDGE estimator (the replay's own
+soundness objection to the 1-D shared-shift form is sustained). It is a
+CANDIDATE until its implementing unit lands through the full gate and
+its identity is pre-registered in the D-117 pack bytes; if either
+fails, contrasts fall back to the worst-case default and the paper says
+so.
+
+**Registration conditions (all bind):** named estimator identity;
+named block-timescale stationarity/transfer assumption WITH the
+bracket-calibration evidence (onset/offset spans) and its honest limit
+(the historical corpus records bounds, not realized member-level
+errors) carried into the paper's limitations; pre-registration before
+any claim-bearing data; identical covariance treatment on calibration
+floor blocks and the consuming science contrast; D-102 never-zero
+allowance applied exactly once inside the shared operative bound; full
+D-118/D-121 gate on the implementing unit; the issued acceptance
+artifact is not reopened and no raw calibration corpus is voided.
+
+**Sequencing:** the implementing unit rides AFTER the trust branch
+merges (shared floor_extraction/estimator surface) and BEFORE pack
+freeze (the packs name the estimator identity). FLOOR-COMMONMODE-01's
+kernel row sharpens to this form.
