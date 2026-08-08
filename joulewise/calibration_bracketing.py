@@ -83,10 +83,14 @@ _D102_OPERATIVE_VALUES = {
     "maximum_budgetable_drift_s": "0.012093166090593858",
 }
 
-# COLD-GATE-Q1: the successor corpus is the complete content-distinct valid
-# same-epoch ledger prefix, not the triggering suffix or the frozen n=19 set.
-SUCCESSOR_CORPUS_SELECTION = (
+# D-125 separates the R2.8 counting universe from the lineage derivation
+# basis.  The full same-epoch inventory governs triggers; only the parent's
+# basis plus parent-judged post-cutoff additions governs new operatives.
+SUCCESSOR_TRIGGER_UNIVERSE_RULE = (
     "all_content_distinct_valid_same_epoch_observations_through_cutoff"
+)
+SUCCESSOR_DERIVATION_BASIS_RULE = (
+    "parent_basis_plus_parent_judged_post_cutoff_additions"
 )
 # COLD-GATE-Q2: the successor level screen is the observed corpus maximum
 # alone. The 95% two-draw prediction remains recorded derivation evidence but
@@ -98,6 +102,13 @@ SUCCESSOR_PREFLIGHT_SCREEN_RULE = "observed_corpus_maximum"
 SUCCESSOR_QUANTILE_METHOD = "decimal_incomplete_beta_bisection_v1"
 SUCCESSOR_DECIMAL_PRECISION = 80
 SUCCESSOR_CONTINUED_FRACTION_MAX_ITERATIONS = 10_000
+SUCCESSOR_COMPARATOR_QUANTUM = Decimal("0.000000000000000001")
+SUCCESSOR_SCREEN_ENVELOPE_RULE = (
+    "max(parent_bracket_screen_s,prediction_95_two_draw_s)"
+)
+SUCCESSOR_CEILING_ENVELOPE_RULE = (
+    "max(parent_maximum_budgetable_drift_s,prediction_99_two_draw_s)"
+)
 # COLD-GATE-Q4: a range successor below the pending boundary retains it; once
 # crossed, the next boundary is twice the newly issued corpus count.
 _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE = (
@@ -137,15 +148,14 @@ POST_SUCCESSOR_POLICY = "require_explicit_parent_judgment_lineage"
 # COLD-GATE-Q12: this four-file exhibit closes the authenticated probe API;
 # writer scalar removal and the U8 arm-path call remain separately scoped.
 WRITER_INTEGRATION_SCOPE_STATUS = "probe_closed_writer_and_arm_path_residual"
-# COLD-GATE-Q13: the allowance generalization remains the exhibit's current
-# answer, but n<19 is not licensed while Q13 is pending. The guard prevents the
-# df=1 / t~=63.66 path from becoming an issued comparator by accident.
+# D-125/D-126 retain n>=19 as the successor licensing floor. The guard prevents
+# the df=1 / t~=63.66 path from becoming an issued comparator by accident.
 SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 SUCCESSOR_DECISION_IDS = (
     "D-102",
     "D-109",
     "D-117",
-    "COLD-GATE-U2-PENDING",
+    "D-126",
 )
 
 _SUCCESSOR_TOP_LEVEL_FIELDS = {
@@ -297,6 +307,12 @@ def _decimal_text(value: Decimal) -> str:
     if not value.is_finite():
         raise ValueError("decimal value must be finite")
     return format(value, "f")
+
+
+def _nonnegative_decimal_text(value: Decimal) -> str:
+    """Render a nonnegative record field without exponent or signed zero."""
+
+    return "0" if value == 0 else _decimal_text(value)
 
 
 def _decimal_pi() -> Decimal:
@@ -457,13 +473,27 @@ def decimal_student_t_quantile(
 
 def derive_successor_decimal_derivation(
     members: Sequence[Mapping[str, Any]],
+    *,
+    parent_operatives: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive the complete v3 Decimal record from authenticated members."""
 
     if len(members) < SUCCESSOR_MINIMUM_CORPUS_SIZE:
-        raise ValueError(
-            "successor_corpus_below_pending_q13_minimum_19"
-        )
+        raise ValueError("successor_derivation_basis_below_minimum_19")
+    inherited = (
+        _D102_OPERATIVE_VALUES
+        if parent_operatives is None
+        else parent_operatives
+    )
+    parent_screen = _decimal(inherited.get("bracket_screen_s"))
+    parent_ceiling = _decimal(inherited.get("maximum_budgetable_drift_s"))
+    if (
+        parent_screen is None
+        or parent_ceiling is None
+        or parent_screen < 0
+        or parent_screen >= parent_ceiling
+    ):
+        raise ValueError("invalid_parent_acceptance_arithmetic")
     content_ids: list[str] = []
     values: list[Decimal] = []
     for member in members:
@@ -488,31 +518,34 @@ def derive_successor_decimal_derivation(
         maximum = max(values)
         observed_range = maximum - minimum
         prediction_95 = (
-            decimal_student_t_quantile("0.975", len(values) - 1)
+            decimal_student_t_quantile(
+                "0.975", len(values) - 1, use_compatibility_pin=False
+            )
             * sample_sd
             * Decimal(2).sqrt()
         )
         prediction_99 = (
-            decimal_student_t_quantile("0.995", len(values) - 1)
+            decimal_student_t_quantile(
+                "0.995", len(values) - 1, use_compatibility_pin=False
+            )
             * sample_sd
             * Decimal(2).sqrt()
         )
-        display_quantum = Decimal("0.000000000000000001")
-        prediction_95_display = prediction_95.quantize(
-            display_quantum, rounding=ROUND_HALF_EVEN
+        prediction_95_comparator = prediction_95.quantize(
+            SUCCESSOR_COMPARATOR_QUANTUM, rounding=ROUND_HALF_EVEN
         )
-        prediction_99_display = prediction_99.quantize(
-            display_quantum, rounding=ROUND_HALF_EVEN
+        prediction_99_comparator = prediction_99.quantize(
+            SUCCESSOR_COMPARATOR_QUANTUM, rounding=ROUND_HALF_EVEN
         )
-        bracket_screen = observed_range.quantize(
-            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
+        bracket_screen = max(parent_screen, prediction_95_comparator)
+        maximum_budgetable_drift = max(
+            parent_ceiling, prediction_99_comparator
         )
+        if bracket_screen >= maximum_budgetable_drift:
+            raise ValueError("successor_screen_exceeds_budget_ceiling")
+        max_budgetable_excess = maximum_budgetable_drift - bracket_screen
         preflight_screen = maximum.quantize(
             Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
-        )
-        maximum_budgetable_drift = prediction_99_display
-        max_budgetable_excess = max(
-            Decimal(0), maximum_budgetable_drift - bracket_screen
         )
 
     return {
@@ -525,7 +558,18 @@ def derive_successor_decimal_derivation(
                 "prediction_99_two_draw": "0.995",
             },
             "rounding": "ROUND_HALF_EVEN",
-            "d102_df18_compatibility_pin": True,
+            "d102_df18_compatibility_pin": False,
+        },
+        "lineage_envelope": {
+            "screen_rule": SUCCESSOR_SCREEN_ENVELOPE_RULE,
+            "ceiling_rule": SUCCESSOR_CEILING_ENVELOPE_RULE,
+            "comparator_quantum_s": _decimal_text(
+                SUCCESSOR_COMPARATOR_QUANTUM
+            ),
+            "parent_bracket_screen_s": _decimal_text(parent_screen),
+            "parent_maximum_budgetable_drift_s": _decimal_text(
+                parent_ceiling
+            ),
         },
         "source_statistics": {
             "minimum_s": _decimal_text(minimum),
@@ -534,13 +578,23 @@ def derive_successor_decimal_derivation(
             "maximum_content_id": content_ids[values.index(maximum)],
             "range_s": _decimal_text(observed_range),
             "mean_s": _decimal_text(
-                mean.quantize(display_quantum, rounding=ROUND_HALF_EVEN)
+                mean.quantize(
+                    SUCCESSOR_COMPARATOR_QUANTUM,
+                    rounding=ROUND_HALF_EVEN,
+                )
             ),
             "sample_sd_s": _decimal_text(
-                sample_sd.quantize(display_quantum, rounding=ROUND_HALF_EVEN)
+                sample_sd.quantize(
+                    SUCCESSOR_COMPARATOR_QUANTUM,
+                    rounding=ROUND_HALF_EVEN,
+                )
             ),
-            "prediction_95_two_draw_s": _decimal_text(prediction_95_display),
-            "prediction_99_two_draw_s": _decimal_text(prediction_99_display),
+            "prediction_95_two_draw_s": _decimal_text(
+                prediction_95_comparator
+            ),
+            "prediction_99_two_draw_s": _decimal_text(
+                prediction_99_comparator
+            ),
         },
         "presentation_values": {
             "range_12_places_s": {
@@ -555,10 +609,12 @@ def derive_successor_decimal_derivation(
         "rounding": {
             "mode": "ROUND_HALF_EVEN",
             "source_fields": "authenticated_decimal_lexemes_unrounded",
-            "statistics_quantum_s": "0.000000000000000001",
+            "statistics_quantum_s": _decimal_text(
+                SUCCESSOR_COMPARATOR_QUANTUM
+            ),
             "bracket_screen": {
-                "source": "source_statistics.range_s",
-                "quantum_s": "0.000001",
+                "source_rule": SUCCESSOR_SCREEN_ENVELOPE_RULE,
+                "quantum_s": _decimal_text(SUCCESSOR_COMPARATOR_QUANTUM),
                 "value_s": _decimal_text(bracket_screen),
             },
             "preflight_level_screen": {
@@ -574,8 +630,6 @@ def derive_successor_decimal_derivation(
             "maximum_budgetable_drift_s": _decimal_text(
                 maximum_budgetable_drift
             ),
-            # COLD-GATE-Q13: deliberately unchanged pending the re-convened
-            # ruling; n<19 is refused above so this cannot reach df=1.
             "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
             "operative_bound_rule": (
                 "max(pre_b_fiducial_s,post_b_fiducial_s)"
@@ -642,6 +696,50 @@ def _repository_relative_path(value: Any) -> str | None:
     if any(part in {"", ".", ".."} for part in candidate.parts):
         return None
     return value
+
+
+def _acceptance_arithmetic_valid(operatives: Mapping[str, Any]) -> bool:
+    screen = _decimal(operatives.get("bracket_screen_s"))
+    ceiling = _decimal(operatives.get("maximum_budgetable_drift_s"))
+    cap = _decimal(operatives.get("max_budgetable_excess_s"))
+    return bool(
+        screen is not None
+        and ceiling is not None
+        and cap is not None
+        and screen >= 0
+        and screen < ceiling
+        and cap == ceiling - screen
+        and cap > 0
+    )
+
+
+def _next_count_boundary(
+    *, parent_boundary: int, trigger_count: int, rule: str
+) -> int:
+    """Recompute one successor boundary under its entry-versioned rule."""
+
+    if rule == _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE:
+        return parent_boundary if trigger_count < parent_boundary else 2 * trigger_count
+    raise ValueError("acceptance_registry_boundary_rule_unsupported")
+
+
+def _artifact_derivation_content_ids(
+    artifact: Mapping[str, Any],
+) -> set[str] | None:
+    members = artifact.get("derivation_corpus", {}).get("members")
+    prior = artifact.get("prior_observation_set", {}).get("observations")
+    if not isinstance(members, list) or not isinstance(prior, list):
+        return None
+    if artifact.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA:
+        ids = {member.get("content_id") for member in members}
+    else:
+        content_by_attempt = {
+            row.get("attempt_id"): row.get("content_id")
+            for row in prior
+            if isinstance(row, Mapping)
+        }
+        ids = {content_by_attempt.get(member.get("member_id")) for member in members}
+    return ids if None not in ids and all(_valid_sha256(item) for item in ids) else None
 
 
 def _valid_registry(value: Any) -> bool:
@@ -874,7 +972,9 @@ def load_calibration_acceptance_registry(
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_parent_missing"
             )
-        count = artifact["derivation_corpus"]["n"]
+        trigger_count = artifact["prospective_rederivation"]["count_trigger"][
+            "source_trigger_count"
+        ]
         parent_boundary = _artifact_count_boundary(parent)
         boundary_rule = entry["count_boundary_rule"]
         artifact_boundary_rule = artifact["prospective_rederivation"][
@@ -884,14 +984,16 @@ def load_calibration_acceptance_registry(
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_boundary_rule_mismatch"
             )
-        if boundary_rule == _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE:
-            expected_boundary = (
-                parent_boundary if count < parent_boundary else 2 * count
+        try:
+            expected_boundary = _next_count_boundary(
+                parent_boundary=parent_boundary,
+                trigger_count=trigger_count,
+                rule=boundary_rule,
             )
-        else:
+        except ValueError:
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_boundary_rule_unsupported"
-            )
+            ) from None
         if artifact["prospective_rederivation"]["count_trigger"][
             "next_boundary"
         ] != expected_boundary:
@@ -904,9 +1006,43 @@ def load_calibration_acceptance_registry(
             or lineage["parent_artifact_sha256"] != parent_entry["artifact_sha256"]
             or lineage["parent_derivation_sha256"] != parent["derivation_sha256"]
             or lineage["parent_ledger_cutoff"] != parent_entry["ledger_cutoff"]
+            or artifact["decimal_derivation"]["lineage_envelope"]
+            .get("parent_bracket_screen_s")
+            != parent["decimal_derivation"]["ratified_operatives"].get(
+                "bracket_screen_s"
+            )
+            or artifact["decimal_derivation"]["lineage_envelope"]
+            .get("parent_maximum_budgetable_drift_s")
+            != parent["decimal_derivation"]["ratified_operatives"].get(
+                "maximum_budgetable_drift_s"
+            )
         ):
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_lineage_invalid"
+            )
+        parent_basis_ids = _artifact_derivation_content_ids(parent)
+        artifact_basis_ids = _artifact_derivation_content_ids(artifact)
+        parent_prior_ids = {
+            row["content_id"]
+            for row in parent["prior_observation_set"]["observations"]
+        }
+        post_cutoff_valid_ids = {
+            row["content_id"]
+            for row in artifact["prior_observation_set"]["observations"]
+            if row["content_id"] not in parent_prior_ids
+            and row["epoch_id"] == "active_epoch"
+            and row["disposition"] == "valid"
+            and row["attempts"][0]["finalization_sequence"]
+            > parent["ledger_cutoff"]["sequence"]
+        }
+        if (
+            parent_basis_ids is None
+            or artifact_basis_ids is None
+            or artifact_basis_ids
+            != parent_basis_ids | post_cutoff_valid_ids
+        ):
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_derivation_basis_invalid"
             )
     return dict(value)
 
@@ -921,67 +1057,9 @@ def _active_registry_entry(registry: Mapping[str, Any]) -> Mapping[str, Any] | N
 
 
 def _load_registry_for_current_active_selection() -> dict[str, Any]:
-    """Load committed authority, with one legacy-root schema migration."""
+    """Load the plain committed registry authority."""
 
-    try:
-        return load_calibration_acceptance_registry(require_committed=True)
-    except CalibrationAcceptanceRegistryRefusal as exc:
-        if exc.reason != "acceptance_registry_missing_commit":
-            raise
-    committed_raw = _git_head_bytes(
-        DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT
-    )
-    try:
-        committed = json.loads(committed_raw) if committed_raw is not None else None
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        committed = None
-    # This branch exists only while the exhibit's additive per-entry field is
-    # uncommitted. It authenticates the old HEAD registry and its HEAD artifact;
-    # it never consumes a worktree registry or permits an active-entry switch.
-    if (
-        not isinstance(committed, Mapping)
-        or not isinstance(committed.get("entries"), list)
-        or len(committed["entries"]) != 1
-        or not isinstance(committed["entries"][0], Mapping)
-        or "count_boundary_rule" in committed["entries"][0]
-    ):
-        raise CalibrationAcceptanceRegistryRefusal(
-            "acceptance_registry_missing_commit"
-        )
-    migrated = {
-        **committed,
-        "entries": [
-            {
-                **committed["entries"][0],
-                "count_boundary_rule": GENESIS_COUNT_BOUNDARY_RULE,
-            }
-        ],
-    }
-    if not _valid_registry(migrated):
-        raise CalibrationAcceptanceRegistryRefusal(
-            "acceptance_registry_schema_or_ancestry_invalid"
-        )
-    entry = migrated["entries"][0]
-    artifact_path = _REPO_ROOT / entry["artifact_path"]
-    try:
-        artifact_raw = artifact_path.read_bytes()
-        artifact = json.loads(artifact_raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        raise CalibrationAcceptanceRegistryRefusal(
-            "acceptance_registry_artifact_unreadable_or_outside_repository"
-        ) from None
-    if (
-        _git_head_bytes(artifact_path.resolve(), _REPO_ROOT) != artifact_raw
-        or hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]
-        or not _valid_acceptance_bound(artifact)
-        or artifact.get("acceptance_id") != entry["acceptance_id"]
-        or artifact.get("schema_version") != entry["artifact_schema"]
-        or artifact.get("derivation_sha256") != entry["derivation_sha256"]
-    ):
-        raise CalibrationAcceptanceRegistryRefusal(
-            "acceptance_registry_artifact_authentication_failed"
-        )
-    return migrated
+    return load_calibration_acceptance_registry(require_committed=True)
 
 
 def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
@@ -1112,7 +1190,14 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         ]
         or not isinstance(prospective.get("count_trigger"), Mapping)
         or set(prospective["count_trigger"])
-        != {"source_corpus_count", "next_boundary", "rule"}
+        != {
+            "source_trigger_count",
+            "next_boundary",
+            "rule",
+            "universe_rule",
+        }
+        or prospective["count_trigger"].get("universe_rule")
+        != SUCCESSOR_TRIGGER_UNIVERSE_RULE
         or prospective["count_trigger"].get("rule")
         not in {
             rule
@@ -1124,16 +1209,24 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
     if (
         not isinstance(corpus, Mapping)
         or set(corpus) != {"selection", "n", "members"}
-        or corpus.get("selection") != SUCCESSOR_CORPUS_SELECTION
+        or corpus.get("selection") != SUCCESSOR_DERIVATION_BASIS_RULE
         or isinstance(corpus.get("n"), bool)
         or not isinstance(corpus.get("n"), int)
         or corpus["n"] < SUCCESSOR_MINIMUM_CORPUS_SIZE
         or not isinstance(corpus.get("members"), list)
         or len(corpus["members"]) != corpus["n"]
-        or prospective["count_trigger"].get("source_corpus_count") != corpus["n"]
+        or isinstance(
+            prospective["count_trigger"].get("source_trigger_count"), bool
+        )
+        or not isinstance(
+            prospective["count_trigger"].get("source_trigger_count"), int
+        )
+        or prospective["count_trigger"]["source_trigger_count"]
+        < corpus["n"]
         or isinstance(prospective["count_trigger"].get("next_boundary"), bool)
         or not isinstance(prospective["count_trigger"].get("next_boundary"), int)
-        or prospective["count_trigger"]["next_boundary"] <= corpus["n"]
+        or prospective["count_trigger"]["next_boundary"]
+        <= prospective["count_trigger"]["source_trigger_count"]
     ):
         return False
     member_keys = {
@@ -1249,6 +1342,7 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
                 "content_id",
                 "epoch_id",
                 "disposition",
+                "disposing_decision_id",
                 "representative_attempt_id",
                 "attempts",
             }
@@ -1256,6 +1350,12 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
             or observation.get("epoch_id") not in prior["epoch_catalog"]
             or observation.get("disposition")
             not in {"valid", "systematic-invalid", "ordinary-invalid"}
+            or observation.get("disposing_decision_id") is not None
+            and (
+                not isinstance(observation["disposing_decision_id"], str)
+                or re.fullmatch(r"D-[1-9][0-9]*", observation["disposing_decision_id"])
+                is None
+            )
             or not isinstance(observation.get("representative_attempt_id"), str)
             or not isinstance(observation.get("attempts"), list)
             or not observation["attempts"]
@@ -1320,7 +1420,12 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         prior_by_id[observation["content_id"]] = observation
         if observation["disposition"] == "valid" and observation["epoch_id"] == "active_epoch":
             valid_active_ids.add(observation["content_id"])
-    if prior_ids != sorted(set(prior_ids)) or valid_active_ids != set(member_ids):
+    if (
+        prior_ids != sorted(set(prior_ids))
+        or not set(member_ids).issubset(valid_active_ids)
+        or prospective["count_trigger"]["source_trigger_count"]
+        != len(valid_active_ids)
+    ):
         return False
     for member in corpus["members"]:
         row = prior_by_id[member["content_id"]]
@@ -1340,10 +1445,26 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         ):
             return False
     try:
-        expected_derivation = derive_successor_decimal_derivation(corpus["members"])
+        envelope = derivation.get("lineage_envelope")
+        if not isinstance(envelope, Mapping):
+            return False
+        expected_derivation = derive_successor_decimal_derivation(
+            corpus["members"],
+            parent_operatives={
+                "bracket_screen_s": envelope.get("parent_bracket_screen_s"),
+                "maximum_budgetable_drift_s": envelope.get(
+                    "parent_maximum_budgetable_drift_s"
+                ),
+            },
+        )
     except (ArithmeticError, InvalidOperation, ValueError):
         return False
-    return derivation == expected_derivation
+    return bool(
+        derivation == expected_derivation
+        and _acceptance_arithmetic_valid(
+            derivation.get("ratified_operatives", {})
+        )
+    )
 
 
 def _valid_acceptance_bound(value: Any) -> bool:
@@ -1606,7 +1727,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
     maximum = Decimal(_D102_OPERATIVE_VALUES["maximum_budgetable_drift_s"])
     excess = Decimal(_D102_OPERATIVE_VALUES["max_budgetable_excess_s"])
     return (
-        (max(values) - min(values)).quantize(
+        _acceptance_arithmetic_valid(operatives)
+        and (max(values) - min(values)).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_EVEN
         )
         == screen
@@ -3284,10 +3406,10 @@ def evaluate_calibration_bracket(
         drift_decimal = abs(pre_decimal - post_decimal)
     endpoint_max_decimal = max(pre_decimal, post_decimal)
     operatives = artifact["decimal_derivation"]["ratified_operatives"]
-    screen = Decimal(operatives["bracket_screen_s"])
-    preflight_screen = Decimal(operatives["preflight_level_screen_s"])
-    maximum_drift = Decimal(operatives["maximum_budgetable_drift_s"])
-    maximum_excess = Decimal(operatives["max_budgetable_excess_s"])
+    screen = _decimal(operatives.get("bracket_screen_s"))
+    preflight_screen = _decimal(operatives.get("preflight_level_screen_s"))
+    maximum_drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
+    maximum_excess = _decimal(operatives.get("max_budgetable_excess_s"))
     result.update(
         {
             "pre": pre.descriptor(),
@@ -3305,6 +3427,25 @@ def evaluate_calibration_bracket(
             "observed_drift_decimal_s": str(drift_decimal),
         }
     )
+    if (
+        screen is None
+        or preflight_screen is None
+        or maximum_drift is None
+        or maximum_excess is None
+        or not _acceptance_arithmetic_valid(operatives)
+    ):
+        result["acceptance"]["drift"] = {
+            "status": "invalid_acceptance_arithmetic",
+            "observed_s": str(drift_decimal),
+            "screen_s": operatives.get("bracket_screen_s"),
+            "maximum_budgetable_drift_s": operatives.get(
+                "maximum_budgetable_drift_s"
+            ),
+            "max_budgetable_excess_s": operatives.get(
+                "max_budgetable_excess_s"
+            ),
+        }
+        return result, ("invalid_acceptance_arithmetic",)
     preflight_status = "passed" if pre_decimal <= preflight_screen else "failed"
     result["acceptance"]["preflight"] = {
         "status": preflight_status,
@@ -3348,7 +3489,9 @@ def evaluate_calibration_bracket(
         )
         return result, ("calibration_acceptance_bound_stale",)
 
-    excess = max(drift_decimal - screen, Decimal(0))
+    excess_over_screen = max(drift_decimal - screen, Decimal(0))
+    excess_over_ceiling = max(drift_decimal - maximum_drift, Decimal(0))
+    budget_headroom = maximum_drift - screen
     drift_status = (
         "budget_exceeded"
         if drift_decimal > maximum_drift
@@ -3360,15 +3503,19 @@ def evaluate_calibration_bracket(
         "status": drift_status,
         "observed_s": str(drift_decimal),
         "screen_s": str(screen),
-        "excess_s": str(excess),
-        "max_budgetable_excess_s": str(maximum_excess),
         "maximum_budgetable_drift_s": str(maximum_drift),
+        "excess_over_screen_s": _nonnegative_decimal_text(
+            excess_over_screen
+        ),
+        "excess_over_budget_ceiling_s": _nonnegative_decimal_text(
+            excess_over_ceiling
+        ),
+        "budget_headroom_s": _decimal_text(budget_headroom),
     }
     if drift_decimal > maximum_drift:
         return result, ("instrument_calibration_mismatch",)
 
-    # COLD-GATE-Q13: current-answer allowance generalization; the re-convened
-    # packet can flip this isolated site without touching downstream shape.
+    # D-125: allowance is minted only after one of the passing classifications.
     allowance = max(drift_decimal, screen)
     operative_bound = endpoint_max_decimal + allowance
     result.update(

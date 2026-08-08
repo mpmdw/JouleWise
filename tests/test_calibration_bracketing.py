@@ -1289,7 +1289,10 @@ class CalibrationBracketingTests(unittest.TestCase):
 
     def test_bracket_drift_over_d079_budget_refuses_claim(self) -> None:
         result, reasons = evaluate_calibration_bracket(
-            [self.candidate("pre", 99.0, 0.020), self.candidate("post", 111.0, 0.035)],
+            [
+                self.candidate("pre", 99.0, "0.020"),
+                self.candidate("post", 111.0, "0.035"),
+            ],
             window_start_s=100.0,
             window_end_s=110.0,
             bindings=self.bindings,
@@ -1321,7 +1324,10 @@ class CalibrationBracketingTests(unittest.TestCase):
 
     def test_d079_drift_beyond_budget_refuses_with_recorded_basis(self) -> None:
         result, reasons = evaluate_calibration_bracket(
-            [self.candidate("pre", 99.0, 0.020), self.candidate("post", 111.0, 0.035)],
+            [
+                self.candidate("pre", 99.0, "0.020"),
+                self.candidate("post", 111.0, "0.035"),
+            ],
             window_start_s=100.0,
             window_end_s=110.0,
             bindings=self.bindings,
@@ -1332,6 +1338,22 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             result["acceptance"]["drift"]["status"], "budget_exceeded"
         )
+        self.assertEqual(
+            result["acceptance"]["drift"]["excess_over_screen_s"],
+            "0.004182",
+        )
+        self.assertEqual(
+            result["acceptance"]["drift"][
+                "excess_over_budget_ceiling_s"
+            ],
+            "0.002906833909406142",
+        )
+        self.assertEqual(
+            result["acceptance"]["drift"]["budget_headroom_s"],
+            "0.001275166090593858",
+        )
+        self.assertIsNone(result["calibration_drift_allowance_s"])
+        self.assertNotIn("allowance", result["acceptance"])
 
     def test_d102_decimal_boundary_sweep_is_exact_and_inclusive(self) -> None:
         cases = (
@@ -1371,6 +1393,35 @@ class CalibrationBracketingTests(unittest.TestCase):
                     if status == "passed"
                     else ("instrument_calibration_mismatch",),
                 )
+                drift = result["acceptance"]["drift"]
+                self.assertEqual(
+                    drift["budget_headroom_s"],
+                    "0.001275166090593858",
+                )
+                expected_screen_excess = {
+                    "exact-screen": "0",
+                    "exact-ceiling": "0.001275166090593858",
+                    "one-decimal-unit-beyond": "0.001275166090593859",
+                }[name]
+                expected_ceiling_excess = (
+                    "0.000000000000000001"
+                    if name == "one-decimal-unit-beyond"
+                    else "0"
+                )
+                self.assertEqual(
+                    drift["excess_over_screen_s"], expected_screen_excess
+                )
+                self.assertEqual(
+                    drift["excess_over_budget_ceiling_s"],
+                    expected_ceiling_excess,
+                )
+                if status == "passed":
+                    self.assertEqual(
+                        result["acceptance"]["allowance"]["value_s"],
+                        observed,
+                    )
+                else:
+                    self.assertNotIn("allowance", result["acceptance"])
 
         exact_ceiling = float(Decimal("0.032093166090593858"))
         one_binary64_ulp_beyond = math.nextafter(exact_ceiling, math.inf)
@@ -1404,6 +1455,46 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(reasons, ())
         self.assertEqual(zero["acceptance"]["drift"]["observed_s"], "0.000")
         self.assertEqual(zero["acceptance"]["allowance"]["value_s"], "0.010818")
+
+    def test_invalid_acceptance_arithmetic_refuses_before_drift_classification(self) -> None:
+        candidates = [
+            self.candidate("pre", 99.0, "0.020"),
+            self.candidate("post", 111.0, "0.021"),
+        ]
+        snapshot, registered = _fixture_snapshot(candidates)
+        artifact = _unissued_acceptance_fixture()
+        artifact["decimal_derivation"]["ratified_operatives"][
+            "max_budgetable_excess_s"
+        ] = "0"
+        artifact["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        self.assertFalse(_valid_acceptance_bound(artifact))
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=artifact,
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                registered,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertEqual(reasons, ("invalid_acceptance_arithmetic",))
+        self.assertEqual(
+            result["acceptance"]["drift"]["status"],
+            "invalid_acceptance_arithmetic",
+        )
+        self.assertIsNone(result["acceptance"]["preflight"])
+        self.assertIsNone(result["calibration_drift_allowance_s"])
+        self.assertNotIn("allowance", result["acceptance"])
 
     def test_t1_mismatched_candidate_remains_ineligible_under_d079_v2(self) -> None:
         mismatched = dict(self.bindings)

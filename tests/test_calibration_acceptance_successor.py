@@ -343,6 +343,19 @@ class RegistryTrustAnchorTests(unittest.TestCase):
                     registry_path, repo_root=root, require_committed=True
                 )
 
+    def test_current_selection_is_plain_committed_registry_load(self) -> None:
+        sentinel = {"registry": "committed"}
+        with patch.object(
+            bracketing,
+            "load_calibration_acceptance_registry",
+            return_value=sentinel,
+        ) as loader:
+            self.assertIs(
+                bracketing._load_registry_for_current_active_selection(),
+                sentinel,
+            )
+        loader.assert_called_once_with(require_committed=True)
+
     def test_registry_rejects_symlink_artifact_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -534,8 +547,27 @@ class TriggerProbeTests(unittest.TestCase):
 
 
 class DecimalDerivationTests(unittest.TestCase):
-    def test_n19_golden_reproduces_predictions_and_operatives(self) -> None:
+    def test_n19_issued_pin_and_successor_kernel_split_are_exact(self) -> None:
         artifact = _parent_artifact()
+        issued_stats = artifact["decimal_derivation"]["source_statistics"]
+        issued_operatives = artifact["decimal_derivation"]["ratified_operatives"]
+        self.assertEqual(
+            issued_stats["prediction_95_two_draw_s"],
+            "0.008826584887500717",
+        )
+        self.assertEqual(
+            issued_stats["prediction_99_two_draw_s"],
+            "0.012093166090593858",
+        )
+        self.assertEqual(issued_operatives["bracket_screen_s"], "0.010818")
+        self.assertEqual(
+            issued_operatives["maximum_budgetable_drift_s"],
+            "0.012093166090593858",
+        )
+        self.assertEqual(
+            issued_operatives["max_budgetable_excess_s"],
+            "0.001275166090593858",
+        )
         content_by_attempt = {
             row["attempt_id"]: row["content_id"]
             for row in artifact["prior_observation_set"]["observations"]
@@ -553,11 +585,21 @@ class DecimalDerivationTests(unittest.TestCase):
         derived = bracketing.derive_successor_decimal_derivation(members)
         stats = derived["source_statistics"]
         operatives = derived["ratified_operatives"]
-        self.assertEqual(stats["prediction_95_two_draw_s"], "0.008826584887500717")
-        self.assertEqual(stats["prediction_99_two_draw_s"], "0.012093166090593858")
+        self.assertEqual(stats["prediction_95_two_draw_s"], "0.008826584887500731")
+        self.assertEqual(stats["prediction_99_two_draw_s"], "0.012093166090698986")
         self.assertEqual(operatives["bracket_screen_s"], "0.010818")
         self.assertEqual(operatives["preflight_level_screen_s"], "0.033558756679900")
-        self.assertEqual(operatives["max_budgetable_excess_s"], "0.001275166090593858")
+        self.assertEqual(
+            operatives["maximum_budgetable_drift_s"],
+            "0.012093166090698986",
+        )
+        self.assertEqual(
+            operatives["max_budgetable_excess_s"],
+            "0.001275166090698986",
+        )
+        self.assertFalse(
+            derived["quantile_method"]["d102_df18_compatibility_pin"]
+        )
 
     def test_preflight_screen_equals_half_even_quantized_observed_maximum(self) -> None:
         members = [
@@ -572,7 +614,10 @@ class DecimalDerivationTests(unittest.TestCase):
             for index in range(1, 20)
         ]
         derived = bracketing.derive_successor_decimal_derivation(members)
-        self.assertEqual(derived["ratified_operatives"]["bracket_screen_s"], "0.000000")
+        self.assertEqual(
+            derived["ratified_operatives"]["bracket_screen_s"],
+            "0.010818",
+        )
         self.assertEqual(
             derived["rounding"]["preflight_level_screen"]["source_rule"],
             bracketing.SUCCESSOR_PREFLIGHT_SCREEN_RULE,
@@ -649,9 +694,9 @@ class DecimalDerivationTests(unittest.TestCase):
                     "0.995", 17, use_compatibility_pin=False
                 )
 
-    def test_q13_pending_minimum_refuses_n_below_19(self) -> None:
+    def test_ratified_minimum_refuses_derivation_basis_below_19(self) -> None:
         with self.assertRaisesRegex(
-            ValueError, "successor_corpus_below_pending_q13_minimum_19"
+            ValueError, "successor_derivation_basis_below_minimum_19"
         ):
             bracketing.derive_successor_decimal_derivation(
                 [
@@ -660,9 +705,153 @@ class DecimalDerivationTests(unittest.TestCase):
                 ]
             )
 
+    def test_current_n30_worked_candidates_remain_below_inherited_envelope(self) -> None:
+        with bracketing.localcontext() as context:
+            context.prec = 100
+            root_two = Decimal(2).sqrt()
+            sample_sd = Decimal("0.011489826907224958") / (
+                bracketing.decimal_student_t_quantile(
+                    "0.995", 29, use_compatibility_pin=False
+                )
+                * root_two
+            )
+            high = (
+                Decimal(2)
+                * sample_sd
+                * (Decimal(29) / Decimal(30)).sqrt()
+            )
+        members = [
+            {
+                "content_id": f"{index:064x}",
+                "b_fiducial_s": str(Decimal(0) if index <= 15 else high),
+            }
+            for index in range(1, 31)
+        ]
+        derived = bracketing.derive_successor_decimal_derivation(members)
+        self.assertEqual(
+            derived["source_statistics"]["prediction_95_two_draw_s"],
+            "0.008525415306447831",
+        )
+        self.assertEqual(
+            derived["source_statistics"]["prediction_99_two_draw_s"],
+            "0.011489826907224958",
+        )
+        self.assertEqual(
+            derived["ratified_operatives"]["bracket_screen_s"],
+            "0.010818",
+        )
+        self.assertEqual(
+            derived["ratified_operatives"]["maximum_budgetable_drift_s"],
+            "0.012093166090593858",
+        )
+
+    def test_degraded_n30_worked_arithmetic_grows_both_envelopes(self) -> None:
+        with bracketing.localcontext() as context:
+            context.prec = bracketing.SUCCESSOR_DECIMAL_PRECISION
+            half_span = Decimal("0.004") * (Decimal(29) / Decimal(30)).sqrt()
+            high = Decimal(2) * half_span
+        members = [
+            {
+                "content_id": f"{index:064x}",
+                "b_fiducial_s": str(Decimal(0) if index <= 15 else high),
+            }
+            for index in range(1, 31)
+        ]
+        derived = bracketing.derive_successor_decimal_derivation(members)
+        self.assertEqual(
+            derived["source_statistics"]["sample_sd_s"],
+            "0.004000000000000000",
+        )
+        self.assertEqual(
+            derived["source_statistics"]["prediction_95_two_draw_s"],
+            "0.011569565992286168",
+        )
+        self.assertEqual(
+            derived["source_statistics"]["prediction_99_two_draw_s"],
+            "0.015592473312419959",
+        )
+        self.assertEqual(
+            derived["ratified_operatives"]["bracket_screen_s"],
+            "0.011569565992286168",
+        )
+        self.assertEqual(
+            derived["ratified_operatives"]["maximum_budgetable_drift_s"],
+            "0.015592473312419959",
+        )
+
+    def test_zero_variance_inherits_strictly_ordered_parent_envelope(self) -> None:
+        members = [
+            {"content_id": f"{index:064x}", "b_fiducial_s": "0.025"}
+            for index in range(1, 20)
+        ]
+        operatives = bracketing.derive_successor_decimal_derivation(members)[
+            "ratified_operatives"
+        ]
+        self.assertEqual(operatives["bracket_screen_s"], "0.010818")
+        self.assertEqual(
+            operatives["maximum_budgetable_drift_s"],
+            "0.012093166090593858",
+        )
+        self.assertEqual(
+            operatives["max_budgetable_excess_s"],
+            "0.001275166090593858",
+        )
+
+    def test_screen_ceiling_crossing_refuses_instead_of_clamping_cap(self) -> None:
+        members = [
+            {
+                "content_id": f"{index:064x}",
+                "b_fiducial_s": "0" if index <= 9 else "1",
+            }
+            for index in range(1, 20)
+        ]
+        with patch.object(
+            bracketing,
+            "decimal_student_t_quantile",
+            return_value=Decimal("3"),
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "^successor_screen_exceeds_budget_ceiling$"
+            ):
+                bracketing.derive_successor_decimal_derivation(members)
+
 
 class SuccessorBuilderTests(unittest.TestCase):
-    def test_first_range_successor_contains_all_30_plus_trigger(self) -> None:
+    def test_actual_30_trigger_inventory_retains_n19_basis_and_excludes_window_b(self) -> None:
+        parent = _parent_artifact()
+        grouped_result = bracketing._group_probe_observations(
+            bracketing._probe_observation_universe(_snapshot())
+        )
+        self.assertIsNotNone(grouped_result)
+        grouped, _noncontent = grouped_result
+        basis_ids = successor._successor_derivation_basis_ids(
+            parent,
+            grouped,
+            parent_new_ids=set(),
+            active_epoch=parent["identity_epoch"],
+        )
+        trigger_ids = {
+            content_id
+            for content_id, aliases in grouped.items()
+            if aliases[0].classification_disposition == "valid"
+            and dict(aliases[0].identity_epoch) == parent["identity_epoch"]
+        }
+        window_b_attempts = {
+            "20260726T031222-e0ce33f5",
+            "20260801T014059-8c3bfe9e",
+        }
+        content_by_attempt = {
+            row["attempt_id"]: row["content_id"]
+            for row in parent["prior_observation_set"]["observations"]
+        }
+        self.assertEqual(len(trigger_ids), 30)
+        self.assertEqual(len(basis_ids), 19)
+        self.assertTrue(
+            {content_by_attempt[attempt] for attempt in window_b_attempts}
+            .isdisjoint(basis_ids)
+        )
+
+    def test_first_range_successor_keeps_full_inventory_but_derives_n20(self) -> None:
         snapshot = _snapshot((_new_observation(0, bound="0.02"),))
         build = successor.build_calibration_acceptance_successor(
             snapshot,
@@ -670,8 +859,31 @@ class SuccessorBuilderTests(unittest.TestCase):
             require_committed_registry=False,
             verify_custody=False,
         )
-        self.assertEqual(build.artifact["derivation_corpus"]["n"], 31)
-        self.assertEqual(build.artifact["prospective_rederivation"]["count_trigger"]["next_boundary"], 38)
+        self.assertEqual(build.artifact["derivation_corpus"]["n"], 20)
+        count_trigger = build.artifact["prospective_rederivation"]["count_trigger"]
+        self.assertEqual(count_trigger["source_trigger_count"], 31)
+        self.assertEqual(count_trigger["next_boundary"], 38)
+        self.assertEqual(
+            count_trigger["universe_rule"],
+            bracketing.SUCCESSOR_TRIGGER_UNIVERSE_RULE,
+        )
+        self.assertEqual(
+            build.artifact["derivation_corpus"]["selection"],
+            bracketing.SUCCESSOR_DERIVATION_BASIS_RULE,
+        )
+        self.assertEqual(
+            len(build.artifact["prior_observation_set"]["observations"]),
+            39,
+        )
+        self.assertTrue(
+            all(
+                "disposing_decision_id" in row
+                and row["disposing_decision_id"] is None
+                for row in build.artifact["prior_observation_set"]["observations"]
+            )
+        )
+        self.assertIn("D-126", build.artifact["decision_ids"])
+        self.assertNotIn("COLD-GATE-U2-PENDING", build.artifact["decision_ids"])
         self.assertTrue(bracketing._valid_acceptance_bound(build.artifact))
         self.assertEqual(build.successor_probe["outcome"], "accepted_under_active_artifact")
         self.assertEqual(build.successor_probe["refusal_reasons"], [])
@@ -698,7 +910,7 @@ class SuccessorBuilderTests(unittest.TestCase):
         self.assertEqual(first.registry_bytes, second.registry_bytes)
         self.assertEqual(first.head_pin, second.head_pin)
 
-    def test_count_boundary_advances_only_after_crossing(self) -> None:
+    def test_38_trigger_progression_derives_n27_and_advances_to_76(self) -> None:
         extras = tuple(_new_observation(index, bound="0.0271") for index in range(8))
         build = successor.build_calibration_acceptance_successor(
             _snapshot(extras),
@@ -706,8 +918,27 @@ class SuccessorBuilderTests(unittest.TestCase):
             require_committed_registry=False,
             verify_custody=False,
         )
-        self.assertEqual(build.artifact["derivation_corpus"]["n"], 38)
-        self.assertEqual(build.artifact["prospective_rederivation"]["count_trigger"]["next_boundary"], 76)
+        self.assertEqual(build.artifact["derivation_corpus"]["n"], 27)
+        count_trigger = build.artifact["prospective_rederivation"]["count_trigger"]
+        self.assertEqual(count_trigger["source_trigger_count"], 38)
+        self.assertEqual(count_trigger["next_boundary"], 76)
+
+    def test_supported_successor_boundary_rules_all_have_recompute_branches(self) -> None:
+        successor_rules = (
+            bracketing._SUPPORTED_COUNT_BOUNDARY_RULES
+            - {bracketing.GENESIS_COUNT_BOUNDARY_RULE}
+        )
+        self.assertTrue(successor_rules)
+        for rule in successor_rules:
+            with self.subTest(rule=rule):
+                self.assertEqual(
+                    bracketing._next_count_boundary(
+                        parent_boundary=38,
+                        trigger_count=38,
+                        rule=rule,
+                    ),
+                    76,
+                )
 
     def test_ancestor_boundary_rule_is_validated_from_its_entry(self) -> None:
         build = successor.build_calibration_acceptance_successor(

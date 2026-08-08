@@ -31,19 +31,22 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     ACCEPTANCE_REGISTRY_AUTHORITY,
     ACCEPTANCE_SUCCESSOR_SCHEMA,
     DEFAULT_ACCEPTANCE_REGISTRY_PATH,
-    SUCCESSOR_CORPUS_SELECTION,
     SUCCESSOR_COUNT_BOUNDARY_RULE,
     SUCCESSOR_DECISION_IDS,
+    SUCCESSOR_DERIVATION_BASIS_RULE,
     SUCCESSOR_MINIMUM_CORPUS_SIZE,
     SUCCESSOR_PUBLICATION_POLICY,
     SUCCESSOR_QUANTILE_METHOD,
+    SUCCESSOR_TRIGGER_UNIVERSE_RULE,
     _active_registry_entry,
     _artifact_count_boundary,
+    _artifact_derivation_content_ids,
     _canonical_sha256,
     _group_probe_observations,
     _governed_noncontent_rows,
     _git_head_bytes,
     _observation_custody_authentic,
+    _next_count_boundary,
     _probe_observation_universe,
     _valid_acceptance_bound,
     _valid_registry,
@@ -145,6 +148,29 @@ def _attempt_row(observation: LedgerObservation) -> dict[str, Any]:
             "instrument_evidence.json"
         ),
     }
+
+
+def _successor_derivation_basis_ids(
+    parent: Mapping[str, Any],
+    grouped: Mapping[str, Sequence[LedgerObservation]],
+    *,
+    parent_new_ids: set[str],
+    active_epoch: Mapping[str, Any],
+) -> set[str]:
+    """Select the parent basis plus parent-judged post-cutoff additions."""
+
+    parent_basis_ids = _artifact_derivation_content_ids(parent)
+    if parent_basis_ids is None or not parent_basis_ids.issubset(grouped):
+        raise ValueError("successor_parent_derivation_basis_missing")
+    parent_cutoff = int(parent["ledger_cutoff"]["sequence"])
+    additions = {
+        content_id
+        for content_id in parent_new_ids
+        if (representative := grouped[content_id][0]).sequence > parent_cutoff
+        and representative.classification_disposition == "valid"
+        and dict(representative.identity_epoch) == dict(active_epoch)
+    }
+    return parent_basis_ids | additions
 
 
 def _load_parent_artifact(
@@ -288,24 +314,48 @@ def build_calibration_acceptance_successor(
     }
     if set(grouped) - parent_prior_ids != parent_new_ids:
         raise ValueError("successor_parent_judgment_content_set_mismatch")
+    derivation_basis_ids = _successor_derivation_basis_ids(
+        parent,
+        grouped,
+        parent_new_ids=parent_new_ids,
+        active_epoch=active_epoch,
+    )
+    parent_prior_by_id = {
+        row["content_id"]: row
+        for row in parent["prior_observation_set"]["observations"]
+    }
+    trigger_count = 0
     for content_id, aliases in grouped.items():
         representative = aliases[0]
         epoch_id = _epoch_id(representative.identity_epoch, active_epoch)
         epoch_values.setdefault(epoch_id, dict(representative.identity_epoch))
+        if (
+            representative.classification_disposition == "valid"
+            and epoch_id == "active_epoch"
+        ):
+            trigger_count += 1
         prior_rows.append(
             {
                 "content_id": content_id,
                 "epoch_id": epoch_id,
                 "disposition": representative.classification_disposition,
+                # D-126 Q5 record-shape seam only. A future disposing ruling
+                # may populate and consume this field; this rework deliberately
+                # preserves/records it without changing observation behavior.
+                "disposing_decision_id": parent_prior_by_id.get(
+                    content_id, {}
+                ).get("disposing_decision_id"),
                 "representative_attempt_id": representative.attempt_id,
                 "attempts": [_attempt_row(alias) for alias in aliases],
             }
         )
+        if content_id not in derivation_basis_ids:
+            continue
         if (
             representative.classification_disposition != "valid"
             or epoch_id != "active_epoch"
         ):
-            continue
+            raise ValueError("successor_derivation_basis_member_invalid")
         # COLD-GATE-Q11: conservative default. A trigger observation enters
         # the corpus only after the real parent probe has dispositioned it
         # under the prior artifact (D-109 R2.6). This isolated predicate is
@@ -338,12 +388,22 @@ def build_calibration_acceptance_successor(
     prior_rows.sort(key=lambda row: row["content_id"])
     corpus_members.sort(key=lambda member: member["content_id"])
     if len(corpus_members) < SUCCESSOR_MINIMUM_CORPUS_SIZE:
-        raise ValueError("successor_corpus_below_pending_q13_minimum_19")
+        raise ValueError("successor_derivation_basis_below_minimum_19")
+    if {member["content_id"] for member in corpus_members} != derivation_basis_ids:
+        raise ValueError("successor_derivation_basis_selection_incomplete")
 
-    derivation = derive_successor_decimal_derivation(corpus_members)
+    parent_operatives = parent["decimal_derivation"]["ratified_operatives"]
+    derivation = derive_successor_decimal_derivation(
+        corpus_members,
+        parent_operatives=parent_operatives,
+    )
     parent_boundary = _artifact_count_boundary(parent)
-    count = len(corpus_members)
-    next_boundary = parent_boundary if count < parent_boundary else 2 * count
+    derivation_count = len(corpus_members)
+    next_boundary = _next_count_boundary(
+        parent_boundary=parent_boundary,
+        trigger_count=trigger_count,
+        rule=SUCCESSOR_COUNT_BOUNDARY_RULE,
+    )
     cutoff_core = {
         "sequence": ledger_snapshot.head_sequence,
         "head_digest": ledger_snapshot.head_digest,
@@ -377,7 +437,7 @@ def build_calibration_acceptance_successor(
             "claim_eligible": True,
             "reason": (
                 "authenticated live-prefix trigger judged under the parent "
-                "artifact and rederived under D-102/D-109/D-117"
+                "artifact and rederived under D-102/D-109/D-117/D-125/D-126"
             ),
         },
         "lineage": {
@@ -412,14 +472,15 @@ def build_calibration_acceptance_successor(
                 "estimator_code_sha256"
             ],
             "count_trigger": {
-                "source_corpus_count": count,
+                "source_trigger_count": trigger_count,
                 "next_boundary": next_boundary,
                 "rule": SUCCESSOR_COUNT_BOUNDARY_RULE,
+                "universe_rule": SUCCESSOR_TRIGGER_UNIVERSE_RULE,
             },
         },
         "derivation_corpus": {
-            "selection": SUCCESSOR_CORPUS_SELECTION,
-            "n": count,
+            "selection": SUCCESSOR_DERIVATION_BASIS_RULE,
+            "n": derivation_count,
             "members": corpus_members,
         },
         "prior_observation_set": {
