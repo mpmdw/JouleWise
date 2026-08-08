@@ -16,6 +16,34 @@ executed history except where the EVENING block says otherwise.
 
 ## ✅ CHECKPOINT 2026-08-07 EVENING — 3.5h magistrate window (READ THIS FIRST)
 
+### D-121 ERA (Ed directive, 2026-08-08 ~late) + second extension
+
+- **D-121 RATIFIED and transcribed** (decision log + memory): the
+  magistrate's OWN contextual final review is the TERMINAL merge-gate
+  item (D-118 item 12) — after every other pass INCLUDING CI,
+  non-delegable; subagent Fable passes count only as earlier items.
+- **Reasoncode: PR #116 OPEN, gate complete through item 9.** Fix round
+  1 landed (`fc93ec1`): degrade-not-raise on the emitter (the crash was
+  REACHABLE under producer drift — delta proved a synthetic drift case
+  crashed the parent), discriminating dedup regression, whitespace
+  aligned, dead regex pruned. Delta: ACCEPT, same-signature NO. Full
+  replay 2747 OK unpiped. Remaining: CI (watcher armed) → **D-121
+  magistrate terminal review → merge**. Opus SF2 (waiver reason code)
+  deferred by design to the spec-ratification lane.
+- **Trust: adversarial audit round 1 = FAIL, same-signature YES** — the
+  operator-authored-authority class survives at ONE site the memo
+  already answered: the supplied binding chooses its own window; the
+  authenticated VERDICT's bracket must anchor window identity (memo §3).
+  Plus: decisive regression not production-path (memo §8), recursive
+  JSON not strict-parsed, containment field measures the mint HEAD not
+  the head-pin commit (adjudication consequence 2). **Fix round 2 IN
+  FLIGHT** (Sol xhigh, contract at `<scratchpad>/trust-fix-prompt.md`,
+  report to `<scratchpad>/trust-fix-out.md`). IF ITS DELTA STILL FINDS
+  THE CLASS: same-signature at count 2 → ESCALATION CONSULT, mandatory,
+  no round 3. Then: fresh delta → replay → PR → CI → D-121 terminal
+  review → merge; the v2 mint bar lifts only then.
+- Recovery implementation still in flight (`<scratchpad>/recovery-out.md`).
+
 ### EXTENDED WINDOW (+90min, same evening) — trust + reasoncode gauntlets advanced; three Sol streams in flight at final close
 
 - **Trust branch (`impl/d117-postcollection-trust`) @ `4fcb687`, pushed:**
