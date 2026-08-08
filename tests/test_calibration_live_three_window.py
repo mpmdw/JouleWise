@@ -1495,7 +1495,6 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             session_id=window["session_id"],
             slot="pre",
             attempt_id=attempts["pre"],
-            claim_id="synthetic-systematic-pre-claim",
         )
         finalize_bracket_session_slot(
             self.ledger,

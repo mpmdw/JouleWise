@@ -31,12 +31,20 @@ import re
 import stat
 import subprocess
 import tempfile
+import threading
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO
 
+from joulewise.calibration_exits import (
+    REFUSAL_BY_CODE,
+    RefusalCode,
+)
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 
 
@@ -52,6 +60,7 @@ CONTROL_SCHEMA = "joulewise.calibration_ledger_control.v1"
 APPEND_INTENT_EVENT = "append-intent"
 ABANDONMENT_EVENT = "abandon-tail"
 APPEND_POLICY_REVISION = "d117-ledger-resident-v1"
+CLAIM_POLICY_REVISION = "d117-stable-claim-v1"
 # Every governed semantic append is represented by one durable intent followed
 # by its committed target.  Consumers that model physical ledger cadence must
 # derive it from this protocol constant instead of hard-coding row counts.
@@ -117,32 +126,65 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 # claim barriers; no malformed or unresolved history is silently omitted.
 REFUSAL_TAXONOMY: Mapping[str, str] = MappingProxyType(
     {
-        "calibration_ledger_missing": "the pinned non-genesis ledger is absent",
-        "calibration_ledger_malformed": "ledger, receipt, or head-pin schema is malformed",
-        "calibration_ledger_chain_conflict": "sequence or predecessor linkage is not one linear chain",
-        "calibration_ledger_attempt_conflict": "an attempt has duplicate or conflicting state transitions",
-        "calibration_ledger_bracket_session_conflict": "a bracket session has duplicate, reordered, or conflicting state transitions",
-        "calibration_ledger_bracket_slot_claimed": "a bracket session slot already has an exclusive writer claim",
-        "calibration_ledger_bracket_session_open": "a bracket session has not finalized both slots or recorded a governed abort",
-        "calibration_ledger_content_conflict": "one content identity has conflicting authenticated classifications",
-        "calibration_ledger_pending": "at least one reservation is unresolved",
-        "calibration_ledger_head_uncommitted": "the head pin differs from the Git HEAD bytes",
-        "calibration_ledger_head_mismatch": "the physical head differs from the committed pin",
-        "calibration_ledger_rollback": "the physical ledger is a proper prefix of the pinned head",
-        "calibration_ledger_recovery_required": "the ledger has an unresolved append intent or non-admitted tail residue",
-        "calibration_ledger_operation_conflict": "an operation key conflicts with its durable target commitment",
-        "calibration_ledger_ungoverned_business": "a business receipt after protocol activation has no completed append intent",
-        "calibration_ledger_baseline_missing": "the acceptance cutoff is not in the current chain",
-        "calibration_ledger_custody_invalid": "receipt-bound evidence bytes are absent or hash-invalid",
-        "calibration_ledger_snapshot_required": "claim evaluation did not receive one immutable snapshot",
-        "calibration_ledger_off_ledger_artifact": "a calibration artifact is not registered in the snapshot",
-        "calibration_observation_unclassifiable": "a governed observation has no ruled disposition",
+        code.value: REFUSAL_BY_CODE[code].description
+        for code in RefusalCode
+        if code.value.startswith("calibration_ledger_")
+        or code is RefusalCode.OBSERVATION_UNCLASSIFIABLE
     }
 )
 
 
 class CalibrationLedgerError(ValueError):
     """A writer-side ledger operation cannot preserve the D-109 contract."""
+
+    def __init__(
+        self,
+        refusal: RefusalCode | str,
+        *,
+        context: Mapping[str, Any] | None = None,
+    ) -> None:
+        # Historical import preparation is outside the unattended calibration
+        # path and retains legacy prose until its own charter. Every D-117
+        # operational site passes RefusalCode and therefore exposes ``code``.
+        self.code = refusal if isinstance(refusal, RefusalCode) else None
+        self.context = MappingProxyType(dict(context or {}))
+        message = (
+            f"{refusal.value}: {REFUSAL_BY_CODE[refusal].description}"
+            if isinstance(refusal, RefusalCode)
+            else refusal
+        )
+        if self.context:
+            diagnostic = ", ".join(
+                f"{key}={value!r}" for key, value in sorted(self.context.items())
+            )
+            message = f"{message} ({diagnostic})"
+        super().__init__(message)
+
+
+_REFUSAL_PRECEDENCE = (
+    RefusalCode.LEDGER_RECOVERY_REQUIRED,
+    RefusalCode.LEDGER_MALFORMED,
+    RefusalCode.LEDGER_CHAIN_CONFLICT,
+    RefusalCode.LEDGER_UNGOVERNED_BUSINESS,
+    RefusalCode.LEDGER_OPERATION_CONFLICT,
+    RefusalCode.LEDGER_CUSTODY_INVALID,
+    RefusalCode.LEDGER_BRACKET_SESSION_CONFLICT,
+    RefusalCode.LEDGER_ATTEMPT_CONFLICT,
+    RefusalCode.LEDGER_CONTENT_CONFLICT,
+    RefusalCode.LEDGER_PENDING,
+    RefusalCode.LEDGER_BRACKET_SESSION_OPEN,
+    RefusalCode.LEDGER_HEAD_UNCOMMITTED,
+    RefusalCode.LEDGER_HEAD_MISMATCH,
+    RefusalCode.LEDGER_ROLLBACK,
+)
+
+
+def _primary_refusal(reasons: Sequence[str]) -> RefusalCode:
+    available = {RefusalCode(reason) for reason in reasons}
+    return next(
+        (code for code in _REFUSAL_PRECEDENCE if code in available),
+        sorted(available, key=lambda code: code.value)[0],
+    )
 
 
 def _jsonable(value: Any) -> Any:
@@ -165,6 +207,26 @@ def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
 
 def canonical_sha256(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def stable_bracket_claim_id(
+    *,
+    session_id: str,
+    slot: str,
+    attempt_id: str,
+    policy_revision: str = CLAIM_POLICY_REVISION,
+) -> str:
+    """Derive durable idempotency identity without process-local material."""
+
+    return canonical_sha256(
+        {
+            "domain": "joulewise.calibration-bracket-claim-id.v1",
+            "policy_revision": policy_revision,
+            "session_id": session_id,
+            "slot": slot,
+            "attempt_id": attempt_id,
+        }
+    )
 
 
 def _is_sha256(value: object) -> bool:
@@ -441,6 +503,52 @@ class CalibrationLedgerInspection:
     target_core_sha256: str | None
     legacy_journal_path: str | None = None
     legacy_journal_sha256: str | None = None
+
+
+class PinRelation(str, Enum):
+    EXACT = "exact"
+    PHYSICAL_AHEAD = "physical_ahead"
+    PHYSICAL_BEHIND = "physical_behind"
+    DIVERGENT = "divergent"
+
+
+@dataclass(frozen=True)
+class CalibrationReadiness:
+    phase: str
+    status: str
+    pin_relation: PinRelation
+    refusal_code: RefusalCode | None
+    session_id: str | None
+    next_slot: str | None
+    attempt_id: str | None
+    custody_state: str | None
+    claim_state: str | None
+    needs_pin_commit: bool
+    head_pin_candidate: Mapping[str, Any] | None
+    enforcing_under_lease: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "phase": self.phase,
+            "status": self.status,
+            "pin_relation": self.pin_relation.value,
+            "refusal_code": (
+                self.refusal_code.value if self.refusal_code is not None else None
+            ),
+            "session_id": self.session_id,
+            "next_slot": self.next_slot,
+            "attempt_id": self.attempt_id,
+            "custody_state": self.custody_state,
+            "claim_state": self.claim_state,
+            "needs_pin_commit": self.needs_pin_commit,
+            "head_pin_candidate": (
+                dict(self.head_pin_candidate)
+                if self.head_pin_candidate is not None
+                else None
+            ),
+            "enforcing_under_lease": self.enforcing_under_lease,
+            "authorizes_arm": self.status == "ready" and self.enforcing_under_lease,
+        }
 
 
 @dataclass
@@ -2449,12 +2557,16 @@ def _open_ledger_lock(ledger_path: Path) -> int:
             0o600,
         )
     except OSError as exc:
-        raise CalibrationLedgerError("ledger lock cannot be opened safely") from exc
+        raise CalibrationLedgerError(
+            RefusalCode.UNSAFE_LOCK_INODE,
+            context={"reason": "open_failed"},
+        ) from exc
     try:
         lock_stat = os.fstat(descriptor)
         if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
             raise CalibrationLedgerError(
-                "ledger lock must be a dedicated regular file"
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "not_dedicated_regular_file"},
             )
         try:
             ledger_stat = os.stat(ledger)
@@ -2462,13 +2574,17 @@ def _open_ledger_lock(ledger_path: Path) -> int:
             ledger_stat = None
         except OSError as exc:
             raise CalibrationLedgerError(
-                "physical ledger identity is unreadable"
+                RefusalCode.PHYSICAL_LEDGER_UNREADABLE,
+                context={"reason": "identity_unreadable"},
             ) from exc
         if ledger_stat is not None and (
             lock_stat.st_dev,
             lock_stat.st_ino,
         ) == (ledger_stat.st_dev, ledger_stat.st_ino):
-            raise CalibrationLedgerError("ledger lock aliases the physical ledger")
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "aliases_ledger"},
+            )
         return descriptor
     except Exception:
         try:
@@ -2476,6 +2592,125 @@ def _open_ledger_lock(ledger_path: Path) -> int:
         except OSError:
             pass
         raise
+
+
+_ACTIVE_WRITER_LEASES: dict[Path, tuple[int, int]] = {}
+_ACTIVE_WRITER_LEASES_GUARD = threading.Lock()
+
+
+def _lease_key(ledger_path: Path) -> Path:
+    return Path(ledger_path).absolute()
+
+
+def _current_writer_lease_descriptor(ledger_path: Path) -> int | None:
+    key = _lease_key(ledger_path)
+    with _ACTIVE_WRITER_LEASES_GUARD:
+        held = _ACTIVE_WRITER_LEASES.get(key)
+    if held is None or held[0] != threading.get_ident():
+        return None
+    return held[1]
+
+
+class CalibrationWriterLease:
+    """One nonblocking kernel lease held across the complete writer lifetime.
+
+    The dedicated lock inode is permanent. Diagnostic metadata may become
+    stale, but only kernel ``flock`` ownership determines liveness.
+    """
+
+    def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
+        self.ledger_path = Path(ledger_path)
+        self.descriptor: int | None = None
+        self._owner_thread: int | None = None
+
+    @property
+    def held(self) -> bool:
+        return self.descriptor is not None
+
+    def acquire(self) -> "CalibrationWriterLease":
+        if self.held:
+            return self
+        self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        key = _lease_key(self.ledger_path)
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            if key in _ACTIVE_WRITER_LEASES:
+                raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION)
+        descriptor = _open_ledger_lock(self.ledger_path)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(descriptor)
+            raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION) from exc
+        owner = threading.get_ident()
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            if key in _ACTIVE_WRITER_LEASES:
+                # This protects same-process callers on platforms whose flock
+                # semantics might otherwise permit a second local open.
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                os.close(descriptor)
+                raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION)
+            _ACTIVE_WRITER_LEASES[key] = (owner, descriptor)
+        self.descriptor = descriptor
+        self._owner_thread = owner
+        return self
+
+    def release(self) -> None:
+        descriptor = self.descriptor
+        if descriptor is None:
+            return
+        key = _lease_key(self.ledger_path)
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            if _ACTIVE_WRITER_LEASES.get(key) == (self._owner_thread, descriptor):
+                del _ACTIVE_WRITER_LEASES[key]
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+            self.descriptor = None
+            self._owner_thread = None
+
+    def __enter__(self) -> "CalibrationWriterLease":
+        return self.acquire()
+
+    def __exit__(self, *_exc: object) -> None:
+        self.release()
+
+
+@contextmanager
+def _ledger_lock(ledger_path: Path, *, nonblocking: bool = False):
+    """Reuse the current thread's held writer lease or acquire a short lock."""
+
+    existing = _current_writer_lease_descriptor(ledger_path)
+    if existing is not None:
+        yield existing
+        return
+    descriptor = _open_ledger_lock(ledger_path)
+    try:
+        flags = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
+        try:
+            fcntl.flock(descriptor, flags)
+        except BlockingIOError as exc:
+            raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION) from exc
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+def writer_lease_is_live(ledger_path: Path = DEFAULT_LEDGER_PATH) -> bool:
+    """Return a diagnostic liveness snapshot; never use it to authorize ARM."""
+
+    if _current_writer_lease_descriptor(ledger_path) is not None:
+        return False
+    descriptor = _open_ledger_lock(Path(ledger_path))
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(descriptor)
 
 
 def _fsync_parent_directory(path: Path) -> None:
@@ -2649,12 +2884,22 @@ def _after_ledger_fsync(stage: str) -> None:
     del stage
 
 
-def _append_and_fsync(handle: BinaryIO, payload: bytes, *, stage: str) -> None:
+def _append_and_fsync(
+    handle: BinaryIO,
+    payload: bytes,
+    *,
+    stage: str,
+    boundary: Any | None = None,
+) -> None:
     handle.seek(0, os.SEEK_END)
+    if boundary is not None:
+        boundary(f"{stage}-write")
     _write_ledger_append_payload(handle, payload)
     handle.flush()
     os.fsync(handle.fileno())
     _after_ledger_fsync(stage)
+    if boundary is not None:
+        boundary(f"{stage}-fsynced")
 
 
 def _new_append_intent(
@@ -2702,7 +2947,7 @@ def _legacy_journal_metadata(path: Path) -> Mapping[str, Any]:
     try:
         raw = path.read_bytes()
     except OSError as exc:
-        raise CalibrationLedgerError("legacy append journal is unreadable") from exc
+        raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_UNREADABLE) from exc
     tail = raw[-64:]
     return {
         "path": str(path),
@@ -2832,14 +3077,12 @@ def _migrate_legacy_journal(
 def _archive_legacy_journal(path: Path, digest: str) -> Path:
     archive = path.with_name(f"{path.name}.archived-{digest[:16]}")
     if archive.exists():
-        raise CalibrationLedgerError("legacy append journal archive conflicts")
+        raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_ARCHIVE_CONFLICT)
     try:
         os.replace(path, archive)
         _fsync_parent_directory(path.parent)
     except OSError as exc:
-        raise CalibrationLedgerError(
-            "legacy append journal could not be archived"
-        ) from exc
+        raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_ARCHIVE_FAILED) from exc
     return archive
 
 
@@ -2893,9 +3136,7 @@ def _repair_locked(
                     attestation_reason=attestation_reason,
                 )
                 continue
-            raise CalibrationLedgerError(
-                "ledger tail requires operator-attested abandon-tail"
-            )
+            raise CalibrationLedgerError(RefusalCode.TAIL_REQUIRES_ABANDON)
         if physical.active_intent is not None:
             predecessor = str(physical.receipts[-1]["receipt_digest"])
             target = _intent_target_receipt(
@@ -2904,15 +3145,13 @@ def _repair_locked(
                 predecessor_digest=predecessor,
             )
             if not _valid_receipt_shape(target):
-                raise CalibrationLedgerError(
-                    "durable append intent commits a malformed target"
-                )
+                raise CalibrationLedgerError(RefusalCode.INTENT_TARGET_MALFORMED)
             payload = canonical_json_bytes(target) + b"\n"
             _append_and_fsync(handle, payload, stage="target")
             raw += payload
             continue
         return raw, physical
-    raise CalibrationLedgerError("ledger recovery did not converge")
+    raise CalibrationLedgerError(RefusalCode.RECOVERY_NONCONVERGENT)
 
 
 def _completed_operation(
@@ -2989,7 +3228,7 @@ def inspect_calibration_ledger(
     try:
         raw = ledger.read_bytes() if ledger.exists() else b""
     except OSError as exc:
-        raise CalibrationLedgerError("physical ledger is unreadable") from exc
+        raise CalibrationLedgerError(RefusalCode.PHYSICAL_LEDGER_UNREADABLE) from exc
     return _inspection_from_physical(
         _scan_physical_ledger(raw),
         legacy_path=_legacy_append_journal_path(ledger),
@@ -3005,14 +3244,10 @@ def repair_calibration_ledger(
     """Converge every mechanically recoverable state under the ledger lock."""
 
     if not engine_identity or not attestation_reason:
-        raise CalibrationLedgerError(
-            "recovery identity and attestation reason must be nonempty"
-        )
+        raise CalibrationLedgerError(RefusalCode.RECOVERY_CREDENTIALS_INVALID)
     ledger = Path(ledger_path)
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    lock_descriptor = _open_ledger_lock(ledger)
-    try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+    with _ledger_lock(ledger):
         descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
@@ -3030,8 +3265,6 @@ def repair_calibration_ledger(
                 )
         finally:
             os.close(descriptor)
-    finally:
-        os.close(lock_descriptor)
 
 
 def _physical_chain_contains_pin(
@@ -3060,9 +3293,7 @@ def abandon_calibration_ledger_tail(
     """Authenticate only the residue after the maximal valid chain."""
 
     if not operator_identity or not attestation_reason or not reason_code:
-        raise CalibrationLedgerError(
-            "operator identity, reason code, and attestation reason are required"
-        )
+        raise CalibrationLedgerError(RefusalCode.ABANDON_CREDENTIALS_INVALID)
     pin = _authenticated_head_pin(
         Path(head_pin_path),
         require_committed_pin=require_committed_pin,
@@ -3070,23 +3301,16 @@ def abandon_calibration_ledger_tail(
     )
     ledger = Path(ledger_path)
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    lock_descriptor = _open_ledger_lock(ledger)
-    try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+    with _ledger_lock(ledger):
         descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 raw = handle.read()
                 physical = _scan_physical_ledger(raw)
                 if not _physical_chain_contains_pin(physical.receipts, pin):
-                    raise CalibrationLedgerError(
-                        "operator abandonment requires the committed head digest "
-                        "at its pinned sequence"
-                    )
+                    raise CalibrationLedgerError(RefusalCode.ABANDON_PIN_MISMATCH)
                 if physical.active_intent is not None:
-                    raise CalibrationLedgerError(
-                        "a durable append intent is irrevocable; run deterministic repair"
-                    )
+                    raise CalibrationLedgerError(RefusalCode.ABANDON_ACTIVE_INTENT)
                 if not physical.residue:
                     return _inspection_from_physical(physical)
                 raw = _append_abandonment(
@@ -3100,14 +3324,10 @@ def abandon_calibration_ledger_tail(
                 )
                 final = _scan_physical_ledger(raw)
                 if final.residue or final.active_intent is not None:
-                    raise CalibrationLedgerError(
-                        "operator abandonment did not produce a clean ledger"
-                    )
+                    raise CalibrationLedgerError(RefusalCode.ABANDON_NOT_CLEAN)
                 return _inspection_from_physical(final)
         finally:
             os.close(descriptor)
-    finally:
-        os.close(lock_descriptor)
 
 
 def _locked_append(
@@ -3117,12 +3337,13 @@ def _locked_append(
     operation_key: Mapping[str, Any] | None,
     completed_matches: Any,
     operation_selector: Any | None = None,
+    nonblocking: bool = False,
+    stage_boundary: Any | None = None,
+    conflict_code: RefusalCode = RefusalCode.LEDGER_OPERATION_CONFLICT,
 ) -> Mapping[str, Any]:
     ledger_path = Path(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_descriptor = _open_ledger_lock(ledger_path)
-    try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+    with _ledger_lock(ledger_path, nonblocking=nonblocking):
         descriptor = os.open(
             ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
         )
@@ -3144,25 +3365,17 @@ def _locked_append(
                 if completed is not None:
                     intent, target = completed
                     if not completed_matches(intent["target_core"]):
-                        raise CalibrationLedgerError(
-                            REFUSAL_TAXONOMY[
-                                "calibration_ledger_operation_conflict"
-                            ]
-                        )
+                        raise CalibrationLedgerError(conflict_code)
                     return _frozen_mapping(target)
                 receipt = build(physical.receipts)
                 if not _valid_receipt_shape(receipt) or receipt.get(
                     "schema_version"
                 ) == CONTROL_SCHEMA:
-                    raise CalibrationLedgerError(
-                        "writer constructed a malformed receipt"
-                    )
+                    raise CalibrationLedgerError(RefusalCode.LEDGER_MALFORMED)
                 target_core = _target_core(receipt)
                 actual_operation_key = _operation_key_for_core(target_core)
                 if operation_key is not None and actual_operation_key != dict(operation_key):
-                    raise CalibrationLedgerError(
-                        "writer operation key does not match target semantics"
-                    )
+                    raise CalibrationLedgerError(conflict_code)
                 intent = _new_append_intent(
                     receipts=physical.receipts,
                     byte_offset=len(raw),
@@ -3170,7 +3383,12 @@ def _locked_append(
                     operation_key=actual_operation_key,
                 )
                 intent_payload = canonical_json_bytes(intent) + b"\n"
-                _append_and_fsync(handle, intent_payload, stage="intent")
+                _append_and_fsync(
+                    handle,
+                    intent_payload,
+                    stage="intent",
+                    boundary=stage_boundary,
+                )
                 raw += intent_payload
                 target = _intent_target_receipt(
                     intent,
@@ -3178,18 +3396,19 @@ def _locked_append(
                     predecessor_digest=str(intent["receipt_digest"]),
                 )
                 target_payload = canonical_json_bytes(target) + b"\n"
-                _append_and_fsync(handle, target_payload, stage="target")
+                _append_and_fsync(
+                    handle,
+                    target_payload,
+                    stage="target",
+                    boundary=stage_boundary,
+                )
                 raw += target_payload
                 final = _scan_physical_ledger(raw)
                 if final.reasons or final.active_intent is not None:
-                    raise CalibrationLedgerError(
-                        "ledger append did not reach a clean finalized state"
-                    )
+                    raise CalibrationLedgerError(RefusalCode.RECOVERY_NONCONVERGENT)
                 return _frozen_mapping(target)
         finally:
             os.close(descriptor)
-    finally:
-        os.close(lock_descriptor)
 
 
 def _authenticated_head_pin(
@@ -3203,12 +3422,12 @@ def _authenticated_head_pin(
         pin_raw = pin_path.read_bytes()
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise CalibrationLedgerError("head pin is unreadable") from exc
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_UNREADABLE) from exc
     pin = _head_pin(pin_value)
     if pin is None:
-        raise CalibrationLedgerError("head pin is malformed")
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_MALFORMED)
     if require_committed_pin and _committed_pin_bytes(pin_path, repo_root) != pin_raw:
-        raise CalibrationLedgerError("head pin is not committed at Git HEAD")
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_NOT_COMMITTED)
     return pin
 
 
@@ -3227,7 +3446,7 @@ def validate_bracket_session_reservation_inputs(
     try:
         normalized_runs_root = normalize_calibration_custody_path(runs_root)
     except CalibrationLedgerError as exc:
-        raise CalibrationLedgerError("bracket session runs_root is malformed") from exc
+        raise CalibrationLedgerError(RefusalCode.RESERVATION_INPUT_INVALID) from exc
     session_identity = {
         "session_id": session_id,
         "window_id": window_id,
@@ -3238,19 +3457,23 @@ def validate_bracket_session_reservation_inputs(
     }
     normalized_slots: dict[str, dict[str, Any]] = {}
     if not isinstance(slots, Mapping) or set(slots) != set(BRACKET_SESSION_SLOTS):
-        raise CalibrationLedgerError("bracket session must reserve exactly pre and post")
+        raise CalibrationLedgerError(RefusalCode.RESERVATION_INPUT_INVALID)
     validation_root = Path(normalized_runs_root) / "instrument_validation"
     for role in BRACKET_SESSION_SLOTS:
         source = slots.get(role)
         if not isinstance(source, Mapping):
-            raise CalibrationLedgerError(f"{role} slot is malformed")
+            raise CalibrationLedgerError(
+                RefusalCode.RESERVATION_INPUT_INVALID,
+                context={"slot": role},
+            )
         custody_value = source.get("custody_locator")
         try:
             custody = Path(normalize_calibration_custody_path(custody_value))
             custody.relative_to(validation_root)
         except (CalibrationLedgerError, OSError, TypeError, ValueError) as exc:
             raise CalibrationLedgerError(
-                f"{role} custody locator is outside runs_root/instrument_validation"
+                RefusalCode.RESERVATION_INPUT_INVALID,
+                context={"slot": role, "reason": "custody_outside_runs_root"},
             ) from exc
         normalized_slots[role] = {
             "attempt_id": source.get("attempt_id"),
@@ -3265,9 +3488,12 @@ def validate_bracket_session_reservation_inputs(
         not _valid_session_slot_reservation(normalized_slots[role], role)
         for role in BRACKET_SESSION_SLOTS
     ):
-        raise CalibrationLedgerError("bracket session reservation is malformed")
+        raise CalibrationLedgerError(RefusalCode.RESERVATION_INPUT_INVALID)
     if normalized_slots["pre"]["attempt_id"] == normalized_slots["post"]["attempt_id"]:
-        raise CalibrationLedgerError("bracket session slot attempts must be distinct")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "slot_attempts_not_distinct"},
+        )
     return _frozen_mapping(session_identity), _frozen_mapping(normalized_slots)
 
 
@@ -3284,6 +3510,7 @@ def append_bracket_session_receipt(
     head_pin_path: Path = DEFAULT_HEAD_PIN_PATH,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
+    _stage_boundary: Any | None = None,
 ) -> Mapping[str, Any]:
     """Atomically reserve exactly one immutable pre/post bracket capability.
 
@@ -3311,13 +3538,11 @@ def append_bracket_session_receipt(
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         if (len(receipts), predecessor) != pin:
-            raise CalibrationLedgerError(
-                "physical ledger head differs from the committed pin"
-            )
+            raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
         observations, sessions, reasons = _attempts_and_observations(receipts)
         del observations
         if reasons:
-            raise CalibrationLedgerError(", ".join(sorted(reasons)))
+            raise CalibrationLedgerError(_primary_refusal(reasons))
         reserved_attempts = {
             attempt_id
             for session in sessions
@@ -3335,7 +3560,7 @@ def append_bracket_session_receipt(
             any(session.session_id == session_id for session in sessions)
             or proposed_attempts & (reserved_attempts | ordinary_attempts)
         ):
-            raise CalibrationLedgerError("bracket session identity conflicts with ledger")
+            raise CalibrationLedgerError(RefusalCode.RESERVATION_IDENTITY_CONFLICT)
         return _new_bracket_session_record(
             sequence=len(receipts) + 1,
             predecessor_digest=str(predecessor),
@@ -3359,6 +3584,8 @@ def append_bracket_session_receipt(
         build,
         operation_key=operation_key,
         completed_matches=lambda core: dict(core) == expected_core,
+        stage_boundary=_stage_boundary,
+        conflict_code=RefusalCode.RESERVATION_IDENTITY_CONFLICT,
     )
 
 
@@ -3368,30 +3595,45 @@ def claim_bracket_session_slot(
     session_id: str,
     slot: str,
     attempt_id: str,
-    claim_id: str,
+    claim_id: str | None = None,
+    _stage_boundary: Any | None = None,
 ) -> Mapping[str, Any]:
-    """Append one process-death-stable exclusive claim for a reserved slot."""
+    """Append one deterministic claim while liveness is owned by the lease."""
 
     if slot not in BRACKET_SESSION_SLOTS:
-        raise CalibrationLedgerError(f"invalid bracket session slot: {slot!r}")
-    if not isinstance(claim_id, str) or not claim_id:
-        raise CalibrationLedgerError("bracket slot claim_id must be nonempty")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"slot": slot},
+        )
+    expected_claim_id = stable_bracket_claim_id(
+        session_id=session_id,
+        slot=slot,
+        attempt_id=attempt_id,
+    )
+    if claim_id is not None and claim_id != expected_claim_id:
+        raise CalibrationLedgerError(RefusalCode.CLAIM_ID_INVALID)
+    claim_id = expected_claim_id
 
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         observations, sessions, reasons = _attempts_and_observations(receipts)
         del observations
         non_open_reasons = reasons - {"calibration_ledger_bracket_session_open"}
         if non_open_reasons:
-            raise CalibrationLedgerError(", ".join(sorted(non_open_reasons)))
+            raise CalibrationLedgerError(_primary_refusal(non_open_reasons))
         session = next(
             (item for item in sessions if item.session_id == session_id), None
         )
         if session is None or session.state != "open":
-            raise CalibrationLedgerError("bracket session is not open")
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
         expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
         if slot != expected_slot or session.slot_attempt_ids.get(slot) != attempt_id:
             raise CalibrationLedgerError(
-                f"bracket session slot must claim in order: expected {expected_slot}"
+                RefusalCode.SLOT_ORDER_CONFLICT,
+                context={
+                    "detail": f"expected {expected_slot}",
+                    "expected_slot": expected_slot,
+                    "slot": slot,
+                },
             )
         existing = [
             receipt
@@ -3402,9 +3644,7 @@ def claim_bracket_session_slot(
             and receipt.get("slot") == slot
         ]
         if existing:
-            raise CalibrationLedgerError(
-                REFUSAL_TAXONOMY["calibration_ledger_bracket_slot_claimed"]
-            )
+            raise CalibrationLedgerError(RefusalCode.LEDGER_BRACKET_SLOT_CLAIMED)
         open_receipt = next(
             receipt
             for receipt in receipts
@@ -3443,6 +3683,8 @@ def claim_bracket_session_slot(
             and core.get("attempt_id") == attempt_id
             and core.get("claim_id") == claim_id
         ),
+        stage_boundary=_stage_boundary,
+        conflict_code=RefusalCode.CLAIM_ID_INVALID,
     )
 
 
@@ -3458,13 +3700,20 @@ def finalize_bracket_session_slot(
     t1_bindings: Mapping[str, Any] | None = None,
     capture_wall_time_s: str | None = None,
     exact_bound_lexeme_s: str | None = None,
+    _stage_boundary: Any | None = None,
 ) -> Mapping[str, Any]:
     """Fill exactly one reserved session slot in mandatory pre/post order."""
 
     if slot not in BRACKET_SESSION_SLOTS:
-        raise CalibrationLedgerError(f"invalid bracket session slot: {slot!r}")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"slot": slot},
+        )
     if disposition not in FINAL_DISPOSITIONS:
-        raise CalibrationLedgerError(f"invalid final disposition: {disposition!r}")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"disposition": disposition},
+        )
     artifacts = dict(artifact_sha256 or {})
     content_id = content_id_from_artifact_hashes(artifacts)
     normalized_epoch = _normalized_vector(identity_epoch, IDENTITY_EPOCH_FIELDS)
@@ -3475,15 +3724,20 @@ def finalize_bracket_session_slot(
         del observations
         non_open_reasons = reasons - {"calibration_ledger_bracket_session_open"}
         if non_open_reasons:
-            raise CalibrationLedgerError(", ".join(sorted(non_open_reasons)))
+            raise CalibrationLedgerError(_primary_refusal(non_open_reasons))
         by_id = {session.session_id: session for session in sessions}
         session = by_id.get(session_id)
         if session is None or session.state != "open":
-            raise CalibrationLedgerError("bracket session is not open")
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
         expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
         if slot != expected_slot or slot in session.finalized_slots:
             raise CalibrationLedgerError(
-                f"bracket session slot must finalize in order: expected {expected_slot}"
+                RefusalCode.SLOT_ORDER_CONFLICT,
+                context={
+                    "detail": f"expected {expected_slot}",
+                    "expected_slot": expected_slot,
+                    "slot": slot,
+                },
             )
         open_receipt = next(
             receipt
@@ -3497,9 +3751,7 @@ def finalize_bracket_session_slot(
             or dict(reserved["identity_epoch"]) != normalized_epoch
             or dict(reserved["t1_bindings"]) != normalized_t1
         ):
-            raise CalibrationLedgerError(
-                "slot finalization conflicts with the reserved session binding"
-            )
+            raise CalibrationLedgerError(RefusalCode.FINALIZATION_BINDING_CONFLICT)
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         return _new_bracket_session_record(
             sequence=len(receipts) + 1,
@@ -3543,6 +3795,8 @@ def finalize_bracket_session_slot(
             and core.get("capture_wall_time_s") == capture_wall_time_s
             and core.get("exact_bound_lexeme_s") == exact_bound_lexeme_s
         ),
+        stage_boundary=_stage_boundary,
+        conflict_code=RefusalCode.FINALIZATION_BINDING_CONFLICT,
     )
 
 
@@ -3555,19 +3809,22 @@ def abort_bracket_session(
     """Append a governed terminal closure without deleting partial receipts."""
 
     if not isinstance(reason, str) or not reason:
-        raise CalibrationLedgerError("bracket session abort reason must be nonempty")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "empty_abort_reason"},
+        )
 
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         observations, sessions, reasons = _attempts_and_observations(receipts)
         del observations
         non_open_reasons = reasons - {"calibration_ledger_bracket_session_open"}
         if non_open_reasons:
-            raise CalibrationLedgerError(", ".join(sorted(non_open_reasons)))
+            raise CalibrationLedgerError(_primary_refusal(non_open_reasons))
         session = next(
             (item for item in sessions if item.session_id == session_id), None
         )
         if session is None or session.state != "open":
-            raise CalibrationLedgerError("bracket session is not open")
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
         open_receipt = next(
             receipt
             for receipt in receipts
@@ -3607,6 +3864,7 @@ def abort_bracket_session(
             and core.get("session_id") == session_id
             and core.get("reason") == reason
         ),
+        nonblocking=True,
     )
 
 
@@ -3620,16 +3878,16 @@ def terminal_head_pin_for_session(
     try:
         raw = Path(ledger_path).read_bytes()
     except OSError as exc:
-        raise CalibrationLedgerError("ledger is unreadable") from exc
+        raise CalibrationLedgerError(RefusalCode.PHYSICAL_LEDGER_UNREADABLE) from exc
     receipts, parse_reasons = _parse_ledger(raw)
     observations, sessions, state_reasons = _attempts_and_observations(receipts)
     del observations
     reasons = parse_reasons | state_reasons
     if reasons:
-        raise CalibrationLedgerError(", ".join(sorted(reasons)))
+        raise CalibrationLedgerError(_primary_refusal(reasons))
     session = next((item for item in sessions if item.session_id == session_id), None)
     if session is None or session.state == "open":
-        raise CalibrationLedgerError("bracket session is not terminal")
+        raise CalibrationLedgerError(RefusalCode.SESSION_NOT_TERMINAL)
     terminal_digest = (
         session.finalized_slots["post"].receipt_digest
         if session.state == "finalized"
@@ -3647,9 +3905,647 @@ def terminal_head_pin_for_session(
         receipt.get("schema_version") != CONTROL_SCHEMA
         for receipt in receipts[terminal_index + 1 :]
     ):
-        raise CalibrationLedgerError("session closure is not the terminal ledger head")
+        raise CalibrationLedgerError(RefusalCode.SESSION_TERMINAL_NOT_HEAD)
     final = receipts[-1]
     return _head_pin_for_valid_receipt(final)
+
+
+def _pin_relation(snapshot: CalibrationLedgerSnapshot) -> PinRelation:
+    pinned = (
+        int(snapshot.committed_head_sequence or 0),
+        str(snapshot.committed_head_digest or GENESIS_DIGEST),
+    )
+    physical = (snapshot.head_sequence, snapshot.head_digest)
+    if physical == pinned:
+        return PinRelation.EXACT
+    if _physical_chain_contains_pin(snapshot.receipts, pinned):
+        return PinRelation.PHYSICAL_AHEAD
+    if (
+        snapshot.head_sequence < pinned[0]
+        and _physical_chain_contains_pin(snapshot.receipts, physical)
+    ):
+        return PinRelation.PHYSICAL_BEHIND
+    return PinRelation.DIVERGENT
+
+
+def _session_open_receipt(
+    snapshot: CalibrationLedgerSnapshot, session_id: str
+) -> Mapping[str, Any] | None:
+    return next(
+        (
+            receipt
+            for receipt in snapshot.receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+            and receipt.get("event") == BRACKET_SESSION_OPEN_EVENT
+            and receipt.get("session_id") == session_id
+        ),
+        None,
+    )
+
+
+def validate_frozen_reservation_plan(
+    plan_path: Path, *, expected_sha256: str, expected_plan_id: str
+) -> Mapping[str, Any]:
+    try:
+        raw = Path(plan_path).read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationLedgerError(RefusalCode.PLAN_UNREADABLE) from exc
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
+    if not isinstance(value, Mapping) or value.get("plan_id") != expected_plan_id:
+        raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
+    return _frozen_mapping(value)
+
+
+def _custody_state(path: Path) -> str:
+    try:
+        if not path.exists():
+            return "absent"
+        if not path.is_dir():
+            return "unreadable"
+        present = {name for name in GOVERNED_ARTIFACTS if (path / name).is_file()}
+    except OSError:
+        return "unreadable"
+    if not present:
+        return "empty"
+    if present == set(GOVERNED_ARTIFACTS):
+        return "complete"
+    return "partial"
+
+
+def calibration_session_status(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    plan_path: Path | None = None,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> dict[str, Any]:
+    """Derive session progress solely from durable ledger/plan/custody state."""
+
+    inspection = inspect_calibration_ledger(ledger_path)
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_pin_path,
+        require_committed_pin=require_committed_pin,
+        verify_custody=False,
+        repo_root=repo_root,
+    )
+    session = snapshot.bracket_session_by_id.get(session_id)
+    if session is None:
+        raise CalibrationLedgerError(RefusalCode.SESSION_NOT_FOUND)
+    if plan_path is not None:
+        validate_frozen_reservation_plan(
+            plan_path,
+            expected_sha256=session.plan_sha256,
+            expected_plan_id=session.plan_id,
+        )
+    open_receipt = _session_open_receipt(snapshot, session_id)
+    slots: dict[str, Any] = {}
+    for slot in BRACKET_SESSION_SLOTS:
+        reserved = (
+            open_receipt.get("slots", {}).get(slot)
+            if isinstance(open_receipt, Mapping)
+            and isinstance(open_receipt.get("slots"), Mapping)
+            else None
+        )
+        locator = (
+            Path(str(reserved.get("custody_locator")))
+            if isinstance(reserved, Mapping)
+            else None
+        )
+        slots[slot] = {
+            "attempt_id": session.slot_attempt_ids.get(slot),
+            "custody_locator": str(locator) if locator is not None else None,
+            "custody_state": _custody_state(locator) if locator is not None else None,
+            "finalized": slot in session.finalized_slots,
+        }
+    next_slot = (
+        BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+        if session.state == "open" and len(session.finalized_slots) < len(BRACKET_SESSION_SLOTS)
+        else None
+    )
+    live_writer = writer_lease_is_live(ledger_path)
+    actionable: RefusalCode | None = None
+    unexpected = set(snapshot.refusal_reasons) - {
+        RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+        RefusalCode.LEDGER_HEAD_MISMATCH.value,
+    }
+    if unexpected:
+        actionable = RefusalCode(_primary_refusal(unexpected))
+    elif inspection.state != "clean" or inspection.legacy_journal_path is not None:
+        actionable = RefusalCode.LEDGER_RECOVERY_REQUIRED
+    elif live_writer:
+        actionable = RefusalCode.LIVE_WRITER_CONTENTION
+    elif next_slot is not None and slots[next_slot]["custody_state"] == "complete":
+        actionable = RefusalCode.CUSTODY_COMPLETE_USE_RESUME
+    elif next_slot is not None and slots[next_slot]["custody_state"] in {
+        "empty",
+        "partial",
+        "unreadable",
+    }:
+        actionable = (
+            RefusalCode.CUSTODY_UNREADABLE
+            if slots[next_slot]["custody_state"] == "unreadable"
+            else RefusalCode.CUSTODY_PARTIAL
+        )
+    elif session.state != "open" and _pin_relation(snapshot) is PinRelation.PHYSICAL_AHEAD:
+        actionable = RefusalCode.LEDGER_HEAD_MISMATCH
+    route = REFUSAL_BY_CODE.get(actionable) if actionable is not None else None
+    return {
+        "status": "session_status",
+        "session_id": session.session_id,
+        "session_state": session.state,
+        "plan_id": session.plan_id,
+        "plan_sha256": session.plan_sha256,
+        "inspection_state": inspection.state,
+        "legacy_journal_path": inspection.legacy_journal_path,
+        "pin_relation": _pin_relation(snapshot).value,
+        "next_slot": next_slot,
+        "slots": slots,
+        "live_writer": live_writer,
+        "refusal_code": actionable.value if actionable is not None else None,
+        "exit_id": route.exit_id if route is not None else None,
+        "next_command": route.command if route is not None else None,
+        "arm_blocked": route.arm_blocked if route is not None else False,
+        "terminal_head_pin_candidate": (
+            terminal_head_pin_for_session(ledger_path, session_id=session_id)
+            if session.state != "open" and inspection.state == "clean"
+            else None
+        ),
+    }
+
+
+def calibration_readiness(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    phase: str,
+    session_id: str | None = None,
+    slot: str | None = None,
+    attempt_id: str | None = None,
+    enforcing_under_lease: bool = False,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> CalibrationReadiness:
+    """Evaluate the D-117 composite readiness predicate for one exact phase."""
+
+    if phase not in {"pre-reserve", "pre-slot", "terminal"}:
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"phase": phase},
+        )
+    if enforcing_under_lease and _current_writer_lease_descriptor(ledger_path) is None:
+        raise CalibrationLedgerError(RefusalCode.PRE_SLOT_NOT_READY)
+    inspection = inspect_calibration_ledger(ledger_path)
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_pin_path,
+        require_committed_pin=require_committed_pin,
+        verify_custody=False,
+        repo_root=repo_root,
+    )
+    relation = _pin_relation(snapshot)
+    common_blocked = inspection.state != "clean" or inspection.legacy_journal_path is not None
+    live_writer = (
+        False
+        if enforcing_under_lease
+        else writer_lease_is_live(ledger_path)
+    )
+    refusal: RefusalCode | None = None
+    next_slot: str | None = None
+    expected_attempt: str | None = None
+    custody_state: str | None = None
+    claim_state: str | None = None
+    candidate: Mapping[str, Any] | None = None
+
+    if phase == "pre-reserve":
+        open_sessions = [item for item in snapshot.bracket_sessions if item.state == "open"]
+        unexpected = set(snapshot.refusal_reasons)
+        if unexpected:
+            refusal = RefusalCode(_primary_refusal(unexpected))
+        elif common_blocked:
+            refusal = RefusalCode.LEDGER_RECOVERY_REQUIRED
+        elif live_writer:
+            refusal = RefusalCode.LIVE_WRITER_CONTENTION
+        elif relation is not PinRelation.EXACT or open_sessions:
+            refusal = RefusalCode.PRE_RESERVE_NOT_READY
+    elif phase == "pre-slot":
+        session = snapshot.bracket_session_by_id.get(str(session_id))
+        open_receipt = (
+            _session_open_receipt(snapshot, str(session_id)) if session is not None else None
+        )
+        if session is not None and session.state == "open":
+            next_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+            expected_attempt = session.slot_attempt_ids.get(next_slot)
+            reserved = (
+                open_receipt.get("slots", {}).get(next_slot)
+                if isinstance(open_receipt, Mapping)
+                and isinstance(open_receipt.get("slots"), Mapping)
+                else None
+            )
+            if isinstance(reserved, Mapping):
+                custody_state = _custody_state(Path(str(reserved["custody_locator"])))
+            claims = [
+                receipt
+                for receipt in snapshot.receipts
+                if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+                and receipt.get("event") == BRACKET_SESSION_SLOT_CLAIM_EVENT
+                and receipt.get("session_id") == str(session_id)
+                and receipt.get("slot") == next_slot
+            ]
+            if not claims:
+                claim_state = "absent"
+            elif len(claims) == 1 and claims[0].get("claim_id") == stable_bracket_claim_id(
+                session_id=str(session_id),
+                slot=str(next_slot),
+                attempt_id=str(expected_attempt),
+            ):
+                claim_state = "exact_completed"
+            else:
+                claim_state = "conflict"
+        unexpected = set(snapshot.refusal_reasons) - {
+            RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+            RefusalCode.LEDGER_HEAD_MISMATCH.value,
+        }
+        if unexpected:
+            refusal = RefusalCode(_primary_refusal(unexpected))
+        elif common_blocked:
+            refusal = RefusalCode.LEDGER_RECOVERY_REQUIRED
+        elif live_writer:
+            refusal = RefusalCode.LIVE_WRITER_CONTENTION
+        elif relation is not PinRelation.PHYSICAL_AHEAD:
+            refusal = (
+                RefusalCode.LEDGER_ROLLBACK
+                if relation is PinRelation.PHYSICAL_BEHIND
+                else RefusalCode.LEDGER_HEAD_MISMATCH
+            )
+        elif custody_state == "complete":
+            refusal = RefusalCode.CUSTODY_COMPLETE_USE_RESUME
+        elif custody_state in {"empty", "partial", "unreadable"}:
+            refusal = (
+                RefusalCode.CUSTODY_UNREADABLE
+                if custody_state == "unreadable"
+                else RefusalCode.CUSTODY_PARTIAL
+            )
+        elif claim_state == "conflict":
+            refusal = RefusalCode.CLAIM_ID_INVALID
+        elif (
+            session is None
+            or session.state != "open"
+            or slot != next_slot
+            or attempt_id != expected_attempt
+            or not snapshot.is_governed_open_bracket_extension
+        ):
+            refusal = RefusalCode.PRE_SLOT_NOT_READY
+    else:
+        session = snapshot.bracket_session_by_id.get(str(session_id))
+        if session is not None and session.state != "open" and not common_blocked:
+            try:
+                candidate = terminal_head_pin_for_session(
+                    ledger_path, session_id=str(session_id)
+                )
+            except CalibrationLedgerError:
+                candidate = None
+        unexpected = set(snapshot.refusal_reasons) - {
+            RefusalCode.LEDGER_HEAD_MISMATCH.value,
+        }
+        if unexpected:
+            refusal = RefusalCode(_primary_refusal(unexpected))
+        elif common_blocked:
+            refusal = RefusalCode.LEDGER_RECOVERY_REQUIRED
+        elif live_writer:
+            refusal = RefusalCode.LIVE_WRITER_CONTENTION
+        elif relation not in {PinRelation.EXACT, PinRelation.PHYSICAL_AHEAD}:
+            refusal = (
+                RefusalCode.LEDGER_ROLLBACK
+                if relation is PinRelation.PHYSICAL_BEHIND
+                else RefusalCode.LEDGER_HEAD_MISMATCH
+            )
+        elif (
+            session is None
+            or session.state == "open"
+            or candidate is None
+        ):
+            refusal = RefusalCode.TERMINAL_NOT_READY
+
+    return CalibrationReadiness(
+        phase=phase,
+        status="ready" if refusal is None else "blocked",
+        pin_relation=relation,
+        refusal_code=refusal,
+        session_id=session_id,
+        next_slot=next_slot,
+        attempt_id=expected_attempt,
+        custody_state=custody_state,
+        claim_state=claim_state,
+        needs_pin_commit=relation is PinRelation.PHYSICAL_AHEAD,
+        head_pin_candidate=candidate,
+        enforcing_under_lease=enforcing_under_lease,
+    )
+
+
+def advance_calibration_head_pin(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str | None,
+    expected_sequence: int,
+    expected_digest: str,
+    operator_identity: str,
+    attestation_reason: str,
+    execute: bool = False,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> Mapping[str, Any]:
+    """Guarded desk-only advancement to an authenticated terminal head."""
+
+    if not operator_identity or not attestation_reason:
+        raise CalibrationLedgerError(RefusalCode.ABANDON_CREDENTIALS_INVALID)
+    with CalibrationWriterLease(ledger_path):
+        current_pin = _authenticated_head_pin(
+            Path(head_pin_path),
+            require_committed_pin=require_committed_pin,
+            repo_root=Path(repo_root),
+        )
+        inspection = inspect_calibration_ledger(ledger_path)
+        if inspection.state != "clean" or inspection.legacy_journal_path is not None:
+            raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+        snapshot = load_calibration_ledger_snapshot(
+            ledger_path,
+            head_pin_path,
+            require_committed_pin=require_committed_pin,
+            verify_custody=False,
+            repo_root=repo_root,
+        )
+        if _pin_relation(snapshot) is not PinRelation.PHYSICAL_AHEAD:
+            raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_NOT_NEEDED)
+        if not _physical_chain_contains_pin(snapshot.receipts, current_pin):
+            raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+        if session_id is None:
+            if any(session.state == "open" for session in snapshot.bracket_sessions):
+                raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+            candidate = {
+                "sequence": inspection.head_sequence,
+                "head_digest": inspection.head_digest,
+                "ledger_schema": LEDGER_SCHEMA,
+            }
+        else:
+            candidate = terminal_head_pin_for_session(
+                ledger_path, session_id=session_id
+            )
+        if (
+            candidate["sequence"] != expected_sequence
+            or candidate["head_digest"] != expected_digest
+        ):
+            raise CalibrationLedgerError(RefusalCode.PIN_CANDIDATE_MISMATCH)
+        result = {
+            **candidate,
+            "operator_identity": operator_identity,
+            "attestation_reason": attestation_reason,
+            "previous_sequence": current_pin[0],
+            "previous_head_digest": current_pin[1],
+            "executed": execute,
+        }
+        if execute:
+            payload = json.dumps(candidate, indent=2, sort_keys=False).encode("utf-8") + b"\n"
+            pin_path = Path(head_pin_path)
+            pin_path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{pin_path.name}.advance-", dir=pin_path.parent
+            )
+            temporary = Path(temporary_name)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, pin_path)
+                _fsync_parent_directory(pin_path.parent)
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+        return _frozen_mapping(result)
+
+
+def resume_finalize_bracket_session(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    slot: str,
+    plan_path: Path,
+    systematic_screen_s: Decimal,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> Mapping[str, Any]:
+    """Finalize authenticated complete custody from a fresh process."""
+
+    with CalibrationWriterLease(ledger_path):
+        repair_calibration_ledger(
+            ledger_path,
+            engine_identity="recover_calibration_ledger.resume-finalize",
+            attestation_reason="fresh-process deterministic finalization",
+        )
+        snapshot = load_calibration_ledger_snapshot(
+            ledger_path,
+            head_pin_path,
+            require_committed_pin=require_committed_pin,
+            verify_custody=False,
+            repo_root=repo_root,
+        )
+        session = snapshot.bracket_session_by_id.get(session_id)
+        if session is None:
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_FOUND)
+        validate_frozen_reservation_plan(
+            plan_path,
+            expected_sha256=session.plan_sha256,
+            expected_plan_id=session.plan_id,
+        )
+        if session.state != "open":
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
+        expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+        if slot != expected_slot:
+            raise CalibrationLedgerError(
+                RefusalCode.SLOT_ORDER_CONFLICT,
+                context={"expected_slot": expected_slot, "slot": slot},
+            )
+        open_receipt = _session_open_receipt(snapshot, session_id)
+        assert open_receipt is not None
+        reserved = open_receipt["slots"][slot]
+        custody = Path(str(reserved["custody_locator"]))
+        state = _custody_state(custody)
+        if state != "complete":
+            raise CalibrationLedgerError(
+                RefusalCode.CUSTODY_PARTIAL
+                if state in {"absent", "empty", "partial"}
+                else RefusalCode.CUSTODY_UNREADABLE
+            )
+        try:
+            raw_by_name = _governed_raw_nofollow(custody)
+            manifest = json.loads(raw_by_name["manifest.json"])
+            evidence = json.loads(raw_by_name["instrument_evidence.json"])
+        except (CalibrationLedgerError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE) from exc
+        if not isinstance(manifest, Mapping) or not isinstance(evidence, Mapping):
+            raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE)
+        hashes = {
+            name: hashlib.sha256(raw).hexdigest()
+            for name, raw in raw_by_name.items()
+        }
+        manifest_hashes = manifest.get("artifacts")
+        evidence_hashes = evidence.get("artifact_sha256")
+        if (
+            not isinstance(manifest_hashes, Mapping)
+            or any(manifest_hashes.get(name) != hashes[name] for name in MANIFEST_BOUND_ARTIFACTS)
+            or not isinstance(evidence_hashes, Mapping)
+            or any(evidence_hashes.get(name) != hashes[name] for name in EVIDENCE_BOUND_ARTIFACTS)
+            or evidence.get("validation_id") != reserved["attempt_id"]
+            or manifest.get("validation_id") != reserved["attempt_id"]
+            or _normalized_vector(evidence.get("bindings"), T1_FIELDS)
+            != dict(reserved["t1_bindings"])
+        ):
+            raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE)
+        try:
+            lexemes = _number_lexemes(
+                raw_by_name["instrument_evidence.json"],
+                custody / "instrument_evidence.json",
+            )
+            capture_wall_time_s = lexemes.get("capture_wall_time_s")
+            exact_bound_lexeme_s = lexemes.get("b_fiducial_s")
+            if not isinstance(capture_wall_time_s, str):
+                raise ValueError("capture time missing")
+            bound = (
+                Decimal(exact_bound_lexeme_s)
+                if isinstance(exact_bound_lexeme_s, str)
+                else None
+            )
+        except (CalibrationLedgerError, InvalidOperation, ValueError) as exc:
+            raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE) from exc
+        status = evidence.get("status")
+        if status not in {"valid", "invalid"}:
+            raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE)
+        disposition = "ordinary-invalid"
+        if status == "valid":
+            disposition = (
+                "systematic-invalid"
+                if bound is not None and bound > systematic_screen_s
+                else "valid"
+            )
+        claim_bracket_session_slot(
+            ledger_path,
+            session_id=session_id,
+            slot=slot,
+            attempt_id=str(reserved["attempt_id"]),
+        )
+        receipt = finalize_bracket_session_slot(
+            ledger_path,
+            session_id=session_id,
+            slot=slot,
+            disposition=disposition,
+            custody_locator=str(custody),
+            artifact_sha256=hashes,
+            identity_epoch=reserved["identity_epoch"],
+            t1_bindings=reserved["t1_bindings"],
+            capture_wall_time_s=capture_wall_time_s,
+            exact_bound_lexeme_s=exact_bound_lexeme_s,
+        )
+        terminal_result = "operation_completed"
+        if slot == "pre" and disposition != "valid":
+            receipt = abort_bracket_session(
+                ledger_path,
+                session_id=session_id,
+                reason=f"pre_capture_{disposition}",
+            )
+            terminal_result = "session_aborted"
+        candidate = (
+            None
+            if slot == "pre" and disposition == "valid"
+            else terminal_head_pin_for_session(ledger_path, session_id=session_id)
+        )
+        return _frozen_mapping(
+            {
+                "status": "finalized",
+                "terminal_result": terminal_result,
+                "session_id": session_id,
+                "slot": slot,
+                "disposition": disposition,
+                "receipt": receipt,
+                "head_pin_candidate": candidate,
+                "needs_pin_commit": candidate is not None,
+            }
+        )
+
+
+def abort_calibration_session(
+    ledger_path: Path,
+    head_pin_path: Path,
+    *,
+    session_id: str,
+    reason: str,
+    plan_path: Path,
+    require_committed_pin: bool = True,
+    repo_root: Path = REPO_ROOT,
+) -> Mapping[str, Any]:
+    """Abort an open session under the writer lease without deleting custody."""
+
+    with CalibrationWriterLease(ledger_path):
+        repair_calibration_ledger(
+            ledger_path,
+            engine_identity="recover_calibration_ledger.abort-session",
+            attestation_reason="fresh-process governed session abort",
+        )
+        status = calibration_session_status(
+            ledger_path,
+            head_pin_path,
+            session_id=session_id,
+            plan_path=plan_path,
+            require_committed_pin=require_committed_pin,
+            repo_root=repo_root,
+        )
+        if status["session_state"] != "open":
+            terminal_result = (
+                "session_aborted"
+                if status["session_state"] == "aborted"
+                else "operation_completed"
+            )
+            return _frozen_mapping(
+                {
+                    "status": status["session_state"],
+                    "terminal_result": terminal_result,
+                    "session_id": session_id,
+                    "receipt": None,
+                    "head_pin_candidate": status["terminal_head_pin_candidate"],
+                    "custody_preserved": True,
+                    "needs_pin_commit": status["pin_relation"] == "physical_ahead",
+                    "idempotent": True,
+                }
+            )
+        next_slot = status["next_slot"]
+        if next_slot is not None:
+            custody_state = status["slots"][next_slot]["custody_state"]
+            if custody_state == "complete":
+                raise CalibrationLedgerError(RefusalCode.CUSTODY_COMPLETE_USE_RESUME)
+        receipt = abort_bracket_session(
+            ledger_path,
+            session_id=session_id,
+            reason=reason,
+        )
+        return _frozen_mapping(
+            {
+                "status": "aborted",
+                "terminal_result": "session_aborted",
+                "session_id": session_id,
+                "receipt": receipt,
+                "head_pin_candidate": terminal_head_pin_for_session(
+                    ledger_path, session_id=session_id
+                ),
+                "custody_preserved": True,
+                "needs_pin_commit": True,
+            }
+        )
 
 
 def append_pending_receipt(
@@ -3671,26 +4567,27 @@ def append_pending_receipt(
     """
 
     if not isinstance(attempt_id, str) or not attempt_id:
-        raise CalibrationLedgerError("attempt_id must be nonempty")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "attempt_id_empty"},
+        )
     pin_path = Path(head_pin_path)
     try:
         pin_raw = pin_path.read_bytes()
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise CalibrationLedgerError("head pin is unreadable") from exc
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_UNREADABLE) from exc
     pin = _head_pin(pin_value)
     if pin is None:
-        raise CalibrationLedgerError("head pin is malformed")
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_MALFORMED)
     if require_committed_pin and _committed_pin_bytes(pin_path, repo_root) != pin_raw:
-        raise CalibrationLedgerError("head pin is not committed at Git HEAD")
+        raise CalibrationLedgerError(RefusalCode.HEAD_PIN_NOT_COMMITTED)
 
     def build(receipts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
         sequence = len(receipts) + 1
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         if (len(receipts), predecessor) != pin:
-            raise CalibrationLedgerError(
-                "physical ledger head differs from the committed pin"
-            )
+            raise CalibrationLedgerError(RefusalCode.RESERVATION_HEAD_MISMATCH)
         observations, bracket_sessions, reasons = _attempts_and_observations(receipts)
         del observations
         del bracket_sessions
@@ -3707,7 +4604,9 @@ def append_pending_receipt(
             for row in receipts
         ):
             raise CalibrationLedgerError(
-                ", ".join(sorted(reasons or {"calibration_ledger_attempt_conflict"}))
+                _primary_refusal(
+                    reasons or {"calibration_ledger_attempt_conflict"}
+                )
             )
         return _new_receipt(
             sequence=sequence,
@@ -3764,7 +4663,10 @@ def finalize_attempt_receipt(
     """Append the sole final state for a previously reserved attempt."""
 
     if disposition not in FINAL_DISPOSITIONS:
-        raise CalibrationLedgerError(f"invalid final disposition: {disposition!r}")
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"disposition": disposition},
+        )
     artifacts = dict(artifact_sha256 or {})
     content_id = content_id_from_artifact_hashes(artifacts)
 
@@ -3775,7 +4677,7 @@ def finalize_attempt_receipt(
         del observations, bracket_sessions
         unexpected_reasons = reasons - {"calibration_ledger_pending"}
         if unexpected_reasons:
-            raise CalibrationLedgerError(", ".join(sorted(unexpected_reasons)))
+            raise CalibrationLedgerError(_primary_refusal(unexpected_reasons))
         reservations = [
             row
             for row in receipts
@@ -3787,7 +4689,7 @@ def finalize_attempt_receipt(
             if row.get("attempt_id") == attempt_id and row["event"] == "finalization"
         ]
         if len(reservations) != 1 or finals:
-            raise CalibrationLedgerError("attempt is not uniquely pending")
+            raise CalibrationLedgerError(RefusalCode.LEDGER_ATTEMPT_CONFLICT)
         reservation = reservations[0]
         normalized_epoch = _normalized_vector(
             identity_epoch, IDENTITY_EPOCH_FIELDS
@@ -3798,9 +4700,7 @@ def finalize_attempt_receipt(
             or dict(reservation["t1_bindings"]) != normalized_t1
             or reservation["custody_locator"] != custody_locator
         ):
-            raise CalibrationLedgerError(
-                "finalization conflicts with the reserved attempt binding"
-            )
+            raise CalibrationLedgerError(RefusalCode.FINALIZATION_BINDING_CONFLICT)
         predecessor = receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
         return _new_receipt(
             sequence=len(receipts) + 1,
@@ -3844,7 +4744,7 @@ def finalize_attempt_receipt(
 
 def _head_pin_for_valid_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     if not _valid_receipt_shape(receipt):
-        raise CalibrationLedgerError("cannot pin a malformed receipt")
+        raise CalibrationLedgerError(RefusalCode.LEDGER_MALFORMED)
     return {
         "sequence": int(receipt["sequence"]),
         "head_digest": str(receipt["receipt_digest"]),
@@ -3856,11 +4756,9 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     """Emit a pin for an ordinary receipt, never a mid-session receipt."""
 
     if receipt.get("event") == APPEND_INTENT_EVENT:
-        raise CalibrationLedgerError("an unresolved append intent cannot be pinned")
+        raise CalibrationLedgerError(RefusalCode.LEDGER_RECOVERY_REQUIRED)
     if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA:
-        raise CalibrationLedgerError(
-            "bracket session receipts require terminal_head_pin_for_session"
-        )
+        raise CalibrationLedgerError(RefusalCode.SESSION_NOT_TERMINAL)
     return _head_pin_for_valid_receipt(receipt)
 
 
@@ -3869,6 +4767,7 @@ __all__ = [
     "ALL_DISPOSITIONS",
     "APPEND_INTENT_EVENT",
     "APPEND_POLICY_REVISION",
+    "CLAIM_POLICY_REVISION",
     "APPEND_RECORDS_PER_OPERATION",
     "BRACKET_SESSION_ABORT_EVENT",
     "BRACKET_SESSION_FINALIZATION_EVENT",
@@ -3894,14 +4793,22 @@ __all__ = [
     "REFUSAL_TAXONOMY",
     "CalibrationLedgerError",
     "CalibrationLedgerInspection",
+    "CalibrationReadiness",
+    "CalibrationWriterLease",
     "CalibrationBracketSession",
     "CalibrationLedgerSnapshot",
     "HistoricalImportDurabilityUncertain",
     "HistoricalImportPlan",
     "LedgerObservation",
+    "PinRelation",
+    "abort_calibration_session",
     "append_pending_receipt",
     "abandon_calibration_ledger_tail",
     "append_bracket_session_receipt",
+    "advance_calibration_head_pin",
+    "calibration_readiness",
+    "calibration_session_status",
+    "canonical_json_bytes",
     "claim_bracket_session_slot",
     "abort_bracket_session",
     "artifact_hashes",
@@ -3918,6 +4825,10 @@ __all__ = [
     "normalize_calibration_custody_path",
     "prepare_historical_import",
     "repair_calibration_ledger",
+    "resume_finalize_bracket_session",
+    "stable_bracket_claim_id",
     "terminal_head_pin_for_session",
     "validate_bracket_session_reservation_inputs",
+    "validate_frozen_reservation_plan",
+    "writer_lease_is_live",
 ]

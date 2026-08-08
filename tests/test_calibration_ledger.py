@@ -18,6 +18,8 @@ import threading
 import unittest
 from unittest import mock
 
+from joulewise.calibration_exits import RefusalCode
+
 import joulewise.calibration_ledger as calibration_ledger
 from scripts import calibration_ledger_bootstrap as bootstrap_cli
 from scripts import reserve_calibration_window_bracket as bracket_session_cli
@@ -455,7 +457,9 @@ class CalibrationLedgerTests(unittest.TestCase):
     def test_same_operation_key_with_different_target_fails_closed(self) -> None:
         custody = self.root / "conflict"
         self._reserve("conflict", custody)
-        with self.assertRaisesRegex(CalibrationLedgerError, "operation key conflicts"):
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, RefusalCode.LEDGER_OPERATION_CONFLICT.value
+        ):
             append_pending_receipt(
                 self.ledger,
                 attempt_id="conflict",
@@ -814,7 +818,9 @@ class CalibrationLedgerTests(unittest.TestCase):
         session = snapshot.bracket_session_by_id["session-alpha"]
         self.assertEqual(session.state, "aborted")
         self.assertEqual(session.finalized_slots["pre"].receipt_digest, pre["receipt_digest"])
-        with self.assertRaisesRegex(CalibrationLedgerError, "operation key conflicts"):
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, RefusalCode.LEDGER_OPERATION_CONFLICT.value
+        ):
             abort_bracket_session(
                 self.ledger,
                 session_id="session-alpha",
@@ -923,7 +929,9 @@ class CalibrationLedgerTests(unittest.TestCase):
         post = self._finalize_bracket_slot("session-alpha", "post")
         lines = self.ledger.read_bytes().splitlines(keepends=True)
         self.ledger.write_bytes(b"".join(lines[:-1]))
-        with self.assertRaisesRegex(CalibrationLedgerError, "open"):
+        with self.assertRaisesRegex(
+            CalibrationLedgerError, RefusalCode.LEDGER_RECOVERY_REQUIRED.value
+        ):
             terminal_head_pin_for_session(
                 self.ledger, session_id="session-alpha"
             )
@@ -948,6 +956,154 @@ class CalibrationLedgerTests(unittest.TestCase):
             terminal_head_pin_for_session(
                 self.ledger, session_id="session-alpha"
             )
+
+    def test_phase_readiness_requires_under_lease_gate_and_disposes_custody(self) -> None:
+        pre_reserve = calibration_ledger.calibration_readiness(
+            self.ledger,
+            self.pin,
+            phase="pre-reserve",
+            require_committed_pin=False,
+        )
+        self.assertEqual(pre_reserve.status, "ready")
+        self.assertFalse(pre_reserve.as_dict()["authorizes_arm"])
+
+        self._open_bracket_session()
+        warning = calibration_ledger.calibration_readiness(
+            self.ledger,
+            self.pin,
+            phase="pre-slot",
+            session_id="session-alpha",
+            slot="pre",
+            attempt_id="session-alpha-pre",
+            require_committed_pin=False,
+        )
+        self.assertEqual(warning.status, "ready")
+        self.assertEqual(warning.claim_state, "absent")
+        self.assertFalse(warning.as_dict()["authorizes_arm"])
+
+        with calibration_ledger.CalibrationWriterLease(self.ledger):
+            enforcing = calibration_ledger.calibration_readiness(
+                self.ledger,
+                self.pin,
+                phase="pre-slot",
+                session_id="session-alpha",
+                slot="pre",
+                attempt_id="session-alpha-pre",
+                enforcing_under_lease=True,
+                require_committed_pin=False,
+            )
+            self.assertTrue(enforcing.as_dict()["authorizes_arm"])
+            calibration_ledger.claim_bracket_session_slot(
+                self.ledger,
+                session_id="session-alpha",
+                slot="pre",
+                attempt_id="session-alpha-pre",
+            )
+            idempotent = calibration_ledger.calibration_readiness(
+                self.ledger,
+                self.pin,
+                phase="pre-slot",
+                session_id="session-alpha",
+                slot="pre",
+                attempt_id="session-alpha-pre",
+                enforcing_under_lease=True,
+                require_committed_pin=False,
+            )
+            self.assertEqual(idempotent.claim_state, "exact_completed")
+            self.assertTrue(idempotent.as_dict()["authorizes_arm"])
+
+        custody = (
+            self.root
+            / "another-root"
+            / "instrument_validation"
+            / "session-alpha-pre"
+        )
+        custody.mkdir(parents=True)
+        with calibration_ledger.CalibrationWriterLease(self.ledger):
+            partial = calibration_ledger.calibration_readiness(
+                self.ledger,
+                self.pin,
+                phase="pre-slot",
+                session_id="session-alpha",
+                slot="pre",
+                attempt_id="session-alpha-pre",
+                enforcing_under_lease=True,
+                require_committed_pin=False,
+            )
+        self.assertEqual(partial.refusal_code, RefusalCode.CUSTODY_PARTIAL)
+
+        custody.rmdir()
+        legacy = self.ledger.with_name(f"{self.ledger.name}.append-journal")
+        legacy.write_bytes(b"")
+        with calibration_ledger.CalibrationWriterLease(self.ledger):
+            journal_blocked = calibration_ledger.calibration_readiness(
+                self.ledger,
+                self.pin,
+                phase="pre-slot",
+                session_id="session-alpha",
+                slot="pre",
+                attempt_id="session-alpha-pre",
+                enforcing_under_lease=True,
+                require_committed_pin=False,
+            )
+        self.assertEqual(journal_blocked.status, "blocked")
+        self.assertIsNotNone(
+            calibration_ledger.inspect_calibration_ledger(
+                self.ledger
+            ).legacy_journal_path
+        )
+
+    def test_guarded_terminal_pin_advancement_reaches_terminal_readiness(self) -> None:
+        self._open_bracket_session()
+        abort_bracket_session(
+            self.ledger,
+            session_id="session-alpha",
+            reason="guarded-pin-test",
+        )
+        before = calibration_ledger.calibration_readiness(
+            self.ledger,
+            self.pin,
+            phase="terminal",
+            session_id="session-alpha",
+            require_committed_pin=False,
+        )
+        self.assertEqual(before.status, "ready")
+        self.assertTrue(before.needs_pin_commit)
+        assert before.head_pin_candidate is not None
+        candidate = dict(before.head_pin_candidate)
+        dry_run = calibration_ledger.advance_calibration_head_pin(
+            self.ledger,
+            self.pin,
+            session_id="session-alpha",
+            expected_sequence=candidate["sequence"],
+            expected_digest=candidate["head_digest"],
+            operator_identity="desk-operator",
+            attestation_reason="reviewed exact terminal candidate",
+            execute=False,
+            require_committed_pin=False,
+        )
+        self.assertFalse(dry_run["executed"])
+        calibration_ledger.advance_calibration_head_pin(
+            self.ledger,
+            self.pin,
+            session_id="session-alpha",
+            expected_sequence=candidate["sequence"],
+            expected_digest=candidate["head_digest"],
+            operator_identity="desk-operator",
+            attestation_reason="reviewed exact terminal candidate",
+            execute=True,
+            require_committed_pin=False,
+        )
+        after = calibration_ledger.calibration_readiness(
+            self.ledger,
+            self.pin,
+            phase="terminal",
+            session_id="session-alpha",
+            require_committed_pin=False,
+        )
+        self.assertEqual(after.status, "ready")
+        self.assertEqual(after.pin_relation, calibration_ledger.PinRelation.EXACT)
+        self.assertFalse(after.needs_pin_commit)
 
     def test_session_snapshot_loader_refuses_rollback_against_committed_terminal_pin(
         self,
@@ -2697,15 +2853,23 @@ raise SystemExit('crash hook was not reached')
         parser = recovery_cli.build_parser()
         with self.assertRaises(SystemExit):
             parser.parse_args(["repair", "--payload", "foreign.json"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--allow-uncommitted-head-pin", "inspect"])
         self.ledger.write_bytes(b"complete-but-malformed\n")
-        with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+        with (
+            mock.patch("sys.stdout", new_callable=io.StringIO) as output,
+            mock.patch.object(
+                calibration_ledger,
+                "_committed_pin_bytes",
+                return_value=self.pin.read_bytes(),
+            ),
+        ):
             code = recovery_cli.main(
                 [
                     "--ledger",
                     str(self.ledger),
                     "--head-pin",
                     str(self.pin),
-                    "--allow-uncommitted-head-pin",
                     "abandon-tail",
                     "--operator-identity",
                     "night-operator",

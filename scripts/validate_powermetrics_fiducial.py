@@ -33,12 +33,14 @@ import time
 import uuid
 from dataclasses import asdict, replace
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -54,6 +56,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_LEDGER_PATH,
     DEFAULT_HEAD_PIN_PATH,
     CalibrationLedgerError,
+    CalibrationWriterLease,
+    calibration_readiness,
     abort_bracket_session,
     append_pending_receipt,
     artifact_hashes as ledger_artifact_hashes,
@@ -64,6 +68,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     load_calibration_ledger_snapshot,
     normalize_calibration_custody_path,
     repair_calibration_ledger,
+    stable_bracket_claim_id,
     terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
@@ -103,6 +108,60 @@ PROTOCOL_V2_PATH = (
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
+
+
+class WriterStage(str, Enum):
+    BEFORE_PRE_RESERVE_READINESS = "before-pre-reserve-readiness"
+    AFTER_PRE_RESERVE_READINESS = "after-pre-reserve-readiness"
+    RESERVATION_INTENT_WRITE = "reservation-intent-write"
+    RESERVATION_INTENT_FSYNCED = "reservation-intent-fsynced"
+    RESERVATION_TARGET_WRITE = "reservation-target-write"
+    RESERVATION_TARGET_FSYNCED = "reservation-target-fsynced"
+    RESERVATION_RETURNED = "reservation-returned"
+    BEFORE_WRITER_LEASE = "before-writer-lease"
+    AFTER_WRITER_LEASE = "after-writer-lease"
+    AFTER_REPAIR = "after-repair"
+    AFTER_SLOT_VALIDATION = "after-slot-validation"
+    CLAIM_INTENT_WRITE = "claim-intent-write"
+    CLAIM_INTENT_FSYNCED = "claim-intent-fsynced"
+    CLAIM_TARGET_WRITE = "claim-target-write"
+    CLAIM_TARGET_FSYNCED = "claim-target-fsynced"
+    CLAIM_RETURNED_BEFORE_BEGUN = "claim-returned-before-begun"
+    AFTER_BEGUN = "after-begun"
+    BEFORE_EXIT_HANDLER_REGISTRATION = "before-exit-handler-registration"
+    AFTER_EXIT_HANDLER_REGISTRATION = "after-exit-handler-registration"
+    AFTER_CUSTODY_DIRECTORY_CREATION = "after-custody-directory-creation"
+    AFTER_EVENT_STREAM_OPEN = "after-event-stream-open"
+    AFTER_SAMPLER_SPAWN = "after-sampler-spawn"
+    AFTER_SAMPLER_READY = "after-sampler-ready"
+    AFTER_ROLLOVER_READY = "after-rollover-ready"
+    DURING_CAPTURE = "during-capture"
+    AFTER_SAMPLER_TEARDOWN = "after-sampler-teardown"
+    DURING_RAW_EVENTS_ARTIFACT = "during-raw-events-artifact"
+    DURING_TRACE_ARTIFACT = "during-trace-artifact"
+    DURING_EVIDENCE_ARTIFACT = "during-evidence-artifact"
+    DURING_MANIFEST_ARTIFACT = "during-manifest-artifact"
+    ARTIFACTS_COMPLETE_BEFORE_FINALIZATION = "artifacts-complete-before-finalization"
+    FINALIZATION_INTENT_WRITE = "finalization-intent-write"
+    FINALIZATION_INTENT_FSYNCED = "finalization-intent-fsynced"
+    FINALIZATION_TARGET_WRITE = "finalization-target-write"
+    FINALIZATION_TARGET_FSYNCED = "finalization-target-fsynced"
+    FINALIZATION_RETURNED_BEFORE_CLOSED = "finalization-returned-before-closed"
+    AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER = "after-closed-before-handler-unregister"
+    AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH = (
+        "after-pre-finalization-before-supervisor-dispatch"
+    )
+    BEFORE_POST_DISPATCH = "before-post-dispatch"
+    AFTER_POST_FINALIZATION_BEFORE_TERMINAL_PIN = (
+        "after-post-finalization-before-terminal-pin"
+    )
+    AFTER_TERMINAL_PIN_BEFORE_OUTPUT = "after-terminal-pin-before-output"
+
+
+def _writer_stage(stage: WriterStage) -> None:
+    """Exact injectable boundary used by real-process crash regressions."""
+
+    del stage
 
 
 def sha256_path(path: Path) -> str:
@@ -346,9 +405,7 @@ def _validate_reserved_bracket_slot(
         or dict(reserved.get("identity_epoch", {})) != dict(identity_epoch)
         or dict(reserved.get("t1_bindings", {})) != dict(t1_bindings)
     ):
-        raise CalibrationLedgerError(
-            "capture does not match the exact reserved bracket session slot"
-        )
+        raise CalibrationLedgerError(RefusalCode.RESERVED_SLOT_MISMATCH)
 
 
 class _CaptureLedgerLifecycle:
@@ -368,9 +425,7 @@ class _CaptureLedgerLifecycle:
         require_committed_pin: bool = True,
     ) -> None:
         if (session_id is None) != (slot is None):
-            raise CalibrationLedgerError(
-                "bracket session id and slot must be supplied together"
-            )
+            raise CalibrationLedgerError(RefusalCode.WRITER_BRACKET_ARGUMENTS)
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
@@ -384,7 +439,16 @@ class _CaptureLedgerLifecycle:
         self.session_id = session_id
         self.slot = slot
         self.require_committed_pin = require_committed_pin
-        self.claim_id = uuid.uuid4().hex
+        self.claim_id = (
+            stable_bracket_claim_id(
+                session_id=session_id,
+                slot=slot,
+                attempt_id=attempt_id,
+            )
+            if session_id is not None and slot is not None
+            else None
+        )
+        self.writer_lease = CalibrationWriterLease(self.ledger_path)
         self.begun = False
         self.closed = False
 
@@ -396,59 +460,80 @@ class _CaptureLedgerLifecycle:
         """Reserve ordinarily, or authenticate a previously reserved slot."""
 
         if self.begun:
-            raise CalibrationLedgerError("capture ledger lifecycle already began")
-        repair_calibration_ledger(
+            raise CalibrationLedgerError(
+                RefusalCode.PRE_SLOT_NOT_READY,
+                context={"reason": "lifecycle_already_began"},
+            )
+        # Early warning only. The same binding is checked again after the
+        # nonblocking lease is held; only that second check can authorize ARM.
+        if self.is_bracket_session:
+            self._validate_slot()
+        try:
+            _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
+            self.writer_lease.acquire()
+            _writer_stage(WriterStage.AFTER_WRITER_LEASE)
+            repair_calibration_ledger(
+                self.ledger_path,
+                engine_identity="validate_powermetrics_fiducial",
+                attestation_reason="automatic pre-capture ledger recovery",
+            )
+            _writer_stage(WriterStage.AFTER_REPAIR)
+            self._begin_once()
+            _writer_stage(WriterStage.CLAIM_RETURNED_BEFORE_BEGUN)
+            self.begun = True
+            _writer_stage(WriterStage.AFTER_BEGUN)
+        except Exception:
+            self.writer_lease.release()
+            raise
+
+    def _validate_slot(self) -> None:
+        assert self.session_id is not None and self.slot is not None
+        _validate_reserved_bracket_slot(
             self.ledger_path,
-            engine_identity="validate_powermetrics_fiducial",
-            attestation_reason="automatic pre-capture ledger recovery",
+            self.head_pin_path,
+            session_id=self.session_id,
+            slot=self.slot,
+            attempt_id=self.attempt_id,
+            custody_locator=self.custody_locator,
+            identity_epoch=self.identity_epoch,
+            t1_bindings=self.t1_bindings,
+            require_committed_pin=self.require_committed_pin,
         )
-        failure: CalibrationLedgerError | None = None
-        for attempt in range(2):
-            try:
-                self._begin_once()
-                self.begun = True
-                return
-            except CalibrationLedgerError as exc:
-                failure = exc
-                if attempt or any(
-                    marker in str(exc)
-                    for marker in (
-                        "exclusive writer claim",
-                        "operation key conflicts",
-                        "exact reserved bracket session slot",
-                    )
-                ):
-                    break
-                repair_calibration_ledger(
-                    self.ledger_path,
-                    engine_identity="validate_powermetrics_fiducial",
-                    attestation_reason="one-shot writer retry recovery",
-                )
-        assert failure is not None
-        raise failure
 
     def _begin_once(self) -> None:
         """Perform one stable-identity reservation or slot-claim attempt."""
 
         if self.is_bracket_session:
             assert self.session_id is not None and self.slot is not None
-            _validate_reserved_bracket_slot(
+            readiness = calibration_readiness(
                 self.ledger_path,
                 self.head_pin_path,
+                phase="pre-slot",
                 session_id=self.session_id,
                 slot=self.slot,
                 attempt_id=self.attempt_id,
-                custody_locator=self.custody_locator,
-                identity_epoch=self.identity_epoch,
-                t1_bindings=self.t1_bindings,
+                enforcing_under_lease=True,
                 require_committed_pin=self.require_committed_pin,
             )
+            if readiness.status != "ready":
+                assert readiness.refusal_code is not None
+                raise CalibrationLedgerError(readiness.refusal_code)
+            self._validate_slot()
+            _writer_stage(WriterStage.AFTER_SLOT_VALIDATION)
             claim_bracket_session_slot(
                 self.ledger_path,
                 session_id=self.session_id,
                 slot=self.slot,
                 attempt_id=self.attempt_id,
                 claim_id=self.claim_id,
+                _stage_boundary=lambda boundary: _writer_stage(
+                    {
+                        "intent-write": WriterStage.CLAIM_INTENT_WRITE,
+                        "intent-fsynced": WriterStage.CLAIM_INTENT_FSYNCED,
+                        "target-write": WriterStage.CLAIM_TARGET_WRITE,
+                        "target-fsynced": WriterStage.CLAIM_TARGET_FSYNCED,
+                    }[boundary]
+                ),
             )
         else:
             append_pending_receipt(
@@ -466,29 +551,32 @@ class _CaptureLedgerLifecycle:
 
         if not self.begun or self.closed:
             return None
-        if self.is_bracket_session:
-            assert self.session_id is not None
-            receipt = abort_bracket_session(
-                self.ledger_path,
-                session_id=self.session_id,
-                reason=reason,
-            )
-        else:
-            receipt = finalize_attempt_receipt(
-                self.ledger_path,
-                attempt_id=self.attempt_id,
-                disposition="abandoned",
-                custody_locator=self.custody_locator,
-                artifact_sha256=ledger_artifact_hashes(
-                    Path(self.custody_locator)
-                ),
-                identity_epoch=self.identity_epoch,
-                t1_bindings=self.t1_bindings,
-                capture_wall_time_s=self.capture_wall_time_s,
-                exact_bound_lexeme_s=self.exact_bound_lexeme_s,
-            )
-        self.closed = True
-        return receipt
+        try:
+            if self.is_bracket_session:
+                assert self.session_id is not None
+                receipt = abort_bracket_session(
+                    self.ledger_path,
+                    session_id=self.session_id,
+                    reason=reason,
+                )
+            else:
+                receipt = finalize_attempt_receipt(
+                    self.ledger_path,
+                    attempt_id=self.attempt_id,
+                    disposition="abandoned",
+                    custody_locator=self.custody_locator,
+                    artifact_sha256=ledger_artifact_hashes(
+                        Path(self.custody_locator)
+                    ),
+                    identity_epoch=self.identity_epoch,
+                    t1_bindings=self.t1_bindings,
+                    capture_wall_time_s=self.capture_wall_time_s,
+                    exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+                )
+            self.closed = True
+            return receipt
+        finally:
+            self.writer_lease.release()
 
     def finalize(
         self, disposition: str
@@ -496,14 +584,57 @@ class _CaptureLedgerLifecycle:
         """Finalize the exact attempt and return any terminal head candidate."""
 
         if not self.begun or self.closed:
-            raise CalibrationLedgerError("capture ledger lifecycle is not open")
-        artifacts = ledger_artifact_hashes(Path(self.custody_locator))
-        if self.is_bracket_session:
-            assert self.session_id is not None and self.slot is not None
-            receipt = finalize_bracket_session_slot(
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
+        try:
+            artifacts = ledger_artifact_hashes(Path(self.custody_locator))
+            if self.is_bracket_session:
+                assert self.session_id is not None and self.slot is not None
+                receipt = finalize_bracket_session_slot(
+                    self.ledger_path,
+                    session_id=self.session_id,
+                    slot=self.slot,
+                    disposition=disposition,
+                    custody_locator=self.custody_locator,
+                    artifact_sha256=artifacts,
+                    identity_epoch=self.identity_epoch,
+                    t1_bindings=self.t1_bindings,
+                    capture_wall_time_s=self.capture_wall_time_s,
+                    exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+                    _stage_boundary=lambda boundary: _writer_stage(
+                        {
+                            "intent-write": WriterStage.FINALIZATION_INTENT_WRITE,
+                            "intent-fsynced": WriterStage.FINALIZATION_INTENT_FSYNCED,
+                            "target-write": WriterStage.FINALIZATION_TARGET_WRITE,
+                            "target-fsynced": WriterStage.FINALIZATION_TARGET_FSYNCED,
+                        }[boundary]
+                    ),
+                )
+                _writer_stage(WriterStage.FINALIZATION_RETURNED_BEFORE_CLOSED)
+                if self.slot == "pre" and disposition != "valid":
+                    receipt = abort_bracket_session(
+                        self.ledger_path,
+                        session_id=self.session_id,
+                        reason=f"pre_capture_{disposition}",
+                    )
+                self.closed = True
+                _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
+                if self.slot == "post":
+                    _writer_stage(
+                        WriterStage.AFTER_POST_FINALIZATION_BEFORE_TERMINAL_PIN
+                    )
+                head_pin = (
+                    None
+                    if self.slot == "pre" and disposition == "valid"
+                    else terminal_head_pin_for_session(
+                        self.ledger_path, session_id=self.session_id
+                    )
+                )
+                if self.slot == "post":
+                    _writer_stage(WriterStage.AFTER_TERMINAL_PIN_BEFORE_OUTPUT)
+                return receipt, head_pin
+            receipt = finalize_attempt_receipt(
                 self.ledger_path,
-                session_id=self.session_id,
-                slot=self.slot,
+                attempt_id=self.attempt_id,
                 disposition=disposition,
                 custody_locator=self.custody_locator,
                 artifact_sha256=artifacts,
@@ -512,34 +643,12 @@ class _CaptureLedgerLifecycle:
                 capture_wall_time_s=self.capture_wall_time_s,
                 exact_bound_lexeme_s=self.exact_bound_lexeme_s,
             )
-            if self.slot == "pre" and disposition != "valid":
-                receipt = abort_bracket_session(
-                    self.ledger_path,
-                    session_id=self.session_id,
-                    reason=f"pre_capture_{disposition}",
-                )
+            _writer_stage(WriterStage.FINALIZATION_RETURNED_BEFORE_CLOSED)
             self.closed = True
-            head_pin = (
-                None
-                if self.slot == "pre" and disposition == "valid"
-                else terminal_head_pin_for_session(
-                    self.ledger_path, session_id=self.session_id
-                )
-            )
-            return receipt, head_pin
-        receipt = finalize_attempt_receipt(
-            self.ledger_path,
-            attempt_id=self.attempt_id,
-            disposition=disposition,
-            custody_locator=self.custody_locator,
-            artifact_sha256=artifacts,
-            identity_epoch=self.identity_epoch,
-            t1_bindings=self.t1_bindings,
-            capture_wall_time_s=self.capture_wall_time_s,
-            exact_bound_lexeme_s=self.exact_bound_lexeme_s,
-        )
-        self.closed = True
-        return receipt, head_pin_for_receipt(receipt)
+            _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
+            return receipt, head_pin_for_receipt(receipt)
+        finally:
+            self.writer_lease.release()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -548,6 +657,17 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-live",
         action="store_true",
         help="explicitly confirm a lead-owned quiet-machine live run",
+    )
+    parser.add_argument(
+        "--arm-countdown-s",
+        type=float,
+        default=0.0,
+        help="count down only after the enforcing pre-slot gate owns the writer lease",
+    )
+    parser.add_argument(
+        "--sleep-display-before-capture",
+        action="store_true",
+        help="run pmset displaysleepnow under the held writer lease after countdown",
     )
     parser.add_argument(
         "--output-root",
@@ -579,48 +699,51 @@ def main(argv: list[str] | None = None) -> int:
     bracket_values = (args.session_id, args.slot, args.attempt_id)
     bracket_mode = all(value is not None and value != "" for value in bracket_values)
     if any(value is not None for value in bracket_values) and not bracket_mode:
-        print(
-            "refusing: --session-id, --slot, and --attempt-id must be supplied together",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            stream=sys.stderr,
         )
-        return 2
     if bracket_mode and (args.rederive_from is not None or args.output is not None):
-        print(
-            "refusing: bracket session parameters apply only to live capture",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+            stream=sys.stderr,
         )
-        return 2
     if not verify_frozen_protocol():
-        print(
-            "refusing: frozen powermetrics fiducial protocol is missing, "
-            "incomplete, or disagrees with executable constants",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.FROZEN_PROTOCOL_INVALID,
+            stream=sys.stderr,
         )
-        return 2
     if args.rederive_from is not None:
         if args.output is None:
-            print("refusing: --rederive-from requires --output", file=sys.stderr)
-            return 2
+            return emit_refusal(
+                RefusalCode.REDERIVE_OUTPUT_REQUIRED,
+                stream=sys.stderr,
+            )
         try:
             payload = rederive_artifact(args.rederive_from, args.output)
         except ValueError as exc:
-            print(f"refusing: {exc}", file=sys.stderr)
-            return 2
+            return emit_refusal(
+                RefusalCode.REDERIVE_FAILED,
+                context={"detail": str(exc)},
+                stream=sys.stderr,
+            )
         print(json.dumps({"status": payload["status"], "output": str(args.output)}))
         return 0 if payload["status"] == "valid" else 1
     if args.output is not None:
-        print("refusing: --output requires --rederive-from", file=sys.stderr)
-        return 2
-    if not args.allow_live:
-        print(
-            "refusing: live [QUIET-MAC] calibration is lead-owned; "
-            "pass --allow-live on a quiet machine",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.OUTPUT_REQUIRES_REDERIVE,
+            stream=sys.stderr,
         )
-        return 77
+    if not args.allow_live:
+        return emit_refusal(
+            RefusalCode.QUIET_MAC_AUTH_REQUIRED,
+            stream=sys.stderr,
+        )
     if not args.power_policy:
-        print("refusing: --power-policy is a binding field", file=sys.stderr)
-        return 2
+        return emit_refusal(
+            RefusalCode.POWER_POLICY_REQUIRED,
+            stream=sys.stderr,
+        )
 
     import mlx.core as mx  # noqa: PLC0415
 
@@ -662,10 +785,45 @@ def main(argv: list[str] | None = None) -> int:
         slot=args.slot if bracket_mode else None,
     )
     try:
+        if bracket_mode and args.slot == "post":
+            _writer_stage(WriterStage.BEFORE_POST_DISPATCH)
         ledger_lifecycle.begin()
     except CalibrationLedgerError as exc:
-        print(f"refusing: {exc}", file=sys.stderr)
-        return 2
+        return emit_refusal(
+            exc.code or RefusalCode.LEDGER_MALFORMED,
+            context=dict(exc.context) | {"detail": str(exc)},
+            stream=sys.stderr,
+        )
+    try:
+        if args.arm_countdown_s < 0:
+            raise ValueError("arm countdown must be nonnegative")
+        if args.arm_countdown_s or args.sleep_display_before_capture:
+            print(
+                json.dumps(
+                    {
+                        "event": "calibration_display_arm_countdown",
+                        "seconds": args.arm_countdown_s,
+                    }
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(args.arm_countdown_s)
+        if args.sleep_display_before_capture:
+            subprocess.run(
+                ["/usr/bin/pmset", "displaysleepnow"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            time.sleep(5)
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        ledger_lifecycle.abandon("display_arm_failed")
+        return emit_refusal(
+            RefusalCode.DISPLAY_ARM_FAILED,
+            context={"detail": str(exc)},
+            stream=sys.stderr,
+        )
 
     def finalize_abandoned(
         reason: str = "writer_exit_before_slot_finalization",
@@ -680,11 +838,15 @@ def main(argv: list[str] | None = None) -> int:
     # An actual interpreter-level uncaught exception/interrupt finalizes when
     # possible. A hard crash between these two appends intentionally leaves
     # ``pending``, which every downstream snapshot refuses.
+    _writer_stage(WriterStage.BEFORE_EXIT_HANDLER_REGISTRATION)
     atexit.register(finalize_abandoned)
+    _writer_stage(WriterStage.AFTER_EXIT_HANDLER_REGISTRATION)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
+    _writer_stage(WriterStage.AFTER_CUSTODY_DIRECTORY_CREATION)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
+    _writer_stage(WriterStage.AFTER_EVENT_STREAM_OPEN)
 
     def emit(event_type: str, metadata: dict) -> None:
         events.write(
@@ -722,6 +884,7 @@ def main(argv: list[str] | None = None) -> int:
     process = subprocess.Popen(
         command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
+    _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
     first_parse = None
     deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
@@ -739,16 +902,22 @@ def main(argv: list[str] | None = None) -> int:
     if first_parse is None:
         process.terminate()
         finalize_abandoned("powermetrics_never_ready")
-        print("powermetrics never became ready", file=sys.stderr)
-        return 1
+        return emit_refusal(
+            RefusalCode.SAMPLER_NEVER_READY,
+            stream=sys.stderr,
+        )
+    _writer_stage(WriterStage.AFTER_SAMPLER_READY)
     # D-078: wait for a native whole-second rollover before any workload.
     try:
         wait_for_preworkload_rollover(capture_path, process)
     except RuntimeError as exc:
         events.close()
         finalize_abandoned(str(exc))
-        print(f"refusing: {exc}", file=sys.stderr)
-        return 1
+        return emit_refusal(
+            RefusalCode.ROLLOVER_GATE_TIMEOUT,
+            stream=sys.stderr,
+        )
+    _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
     sampling_started = clock.stamp()
     emit("sampling_started", {})
 
@@ -785,6 +954,7 @@ def main(argv: list[str] | None = None) -> int:
     pulse_loop_mono0 = time.monotonic()
     pulses: list[CommandedPulse] = []
     for on_offset_s, off_offset_s in pulse_schedule(args.pulse_count):
+        _writer_stage(WriterStage.DURING_CAPTURE)
         if pulses:
             elapsed_s = time.monotonic() - pulse_loop_mono0
             time.sleep(max(0.0, on_offset_s - elapsed_s))
@@ -811,9 +981,11 @@ def main(argv: list[str] | None = None) -> int:
     sampling_stopped = clock.stamp()
     emit("sampling_stopped", {})
     _terminate_powermetrics(process)
+    _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
     post_parse = clock.stamp()
 
     data = capture_path.read_bytes()
+    _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
     native_records = parse_powermetrics_records(data)
     evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
         stamps={
@@ -851,6 +1023,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{sample.timestamp_s!r},{sample.power_w!r},{sample.source},"
                 f"{sample.rail},{sample.interval_start_s!r},{sample.interval_end_s!r}\n"
             )
+    _writer_stage(WriterStage.DURING_TRACE_ARTIFACT)
 
     intervals = [
         TraceInterval(
@@ -919,6 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    _writer_stage(WriterStage.DURING_EVIDENCE_ARTIFACT)
     manifest = {
         "schema_version": "joulewise.instrument_validation_manifest.v1",
         "validation_id": validation_id,
@@ -937,6 +1111,8 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    _writer_stage(WriterStage.DURING_MANIFEST_ARTIFACT)
+    _writer_stage(WriterStage.ARTIFACTS_COMPLETE_BEFORE_FINALIZATION)
     serialized_evidence = json.loads(
         json.dumps(evidence_payload, sort_keys=True),
         parse_float=str,
@@ -970,6 +1146,8 @@ def main(argv: list[str] | None = None) -> int:
             "slot": args.slot,
             "attempt_id": args.attempt_id,
         }
+    if bracket_mode and args.slot == "pre":
+        _writer_stage(WriterStage.AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH)
     print(json.dumps(output, indent=2))
     return 0 if disposition == "valid" else 1
 
