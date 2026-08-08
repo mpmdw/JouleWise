@@ -148,6 +148,7 @@ be re-derived by a future agent gets an entry here.
 | D-124 | Common-mode ABBA contrast estimator PROMOTED-AS-CANDIDATE in the TWO-SHARED-EDGE form (shared onset + shared offset parameters, adversarial per-bundle residuals) after the ordered current-semantics replay HELD the bar decisively (a5 decode: worst-case default 8.611855 J vs joint-sweep 1.632422 J, two-shared-edge 1.869502 J — all NON-CLAIM); registration conditions bind (named estimator + named stationarity transfer assumption with evidence; pre-registration in the D-117 packs BEFORE claim data; identical treatment on calibration and consuming contrast; allowance exactly once; full D-118/D-121 gate; issued artifact untouched); the evidentiary limit of the transfer assumption is registered and rides the paper's limitations | adopted (magistrate under the D-123 overnight license; Ed may reverse — flagged for morning review) |
 | D-125 | Ed morning ratification batch (2026-08-08): D-124 common-mode estimator SIGNED OFF ("if instrument gets better, yes"); the Q1+Q13 lineage-envelope adoption RATIFIED on trust ("i trust your decisions there"), with the magistrate's clarification on record that this is successor calibration-acceptance arithmetic (not workload profiles) and only ever strengthens the 0.010818 floor — D-117 cl.1 is accordingly AMENDED for successors to "genesis lower bound + lineage-envelope rule" (the consult's transcription condition is met; freeze-until-ruled ends); 40-hour work window granted — plan of record at docs/strategy/2026-08-08-40h-plan.md | ratified (Ed, in-thread 2026-08-08 morning; transcribed by the magistrate) |
 | D-126 | U2 second-convening synthesis TRANSCRIBED (record: docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS-V2.md): six first-round objections verified moot in code by both sealed judges; Q2/Q4/Q6/Q7/Q9/Q11 + the Q13 n>=19 floor RATIFIED with the cold judge's binding amendments; Q5 ratified WITH the judge's closure definition (decision-log disposition by content_id + successor prior_observation_set record; consuming code waits for the first disposing ruling); Q8 registry authority ratified and the migration shim DELETED by convergent ruling; the Q1+Q13 joint remand is RESOLVED by the D-125 lineage envelopes; Q12 stays OPEN pending full-register re-presentation (packet rule hardened: quotes run to end of document section); Q10 deferred to the recovery gate; rework round 2 + the landing gauntlet (required writer≠reviewer lens over the 965-line successor test surface) bind before any successor issuance; this decision ID replaces the COLD-GATE-U2-PENDING tuple member — an issued artifact may never embed a tuple member with no decision-log entry | adopted (magistrate transcription of the sealed convening, 2026-08-08) |
+| D-127 | AUTONOMOUS WINDOW LOOP authorized (Ed directive, in-thread 2026-08-08, during the 40h window): partially REVERSES D-114's descope — the scoped network-time toggle (QUIET-GUARD sudoers slice: exactly the two fixed systemsetup network-time commands, exact binary path + exact argv, no wildcards) plus an autonomous experiment-loop harness (post-window supervisor step relaunches a fresh headless claude session with launch-then-verify-then-retry liveness proof + an independent launchd fallback timer; agent fully EXITS during capture — zero-agent rule for the capture itself is UNCHANGED) are chartered for build. D-115's conditions bind the privileged install path (fresh sudo -k auth, authenticated staged content, interpreter isolation) and Ed personally executes the one sudo install command — the privileged step never passes through the agent. Security-critical: full D-118/D-121 gauntlet + pre-decision design consult; built OFF the night-critical path and INSTALLED only at a deliberate Ed-present moment | chartered (Ed, in-thread; transcribed by the magistrate) |
 
 ---
 
@@ -7987,3 +7988,41 @@ the sealed second convening; both judges' rulings custodied at
 7. **Tuple rule:** this decision ID replaces `COLD-GATE-U2-PENDING`;
    an issued artifact may never embed a tuple member with no
    decision-log entry.
+
+## D-127: Autonomous window loop chartered — scoped time-toggle + verified relaunch harness (partial D-114 reversal)
+
+**Date:** 2026-08-08 (Ed, in-thread during the 40h window). **Status:**
+CHARTERED (build authorized; install gated).
+
+1. **What Ed authorized.** Claude Code drives the full experiment loop
+   across multi-day unattended stretches: harvest → mint → judge →
+   build/freeze next pack → toggle network time off → launch the
+   supervisor → EXIT for the capture; the window's final step relaunches
+   a fresh headless session. Ed's involvement reduces to optionally
+   remote, or zero once the toggle lands.
+2. **Zero-agent during capture is UNCHANGED.** The agent fully exits for
+   the ~3h capture; this charter removes the human toggle and the
+   relaunch gap, not the contamination fence. (The dormant-app
+   characterization number becomes moot for this design — full exit,
+   not residency.)
+3. **Scoped toggle.** Sudoers rule for exactly the two fixed
+   systemsetup network-time commands (exact path, exact argv, no
+   wildcards). Honest risk register: worst-case abuse is TIME
+   MANIPULATION, which for this project is a measurement-integrity
+   vector (clock anchors, drift screens) — detectable by the existing
+   custody/drift chain; not a general-privilege surface. D-115's
+   install conditions bind (sudo -k fresh auth; authenticated staged
+   content; interpreter isolation); Ed personally runs the single sudo
+   install command after the artifacts clear their gauntlet.
+4. **Relaunch harness (Ed's design point, corrected for process
+   lifecycle).** No pre-existing process to check — each cycle launches
+   fresh. Shape: preflight (binary, auth, disk state) → launch →
+   liveness proof (the fresh session's first scripted action writes a
+   heartbeat/claim file; launcher stands down only on proof) → bounded
+   retries with backoff → independent launchd fallback timer as the
+   second wake layer. Never one mechanism.
+5. **Process.** Security-critical: pre-decision design consult, full
+   D-118 gauntlet, D-121 terminal review; own branch/worktree, OFF the
+   night-critical path (trust/recovery merges outrank it); D-114's
+   remaining descopes (t3-resident, T3-CHAR-PAIR, WO-T3-VIS, SEC5A
+   remote) stay descoped except as this charter names.
