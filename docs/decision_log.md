@@ -149,6 +149,7 @@ be re-derived by a future agent gets an entry here.
 | D-125 | Ed morning ratification batch (2026-08-08): D-124 common-mode estimator SIGNED OFF ("if instrument gets better, yes"); the Q1+Q13 lineage-envelope adoption RATIFIED on trust ("i trust your decisions there"), with the magistrate's clarification on record that this is successor calibration-acceptance arithmetic (not workload profiles) and only ever strengthens the 0.010818 floor — D-117 cl.1 is accordingly AMENDED for successors to "genesis lower bound + lineage-envelope rule" (the consult's transcription condition is met; freeze-until-ruled ends); 40-hour work window granted — plan of record at docs/strategy/2026-08-08-40h-plan.md | ratified (Ed, in-thread 2026-08-08 morning; transcribed by the magistrate) |
 | D-126 | U2 second-convening synthesis TRANSCRIBED (record: docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS-V2.md): six first-round objections verified moot in code by both sealed judges; Q2/Q4/Q6/Q7/Q9/Q11 + the Q13 n>=19 floor RATIFIED with the cold judge's binding amendments; Q5 ratified WITH the judge's closure definition (decision-log disposition by content_id + successor prior_observation_set record; consuming code waits for the first disposing ruling); Q8 registry authority ratified and the migration shim DELETED by convergent ruling; the Q1+Q13 joint remand is RESOLVED by the D-125 lineage envelopes; Q12 stays OPEN pending full-register re-presentation (packet rule hardened: quotes run to end of document section); Q10 deferred to the recovery gate; rework round 2 + the landing gauntlet (required writer≠reviewer lens over the 965-line successor test surface) bind before any successor issuance; this decision ID replaces the COLD-GATE-U2-PENDING tuple member — an issued artifact may never embed a tuple member with no decision-log entry | adopted (magistrate transcription of the sealed convening, 2026-08-08) |
 | D-127 | AUTONOMOUS WINDOW LOOP authorized (Ed directive, in-thread 2026-08-08, during the 40h window): partially REVERSES D-114's descope — the scoped network-time toggle (QUIET-GUARD sudoers slice: exactly the two fixed systemsetup network-time commands, exact binary path + exact argv, no wildcards) plus an autonomous experiment-loop harness (post-window supervisor step relaunches a fresh headless claude session with launch-then-verify-then-retry liveness proof + an independent launchd fallback timer; agent fully EXITS during capture — zero-agent rule for the capture itself is UNCHANGED) are chartered for build. D-115's conditions bind the privileged install path (fresh sudo -k auth, authenticated staged content, interpreter isolation) and Ed personally executes the one sudo install command — the privileged step never passes through the agent. Security-critical: full D-118/D-121 gauntlet + pre-decision design consult; built OFF the night-critical path and INSTALLED only at a deliberate Ed-present moment | chartered (Ed, in-thread; transcribed by the magistrate) |
+| D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 
 ---
 
@@ -8026,3 +8027,32 @@ CHARTERED (build authorized; install gated).
    night-critical path (trust/recovery merges outrank it); D-114's
    remaining descopes (t3-resident, T3-CHAR-PAIR, WO-T3-VIS, SEC5A
    remote) stay descoped except as this charter names.
+
+## D-128: Standing run-the-loop mandate — drive until the paper is defensible
+
+**Date:** 2026-08-08 (Ed, in-thread: "i want you running this
+project/loop until you've got a defensible paper"). **Status:**
+RATIFIED. Also ratifies D-127 (chartered → ratified).
+
+1. **The mandate.** The magistrate owns continuous operation of the
+   experiment loop and the project: pack building, window arming (via
+   D-127 once landed; via Ed's §5A taps until then), morning harvests,
+   verdicts, mints, refusal diagnosis, re-arm decisions, desk analysis,
+   and paper assembly — across sessions and days, without per-step
+   authorization, until the paper is DEFENSIBLE.
+2. **"Defensible" is the bar, and it is conservative:** the P1 MVP
+   paper carrying measured numbers whose every claim survives the
+   adjudicated trust model, the results-prose acceptance contract
+   (template landed 1e6fa16), D-119 conservative wording, and the
+   D-078 attribution-limited floors doctrine. Defensible to advisor
+   Rivoire's metrology bar, not merely internally green.
+3. **Unchanged fences (this mandate relaxes NOTHING):** zero-agent
+   capture; the full D-118 gate + D-121 terminal review on every
+   merge; standing same-signature escalation and cold-gate triggers
+   (U2's count-3 freeze stands as precedent); the lieutenant-forbidden
+   list; Ed's owed rulings (Window-C funding, ruling 8 spec
+   governance, wall-meter/artifact scope) remain his; any external
+   claim release or publication remains Ed-gated.
+4. **Morning surface.** Each cycle leaves Ed a one-page morning state
+   (what ran, what minted or refused and why, what the next night
+   does, anything parked awaiting him) — RUN_STATE stays the pointer.
