@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import statistics
 import time
 from collections.abc import Mapping, Sequence
@@ -134,9 +133,6 @@ PROSPECTIVE_MEMBER_FAILURE_REASON_CODES = (
     "whole_window_bundle_invalid",
 )
 MEMBER_FAILURE_DETAIL_MAX_CHARS = 512
-_MEMBER_FAILURE_REASON_CODE_RE = re.compile(
-    r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
-)
 
 # The additive diagnostic field must remain outside this six-key verdict
 # identity. Old and enriched rows with the same basis stay semantically equal.
@@ -4149,7 +4145,6 @@ def _validated_member_failures(
             or member_id not in member_ids
             or not isinstance(reason_code, str)
             or not reason_code.strip()
-            or _MEMBER_FAILURE_REASON_CODE_RE.fullmatch(reason_code) is None
             or reason_code not in PROSPECTIVE_MEMBER_FAILURE_REASON_CODES
             or not isinstance(detail, str)
             or not detail.strip()

@@ -3805,12 +3805,18 @@ def _bounded_member_failure_detail(detail: str) -> str:
 
 def _member_failure_record(
     member_id: str, reason_code: str, detail: str
-) -> dict[str, str]:
+) -> dict[str, str] | None:
+    """Build one diagnostic record, or None when it cannot be represented.
+
+    The verdict row must never be suppressed by its own diagnostics: an
+    undeclared reason code or an unrepresentable detail degrades to
+    omitting that record, not to an exception on the emitter path.
+    """
+
     if reason_code not in PROSPECTIVE_MEMBER_FAILURE_REASON_CODES:
-        raise ValueError(
-            "undeclared prospective member-failure reason code: "
-            f"{reason_code}"
-        )
+        return None
+    if not detail.strip():
+        return None
     return {
         "member_id": member_id,
         "reason_code": reason_code,
@@ -3822,6 +3828,7 @@ def _canonical_member_failures(
     failures: Sequence[Mapping[str, str]],
 ) -> list[dict[str, str]]:
     by_pair: dict[tuple[str, str], dict[str, str]] = {}
+    conflicted: set[tuple[str, str]] = set()
     for failure in failures:
         record = {
             "member_id": failure["member_id"],
@@ -3831,12 +3838,16 @@ def _canonical_member_failures(
         pair = (record["member_id"], record["reason_code"])
         previous = by_pair.setdefault(pair, record)
         if previous != record:
-            raise ValueError(
-                "conflicting prospective member-failure detail for "
-                f"{pair[0]}/{pair[1]}"
-            )
+            # Conflicting details for one (member, reason) pair indicate a
+            # producer defect; the pair's diagnostic is dropped rather than
+            # letting a diagnostic conflict suppress the verdict row.
+            conflicted.add(pair)
     return sorted(
-        by_pair.values(),
+        (
+            record
+            for pair, record in by_pair.items()
+            if pair not in conflicted
+        ),
         key=lambda record: (
             record["member_id"],
             record["reason_code"],
@@ -3877,7 +3888,9 @@ def _cpu_member_failure_detail(cpu_admission: Mapping[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
-def _excluded_member_failure(evaluation: MemberEvaluation) -> dict[str, str]:
+def _excluded_member_failure(
+    evaluation: MemberEvaluation,
+) -> dict[str, str] | None:
     detail = json.dumps(
         {
             "collection_integrity_flags": list(
@@ -4280,25 +4293,25 @@ def _idle_admission_core_evaluation(
                 conditions.update(post_run_reasons)
                 environment_reasons.update(post_run_reasons)
         for reason_code in sorted(environment_reasons):
-            member_failures.append(
-                _member_failure_record(
-                    evaluation.bundle_id,
-                    reason_code,
-                    _environment_member_failure_detail(
-                        evaluation, reason_code
-                    ),
-                )
+            record = _member_failure_record(
+                evaluation.bundle_id,
+                reason_code,
+                _environment_member_failure_detail(
+                    evaluation, reason_code
+                ),
             )
+            if record is not None:
+                member_failures.append(record)
         attempt = _final_idle_admission_attempt(evaluation)
         if attempt is None:
             conditions.add("idle_admission_attempt_ledger_invalid")
-            member_failures.append(
-                _member_failure_record(
-                    evaluation.bundle_id,
-                    "idle_admission_attempt_ledger_invalid",
-                    "final idle-admission attempt ledger is missing, malformed, or inconsistent",
-                )
+            record = _member_failure_record(
+                evaluation.bundle_id,
+                "idle_admission_attempt_ledger_invalid",
+                "final idle-admission attempt ledger is missing, malformed, or inconsistent",
             )
+            if record is not None:
+                member_failures.append(record)
         records = (
             _load_idle_rich_telemetry(evaluation.bundle_path, attempt)
             if attempt is not None
@@ -4311,13 +4324,13 @@ def _idle_admission_core_evaluation(
         )
         conditions.update(cpu_admission["conditions"])
         for reason_code in cpu_admission["conditions"]:
-            member_failures.append(
-                _member_failure_record(
-                    evaluation.bundle_id,
-                    reason_code,
-                    _cpu_member_failure_detail(cpu_admission),
-                )
+            record = _member_failure_record(
+                evaluation.bundle_id,
+                reason_code,
+                _cpu_member_failure_detail(cpu_admission),
             )
+            if record is not None:
+                member_failures.append(record)
         member_observations = _adapter_observations_for(evaluation)
         adapter_observations.extend(member_observations)
         section["members"].append(
@@ -5438,7 +5451,14 @@ def _run_whole_window_verdict_locked(
     member_failures = _canonical_member_failures(
         [
             *core_evaluation.member_failures,
-            *(_excluded_member_failure(evaluation) for evaluation in excluded),
+            *(
+                record
+                for record in (
+                    _excluded_member_failure(evaluation)
+                    for evaluation in excluded
+                )
+                if record is not None
+            ),
         ]
     )
     core_conditions = set(core.get("conditions", []))

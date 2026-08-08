@@ -7248,6 +7248,69 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             ),
         )
 
+    def test_canonical_member_failures_deduplicates_direct_duplicates(
+        self,
+    ) -> None:
+        # Delta-audit P2: duplicates fed DIRECTLY through the writer-side
+        # canonicalizer, so a no-dedup sorted implementation fails here
+        # (upstream set-normalization cannot mask it).
+        record = {
+            "member_id": "m1",
+            "reason_code": "environment_admission_failed",
+            "detail": "d",
+        }
+        out = run_campaign_module._canonical_member_failures(
+            [dict(record), dict(record), dict(record)]
+        )
+        self.assertEqual(out, [record])
+
+    def test_conflicting_member_failure_details_drop_the_pair_only(
+        self,
+    ) -> None:
+        keep = {
+            "member_id": "m2",
+            "reason_code": "whole_window_bundle_invalid",
+            "detail": "kept",
+        }
+        out = run_campaign_module._canonical_member_failures(
+            [
+                {
+                    "member_id": "m1",
+                    "reason_code": "environment_admission_failed",
+                    "detail": "first",
+                },
+                {
+                    "member_id": "m1",
+                    "reason_code": "environment_admission_failed",
+                    "detail": "second",
+                },
+                dict(keep),
+            ]
+        )
+        self.assertEqual(out, [keep])
+
+    def test_undeclared_or_blank_member_failure_degrades_to_none(
+        self,
+    ) -> None:
+        # The verdict row must never be suppressed by its own diagnostics:
+        # an undeclared code or unrepresentable detail skips the record
+        # instead of raising on the emitter path.
+        self.assertIsNone(
+            run_campaign_module._member_failure_record(
+                "m1", "code_not_in_the_frozen_namespace", "detail"
+            )
+        )
+        self.assertIsNone(
+            run_campaign_module._member_failure_record(
+                "m1", "environment_admission_failed", "   "
+            )
+        )
+        self.assertIsNotNone(
+            run_campaign_module._member_failure_record(
+                "m1", "environment_admission_failed", "detail"
+            )
+        )
+
     def test_member_failures_map_environment_ledger_and_cpu_to_member(
         self,
     ) -> None:
