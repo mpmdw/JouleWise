@@ -142,6 +142,7 @@ be re-derived by a future agent gets an entry here.
 | D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
 | D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
 | D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
+| D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
 
 ---
 
@@ -7771,3 +7772,38 @@ territory.
 
 **Termination:** this delegation ends when Ed begins reviewing drafts
 directly. He may reverse any ruling at any time; none of them bind him.
+
+
+## D-121: The magistrate's contextual final review is the terminal merge-gate item (Ed directive; amends D-118)
+
+**Date:** 2026-08-08 (Ed, in-thread: "fable should do a final review of
+everything that is gonna touch main after every other pass. with
+relevant context"). **Status:** RATIFIED. Ed's ruling moots the rule-11
+cold gate on process amendments.
+
+**The rule.** Nothing merges to main until the magistrate (the directing
+Fable instance) has personally reviewed the exact merge candidate — the
+final head, its full diff, and its completed gate ledger — AFTER every
+other gate item has finished. This review is:
+1. **Terminal:** it is D-118 item 12, sequenced strictly after items
+   1-11 (including CI). A fix landing after it re-triggers it (the
+   final-head rule composes: any new commit restarts at item 4's delta
+   and ends at item 12 again).
+2. **Contextual, by design:** unlike cold gates and fresh subagent
+   passes (which exist to remove loop context), this slot exists to
+   apply it — the magistrate reads the candidate knowing the session's
+   escalations, adjudications, deferred items, and cross-branch state
+   that no fresh reviewer holds.
+3. **Non-delegable:** delegated Fable subagent diff/final-head passes
+   remain valid as EARLIER ledger items; they never satisfy item 12.
+   The magistrate adjudicates and signs the ledger.
+
+**Why (the session evidence that prompted it):** on 2026-08-07 the
+apex-delegable reading let merges complete where the magistrate's own
+last-look happened mid-gauntlet rather than last; separately, a
+counter-review caught a branch falsifying a PAPER sentence — a
+cross-surface fact only context-holding review reliably connects. The
+terminal slot puts the accountable reviewer at the accountable moment.
+
+**Ledger form:** item 12 reads "Magistrate final review — <head sha>,
+<verdict>, <one-line disposition of any deferred items>."
