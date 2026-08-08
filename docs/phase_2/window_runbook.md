@@ -282,8 +282,9 @@ diagnostic and never authorizes ARM.
   --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN"` before reservation
   and the exact `--phase pre-slot --session-id ... --slot ...
   --attempt-id ... --plan "$FROZEN_PLAN"` check before each slot.
-- [ ] Require structured `status: ready`. Never infer readiness from
-  `inspection.state`, even when that field says `clean`.
+- [ ] Treat structured `status: ready` from the public readiness command as
+  diagnostic early warning only. Never infer ARM permission from it or from
+  `inspection.state`, even when either field says `clean`.
 - [ ] Confirm the phase-appropriate pin relation: `exact` at pre-reserve,
   the exact governed session extension at pre-slot, and an authenticated
   terminal candidate at terminal.
@@ -294,10 +295,13 @@ diagnostic and never authorizes ARM.
 - [ ] Treat `needs_pin_commit: true` as desk work that ends a 2 a.m. attempt.
   It never licenses an uncommitted-pin override.
 
-The preflight command is early warning only. The writer repeats the enforcing
-pre-slot predicate after acquiring the nonblocking kernel writer lease and
-holds that same lease continuously through countdown, capture, finalization,
-or governed abort.
+The public readiness, `audit`, `audit-observations`, and `validate-slot`
+commands are early warning or validation only and never emit `ready_to_arm`.
+Only the reservation CLI's enforcing `pre-reserve` check and the writer's
+enforcing `pre-slot` check can emit `ready_to_arm`, and only while holding the
+resolved-ledger-identity lease. Both inspect custody across every finalized
+session in the authenticated snapshot. The writer holds that same lease
+continuously through countdown, capture, finalization, or governed abort.
 
 ## 5A. Pre-window clock stabilization (administrator step; Ed performs it)
 
@@ -848,16 +852,19 @@ than an operator command.
 | Registered code / exit | Required command and terminal result |
 |---|---|
 | `calibration_ledger_recovery_required` / `repair` | Run `repair`; require `operation_completed` or another registered code. |
-| `calibration_tail_requires_abandon` / `abandon-tail` | Run `abandon-tail --operator-identity "$OPERATOR_ID" --attestation-reason "$ATTESTATION_REASON"`, then `repair`; require `operation_completed`. If this advanced the physical head, follow the desk-only pin row before readiness can become `ready_to_arm`. |
+| `calibration_tail_requires_abandon` / `abandon-tail-then-repair` | Run `abandon-tail --operator-identity "$OPERATOR_ID" --attestation-reason "$ATTESTATION_REASON"`, then `repair`; require `operation_completed`. If this advanced the physical head, follow the desk-only pin row before readiness can become `ready_to_arm`. |
+| `calibration_intent_target_malformed` / `abandon-tail-then-repair` | Treat the admitted malformed intent and any target bytes as quarantine-only residue. Run the same operator-attested `abandon-tail`, then `repair`; require `operation_completed`. Never execute, replay, admit, or finalize the malformed target. |
 | `calibration_custody_complete_use_resume` / `resume-finalize` | Run `resume-finalize --session-id "$BRACKET_SESSION_ID" --slot "$SLOT" --plan "$FROZEN_PLAN"`; require `operation_completed`. |
 | `calibration_custody_partial` / `abort-session` | Run `abort-session --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN" --reason "$ABORT_REASON"`; require `session_aborted` and `custody_preserved: true`. |
 | `calibration_live_writer_contention` | Wait for or intentionally stop the live holder. Never run `abort-session` underneath it. After a crash, the kernel releases the lease; rerun `session-status`, then its exact `resume-finalize` or `abort-session` route. |
 | `calibration_ledger_head_mismatch` with `needs_pin_commit: true` / guarded advancement | End the 2 a.m. attempt. At the desk, review the candidate, run `advance-head-pin` with its exact sequence/digest plus operator attestation and `--execute`, commit the pin, require a clean checkout, and repeat readiness. |
-| malformed ledger, unsafe lock inode, unreadable/archive-conflicting legacy journal, unreadable custody, divergent pin, or nonconvergent recovery | `night_stopped_preserved`: stop, preserve all ledger/lock/journal/custody bytes, and escalate. Never delete a lock inode or integrity evidence. |
+| malformed ledger, unsafe lock inode, unreadable/archive-conflicting legacy journal, unreadable custody, divergent pin, or nonconvergent recovery | `night_stopped_preserved`: stop, preserve all ledger/lock/journal/custody/pin bytes, and escalate. Hash before and after the mapped exit; require byte identity and the same lock inode. Never delete a lock inode or integrity evidence. |
+| torn `manifest.json` after a writer crash | `session-status` must report unreadable custody, never complete or resumable. A fresh `resume-finalize` attempt must emit the registered `calibration_custody_unreadable` hard stop with `night_stopped_preserved`; verify ledger, pin, lock inode, and all custody bytes are unchanged. |
 
-`inspect` is diagnostic only. A `clean` parser state with a non-null
-`legacy_journal_path` is blocked. No night command accepts an uncommitted-pin
-override.
+`inspect` is diagnostic only. So are `audit`, `audit-observations`, and
+`validate-slot`; none is an ARM-permission route. A `clean` parser state with
+a non-null `legacy_journal_path` is blocked. No night command accepts an
+uncommitted-pin override.
 
 Fresh-process recovery examples:
 

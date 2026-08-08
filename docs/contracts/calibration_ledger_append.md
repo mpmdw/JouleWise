@@ -123,12 +123,17 @@ chain. For each candidate record it applies these rules in order:
 1. The schema, canonical self-digest, sequence, and predecessor must validate.
 2. An intent must bind the immediately preceding physical head and its exact
    byte offset, use the lineage's `ledger_id`, commit a valid target schema,
-   and describe a legal business-state transition.
+   and describe a legal business-state transition. A chain-valid intent whose
+   committed target fails that target validation is *admitted malformed
+   intent*: it is typed residue, not an executable intent.
 3. While an intent is active, the only admissible business record is the exact
    target core reconstructed at the then-current sequence and predecessor.
 4. An abandonment may bridge residue only through the exact range/SHA rule
-   above. When an intent is active it must repeat that intent's operation and
-   target commitments. It quarantines bytes; it does not revoke the intent.
+   above. When a valid intent is active it must repeat that intent's operation
+   and target commitments. It quarantines bytes; it does not revoke a valid
+   intent. An admitted malformed intent is the sole exception: operator
+   abandonment quarantines the malformed intent and any following target bytes
+   as one non-executable residue range.
 5. A business receipt closes the active intent only when its complete semantic
    core matches. Control receipts are ignored by the observation and bracket
    reducers but remain in the physical chain and head pin.
@@ -151,6 +156,11 @@ An unresolved valid intent or terminal residue yields
 refuse that state. A clean abandonment control receipt is evidence, not an
 unresolved observation.
 
+An admitted malformed intent yields `calibration_intent_target_malformed`.
+Recovery must never construct, append, admit, or finalize its target. Its only
+legal disposition is the registered, typed `abandon-tail-then-repair` route;
+the resulting abandonment proves quarantine and leaves no executable intent.
+
 Terminal session status is determined from business receipts. Once the
 session's POST finalization or governed business abort is terminal, any
 authenticated trailing control receipts remain part of the physical head and
@@ -171,7 +181,8 @@ emission.
 A valid intent is irrevocable. Zero target bytes always lead to deterministic
 completion. If following bytes disagree, the engine first appends an
 abandonment receipt, then reconstructs the committed target at the new physical
-head. It never substitutes the mismatching bytes.
+head. It never substitutes the mismatching bytes. A malformed intent is never
+valid for this rule: it remains quarantine-only residue and cannot finalize.
 
 Every physical append-recovery refusal has one governed exit:
 
@@ -194,10 +205,12 @@ There is no deletion-based recovery state.
 | after abandonment fsync | valid intent remains active, residue governed | exact target completion |
 
 All append stages fsync the ledger before advancing. One permanent dedicated
-`<ledger>.lock` regular inode serializes recovery, reservation, claim,
+`<resolved-ledger-identity>.lock` regular inode serializes recovery, reservation, claim,
 countdown, capture, finalization, and abort. The writer acquires its
 nonblocking kernel `flock` before recovery and holds the descriptor
 continuously until finalization or governed abort. The inode is never deleted.
+The lock path and in-process ownership key derive from the resolved ledger
+identity, so symlink or lexical aliases cannot acquire a second lease.
 Only kernel lease ownership is a liveness discriminator; PID text, process
 UUIDs, and exception substrings have no policy role.
 
@@ -221,7 +234,9 @@ The machine gate reports one typed pin relation:
 Only `scripts/recover_calibration_ledger.py advance-head-pin` may advance the
 pin. It requires the exact authenticated candidate, operator identity,
 attestation reason, a clean physical protocol with no legacy journal, and a
-terminal session (or sessionless recovery-only control head). Execution is
+terminal session (or a sessionless recovery-only abandonment control head).
+Any pending/open/refusal business state beyond that authenticated control tail
+blocks advancement. Execution is
 desk-only: review the candidate and diff, run with `--execute`, commit the pin,
 restore a clean checkout, and repeat readiness. There is no night-path
 uncommitted-head override.
@@ -238,10 +253,15 @@ phase-specific pin/session/custody relation:
   state, and custody requiring neither resume nor abort; and
 - `terminal`: exact terminal session and authenticated terminal pin candidate.
 
-The standalone CLI is early warning. The enforcing `pre-slot` predicate runs
-only after the writer owns the lease and that descriptor remains held directly
-through countdown, capture, and closure. A parser-clean result with a non-null
-`legacy_journal_path` is blocked by the machine gate.
+The standalone CLI and the public `audit`, `audit-observations`, and
+`validate-slot` routes are diagnostic and never emit `ready_to_arm`. The
+enforcing `pre-reserve` predicate runs only while the reservation CLI owns the
+lease; the enforcing `pre-slot` predicate runs only after the writer owns the
+lease and that descriptor remains held directly through countdown, capture,
+and closure. Those enforcing under-lease predicates are the only
+`ready_to_arm` source. Both verify custody for every finalized session in the
+authenticated snapshot, not only the proposed session. A parser-clean result
+with a non-null `legacy_journal_path` is blocked by the machine gate.
 
 ## Generated cross-layer refusal projection
 
@@ -275,7 +295,7 @@ through countdown, capture, and closure. A parser-clean result with a non-null
 | `calibration_legacy_journal_archive_conflict` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_conflict` |
 | `calibration_legacy_journal_archive_failed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_failed` |
 | `calibration_tail_requires_abandon` | `operational` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_tail_requires_abandon` |
-| `calibration_intent_target_malformed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_intent_target_malformed` |
+| `calibration_intent_target_malformed` | `corruption_backstop` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_intent_target_malformed` |
 | `calibration_recovery_nonconvergent` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_nonconvergent` |
 | `calibration_recovery_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_credentials_invalid` |
 | `calibration_abandon_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_credentials_invalid` |
@@ -292,8 +312,8 @@ through countdown, capture, and closure. A parser-clean result with a non-null
 | `calibration_session_not_found` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_found` |
 | `calibration_session_not_open` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_open` |
 | `calibration_slot_order_conflict` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_slot_order_conflict` |
-| `calibration_claim_id_invalid` | `internal_invariant` | writer | pre-slot-or-capture | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_claim_id_invalid` |
-| `calibration_finalization_binding_conflict` | `internal_invariant` | writer | pre-slot-or-capture | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_finalization_binding_conflict` |
+| `calibration_claim_id_invalid` | `operational` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_claim_id_invalid` |
+| `calibration_finalization_binding_conflict` | `corruption_backstop` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_finalization_binding_conflict` |
 | `calibration_session_not_terminal` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_terminal` |
 | `calibration_session_terminal_not_head` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_terminal_not_head` |
 | `calibration_custody_partial` | `operational` | recovery-cli | recovery | `abort-session` | `session_aborted` | `true` | `witness.calibration_custody_partial` |
@@ -342,8 +362,9 @@ The CLI accepts no payload, journal source, target JSON, or byte range.
 `abandon-tail` always begins at the parser's first byte after the maximal valid
 chain. Before appending, it verifies that the digest at the pin's exact
 sequence equals the committed digest; a same-sequence sibling is not the
-committed head. It refuses when that pinned head is absent or a valid intent is
-active. Because the residue starts only after the maximal admitted chain, the
+committed head. It refuses when that pinned head is absent or a valid
+executable intent is active; an admitted malformed intent is expressly
+quarantineable and never executable. Because the residue starts only after the maximal admitted chain, the
 whole range may include later chain-shaped orphan bytes without crossing a
 valid record. Operators cannot abandon a committed head, an admitted receipt,
 or an irrevocable business operation.

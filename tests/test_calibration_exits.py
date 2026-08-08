@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -47,8 +48,6 @@ class WitnessCase:
 
 INTERNAL_UNIT_CODES = frozenset(
     {
-        RefusalCode.CLAIM_ID_INVALID,
-        RefusalCode.FINALIZATION_BINDING_CONFLICT,
         RefusalCode.LEDGER_OFF_LEDGER_ARTIFACT,
         RefusalCode.LEDGER_BRACKET_SLOT_CLAIMED,
         RefusalCode.LEDGER_SNAPSHOT_REQUIRED,
@@ -100,6 +99,8 @@ WITNESS_CASES = (
     WitnessCase(RefusalCode.SESSION_NOT_FOUND, "_state_missing_session", "session-status"),
     WitnessCase(RefusalCode.SESSION_NOT_OPEN, "_state_closed_session", "resume-pre"),
     WitnessCase(RefusalCode.SLOT_ORDER_CONFLICT, "_state_open_for_abort", "resume-post"),
+    WitnessCase(RefusalCode.CLAIM_ID_INVALID, "_state_hostile_claim_id", "readiness-pre-slot"),
+    WitnessCase(RefusalCode.FINALIZATION_BINDING_CONFLICT, "_state_writer_binding_conflict", "writer-binding-conflict"),
     WitnessCase(RefusalCode.SESSION_NOT_TERMINAL, "_state_open_for_abort", "terminal-pin"),
     WitnessCase(RefusalCode.SESSION_TERMINAL_NOT_HEAD, "_state_terminal_not_head", "terminal-pin"),
     WitnessCase(RefusalCode.PLAN_UNREADABLE, "_state_reservation_inputs", "reserve-plan-unreadable"),
@@ -120,9 +121,9 @@ WITNESS_CASES = (
     WitnessCase(RefusalCode.QUIET_MAC_AUTH_REQUIRED, "_state_writer_protocol", "writer-quiet"),
     WitnessCase(RefusalCode.POWER_POLICY_REQUIRED, "_state_writer_protocol", "writer-power"),
     WitnessCase(RefusalCode.RESERVED_SLOT_MISMATCH, "_state_reserved_mismatch", "validate-slot"),
-    WitnessCase(RefusalCode.DISPLAY_ARM_FAILED, "_state_display_abort", "session-refusal"),
-    WitnessCase(RefusalCode.SAMPLER_NEVER_READY, "_state_sampler_abort", "session-refusal"),
-    WitnessCase(RefusalCode.ROLLOVER_GATE_TIMEOUT, "_state_rollover_abort", "session-refusal"),
+    WitnessCase(RefusalCode.DISPLAY_ARM_FAILED, "_state_display_abort", "writer-display-failure"),
+    WitnessCase(RefusalCode.SAMPLER_NEVER_READY, "_state_sampler_abort", "writer-sampler-failure"),
+    WitnessCase(RefusalCode.ROLLOVER_GATE_TIMEOUT, "_state_rollover_abort", "writer-rollover-failure"),
 )
 
 
@@ -131,6 +132,94 @@ def _fresh_cli_env() -> dict[str, str]:
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "PYTHONDONTWRITEBYTECODE": "1",
     }
+
+
+def _install_fake_writer_dependencies(repo: Path) -> Path:
+    """Install process-level external dependencies; production code stays real."""
+
+    mlx = repo / "mlx"
+    mlx.mkdir(exist_ok=True)
+    (mlx / "__init__.py").write_text("", encoding="utf-8")
+    (mlx / "core.py").write_text(
+        """__version__ = 'test-mlx-1'\n
+class _Array:\n
+    def astype(self, _dtype):\n
+        return self\n
+class _Random:\n
+    def normal(self, _shape):\n
+        return _Array()\n
+random = _Random()\n
+float16 = object()\n
+def matmul(_left, _right):\n
+    return _Array()\n
+def eval(*_values):\n
+    return None\n
+""",
+        encoding="utf-8",
+    )
+    fixture_root = repo / "writer-fixtures"
+    fixture_root.mkdir(exist_ok=True)
+    shutil.copy2(
+        REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.plist",
+        fixture_root / "powermetrics_sample.plist",
+    )
+    sampler = fixture_root / "fake_sampler.py"
+    sampler.write_text(
+        """#!/usr/bin/env python3
+import argparse
+from datetime import UTC, datetime, timedelta
+import os
+from pathlib import Path
+import plistlib
+import signal
+import time
+
+running = True
+def stop(_signum, _frame):
+    global running
+    running = False
+
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('-o', required=True)
+args, _unknown = parser.parse_known_args()
+signal.signal(signal.SIGTERM, stop)
+mode = os.environ.get('JW_FAKE_SAMPLER_MODE', 'normal')
+output = Path(args.o)
+if mode == 'never':
+    while running:
+        time.sleep(0.001)
+    raise SystemExit(0)
+frames = [
+    plistlib.loads(raw)
+    for raw in Path(__file__).with_name('powermetrics_sample.plist').read_bytes().split(b'\\0')
+    if raw.strip()
+]
+with output.open('wb', buffering=0) as handle:
+    index = 0
+    while running:
+        document = dict(frames[index % len(frames)])
+        document['hw_model'] = os.environ['JW_FAKE_HW_MODEL']
+        document['kern_osversion'] = os.environ['JW_FAKE_OS_BUILD']
+        document['timestamp'] = datetime.now(UTC) + timedelta(seconds=index)
+        document['elapsed_ns'] = 100_000_000
+        processor = dict(document['processor'])
+        for rail, counter in (('cpu_power', 'cpu_energy'), ('gpu_power', 'gpu_energy'), ('ane_power', 'ane_energy')):
+            processor[counter] = round(float(processor[rail]) * 0.1)
+        document['processor'] = processor
+        if index:
+            handle.write(b'\\0')
+        handle.write(plistlib.dumps(document))
+        index += 1
+        if mode == 'one':
+            while running:
+                time.sleep(0.001)
+            break
+        time.sleep(0.001)
+""",
+        encoding="utf-8",
+    )
+    sampler.chmod(0o755)
+    return sampler
 
 
 class RefusalInventoryTests(unittest.TestCase):
@@ -392,7 +481,7 @@ class RefusalInventoryTests(unittest.TestCase):
                 raised.exception.code, RefusalCode.LEDGER_BRACKET_SLOT_CLAIMED
             )
 
-    def test_internal_claim_id_argument_guard_raise_path(self) -> None:
+    def test_low_level_claim_id_argument_guard_supplements_public_witness(self) -> None:
         witness = PublicGovernedExitWitnessTests(methodName="runTest")
         witness.setUp()
         try:
@@ -409,7 +498,7 @@ class RefusalInventoryTests(unittest.TestCase):
         finally:
             witness.tearDown()
 
-    def test_internal_finalization_binding_guard_raise_path(self) -> None:
+    def test_low_level_finalization_binding_guard_supplements_writer_witness(self) -> None:
         witness = PublicGovernedExitWitnessTests(methodName="runTest")
         witness.setUp()
         try:
@@ -501,6 +590,50 @@ class RefusalInventoryTests(unittest.TestCase):
                     violations.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
         self.assertEqual(violations, [])
 
+    def test_calibration_tests_have_no_literal_positional_receipt_indexing(self) -> None:
+        def rooted_name(node: ast.AST) -> str:
+            if isinstance(node, ast.Name):
+                return node.id
+            if isinstance(node, ast.Attribute):
+                return node.attr
+            return ""
+
+        def integer_literal(node: ast.AST | None) -> bool:
+            return bool(
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, int)
+                and not isinstance(node.value, bool)
+                or isinstance(node, ast.UnaryOp)
+                and isinstance(node.op, ast.USub)
+                and isinstance(node.operand, ast.Constant)
+                and isinstance(node.operand.value, int)
+            )
+
+        paths = sorted((REPO_ROOT / "tests").glob("test_calibration*.py"))
+        paths.append(REPO_ROOT / "tests" / "test_powermetrics_fiducial.py")
+        violations: list[str] = []
+        for path in paths:
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not isinstance(node, ast.Subscript):
+                    continue
+                if "receipt" not in rooted_name(node.value).lower():
+                    continue
+                positional = integer_literal(node.slice)
+                if isinstance(node.slice, ast.Slice):
+                    positional = any(
+                        integer_literal(part)
+                        for part in (
+                            node.slice.lower,
+                            node.slice.upper,
+                            node.slice.step,
+                        )
+                    )
+                if positional:
+                    violations.append(
+                        f"{path.relative_to(REPO_ROOT)}:{node.lineno}"
+                    )
+        self.assertEqual(violations, [])
+
 
 class PublicGovernedExitWitnessTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -522,14 +655,15 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             / "protocol_v3.json"
         )
         protocol.parent.mkdir(parents=True)
-        shutil.copy2(
-            REPO_ROOT
-            / "configs"
-            / "calibration"
-            / "powermetrics_fiducial"
-            / "protocol_v3.json",
-            protocol,
-        )
+        for protocol_name in ("protocol_v2.json", "protocol_v3.json"):
+            shutil.copy2(
+                REPO_ROOT
+                / "configs"
+                / "calibration"
+                / "powermetrics_fiducial"
+                / protocol_name,
+                protocol.with_name(protocol_name),
+            )
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"
         self.pin.parent.mkdir(parents=True, exist_ok=True)
         self.pin.write_text(
@@ -565,6 +699,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.writer_script = (
             self.repo / "scripts" / "validate_powermetrics_fiducial.py"
         )
+        self.fake_sampler = _install_fake_writer_dependencies(self.repo)
         self.epoch = {
             "os_build": "25F84",
             "hardware_model": "Mac15,9",
@@ -628,6 +763,148 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             check=False,
         )
 
+    def _json_payload(self, completed: subprocess.CompletedProcess[str]) -> dict:
+        lines = [
+            line
+            for line in (completed.stdout + "\n" + completed.stderr).splitlines()
+            if line.strip().startswith("{")
+        ]
+        self.assertTrue(lines, completed.stdout + completed.stderr)
+        return json.loads(lines[-1])
+
+    def _ensure_preservation_lock(self) -> Path:
+        lock = ledger_module._ledger_lock_path(self.ledger)
+        try:
+            lock.lstat()
+        except FileNotFoundError:
+            descriptor = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+            os.close(descriptor)
+        return lock
+
+    def _durable_fingerprint(self) -> tuple[dict[str, str], tuple[int, int] | None]:
+        lock = self._ensure_preservation_lock()
+        candidates = {self.ledger, self.pin, lock}
+        candidates.update(self.ledger.parent.glob(f"{self.ledger.name}.append-journal*"))
+        for root in (self.repo / "runs", self.repo / "custody"):
+            if root.exists():
+                candidates.update(path for path in root.rglob("*") if path.is_file() or path.is_symlink())
+        fingerprints: dict[str, str] = {}
+        for path in sorted(candidates, key=lambda item: str(item)):
+            try:
+                status = path.lstat()
+            except FileNotFoundError:
+                raw = b"absent"
+            else:
+                identity = (
+                    f"{stat.S_IFMT(status.st_mode)}:{status.st_dev}:{status.st_ino}:"
+                    f"{status.st_nlink}:{status.st_size}:"
+                ).encode()
+                if path.is_symlink():
+                    content = os.readlink(path).encode()
+                elif path.is_file():
+                    try:
+                        content = path.read_bytes()
+                    except OSError:
+                        content = b"unreadable"
+                else:
+                    content = b"special"
+                raw = identity + content
+            fingerprints[str(path.relative_to(self.repo))] = hashlib.sha256(raw).hexdigest()
+        try:
+            lock_status = lock.lstat()
+            lock_identity = (lock_status.st_dev, lock_status.st_ino)
+        except FileNotFoundError:
+            lock_identity = None
+        return fingerprints, lock_identity
+
+    def _writer_env(self, state: dict, *, mode: str) -> dict[str, str]:
+        return {
+            **_fresh_cli_env(),
+            "JW_FAKE_SAMPLER_MODE": mode,
+            "JW_FAKE_HW_MODEL": state["epoch"]["hardware_model"],
+            "JW_FAKE_OS_BUILD": state["epoch"]["os_build"],
+        }
+
+    def _enforcing_readiness(
+        self,
+        *,
+        phase: str,
+        session_id: str | None = None,
+        slot: str | None = None,
+        attempt_id: str | None = None,
+    ) -> dict:
+        code = f"""
+import json
+from pathlib import Path
+from joulewise.calibration_ledger import CalibrationWriterLease, calibration_readiness
+ledger = Path({str(self.ledger)!r})
+with CalibrationWriterLease(ledger):
+    result = calibration_readiness(
+        ledger,
+        Path({str(self.pin)!r}),
+        phase={phase!r},
+        session_id={session_id!r},
+        slot={slot!r},
+        attempt_id={attempt_id!r},
+        enforcing_under_lease=True,
+        require_committed_pin=True,
+        repo_root=Path({str(self.repo)!r}),
+    ).as_dict()
+print(json.dumps(result, sort_keys=True))
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=self.repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_fresh_cli_env(),
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["authorizes_arm"], payload)
+        self.assertEqual(payload["terminal_result"], "ready_to_arm")
+        return payload
+
+    def _write_valid_rederive_source(self, source: Path) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        if source.exists():
+            shutil.rmtree(source)
+        (source / "raw").mkdir(parents=True)
+        evidence, raw, events = self_consistent_calibration()
+        stored_only = max(
+            abs(float(pulse[field]))
+            for pulse in evidence["pulses"]
+            for field in (
+                "onset_residual_lower_s",
+                "onset_residual_upper_s",
+                "offset_residual_lower_s",
+                "offset_residual_upper_s",
+            )
+        )
+        evidence["b_fiducial_s"] = stored_only
+        (source / "raw" / "powermetrics.plist").write_bytes(raw)
+        (source / "events.jsonl").write_bytes(events)
+        evidence_raw = json.dumps(evidence, indent=2, sort_keys=True).encode() + b"\n"
+        (source / "instrument_evidence.json").write_bytes(evidence_raw)
+        (source / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "artifacts": {
+                        "raw/powermetrics.plist": hashlib.sha256(raw).hexdigest(),
+                        "events.jsonl": hashlib.sha256(events).hexdigest(),
+                        "instrument_evidence.json": hashlib.sha256(
+                            evidence_raw
+                        ).hexdigest(),
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     def _commit_fixture(self, message: str) -> None:
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(
@@ -642,7 +919,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 {
                     "sequence": len(receipts),
                     "head_digest": (
-                        receipts[-1]["receipt_digest"]
+                        next(reversed(receipts))["receipt_digest"]
                         if receipts
                         else GENESIS_DIGEST
                     ),
@@ -681,7 +958,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         return ledger_module._new_receipt(
             sequence=len(receipts) + 1,
             predecessor_digest=(
-                receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
+                next(reversed(receipts))["receipt_digest"] if receipts else GENESIS_DIGEST
             ),
             event=event,
             attempt_id=attempt_id,
@@ -719,7 +996,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         return ledger_module._new_bracket_session_record(
             sequence=len(receipts) + 1,
             predecessor_digest=(
-                receipts[-1]["receipt_digest"] if receipts else GENESIS_DIGEST
+                next(reversed(receipts))["receipt_digest"] if receipts else GENESIS_DIGEST
             ),
             event=ledger_module.BRACKET_SESSION_OPEN_EVENT,
             session_identity=identity,
@@ -899,7 +1176,15 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def _state_writer_protocol(self) -> dict:
         source = self.repo / "rederive-source"
         source.mkdir()
-        return {"source": source, "output": self.repo / "rederived.json"}
+        plan = self._open_session("session-writer-correction")
+        return {
+            "source": source,
+            "output": self.repo / "rederived.json",
+            "plan": plan,
+            "session_id": "session-writer-correction",
+            "slot": "pre",
+            "attempt_id": "session-writer-correction-pre",
+        }
 
     def _state_writer_protocol_invalid(self) -> dict:
         state = self._state_writer_protocol()
@@ -923,23 +1208,143 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         state["custody_locator"] = str(self.repo / "wrong-custody-location")
         return state
 
-    def _state_automatic_abort(self, reason: str) -> dict:
-        state = self._state_open_for_abort()
-        ledger_module.abort_bracket_session(
-            self.ledger,
-            session_id=state["session_id"],
-            reason=reason,
+    def _actual_writer_bindings(self) -> tuple[dict, dict]:
+        epoch = {
+            "os_build": "25F84",
+            "hardware_model": "Mac15,9",
+            "power_policy": "ac_high_power",
+            "sampling_interval_ms": 100,
+            "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+            "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        }
+        t1 = {
+            **epoch,
+            "powermetrics_sha256": hashlib.sha256(
+                self.fake_sampler.read_bytes()
+            ).hexdigest(),
+            "anchor_method_version": (
+                "powermetrics_native_second_censored_intersection_v1"
+            ),
+            "mlx_version": "test-mlx-1",
+            "protocol_sha256": hashlib.sha256(
+                (
+                    self.repo
+                    / "configs"
+                    / "calibration"
+                    / "powermetrics_fiducial"
+                    / "protocol_v3.json"
+                ).read_bytes()
+            ).hexdigest(),
+        }
+        return epoch, t1
+
+    def _state_real_writer(self, session_id: str) -> dict:
+        epoch, t1 = self._actual_writer_bindings()
+        plan = self._open_session(session_id, epoch=epoch, t1=t1)
+        custody = (
+            self.repo
+            / "runs"
+            / session_id
+            / "instrument_validation"
+            / f"{session_id}-pre"
         )
+        identity_path = self.repo / "writer-fixtures" / f"{session_id}-identity.json"
+        identity_path.write_text(json.dumps(epoch) + "\n", encoding="utf-8")
+        return {
+            "plan": plan,
+            "session_id": session_id,
+            "slot": "pre",
+            "attempt_id": f"{session_id}-pre",
+            "custody_locator": str(custody),
+            "output_root": custody.parent,
+            "epoch": epoch,
+            "t1": t1,
+            "identity_path": identity_path,
+        }
+
+    def _writer_capture_args(self, state: dict) -> list[str]:
+        return [
+            "--allow-live",
+            "--power-policy",
+            "ac_high_power",
+            "--ledger",
+            str(self.ledger),
+            "--head-pin",
+            str(self.pin),
+            "--session-id",
+            state["session_id"],
+            "--slot",
+            state["slot"],
+            "--attempt-id",
+            state["attempt_id"],
+            "--output-root",
+            str(state["output_root"]),
+            "--sampler-binary",
+            str(self.fake_sampler),
+            "--sampler-direct-for-test",
+            "--time-scale-for-test",
+            "0.001",
+            "--identity-epoch-json-for-test",
+            str(state["identity_path"]),
+            "--sampler-ready-timeout-s",
+            "1.0",
+            "--rollover-timeout-s",
+            "0.05",
+        ]
+
+    def _state_hostile_claim_id(self) -> dict:
+        state = self._state_open_for_abort()
+        receipts = list(
+            ledger_module._scan_physical_ledger(self.ledger.read_bytes()).receipts
+        )
+        open_receipt = next(
+            receipt
+            for receipt in receipts
+            if receipt.get("event") == ledger_module.BRACKET_SESSION_OPEN_EVENT
+        )
+        hostile = ledger_module._new_bracket_session_record(
+            sequence=len(receipts) + 1,
+            predecessor_digest=next(reversed(receipts))["receipt_digest"],
+            event=ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            session_identity={
+                field: open_receipt[field]
+                for field in ledger_module._SESSION_IDENTITY_KEYS
+            },
+            fields={
+                "slot": "pre",
+                "attempt_id": state["attempt_id"],
+                "claim_id": "authenticated-but-not-the-policy-claim-id",
+            },
+        )
+        intent = ledger_module._new_append_intent(
+            receipts=receipts,
+            byte_offset=len(self.ledger.read_bytes()),
+            target_core=ledger_module._target_core(hostile),
+            operation_key=ledger_module._operation_key_for_core(
+                ledger_module._target_core(hostile)
+            ),
+        )
+        target = ledger_module._intent_target_receipt(
+            intent,
+            sequence=len(receipts) + 2,
+            predecessor_digest=intent["receipt_digest"],
+        )
+        with self.ledger.open("ab") as handle:
+            handle.write(canonical_json_bytes(intent) + b"\n")
+            handle.write(canonical_json_bytes(target) + b"\n")
         return state
 
+    def _state_writer_binding_conflict(self) -> dict:
+        return self._state_real_writer("session-binding-conflict")
+
     def _state_display_abort(self) -> dict:
-        return self._state_automatic_abort("display_arm_failed")
+        return self._state_real_writer("session-display-abort")
 
     def _state_sampler_abort(self) -> dict:
-        return self._state_automatic_abort("powermetrics_never_ready")
+        return self._state_real_writer("session-sampler-abort")
 
     def _state_rollover_abort(self) -> dict:
-        return self._state_automatic_abort("pulse_calibration_rollover_gate_timeout")
+        return self._state_real_writer("session-rollover-abort")
 
     def _reservation_args(
         self, state: dict, *, session_id: str | None = None, execute: bool = False
@@ -1192,6 +1597,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         return {"restore": lambda: self.ledger.chmod(0o600)}
 
     def _journal(self) -> Path:
+        if not self.ledger.exists():
+            self.ledger.write_bytes(b"")
         journal = ledger_module._legacy_append_journal_path(self.ledger)
         journal.write_bytes(b"legacy journal bytes")
         return journal
@@ -1349,7 +1756,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         epoch = epoch or self.epoch
         t1 = t1 or self.t1
         plan = self.repo / "plans" / f"{session_id}.json"
-        plan.parent.mkdir()
+        plan.parent.mkdir(exist_ok=True)
         plan.write_text(
             json.dumps({"plan_id": f"plan-{session_id}", "session_id": session_id})
             + "\n",
@@ -1432,6 +1839,13 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def _execute_case(self, case: WitnessCase) -> None:
         state = getattr(self, case.constructor)()
         holder = state.get("holder")
+        record = REFUSAL_BY_CODE[case.code]
+        preservation_before = (
+            self._durable_fingerprint()
+            if record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED
+            and case.code is not RefusalCode.FINALIZATION_BINDING_CONFLICT
+            else None
+        )
         try:
             if case.observer in {"audit", "inspect", "repair"}:
                 refused = self._run(case.observer)
@@ -1656,12 +2070,40 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     writer_args = ["--output", str(state["output"])]
                 elif case.observer == "writer-power":
                     writer_args = ["--allow-live"]
+                elif case.observer == "writer-display-failure":
+                    writer_args = [
+                        *self._writer_capture_args(state),
+                        "--sleep-display-before-capture",
+                        "--display-arm-binary",
+                        str(self.repo / "missing-display-arm-command"),
+                    ]
+                elif case.observer == "writer-sampler-failure":
+                    writer_args = self._writer_capture_args(state)
+                elif case.observer == "writer-rollover-failure":
+                    writer_args = [
+                        *self._writer_capture_args(state),
+                        "--sampler-ready-timeout-s",
+                        "1.0",
+                    ]
+                elif case.observer == "writer-binding-conflict":
+                    writer_args = self._writer_capture_args(state)
                 else:
                     writer_args = []
+                if case.observer == "writer-display-failure":
+                    writer_env = self._writer_env(state, mode="normal")
+                elif case.observer == "writer-sampler-failure":
+                    writer_env = self._writer_env(state, mode="never")
+                elif case.observer == "writer-rollover-failure":
+                    writer_env = self._writer_env(state, mode="one")
+                elif case.observer == "writer-binding-conflict":
+                    writer_env = self._writer_env(state, mode="normal")
+                    writer_env["JW_FAKE_HW_MODEL"] = "corrupted-device-metadata"
+                else:
+                    writer_env = state.get("env")
                 refused = self._run_script(
                     self.writer_script,
                     *writer_args,
-                    env=state.get("env"),
+                    env=writer_env,
                 )
             else:  # pragma: no cover - the table is closed by the exact-set gate
                 raise AssertionError(f"unknown observer {case.observer}")
@@ -1670,18 +2112,73 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 REFUSAL_BY_CODE[case.code].process_exit,
                 refused.stdout + refused.stderr,
             )
-            payload = json.loads(refused.stdout or refused.stderr)
+            payload = self._json_payload(refused)
             self.assertEqual(payload["code"], case.code.value)
+            if record.terminal_result is not TerminalResult.NIGHT_STOPPED_PRESERVED:
+                self.assertNotIn(
+                    "terminal_result",
+                    payload,
+                    f"{case.code.value} projected an unexecuted terminal result",
+                )
 
             # The observation subprocess is gone here. Invoke the registered
             # public exit from a fresh process and assert its terminal state.
-            record = REFUSAL_BY_CODE[case.code]
             if record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED:
-                exited = self._run("explain", case.code.value)
-                self.assertEqual(exited.returncode, 0, exited.stderr)
-                self.assertEqual(json.loads(exited.stdout)["exit_id"], record.exit_id)
-                terminal = TerminalResult.NIGHT_STOPPED_PRESERVED.value
-            elif case.code is RefusalCode.TAIL_REQUIRES_ABANDON:
+                if case.code is RefusalCode.FINALIZATION_BINDING_CONFLICT:
+                    preservation_before = self._durable_fingerprint()
+                    exited = self._run(
+                        "resume-finalize",
+                        "--session-id",
+                        state["session_id"],
+                        "--slot",
+                        state["slot"],
+                        "--plan",
+                        str(state["plan"]),
+                    )
+                    self.assertEqual(exited.returncode, record.process_exit)
+                    exit_payload = self._json_payload(exited)
+                    self.assertIn(
+                        exit_payload["code"],
+                        {
+                            case.code.value,
+                            RefusalCode.CUSTODY_UNREADABLE.value,
+                        },
+                    )
+                else:
+                    exited = refused
+                    exit_payload = payload
+                self.assertEqual(exit_payload["exit_id"], record.exit_id)
+                self.assertEqual(
+                    exit_payload["terminal_result"],
+                    TerminalResult.NIGHT_STOPPED_PRESERVED.value,
+                )
+                preservation_after = self._durable_fingerprint()
+                assert preservation_before is not None
+                self.assertEqual(
+                    preservation_after[0],
+                    preservation_before[0],
+                    f"{case.code.value} changed durable bytes",
+                )
+                self.assertIsNotNone(preservation_before[1])
+                self.assertEqual(preservation_after[1], preservation_before[1])
+                terminal = exit_payload["terminal_result"]
+            elif case.code in {
+                RefusalCode.TAIL_REQUIRES_ABANDON,
+                RefusalCode.INTENT_TARGET_MALFORMED,
+            }:
+                if case.code is RefusalCode.INTENT_TARGET_MALFORMED:
+                    quarantined = ledger_module.inspect_calibration_ledger(
+                        self.ledger
+                    )
+                    self.assertEqual(quarantined.state, "intent")
+                    before_rows = list(
+                        ledger_module._scan_physical_ledger(
+                            self.ledger.read_bytes()
+                        ).receipts
+                    )
+                    self.assertEqual(
+                        before_rows[-1]["event"], ledger_module.APPEND_INTENT_EVENT
+                    )
                 exited = self._run(
                     "abandon-tail",
                     "--operator-identity",
@@ -1691,7 +2188,28 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 )
                 self.assertEqual(exited.returncode, 0, exited.stdout + exited.stderr)
                 self.assertEqual(json.loads(exited.stdout)["inspection"]["state"], "clean")
-                terminal = json.loads(exited.stdout)["terminal_result"]
+                repaired = self._run("repair")
+                self.assertEqual(
+                    repaired.returncode, 0, repaired.stdout + repaired.stderr
+                )
+                repaired_payload = json.loads(repaired.stdout)
+                self.assertEqual(repaired_payload["inspection"]["state"], "clean")
+                if case.code is RefusalCode.INTENT_TARGET_MALFORMED:
+                    after_rows = list(
+                        ledger_module._scan_physical_ledger(
+                            self.ledger.read_bytes()
+                        ).receipts
+                    )
+                    self.assertEqual(
+                        after_rows[-1]["event"], ledger_module.ABANDONMENT_EVENT
+                    )
+                    self.assertFalse(
+                        any(
+                            row.get("schema_version") == "hostile.invalid.v1"
+                            for row in after_rows
+                        )
+                    )
+                terminal = repaired_payload["terminal_result"]
             elif case.code is RefusalCode.CUSTODY_COMPLETE_USE_RESUME:
                 exited = self._run(
                     "resume-finalize",
@@ -1736,32 +2254,92 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 self.assertEqual(exited.returncode, 0, exited.stdout + exited.stderr)
                 terminal = json.loads(exited.stdout)["terminal_result"]
             elif record.terminal_result is TerminalResult.SESSION_ABORTED:
-                exit_state = state.get("open_state", state)
-                exited = self._run(
-                    "abort-session",
-                    "--session-id",
-                    exit_state["session_id"],
-                    "--plan",
-                    str(exit_state["plan"]),
-                    "--reason",
-                    f"executed {case.code.value} exit",
-                )
-                self.assertEqual(exited.returncode, 0, exited.stdout + exited.stderr)
-                terminal = json.loads(exited.stdout)["terminal_result"]
-            elif record.terminal_result is TerminalResult.READY_TO_ARM:
-                if case.code is RefusalCode.PRE_SLOT_NOT_READY:
-                    exited = self._run(
-                        "readiness",
-                        "--phase",
-                        "pre-slot",
+                if case.code in {
+                    RefusalCode.DISPLAY_ARM_FAILED,
+                    RefusalCode.SAMPLER_NEVER_READY,
+                    RefusalCode.ROLLOVER_GATE_TIMEOUT,
+                }:
+                    status = self._run(
+                        "session-status",
                         "--session-id",
                         state["session_id"],
-                        "--slot",
-                        "pre",
-                        "--attempt-id",
-                        f"{state['session_id']}-pre",
                         "--plan",
                         str(state["plan"]),
+                    )
+                    self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+                    durable = json.loads(status.stdout)
+                    self.assertEqual(durable["session_state"], "aborted")
+                    self.assertEqual(
+                        durable["abort_reason"],
+                        {
+                            RefusalCode.DISPLAY_ARM_FAILED: "display_arm_failed",
+                            RefusalCode.SAMPLER_NEVER_READY: "powermetrics_never_ready",
+                            RefusalCode.ROLLOVER_GATE_TIMEOUT: (
+                                "pulse_calibration_rollover_gate_timeout"
+                            ),
+                        }[case.code],
+                    )
+                    fresh = self._run(
+                        "session-refusal",
+                        "--session-id",
+                        state["session_id"],
+                        "--plan",
+                        str(state["plan"]),
+                    )
+                    self.assertEqual(fresh.returncode, record.process_exit)
+                    terminal = self._json_payload(fresh)["terminal_result"]
+                else:
+                    exit_state = state.get("open_state", state)
+                    exited = self._run(
+                        "abort-session",
+                        "--session-id",
+                        exit_state["session_id"],
+                        "--plan",
+                        str(exit_state["plan"]),
+                        "--reason",
+                        f"executed {case.code.value} exit",
+                    )
+                    self.assertEqual(exited.returncode, 0, exited.stdout + exited.stderr)
+                    terminal = json.loads(exited.stdout)["terminal_result"]
+            elif record.terminal_result is TerminalResult.READY_TO_ARM:
+                reservation_corrections = {
+                    RefusalCode.RESERVATION_INPUT_INVALID,
+                    RefusalCode.RESERVATION_JSON_INVALID,
+                    RefusalCode.PLAN_UNREADABLE,
+                    RefusalCode.PLAN_HASH_MISMATCH,
+                }
+                rederive_corrections = {
+                    RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+                    RefusalCode.FROZEN_PROTOCOL_INVALID,
+                    RefusalCode.REDERIVE_OUTPUT_REQUIRED,
+                    RefusalCode.REDERIVE_FAILED,
+                    RefusalCode.OUTPUT_REQUIRES_REDERIVE,
+                }
+                if case.code in reservation_corrections:
+                    if case.code is RefusalCode.RESERVATION_JSON_INVALID:
+                        state["epoch_path"].write_text(
+                            json.dumps(self.epoch) + "\n", encoding="utf-8"
+                        )
+                    corrected = self._run_script(
+                        self.reserve_script,
+                        *self._reservation_args(state),
+                    )
+                    self.assertEqual(
+                        corrected.returncode,
+                        0,
+                        corrected.stdout + corrected.stderr,
+                    )
+                    self.assertEqual(
+                        json.loads(corrected.stdout)["status"],
+                        "validated_not_reserved",
+                    )
+                    exit_payload = self._enforcing_readiness(phase="pre-reserve")
+                elif case.code is RefusalCode.PRE_SLOT_NOT_READY:
+                    exit_payload = self._enforcing_readiness(
+                        phase="pre-slot",
+                        session_id=state["session_id"],
+                        slot="pre",
+                        attempt_id=f"{state['session_id']}-pre",
                     )
                 elif case.code is RefusalCode.PRE_RESERVE_NOT_READY:
                     open_state = state["open_state"]
@@ -1792,21 +2370,74 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     )
                     self.assertEqual(advanced.returncode, 0, advanced.stdout + advanced.stderr)
                     self._commit_fixture("commit corrected head pin")
-                    exited = self._run(
-                        "readiness",
-                        "--phase",
-                        "pre-reserve",
-                        "--session-id",
-                        state["session_id"],
-                        "--plan",
-                        str(state["plan"]),
+                    exit_payload = self._enforcing_readiness(
+                        phase="pre-reserve"
+                    )
+                elif case.code is RefusalCode.TERMINAL_NOT_READY:
+                    corrected_plan = self._open_session("session-terminal-corrected")
+                    ledger_module.abort_bracket_session(
+                        self.ledger,
+                        session_id="session-terminal-corrected",
+                        reason="restore terminal state",
+                    )
+                    self.assertTrue(corrected_plan.is_file())
+                    exit_payload = self._enforcing_readiness(
+                        phase="terminal",
+                        session_id="session-terminal-corrected",
+                    )
+                elif case.code in rederive_corrections:
+                    if case.code is RefusalCode.FROZEN_PROTOCOL_INVALID:
+                        shutil.copy2(
+                            REPO_ROOT
+                            / "configs"
+                            / "calibration"
+                            / "powermetrics_fiducial"
+                            / "protocol_v3.json",
+                            self.repo
+                            / "configs"
+                            / "calibration"
+                            / "powermetrics_fiducial"
+                            / "protocol_v3.json",
+                        )
+                    self._write_valid_rederive_source(state["source"])
+                    corrected = self._run_script(
+                        self.writer_script,
+                        "--rederive-from",
+                        str(state["source"]),
+                        "--output",
+                        str(state["output"]),
+                    )
+                    self.assertEqual(
+                        corrected.returncode,
+                        0,
+                        corrected.stdout + corrected.stderr,
+                    )
+                    self.assertTrue(state["output"].is_file())
+                    exit_payload = self._enforcing_readiness(
+                        phase="pre-slot",
+                        session_id=state["session_id"],
+                        slot=state["slot"],
+                        attempt_id=state["attempt_id"],
                     )
                 else:
-                    exited = self._run("audit")
-                self.assertEqual(exited.returncode, 0, exited.stdout + exited.stderr)
-                exit_payload = json.loads(exited.stdout)
-                self.assertEqual(exit_payload["status"], "ready")
-                terminal = TerminalResult.READY_TO_ARM.value
+                    # Correct the writer tuple, lead authorization, or power
+                    # policy named by the registry row, then run the exact
+                    # under-lease gate that the live writer consumes.
+                    self.assertIn(
+                        case.code,
+                        {
+                            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+                            RefusalCode.QUIET_MAC_AUTH_REQUIRED,
+                            RefusalCode.POWER_POLICY_REQUIRED,
+                        },
+                    )
+                    exit_payload = self._enforcing_readiness(
+                        phase="pre-slot",
+                        session_id=state["session_id"],
+                        slot=state["slot"],
+                        attempt_id=state["attempt_id"],
+                    )
+                terminal = exit_payload["terminal_result"]
             else:  # pragma: no cover - every non-hard-stop row is explicit
                 raise AssertionError(f"no terminal exit for {case.code.value}")
             self.assertEqual(terminal, record.terminal_result.value)
@@ -1826,6 +2457,76 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         executed = self.execute_cases(case.code for case in WITNESS_CASES)
         self.assertEqual(executed, {case.code for case in WITNESS_CASES})
+
+    def test_diagnostic_routes_never_emit_ready_to_arm_under_live_lease(self) -> None:
+        holder_code = (
+            "import time; from pathlib import Path; "
+            "from joulewise.calibration_ledger import CalibrationWriterLease; "
+            f"lease=CalibrationWriterLease(Path({str(self.ledger)!r})); "
+            "lease.acquire(); print('LEASED', flush=True); time.sleep(60)"
+        )
+        holder = subprocess.Popen(
+            [sys.executable, "-c", holder_code],
+            cwd=self.repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_fresh_cli_env(),
+        )
+        try:
+            assert holder.stdout is not None
+            self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+            audit = self._run("audit")
+            observations = self._run(
+                "audit-observations",
+                "--baseline-sequence",
+                "0",
+                "--baseline-digest",
+                GENESIS_DIGEST,
+            )
+            for completed, expected_status in (
+                (audit, "audit_clean"),
+                (observations, "observations_classified"),
+            ):
+                self.assertEqual(
+                    completed.returncode, 0, completed.stdout + completed.stderr
+                )
+                payload = json.loads(completed.stdout)
+                self.assertEqual(payload["status"], expected_status)
+                self.assertNotIn("terminal_result", payload)
+                self.assertNotIn("ready_to_arm", completed.stdout)
+        finally:
+            if holder.poll() is None:
+                holder.kill()
+            holder.communicate(timeout=10)
+
+        state = self._state_reserved_mismatch()
+        state["custody_locator"] = str(
+            self.repo
+            / "runs"
+            / state["session_id"]
+            / "instrument_validation"
+            / state["attempt_id"]
+        )
+        validated = self._run(
+            "validate-slot",
+            "--session-id",
+            state["session_id"],
+            "--slot",
+            state["slot"],
+            "--attempt-id",
+            state["attempt_id"],
+            "--custody-locator",
+            state["custody_locator"],
+            "--identity-epoch-json",
+            str(state["epoch_path"]),
+            "--t1-bindings-json",
+            str(state["t1_path"]),
+        )
+        self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+        self.assertEqual(json.loads(validated.stdout)["status"], "slot_validated")
+        self.assertNotIn("terminal_result", json.loads(validated.stdout))
+        self.assertNotIn("ready_to_arm", validated.stdout)
 
 
 if __name__ == "__main__":

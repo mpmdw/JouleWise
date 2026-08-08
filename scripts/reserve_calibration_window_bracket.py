@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.ledger,
                     args.head_pin,
                     phase="pre-reserve",
-                    enforcing_under_lease=False,
+                    enforcing_under_lease=True,
                     require_committed_pin=not args.allow_uncommitted_pin_for_test,
                     repo_root=REPO_ROOT,
                 )

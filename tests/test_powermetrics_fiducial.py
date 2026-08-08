@@ -1015,10 +1015,20 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 lifecycle.begin()
             ordinary.assert_not_called()
             receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
-            self.assertEqual(receipts[1], capability)
-            self.assertEqual(
-                receipts[3]["event"],
+            business_by_event = {
+                receipt["event"]: receipt
+                for receipt in receipts
+                if receipt.get("schema_version")
+                == ledger_module.BRACKET_SESSION_SCHEMA
+            }
+            expected_events = {
+                ledger_module.BRACKET_SESSION_OPEN_EVENT,
                 ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            }
+            self.assertEqual(set(business_by_event), expected_events)
+            self.assertEqual(
+                business_by_event[ledger_module.BRACKET_SESSION_OPEN_EVENT],
+                capability,
             )
             self.assertFalse(custody["pre"].exists())
             with self.assertRaisesRegex(

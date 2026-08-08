@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+import joulewise.calibration_ledger as calibration_ledger_module
 from joulewise.calibration_bracketing import (
     CalibrationCandidate,
     _canonical_sha256 as bracketing_canonical_sha256,
@@ -157,14 +158,14 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         cls.base_receipts = base_receipts
         cls.acceptance = acceptance
         cls.base_sequence = len(base_receipts)
-        cls.base_digest = base_receipts[-1]["receipt_digest"]
+        cls.base_digest = next(reversed(base_receipts))["receipt_digest"]
 
         ledger = root / "runs" / "ledger.jsonl"
         pin = root / "configs" / "calibration" / "head.json"
         ledger.parent.mkdir(parents=True)
         pin.parent.mkdir(parents=True)
         ledger.write_bytes(_ledger_bytes(base_receipts))
-        pin.write_bytes(_pin_bytes(_pin_for(base_receipts[-1])))
+        pin.write_bytes(_pin_bytes(_pin_for(next(reversed(base_receipts)))))
 
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
         subprocess.run(
@@ -241,6 +242,10 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
 
                 with patch.object(
                     production_writer,
+                    "load_calibration_ledger_snapshot",
+                    side_effect=load_without_import_custody,
+                ), patch.object(
+                    calibration_ledger_module,
                     "load_calibration_ledger_snapshot",
                     side_effect=load_without_import_custody,
                 ):
@@ -428,7 +433,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
 
         cutoff = {
             "sequence": len(receipts),
-            "head_digest": receipts[-1]["receipt_digest"],
+            "head_digest": next(reversed(receipts))["receipt_digest"],
             "ledger_schema": LEDGER_SCHEMA,
         }
         artifact["ledger_cutoff"] = {
@@ -563,7 +568,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
     def _variant_snapshot(self, receipts: list[dict], pin: dict | None = None):
         self.ledger.write_bytes(_ledger_bytes(receipts))
         if pin is None:
-            pin = _pin_for(receipts[-1])
+            pin = _pin_for(next(reversed(receipts)))
         self.pin.write_bytes(_pin_bytes(pin))
         return self._load_snapshot()
 

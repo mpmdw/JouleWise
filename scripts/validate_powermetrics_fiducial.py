@@ -27,6 +27,8 @@ import atexit
 import hashlib
 import json
 import math
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -159,9 +161,25 @@ class WriterStage(str, Enum):
 
 
 def _writer_stage(stage: WriterStage) -> None:
-    """Exact injectable boundary used by real-process crash regressions."""
+    """Real production boundary with one process-level test kill switch."""
 
-    del stage
+    if os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE") == stage.value:
+        os.kill(os.getpid(), signal.SIGKILL)
+
+
+def _write_text_artifact(path: Path, payload: str, stage: WriterStage) -> None:
+    """Write one artifact with the stage boundary inside the durable write."""
+
+    raw = payload.encode("utf-8")
+    split = max(1, len(raw) // 2)
+    with path.open("xb") as handle:
+        handle.write(raw[:split])
+        handle.flush()
+        os.fsync(handle.fileno())
+        _writer_stage(stage)
+        handle.write(raw[split:])
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def sha256_path(path: Path) -> str:
@@ -674,6 +692,32 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=REPO_ROOT / "runs" / "instrument_validation",
     )
+    parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
+    parser.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
+    parser.add_argument(
+        "--sampler-binary",
+        type=Path,
+        default=Path(POWER_METRICS),
+        help="powermetrics-compatible sampler executable",
+    )
+    parser.add_argument(
+        "--sampler-ready-timeout-s", type=float, default=15.0
+    )
+    parser.add_argument("--rollover-timeout-s", type=float, default=15.0)
+    parser.add_argument(
+        "--display-arm-binary", type=Path, default=Path("/usr/bin/pmset")
+    )
+    parser.add_argument(
+        "--sampler-direct-for-test", action="store_true", help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--identity-epoch-json-for-test",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--rederive-from", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--pulse-count", type=int, default=PULSE_COUNT)
@@ -744,6 +788,12 @@ def main(argv: list[str] | None = None) -> int:
             RefusalCode.POWER_POLICY_REQUIRED,
             stream=sys.stderr,
         )
+    if args.time_scale_for_test <= 0 or args.time_scale_for_test > 1:
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            context={"detail": "test time scale must be in (0, 1]"},
+            stream=sys.stderr,
+        )
 
     import mlx.core as mx  # noqa: PLC0415
 
@@ -755,9 +805,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     out_dir = args.output_root / validation_id
     custody_locator = normalize_calibration_custody_path(out_dir)
+    identity_fixture: Mapping[str, Any] = {}
+    if args.identity_epoch_json_for_test is not None:
+        try:
+            loaded_identity = json.loads(
+                args.identity_epoch_json_for_test.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("test identity fixture is unreadable") from exc
+        if not isinstance(loaded_identity, Mapping):
+            raise ValueError("test identity fixture is malformed")
+        identity_fixture = loaded_identity
     planned_epoch = {
-        "os_build": _sysctl_identity("kern.osversion"),
-        "hardware_model": _sysctl_identity("hw.model"),
+        "os_build": identity_fixture.get("os_build")
+        or _sysctl_identity("kern.osversion"),
+        "hardware_model": identity_fixture.get("hardware_model")
+        or _sysctl_identity("hw.model"),
         "power_policy": args.power_policy,
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
         "estimator_revision": RESIDUAL_REGION_METHOD,
@@ -765,7 +828,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     planned_t1 = {
         **planned_epoch,
-        "powermetrics_sha256": sha256_path(Path(POWER_METRICS)),
+        "powermetrics_sha256": sha256_path(args.sampler_binary),
         "anchor_method_version": CLOCK_METHOD_V2,
         "mlx_version": getattr(mx, "__version__", None),
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
@@ -775,8 +838,8 @@ def main(argv: list[str] | None = None) -> int:
     # reserved. Both paths run before directory creation, sampler launch, and
     # all hardware capture.
     ledger_lifecycle = _CaptureLedgerLifecycle(
-        ledger_path=DEFAULT_LEDGER_PATH,
-        head_pin_path=DEFAULT_HEAD_PIN_PATH,
+        ledger_path=args.ledger,
+        head_pin_path=args.head_pin,
         attempt_id=validation_id,
         custody_locator=custody_locator,
         identity_epoch=planned_epoch,
@@ -811,12 +874,12 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(args.arm_countdown_s)
         if args.sleep_display_before_capture:
             subprocess.run(
-                ["/usr/bin/pmset", "displaysleepnow"],
+                [str(args.display_arm_binary), "displaysleepnow"],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
-            time.sleep(5)
+            time.sleep(5 * args.time_scale_for_test)
     except (OSError, subprocess.CalledProcessError, ValueError) as exc:
         ledger_lifecycle.abandon("display_arm_failed")
         return emit_refusal(
@@ -865,10 +928,8 @@ def main(argv: list[str] | None = None) -> int:
         events.flush()
 
     buffers = allocate_matmul_buffers()
-    command = [
-        "sudo",
-        "-n",
-        POWER_METRICS,
+    command = ([] if args.sampler_direct_for_test else ["sudo", "-n"]) + [
+        str(args.sampler_binary),
         "-b",
         "0",
         "-i",
@@ -886,7 +947,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
     first_parse = None
-    deadline = time.monotonic() + 15.0
+    deadline = time.monotonic() + args.sampler_ready_timeout_s
     while time.monotonic() < deadline:
         if capture_path.exists() and capture_path.stat().st_size > 0:
             first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
@@ -898,7 +959,7 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     first_parse = clock.stamp()
                     break
-        time.sleep(0.05)
+        time.sleep(min(0.05, args.sampler_ready_timeout_s / 4))
     if first_parse is None:
         process.terminate()
         finalize_abandoned("powermetrics_never_ready")
@@ -909,7 +970,12 @@ def main(argv: list[str] | None = None) -> int:
     _writer_stage(WriterStage.AFTER_SAMPLER_READY)
     # D-078: wait for a native whole-second rollover before any workload.
     try:
-        wait_for_preworkload_rollover(capture_path, process)
+        wait_for_preworkload_rollover(
+            capture_path,
+            process,
+            timeout_s=args.rollover_timeout_s,
+            poll_s=min(0.05, args.rollover_timeout_s / 4),
+        )
     except RuntimeError as exc:
         events.close()
         finalize_abandoned(str(exc))
@@ -921,7 +987,7 @@ def main(argv: list[str] | None = None) -> int:
     sampling_started = clock.stamp()
     emit("sampling_started", {})
 
-    time.sleep(BASELINE_S)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
     warmups: list[CommandedPulse] = []
     for warmup_index in range(WARMUP_PULSE_COUNT):
         on_stamp = clock.stamp()
@@ -929,7 +995,7 @@ def main(argv: list[str] | None = None) -> int:
             "warmup_command_on",
             {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
         )
-        run_matmul_pulse(PULSE_DURATION_S, buffers)
+        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
         off_stamp = clock.stamp()
         emit(
             "warmup_command_off",
@@ -943,8 +1009,8 @@ def main(argv: list[str] | None = None) -> int:
                 off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
-        time.sleep(1.5)
-    time.sleep(BASELINE_S)
+        time.sleep(1.5 * args.time_scale_for_test)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
 
     # Van der Corput spacing is schedule-relative (offsets start at 0 for the
     # first pulse), so the loop cursor MUST be measured from the pulse-loop
@@ -953,7 +1019,9 @@ def main(argv: list[str] | None = None) -> int:
     # made every gap negative and collapsed the pulses back-to-back.
     pulse_loop_mono0 = time.monotonic()
     pulses: list[CommandedPulse] = []
-    for on_offset_s, off_offset_s in pulse_schedule(args.pulse_count):
+    for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
+        on_offset_s = raw_on_offset_s * args.time_scale_for_test
+        off_offset_s = raw_off_offset_s * args.time_scale_for_test
         _writer_stage(WriterStage.DURING_CAPTURE)
         if pulses:
             elapsed_s = time.monotonic() - pulse_loop_mono0
@@ -963,7 +1031,7 @@ def main(argv: list[str] | None = None) -> int:
             "pulse_command_on",
             {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
         )
-        run_matmul_pulse(PULSE_DURATION_S, buffers)
+        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
         off_stamp = clock.stamp()
         emit(
             "pulse_command_off",
@@ -977,7 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
                 off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
-    time.sleep(BASELINE_S)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
     sampling_stopped = clock.stamp()
     emit("sampling_stopped", {})
     _terminate_powermetrics(process)
@@ -1014,16 +1082,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     samples = samples_from_records(anchored)
     trace_path = out_dir / "power_trace.csv"
-    with trace_path.open("w", encoding="utf-8") as handle:
-        handle.write(
-            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+    trace_payload = (
+        "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+        + "".join(
+            f"{sample.timestamp_s!r},{sample.power_w!r},{sample.source},"
+            f"{sample.rail},{sample.interval_start_s!r},{sample.interval_end_s!r}\n"
+            for sample in samples
         )
-        for sample in samples:
-            handle.write(
-                f"{sample.timestamp_s!r},{sample.power_w!r},{sample.source},"
-                f"{sample.rail},{sample.interval_start_s!r},{sample.interval_end_s!r}\n"
-            )
-    _writer_stage(WriterStage.DURING_TRACE_ARTIFACT)
+    )
+    _write_text_artifact(trace_path, trace_payload, WriterStage.DURING_TRACE_ARTIFACT)
 
     intervals = [
         TraceInterval(
@@ -1048,7 +1115,7 @@ def main(argv: list[str] | None = None) -> int:
     bindings = {
         "hardware_model": device_meta.get("hw_model"),
         "os_build": device_meta.get("kern_osversion"),
-        "powermetrics_sha256": sha256_path(Path(POWER_METRICS)),
+        "powermetrics_sha256": sha256_path(args.sampler_binary),
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
         "anchor_method_version": evidence["clock_anchor"].get("method"),
         "mlx_version": getattr(mx, "__version__", None),
@@ -1088,11 +1155,11 @@ def main(argv: list[str] | None = None) -> int:
         evidence_payload["reasons"] = sorted(
             set(evidence_payload.get("reasons", [])) | {"clock_anchor_unresolved"}
         )
-    (out_dir / "instrument_evidence.json").write_text(
+    _write_text_artifact(
+        out_dir / "instrument_evidence.json",
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        WriterStage.DURING_EVIDENCE_ARTIFACT,
     )
-    _writer_stage(WriterStage.DURING_EVIDENCE_ARTIFACT)
     manifest = {
         "schema_version": "joulewise.instrument_validation_manifest.v1",
         "validation_id": validation_id,
@@ -1108,10 +1175,11 @@ def main(argv: list[str] | None = None) -> int:
         }
         | {"raw/powermetrics.plist": sha256_path(capture_path)},
     }
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_text_artifact(
+        out_dir / "manifest.json",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        WriterStage.DURING_MANIFEST_ARTIFACT,
     )
-    _writer_stage(WriterStage.DURING_MANIFEST_ARTIFACT)
     _writer_stage(WriterStage.ARTIFACTS_COMPLETE_BEFORE_FINALIZATION)
     serialized_evidence = json.loads(
         json.dumps(evidence_payload, sort_keys=True),
@@ -1130,7 +1198,19 @@ def main(argv: list[str] | None = None) -> int:
             and Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S
             else "valid"
         )
-    _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+    try:
+        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+    except CalibrationLedgerError as exc:
+        if exc.code == RefusalCode.FINALIZATION_BINDING_CONFLICT:
+            # Binding conflict is corruption evidence.  Do not let the generic
+            # atexit abort mutate the open session underneath it. Other writer
+            # failures retain their automatic governed-abort handler.
+            atexit.unregister(finalize_abandoned)
+        return emit_refusal(
+            exc.code or RefusalCode.LEDGER_MALFORMED,
+            context=dict(exc.context) | {"detail": str(exc)},
+            stream=sys.stderr,
+        )
     atexit.unregister(finalize_abandoned)
     output = {
         "validation_id": validation_id,

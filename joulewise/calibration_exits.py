@@ -255,7 +255,10 @@ _DESCRIPTIONS: Mapping[RefusalCode, str] = MappingProxyType(
 _REPAIR = {
     RefusalCode.LEDGER_RECOVERY_REQUIRED,
 }
-_ABANDON = {RefusalCode.TAIL_REQUIRES_ABANDON}
+_ABANDON = {
+    RefusalCode.TAIL_REQUIRES_ABANDON,
+    RefusalCode.INTENT_TARGET_MALFORMED,
+}
 _ABORT = {
     RefusalCode.LEDGER_BRACKET_SESSION_OPEN,
     RefusalCode.CUSTODY_PARTIAL,
@@ -367,6 +370,7 @@ _CORRUPTION_BACKSTOPS = {
     RefusalCode.HEAD_PIN_UNREADABLE,
     RefusalCode.HEAD_PIN_MALFORMED,
     RefusalCode.CUSTODY_UNREADABLE,
+    RefusalCode.FINALIZATION_BINDING_CONFLICT,
 }
 
 _INTERNAL_INVARIANTS: Mapping[RefusalCode, str] = MappingProxyType(
@@ -383,14 +387,6 @@ _INTERNAL_INVARIANTS: Mapping[RefusalCode, str] = MappingProxyType(
         RefusalCode.LEDGER_BRACKET_SLOT_CLAIMED: (
             "inner duplicate-claim programming guard; an exact durable claim returns "
             "idempotently and every nonmatching claim is rejected before this branch"
-        ),
-        RefusalCode.CLAIM_ID_INVALID: (
-            "stable claim identity is derived internally; public writers never accept "
-            "a caller-supplied claim id, so only a bad in-memory argument reaches it"
-        ),
-        RefusalCode.FINALIZATION_BINDING_CONFLICT: (
-            "fresh-process finalization reloads the reserved binding and supplies it "
-            "unchanged; only inconsistent in-memory finalization arguments reach it"
         ),
     }
 )
@@ -411,6 +407,14 @@ def _route(code: RefusalCode) -> RefusalRecord:
             exit_id="internal-invariant",
             command="",
             runbook_anchor="",
+        )
+    if code is RefusalCode.CLAIM_ID_INVALID:
+        kwargs.update(
+            witness_class=WitnessClass.OPERATIONAL,
+            witness_note=(
+                "reachable from an authenticated durable slot claim whose nonempty "
+                "claim id does not match the deterministic policy identity"
+            ),
         )
     if code in _RECOVERY_COMPONENT:
         kwargs.update(component="recovery-cli", phase="recovery")
@@ -483,6 +487,15 @@ def _route(code: RefusalCode) -> RefusalRecord:
             night_loss=False,
             terminal_result=TerminalResult.READY_TO_ARM,
         )
+    if code is RefusalCode.CUSTODY_UNREADABLE:
+        kwargs.update(
+            prior_crash_reachable=True,
+            exit_kind="custody-hard-stop-preserved",
+            witness_note=(
+                "reachable from hostile custody or a crash during a governed "
+                "artifact write; bytes remain quarantined and non-finalizable"
+            ),
+        )
     return _record(code, _DESCRIPTIONS[code], **kwargs)
 
 
@@ -497,7 +510,10 @@ def refusal_record(code: RefusalCode | str) -> RefusalRecord:
 
 
 def refusal_payload(
-    code: RefusalCode | str, *, context: Mapping[str, Any] | None = None
+    code: RefusalCode | str,
+    *,
+    context: Mapping[str, Any] | None = None,
+    terminal_result: TerminalResult | str | None = None,
 ) -> dict[str, Any]:
     record = refusal_record(code)
     payload: dict[str, Any] = {
@@ -507,6 +523,21 @@ def refusal_payload(
         "arm_blocked": record.arm_blocked,
         "next_command": record.command,
     }
+    observed_terminal = terminal_result
+    if (
+        observed_terminal is None
+        and record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED
+    ):
+        # A hard-stop refusal is itself the mapped terminal action. Other
+        # registry terminal results describe work still to be executed and
+        # must not be projected as if it had already happened.
+        observed_terminal = record.terminal_result
+    if observed_terminal is not None:
+        payload["terminal_result"] = (
+            observed_terminal.value
+            if isinstance(observed_terminal, TerminalResult)
+            else str(observed_terminal)
+        )
     if context:
         payload["context"] = dict(context)
     return payload
@@ -517,6 +548,7 @@ def explain_payload(code: RefusalCode | str) -> dict[str, Any]:
 
     payload = refusal_payload(code)
     payload.pop("status")
+    payload.pop("terminal_result", None)
     return payload
 
 
@@ -524,10 +556,21 @@ def emit_refusal(
     code: RefusalCode | str,
     *,
     context: Mapping[str, Any] | None = None,
+    terminal_result: TerminalResult | str | None = None,
     stream: TextIO,
 ) -> int:
     record = refusal_record(code)
-    print(json.dumps(refusal_payload(record.code, context=context), sort_keys=True), file=stream)
+    print(
+        json.dumps(
+            refusal_payload(
+                record.code,
+                context=context,
+                terminal_result=terminal_result,
+            ),
+            sort_keys=True,
+        ),
+        file=stream,
+    )
     return record.process_exit
 
 

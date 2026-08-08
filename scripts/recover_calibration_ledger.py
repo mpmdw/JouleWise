@@ -252,8 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     {
-                        "status": "ready",
-                        "terminal_result": "ready_to_arm",
+                        "status": "audit_clean",
                         "head_sequence": snapshot.head_sequence,
                         "head_digest": snapshot.head_digest,
                     },
@@ -297,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             print(
                 json.dumps(
-                    {"status": "ready", "terminal_result": "ready_to_arm"},
+                    {"status": "observations_classified"},
                     sort_keys=True,
                 )
             )
@@ -344,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
             return emit_refusal(
                 code,
                 context={"durable_session_status": output},
+                terminal_result="session_aborted",
                 stream=sys.stdout,
             )
         elif args.command == "validate-slot":
@@ -369,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(
                 json.dumps(
-                    {"status": "ready", "terminal_result": "ready_to_arm"},
+                    {"status": "slot_validated"},
                     sort_keys=True,
                 )
             )

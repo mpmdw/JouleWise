@@ -528,6 +528,7 @@ class CalibrationReadiness:
     enforcing_under_lease: bool
 
     def as_dict(self) -> dict[str, Any]:
+        authorizes_arm = self.status == "ready" and self.enforcing_under_lease
         return {
             "phase": self.phase,
             "status": self.status,
@@ -547,7 +548,8 @@ class CalibrationReadiness:
                 else None
             ),
             "enforcing_under_lease": self.enforcing_under_lease,
-            "authorizes_arm": self.status == "ready" and self.enforcing_under_lease,
+            "authorizes_arm": authorizes_arm,
+            "terminal_result": "ready_to_arm" if authorizes_arm else None,
         }
 
 
@@ -1251,6 +1253,14 @@ def _control_state_admits(
         )
         return valid, value if valid else active_intent
     if event == ABANDONMENT_EVENT:
+        malformed_active_intent = False
+        if active_intent is not None:
+            active_target = _intent_target_receipt(
+                active_intent,
+                sequence=expected_sequence,
+                predecessor_digest=predecessor_digest,
+            )
+            malformed_active_intent = not _valid_receipt_shape(active_target)
         valid = (
             value["abandoned_predecessor_sequence"] == expected_sequence - 1
             and value["abandoned_predecessor_digest"] == predecessor_digest
@@ -1259,8 +1269,17 @@ def _control_state_admits(
             and value["receipt_offset"] == offset
             and value["residue_sha256"] == hashlib.sha256(b"").hexdigest()
             and _known_intent_matches(value, active_intent)
-            and value.get("legacy_journal") is not None
+            and (
+                value.get("legacy_journal") is not None
+                or malformed_active_intent
+            )
         )
+        if valid and active_intent is not None:
+            # An authenticated malformed-target intent is admitted only as
+            # residue.  Its governed abandonment closes the quarantine; a
+            # valid executable intent remains irrevocable.
+            if malformed_active_intent:
+                return True, None
         return valid, active_intent
     if active_intent is None:
         return not protocol_active, None
@@ -2550,7 +2569,9 @@ def _require_genesis_bootstrap_state(
 
 
 def _ledger_lock_path(ledger_path: Path) -> Path:
-    ledger = Path(ledger_path)
+    # Resolve lexical aliases before selecting the permanent lock inode.  A
+    # symlink to one ledger therefore cannot mint a second adjacent lock.
+    ledger = Path(ledger_path).resolve(strict=False)
     return ledger.with_name(f"{ledger.name}.lock")
 
 
@@ -2607,7 +2628,9 @@ _ACTIVE_WRITER_LEASES_GUARD = threading.Lock()
 
 
 def _lease_key(ledger_path: Path) -> Path:
-    return Path(ledger_path).absolute()
+    # The real path is stable before first creation and after append, unlike
+    # an inode-only key.  It also unifies every symlink spelling in-process.
+    return Path(ledger_path).resolve(strict=False)
 
 
 def _current_writer_lease_descriptor(ledger_path: Path) -> int | None:
@@ -3066,6 +3089,19 @@ def _migrate_legacy_journal(
         return raw, physical
     if physical.residue:
         return raw, physical
+    archive = path.with_name(
+        f"{path.name}.archived-{str(metadata['sha256'])[:16]}"
+    )
+    if archive.exists():
+        raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_ARCHIVE_CONFLICT)
+    try:
+        parent_mode = path.parent.stat().st_mode
+    except OSError as exc:
+        raise CalibrationLedgerError(
+            RefusalCode.LEGACY_JOURNAL_ARCHIVE_FAILED
+        ) from exc
+    if parent_mode & 0o222 == 0:
+        raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_ARCHIVE_FAILED)
     raw = _append_abandonment(
         handle,
         raw,
@@ -3331,15 +3367,29 @@ def abandon_calibration_ledger_tail(
                 physical = _scan_physical_ledger(raw)
                 if not _physical_chain_contains_pin(physical.receipts, pin):
                     raise CalibrationLedgerError(RefusalCode.ABANDON_PIN_MISMATCH)
+                malformed_intent = False
                 if physical.active_intent is not None:
+                    target = _intent_target_receipt(
+                        physical.active_intent,
+                        sequence=len(physical.receipts) + 1,
+                        predecessor_digest=str(
+                            physical.receipts[-1]["receipt_digest"]
+                        ),
+                    )
+                    malformed_intent = not _valid_receipt_shape(target)
+                if physical.active_intent is not None and not malformed_intent:
                     raise CalibrationLedgerError(RefusalCode.ABANDON_ACTIVE_INTENT)
-                if not physical.residue:
+                if not physical.residue and not malformed_intent:
                     return _inspection_from_physical(physical)
                 raw = _append_abandonment(
                     handle,
                     raw,
                     physical,
-                    reason_code=reason_code,
+                    reason_code=(
+                        "admitted-malformed-intent-quarantine"
+                        if malformed_intent
+                        else reason_code
+                    ),
                     actor_type="operator",
                     actor_identity=operator_identity,
                     attestation_reason=attestation_reason,
@@ -3996,6 +4046,14 @@ def _custody_state(path: Path) -> str:
     if not present:
         return "empty"
     if present == set(GOVERNED_ARTIFACTS):
+        try:
+            raw_by_name = _governed_raw_nofollow(path)
+            manifest = json.loads(raw_by_name["manifest.json"])
+            evidence = json.loads(raw_by_name["instrument_evidence.json"])
+        except (CalibrationLedgerError, UnicodeDecodeError, json.JSONDecodeError):
+            return "unreadable"
+        if not isinstance(manifest, Mapping) or not isinstance(evidence, Mapping):
+            return "unreadable"
         return "complete"
     return "partial"
 
@@ -4131,7 +4189,9 @@ def calibration_readiness(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
-        verify_custody=False,
+        # The enforcing gate authenticates every finalized observation in the
+        # snapshot, not merely the custody path for the upcoming slot.
+        verify_custody=enforcing_under_lease,
         repo_root=repo_root,
     )
     relation = _pin_relation(snapshot)
@@ -4309,7 +4369,7 @@ def advance_calibration_head_pin(
             ledger_path,
             head_pin_path,
             require_committed_pin=require_committed_pin,
-            verify_custody=False,
+            verify_custody=True,
             repo_root=repo_root,
         )
         if _pin_relation(snapshot) is not PinRelation.PHYSICAL_AHEAD:
@@ -4317,7 +4377,18 @@ def advance_calibration_head_pin(
         if not _physical_chain_contains_pin(snapshot.receipts, current_pin):
             raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
         if session_id is None:
-            if any(session.state == "open" for session in snapshot.bracket_sessions):
+            # Sessionless advancement is only for a clean recovery-shaped
+            # control tail.  Ordinary pending/open/refusal state is never a
+            # candidate merely because its bytes authenticate.
+            allowed_reasons = {RefusalCode.LEDGER_HEAD_MISMATCH.value}
+            terminal = snapshot.receipts[-1] if snapshot.receipts else None
+            if (
+                set(snapshot.refusal_reasons) - allowed_reasons
+                or any(session.state == "open" for session in snapshot.bracket_sessions)
+                or not isinstance(terminal, Mapping)
+                or terminal.get("schema_version") != CONTROL_SCHEMA
+                or terminal.get("event") != ABANDONMENT_EVENT
+            ):
                 raise CalibrationLedgerError(RefusalCode.PIN_ADVANCEMENT_UNSAFE)
             candidate = {
                 "sequence": inspection.head_sequence,

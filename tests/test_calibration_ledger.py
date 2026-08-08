@@ -1053,6 +1053,57 @@ class CalibrationLedgerTests(unittest.TestCase):
             ).legacy_journal_path
         )
 
+    def test_enforcing_post_readiness_refuses_deleted_finalized_pre_custody(self) -> None:
+        self._open_bracket_session()
+        calibration_ledger.claim_bracket_session_slot(
+            self.ledger,
+            session_id="session-alpha",
+            slot="pre",
+            attempt_id="session-alpha-pre",
+        )
+        self._finalize_bracket_slot("session-alpha", "pre")
+        pre_custody = (
+            self.root
+            / "another-root"
+            / "instrument_validation"
+            / "session-alpha-pre"
+        )
+        (pre_custody / "manifest.json").unlink()
+
+        with calibration_ledger.CalibrationWriterLease(self.ledger):
+            readiness = calibration_ledger.calibration_readiness(
+                self.ledger,
+                self.pin,
+                phase="pre-slot",
+                session_id="session-alpha",
+                slot="post",
+                attempt_id="session-alpha-post",
+                enforcing_under_lease=True,
+                require_committed_pin=False,
+            )
+        self.assertEqual(
+            readiness.refusal_code, RefusalCode.LEDGER_CUSTODY_INVALID
+        )
+        self.assertFalse(readiness.as_dict()["authorizes_arm"])
+        self.assertIsNone(readiness.as_dict()["terminal_result"])
+
+    def test_sessionless_pin_advancement_refuses_pending_business_head(self) -> None:
+        self._reserve("pending-business-head", self.root / "pending-custody")
+        inspection = calibration_ledger.inspect_calibration_ledger(self.ledger)
+        with self.assertRaises(CalibrationLedgerError) as raised:
+            calibration_ledger.advance_calibration_head_pin(
+                self.ledger,
+                self.pin,
+                session_id=None,
+                expected_sequence=inspection.head_sequence,
+                expected_digest=inspection.head_digest,
+                operator_identity="desk-operator",
+                attestation_reason="must reject an ordinary pending head",
+                execute=False,
+                require_committed_pin=False,
+            )
+        self.assertEqual(raised.exception.code, RefusalCode.PIN_ADVANCEMENT_UNSAFE)
+
     def test_guarded_terminal_pin_advancement_reaches_terminal_readiness(self) -> None:
         self._open_bracket_session()
         abort_bracket_session(
@@ -1342,7 +1393,9 @@ class CalibrationLedgerTests(unittest.TestCase):
         )
         self.assertEqual(issued_reasons, set())
         self.assertEqual(len(issued_receipts), 76)
-        self.assertEqual(issued_receipts[-1]["receipt_digest"], plan.head_digest)
+        self.assertEqual(
+            next(reversed(issued_receipts))["receipt_digest"], plan.head_digest
+        )
         source = _unissued_acceptance_fixture()
         reversed_source = dict(reversed(tuple(source.items())))
         canonical_artifact = bootstrap_cli._issued_acceptance_artifact(
@@ -1572,7 +1625,12 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertNotEqual(original.head_digest, table_reformatted.head_digest)
         self.assertNotEqual(original.ledger_bytes, manifest_reformatted.ledger_bytes)
         self.assertNotEqual(original.head_digest, manifest_reformatted.head_digest)
-        for receipt in original.receipts[::2]:
+        import_receipts = (
+            receipt
+            for receipt in original.receipts
+            if "historical_import_input_sha256" in receipt
+        )
+        for receipt in import_receipts:
             self.assertEqual(
                 dict(receipt["historical_import_input_sha256"]),
                 {
@@ -2058,6 +2116,44 @@ class CalibrationLedgerTests(unittest.TestCase):
             (ledger_status.st_dev, ledger_status.st_ino),
         )
 
+    def test_symlink_alias_cannot_acquire_a_second_writer_lease(self) -> None:
+        self.ledger.write_bytes(b"")
+        alias = self.root / "ledger-alias.jsonl"
+        alias.symlink_to(self.ledger)
+        self.assertEqual(
+            calibration_ledger._ledger_lock_path(self.ledger),
+            calibration_ledger._ledger_lock_path(alias),
+        )
+        holder_code = "\n".join(
+            (
+                "import time",
+                "from pathlib import Path",
+                "from joulewise.calibration_ledger import CalibrationWriterLease",
+                f"with CalibrationWriterLease(Path({str(self.ledger)!r})):",
+                "    print('LEASED', flush=True)",
+                "    time.sleep(60)",
+            )
+        )
+        holder = subprocess.Popen(
+            [sys.executable, "-c", holder_code],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            assert holder.stdout is not None
+            self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+            with self.assertRaises(CalibrationLedgerError) as raised:
+                calibration_ledger.CalibrationWriterLease(alias).acquire()
+            self.assertEqual(
+                raised.exception.code, RefusalCode.LIVE_WRITER_CONTENTION
+            )
+        finally:
+            if holder.poll() is None:
+                holder.kill()
+            holder.communicate(timeout=10)
+
     def test_sigkill_mid_import_leaves_retryable_genesis(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
         import_args = self._historical_import_args(table, custodies)
@@ -2335,7 +2431,7 @@ module.bootstrap_historical_import(
         target_a = calibration_ledger._intent_target_receipt(
             intent,
             sequence=len(physical.receipts) + 1,
-            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+            predecessor_digest=next(reversed(physical.receipts))["receipt_digest"],
         )
         bytes_a = canonical_json_bytes(target_a) + b"\n"
         target_b = calibration_ledger._new_receipt(
@@ -2423,7 +2519,7 @@ module.bootstrap_historical_import(
         self._write_pin(
             {
                 "sequence": len(physical.receipts),
-                "head_digest": physical.receipts[-1]["receipt_digest"],
+                "head_digest": next(reversed(physical.receipts))["receipt_digest"],
                 "ledger_schema": LEDGER_SCHEMA,
             }
         )
@@ -2431,7 +2527,7 @@ module.bootstrap_historical_import(
         foreign_custody = self._custody("foreign-bare-operation")
         reservation = calibration_ledger._new_receipt(
             sequence=len(physical.receipts) + 1,
-            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+            predecessor_digest=next(reversed(physical.receipts))["receipt_digest"],
             event="reservation",
             attempt_id="foreign-bare-operation",
             content_id=None,
@@ -2482,14 +2578,14 @@ module.bootstrap_historical_import(
         self._write_pin(
             {
                 "sequence": len(physical.receipts),
-                "head_digest": physical.receipts[-1]["receipt_digest"],
+                "head_digest": next(reversed(physical.receipts))["receipt_digest"],
                 "ledger_schema": LEDGER_SCHEMA,
             }
         )
         hashes = artifact_hashes(custody)
         orphan = calibration_ledger._new_receipt(
             sequence=len(physical.receipts) + 1,
-            predecessor_digest=physical.receipts[-1]["receipt_digest"],
+            predecessor_digest=next(reversed(physical.receipts))["receipt_digest"],
             event="finalization",
             attempt_id=reservation["attempt_id"],
             content_id=content_id_from_artifact_hashes(hashes),
@@ -2520,7 +2616,7 @@ module.bootstrap_historical_import(
         final = calibration_ledger._scan_physical_ledger(
             self.ledger.read_bytes()
         )
-        abandonment = final.receipts[-1]
+        abandonment = next(reversed(final.receipts))
         self.assertEqual(abandonment["residue_length"], len(residue))
         self.assertEqual(
             abandonment["residue_sha256"], hashlib.sha256(residue).hexdigest()
@@ -2598,7 +2694,7 @@ module.bootstrap_historical_import(
         physical = calibration_ledger._scan_physical_ledger(
             self.ledger.read_bytes()
         )
-        abandonment = physical.receipts[-1]
+        abandonment = next(reversed(physical.receipts))
         self.assertEqual(abandonment["event"], calibration_ledger.ABANDONMENT_EVENT)
         pin = terminal_head_pin_for_session(
             self.ledger, session_id="session-alpha"
@@ -2786,7 +2882,7 @@ raise SystemExit('crash hook was not reached')
         parsed = calibration_ledger._scan_physical_ledger(
             self.ledger.read_bytes()
         )
-        abandonment = parsed.receipts[-1]
+        abandonment = next(reversed(parsed.receipts))
         self.assertEqual(abandonment["event"], calibration_ledger.ABANDONMENT_EVENT)
         self.assertEqual(
             abandonment["legacy_journal"]["sha256"],
@@ -2883,8 +2979,9 @@ raise SystemExit('crash hook was not reached')
         parsed = calibration_ledger._scan_physical_ledger(
             self.ledger.read_bytes()
         )
-        self.assertEqual(parsed.receipts[-1]["actor_type"], "operator")
-        self.assertEqual(parsed.receipts[-1]["residue_start_offset"], 0)
+        terminal_receipt = next(reversed(parsed.receipts))
+        self.assertEqual(terminal_receipt["actor_type"], "operator")
+        self.assertEqual(terminal_receipt["residue_start_offset"], 0)
 
 
 if __name__ == "__main__":
