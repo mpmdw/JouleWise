@@ -318,3 +318,9 @@ morning mint refusal on wrong arm-time identity pins (worst consequence —
 an irrecoverable floor night); a pre-bookend acceptance trigger with U2
 unbuilt, compounded by L4's copied-scalar screen (science runs all night,
 verdict refuses in the morning).
+
+### Addendum 2026-08-08
+
+For RESULTS_PROSE completeness, the re-examination counted 105 `[VALUE]`
+placeholders plus 9 second-family placeholders, superseding the historical
+“35” completeness signal above; see `OPUS-EXAM-PROSE-RERUN.md`.
