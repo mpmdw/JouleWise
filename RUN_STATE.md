@@ -10,8 +10,8 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-07 — **LIVE SESSION (14h Ed window). Read this
-block first;** the 2026-08-06 checkpoint below is executed history.
+Last updated: 2026-08-07 — **CHECKPOINTED for /clear. Read the
+CHECKPOINT block first;** everything below it is executed history.
 
 ## ✅ CHECKPOINT 2026-08-07 — /clear stop (READ THIS FIRST; full resume script)
 
