@@ -1227,6 +1227,7 @@ def _control_state_admits(
             sequence=expected_sequence + 1,
             predecessor_digest=str(value["receipt_digest"]),
         )
+        target_shape_valid = _valid_receipt_shape(target)
         valid = (
             active_intent is None
             and value["ledger_id"] == _derived_ledger_id(receipts)
@@ -1238,8 +1239,15 @@ def _control_state_admits(
                 and dict(receipt["operation_key"]) == dict(value["operation_key"])
                 for receipt in receipts
             )
-            and _valid_receipt_shape(target)
-            and _target_state_transition_is_valid(receipts, target)
+            # A hostile but internally authenticated intent may commit a
+            # malformed target. Admit the intent as durable protocol state so
+            # repair reaches the typed INTENT_TARGET_MALFORMED backstop rather
+            # than degrading it to anonymous tail residue. Valid targets still
+            # undergo the normal semantic-transition check.
+            and (
+                not target_shape_valid
+                or _target_state_transition_is_valid(receipts, target)
+            )
         )
         return valid, value if valid else active_intent
     if event == ABANDONMENT_EVENT:
@@ -3144,6 +3152,15 @@ def _repair_locked(
                 sequence=len(physical.receipts) + 1,
                 predecessor_digest=predecessor,
             )
+            if (
+                target.get("schema_version") == CONTROL_SCHEMA
+                and target.get("event") == APPEND_INTENT_EVENT
+            ):
+                # A durable intent whose committed target is another intent
+                # cannot reduce to one business operation. This shape is not
+                # emitted by any writer, but hostile authenticated bytes must
+                # still reach the typed nonconvergence backstop.
+                raise CalibrationLedgerError(RefusalCode.RECOVERY_NONCONVERGENT)
             if not _valid_receipt_shape(target):
                 raise CalibrationLedgerError(RefusalCode.INTENT_TARGET_MALFORMED)
             payload = canonical_json_bytes(target) + b"\n"
@@ -3302,7 +3319,12 @@ def abandon_calibration_ledger_tail(
     ledger = Path(ledger_path)
     ledger.parent.mkdir(parents=True, exist_ok=True)
     with _ledger_lock(ledger):
-        descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            descriptor = os.open(
+                ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
+            )
+        except OSError as exc:
+            raise CalibrationLedgerError(RefusalCode.ABANDON_NOT_CLEAN) from exc
         try:
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 raw = handle.read()
@@ -3326,6 +3348,8 @@ def abandon_calibration_ledger_tail(
                 if final.residue or final.active_intent is not None:
                     raise CalibrationLedgerError(RefusalCode.ABANDON_NOT_CLEAN)
                 return _inspection_from_physical(final)
+        except OSError as exc:
+            raise CalibrationLedgerError(RefusalCode.ABANDON_NOT_CLEAN) from exc
         finally:
             os.close(descriptor)
 
@@ -3882,7 +3906,9 @@ def terminal_head_pin_for_session(
     receipts, parse_reasons = _parse_ledger(raw)
     observations, sessions, state_reasons = _attempts_and_observations(receipts)
     del observations
-    reasons = parse_reasons | state_reasons
+    reasons = (parse_reasons | state_reasons) - {
+        RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+    }
     if reasons:
         raise CalibrationLedgerError(_primary_refusal(reasons))
     session = next((item for item in sessions if item.session_id == session_id), None)
@@ -4058,6 +4084,7 @@ def calibration_session_status(
         "status": "session_status",
         "session_id": session.session_id,
         "session_state": session.state,
+        "abort_reason": session.abort_reason,
         "plan_id": session.plan_id,
         "plan_sha256": session.plan_sha256,
         "inspection_state": inspection.state,
@@ -4123,15 +4150,20 @@ def calibration_readiness(
 
     if phase == "pre-reserve":
         open_sessions = [item for item in snapshot.bracket_sessions if item.state == "open"]
-        unexpected = set(snapshot.refusal_reasons)
+        unexpected = set(snapshot.refusal_reasons) - {
+            RefusalCode.LEDGER_HEAD_MISMATCH.value,
+            RefusalCode.LEDGER_BRACKET_SESSION_OPEN.value,
+        }
         if unexpected:
             refusal = RefusalCode(_primary_refusal(unexpected))
         elif common_blocked:
             refusal = RefusalCode.LEDGER_RECOVERY_REQUIRED
         elif live_writer:
             refusal = RefusalCode.LIVE_WRITER_CONTENTION
-        elif relation is not PinRelation.EXACT or open_sessions:
+        elif open_sessions:
             refusal = RefusalCode.PRE_RESERVE_NOT_READY
+        elif relation is not PinRelation.EXACT:
+            refusal = RefusalCode.RESERVATION_HEAD_MISMATCH
     elif phase == "pre-slot":
         session = snapshot.bracket_session_by_id.get(str(session_id))
         open_receipt = (

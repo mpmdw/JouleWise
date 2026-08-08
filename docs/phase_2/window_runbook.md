@@ -833,12 +833,17 @@ historical window; that remains a separate lead-controlled step.
 
 ### D-117 §10 amendment — calibration-ledger refusals and governed exits
 
-Use the emitted refusal `code`, never prose recognition. For any code, the
-registry route is available as structured JSON:
+Use the emitted refusal `code`, never prose recognition. For any
+operator-emitted code, the registry route is available as structured JSON:
 
 ```sh
 .venv/bin/python scripts/recover_calibration_ledger.py explain "$REFUSAL_CODE"
 ```
+
+Registry rows classified `internal_invariant` are deliberately absent from
+this operator table: public workflows supply those arguments from authenticated
+durable state, so the corresponding guards have focused unit evidence rather
+than an operator command.
 
 | Registered code / exit | Required command and terminal result |
 |---|---|

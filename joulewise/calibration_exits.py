@@ -105,6 +105,12 @@ class TerminalResult(str, Enum):
     NIGHT_STOPPED_PRESERVED = "night_stopped_preserved"
 
 
+class WitnessClass(str, Enum):
+    OPERATIONAL = "operational"
+    CORRUPTION_BACKSTOP = "corruption_backstop"
+    INTERNAL_INVARIANT = "internal_invariant"
+
+
 @dataclass(frozen=True)
 class RefusalRecord:
     code: RefusalCode
@@ -117,7 +123,9 @@ class RefusalRecord:
     runbook_anchor: str
     arm_blocked: bool
     prior_crash_reachable: bool
+    witness_class: WitnessClass
     witness_id: str
+    witness_note: str
     terminal_result: TerminalResult
     night_loss: bool
     description: str
@@ -134,8 +142,11 @@ def _record(
     exit_kind: str = "stop-preserved",
     exit_id: str = "hard-stop-preserved",
     command: str = "recover_calibration_ledger.py explain {code}",
+    runbook_anchor: str = "d-117-10-calibration-ledger-refusals-and-governed-exits",
     terminal_result: TerminalResult = TerminalResult.NIGHT_STOPPED_PRESERVED,
     prior_crash_reachable: bool = False,
+    witness_class: WitnessClass = WitnessClass.OPERATIONAL,
+    witness_note: str = "reachable through governed public operations or crash recovery",
     night_loss: bool = True,
     process_exit: int = 2,
 ) -> RefusalRecord:
@@ -147,10 +158,16 @@ def _record(
         exit_kind=exit_kind,
         exit_id=exit_id,
         command=command.format(code=code.value),
-        runbook_anchor="d-117-10-calibration-ledger-refusals-and-governed-exits",
+        runbook_anchor=runbook_anchor,
         arm_blocked=True,
         prior_crash_reachable=prior_crash_reachable,
-        witness_id=f"witness.{code.value}",
+        witness_class=witness_class,
+        witness_id=(
+            f"unit.{code.value}"
+            if witness_class is WitnessClass.INTERNAL_INVARIANT
+            else f"witness.{code.value}"
+        ),
+        witness_note=witness_note,
         terminal_result=terminal_result,
         night_loss=night_loss,
         description=description,
@@ -241,13 +258,10 @@ _REPAIR = {
 _ABANDON = {RefusalCode.TAIL_REQUIRES_ABANDON}
 _ABORT = {
     RefusalCode.LEDGER_BRACKET_SESSION_OPEN,
-    RefusalCode.LEDGER_BRACKET_SESSION_CONFLICT,
     RefusalCode.CUSTODY_PARTIAL,
     RefusalCode.RESERVATION_IDENTITY_CONFLICT,
     RefusalCode.RESERVED_SLOT_MISMATCH,
-    RefusalCode.CLAIM_ID_INVALID,
     RefusalCode.SLOT_ORDER_CONFLICT,
-    RefusalCode.FINALIZATION_BINDING_CONFLICT,
     RefusalCode.DISPLAY_ARM_FAILED,
     RefusalCode.SAMPLER_NEVER_READY,
     RefusalCode.ROLLOVER_GATE_TIMEOUT,
@@ -331,8 +345,73 @@ _WRITER_COMPONENT = {
 }
 
 
+_CORRUPTION_BACKSTOPS = {
+    RefusalCode.LEDGER_MISSING,
+    RefusalCode.LEDGER_MALFORMED,
+    RefusalCode.LEDGER_CHAIN_CONFLICT,
+    RefusalCode.LEDGER_ATTEMPT_CONFLICT,
+    RefusalCode.LEDGER_BRACKET_SESSION_CONFLICT,
+    RefusalCode.LEDGER_CONTENT_CONFLICT,
+    RefusalCode.LEDGER_ROLLBACK,
+    RefusalCode.LEDGER_OPERATION_CONFLICT,
+    RefusalCode.LEDGER_UNGOVERNED_BUSINESS,
+    RefusalCode.LEDGER_CUSTODY_INVALID,
+    RefusalCode.UNSAFE_LOCK_INODE,
+    RefusalCode.PHYSICAL_LEDGER_UNREADABLE,
+    RefusalCode.LEGACY_JOURNAL_UNREADABLE,
+    RefusalCode.LEGACY_JOURNAL_ARCHIVE_CONFLICT,
+    RefusalCode.LEGACY_JOURNAL_ARCHIVE_FAILED,
+    RefusalCode.INTENT_TARGET_MALFORMED,
+    RefusalCode.RECOVERY_NONCONVERGENT,
+    RefusalCode.ABANDON_NOT_CLEAN,
+    RefusalCode.HEAD_PIN_UNREADABLE,
+    RefusalCode.HEAD_PIN_MALFORMED,
+    RefusalCode.CUSTODY_UNREADABLE,
+}
+
+_INTERNAL_INVARIANTS: Mapping[RefusalCode, str] = MappingProxyType(
+    {
+        RefusalCode.LEDGER_SNAPSHOT_REQUIRED: (
+            "in-memory claim-evaluation argument guard; public runners load the "
+            "immutable snapshot before evaluation, so no durable state omits it"
+        ),
+        RefusalCode.LEDGER_OFF_LEDGER_ARTIFACT: (
+            "low-level evaluator candidate/snapshot equality guard; public bundle "
+            "evaluation discovers its candidate set only from the authenticated "
+            "snapshot, mapping missing custody earlier instead"
+        ),
+        RefusalCode.LEDGER_BRACKET_SLOT_CLAIMED: (
+            "inner duplicate-claim programming guard; an exact durable claim returns "
+            "idempotently and every nonmatching claim is rejected before this branch"
+        ),
+        RefusalCode.CLAIM_ID_INVALID: (
+            "stable claim identity is derived internally; public writers never accept "
+            "a caller-supplied claim id, so only a bad in-memory argument reaches it"
+        ),
+        RefusalCode.FINALIZATION_BINDING_CONFLICT: (
+            "fresh-process finalization reloads the reserved binding and supplies it "
+            "unchanged; only inconsistent in-memory finalization arguments reach it"
+        ),
+    }
+)
+
+
 def _route(code: RefusalCode) -> RefusalRecord:
     kwargs: dict[str, Any] = {}
+    if code in _CORRUPTION_BACKSTOPS:
+        kwargs.update(
+            witness_class=WitnessClass.CORRUPTION_BACKSTOP,
+            witness_note="reachable only from corrupted or hostile durable state",
+        )
+    elif code in _INTERNAL_INVARIANTS:
+        kwargs.update(
+            witness_class=WitnessClass.INTERNAL_INVARIANT,
+            witness_note=_INTERNAL_INVARIANTS[code],
+            exit_kind="internal-invariant",
+            exit_id="internal-invariant",
+            command="",
+            runbook_anchor="",
+        )
     if code in _RECOVERY_COMPONENT:
         kwargs.update(component="recovery-cli", phase="recovery")
     elif code in _RESERVATION_COMPONENT:
@@ -400,7 +479,7 @@ def _route(code: RefusalCode) -> RefusalRecord:
             retry_class="after-correction",
             exit_kind="fix-preflight",
             exit_id="correct-preflight",
-            command="recover_calibration_ledger.py explain {code}",
+            command="recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN",
             night_loss=False,
             terminal_result=TerminalResult.READY_TO_ARM,
         )
@@ -458,6 +537,7 @@ __all__ = [
     "RefusalCode",
     "RefusalRecord",
     "TerminalResult",
+    "WitnessClass",
     "emit_refusal",
     "explain_payload",
     "refusal_payload",
