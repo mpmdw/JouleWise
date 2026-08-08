@@ -204,6 +204,51 @@ not grant or restore any mint license. In particular, D-110 clause 3 remains a
 separate license gate; a future pinset can make a hypothetical artifact
 truthfully valid without authorizing that artifact to be minted or published.
 
+### Generalized-v2 D-117 verification profile
+
+The generalized v2 mint consumes extraction reports through a recursively
+closed profile. Top level, cell, floor, and member objects reject every unknown
+key. The top level is the extractor's governed wire: schema/spec versions,
+root and manifest identity, consumption semantics/provenance, governance,
+cells, specification and idle refusals, whole-window allowances,
+`all_cells_extractable`, and optional single-count discipline. Cell objects
+contain the governed identity/count/refusal fields, floor, claim-family and
+allowance fields, operative floor, anchor bound, and members; only the existing
+attribution labels/diagnostic/single-count fields are optional. Floor objects
+contain the complete estimator arithmetic and may additionally carry the four
+whole-window drift-widening fields. Member objects contain exactly their slot
+and bundle/block position, metric, cooldown/cap/exclusion state, anchor
+envelope, consumption provenance, and summary/bundle/config digests.
+`floor_mint_postcollection` is not an extractor field or an authority; a report
+containing it refuses as an unknown top-level key. This profile is v2-only, so
+the historical v1 mint remains byte-identical.
+
+Postcollection verification is domain separated. Ledger observations plus the
+validated bracket binding own receipt/content custody and terminality. The
+exact code-pinned issued acceptance artifact owns the allowance rule and
+screen. The authenticated whole-window verdict owns evaluation-basis identity,
+complete membership, and drift evidence. Authenticated bundle/report members
+and the governed estimator own absolute and comparative floors. The mint owns
+only the verification calculation: it derives exact drift and allowance,
+recomputes floors from members/widths/allowances, takes the component maximum,
+and renders verified values at six decimals. The report is a checked cache and
+the pinset is a frozen expectation; neither is self-authenticating.
+
+Accordingly, “the mint only compares and does not calculate” is narrowed to:
+the mint calculates the expected verification projection from authenticated
+domain evidence and compares it with independently frozen pins. It never
+invents, selects, defaults, generates, or fills missing pins. Before parsing
+evidence, the production v2 route derives actual Git `HEAD`, requires a clean
+tree, checks the caller's claim, and records whether `origin/main` contains the
+head. All inputs reject duplicate JSON keys and non-finite numbers.
+
+The v2 artifact's provenance requires the assurance profile
+`single_authority_hash_bound_replay.v1` with
+`independent_attestation=false`. The profile establishes reproducible,
+hash-bound consistency with disclosed commitments; it explicitly does not
+establish operator honesty, an independent witness of collection, or resistance
+to coordinated prepublication rewrite.
+
 ### Cell List
 
 The default target for Window A is `n = 10` strict-valid bundles per cell.

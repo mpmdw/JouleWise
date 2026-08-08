@@ -1367,7 +1367,7 @@ _PROVENANCE_KEYS = {
     "mint_tool_version",
     "implementation",
 }
-_PROVENANCE_OPTIONAL_KEYS = {"producer_calibration_plans"}
+_PROVENANCE_OPTIONAL_KEYS = {"producer_calibration_plans", "assurance"}
 _CALIBRATION_PLAN_KEYS = {
     "plan_id",
     "declared_calibration_scope",
@@ -1381,6 +1381,27 @@ _IMPLEMENTATION_KEYS = {
     "project_commit",
     "project_tree_state",
     "python_package",
+}
+_IMPLEMENTATION_OPTIONAL_KEYS = {"head_pin_commit_contained_in_origin_main"}
+_ASSURANCE_KEYS = {
+    "profile_id",
+    "independent_attestation",
+    "establishes",
+    "does_not_establish",
+}
+_V2_ASSURANCE_PROFILE = {
+    "profile_id": "single_authority_hash_bound_replay.v1",
+    "independent_attestation": False,
+    "establishes": [
+        "exact-byte consistency with disclosed commitments",
+        "ledger and verdict consistency under the recorded code",
+        "deterministic rederivability of mint inputs",
+    ],
+    "does_not_establish": [
+        "honesty of the trusted operator",
+        "independent witness of physical collection",
+        "resistance to coordinated prepublication rewrite",
+    ],
 }
 _CELL_PROVENANCE_KEYS = {"absolute", "comparative"}
 _COMPONENT_PROVENANCE_KEYS = {
@@ -2286,10 +2307,13 @@ def _validate_provenance(
     ):
         errors.append(f"{where}.mint_tool_version: must be a nonempty string")
 
+    mint_tool_version = provenance["mint_tool_version"]
+    is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2
     implementation = provenance["implementation"]
-    if _check_keys(
+    if _check_keys_with_optional(
         implementation,
         _IMPLEMENTATION_KEYS,
+        _IMPLEMENTATION_OPTIONAL_KEYS,
         f"{where}.implementation",
         errors,
     ):
@@ -2307,6 +2331,33 @@ def _validate_provenance(
             errors.append(
                 f"{where}.implementation.python_package: must be 'joulewise'"
             )
+        contains_head = implementation.get(
+            "head_pin_commit_contained_in_origin_main"
+        )
+        if is_v2 and not isinstance(contains_head, bool):
+            errors.append(
+                f"{where}.implementation.head_pin_commit_contained_in_origin_main: "
+                "required boolean for the v2 mint"
+            )
+        if not is_v2 and contains_head is not None:
+            errors.append(
+                f"{where}.implementation.head_pin_commit_contained_in_origin_main: "
+                "allowed only for the v2 mint"
+            )
+    assurance = provenance.get("assurance")
+    if is_v2:
+        if not _check_keys(
+            assurance,
+            _ASSURANCE_KEYS,
+            f"{where}.assurance",
+            errors,
+        ) or assurance != _V2_ASSURANCE_PROFILE:
+            errors.append(
+                f"{where}.assurance: must equal the canonical "
+                "single_authority_hash_bound_replay.v1 profile"
+            )
+    elif assurance is not None:
+        errors.append(f"{where}.assurance: allowed only for the v2 mint")
     producer_plans = provenance.get("producer_calibration_plans")
     if producer_plans is None:
         return (

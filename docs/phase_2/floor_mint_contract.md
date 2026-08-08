@@ -161,3 +161,100 @@ divergence; accidental artifact-scope==plan-scope enforcement.
   and normalize per rule 5 — do not guess.
 - Review debts folded here: C1 (via Q4), C3/E3 (via W8), SCHEMA_VERSION
   ruling (via W10).
+
+## D-117 postcollection trust amendment (2026-08-07)
+
+This amendment governs the generalized v2 mint and supersedes the W6 sentence
+that treated postcollection calculation inside the mint as forbidden. The
+narrowed binding rule is: **the mint calculates the expected verification
+projection from authenticated source evidence and compares the independently
+frozen pins against that projection; it never invents, selects, defaults, or
+fills a missing pin.** A pin is an expected value, not evidence.
+
+There is no mint-owned postcollection certificate. In particular,
+`floor_mint_postcollection` has no producer and is not part of the extraction
+wire. Its presence in a D-117 report is an unknown-top-level-key refusal.
+
+### Domain owners
+
+| Frozen postcollection pin | Authoritative verification source |
+|---|---|
+| Pre/post receipt digests | Finalized endpoints returned by `validate_calibration_bracket_binding` over the authenticated ledger snapshot |
+| Pre/post content digests | Receipt-bound ledger observation content IDs, recomputed from calibration artifacts by the ledger subsystem |
+| Bracket-binding SHA | SHA-256 of the exact supplied binding bytes plus complete validation of that binding against the ledger |
+| Terminal ledger head | Git-committed head pin and authenticated ledger snapshot; the binding copy is only a cross-check |
+| Observed drift | Exact-Decimal absolute difference between authenticated pre/post bound lexemes |
+| Allowance rule, screen, applied allowance, embedding count | Exact code-pinned issued D-079 acceptance artifact and its authenticated rule; applied allowance is `max(observed, accepted screen)` and the count is exactly one |
+| Evaluation-basis SHA and member count | Authenticated whole-window verdict/evaluation basis and its complete covered membership |
+| Extraction-report SHA | SHA-256 of the exact report bytes; it binds file identity but is not proof of operator honesty |
+| Absolute/comparative floors | Fresh estimator calculation from authenticated members, widths, semantics, and whole-window allowances; the corresponding report cells are checked as caches |
+| Operative floor | Fresh `max(absolute, comparative)` calculation |
+| Six-decimal strings | `.6f` rendering recomputed from verified full-precision values and compared to the frozen literals |
+
+No subsystem may copy another domain's facts and thereby replace that domain as
+authority.
+
+### Closed D-117 report-consumption profile
+
+Only the generalized v2 mint applies this profile; historical v1 behavior and
+bytes remain frozen. Every listed set is closed, so any other key refuses.
+
+- Top level requires `schema_version`, `spec_schema_version`, `runs_root`,
+  `manifest_id`, `consumption_semantics_id`, `consumption_provenance`,
+  `governance`, `cells`, `spec_membership_refusals`,
+  `idle_admission_refusals`, `whole_window_drift_allowances`, and
+  `all_cells_extractable`; `single_count_discipline` is optional.
+- A cell requires `cell_id`, `kind`, `metric`, `window_class`,
+  `cap_hit_policy`, `n_planned`, `n_admitted`, `excluded_slots`,
+  `extractable`, `refusal_reasons`, `floor`, `claim_family`,
+  `whole_window_drift_allowance`, `operative_floor_j`,
+  `anchor_shift_bound_max_j`, and `members`. The only optional keys are
+  `floor_conditions`, `floor_source`, `floor_limit_class`,
+  `point_floor_diagnostic`, and `single_count_discipline`.
+- A non-null floor requires `kind`, `n`, `mean_j`, `deviations_j`,
+  `sample_stddev_j`, `max_abs_deviation_j`, `t_critical`,
+  `prediction_component_j`, `unguarded_floor_j`, `guard_factor`,
+  `guarded_floor_j`, `admissible_half_widths_j`,
+  `corner_widened_unguarded_floor_j`,
+  `corner_widened_guarded_floor_j`, and `smoke_only`. Its only optional keys
+  are `whole_window_drift_allowance_j`,
+  `whole_window_drift_allowance_provenance`,
+  `drift_widened_unguarded_floor_j`, and
+  `drift_widened_guarded_floor_j`.
+- A member requires exactly `slot`, `bundle_id`, `block_id`, `position`,
+  `metric_value_j`, `cooldown_result`, `cooldown_verified`, `cap_hit`,
+  `excluded`, `reasons`, `anchor_shift_bound_j`,
+  `operative_anchor_envelope`, `consumption_provenance`, `summary_sha256`,
+  `bundle_sha256`, and `config_sha256`.
+
+### Required generalized-v2 verification order
+
+1. Derive actual Git `HEAD`, require a clean tree, compare any claimed commit,
+   and record whether `origin/main` contains the mint head.
+2. Reject duplicate keys and non-finite numbers in every parsed input, with
+   exact-byte re-reads at TOCTOU boundaries.
+3. Authenticate the issued acceptance artifact against its exact code pin and
+   internal derivation.
+4. Load the ledger against the Git-committed terminal head and acceptance
+   cutoff; reject malformed chains, rollback, stale/uncommitted heads, open
+   sessions, and invalid custody.
+5. Validate bracket plan, window, evidence root, runs root, session, slots,
+   content IDs, and terminality through the bracketing API.
+6. Recompute exact-Decimal drift and the issued-rule allowance.
+7. Authenticate the whole-window verdict, policy, bracket, attempts,
+   supersessions, bundle bytes, and complete evaluation membership.
+8. Apply the recursively closed D-117 report profile.
+9. Treat report cells as caches: reauthenticate members, metrics, widths,
+   semantics, and allowance, then recompute every mint-relevant floor.
+10. Compare every required frozen pin with its domain-owned projection. A
+    missing, placeholder, or disagreeing pin refuses; none is generated.
+11. Construct all four cells, recompute component/cross-stack maxima, validate,
+    bind back to source bytes, and create outputs exclusively.
+
+Every v2 artifact carries the required provenance assurance profile
+`single_authority_hash_bound_replay.v1`, with
+`independent_attestation=false`. It establishes exact-byte consistency with
+disclosed commitments, ledger/verdict consistency under recorded code, and
+deterministic rederivability. It does not establish operator honesty,
+independent witness of physical collection, or resistance to coordinated
+prepublication rewrite.

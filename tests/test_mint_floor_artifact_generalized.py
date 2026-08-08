@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import copy
 import hashlib
 import io
@@ -20,7 +19,16 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
     complete_bundle_sha256,
 )
-from joulewise.floor_extraction import validate_extraction_spec
+from joulewise.calibration_bracketing import (
+    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    load_calibration_acceptance_bound,
+)
+from joulewise.floor_extraction import (
+    CellReport,
+    MemberReport,
+    validate_d117_mint_consumption_report,
+    validate_extraction_spec,
+)
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -636,6 +644,61 @@ def _v2_component_pin(component: mint1.AuthenticatedComponent) -> dict:
     }
 
 
+def _production_report_cell(
+    component: mint1.AuthenticatedComponent,
+) -> dict:
+    """Emit the exact governed CellReport wire used by extract_cells."""
+
+    core = generalized._fresh_original_core()
+    if component.kind == "absolute":
+        estimate = core.absolute_false_effect_floor(
+            [member_row.metric_value_j for member_row in component.members],
+            admissible_half_widths_j=component.widths_j,
+        )
+    else:
+        _blocks, deltas = core._comparative_blocks(component)
+        estimate = core.comparative_false_effect_floor(
+            deltas,
+            admissible_half_widths_j=component.widths_j,
+        )
+    rows = tuple(
+        MemberReport(
+            slot=member_row.bundle_id,
+            bundle_id=member_row.bundle_id,
+            block_id=None,
+            position=None,
+            value_j=member_row.metric_value_j,
+            cooldown_result="completed",
+            cooldown_verified=True,
+            cap_hit=False,
+            excluded=False,
+            reasons=(),
+            anchor_shift_bound_j=0.0,
+            operative_anchor_envelope=None,
+            consumption_provenance=None,
+            summary_sha256="0" * 64,
+            bundle_sha256=member_row.bundle_sha256,
+            config_sha256=member_row.config_sha256,
+        )
+        for member_row in component.members
+    )
+    return CellReport(
+        cell_id=component.calibration_cell_id,
+        kind=component.kind,
+        metric=component.spec_cell["metric"],
+        window_class=component.spec_cell["window_class"],
+        cap_hit_policy="exclude_same_slot",
+        members=rows,
+        excluded_slots=(),
+        n_planned=len(rows),
+        n_admitted=len(rows),
+        refusal_reasons=(),
+        floor=estimate,
+        anchor_shift_bound_max_j=max(component.widths_j, default=0.0),
+        whole_window_drift_allowance=component.whole_window_drift_allowance,
+    ).as_row()
+
+
 def _fixture_spec_member_ids(spec: dict) -> tuple[str, ...]:
     """Independent physical-member projection for the golden pin fixture."""
 
@@ -868,7 +931,6 @@ def synthetic_v2_fixture() -> tuple[
         bracket_binding_sha256 = _fixture_artifact_sha256(binding)
         extraction_spec_sha256 = f"{producer_index + 2:x}" * 64
         role_rows = []
-        report_rows = []
         for role in ("decode", "prefill"):
             family_id = f"synthetic-{producer_index}-{role}"
             absolute, comparative, family_binding = _role_components(
@@ -893,29 +955,31 @@ def synthetic_v2_fixture() -> tuple[
                     ],
                 }
             ]
-            report_rows.append(
-                {
-                    "cell_id": cell_id,
-                    "observed_drift_s": "0.001000",
-                    "applied_allowance_s": generalized.V2_BRACKET_SCREEN_S,
-                    "absolute_floor_full_precision": "6.294380135190098",
-                    "comparative_floor_full_precision": "13.998036715259254",
-                    "operative_floor_full_precision": "13.998036715259254",
-                    "absolute_floor_six_decimal": "6.294380",
-                    "comparative_floor_six_decimal": "13.998037",
-                    "operative_floor_six_decimal": "13.998037",
-                }
-            )
             role_rows.append(
                 (role, cell_id, group_id, allowlist, family_binding, absolute, comparative)
             )
+        report_cells = [
+            _production_report_cell(component)
+            for row in role_rows
+            for component in (row[-2], row[-1])
+        ]
         report = {
-            "diagnostics": {"published_claim_floor": False},
-            "floor_mint_postcollection": {
-                "schema_version": generalized.V2_EXTRACTION_POSTCOLLECTION_SCHEMA,
-                "cells": report_rows,
+            "schema_version": mint1.EXTRACTION_SCHEMA_VERSION,
+            "spec_schema_version": mint1.EXTRACTION_SPEC_SCHEMA_VERSION,
+            "runs_root": str(evidence_root),
+            "manifest_id": None,
+            "consumption_semantics_id": MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+            "consumption_provenance": {},
+            "governance": {"d078_gate": "governed synthetic fixture"},
+            "cells": report_cells,
+            "spec_membership_refusals": [],
+            "idle_admission_refusals": [],
+            "whole_window_drift_allowances": {
+                "gross_energy": dict(base_absolute.whole_window_drift_allowance)
             },
+            "all_cells_extractable": True,
         }
+        assert validate_d117_mint_consumption_report(report) == []
         report_sha256 = _fixture_artifact_sha256(report)
         role_inputs = {}
         cell_pins = []
@@ -928,11 +992,25 @@ def synthetic_v2_fixture() -> tuple[
             absolute,
             comparative,
         ) in role_rows:
+            absolute_cell = next(
+                row for row in report_cells
+                if row["cell_id"] == absolute.calibration_cell_id
+            )
+            comparative_cell = next(
+                row for row in report_cells
+                if row["cell_id"] == comparative.calibration_cell_id
+            )
             absolute = replace(
-                absolute, report=report, report_sha256=report_sha256
+                absolute,
+                report=report,
+                report_sha256=report_sha256,
+                cell=absolute_cell,
             )
             comparative = replace(
-                comparative, report=report, report_sha256=report_sha256
+                comparative,
+                report=report,
+                report_sha256=report_sha256,
+                cell=comparative_cell,
             )
             cell_pins.append(
                 {
@@ -987,11 +1065,9 @@ def synthetic_v2_fixture() -> tuple[
         runtime_identity_sha256 = components[0].source_regime[
             "stack_identity_sha256"
         ]
-        acceptance = {
-            "schema_version": "joulewise.calibration_acceptance_bound.v2",
-            "acceptance_id": "d079-calibration-acceptance-v2",
-            "derivation_sha256": "b" * 64,
-        }
+        acceptance = load_calibration_acceptance_bound()
+        assert acceptance is not None
+        acceptance_sha256 = file_sha256(DEFAULT_ACCEPTANCE_BOUND_PATH)
         producer = {
             "plan": {
                 "plan_id": plan_id,
@@ -1022,7 +1098,7 @@ def synthetic_v2_fixture() -> tuple[
             },
             "calibration_acceptance": {
                 "acceptance_id": acceptance["acceptance_id"],
-                "artifact_sha256": "a" * 64,
+                "artifact_sha256": acceptance_sha256,
                 "derivation_sha256": acceptance["derivation_sha256"],
                 "derivation_rule_id": acceptance["schema_version"],
             },
@@ -1037,9 +1113,21 @@ def synthetic_v2_fixture() -> tuple[
             plan_declared_sha256=declared_sha256,
             plan_sidecar_sha256=sidecar_sha256,
             calibration_acceptance=acceptance,
-            calibration_acceptance_sha256="a" * 64,
+            calibration_acceptance_sha256=acceptance_sha256,
             bracket_binding=binding,
             bracket_binding_sha256=bracket_binding_sha256,
+            authenticated_pre_observation=observations[0],
+            authenticated_post_observation=observations[1],
+            calibration_allowance_projection=(
+                {
+                    **generalized.issued_calibration_allowance_projection(
+                        acceptance,
+                        pre_exact_bound_lexeme_s="0.020000",
+                        post_exact_bound_lexeme_s="0.021000",
+                    ),
+                    "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                }
+            ),
         )
     pinset = {
         "schema_version": generalized.PINSET_SCHEMA_VERSION_V2,
@@ -1077,25 +1165,30 @@ def synthetic_v2_fixture() -> tuple[
         head_sequence=len(ledger_receipts),
         head_digest=ledger_receipts[-1]["receipt_digest"],
     )
+    for producer in producers:
+        for cell in producer["cells"]:
+            cell["postcollection"]["terminal_ledger_head_sha256"] = (
+                ledger_snapshot.head_digest
+            )
     return pinset, inputs, ledger_snapshot
 
 
 # Independent golden constants. They are regenerated only by an explicit
 # fixture-review step, never by the mint implementation under test.
 SYNTHETIC_COMPONENT_SHA256S = (
-    "b0404c15df0b2e0afb445ab6cea9b2c08a7922e3d49fd7354b8aec05262d9851",
-    "0543bb0d1282f84e78e6b7c03cc6eaf3903d470bcb58bf39cb9d63fda5922fef",
+    "834933eccfab3558bf2e2b9a5ec9ac1d8daed82e3b085b4b1cc4d4c9abbeff63",
+    "5bbb54e7f363208d7bd6ec26affb94d4239d47b4697eb94c6352d07451cc1b2a",
 )
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "70e3c43269a2bdd4bfc651d136086b6b0b863c8a4f9de1a1716d81d879c44a8b",
-    "e1f600ebbae32be565abdb64098d5c4046f101f041ea5bd8f7c2800b7f6a4278",
+    "00f974ad001739a4b8ae8ef74a9c9486d18d6331d244a8676123d603fe3a5221",
+    "84cba89e68eb28a082501505eb118b8935d8ee682f32c3538a4751da47f3c6ca",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "f58ed63311a5e62a1b61dc9c43c653c0caddc5aa201ae17533a28eabaa397c11"
+    "7c26c080d97edb9cee4f75c9aed213ec82a5cf3af6e9827d91f44e831ddb377c"
 )
 CLI_COMPONENT_SHA256S = (
-    "77ec1d85330f48773f6f597cdff3df891a5382df0a7685d3e0ebc0c9555ef9b8",
-    "6b586ce5e430daa7defc88cadbd7dc05132dc401366f81272d40f2c8591f5c3f",
+    "0992de6432787321b874aa08dfec71075bd340835974db9789349852f3401496",
+    "3cfed014f4eb7032a4424e7b225b6b053527456e64acf0606da1f91f5499fa4b",
 )
 
 
@@ -1185,6 +1278,20 @@ def install_v2_cli_fixture(root: Path):
 
         evidence_root = root / f"{plan_id}-root"
         evidence_root.mkdir()
+        campaign_path = evidence_root / "campaign_log.jsonl"
+        campaign_path.write_text("{}\n", encoding="utf-8")
+        campaign_sha256 = file_sha256(campaign_path)
+        bundle_ids = {
+            bundle_id
+            for cell in source.cells.values()
+            for component in (cell.absolute, cell.comparative)
+            for bundle_id in generalized._v2_spec_member_ids(component.spec)
+        }
+        for bundle_id in bundle_ids:
+            bundle = evidence_root / bundle_id
+            bundle.mkdir(exist_ok=True)
+            for name in ("config.json", "metadata.json", "summary_metrics.json"):
+                (bundle / name).write_text("{}\n", encoding="utf-8")
         binding, receipts, observations, session = _synthetic_bracket_evidence(
             producer_index,
             plan_id=plan_id,
@@ -1250,6 +1357,7 @@ def install_v2_cli_fixture(root: Path):
                     spec_sha256=file_sha256(spec_path),
                     order_manifest=order,
                     order_manifest_sha256=file_sha256(order_path),
+                    campaign_log_sha256=campaign_sha256,
                 )
                 components[component_name] = component
                 component_paths[component_name] = {
@@ -1326,6 +1434,11 @@ def install_v2_cli_fixture(root: Path):
         head_sequence=len(ledger_receipts),
         head_digest=ledger_receipts[-1]["receipt_digest"],
     )
+    for producer in pinset["producer_plans"]:
+        for cell in producer["cells"]:
+            cell["postcollection"]["terminal_ledger_head_sha256"] = (
+                ledger_snapshot.head_digest
+            )
     manifest_path = root / "manifest.json"
     manifest_path.write_text(
         json.dumps(
@@ -1578,47 +1691,243 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )
         )
 
-    def test_v2_mint_does_not_render_or_round_floor_literals(self) -> None:
-        source_tree = ast.parse(inspect.getsource(generalized))
-        formatted_values = [
-            node
-            for node in ast.walk(source_tree)
-            if isinstance(node, ast.FormattedValue)
-            and node.format_spec is not None
-        ]
-        self.assertEqual(
-            formatted_values,
-            [],
-            "v2 mint contains f-string formatting capable of deriving a literal",
-        )
+    def test_v2_mint_recomputes_rendering_but_never_fills_pins(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path, digest, inputs, ledger_snapshot = (
                 freeze_synthetic_v2_pinset(Path(tmp))
             )
-            poison = AssertionError("v2 mint attempted numeric rendering")
-            with (
-                mock.patch.object(
-                    generalized,
-                    "format",
-                    side_effect=poison,
-                    create=True,
-                ),
-                mock.patch.object(
-                    generalized,
-                    "round",
-                    side_effect=poison,
-                    create=True,
-                ),
-            ):
-                artifact = generalized.mint_multi_cell_authenticated_artifact(
-                    pinset_path=path,
-                    pinset_sha256=digest,
-                    producer_inputs=inputs,
-                    calibration_ledger_snapshot=ledger_snapshot,
-                    project_commit="0" * 40,
-                    project_tree_state="clean",
-                )
+            artifact = generalized.mint_multi_cell_authenticated_artifact(
+                pinset_path=path,
+                pinset_sha256=digest,
+                producer_inputs=inputs,
+                calibration_ledger_snapshot=ledger_snapshot,
+                project_commit="0" * 40,
+                project_tree_state="clean",
+            )
         self.assertEqual(len(artifact["cells"]), 4)
+        self.assertEqual(
+            artifact["provenance"]["assurance"],
+            generalized.V2_ASSURANCE_PROFILE,
+        )
+
+    def test_v2_assurance_and_git_containment_are_required_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest, inputs, ledger_snapshot = (
+                freeze_synthetic_v2_pinset(Path(tmp))
+            )
+            artifact = generalized.mint_multi_cell_authenticated_artifact(
+                pinset_path=path,
+                pinset_sha256=digest,
+                producer_inputs=inputs,
+                calibration_ledger_snapshot=ledger_snapshot,
+                project_commit="0" * 40,
+                project_tree_state="clean",
+            )
+            for field in ("assurance",):
+                with self.subTest(field=field):
+                    attacked = copy.deepcopy(artifact)
+                    attacked["provenance"].pop(field)
+                    errors = generalized.validate_floor_artifact(
+                        artifact=attacked,
+                        pinset_path=path,
+                        pinset_sha256=digest,
+                    )
+                    self.assertTrue(
+                        any("assurance" in error for error in errors), errors
+                    )
+            attacked = copy.deepcopy(artifact)
+            attacked["provenance"]["implementation"].pop(
+                "head_pin_commit_contained_in_origin_main"
+            )
+            errors = generalized.validate_floor_artifact(
+                artifact=attacked,
+                pinset_path=path,
+                pinset_sha256=digest,
+            )
+            self.assertTrue(
+                any(
+                    "head_pin_commit_contained_in_origin_main" in error
+                    for error in errors
+                ),
+                errors,
+            )
+
+    def test_actual_git_state_refuses_dirty_tree_and_records_containment(self) -> None:
+        head = "a" * 40
+        result = lambda returncode=0, stdout="": SimpleNamespace(
+            returncode=returncode, stdout=stdout, stderr=""
+        )
+        with mock.patch.object(
+            generalized.subprocess,
+            "run",
+            side_effect=(
+                result(stdout=head + "\n"),
+                result(stdout=" M evidence.json\n"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                generalized.MintError, "clean Git working tree"
+            ):
+                generalized._actual_v2_git_state()
+
+        with mock.patch.object(
+            generalized.subprocess,
+            "run",
+            side_effect=(
+                result(stdout=head + "\n"),
+                result(),
+                result(stdout="b" * 40 + "\n"),
+                result(returncode=1),
+            ),
+        ):
+            self.assertEqual(generalized._actual_v2_git_state(), (head, False))
+
+        with mock.patch.object(
+            generalized,
+            "_actual_v2_git_state",
+            return_value=(head, True),
+        ):
+            with self.assertRaisesRegex(
+                generalized.MintError, "claimed project commit differs"
+            ):
+                generalized.mint_multi_cell_floor_artifact(
+                    pinset_path=Path("unreached-pinset.json"),
+                    pinset_sha256="0" * 64,
+                    input_manifest_path=Path("unreached-inputs.json"),
+                    floor_path=Path("unreached-floor.json"),
+                    statement_path=Path("unreached-statement.txt"),
+                    project_commit="c" * 40,
+                    project_tree_state="clean",
+                    strict_validator=lambda _path, _strict: [],
+                )
+
+    def test_all_v2_json_routes_reject_duplicate_and_nonfinite_values(self) -> None:
+        for label, raw, message in (
+            ("duplicate", b'{"x": 1, "x": 2}', "duplicate JSON key"),
+            ("nonfinite", b'{"x": NaN}', "non-finite JSON number"),
+        ):
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(generalized.MintError, message):
+                    generalized._strict_json_value(raw, "authenticated input")
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "manifest.json"
+                    path.write_bytes(raw)
+                    with self.assertRaisesRegex(
+                        generalized.MintError, message
+                    ):
+                        generalized._load_v2_input_manifest(path)
+
+    def test_each_genuine_source_mutation_has_a_domain_specific_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest, inputs, ledger_snapshot = (
+                freeze_synthetic_v2_pinset(Path(tmp))
+            )
+            plan_id = next(iter(inputs))
+            source = inputs[plan_id]
+
+            def with_decode_cell(
+                updated: generalized.V2CellComponents,
+            ) -> dict[str, generalized.V2ProducerInputs]:
+                return {
+                    **inputs,
+                    plan_id: replace(
+                        source,
+                        cells={**source.cells, "decode": updated},
+                    ),
+                }
+
+            decode = source.cells["decode"]
+            mutated_member = replace(
+                decode.absolute.members[0],
+                metric_value_j=decode.absolute.members[0].metric_value_j + 1.0,
+            )
+            member_component = replace(
+                decode.absolute,
+                members=(mutated_member, *decode.absolute.members[1:]),
+            )
+            basis_component = replace(
+                decode.absolute,
+                whole_window_evaluation_basis_sha256="f" * 64,
+            )
+            report_component = replace(
+                decode.absolute,
+                report_sha256="f" * 64,
+            )
+            report_comparative = replace(
+                decode.comparative,
+                report_sha256="f" * 64,
+            )
+            bad_ledger_values = dict(vars(ledger_snapshot))
+            bad_ledger_values["head_digest"] = "f" * 64
+            cases = (
+                (
+                    "acceptance",
+                    {
+                        **inputs,
+                        plan_id: replace(
+                            source, calibration_acceptance_sha256="f" * 64
+                        ),
+                    },
+                    ledger_snapshot,
+                    "calibration acceptance evidence mismatch",
+                ),
+                (
+                    "binding",
+                    {
+                        **inputs,
+                        plan_id: replace(
+                            source, bracket_binding_sha256="f" * 64
+                        ),
+                    },
+                    ledger_snapshot,
+                    "bracket_binding_sha256 mismatch",
+                ),
+                (
+                    "verdict-basis",
+                    with_decode_cell(
+                        replace(decode, absolute=basis_component)
+                    ),
+                    ledger_snapshot,
+                    "absolute_evaluation_basis_sha256 mismatch",
+                ),
+                (
+                    "member-bytes",
+                    with_decode_cell(
+                        replace(decode, absolute=member_component)
+                    ),
+                    ledger_snapshot,
+                    "report cell floor differs from authenticated absolute member evidence",
+                ),
+                (
+                    "report-bytes",
+                    with_decode_cell(
+                        replace(
+                            decode,
+                            absolute=report_component,
+                            comparative=report_comparative,
+                        )
+                    ),
+                    ledger_snapshot,
+                    "extraction_report_sha256 mismatch",
+                ),
+                (
+                    "ledger-head",
+                    inputs,
+                    SimpleNamespace(**bad_ledger_values),
+                    "terminal_ledger_head_sha256 mismatch",
+                ),
+            )
+            for label, candidate_inputs, candidate_ledger, message in cases:
+                with self.subTest(label=label):
+                    with self.assertRaisesRegex(generalized.MintError, message):
+                        generalized.mint_multi_cell_authenticated_artifact(
+                            pinset_path=path,
+                            pinset_sha256=digest,
+                            producer_inputs=candidate_inputs,
+                            calibration_ledger_snapshot=candidate_ledger,
+                            project_commit="0" * 40,
+                            project_tree_state="clean",
+                        )
 
     def test_fabricated_postcollection_pins_refuse_after_self_hash_repair(
         self,
@@ -1728,26 +2037,40 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )
             candidate = load_json(path)
             producer = candidate["producer_plans"][0]
-            decode_post = producer["cells"][0]["postcollection"]
-            decode_post["absolute_floor_full_precision"] = "6.294381135190098"
-            decode_post["absolute_floor_six_decimal"] = "6.294381"
-
             plan_id = producer["plan"]["plan_id"]
             source = inputs[plan_id]
             report = copy.deepcopy(source.cells["decode"].absolute.report)
-            report_row = next(
-                row
-                for row in report["floor_mint_postcollection"]["cells"]
-                if row["cell_id"] == producer["cells"][0]["cell_id"]
-            )
-            report_row["absolute_floor_full_precision"] = (
-                "6.294381135190098"
-            )
-            report_row["absolute_floor_six_decimal"] = "6.294381"
+            report["floor_mint_postcollection"] = {
+                "observed_drift_s": "0.002000",
+                "applied_allowance_s": "0.010818",
+                "absolute_floor_six_decimal": "6.294381",
+                "comparative_floor_six_decimal": "13.998038",
+                "operative_floor_six_decimal": "13.998038",
+            }
+            for report_cell in report["cells"]:
+                report_cell["floor"]["drift_widened_guarded_floor_j"] += 0.000001
+                report_cell["operative_floor_j"] += 0.000001
             report_sha256 = _fixture_artifact_sha256(report)
             for cell_pin in producer["cells"]:
-                cell_pin["postcollection"]["extraction_report_sha256"] = (
-                    report_sha256
+                post = cell_pin["postcollection"]
+                post.update(
+                    {
+                        "pre_receipt_sha256": "0" * 64,
+                        "pre_content_sha256": "1" * 64,
+                        "post_receipt_sha256": "2" * 64,
+                        "post_content_sha256": "3" * 64,
+                        "bracket_binding_sha256": "4" * 64,
+                        "terminal_ledger_head_sha256": "5" * 64,
+                        "observed_drift_s": "0.002000",
+                        "applied_allowance_s": "0.010818",
+                        "extraction_report_sha256": report_sha256,
+                        "absolute_floor_full_precision": "6.294381135190098",
+                        "comparative_floor_full_precision": "13.998037715259254",
+                        "operative_floor_full_precision": "13.998037715259254",
+                        "absolute_floor_six_decimal": "6.294381",
+                        "comparative_floor_six_decimal": "13.998038",
+                        "operative_floor_six_decimal": "13.998038",
+                    }
                 )
             updated_cells = {
                 role: generalized.V2CellComponents(
@@ -1775,7 +2098,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
             candidate_path, candidate_digest = write_pinset(root, candidate)
             with self.assertRaisesRegex(
                 generalized.MintError,
-                "absolute full-precision value mismatch",
+                "unknown keys.*floor_mint_postcollection",
             ):
                 generalized.mint_multi_cell_authenticated_artifact(
                     pinset_path=candidate_path,
@@ -1889,6 +2212,34 @@ class V2PinsetAndMintTests(unittest.TestCase):
             self.assertIn("requires --v2-input-manifest", stderr.getvalue())
 
     def test_production_cli_mints_and_names_every_custody_mismatch(self) -> None:
+        self.enterContext(
+            mock.patch.object(
+                generalized,
+                "_actual_v2_git_state",
+                return_value=("0" * 40, True),
+            )
+        )
+
+        def validate_binding(binding, snapshot, **_kwargs):
+            resolved = []
+            for role in ("pre", "post"):
+                receipt = binding["endpoints"][role]["receipt_digest"]
+                resolved.append(
+                    next(
+                        observation
+                        for observation in snapshot.observations
+                        if observation.receipt_digest == receipt
+                    )
+                )
+            return tuple(resolved)
+
+        self.enterContext(
+            mock.patch.object(
+                generalized,
+                "validate_calibration_bracket_binding",
+                side_effect=validate_binding,
+            )
+        )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             pinset_path, pinset_sha256, manifest_path, load_test_core = (
@@ -1927,6 +2278,16 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 )
             self.assertTrue((root / "correct-floor.json").is_file())
             self.assertTrue((root / "correct-single-count.txt").is_file())
+            minted = load_json(root / "correct-floor.json")
+            self.assertTrue(
+                minted["provenance"]["implementation"][
+                    "head_pin_commit_contained_in_origin_main"
+                ]
+            )
+            self.assertEqual(
+                minted["provenance"]["assurance"],
+                generalized.V2_ASSURANCE_PROFILE,
+            )
 
             mismatch_values = {
                 "pre_receipt_sha256": "0" * 64,
@@ -2021,6 +2382,8 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 binding["plan_sha256"] = plan_sha256
                 producer_evidence_root = root / f"{plan_id}-root"
                 producer_evidence_root.mkdir()
+                campaign_path = producer_evidence_root / "campaign_log.jsonl"
+                campaign_path.write_text("{}\n", encoding="utf-8")
                 binding["runs_root"] = str(
                     producer_evidence_root.resolve(strict=False)
                 )
@@ -2054,17 +2417,24 @@ class V2PinsetAndMintTests(unittest.TestCase):
                             "order_manifest": str(root / f"{label}-order.json"),
                         }
                         for field in ("report", "spec", "order_manifest"):
+                            value = {
+                                "report": component.report,
+                                "spec": component.spec,
+                                "order_manifest": component.order_manifest,
+                            }[field]
                             Path(paths[field]).write_text(
-                                f"{component.calibration_cell_id}:{field}\n",
+                                json.dumps(value, indent=2, sort_keys=True) + "\n",
                                 encoding="utf-8",
                             )
                         component_rows[component_name] = paths
-                        component_by_cell_id[
-                            component.calibration_cell_id
-                        ] = component
-                        expected_report_text[
-                            component.calibration_cell_id
-                        ] = Path(paths["report"]).read_text(encoding="utf-8")
+                        source_key = (
+                            component.calibration_cell_id,
+                            str(producer_evidence_root.resolve()),
+                        )
+                        component_by_cell_id[source_key] = component
+                        expected_report_text[source_key] = Path(
+                            paths["report"]
+                        ).read_text(encoding="utf-8")
                     cell_pin["postcollection"][
                         "bracket_binding_sha256"
                     ] = binding_sha256
@@ -2117,10 +2487,14 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )
 
             def authenticate(paths, **kwargs):
-                expected = component_by_cell_id[paths.calibration_cell_id]
+                source_key = (
+                    paths.calibration_cell_id,
+                    str(paths.evidence_root.resolve()),
+                )
+                expected = component_by_cell_id[source_key]
                 self.assertEqual(
                     paths.report_path.read_text(encoding="utf-8"),
-                    expected_report_text[paths.calibration_cell_id],
+                    expected_report_text[source_key],
                 )
                 self.assertEqual(
                     kwargs["expected_consumption_semantics_id"],
@@ -2129,7 +2503,17 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 self.assertIs(
                     kwargs["calibration_ledger_snapshot"], ledger_snapshot
                 )
-                return expected
+                return replace(
+                    expected,
+                    report_sha256=file_sha256(paths.report_path),
+                    spec_sha256=file_sha256(paths.spec_path),
+                    order_manifest_sha256=file_sha256(
+                        paths.order_manifest_path
+                    ),
+                    campaign_log_sha256=file_sha256(
+                        paths.evidence_root / "campaign_log.jsonl"
+                    ),
+                )
 
             component_core = SimpleNamespace(
                 MintError=mint1.MintError,
@@ -2146,6 +2530,19 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     generalized,
                     "_configured_core",
                     return_value=component_core,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_v2_spec_member_ids",
+                    return_value=(),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "validate_calibration_bracket_binding",
+                    side_effect=lambda binding, _snapshot, **_kwargs: (
+                        next(iter(source_inputs.values())).authenticated_pre_observation,
+                        next(iter(source_inputs.values())).authenticated_post_observation,
+                    ),
                 ),
             ):
                 authenticated, roots, observed_snapshot = (

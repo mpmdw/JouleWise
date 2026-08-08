@@ -854,6 +854,162 @@ class CellReport:
         return row
 
 
+# D117-POSTCOLLECTION-TRUST-01: this is the closed subset of the extraction
+# wire consumed by the generalized v2 mint.  It deliberately describes the
+# report the governed extractor already emits; it does not add a mint-owned
+# certificate or duplicate any domain authority.
+_D117_MINT_REPORT_KEYS = {
+    "schema_version",
+    "spec_schema_version",
+    "runs_root",
+    "manifest_id",
+    "consumption_semantics_id",
+    "consumption_provenance",
+    "governance",
+    "cells",
+    "spec_membership_refusals",
+    "idle_admission_refusals",
+    "whole_window_drift_allowances",
+    "all_cells_extractable",
+}
+_D117_MINT_REPORT_OPTIONAL_KEYS = {"single_count_discipline"}
+_D117_MINT_CELL_KEYS = {
+    "cell_id",
+    "kind",
+    "metric",
+    "window_class",
+    "cap_hit_policy",
+    "n_planned",
+    "n_admitted",
+    "excluded_slots",
+    "extractable",
+    "refusal_reasons",
+    "floor",
+    "claim_family",
+    "whole_window_drift_allowance",
+    "operative_floor_j",
+    "anchor_shift_bound_max_j",
+    "members",
+}
+_D117_MINT_CELL_OPTIONAL_KEYS = {
+    "floor_conditions",
+    "floor_source",
+    "floor_limit_class",
+    "point_floor_diagnostic",
+    "single_count_discipline",
+}
+_D117_MINT_FLOOR_KEYS = {
+    "kind",
+    "n",
+    "mean_j",
+    "deviations_j",
+    "sample_stddev_j",
+    "max_abs_deviation_j",
+    "t_critical",
+    "prediction_component_j",
+    "unguarded_floor_j",
+    "guard_factor",
+    "guarded_floor_j",
+    "admissible_half_widths_j",
+    "corner_widened_unguarded_floor_j",
+    "corner_widened_guarded_floor_j",
+    "smoke_only",
+}
+_D117_MINT_FLOOR_OPTIONAL_KEYS = {
+    "whole_window_drift_allowance_j",
+    "whole_window_drift_allowance_provenance",
+    "drift_widened_unguarded_floor_j",
+    "drift_widened_guarded_floor_j",
+}
+_D117_MINT_MEMBER_KEYS = {
+    "slot",
+    "bundle_id",
+    "block_id",
+    "position",
+    "metric_value_j",
+    "cooldown_result",
+    "cooldown_verified",
+    "cap_hit",
+    "excluded",
+    "reasons",
+    "anchor_shift_bound_j",
+    "operative_anchor_envelope",
+    "consumption_provenance",
+    "summary_sha256",
+    "bundle_sha256",
+    "config_sha256",
+}
+
+
+def _d117_closed_keys(
+    value: object,
+    required: set[str],
+    optional: set[str],
+    where: str,
+) -> list[str]:
+    if not isinstance(value, Mapping):
+        return [f"{where}: must be an object"]
+    keys = set(value)
+    missing = sorted(required - keys)
+    unknown = sorted(keys - required - optional)
+    errors = [f"{where}: missing required keys {missing}"] if missing else []
+    if unknown:
+        errors.append(f"{where}: unknown keys {unknown}")
+    return errors
+
+
+def validate_d117_mint_consumption_report(value: object) -> list[str]:
+    """Validate the recursively closed report profile used only by v2 minting."""
+
+    errors = _d117_closed_keys(
+        value,
+        _D117_MINT_REPORT_KEYS,
+        _D117_MINT_REPORT_OPTIONAL_KEYS,
+        "extraction report",
+    )
+    if errors or not isinstance(value, Mapping):
+        return errors
+    cells = value.get("cells")
+    if not isinstance(cells, list) or not cells:
+        return [*errors, "extraction report.cells: must be a nonempty array"]
+    for cell_index, cell in enumerate(cells):
+        cell_where = f"extraction report.cells[{cell_index}]"
+        errors.extend(
+            _d117_closed_keys(
+                cell,
+                _D117_MINT_CELL_KEYS,
+                _D117_MINT_CELL_OPTIONAL_KEYS,
+                cell_where,
+            )
+        )
+        if not isinstance(cell, Mapping):
+            continue
+        floor = cell.get("floor")
+        if floor is not None:
+            errors.extend(
+                _d117_closed_keys(
+                    floor,
+                    _D117_MINT_FLOOR_KEYS,
+                    _D117_MINT_FLOOR_OPTIONAL_KEYS,
+                    f"{cell_where}.floor",
+                )
+            )
+        members = cell.get("members")
+        if not isinstance(members, list):
+            errors.append(f"{cell_where}.members: must be an array")
+            continue
+        for member_index, member in enumerate(members):
+            errors.extend(
+                _d117_closed_keys(
+                    member,
+                    _D117_MINT_MEMBER_KEYS,
+                    set(),
+                    f"{cell_where}.members[{member_index}]",
+                )
+            )
+    return errors
+
+
 def _sole_attribution_limit(
     refusals: Sequence[str],
     floor: FloorEstimate | None,
