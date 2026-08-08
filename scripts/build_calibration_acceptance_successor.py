@@ -50,6 +50,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     _probe_observation_universe,
     _valid_acceptance_bound,
     _valid_registry,
+    _verified_acceptance_after_ledger_residue,
     derive_successor_decimal_derivation,
     load_calibration_acceptance_registry,
     probe_calibration_acceptance_trigger,
@@ -187,7 +188,6 @@ def _load_parent_artifact(
         raise ValueError("active acceptance artifact is unreadable") from exc
     if (
         hashlib.sha256(raw).hexdigest() != active["artifact_sha256"]
-        or not _valid_acceptance_bound(artifact)
     ):
         raise ValueError("active acceptance artifact is not registry-authenticated")
     return active, artifact
@@ -493,8 +493,23 @@ def build_calibration_acceptance_successor(
         "decimal_derivation": derivation,
     }
     artifact["derivation_sha256"] = _canonical_sha256(artifact)
-    if not _valid_acceptance_bound(artifact):
-        raise ValueError("constructed successor fails the production loader")
+    attestation_violations: list[str] = []
+    if not _valid_acceptance_bound(
+        artifact,
+        parent=parent,
+        parent_artifact_sha256=str(parent_entry["artifact_sha256"]),
+        violations=attestation_violations,
+    ):
+        raise ValueError(attestation_violations[0])
+    verified, ledger_violations = _verified_acceptance_after_ledger_residue(
+        artifact,
+        ledger_snapshot,
+        observed_identity_epoch=observed_identity_epoch,
+        verify_custody=verify_custody,
+        require_terminal_cutoff=True,
+    )
+    if verified is None:
+        raise ValueError(ledger_violations[0])
     artifact_bytes = _pretty_json_bytes(artifact)
     artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
 

@@ -62,9 +62,14 @@ from scripts.calibration_ledger_bootstrap import (
 )
 
 
-_REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
-_REAL_D079_CUSTODY_MANIFEST = Path(
-    "/private/tmp/d079-custody-manifest.lead.json"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REAL_D079_TABLE = _REPO_ROOT / (
+    "docs/process_traces/2026-08-06-d079-issuance-coldgate/"
+    "ISSUANCE-disposition-table.json"
+)
+_REAL_D079_CUSTODY_MANIFEST = _REPO_ROOT / (
+    "docs/process_traces/2026-08-06-d079-issuance-coldgate/"
+    "ISSUANCE-custody-manifest.json"
 )
 _REAL_D079_TABLE_SHA256 = (
     "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
@@ -612,10 +617,6 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         self.assertFalse(_valid_acceptance_bound(artifact))
 
-    @unittest.skipUnless(
-        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
-        "lead-reviewed D-079 import inputs are unavailable",
-    )
     def test_production_path_authenticates_real_76_receipt_import_prefix(
         self,
     ) -> None:
@@ -719,10 +720,6 @@ class CalibrationBracketingTests(unittest.TestCase):
             result["acceptance"]["ledger_snapshot"]["baseline_sequence"], 76
         )
 
-    @unittest.skipUnless(
-        _REAL_D079_TABLE.is_file() and _REAL_D079_CUSTODY_MANIFEST.is_file(),
-        "lead-reviewed D-079 import inputs are unavailable",
-    )
     def test_rehashed_terminal_receipt_twin_and_wrong_committed_pin_refuse(self) -> None:
         def receipt(**fields) -> dict:
             value = dict(fields)
@@ -1687,6 +1684,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             "bracket_screen_s",
             "maximum_budgetable_drift_s",
             "max_budgetable_excess_s",
+            "preflight_level_screen_s",
         ):
             cases[f"missing-{missing}"] = {missing: None}
         for name, changes in cases.items():
@@ -1706,8 +1704,6 @@ class CalibrationBracketingTests(unittest.TestCase):
                     }
                 )
                 self.assertFalse(_valid_acceptance_bound(artifact))
-                if name.startswith("missing-"):
-                    continue
                 with patch(
                     "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
                     return_value=artifact,

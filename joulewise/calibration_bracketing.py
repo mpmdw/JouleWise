@@ -19,6 +19,18 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise.bundle_read import BundleReadError, BundleReader
+from joulewise.calibration_acceptance_attestation import (
+    ACCEPTANCE_ATTESTATION_FIELDS,
+    B_TO_L,
+    CUSTODY,
+    LEDGER,
+    R,
+    S,
+    REGISTRY_WIRE_SCHEMA,
+    SUCCESSOR_WIRE_SCHEMA,
+    VerifiedAcceptance,
+    acceptance_attestation_pass,
+)
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
     LEDGER_SCHEMA,
@@ -155,6 +167,7 @@ SUCCESSOR_DECISION_IDS = (
     "D-102",
     "D-109",
     "D-117",
+    "D-125",
     "D-126",
 )
 
@@ -197,8 +210,9 @@ class CalibrationAcceptanceNumericalRefusal(ValueError):
 class CalibrationAcceptanceRegistryRefusal(ValueError):
     """The rotating registry authority failed with a stable reason code."""
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, reason: str, violations: Sequence[str] = ()) -> None:
         self.reason = reason
+        self.violations = tuple(violations) or (reason,)
         super().__init__(reason)
 
 
@@ -742,7 +756,7 @@ def _artifact_derivation_content_ids(
     return ids if None not in ids and all(_valid_sha256(item) for item in ids) else None
 
 
-def _valid_registry(value: Any) -> bool:
+def _valid_registry_shape(value: Any) -> bool:
     if (
         not isinstance(value, Mapping)
         or set(value) != {"schema_version", "authority", "entries"}
@@ -852,9 +866,209 @@ def _valid_registry(value: Any) -> bool:
         roots == 1
         and len(leaves) == 1
         and active_ids == leaves
+        and [entry["generation"] for entry in value["entries"]]
+        == sorted(entry["generation"] for entry in value["entries"])
         and {entry["generation"] for entry in value["entries"]}
         == set(range(1, len(value["entries"]) + 1))
     )
+
+
+def _registry_attestation_violations(value: Any) -> tuple[str, ...]:
+    """Return all independently named registry-shape violations."""
+
+    violations: list[str] = []
+    if not isinstance(value, Mapping):
+        return ("acceptance_registry_schema_or_ancestry_invalid",)
+    if value.get("schema_version") != ACCEPTANCE_REGISTRY_SCHEMA:
+        violations.append(_attestation_code("registry.schema_version"))
+    if value.get("authority") != ACCEPTANCE_REGISTRY_AUTHORITY:
+        violations.append(_attestation_code("registry.authority"))
+    entries = value.get("entries")
+    if isinstance(entries, list):
+        expected_entry_keys = {
+            "acceptance_id",
+            "artifact_path",
+            "artifact_sha256",
+            "derivation_sha256",
+            "artifact_schema",
+            "generation",
+            "active",
+            "parent_acceptance_id",
+            "parent_artifact_sha256",
+            "count_boundary_rule",
+            "ledger_cutoff",
+        }
+        for entry in entries:
+            if not isinstance(entry, Mapping) or set(entry) != expected_entry_keys:
+                violations.append("acceptance_registry_schema_or_ancestry_invalid")
+                continue
+            field_checks = (
+                (
+                    "registry.entries[*].acceptance_id",
+                    isinstance(entry.get("acceptance_id"), str)
+                    and bool(entry.get("acceptance_id")),
+                ),
+                (
+                    "registry.entries[*].artifact_path",
+                    _repository_relative_path(entry.get("artifact_path")) is not None
+                    and str(entry.get("artifact_path")).startswith(
+                        "configs/calibration/"
+                    ),
+                ),
+                (
+                    "registry.entries[*].artifact_sha256",
+                    _valid_sha256(entry.get("artifact_sha256")),
+                ),
+                (
+                    "registry.entries[*].derivation_sha256",
+                    _valid_sha256(entry.get("derivation_sha256")),
+                ),
+                (
+                    "registry.entries[*].artifact_schema",
+                    entry.get("artifact_schema")
+                    in {ACCEPTANCE_BOUND_SCHEMA, ACCEPTANCE_SUCCESSOR_SCHEMA},
+                ),
+                (
+                    "registry.entries[*].generation",
+                    isinstance(entry.get("generation"), int)
+                    and not isinstance(entry.get("generation"), bool)
+                    and entry["generation"] >= 1,
+                ),
+                (
+                    "registry.entries[*].active",
+                    isinstance(entry.get("active"), bool),
+                ),
+                (
+                    "registry.entries[*].count_boundary_rule",
+                    entry.get("count_boundary_rule")
+                    in _SUPPORTED_COUNT_BOUNDARY_RULES,
+                ),
+            )
+            for pattern, valid in field_checks:
+                if not valid:
+                    violations.append(_attestation_code(pattern))
+            generation = entry.get("generation")
+            parent_id = entry.get("parent_acceptance_id")
+            parent_sha = entry.get("parent_artifact_sha256")
+            if generation == 1:
+                if parent_id is not None:
+                    violations.append(
+                        _attestation_code("registry.entries[*].parent_acceptance_id")
+                    )
+                if parent_sha is not None:
+                    violations.append(
+                        _attestation_code("registry.entries[*].parent_artifact_sha256")
+                    )
+            else:
+                if not isinstance(parent_id, str) or not parent_id:
+                    violations.append(
+                        _attestation_code("registry.entries[*].parent_acceptance_id")
+                    )
+                if not _valid_sha256(parent_sha):
+                    violations.append(
+                        _attestation_code("registry.entries[*].parent_artifact_sha256")
+                    )
+            cutoff = entry.get("ledger_cutoff")
+            if isinstance(cutoff, Mapping):
+                cutoff_checks = (
+                    (
+                        "registry.entries[*].ledger_cutoff.sequence",
+                        isinstance(cutoff.get("sequence"), int)
+                        and not isinstance(cutoff.get("sequence"), bool)
+                        and cutoff["sequence"] >= 1,
+                    ),
+                    (
+                        "registry.entries[*].ledger_cutoff.head_digest",
+                        _valid_sha256(cutoff.get("head_digest")),
+                    ),
+                    (
+                        "registry.entries[*].ledger_cutoff.ledger_schema",
+                        cutoff.get("ledger_schema") == LEDGER_SCHEMA,
+                    ),
+                )
+                for pattern, valid in cutoff_checks:
+                    if not valid:
+                        violations.append(_attestation_code(pattern))
+        active_ids = [
+            entry.get("acceptance_id")
+            for entry in entries
+            if isinstance(entry, Mapping) and entry.get("active") is True
+        ]
+        if len(active_ids) != 1:
+            violations.append("registry_active_cardinality_invalid")
+        if all(
+            isinstance(entry, Mapping)
+            and isinstance(entry.get("acceptance_id"), str)
+            and "parent_acceptance_id" in entry
+            for entry in entries
+        ):
+            child_ids = {
+                entry.get("parent_acceptance_id")
+                for entry in entries
+                if entry.get("parent_acceptance_id") is not None
+            }
+            leaves = [
+                entry["acceptance_id"]
+                for entry in entries
+                if entry["acceptance_id"] not in child_ids
+            ]
+            if active_ids != leaves:
+                violations.append("registry_active_leaf_invalid")
+            entry_ids = {entry["acceptance_id"] for entry in entries}
+            entries_by_id = {
+                entry["acceptance_id"]: entry for entry in entries
+            }
+            if any(
+                entry.get("parent_acceptance_id") is not None
+                and entry.get("parent_acceptance_id") not in entry_ids
+                for entry in entries
+            ):
+                violations.append(
+                    _attestation_code("registry.entries[*].acceptance_id")
+                )
+                violations.append(
+                    _attestation_code("registry.entries[*].parent_acceptance_id")
+                )
+            if any(
+                (parent := entries_by_id.get(entry.get("parent_acceptance_id")))
+                is not None
+                and entry.get("parent_artifact_sha256")
+                != parent.get("artifact_sha256")
+                for entry in entries
+            ):
+                violations.append(
+                    _attestation_code("registry.entries[*].artifact_sha256")
+                )
+                violations.append(
+                    _attestation_code("registry.entries[*].parent_artifact_sha256")
+                )
+        generations = [
+            entry.get("generation")
+            for entry in entries
+            if isinstance(entry, Mapping)
+        ]
+        if generations != sorted(
+            generation for generation in generations if isinstance(generation, int)
+        ):
+            violations.append("registry_generation_order_invalid")
+        if generations != list(range(1, len(entries) + 1)):
+            violations.append(_attestation_code("registry.entries[*].generation"))
+    enrollment = acceptance_attestation_pass(
+        value,
+        schema=REGISTRY_WIRE_SCHEMA,
+        layer=R,
+    )
+    violations.extend(enrollment.violations)
+    if not _valid_registry_shape(value) and not violations:
+        violations.append("acceptance_registry_schema_or_ancestry_invalid")
+    return tuple(dict.fromkeys(violations))
+
+
+def _valid_registry(value: Any, *, violations: list[str] | None = None) -> bool:
+    reasons = _registry_attestation_violations(value)
+    if violations is not None:
+        violations.extend(reason for reason in reasons if reason not in violations)
+    return not reasons
 
 
 def _git_head_bytes(path: Path, repo_root: Path) -> bytes | None:
@@ -903,13 +1117,15 @@ def load_calibration_acceptance_registry(
         raise CalibrationAcceptanceRegistryRefusal(
             "acceptance_registry_missing_commit"
         )
-    if not _valid_registry(value):
+    registry_violations = _registry_attestation_violations(value)
+    if registry_violations:
         raise CalibrationAcceptanceRegistryRefusal(
-            "acceptance_registry_schema_or_ancestry_invalid"
+            registry_violations[0], registry_violations
         )
     entries_by_id = {entry["acceptance_id"]: entry for entry in value["entries"]}
     artifacts_by_id: dict[str, Mapping[str, Any]] = {}
-    for entry in value["entries"]:
+    artifact_raw_by_id: dict[str, bytes] = {}
+    for entry in sorted(value["entries"], key=lambda item: item["generation"]):
         artifact_path = repo_root / entry["artifact_path"]
         if _path_has_symlink_component(artifact_path.absolute(), repo_root):
             raise CalibrationAcceptanceRegistryRefusal(
@@ -922,7 +1138,7 @@ def load_calibration_acceptance_registry(
             artifact = json.loads(artifact_raw)
         except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
             raise CalibrationAcceptanceRegistryRefusal(
-                "acceptance_registry_artifact_unreadable_or_outside_repository"
+                _attestation_code("registry.entries[*].artifact_path")
             ) from None
         if (
             require_committed
@@ -931,22 +1147,71 @@ def load_calibration_acceptance_registry(
             raise CalibrationAcceptanceRegistryRefusal(
                 "acceptance_registry_artifact_missing_commit"
             )
-        if (
-            hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]
-            or not _valid_acceptance_bound(artifact)
-            or artifact.get("acceptance_id") != entry["acceptance_id"]
-            or artifact.get("schema_version") != entry["artifact_schema"]
-            or artifact.get("derivation_sha256") != entry["derivation_sha256"]
-            or {
-                key: artifact["ledger_cutoff"].get(key)
-                for key in ("sequence", "head_digest", "ledger_schema")
-            }
-            != entry["ledger_cutoff"]
-        ):
+        if hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]:
             raise CalibrationAcceptanceRegistryRefusal(
-                "acceptance_registry_artifact_authentication_failed"
+                _attestation_code("registry.entries[*].artifact_sha256")
             )
+        parent = artifacts_by_id.get(entry.get("parent_acceptance_id"))
+        parent_raw = artifact_raw_by_id.get(entry.get("parent_acceptance_id"))
+        artifact_violations: list[str] = []
+        artifact_valid = _valid_acceptance_bound(
+            artifact,
+            parent=parent,
+            parent_artifact_sha256=(
+                hashlib.sha256(parent_raw).hexdigest()
+                if parent_raw is not None
+                else None
+            ),
+            count_boundary_rule=str(entry["count_boundary_rule"]),
+            violations=artifact_violations,
+        )
+        if not artifact_valid:
+            first = artifact_violations[0]
+            registry_reason = (
+                "acceptance_registry_trigger_judgment_mismatch"
+                if first == "trigger_judgment_mismatch"
+                else f"acceptance_registry_{first}"
+            )
+            raise CalibrationAcceptanceRegistryRefusal(
+                registry_reason,
+                tuple(f"acceptance_registry_{reason}" for reason in artifact_violations),
+            )
+        entry_comparisons = (
+            (
+                "registry.entries[*].acceptance_id",
+                artifact.get("acceptance_id") == entry["acceptance_id"],
+            ),
+            (
+                "registry.entries[*].artifact_schema",
+                artifact.get("schema_version") == entry["artifact_schema"],
+            ),
+            (
+                "registry.entries[*].derivation_sha256",
+                artifact.get("derivation_sha256") == entry["derivation_sha256"],
+            ),
+            (
+                "registry.entries[*].ledger_cutoff.sequence",
+                artifact.get("ledger_cutoff", {}).get("sequence")
+                == entry["ledger_cutoff"]["sequence"],
+            ),
+            (
+                "registry.entries[*].ledger_cutoff.head_digest",
+                artifact.get("ledger_cutoff", {}).get("head_digest")
+                == entry["ledger_cutoff"]["head_digest"],
+            ),
+            (
+                "registry.entries[*].ledger_cutoff.ledger_schema",
+                artifact.get("ledger_cutoff", {}).get("ledger_schema")
+                == entry["ledger_cutoff"]["ledger_schema"],
+            ),
+        )
+        for pattern, valid in entry_comparisons:
+            if not valid:
+                raise CalibrationAcceptanceRegistryRefusal(
+                    _attestation_code(pattern)
+                )
         artifacts_by_id[entry["acceptance_id"]] = artifact
+        artifact_raw_by_id[entry["acceptance_id"]] = artifact_raw
         if entry["artifact_schema"] == ACCEPTANCE_SUCCESSOR_SCHEMA:
             filename_match = _SUCCESSOR_ARTIFACT_NAME_RE.fullmatch(
                 Path(entry["artifact_path"]).name
@@ -1477,7 +1742,411 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
     )
 
 
-def _valid_acceptance_bound(value: Any) -> bool:
+def _attestation_code(pattern: str) -> str:
+    spec = ACCEPTANCE_ATTESTATION_FIELDS[pattern]
+    assert spec.stable_failure_code is not None
+    return spec.stable_failure_code
+
+
+def _decimal_leaf_values(
+    value: Any, prefix: str = "decimal_derivation"
+) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            result.update(_decimal_leaf_values(item, f"{prefix}.{key}"))
+        return result
+    return {prefix: value}
+
+
+def _expected_successor_triggers(
+    child: Mapping[str, Any], parent: Mapping[str, Any]
+) -> list[str] | None:
+    """Recompute the exact two-universe trigger set under the parent."""
+
+    try:
+        child_rows = child["prior_observation_set"]["observations"]
+        parent_rows = parent["prior_observation_set"]["observations"]
+        catalog = child["prior_observation_set"]["epoch_catalog"]
+        parent_ids = {row["content_id"] for row in parent_rows}
+        parent_values = _artifact_corpus_values(parent)
+        if not parent_values:
+            return None
+        new_rows = [row for row in child_rows if row["content_id"] not in parent_ids]
+        range_trigger = False
+        for row in new_rows:
+            attempts = row.get("attempts")
+            epoch = catalog.get(row.get("epoch_id"))
+            if (
+                row.get("disposition") == "valid"
+                and isinstance(epoch, Mapping)
+                and dict(epoch) == dict(parent["identity_epoch"])
+                and isinstance(attempts, list)
+                and attempts
+                and (bound := _decimal(attempts[0].get("exact_bound_lexeme_s")))
+                is not None
+                and (bound < min(parent_values) or bound > max(parent_values))
+            ):
+                range_trigger = True
+        source_count = sum(
+            row.get("disposition") == "valid"
+            and isinstance(catalog.get(row.get("epoch_id")), Mapping)
+            and dict(catalog[row["epoch_id"]]) == dict(parent["identity_epoch"])
+            for row in child_rows
+        )
+        count_trigger = source_count >= _artifact_count_boundary(parent)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return [
+        trigger
+        for enabled, trigger in (
+            (
+                range_trigger,
+                "new_valid_same_identity_capture_expands_observed_range",
+            ),
+            (
+                count_trigger,
+                "content_distinct_valid_same_epoch_count_boundary",
+            ),
+        )
+        if enabled
+    ]
+
+
+def _successor_attestation_failed_patterns(
+    value: Mapping[str, Any],
+    *,
+    parent: Mapping[str, Any],
+    parent_artifact_sha256: str,
+    count_boundary_rule: str,
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    failed: dict[str, str] = {}
+    global_violations: list[str] = []
+
+    def check(pattern: str, condition: bool) -> None:
+        if not condition:
+            failed[pattern] = _attestation_code(pattern)
+
+    try:
+        cutoff = value["ledger_cutoff"]
+        lineage = value["lineage"]
+        judgment = lineage["trigger_judgment"]
+        prospective = value["prospective_rederivation"]
+        count = prospective["count_trigger"]
+        corpus = value["derivation_corpus"]
+        prior = value["prior_observation_set"]
+    except (KeyError, TypeError):
+        return failed, ("acceptance_successor_schema_invalid",)
+
+    check("schema_version", value.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA)
+    expected_id = (
+        f"d079_calibration_acceptance_v3_s{cutoff.get('sequence')}_"
+        f"{str(cutoff.get('head_digest'))[:16]}"
+    )
+    check("acceptance_id", value.get("acceptance_id") == expected_id)
+    id_match = re.fullmatch(
+        r"d079_calibration_acceptance_v3_s([1-9][0-9]*)_([0-9a-f]{16})",
+        str(value.get("acceptance_id")),
+    )
+    check(
+        "ledger_cutoff.sequence",
+        id_match is not None and cutoff.get("sequence") == int(id_match.group(1)),
+    )
+    check(
+        "ledger_cutoff.head_digest",
+        id_match is not None
+        and isinstance(cutoff.get("head_digest"), str)
+        and cutoff["head_digest"].startswith(id_match.group(2)),
+    )
+    check("decision_ids[*]", value.get("decision_ids") == list(SUCCESSOR_DECISION_IDS))
+    check("artifact_role", value.get("artifact_role") == "issued")
+    issuance = value.get("issuance", {})
+    check("issuance.status", issuance.get("status") == "issued")
+    check("issuance.claim_eligible", issuance.get("claim_eligible") is True)
+    check("ledger_cutoff.ledger_schema", cutoff.get("ledger_schema") == LEDGER_SCHEMA)
+    check("ledger_cutoff.role", cutoff.get("role") == "issued_acceptance_baseline")
+
+    parent_generation = (
+        parent.get("lineage", {}).get("generation")
+        if parent.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA
+        else 1
+    )
+    expected_root = (
+        parent.get("lineage", {}).get("root_acceptance_id")
+        if parent.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA
+        else parent.get("acceptance_id")
+    )
+    check("lineage.generation", lineage.get("generation") == parent_generation + 1)
+    check("lineage.root_acceptance_id", lineage.get("root_acceptance_id") == expected_root)
+    check("lineage.parent_acceptance_id", lineage.get("parent_acceptance_id") == parent.get("acceptance_id"))
+    check("lineage.parent_artifact_sha256", lineage.get("parent_artifact_sha256") == parent_artifact_sha256)
+    check("lineage.parent_derivation_sha256", lineage.get("parent_derivation_sha256") == parent.get("derivation_sha256"))
+    parent_cutoff = {
+        key: parent.get("ledger_cutoff", {}).get(key)
+        for key in ("sequence", "head_digest", "ledger_schema")
+    }
+    for key in ("sequence", "head_digest", "ledger_schema"):
+        check(
+            f"lineage.parent_ledger_cutoff.{key}",
+            lineage.get("parent_ledger_cutoff", {}).get(key) == parent_cutoff[key],
+        )
+    check(
+        "lineage.trigger_judgment.judged_under_acceptance_id",
+        judgment.get("judged_under_acceptance_id") == parent.get("acceptance_id"),
+    )
+    check(
+        "lineage.trigger_judgment.judged_under_artifact_sha256",
+        judgment.get("judged_under_artifact_sha256") == parent_artifact_sha256,
+    )
+
+    expected_triggers = _expected_successor_triggers(value, parent)
+    check(
+        "lineage.trigger_judgment.triggers[*]",
+        expected_triggers is not None and judgment.get("triggers") == expected_triggers,
+    )
+    check(
+        "lineage.trigger_judgment.result",
+        expected_triggers is not None
+        and bool(expected_triggers)
+        and judgment.get("result") == "successor_required",
+    )
+
+    parent_basis = _artifact_derivation_content_ids(parent)
+    child_basis = _artifact_derivation_content_ids(value)
+    expected_new_ids = (
+        sorted(child_basis - parent_basis)
+        if parent_basis is not None and child_basis is not None
+        else None
+    )
+    check(
+        "lineage.trigger_judgment.new_content_ids[*]",
+        expected_new_ids is not None
+        and judgment.get("new_content_ids") == expected_new_ids,
+    )
+
+    for field in ACCEPTANCE_IDENTITY_FIELDS:
+        check(
+            f"identity_epoch.{field}",
+            value.get("identity_epoch", {}).get(field)
+            == parent.get("identity_epoch", {}).get(field),
+        )
+    check(
+        "prospective_rederivation.calendar_expiry",
+        prospective.get("calendar_expiry") is None,
+    )
+    check(
+        "prospective_rederivation.trigger_observation_rule",
+        prospective.get("trigger_observation_rule")
+        == "judge_under_prior_artifact_never_self_fit",
+    )
+    check(
+        "prospective_rederivation.triggers[*]",
+        prospective.get("triggers")
+        == [
+            "identity_field_change",
+            "protocol_or_estimator_byte_change",
+            "new_valid_same_identity_capture_expands_observed_range",
+            "content_distinct_valid_same_epoch_count_boundary",
+            "new_systematic_failure_challenges_preflight_screen",
+        ],
+    )
+    check(
+        "prospective_rederivation.protocol_sha256",
+        prospective.get("protocol_sha256") == protocol_sha256(PROTOCOL_ID),
+    )
+    current_code = _current_estimator_code_sha256()
+    for path in ESTIMATOR_CODE_PATHS:
+        check(
+            f"prospective_rederivation.estimator_code_sha256.{path}",
+            prospective.get("estimator_code_sha256", {}).get(path)
+            == (current_code or {}).get(path),
+        )
+    check("prospective_rederivation.count_trigger.rule", count.get("rule") == count_boundary_rule)
+    check("prospective_rederivation.count_trigger.universe_rule", count.get("universe_rule") == SUCCESSOR_TRIGGER_UNIVERSE_RULE)
+
+    catalog = prior.get("epoch_catalog", {})
+    rows = prior.get("observations", [])
+    expected_count = sum(
+        isinstance(row, Mapping)
+        and row.get("disposition") == "valid"
+        and isinstance(catalog.get(row.get("epoch_id")), Mapping)
+        and dict(catalog[row["epoch_id"]]) == dict(parent.get("identity_epoch", {}))
+        for row in rows
+    )
+    check("prospective_rederivation.count_trigger.source_trigger_count", count.get("source_trigger_count") == expected_count)
+    try:
+        expected_boundary = _next_count_boundary(
+            parent_boundary=_artifact_count_boundary(parent),
+            trigger_count=expected_count,
+            rule=count_boundary_rule,
+        )
+    except ValueError:
+        expected_boundary = None
+    check("prospective_rederivation.count_trigger.next_boundary", count.get("next_boundary") == expected_boundary)
+    check("derivation_corpus.selection", corpus.get("selection") == SUCCESSOR_DERIVATION_BASIS_RULE)
+    check("derivation_corpus.n", corpus.get("n") == len(corpus.get("members", ())) and corpus.get("n", 0) >= SUCCESSOR_MINIMUM_CORPUS_SIZE)
+    check("prior_observation_set.cutoff.sequence", prior.get("cutoff", {}).get("sequence") == cutoff.get("sequence"))
+    check("prior_observation_set.cutoff.head_digest", prior.get("cutoff", {}).get("head_digest") == cutoff.get("head_digest"))
+    check("prior_observation_set.cutoff.ledger_schema", prior.get("cutoff", {}).get("ledger_schema") == cutoff.get("ledger_schema"))
+    check(
+        "prior_observation_set.content_identity_method",
+        prior.get("content_identity_method")
+        == "sha256(canonical_json({instrument_evidence.json,manifest.json} byte sha256s))",
+    )
+
+    expected_epoch_ids: set[str] = set()
+    for epoch_id, epoch in catalog.items():
+        if epoch_id == "active_epoch":
+            expected_epoch_id = "active_epoch"
+        else:
+            expected_epoch_id = (
+                "epoch_"
+                + hashlib.sha256(
+                    json.dumps(
+                        dict(epoch),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ).encode("utf-8")
+                ).hexdigest()[:16]
+            )
+        expected_epoch_ids.add(expected_epoch_id)
+        for field in ACCEPTANCE_IDENTITY_FIELDS:
+            check(
+                f"prior_observation_set.epoch_catalog[*].{field}",
+                isinstance(epoch, Mapping)
+                and field in epoch
+                and (
+                    epoch_id != "active_epoch"
+                    or epoch.get(field) == value.get("identity_epoch", {}).get(field)
+                ),
+            )
+    if set(catalog) != expected_epoch_ids:
+        for field in ACCEPTANCE_IDENTITY_FIELDS:
+            failed[f"prior_observation_set.epoch_catalog[*].{field}"] = _attestation_code(
+                f"prior_observation_set.epoch_catalog[*].{field}"
+            )
+
+    prior_by_id = {
+        row.get("content_id"): row for row in rows if isinstance(row, Mapping)
+    }
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        attempts = row.get("attempts", [])
+        representative = attempts[0] if isinstance(attempts, list) and attempts else {}
+        hashes = {
+            "manifest.json": representative.get("manifest_sha256"),
+            "instrument_evidence.json": representative.get(
+                "instrument_evidence_sha256"
+            ),
+        }
+        check(
+            "prior_observation_set.observations[*].content_id",
+            row.get("content_id") == content_id_from_artifact_hashes(hashes),
+        )
+        check(
+            "prior_observation_set.observations[*].representative_attempt_id",
+            row.get("representative_attempt_id") == representative.get("attempt_id"),
+        )
+        for attempt in attempts:
+            attempt_hashes = {
+                "manifest.json": attempt.get("manifest_sha256"),
+                "instrument_evidence.json": attempt.get(
+                    "instrument_evidence_sha256"
+                ),
+            }
+            check(
+                "prior_observation_set.observations[*].content_id",
+                row.get("content_id")
+                == content_id_from_artifact_hashes(attempt_hashes),
+            )
+    member_patterns = {
+        "attempt_id": "attempt_id",
+        "finalization_sequence": "finalization_sequence",
+        "receipt_digest": "receipt_digest",
+        "custody_locator": "custody_locator",
+        "b_fiducial_s": "exact_bound_lexeme_s",
+        "manifest_sha256": "manifest_sha256",
+        "instrument_evidence_sha256": "instrument_evidence_sha256",
+    }
+    for member in corpus.get("members", ()):
+        row = prior_by_id.get(member.get("content_id"), {})
+        attempts = row.get("attempts", []) if isinstance(row, Mapping) else []
+        representative = attempts[0] if attempts else {}
+        hashes = {
+            "manifest.json": member.get("manifest_sha256"),
+            "instrument_evidence.json": member.get("instrument_evidence_sha256"),
+        }
+        check(
+            "derivation_corpus.members[*].content_id",
+            member.get("content_id") == content_id_from_artifact_hashes(hashes),
+        )
+        for member_key, attempt_key in member_patterns.items():
+            check(
+                f"derivation_corpus.members[*].{member_key}",
+                member.get(member_key) == representative.get(attempt_key),
+            )
+
+    try:
+        expected_derivation = derive_successor_decimal_derivation(
+            corpus["members"],
+            parent_operatives=parent["decimal_derivation"]["ratified_operatives"],
+        )
+    except (ArithmeticError, InvalidOperation, KeyError, TypeError, ValueError):
+        expected_derivation = {}
+    actual_decimal = _decimal_leaf_values(value.get("decimal_derivation", {}))
+    expected_decimal = _decimal_leaf_values(expected_derivation)
+    for pattern in set(actual_decimal) | set(expected_decimal):
+        if pattern in ACCEPTANCE_ATTESTATION_FIELDS:
+            check(pattern, actual_decimal.get(pattern) == expected_decimal.get(pattern))
+    check(
+        "derivation_sha256",
+        value.get("derivation_sha256")
+        == _canonical_sha256(
+            {key: item for key, item in value.items() if key != "derivation_sha256"}
+        ),
+    )
+    if not _valid_successor_acceptance_bound(value) and not failed:
+        global_violations.append("acceptance_successor_schema_invalid")
+    return failed, tuple(global_violations)
+
+
+def _acceptance_attestation_violations(
+    value: Any,
+    *,
+    parent: Mapping[str, Any] | None = None,
+    parent_artifact_sha256: str | None = None,
+    count_boundary_rule: str | None = None,
+) -> tuple[str, ...]:
+    if not isinstance(value, Mapping):
+        return ("acceptance_artifact_not_a_mapping",)
+    successor_candidate = bool(
+        value.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA
+        or "lineage" in value
+        and "backfill_candidate" not in value
+    )
+    if not successor_candidate:
+        return () if _valid_acceptance_bound_legacy(value) else ("acceptance_legacy_schema_invalid",)
+    if parent is None or not _valid_sha256(parent_artifact_sha256):
+        return ("acceptance_parent_context_required",)
+    failed, global_violations = _successor_attestation_failed_patterns(
+        value,
+        parent=parent,
+        parent_artifact_sha256=str(parent_artifact_sha256),
+        count_boundary_rule=count_boundary_rule or SUCCESSOR_COUNT_BOUNDARY_RULE,
+    )
+    return acceptance_attestation_pass(
+        value,
+        schema=SUCCESSOR_WIRE_SCHEMA,
+        layer=S,
+        failed_patterns=failed,
+        global_violations=global_violations,
+    ).violations
+
+
+def _valid_acceptance_bound_legacy(value: Any) -> bool:
     """Validate the D-102 artifact from its decimal-source member table."""
 
     if not isinstance(value, Mapping):
@@ -1769,9 +2438,15 @@ def load_calibration_acceptance_bound(
             raw = requested.read_bytes()
         except OSError:
             return None
+        parent, parent_sha256 = _registry_parent_context(
+            registry, active, _REPO_ROOT
+        )
         return _acceptance_bound_from_authenticated_bytes(
             raw,
             expected_sha256=str(active["artifact_sha256"]),
+            parent=parent,
+            parent_artifact_sha256=parent_sha256,
+            count_boundary_rule=str(active["count_boundary_rule"]),
         )
 
     requested = Path(path)
@@ -1786,6 +2461,9 @@ def _acceptance_bound_from_authenticated_bytes(
     raw: bytes,
     *,
     expected_sha256: str | None = None,
+    parent: Mapping[str, Any] | None = None,
+    parent_artifact_sha256: str | None = None,
+    count_boundary_rule: str | None = None,
 ) -> dict[str, Any] | None:
     """Parse acceptance bytes only when their role-indexed pin authenticates."""
 
@@ -1811,9 +2489,40 @@ def _acceptance_bound_from_authenticated_bytes(
         }.get(role)
     if hashlib.sha256(raw).hexdigest() != authenticated_sha256:
         return None
-    if not _valid_acceptance_bound(value):
+    if not _valid_acceptance_bound(
+        value,
+        parent=parent,
+        parent_artifact_sha256=parent_artifact_sha256,
+        count_boundary_rule=count_boundary_rule,
+    ):
         return None
     return dict(value)
+
+
+def _registry_parent_context(
+    registry: Mapping[str, Any],
+    entry: Mapping[str, Any],
+    repo_root: Path,
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    parent_id = entry.get("parent_acceptance_id")
+    if parent_id is None:
+        return None, None
+    parent_entry = next(
+        (
+            candidate
+            for candidate in registry.get("entries", ())
+            if candidate.get("acceptance_id") == parent_id
+        ),
+        None,
+    )
+    if not isinstance(parent_entry, Mapping):
+        return None, None
+    try:
+        raw = (Path(repo_root) / str(parent_entry["artifact_path"])).read_bytes()
+        parent = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError):
+        return None, None
+    return parent, hashlib.sha256(raw).hexdigest()
 
 
 def _authenticated_explicit_acceptance_bound(
@@ -2084,9 +2793,15 @@ def probe_calibration_acceptance_trigger(
             raw = (Path(repo_root) / str(active["artifact_path"])).read_bytes()
         except OSError:
             raw = b""
+        parent, parent_sha256 = _registry_parent_context(
+            registry, active, Path(repo_root)
+        )
         artifact = _acceptance_bound_from_authenticated_bytes(
             raw,
             expected_sha256=str(active["artifact_sha256"]),
+            parent=parent,
+            parent_artifact_sha256=parent_sha256,
+            count_boundary_rule=str(active["count_boundary_rule"]),
         )
     if active is None or artifact is None:
         return _probe_result(
@@ -2539,6 +3254,27 @@ def _binding_evidence_authentic(
     )
 
 
+def _valid_acceptance_bound(
+    value: Any,
+    *,
+    parent: Mapping[str, Any] | None = None,
+    parent_artifact_sha256: str | None = None,
+    count_boundary_rule: str | None = None,
+    violations: list[str] | None = None,
+) -> bool:
+    """Run the declared attestation pass; v3 always requires its parent."""
+
+    reasons = _acceptance_attestation_violations(
+        value,
+        parent=parent,
+        parent_artifact_sha256=parent_artifact_sha256,
+        count_boundary_rule=count_boundary_rule,
+    )
+    if violations is not None:
+        violations.extend(reason for reason in reasons if reason not in violations)
+    return not reasons
+
+
 def load_calibration_candidate(
     directory: Path, *, runs_root: Path
 ) -> CalibrationCandidate | None:
@@ -2932,6 +3668,85 @@ def _prior_set_matches_import_cutoff_prefix(
     return observed == expected and len(observed) == len(prefix)
 
 
+def _verified_acceptance_after_ledger_residue(
+    artifact: Mapping[str, Any],
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    *,
+    observed_identity_epoch: Mapping[str, Any] | None = None,
+    verify_custody: bool = True,
+    require_terminal_cutoff: bool = False,
+) -> tuple[VerifiedAcceptance | None, tuple[str, ...]]:
+    """Run B→L authority checks and return the annotation-free decision view."""
+
+    cutoff = artifact.get("ledger_cutoff", {})
+    cutoff_snapshot_match = (
+        cutoff.get("sequence") == ledger_snapshot.head_sequence
+        and cutoff.get("head_digest") == ledger_snapshot.head_digest
+        if require_terminal_cutoff
+        else cutoff.get("sequence") == ledger_snapshot.baseline_sequence
+        and cutoff.get("head_digest") == ledger_snapshot.baseline_digest
+    )
+    ledger_match = bool(
+        isinstance(cutoff, Mapping)
+        and cutoff_snapshot_match
+        and cutoff.get("ledger_schema") == ledger_snapshot.ledger_schema
+        and _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot)
+    )
+    identity_match = bool(
+        observed_identity_epoch is None
+        or isinstance(observed_identity_epoch, Mapping)
+        and all(
+            observed_identity_epoch.get(field)
+            == artifact.get("identity_epoch", {}).get(field)
+            for field in ACCEPTANCE_IDENTITY_FIELDS
+        )
+    )
+    custody_match = True
+    if verify_custody and artifact.get("schema_version") == ACCEPTANCE_SUCCESSOR_SCHEMA:
+        grouped_result = _group_probe_observations(
+            tuple(
+                observation
+                for observation in ledger_snapshot.observations
+                if observation.sequence <= cutoff.get("sequence", -1)
+            )
+        )
+        custody_match = bool(
+            grouped_result is not None
+            and all(
+                _observation_custody_authentic(aliases[0])
+                for aliases in grouped_result[0].values()
+            )
+        )
+    if artifact.get("schema_version") != ACCEPTANCE_SUCCESSOR_SCHEMA:
+        reasons = tuple(
+            reason
+            for valid, reason in (
+                (ledger_match, "acceptance_ledger_residue_mismatch"),
+                (identity_match, "acceptance_identity_epoch_mismatch"),
+                (custody_match, "acceptance_custody_residue_mismatch"),
+            )
+            if not valid
+        )
+        return (VerifiedAcceptance(artifact) if not reasons else None), reasons
+
+    failed: dict[str, str] = {}
+    for pattern, spec in ACCEPTANCE_ATTESTATION_FIELDS.items():
+        if B_TO_L not in spec.layer:
+            continue
+        if LEDGER in spec.source and (not ledger_match or not identity_match):
+            failed[pattern] = _attestation_code(pattern)
+        if CUSTODY in spec.source and not custody_match:
+            failed[pattern] = _attestation_code(pattern)
+    result = acceptance_attestation_pass(
+        artifact,
+        schema=SUCCESSOR_WIRE_SCHEMA,
+        layer=B_TO_L,
+        failed_patterns=failed,
+        produce_verified=True,
+    )
+    return result.verified, result.violations
+
+
 def evaluate_calibration_bracket(
     candidates: Sequence[CalibrationCandidate],
     *,
@@ -3050,8 +3865,23 @@ def evaluate_calibration_bracket(
         return result, ("calibration_ledger_baseline_missing",)
     if not _prior_set_matches_import_cutoff_prefix(artifact, ledger_snapshot):
         return result, ("calibration_ledger_baseline_missing",)
+    verified_artifact, verification_reasons = _verified_acceptance_after_ledger_residue(
+        artifact,
+        ledger_snapshot,
+        observed_identity_epoch=artifact.get("identity_epoch"),
+        verify_custody=False,
+    )
+    if verified_artifact is None:
+        return result, verification_reasons
+    artifact = verified_artifact
     identity_epoch = artifact["identity_epoch"]
     prospective = artifact["prospective_rederivation"]
+    decimal_derivation = artifact.get("decimal_derivation")
+    operatives = (
+        decimal_derivation.get("ratified_operatives", {})
+        if isinstance(decimal_derivation, Mapping)
+        else {}
+    )
     result["policy"].update(
         {
             "calibration_bracket_max_drift_s_role": (
@@ -3059,9 +3889,7 @@ def evaluate_calibration_bracket(
             ),
             "acceptance_bound_id": artifact["acceptance_id"],
             "operative_bracket_screen_decimal_s": (
-                artifact["decimal_derivation"]["ratified_operatives"][
-                    "bracket_screen_s"
-                ]
+                operatives.get("bracket_screen_s")
             ),
         }
     )
@@ -3126,6 +3954,29 @@ def evaluate_calibration_bracket(
     }
     if stale_fields:
         return result, ("calibration_acceptance_bound_stale",)
+    screen = _decimal(operatives.get("bracket_screen_s"))
+    preflight_screen = _decimal(operatives.get("preflight_level_screen_s"))
+    maximum_drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
+    maximum_excess = _decimal(operatives.get("max_budgetable_excess_s"))
+    if (
+        screen is None
+        or preflight_screen is None
+        or maximum_drift is None
+        or maximum_excess is None
+        or not _acceptance_arithmetic_valid(operatives)
+    ):
+        result["acceptance"]["drift"] = {
+            "status": "invalid_acceptance_arithmetic",
+            "observed_s": None,
+            "screen_s": operatives.get("bracket_screen_s"),
+            "maximum_budgetable_drift_s": operatives.get(
+                "maximum_budgetable_drift_s"
+            ),
+            "max_budgetable_excess_s": operatives.get(
+                "max_budgetable_excess_s"
+            ),
+        }
+        return result, ("invalid_acceptance_arithmetic",)
     observations_by_attempt = ledger_snapshot.observation_by_attempt
     finalized_session_ids = {
         session.session_id
@@ -3415,11 +4266,6 @@ def evaluate_calibration_bracket(
     else:
         drift_decimal = abs(pre_decimal - post_decimal)
     endpoint_max_decimal = max(pre_decimal, post_decimal)
-    operatives = artifact["decimal_derivation"]["ratified_operatives"]
-    screen = _decimal(operatives.get("bracket_screen_s"))
-    preflight_screen = _decimal(operatives.get("preflight_level_screen_s"))
-    maximum_drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
-    maximum_excess = _decimal(operatives.get("max_budgetable_excess_s"))
     result.update(
         {
             "pre": pre.descriptor(),
@@ -3658,6 +4504,7 @@ def calibration_bracket_for_bundles(
 
 
 __all__ = [
+    "ACCEPTANCE_ATTESTATION_FIELDS",
     "ACCEPTANCE_BOUND_SCHEMA",
     "ACCEPTANCE_EVALUATION_SCHEMA",
     "ACCEPTANCE_REGISTRY_SCHEMA",
@@ -3666,6 +4513,7 @@ __all__ = [
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
+    "VerifiedAcceptance",
     "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
     "decimal_student_t_quantile",

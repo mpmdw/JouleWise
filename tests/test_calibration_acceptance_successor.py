@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import fcntl
 import hashlib
 import io
 import json
@@ -16,6 +18,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import joulewise.calibration_bracketing as bracketing
+import joulewise.calibration_acceptance_attestation as attestation
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
@@ -37,8 +40,14 @@ ACCEPTANCE_PATH = (
 )
 REGISTRY_PATH = bracketing.DEFAULT_ACCEPTANCE_REGISTRY_PATH
 PARENT_HEAD = "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
-REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
-REAL_D079_CUSTODY_MANIFEST = Path("/private/tmp/d079-custody-manifest.lead.json")
+REAL_D079_TABLE = REPO_ROOT / (
+    "docs/process_traces/2026-08-06-d079-issuance-coldgate/"
+    "ISSUANCE-disposition-table.json"
+)
+REAL_D079_CUSTODY_MANIFEST = REPO_ROOT / (
+    "docs/process_traces/2026-08-06-d079-issuance-coldgate/"
+    "ISSUANCE-custody-manifest.json"
+)
 REAL_D079_TABLE_SHA256 = (
     "5da820aa5c649e5991b934230cd75e8c99daa8dcea22f3f1b3e3db89c80f2a6a"
 )
@@ -90,6 +99,13 @@ def _parent_artifact() -> dict:
 
 def _parent_observations() -> list[LedgerObservation]:
     artifact = _parent_artifact()
+    disposition_table = json.loads(REAL_D079_TABLE.read_bytes())
+    source_by_attempt = {
+        member["attempt_id"]: member for member in disposition_table["members"]
+    }
+    custody_by_content = json.loads(REAL_D079_CUSTODY_MANIFEST.read_bytes())[
+        "members"
+    ]
     corpus_by_attempt = {
         member["member_id"]: member
         for member in artifact["derivation_corpus"]["members"]
@@ -103,14 +119,9 @@ def _parent_observations() -> list[LedgerObservation]:
         artifact["prior_observation_set"]["observations"], start=1
     ):
         member = corpus_by_attempt.get(row["attempt_id"])
-        manifest_sha = (
-            member["manifest_sha256"] if member is not None else _digest(f"m-{index}")
-        )
-        evidence_sha = (
-            member["instrument_evidence_sha256"]
-            if member is not None
-            else _digest(f"e-{index}")
-        )
+        source = source_by_attempt[row["attempt_id"]]
+        manifest_sha = source["artifact_sha256"]["manifest.json"]
+        evidence_sha = source["artifact_sha256"]["instrument_evidence.json"]
         bound = (
             member["b_fiducial_s"]
             if member is not None
@@ -132,7 +143,7 @@ def _parent_observations() -> list[LedgerObservation]:
                 capture_wall_time_s=str(sequence),
                 exact_bound_lexeme_s=bound,
                 disposition=row["disposition"],
-                custody_locator=f"/authenticated/parent/{row['attempt_id']}",
+                custody_locator=custody_by_content[row["content_id"]],
                 observation_kind="historical-import",
             )
         )
@@ -149,16 +160,20 @@ def _new_observation(
     artifacts: dict | None = None,
 ) -> LedgerObservation:
     attempt_id = f"live-{index:02d}"
+    artifact_hashes = artifacts or {
+        "manifest.json": _digest(f"live-manifest-{index}"),
+        "instrument_evidence.json": _digest(f"live-evidence-{index}"),
+    }
     return LedgerObservation(
         sequence=77 + index,
         receipt_digest=_digest(f"live-receipt-{index}"),
         attempt_id=attempt_id,
-        content_id=content_id if content_id is not None else _digest(f"live-content-{index}"),
-        artifact_sha256=artifacts
-        or {
-            "manifest.json": _digest(f"live-manifest-{index}"),
-            "instrument_evidence.json": _digest(f"live-evidence-{index}"),
-        },
+        content_id=(
+            content_id
+            if content_id is not None
+            else content_id_from_artifact_hashes(artifact_hashes)
+        ),
+        artifact_sha256=artifact_hashes,
         identity_epoch=epoch or dict(_parent_artifact()["identity_epoch"]),
         t1_bindings={},
         capture_wall_time_s=str(1000 + index),
@@ -324,6 +339,149 @@ def _open_pre_snapshot() -> CalibrationLedgerSnapshot:
     )
 
 
+class AcceptanceAttestationEnrollmentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        abandoned = replace(
+            _new_observation(0, disposition="abandoned"),
+            content_id=None,
+            artifact_sha256={},
+            exact_bound_lexeme_s=None,
+        )
+        cls.snapshot = _snapshot(
+            (abandoned, _new_observation(1, bound="0.02"))
+        )
+        cls.build = successor.build_calibration_acceptance_successor(
+            cls.snapshot,
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+
+    def test_schema_leaf_exact_set_equals_declared_enrollment(self) -> None:
+        successor_leaves = attestation.schema_leaf_patterns(
+            attestation.SUCCESSOR_WIRE_SCHEMA
+        )
+        registry_leaves = attestation.schema_leaf_patterns(
+            attestation.REGISTRY_WIRE_SCHEMA
+        )
+        self.assertEqual(
+            successor_leaves | registry_leaves,
+            set(attestation.ACCEPTANCE_ATTESTATION_FIELDS),
+        )
+        self.assertEqual(
+            attestation.wire_leaf_patterns(
+                self.build.artifact, attestation.SUCCESSOR_WIRE_SCHEMA
+            ),
+            successor_leaves,
+        )
+        self.assertEqual(
+            attestation.wire_leaf_patterns(
+                self.build.registry, attestation.REGISTRY_WIRE_SCHEMA
+            ),
+            registry_leaves,
+        )
+
+    def test_enrollment_pairing_and_annotation_contract(self) -> None:
+        fields = attestation.ACCEPTANCE_ATTESTATION_FIELDS
+        self.assertEqual(len(fields), len(set(fields)))
+        annotations = {
+            pattern
+            for pattern, spec in fields.items()
+            if spec.classification
+            == attestation.NON_AUTHORITATIVE_ANNOTATION
+        }
+        self.assertEqual(
+            annotations,
+            {
+                "issuance.reason",
+                "prior_observation_set.observations[*].disposing_decision_id",
+            },
+        )
+        for pattern, spec in fields.items():
+            with self.subTest(pattern=pattern):
+                if spec.classification == attestation.VERIFIED:
+                    self.assertTrue(callable(spec.verifier))
+                    self.assertTrue(callable(spec.forge_mutator))
+                    self.assertIsNotNone(spec.stable_failure_code)
+                    self.assertIsNone(spec.consumer_policy)
+                else:
+                    self.assertIsNone(spec.verifier)
+                    self.assertIsNone(spec.forge_mutator)
+                    self.assertIsNotNone(spec.consumer_policy)
+
+    def test_maximal_fixture_visits_every_concrete_leaf_once(self) -> None:
+        artifact_result = attestation.acceptance_attestation_pass(
+            self.build.artifact,
+            schema=attestation.SUCCESSOR_WIRE_SCHEMA,
+            layer=attestation.S,
+            require_all_patterns_visited=True,
+        )
+        registry_result = attestation.acceptance_attestation_pass(
+            self.build.registry,
+            schema=attestation.REGISTRY_WIRE_SCHEMA,
+            layer=attestation.R,
+            require_all_patterns_visited=True,
+        )
+        for result in (artifact_result, registry_result):
+            self.assertEqual(result.violations, ())
+            self.assertEqual(
+                len(result.visited_concrete_leaves),
+                len(set(result.visited_concrete_leaves)),
+            )
+
+    def test_unenrolled_new_leaf_fails_closed(self) -> None:
+        changed = json.loads(json.dumps(self.build.artifact))
+        changed["future_authority_leaf"] = "unenrolled"
+        result = attestation.acceptance_attestation_pass(
+            changed,
+            schema=attestation.SUCCESSOR_WIRE_SCHEMA,
+            layer=attestation.S,
+        )
+        self.assertIn("acceptance_attestation_unenrolled_field", result.violations)
+
+    def test_verified_view_and_static_consumers_exclude_annotations(self) -> None:
+        verified, violations = bracketing._verified_acceptance_after_ledger_residue(
+            self.build.artifact,
+            self.snapshot,
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            verify_custody=False,
+            require_terminal_cutoff=True,
+        )
+        self.assertEqual(violations, ())
+        self.assertIsInstance(verified, attestation.VerifiedAcceptance)
+        decision = verified.as_dict()
+        self.assertNotIn("reason", decision["issuance"])
+        self.assertTrue(
+            all(
+                "disposing_decision_id" not in row
+                for row in decision["prior_observation_set"]["observations"]
+            )
+        )
+        tree = ast.parse((REPO_ROOT / "joulewise/calibration_bracketing.py").read_text())
+        decision_functions = {
+            "evaluate_calibration_bracket",
+            "probe_calibration_acceptance_trigger",
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in decision_functions:
+                string_constants = {
+                    child.value
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                }
+                self.assertNotIn("disposing_decision_id", string_constants)
+                self.assertNotIn(
+                    "issuance",
+                    {
+                        child.id
+                        for child in ast.walk(node)
+                        if isinstance(child, ast.Name)
+                    },
+                )
+
+
 class RegistryTrustAnchorTests(unittest.TestCase):
     def test_current_registry_authenticates_exact_issued_state(self) -> None:
         registry = bracketing.load_calibration_acceptance_registry(
@@ -347,6 +505,189 @@ class RegistryTrustAnchorTests(unittest.TestCase):
         self.assertEqual(counts, {"valid": 30, "systematic-invalid": 2, "ordinary-invalid": 6})
         self.assertEqual(active["ledger_cutoff"]["sequence"], 76)
 
+
+class AcceptanceAttestationForgeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        abandoned = replace(
+            _new_observation(0, disposition="abandoned"),
+            content_id=None,
+            artifact_sha256={},
+            exact_bound_lexeme_s=None,
+        )
+        cls.snapshot = _snapshot(
+            (abandoned, _new_observation(1, bound="0.02"))
+        )
+        cls.build = successor.build_calibration_acceptance_successor(
+            cls.snapshot,
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+
+    def test_every_successor_verified_field_has_discriminating_forgery(self) -> None:
+        specs = [
+            (pattern, spec)
+            for pattern, spec in attestation.ACCEPTANCE_ATTESTATION_FIELDS.items()
+            if spec.classification == attestation.VERIFIED
+            and not pattern.startswith("registry.")
+        ]
+        self.assertEqual(len(specs), 118)
+        authentic_parent = _parent_artifact()
+        authentic_parent_copy = json.loads(json.dumps(authentic_parent))
+        parent_sha = self.build.registry["entries"][0]["artifact_sha256"]
+        for pattern, spec in specs:
+            with self.subTest(pattern=pattern):
+                forged = json.loads(json.dumps(self.build.artifact))
+                spec.forge_mutator(forged)
+                if pattern != "derivation_sha256":
+                    forged["derivation_sha256"] = bracketing._canonical_sha256(
+                        {
+                            key: value
+                            for key, value in forged.items()
+                            if key != "derivation_sha256"
+                        }
+                    )
+                standalone: list[str] = []
+                bracketing._valid_acceptance_bound(
+                    forged,
+                    parent=authentic_parent,
+                    parent_artifact_sha256=parent_sha,
+                    violations=standalone,
+                )
+                _view, ledger_reasons = (
+                    bracketing._verified_acceptance_after_ledger_residue(
+                        forged,
+                        self.snapshot,
+                        observed_identity_epoch=authentic_parent[
+                            "identity_epoch"
+                        ],
+                        verify_custody=False,
+                        require_terminal_cutoff=True,
+                    )
+                )
+                self.assertIn(
+                    spec.stable_failure_code,
+                    set(standalone) | set(ledger_reasons),
+                )
+                self.assertEqual(authentic_parent, authentic_parent_copy)
+
+    def test_every_registry_verified_field_refuses_in_committed_temp_repo(self) -> None:
+        specs = [
+            (pattern, spec)
+            for pattern, spec in attestation.ACCEPTANCE_ATTESTATION_FIELDS.items()
+            if pattern.startswith("registry.")
+        ]
+        self.assertEqual(len(specs), 15)
+        for pattern, spec in specs:
+            with self.subTest(pattern=pattern), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                forged = json.loads(json.dumps(self.build.registry))
+                spec.forge_mutator(forged)
+                for entry in self.build.registry["entries"]:
+                    destination = root / entry["artifact_path"]
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(
+                        self.build.artifact_bytes
+                        if entry["acceptance_id"]
+                        == self.build.artifact["acceptance_id"]
+                        else (REPO_ROOT / entry["artifact_path"]).read_bytes()
+                    )
+                registry_path = (
+                    root
+                    / "configs/calibration/calibration_acceptance_registry.json"
+                )
+                registry_path.write_bytes(successor._pretty_json_bytes(forged))
+                subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+                subprocess.run(
+                    ["git", "config", "user.name", "attestation-test"],
+                    cwd=root,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "config", "user.email", "test@example.invalid"],
+                    cwd=root,
+                    check=True,
+                )
+                subprocess.run(["git", "add", "."], cwd=root, check=True)
+                subprocess.run(
+                    ["git", "commit", "-qm", "forged authority"],
+                    cwd=root,
+                    check=True,
+                )
+                with self.assertRaises(
+                    bracketing.CalibrationAcceptanceRegistryRefusal
+                ) as raised:
+                    bracketing.load_calibration_acceptance_registry(
+                        registry_path,
+                        repo_root=root,
+                        require_committed=True,
+                    )
+                self.assertIn(
+                    spec.stable_failure_code,
+                    raised.exception.violations,
+                )
+
+    def test_forged_range_only_trigger_refuses_standalone_and_registry(self) -> None:
+        forged = json.loads(json.dumps(self.build.artifact))
+        self.assertEqual(
+            forged["lineage"]["trigger_judgment"]["triggers"],
+            ["new_valid_same_identity_capture_expands_observed_range"],
+        )
+        forged["lineage"]["trigger_judgment"]["triggers"] = [
+            "content_distinct_valid_same_epoch_count_boundary"
+        ]
+        forged["derivation_sha256"] = bracketing._canonical_sha256(
+            {
+                key: value
+                for key, value in forged.items()
+                if key != "derivation_sha256"
+            }
+        )
+        forged_bytes = successor._pretty_json_bytes(forged)
+        registry = json.loads(json.dumps(self.build.registry))
+        active = next(entry for entry in registry["entries"] if entry["active"])
+        active["artifact_sha256"] = hashlib.sha256(forged_bytes).hexdigest()
+        active["derivation_sha256"] = forged["derivation_sha256"]
+        standalone: list[str] = []
+        self.assertFalse(
+            bracketing._valid_acceptance_bound(
+                forged,
+                parent=_parent_artifact(),
+                parent_artifact_sha256=registry["entries"][0][
+                    "artifact_sha256"
+                ],
+                violations=standalone,
+            )
+        )
+        self.assertIn("trigger_judgment_mismatch", standalone)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for entry in registry["entries"]:
+                destination = root / entry["artifact_path"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(
+                    forged_bytes
+                    if entry["acceptance_id"] == forged["acceptance_id"]
+                    else (REPO_ROOT / entry["artifact_path"]).read_bytes()
+                )
+            registry_path = (
+                root / "configs/calibration/calibration_acceptance_registry.json"
+            )
+            registry_path.write_bytes(successor._pretty_json_bytes(registry))
+            with self.assertRaises(
+                bracketing.CalibrationAcceptanceRegistryRefusal
+            ) as raised:
+                bracketing.load_calibration_acceptance_registry(
+                    registry_path,
+                    repo_root=root,
+                    require_committed=False,
+                )
+        self.assertEqual(
+            raised.exception.reason,
+            "acceptance_registry_trigger_judgment_mismatch",
+        )
+
     def test_registry_rejects_multiple_active_without_a_cycle(self) -> None:
         registry = json.loads(REGISTRY_PATH.read_bytes())
         parent = registry["entries"][0]
@@ -366,7 +707,12 @@ class RegistryTrustAnchorTests(unittest.TestCase):
             },
         }
         registry["entries"].append(child)
-        self.assertFalse(bracketing._valid_registry(registry))
+        violations: list[str] = []
+        self.assertFalse(
+            bracketing._valid_registry(registry, violations=violations)
+        )
+        self.assertIn("registry_active_cardinality_invalid", violations)
+        self.assertIn("registry_active_leaf_invalid", violations)
 
     def test_registry_rejects_self_cycle_without_multiple_active_entries(self) -> None:
         registry = json.loads(REGISTRY_PATH.read_bytes())
@@ -519,6 +865,24 @@ class TriggerProbeTests(unittest.TestCase):
         self.assertEqual(
             result["observed_triggers"],
             ["content_distinct_valid_same_epoch_count_boundary"],
+        )
+
+    def test_range_and_count_triggers_are_both_recorded_canonically(self) -> None:
+        extras = (
+            _new_observation(0, bound="0.02"),
+            *tuple(
+                _new_observation(index, bound="0.0271")
+                for index in range(1, 8)
+            ),
+        )
+        result = _probe(_snapshot(extras))
+        self.assertEqual(result["outcome"], "successor_required")
+        self.assertEqual(
+            result["observed_triggers"],
+            [
+                "new_valid_same_identity_capture_expands_observed_range",
+                "content_distinct_valid_same_epoch_count_boundary",
+            ],
         )
 
     def test_systematic_classification_and_above_screen_both_refuse(self) -> None:
@@ -1012,14 +1376,28 @@ class SuccessorBuilderTests(unittest.TestCase):
                 for row in build.artifact["prior_observation_set"]["observations"]
             )
         )
-        self.assertIn("D-126", build.artifact["decision_ids"])
+        self.assertEqual(
+            build.artifact["decision_ids"],
+            ["D-102", "D-109", "D-117", "D-125", "D-126"],
+        )
         self.assertNotIn("COLD-GATE-U2-PENDING", build.artifact["decision_ids"])
-        self.assertTrue(bracketing._valid_acceptance_bound(build.artifact))
+        self.assertTrue(
+            bracketing._valid_acceptance_bound(
+                build.artifact,
+                parent=_parent_artifact(),
+                parent_artifact_sha256=build.registry["entries"][0][
+                    "artifact_sha256"
+                ],
+            )
+        )
         self.assertEqual(build.successor_probe["outcome"], "accepted_under_active_artifact")
         self.assertEqual(build.successor_probe["refusal_reasons"], [])
         self.assertNotIn("parent_judgment_policy", build.successor_probe)
         self.assertEqual(build.artifact["lineage"]["parent_acceptance_id"], "d079_calibration_acceptance_v2_n19")
-        self.assertIn(_digest("live-content-0"), build.artifact["lineage"]["trigger_judgment"]["new_content_ids"])
+        self.assertIn(
+            _new_observation(0).content_id,
+            build.artifact["lineage"]["trigger_judgment"]["new_content_ids"],
+        )
 
     def test_absorbed_basis_additions_must_equal_parent_judgment(self) -> None:
         build = successor.build_calibration_acceptance_successor(
@@ -1042,7 +1420,15 @@ class SuccessorBuilderTests(unittest.TestCase):
         active = next(entry for entry in registry["entries"] if entry["active"])
         active["artifact_sha256"] = hashlib.sha256(tampered_bytes).hexdigest()
         active["derivation_sha256"] = tampered["derivation_sha256"]
-        self.assertFalse(bracketing._valid_acceptance_bound(tampered))
+        self.assertFalse(
+            bracketing._valid_acceptance_bound(
+                tampered,
+                parent=_parent_artifact(),
+                parent_artifact_sha256=build.registry["entries"][0][
+                    "artifact_sha256"
+                ],
+            )
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1137,10 +1523,6 @@ class SuccessorBuilderTests(unittest.TestCase):
         derivation_count = build.artifact["derivation_corpus"]["n"]
         self.assertEqual(trigger_count - derivation_count, 10)
 
-    @unittest.skipUnless(
-        REAL_D079_TABLE.is_file() and REAL_D079_CUSTODY_MANIFEST.is_file(),
-        "lead-reviewed D-079 import inputs are unavailable",
-    )
     def test_builder_uses_loaded_real_reservation_finalization_cadence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1562,18 +1944,38 @@ class SuccessorBuilderTests(unittest.TestCase):
             verify_custody=False,
         )
         original_fsync = os.fsync
+        original_replace = os.replace
         sync_kinds: list[str] = []
+        events: list[tuple[str, str, str | None]] = []
 
         def observed_fsync(descriptor: int) -> None:
             mode = os.fstat(descriptor).st_mode
-            sync_kinds.append("directory" if stat.S_ISDIR(mode) else "file")
+            kind = "directory" if stat.S_ISDIR(mode) else "file"
+            sync_kinds.append(kind)
+            try:
+                descriptor_path = (
+                    fcntl.fcntl(
+                        descriptor, fcntl.F_GETPATH, b"\0" * 1024
+                    )
+                    .split(b"\0", 1)[0]
+                    .decode("utf-8")
+                )
+            except OSError:
+                descriptor_path = None
+            events.append(("fsync", kind, descriptor_path))
             original_fsync(descriptor)
+
+        def observed_replace(source: Path, destination: Path) -> None:
+            events.append(("replace", str(Path(source)), str(Path(destination))))
+            original_replace(source, destination)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             registry, _ = _init_publication_repo(root)
             artifact = root / build.artifact_path
-            with patch.object(successor.os, "fsync", side_effect=observed_fsync):
+            with patch.object(
+                successor.os, "fsync", side_effect=observed_fsync
+            ), patch.object(successor.os, "replace", side_effect=observed_replace):
                 successor.publish_successor(
                     build,
                     artifact_destination=artifact,
@@ -1583,6 +1985,31 @@ class SuccessorBuilderTests(unittest.TestCase):
                 )
         self.assertEqual(sync_kinds.count("file"), 2)
         self.assertEqual(sync_kinds.count("directory"), 2)
+        replace_events = [
+            (index, source, destination)
+            for index, (kind, source, destination) in enumerate(events)
+            if kind == "replace"
+        ]
+        self.assertEqual(len(replace_events), 2)
+        for replace_index, source, destination in replace_events:
+            staged_syncs = [
+                index
+                for index, event in enumerate(events)
+                if event == ("fsync", "file", source)
+            ]
+            destination_dir_syncs = [
+                index
+                for index, event in enumerate(events)
+                if event
+                == ("fsync", "directory", str(Path(destination).parent))
+            ]
+            self.assertTrue(staged_syncs)
+            self.assertTrue(destination_dir_syncs)
+            self.assertLess(max(staged_syncs), replace_index)
+            self.assertLess(
+                replace_index,
+                min(index for index in destination_dir_syncs if index > replace_index),
+            )
 
     def test_post_update_ref_verification_failure_keeps_successor_authoritative(self) -> None:
         build = successor.build_calibration_acceptance_successor(

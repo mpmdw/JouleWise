@@ -4,7 +4,7 @@
 
 The consult requires derivation basis additions to be “judged under the parent artifact before absorption.” The loader instead constructs additions solely from post-cutoff valid prior rows:
 
-> `post_cutoff_valid_ids = { row["content_id"] ... }`  
+> `post_cutoff_valid_ids = { row["content_id"] ... }`
 > `artifact_basis_ids != parent_basis_ids | post_cutoff_valid_ids`
 
 at [calibration_bracketing.py:1029](/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad/u2rework/joulewise/calibration_bracketing.py:1029), while `trigger_judgment.new_content_ids` receives only syntactic list/hash validation at [calibration_bracketing.py:1159](/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad/u2rework/joulewise/calibration_bracketing.py:1159). There is no equality/subset binding between the recorded judgment and absorbed additions.
