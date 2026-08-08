@@ -65,14 +65,22 @@ everything under it is executed history.
   gates. **Witness round 3 IN FLIGHT** (out `SP/recovery3-out.md`, 8h
   cap, family-checkpoint resumable). Then gauntlet → integration-tree
   post-trust → merge discharges ARMING BLOCKER.
-- **A6 U2** @ 878ce9e (envelope rework e5cf244 + gauntlet fix round
-  banked; suite 2748 OK). Attestation-binding class hit count 2
-  (triggers field forged-acceptable) → ESCALATION-ATTESTATION.md;
-  consult ADOPTED (`ATTESTATION-CONSULT.md` on branch): enrollment
-  registry over every schema leaf, trigger-set recomputation,
-  decision_ids += D-125, parameterized forge regressions. **Attestation
-  rework IN FLIGHT** (out `SP/u2rework2-out.md`, 6h cap). Then delta →
-  Q12 full-register packet + third convening. NOT night-blocking.
+- **A6 U2** @ 5b00200 — **FROZEN at attestation count 3 (cold-gate
+  item; U2-FROZEN-COUNT3.md).** Envelope rework + gauntlet fix + the
+  enrollment attestation rework all landed on the branch, but the delta
+  ruled the attestation-binding class same-signature YES a THIRD time:
+  the enrollment registry was auto-generated with always-true verifiers
+  (Potemkin), so a ledger-absent epoch_catalog entry passed every layer.
+  Per rule-11 escalation discipline, this is NOT answered with another
+  loop fix — U2 is frozen pending a deliberate cold gate (fresh
+  instance, mechanical packet), schedulable POST-WINDOW. **Freeze costs
+  the paper nothing:** U2 issuance was already gated behind Q12 (open) +
+  the third convening (not held); the issued D-079 artifact governs
+  alpha/beta/gamma. Sound-and-landed (preserve on resume): trigger-set
+  recomputation, the 4 non-class closures, the 5-ID resolution test,
+  the clean integration merge, all must-not-change items. Resolution
+  packet is written in U2-FROZEN-COUNT3.md §"What a resolution must
+  establish".
 - **D-126 minted** (`1a1dac0`); prose merge `1e6fa16`; ruling commits
   `fe85b09`, `6981d2b` — all pushed.
 - If a stream's process dies, the WORKTREE DIFF is the artifact —
