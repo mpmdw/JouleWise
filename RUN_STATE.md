@@ -15,6 +15,15 @@ block first;** the 2026-08-06 checkpoint below is executed history.
 
 ## ✅ CHECKPOINT 2026-08-07 — /clear stop (READ THIS FIRST; full resume script)
 
+**THE GOAL MAP:** `docs/strategy/HORIZONS.md` — H0 ship the capstone
+paper (current focus, everything waits on it) / H1 the ICPE version /
+H2 mechanism-level energy (Ed's original research goals, with each axis
+honestly statused) / H3 what the instrument could become. Ed points at a
+horizon; the magistrate picks the next unblocked move inside it.
+Claim WORDING is magistrate territory now, conservative by default
+(D-119); what to measure, fund, and scope stays Ed's.
+
+
 **Nothing in flight. No orphaned processes. Everything pushed.** All
 scratchpad worktrees are clean and their branches pushed; they are safe
 to lose (recreate with `git worktree add` from the branch names below).
