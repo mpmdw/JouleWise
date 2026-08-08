@@ -15,6 +15,57 @@ double-window. A NEW SESSION STARTS HERE: read, in order, (1) the
 SUCCESSOR SCRIPT immediately below, (2) the D-121 ERA block, (3) the
 EVENING block. Everything under those is executed history.**
 
+## ▶ MORNING STATE 2026-08-08 (overnight run complete — READ THIS FIRST)
+
+**The night in one breath:** PR #116 merged early (reason-code
+diagnostics, full 12-item gate). After that the gates got STRICTER than
+the code: THREE standing escalation triggers fired (trust
+regression/scoping classes; recovery ungoverned-refusal class across
+layers), each redirected to a design consult, and all three consults
+returned TERMINATING designs that are now ADOPTED and custodied. The
+U2 cold gate re-convened on a workflow-assembled, byte-verified packet
+and ruled: six first-round objections verified moot; Q1+Q13 remanded
+and then DESIGNED (lineage-monotone envelopes); Q8 shim deleted. The
+common-mode estimator (D-124) and the attribution question are settled
+with evidence. Nothing unsound merged; the mint bar and arming blocker
+correctly stayed up.
+
+**ED'S MORNING REVIEW (reversible items, newest first):**
+1. **Q1+Q13 envelope adoption** (Q1Q13-REMAND-CONSULT.md): successor
+   screen/ceiling become lineage-monotone t-family envelopes inheriting
+   0.010818 as the floor (can only strengthen). The D-117 cl.1
+   successor amendment transcribes only with your ack; until then
+   freeze-until-ruled controls (costless for the three nights).
+2. **D-124** common-mode contrast estimator (two-shared-edge), 4-5x
+   floor improvement on contrasts, full registration conditions.
+3. Your own D-122 (256-tok prefill arm) + D-123 (reported-energy cells,
+   signal-size doctrine) as transcribed — check the wording.
+
+**SUCCESSOR QUEUE (all designs adopted; execution + full gates):**
+1. **Trust rework** (registration-at-read; 2026-08-08-trust-scoping-
+   escalation/CONSULT-RESPONSE.md): strict-read session, traversal
+   deleted, decisive regression replaced on the real-fixture
+   no-substitution contract → gate → MERGE LIFTS THE MINT BAR.
+2. **Recovery integrated round** (2026-08-08-recovery-exits-
+   escalation/CONSULT-RESPONSE.md): stable claim + held lease,
+   under-lease ARM readiness, registry-at-raise with executed
+   witnesses, §5/§6/§10 runbook amendments → gate → merge DISCHARGES
+   THE ARMING BLOCKER (only when all four elements land together).
+3. **U2 rework round 2** (SYNTHESIS-V2.md + Q1Q13 consult): envelope
+   arithmetic, shim delete, Q5 closure plumbing, Q4 freeze test,
+   Q3 evidence regeneration (the lead's 40-digit grid bug), Q13
+   refusal rename → re-present Q12 on the FULL register text.
+4. **U5-U7 packs:** Ed rulings 2+4 are IN HAND (D-122/D-123) — packs
+   generate + freeze once recovery lands (receipt-oracle re-derivation)
+   with reported-energy cells, the 256-tok prefill arm, stage_launch
+   recipes, and the D-124 estimator identity if its registration lands.
+5. Operator packet refresh + results-prose re-run + paper touch-ups
+   (D-122 scope wording is already magistrate territory under D-119).
+
+**In-flight at close: NOTHING.** All Sol runs harvested; all agents
+returned; caffeinate dies with the session. Scratchpad worktrees
+trust/recovery/u2rework remain (branches pushed; safe to lose).
+
 ## ▶ SUCCESSOR SCRIPT (2026-08-08 wrap — start here)
 
 **OVERNIGHT RUN LIVE (D-123 license):** rulings D-122/D-123 transcribed;
