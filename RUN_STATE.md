@@ -13,74 +13,105 @@ file instead.
 Last updated: 2026-08-07 — **LIVE SESSION (14h Ed window). Read this
 block first;** the 2026-08-06 checkpoint below is executed history.
 
-## ⏳ 2026-08-07 — paper-first session (LIVE; block 3 — near-final state)
+## ✅ CHECKPOINT 2026-08-07 — /clear stop (READ THIS FIRST; full resume script)
 
-**CURRENT VERIFICATION (lead-replayed, unpiped, on MERGED MAIN at
-`48b7e59`, 2026-08-07):** `Ran 2733 tests` / `OK (skipped=86)`, exit 0.
-This supersedes every earlier "current verification" line in this file;
-prior figures (2,418-test PR #95 tree; the 2689/2691/2687 branch results)
-are BRANCH or HISTORICAL results and must not be quoted as main.
+**Nothing in flight. No orphaned processes. Everything pushed.** All
+scratchpad worktrees are clean and their branches pushed; they are safe
+to lose (recreate with `git worktree add` from the branch names below).
 
-**MERGED TODAY:** PR #111 (U1 bracket session), #112 (U3 pinset v2 +
-authenticated four-cell mint), #113 (U4 three-window regression).
-**D-118 RATIFIED** — the merge gate is now enumerated (11 items) and
-mechanically checked by a per-PR GATE LEDGER; D-072 self-merge is
-conditioned on that ledger being complete. Recorded honestly: these
-three merged BEFORE D-118 with an incomplete gate (no apex Fable diff
-gate, no prune lens, no Opus counter-review, and U4's post-delta fix
-skipped the final-head rule). All four missing layers were launched
-retroactively; findings are fixed FORWARD on main.
+### STATE IN ONE BREATH
 
-**ED'S RULINGS OWED (8; full text + recommendations in
-`docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`):** 1 Window C
-night (recommend FUND — §6's six characterization rows otherwise ship with
-no evidence); 2 reported-energy cells in alpha/beta (TIME-CRITICAL, must
-precede U5/U6 pack-hash freeze); 3 reason-code plumbing authorization
-(URGENT — only 14/44 refused occurrences have a reconstructable reason
-today; the nights will add more); 4 256-tok prefill arm (recommend NO);
-5 quantization posture; 6 calendar dates; 7 artifact scope + wall-meter vs
-second-unit; **8 NEW — the ratified `refusal_scope_spec.md` cites D-083 as
-its authority but D-083 is a different ruling and no decision-log row for
-the spec exists.**
+Ed's MVP capstone paper draft is COMPLETE and merged (PR #110). Three
+D-117 toolchain units merged (U1/U3/U4; PRs #111/#112/#113) and merged
+main is lead-verified GREEN (**2733 tests, exit 0, unpiped**). A
+retroactive apex-gate pass over those merges then found five real
+defects, produced **two escalations that are now the top of the queue**,
+and produced **D-118** (nothing merges without the full enumerated
+council gate). Ed owes 8 rulings. No quiet night can be armed yet.
 
-**DELIVERABLE SHIPPED:** MVP paper draft COMPLETE, PR #110 MERGED
-(`6a70707`). Run report: `docs/run_reports/2026-08-07-paper-first-session.md`.
-Council entry: C-050.
+### IMMEDIATE RESUME ORDER
 
-**U-UNIT STATE (three toolchain blockers before night one):**
-- **U1 — DONE, PR #111 OPEN.** Full gauntlet; 2691 tests green
-  lead-verified; second delta CLEAN with an explicit same-signature NO;
-  D-116 issued-prefix byte-identical. Merge on green under D-072.
-- **U3 — fix round 2 (FIX-1b/6b/8) committed**, full suite running at
-  hand-off; needs its DELTA (the authentication class survived round 1 as
-  "presence-only"; a THIRD survival goes to a design consult, not a fix
-  round — binding).
-- **U2 — COLD-GATE EXHIBIT pushed** (`impl/d117-u2-successor`), 12
-  contested choices tagged COLD-GATE-Q1..Q12 + the design brief's 12
-  questions. NOT a landing candidate; convene the rule-11 cold gate.
-- **U4 — amendment round in flight** (confirmed defects: stale sequence-85
-  oracle from a superseded memo model; one-sided allowance test).
-- **U8 — EVIDENCE ONLY, examination verdict REWORK.** Do NOT land the
-  runbook edit: §5B still licenses a cause-removal retry the two-slot
-  session cannot represent. Needs the zero-retry ruling + the S1-domain
-  ruling first.
-- **U5-U7 packs**: scout custodied (`U5-U7-PACK-SCOUT.md`); gated on U3+U10
-  vocabulary freeze and ruling #2.
+1. **EXECUTE THE BRANCH SPLIT** (ruled, not yet done — record:
+   `docs/process_traces/2026-08-07-d117-u-units/ESCALATION-U1-RECOVERY.md`).
+   Branch `impl/d117-u1-gate-debt` contains BOTH night-critical fixes and
+   an escalated subsystem. Land **F2 / F4 / F5 / F6a** (delta-verified
+   clean; F2 is a night-critical correctness defect live on main right
+   now — the first finalized bracket session silently makes bindings
+   mandatory for EVERY historical window). **HOLD F1 + the recovery
+   hardening** pending the consult below. Then PR with a complete D-118
+   gate ledger.
+2. **RUN THE TWO QUEUED CONSULTS** (both are escalations; a further fix
+   round on either is FORBIDDEN):
+   - *Append-recovery subsystem shape* — three rounds, three distinct
+     defects, class still alive (positive-prefix foreign-journal replay)
+     plus a refused state with no governed operator exit. Charge is
+     written in ESCALATION-U1-RECOVERY.md.
+   - *D117-POSTCOLLECTION-TRUST-01* — already consulted and the SHAPE IS
+     ADOPTED (delete `floor_mint_postcollection`; rederive every pinned
+     value from its domain owner). This one needs IMPLEMENTATION, not
+     another consult. It is a pre-window work order and a dependency of
+     U10. **The v2 mint is BARRED from issuing until it lands.**
+3. **PR #114 (paper trust-model narrowing) — owes 2 gate items** (delta
+   re-audit + final-head pass) and says so in its own gate ledger. Not
+   merge-eligible until they run.
+4. **U5-U7 campaign packs: GENERATE NOW** (apex-examined
+   ACCEPT-WITH-AMENDMENTS; packs correctly firewall the mint bar out of
+   their bytes). Apply the 5 amendments in
+   `docs/process_traces/2026-08-07-plan-factory/MAGISTRATE-DISPOSITIONS.md`
+   — including registering the **UNOWNED night-killer**: nothing charters
+   the tool projecting arm-time identity pins, and a wrong projection
+   makes clean night data PERMANENTLY unmintable.
+5. **U2 cold gate: packet is READY**, not convened —
+   `docs/process_traces/2026-08-07-u2-coldgate/` (cold Fable from a
+   worktree + Opus contract-lens refuter; 12 tagged decision points).
+6. **U8: REWORK, do not land** — its runbook edit would put contradictory
+   instructions in front of Ed at 2am (§5B still licenses a retry the
+   two-slot session cannot represent).
 
-**BINDING RULES ADOPTED TODAY (bind all successors):** memo literals must
-be RE-DERIVED from landed branches (U1 superseded the memo's receipt
-model); no second-paper work touches the mint/pinset/detection_floor file
-set until U10 closes; every kill threshold is a multiple of a PROJECTED
-floor (7.3% of member mean precedent), never a joule literal, never 1x.
+### ED'S RULINGS OWED (8; full text + recommendations in
+`docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`)
 
-**PORTFOLIO:** 24 directions adjudicated
-(`docs/strategy/2026-08-07-paper-portfolio/`). Arc: MVP + Window C ->
-quantization BF16/Q4/Q8 (**4 nights**, was 3) -> MoE stretch (**4 nights**,
-was 2-3). 7 riders folded into the MVP.
+1 Window C night (recommend FUND; §6 otherwise ships with no evidence).
+2 Reported-energy cells in alpha/beta — **TIME-CRITICAL, must precede the
+U5/U6 pack-hash freeze**. 3 Reason-code plumbing (urgent: only 14/44
+refused occurrences have a reconstructable reason). 4 256-tok prefill arm
+(recommend NO). 5 Quantization posture. 6 Calendar dates. 7 Artifact
+scope + wall-meter vs second unit. 8 The `refusal_scope_spec.md`
+governance hole (cites D-083, which is a different ruling; no
+decision-log row exists for it).
 
-**Worktrees:** `<scratchpad>/{desk,u1,u2,u3,u4,u8}` — prune after the
-branches land. Owed: U3 delta -> PR; U4 harvest; skill-usage log entry;
-consistency-correction verification.
+### BRANCHES (all pushed)
+
+`impl/d117-u1-gate-debt` (split pending) · `impl/d117-u2-successor`
+(COLD-GATE EXHIBIT, never a PR) · `impl/d117-u8-readiness` (evidence only,
+REWORK) · `impl/paper-trust-model` (PR #114, 2 gate items owed).
+Merged today: `impl/d117-u1-ledger-session`, `impl/d117-u3-pinset-v2`,
+`impl/d117-u4-regression`, `impl/paper-mvp-complete`.
+
+### WHAT CHANGED IN DOCTRINE TODAY (binds successors)
+
+- **D-118**: the merge gate is enumerated (11 items) and mechanically
+  checked by a per-PR GATE LEDGER; any NOT-RUN item blocks merge
+  regardless of CI; D-072 self-merge is conditioned on it; a burn license
+  never reduces the gate. The apex Fable diff gate MAY be delegated to
+  Fable subagents (magistrate adjudicates, never skips).
+- **D-117**: three prospective windows replace the historical re-mint.
+- Memo literals must be RE-DERIVED from landed branches (the memo's
+  3-receipt/85 model was superseded by the landed 5-receipt/91 reality).
+- No second-paper work touches the mint/pinset/detection_floor file set
+  until U10 closes; kill thresholds are multiples of a PROJECTED floor,
+  never joule literals.
+- **The floor artifact is OPERATOR-ATTESTED**, not machine-verified
+  provenance — adjudicated by two converging apex reviews; the paper's
+  custody language was narrowed accordingly (PR #114).
+
+### LEAD ERRORS RECORDED (do not repeat)
+
+Custodied mid-write files as if complete (an examiner reviewed a dead
+snapshot). Accepted a delta's headline twice while its qualifiers went
+unread (U3's CLEAN, later overturned; U4's three PARTIALs, never ruled).
+Merged three PRs before the apex gate existed. All are closed
+structurally, not by memory.
 
 ## ✅ CHECKPOINT 2026-08-06 late — machine-move stop (resume script)
 
