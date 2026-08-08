@@ -147,6 +147,7 @@ be re-derived by a future agent gets an entry here.
 | D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
 | D-124 | Common-mode ABBA contrast estimator PROMOTED-AS-CANDIDATE in the TWO-SHARED-EDGE form (shared onset + shared offset parameters, adversarial per-bundle residuals) after the ordered current-semantics replay HELD the bar decisively (a5 decode: worst-case default 8.611855 J vs joint-sweep 1.632422 J, two-shared-edge 1.869502 J — all NON-CLAIM); registration conditions bind (named estimator + named stationarity transfer assumption with evidence; pre-registration in the D-117 packs BEFORE claim data; identical treatment on calibration and consuming contrast; allowance exactly once; full D-118/D-121 gate; issued artifact untouched); the evidentiary limit of the transfer assumption is registered and rides the paper's limitations | adopted (magistrate under the D-123 overnight license; Ed may reverse — flagged for morning review) |
 | D-125 | Ed morning ratification batch (2026-08-08): D-124 common-mode estimator SIGNED OFF ("if instrument gets better, yes"); the Q1+Q13 lineage-envelope adoption RATIFIED on trust ("i trust your decisions there"), with the magistrate's clarification on record that this is successor calibration-acceptance arithmetic (not workload profiles) and only ever strengthens the 0.010818 floor — D-117 cl.1 is accordingly AMENDED for successors to "genesis lower bound + lineage-envelope rule" (the consult's transcription condition is met; freeze-until-ruled ends); 40-hour work window granted — plan of record at docs/strategy/2026-08-08-40h-plan.md | ratified (Ed, in-thread 2026-08-08 morning; transcribed by the magistrate) |
+| D-126 | U2 second-convening synthesis TRANSCRIBED (record: docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS-V2.md): six first-round objections verified moot in code by both sealed judges; Q2/Q4/Q6/Q7/Q9/Q11 + the Q13 n>=19 floor RATIFIED with the cold judge's binding amendments; Q5 ratified WITH the judge's closure definition (decision-log disposition by content_id + successor prior_observation_set record; consuming code waits for the first disposing ruling); Q8 registry authority ratified and the migration shim DELETED by convergent ruling; the Q1+Q13 joint remand is RESOLVED by the D-125 lineage envelopes; Q12 stays OPEN pending full-register re-presentation (packet rule hardened: quotes run to end of document section); Q10 deferred to the recovery gate; rework round 2 + the landing gauntlet (required writer≠reviewer lens over the 965-line successor test surface) bind before any successor issuance; this decision ID replaces the COLD-GATE-U2-PENDING tuple member — an issued artifact may never embed a tuple member with no decision-log entry | adopted (magistrate transcription of the sealed convening, 2026-08-08) |
 
 ---
 
@@ -7939,3 +7940,50 @@ kernel row sharpens to this form.
    quiet-window nights (Ed available for §5A arm/disarm taps). The plan
    of record is `docs/strategy/2026-08-08-40h-plan.md`; RUN_STATE points
    to it as the resume script across /clear.
+
+## D-126: U2 second convening — synthesis of record; COLD-GATE-U2-PENDING resolves to this entry
+
+**Date:** 2026-08-08. **Status:** ADOPTED (magistrate transcription of
+the sealed second convening; both judges' rulings custodied at
+`docs/process_traces/2026-08-07-u2-coldgate/`).
+
+1. **Outcome.** Partial ratification + one joint remand, per
+   SYNTHESIS-V2.md: six first-round objections verified moot in the
+   exhibit's bytes by both sealed judges (Q2 observed-max screen, Q4
+   one-way door, Q6 abandoned-brick, Q7 bare-None loader, Q9
+   unbarriered publication, Q11 fabricated successor_probe).
+2. **Ratified with binding amendments:** Q2; Q4 (plus the two-site
+   freeze test obligation on `_SUPPORTED_COUNT_BOUNDARY_RULES` and its
+   recompute branch); Q5 (the cold judge's closure definition is
+   BINDING — an observation ceases to be "new" only via an explicit
+   decision-log disposition by content_id plus the next successor's
+   prior_observation_set recording the disposing decision ID; consuming
+   code lands with the first disposing ruling, not before); Q6; Q7; Q8
+   (registry authority ratified; the migration shim DELETED by
+   convergent ruling — `_load_registry_for_current_active_selection`
+   collapses to the plain committed load); Q9 (strict with the shim
+   gone); Q11; the Q13 n>=19 licensing floor.
+3. **Q1+Q13 joint remand: RESOLVED** by the lineage-monotone envelope
+   design (Q1Q13-REMAND-CONSULT.md), ratified by Ed as D-125. The
+   silent clamp is removed; issuance refuses
+   `successor_screen_exceeds_budget_ceiling` when screen >= ceiling;
+   cap = ceiling − screen with no max(0,·); runtime classification and
+   record fields per consult §6.
+4. **Q12 OPEN** pending re-presentation on the FULL register text.
+   Packet rule hardened (second occurrence of the truncation class):
+   register/finding quotes run to END OF DOCUMENT SECTION, never to an
+   assembler-chosen paragraph boundary.
+5. **Q10 DEFERRED** to the recovery gate; the exception may not be
+   exercised on a live night before the predicate re-verifies on the
+   ledger-resident substrate.
+6. **Cross-cutting:** CH-1 (writer copied-scalar unit) deadline is
+   before the first successor issuance or any live night relying on
+   writer dispositions, whichever comes first. The U2 landing gauntlet
+   REQUIRES a writer≠reviewer lens over the 965-line successor test
+   surface (torn-publication, rollback, durability-uncertain,
+   receipt-authentication paths). No successor can issue until rework
+   round 2 + the remand resolution + the landing gauntlet + CH-1 have
+   all landed.
+7. **Tuple rule:** this decision ID replaces `COLD-GATE-U2-PENDING`;
+   an issued artifact may never embed a tuple member with no
+   decision-log entry.
