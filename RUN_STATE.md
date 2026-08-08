@@ -20,6 +20,30 @@ EVENING block. Everything under those is executed history.**
 **OVERNIGHT RUN LIVE (D-123 license):** rulings D-122/D-123 transcribed;
 attribution debate adopted (means: signal-sizing only; contrasts:
 common-mode estimator replay ORDERED pre-freeze, promotion bar >=2x/2J).
+OVERNIGHT, LATER (state at ~03:30): **U2 second convening RULED**
+(SYNTHESIS-V2.md, both sealed rulings custodied): six first-round
+objections verified moot in code by BOTH judges; Q5 closure defined and
+adopted; Q8 migration shim deleted by convergent ruling; Q9 barrier
+verified mechanical; **Q1+Q13 jointly REMANDED to design** (the
+refuter PROVED the range-based successor screen crosses the shrinking
+t-ceiling at ~67% at the actual n=30 first-successor corpus — silent
+clamp + incoherent runtime refusal; consult IN FLIGHT
+`<scratchpad>/q1q13-consult-out.md`); Q12 open (the packet truncated
+the register AGAIN one paragraph later — packet rule hardened:
+quote to end of document section); Q10 defers to recovery. **RECOVERY:
+escalation FIRED at count 2 ACROSS LAYERS**
+(docs/process_traces/2026-08-08-recovery-exits-escalation/ESCALATION.md
+— the Opus lens PROVED by executed probes that the writer's
+per-process claim_id wedges the night permanently after the design's
+own canonical crash, all three governed exits non-functional; runbook
+amendment sits under a not-in-force banner). No fix round 2;
+exit-completeness design consult IN FLIGHT
+(`<scratchpad>/exits-consult-out.md`). The recovery branch's custody
+core is CLEAN (no path admits a control receipt as evidence) — the
+class lives in the operator/liveness layer. TRUST: fix round 3 landed
+(`ad16fb2`, replay 2748 OK unpiped); delta4 IN FLIGHT — on ACCEPT:
+PR -> CI -> D-121 terminal review -> merge lifts the mint bar.
+
 OVERNIGHT PROGRESS: trust tripwire delta RULED **same-signature NO —
 the operator-authored-authority class is DEAD** (authority terminates in
 authenticated ledger/session evidence, committed head pin, code-pinned
