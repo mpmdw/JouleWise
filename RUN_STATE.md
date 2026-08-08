@@ -10,10 +10,100 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-07 — **CHECKPOINTED for /clear. Read the
-CHECKPOINT block first;** everything below it is executed history.
+Last updated: 2026-08-07 EVENING — **window-end checkpoint. Read the
+EVENING block first;** the earlier /clear checkpoint below it is
+executed history except where the EVENING block says otherwise.
 
-## ✅ CHECKPOINT 2026-08-07 — /clear stop (READ THIS FIRST; full resume script)
+## ✅ CHECKPOINT 2026-08-07 EVENING — 3.5h magistrate window (READ THIS FIRST)
+
+**Executed this window (all pushed):** resume items 1, 2 (both
+consults), 3, and 5 of the /clear checkpoint, plus the reason-code code
+lane and two U5-U7 amendment closures.
+
+1. **PR #114 MERGED** (`a6bb14f`) — full D-118 ledger: round-1 delta
+   FAIL (2 blockers: unqualified tamper/detectability claims) → fix
+   `b0ee307` (D-119 conservative qualifiers + plain-language
+   mint/pinset/ledger-head-pin definitions) → delta ACCEPT + Fable
+   final-head PASS + CI green. Paper custody language is now fully
+   aligned with the adjudicated trust model.
+2. **Recovery-shape escalation consult DONE + ADOPTED**
+   (`docs/process_traces/2026-08-07-d117-u-units/RECOVERY-SHAPE-CONSULT.md`):
+   DELETE the sidecar journal; ledger-resident intent/finalize/abandon
+   receipts; F1 reborn as ledger-only recovery; three rounds of sidecar
+   work discarded. Implementation = NEW work order, full gauntlet,
+   sequenced AFTER PR #115 merges (shared calibration_ledger.py).
+3. **U1 BRANCH SPLIT EXECUTED → PR #115 OPEN, NOT merge-eligible yet.**
+   Port proven pure-subset of 880b6bc; two independent lenses (Sol
+   delta + Opus counter-review) convergently caught a REAL P1 beyond
+   the original delta (one-sided session endpoint served unbound) →
+   bench fix `86d7f59` + discriminating regression (41 focused OK,
+   mutation-checked). **OWED before merge (successor's FIRST move):
+   harvest `<scratchpad>/split-delta2-out.md` (fix-round delta,
+   in flight at close) + `<scratchpad>/split-postfix-replay.log`
+   (full unpiped replay, in flight) + final-head pass on `86d7f59` +
+   CI → then D-072 merge.** Same-signature: F2 scoping class at count
+   1; if the delta2 says "count 2" the escalation trigger fires —
+   consult, never round 3. ARMING blocker recorded (not merge): the
+   escalation's promised operator runbook procedure for the held F1
+   recovery gap is still unwritten.
+4. **U2 COLD GATE CONVENED AND RULED: NOT RATIFIED — packet remanded**
+   (`docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS.md` +
+   both sealed rulings custodied). Decisive: the packet quoted
+   D-102/D-116 while the exhibit's own decision-ID tuple declares
+   D-102/D-109/D-117 — D-109 is operative for 7 of 12 questions.
+   Convergent technical blockers bind the U2 rework (Q2 screen source,
+   Q3 kernel verification, Q11 fabricated successor_probe, Q6
+   abandoned-row brick, Q9 publication barrier, Q4 undisclosed one-way
+   door, allowance-rule as new Q13). New packet rule: quote every entry
+   the exhibit itself declares as authority, diffed mechanically.
+   Charter erratum #2: worktree convening does NOT suppress harness
+   injection for Agent-tool subagents — disclosure line is the control.
+5. **U5-U7 amendments 3+4 CLOSED:** U11 arm-time identity-pin
+   projection work order registered
+   (`WORK-ORDER-U11-IDPIN-PROJECTION.md`); launch-command contract
+   adopted (`docs/process_traces/2026-08-07-plan-factory/PACK-LAUNCH-CONTRACT-CONSULT.md`
+   — typed stage_launch.v1 recipes in plan_tree nodes, U8 materializes
+   to exact argv). **Pack generation now blocks ONLY on Ed ruling 2
+   (reported-energy cells) for the hash freeze**; amendments 1/2/5 are
+   generation-time work.
+6. **Reason-code CODE lane implemented** (magistrate ruling A split) —
+   branch `impl/d117-reasoncode-plumbing` (`21991f1`, pushed),
+   self-labeled UNGATED: top-level sibling field both whole-window
+   emitters, outside-S1 frozen namespace, golden characterization
+   sha256, projection key-list freeze test. **D-118 gauntlet owed
+   before any PR.** Spec ratification lane untouched (Ed ruling 8 /
+   S1-domain question remains).
+
+**IN FLIGHT AT CLOSE (harvest, do not re-run):**
+- **D117-POSTCOLLECTION-TRUST-01 implementation** — Sol xhigh,
+  worktree `<session-scratchpad>/trust`, branch
+  `impl/d117-postcollection-trust`, WRITE_SCOPE = the consult §5
+  surface minus draft-v1.md/ledger. Report `<scratchpad>/trust-out.md`
+  when done; if the process died at session end, the WORKTREE DIFF is
+  the artifact — commit it UNGATED like reasoncode and gauntlet next
+  session. The v2 mint stays BARRED until this lands + delta + gate.
+- **PR #115 fix-round delta + full replay** (item 3 above).
+- Session scratchpad: `/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad`
+  (worktrees split/trust/reasoncode live there; prompts + all Sol
+  outputs custodied there; bridge audit rows in .codex-bridge/).
+
+**LEAD ERRORS this window (recorded, closed structurally):** (a) an
+Opus review subagent launched in the main-repo cwd detached the main
+tree via checkout; a bookkeeping commit landed on the detached lineage
+and its push silently no-opped — recovered by cherry-pick (`a64f6ad`).
+RULE: review agents get isolation:worktree or an explicit no-checkout
+line; check `git branch --show-current` before any main-tree commit.
+(b) The lead's first full-suite replay was PIPED (tail ate the exit
+code) — the twice-recorded rule recurred; replay redone unpiped.
+
+**Ed's rulings owed: UNCHANGED 8** (ADJUDICATION.md) — ruling 2 is now
+the ONLY blocker on U5 pack-hash freeze; ruling 8 (refusal-scope spec
+governance) gates the reason-code spec lane.
+
+**Successor's order: (1) PR #115 gate completion → merge (F2 is live
+on main until then); (2) trust harvest → gauntlet → PR; (3) reasoncode
+gauntlet → PR; (4) recovery-shape implementation (after #115); (5) U2
+packet reassembly + rework; (6) packs on Ed ruling 2.**
 
 **THE GOAL MAP:** `docs/strategy/HORIZONS.md` — H0 ship the capstone
 paper (current focus, everything waits on it) / H1 the ICPE version /
