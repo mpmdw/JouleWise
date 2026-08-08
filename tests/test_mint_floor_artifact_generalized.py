@@ -1176,19 +1176,19 @@ def synthetic_v2_fixture() -> tuple[
 # Independent golden constants. They are regenerated only by an explicit
 # fixture-review step, never by the mint implementation under test.
 SYNTHETIC_COMPONENT_SHA256S = (
-    "834933eccfab3558bf2e2b9a5ec9ac1d8daed82e3b085b4b1cc4d4c9abbeff63",
-    "5bbb54e7f363208d7bd6ec26affb94d4239d47b4697eb94c6352d07451cc1b2a",
+    "8f81bd1326cf8b6f0800eac49d895b079a63b2cf9a89bc61c04dca480b37bd02",
+    "04f2dbdc76b4d7d181efb03102a38b536c80ad2754e306921f8a8613c5663db4",
 )
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "00f974ad001739a4b8ae8ef74a9c9486d18d6331d244a8676123d603fe3a5221",
-    "84cba89e68eb28a082501505eb118b8935d8ee682f32c3538a4751da47f3c6ca",
+    "895d7ab4f85b40a6d826908219ee4d370acf1dc5cce844628473237b1d5f9d7d",
+    "49d4f4fdbbe978e12707e80b9c2b0a9035585eddbdc920501a96f7875bae7e06",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "7c26c080d97edb9cee4f75c9aed213ec82a5cf3af6e9827d91f44e831ddb377c"
+    "5df2a269f4eb465f0067c5fd398cb1d6d1a1cc0cbff60c9ac1ef27525661942c"
 )
 CLI_COMPONENT_SHA256S = (
-    "0992de6432787321b874aa08dfec71075bd340835974db9789349852f3401496",
-    "3cfed014f4eb7032a4424e7b225b6b053527456e64acf0606da1f91f5499fa4b",
+    "e5656b5a3e17f9442e71e29c2adcd61ae1f6f5d3128f44d16e389d5ca1801f59",
+    "5438bdd3d1e58a84412fbef8a008b63fbcfb35dbb2f00abb355d5cde0c545ad9",
 )
 
 
@@ -1737,7 +1737,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     )
             attacked = copy.deepcopy(artifact)
             attacked["provenance"]["implementation"].pop(
-                "head_pin_commit_contained_in_origin_main"
+                "mint_commit_contained_in_origin_main"
             )
             errors = generalized.validate_floor_artifact(
                 artifact=attacked,
@@ -1746,7 +1746,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )
             self.assertTrue(
                 any(
-                    "head_pin_commit_contained_in_origin_main" in error
+                    "mint_commit_contained_in_origin_main" in error
                     for error in errors
                 ),
                 errors,
@@ -2281,7 +2281,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
             minted = load_json(root / "correct-floor.json")
             self.assertTrue(
                 minted["provenance"]["implementation"][
-                    "head_pin_commit_contained_in_origin_main"
+                    "mint_commit_contained_in_origin_main"
                 ]
             )
             self.assertEqual(

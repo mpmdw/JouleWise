@@ -1382,7 +1382,7 @@ _IMPLEMENTATION_KEYS = {
     "project_tree_state",
     "python_package",
 }
-_IMPLEMENTATION_OPTIONAL_KEYS = {"head_pin_commit_contained_in_origin_main"}
+_IMPLEMENTATION_OPTIONAL_KEYS = {"mint_commit_contained_in_origin_main"}
 _ASSURANCE_KEYS = {
     "profile_id",
     "independent_attestation",
@@ -2331,17 +2331,20 @@ def _validate_provenance(
             errors.append(
                 f"{where}.implementation.python_package: must be 'joulewise'"
             )
+        key_present = "mint_commit_contained_in_origin_main" in implementation
         contains_head = implementation.get(
-            "head_pin_commit_contained_in_origin_main"
+            "mint_commit_contained_in_origin_main"
         )
-        if is_v2 and not isinstance(contains_head, bool):
+        if is_v2 and not (
+            key_present and (contains_head is None or isinstance(contains_head, bool))
+        ):
             errors.append(
-                f"{where}.implementation.head_pin_commit_contained_in_origin_main: "
-                "required boolean for the v2 mint"
+                f"{where}.implementation.mint_commit_contained_in_origin_main: "
+                "required boolean-or-null for the v2 mint"
             )
-        if not is_v2 and contains_head is not None:
+        if not is_v2 and key_present:
             errors.append(
-                f"{where}.implementation.head_pin_commit_contained_in_origin_main: "
+                f"{where}.implementation.mint_commit_contained_in_origin_main: "
                 "allowed only for the v2 mint"
             )
     assurance = provenance.get("assurance")

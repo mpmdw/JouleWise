@@ -1179,7 +1179,7 @@ def _strict_json_lines_file(path: Path, label: str) -> bytes:
     return raw
 
 
-def _actual_v2_git_state() -> tuple[str, bool]:
+def _actual_v2_git_state() -> tuple[str, bool | None]:
     """Return the actual clean HEAD and whether origin/main contains it."""
 
     def run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -1201,13 +1201,21 @@ def _actual_v2_git_state() -> tuple[str, bool]:
     if status_result.returncode != 0:
         raise MintError("cannot derive the actual Git tree state for v2 issuance")
     if status_result.stdout:
-        raise MintError("v2 issuance requires a clean Git working tree")
+        dirty = ", ".join(
+            line.strip() for line in status_result.stdout.splitlines()[:8]
+        )
+        raise MintError(
+            "v2 issuance requires a clean Git working tree "
+            f"(dirty: {dirty})"
+        )
+    # origin/main containment is recorded evidence, never a gate: an
+    # unresolvable upstream (offline, single-branch clone) records unknown.
     upstream_result = run("rev-parse", "--verify", "origin/main^{commit}")
     if upstream_result.returncode != 0:
-        raise MintError("cannot resolve origin/main for v2 issuance")
+        return head, None
     contained_result = run("merge-base", "--is-ancestor", head, "origin/main")
     if contained_result.returncode not in (0, 1):
-        raise MintError("cannot determine whether origin/main contains v2 mint HEAD")
+        return head, None
     return head, contained_result.returncode == 0
 
 
@@ -2320,7 +2328,7 @@ def _mint_v2_cell_artifact(
             "implementation": {
                 "project_commit": project_commit,
                 "project_tree_state": project_tree_state,
-                "head_pin_commit_contained_in_origin_main": (
+                "mint_commit_contained_in_origin_main": (
                     origin_main_contains_head
                 ),
                 "python_package": "joulewise",
