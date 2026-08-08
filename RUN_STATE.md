@@ -40,32 +40,50 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶ T0 SESSION 2026-08-08 (40h window) — three Phase A streams IN FLIGHT
+## ▶ T0 SESSION 2026-08-08 (40h window) — mid-session state (updated ~afternoon)
 
 - Session scratchpad (prompts, scopes, consult copies, out-files):
-  `/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad`.
-  Worktrees are the PRIOR session's (still live, clean, branches pushed):
-  `…/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad/{trust,recovery,u2rework}`.
-- **A1 trust rework** (registration-at-read, consult-shaped) — Sol xhigh
-  enforced-scope in worktree `trust` @ ad16fb2; out
-  `<SP>/trust-rework-out.md` (8h cap). Gate on harvest: fresh delta vs
-  the 16-question relocation checklist → replay → integration-merge →
-  PR → CI → D-121 → merge lifts the MINT BAR.
-- **A2 recovery integrated round** (exit-completeness, four elements
-  TOGETHER) — Sol xhigh in worktree `recovery` @ c0e0257; out
-  `<SP>/recovery-rework-out.md` (6h cap). Merge discharges the ARMING
-  BLOCKER only with all four landed together; integration-tree with
-  post-trust main first (shared calibration_ledger.py).
-- **A6 U2 rework round 2** — Sol xhigh in worktree `u2rework` @ ad5f3f7;
-  out `<SP>/u2rework-r2-out.md` (5h cap). Envelope arithmetic per the
-  D-125-ratified Q1Q13 design; Q8 shim delete; Q5 record-shape; Q4
-  freeze test; Q3 evidence regen; COLD-GATE-U2-PENDING → D-126.
-- **D-126 MINTED + pushed (`1a1dac0`)**: the U2 second-convening
-  synthesis transcribed; it is the tuple-member replacement ID.
+  `/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad` (SP).
+  Worktrees: `…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+- **DONE: RESULTS_PROSE landed on main (`1e6fa16`)** — fillable results
+  template with terminating conditional structure + fail-closed linter
+  (15 refusing mutations); the unconditional-assertion class ruled DEAD
+  after 4 delta rounds; full record in
+  docs/process_traces/2026-08-07-plan-factory/PROSE-ESCALATION.md.
+  Ready to receive alpha numbers.
+- **A1 trust** @ 97fd4c1 (registration-at-read core BANKED; round 1
+  early-returned on two authority conflicts). F1/F2 RULED + custodied
+  (`RULING-CONSULT.md`, main `fe85b09`): reduce.py reverts (pin
+  senior), path-capability registration, content-addressed custody
+  store. **Round 2 IN FLIGHT** (out `SP/trust2-out.md`, 8h cap,
+  7-step sequence; step-3 diff checkpoints to trust2-commit1.diff).
+  Then 16-question delta → gate → merge lifts MINT BAR.
+- **A2 recovery** @ b0c8f6d (four elements BANKED, suite 2763 OK;
+  arming blocker held open on witness gap). 71-code census; WITNESS-
+  SCOPE-RULING custodied (main `6981d2b`): corruption construction
+  legitimate, witness_class tri-state, per-class executed-witness
+  gates. **Witness round 3 IN FLIGHT** (out `SP/recovery3-out.md`, 8h
+  cap, family-checkpoint resumable). Then gauntlet → integration-tree
+  post-trust → merge discharges ARMING BLOCKER.
+- **A6 U2** @ 878ce9e (envelope rework e5cf244 + gauntlet fix round
+  banked; suite 2748 OK). Attestation-binding class hit count 2
+  (triggers field forged-acceptable) → ESCALATION-ATTESTATION.md;
+  consult ADOPTED (`ATTESTATION-CONSULT.md` on branch): enrollment
+  registry over every schema leaf, trigger-set recomputation,
+  decision_ids += D-125, parameterized forge regressions. **Attestation
+  rework IN FLIGHT** (out `SP/u2rework2-out.md`, 6h cap). Then delta →
+  Q12 full-register packet + third convening. NOT night-blocking.
+- **D-126 minted** (`1a1dac0`); prose merge `1e6fa16`; ruling commits
+  `fe85b09`, `6981d2b` — all pushed.
 - If a stream's process dies, the WORKTREE DIFF is the artifact —
-  harvest, never re-run blind. A3 (CH-1 writer scalar) is queued after
-  A2 lands (shared writer file); A4 (estimator) + A5 (U11 tool) queue
-  after A1 merges (shared mint/floor surfaces).
+  harvest, never re-run blind (codex-run-v3 --resume for died
+  workspace-write runs). A3 (CH-1) queued after A2; A4 (estimator) +
+  A5 (U11 tool) queued after A1 merges. Same-signature counters live:
+  trust relocation classes (delta grades vs 16-question checklist);
+  recovery witness-coverage (first occurrence, honest); U2 attestation
+  class count 2 (consult-shaped rework in flight — if its delta finds
+  the class again, that is count 3 at the enrollment level: cold-gate
+  territory, not another fix).
 
 ## ▶ MORNING STATE 2026-08-08 (overnight run complete — READ THIS FIRST)
 
