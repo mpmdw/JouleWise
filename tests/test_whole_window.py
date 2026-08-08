@@ -21,10 +21,15 @@ from joulewise.whole_window import AuthenticatedConsumptionSession
 from joulewise.whole_window import (
     ADAPTER_CONTINUITY_SCHEMA,
     IDLE_ADMISSION_CORE_SCHEMA,
+    MEMBER_FAILURE_DETAIL_MAX_CHARS,
     NEG8_BRACKET_SCHEMA,
     WHOLE_WINDOW_SCHEMA,
+    WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS,
     _validate_row,
+    _validated_member_failures,
+    _whole_window_semantic_identity,
     build_row_provenance,
+    whole_window_refusal_reasons,
 )
 from joulewise.campaign_provenance import (
     campaign_provenance_attestation,
@@ -216,6 +221,184 @@ class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
                     "whole_window_verdict_provenance_invalid",
                     reasons,
                 )
+
+    def test_present_empty_member_failures_validates_but_absent_is_legacy(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy = self._verdict_fixture(
+                root,
+                schema_version="joulewise.campaign_provenance.v2",
+                attest=True,
+            )
+            self.assertIsNone(_validated_member_failures(legacy))
+            enriched = copy.deepcopy(legacy)
+            enriched["member_failures"] = []
+            self.assertEqual(_validated_member_failures(enriched), [])
+            ok, reasons = self._validate(enriched, root)
+
+        self.assertTrue(ok, reasons)
+        self.assertEqual(reasons, ())
+
+    def test_malformed_present_member_failures_invalidates_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = self._verdict_fixture(
+                root,
+                schema_version="joulewise.campaign_provenance.v2",
+                attest=True,
+            )
+            row["member_failures"] = [
+                {
+                    "member_id": "foreign-member",
+                    "reason_code": "cpu_busy_ratio_p95_exceeded",
+                    "detail": "foreign member",
+                }
+            ]
+            ok, reasons = self._validate(row, root)
+
+        self.assertFalse(ok)
+        self.assertIn("whole_window_verdict_provenance_invalid", reasons)
+
+
+class ProspectiveMemberFailureValidationTests(unittest.TestCase):
+    @staticmethod
+    def _row() -> dict:
+        return {
+            "bundle_ids": ["included-member"],
+            "excluded_bundles": [{"bundle_id": "excluded-member"}],
+            "waived_bundles": [{"bundle_id": "waived-member"}],
+        }
+
+    @staticmethod
+    def _failure(member_id: str, reason_code: str, detail: str) -> dict:
+        return {
+            "member_id": member_id,
+            "reason_code": reason_code,
+            "detail": detail,
+        }
+
+    def test_six_key_semantic_identity_projection_is_frozen(self) -> None:
+        self.assertEqual(
+            WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS,
+            (
+                "status",
+                "bundle_ids",
+                "campaign_policy",
+                "idle_admission_core",
+                "row_provenance",
+                "evaluation_basis",
+            ),
+        )
+        row = {
+            key: {"fixture": key}
+            for key in WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS
+        }
+        row["bundle_ids"] = ["z", "a"]
+        row["member_failures"] = []
+        projection = _whole_window_semantic_identity(row)
+        self.assertEqual(tuple(projection), WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS)
+        self.assertEqual(projection["bundle_ids"], ["a", "z"])
+        self.assertNotIn("member_failures", projection)
+
+    def test_valid_member_failures_cover_included_excluded_and_waived_ids(
+        self,
+    ) -> None:
+        row = self._row()
+        row["member_failures"] = [
+            self._failure(
+                "excluded-member",
+                "whole_window_bundle_invalid",
+                "strict validation failed",
+            ),
+            self._failure(
+                "included-member",
+                "cpu_busy_ratio_p95_exceeded",
+                "cpu p95 exceeded",
+            ),
+            self._failure(
+                "waived-member",
+                "environment_admission_failed",
+                "environment validation failed",
+            ),
+        ]
+
+        self.assertEqual(
+            _validated_member_failures(row), row["member_failures"]
+        )
+
+    def test_malformed_present_member_failure_shapes_are_rejected(self) -> None:
+        valid = self._failure(
+            "included-member",
+            "cpu_busy_ratio_p95_exceeded",
+            "cpu p95 exceeded",
+        )
+        cases = {
+            "wrong_type": "not-a-list",
+            "missing_key": [
+                {
+                    "member_id": "included-member",
+                    "reason_code": "cpu_busy_ratio_p95_exceeded",
+                }
+            ],
+            "duplicate_pair": [valid, dict(valid)],
+            "foreign_member": [
+                {**valid, "member_id": "foreign-member"}
+            ],
+            "invalid_reason_spelling": [
+                {**valid, "reason_code": "CPU-Busy"}
+            ],
+            "undeclared_reason": [
+                {**valid, "reason_code": "future_reason"}
+            ],
+            "unsorted": [
+                self._failure(
+                    "waived-member",
+                    "environment_admission_failed",
+                    "environment validation failed",
+                ),
+                valid,
+            ],
+            "empty_detail": [{**valid, "detail": ""}],
+            "oversized_detail": [
+                {
+                    **valid,
+                    "detail": "x" * (MEMBER_FAILURE_DETAIL_MAX_CHARS + 1),
+                }
+            ],
+        }
+        for name, member_failures in cases.items():
+            with self.subTest(case=name):
+                row = self._row()
+                row["member_failures"] = member_failures
+                self.assertIsNone(_validated_member_failures(row))
+
+    def test_same_basis_legacy_and_enriched_rows_do_not_conflict(self) -> None:
+        legacy = {
+            "record_type": "idle_admission_whole_window_verdict",
+            "status": "passed",
+            "bundle_ids": ["member"],
+            "campaign_policy": {"sha256": "a" * 64},
+            "idle_admission_core": {"same": True},
+            "row_provenance": {"same": True},
+            "evaluation_basis": None,
+        }
+        enriched = copy.deepcopy(legacy)
+        enriched["member_failures"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "campaign_log.jsonl").write_text(
+                json.dumps(legacy) + "\n" + json.dumps(enriched) + "\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(True, ()),
+            ):
+                reasons = whole_window_refusal_reasons(root, {"member"})
+
+        self.assertEqual(reasons, ())
 
 
 class TwoScopeRefusalTests(unittest.TestCase):
