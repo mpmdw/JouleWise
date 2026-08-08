@@ -10,9 +10,63 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-07 EVENING — **window-end checkpoint. Read the
-EVENING block first;** the earlier /clear checkpoint below it is
-executed history except where the EVENING block says otherwise.
+Last updated: 2026-08-08 — **FINAL WRAP of the 2026-08-07/08 evening
+double-window. A NEW SESSION STARTS HERE: read, in order, (1) the
+SUCCESSOR SCRIPT immediately below, (2) the D-121 ERA block, (3) the
+EVENING block. Everything under those is executed history.**
+
+## ▶ SUCCESSOR SCRIPT (2026-08-08 wrap — start here)
+
+**MERGED this window (all on main):** PR #114 (paper trust language),
+PR #115 (U1 night fixes — F2 fixed on main), PR #116 (reason-code
+plumbing — FIRST merge under the full 12-item D-121 gate). Decisions
+minted: D-119 (claim language), D-120 (trust closure), **D-121 (the
+magistrate's OWN contextual final review is the TERMINAL merge-gate
+item — binds every merge, non-delegable, after CI)**. Council record:
+C-050. Skill-usage log updated.
+
+**TWO SOL RUNS WERE IN FLIGHT at wrap** (background processes die with
+the session; the WORKTREE DIFF on disk is then the artifact — harvest,
+never re-run blind):
+1. **Trust fix round 2** — worktree `<session-377d…>/scratchpad/trust`,
+   branch `impl/d117-postcollection-trust` (last pushed head `4fcb687`;
+   Sol was editing uncommitted on top). Contract:
+   `<scratchpad>/trust-fix-prompt.md`; report (if finished):
+   `<scratchpad>/trust-fix-out.md`. It closes the round-1 audit FAIL
+   (A1 window-anchor-from-verdict; A2 production-path decisive
+   regression; A3 recursive strict-parse; A4 head-pin-commit
+   containment). **On harvest: fresh delta re-audit — if the
+   operator-authored-authority class survives in ANY form, that is
+   same-signature COUNT 2 and the next spend is an ESCALATION CONSULT,
+   never a round-3 fix.** Then replay -> PR -> CI -> D-121 terminal
+   review -> merge. The v2 mint bar lifts only then.
+2. **Recovery resume** — worktree `<session-377d…>/scratchpad/recovery`,
+   branch `impl/d117-ledger-recovery` (nothing pushed yet; round 1
+   returned NEEDS_SCOPE, magistrate approved expansion to the two
+   positional fixture sets with derived-count discipline). Report
+   appends to `<scratchpad>/recovery-out.md`. On harvest: commit
+   ungated -> full D-118/D-121 gauntlet -> PR. **Its receipt-cadence
+   change (5->10 per session) makes the U5-U7 '5-receipt/91' oracles
+   STALE — pack generation must re-derive from this branch, and packs
+   stay unfrozen anyway pending Ed ruling 2.**
+
+Session scratchpad root:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad`
+(prompts, all Sol outputs, worktrees trust/recovery/reasoncode/split†;
+† split worktree pruned post-merge). If the scratchpad is gone, the
+pushed branches + the prompt texts recorded in `.codex-bridge/` and the
+v3 manifests reconstruct everything.
+
+**THEN the queue (unchanged order):** trust merge (mint-bar lift) ->
+recovery gauntlet (discharges the night-1 arming blocker via its
+runbook amendment) -> U2 packet reassembly + rework (per
+`2026-08-07-u2-coldgate/SYNTHESIS.md`) -> U5-U7 pack generation on Ed
+ruling 2 (with re-derived receipt oracles + the adopted stage_launch.v1
+contract + U11 projection receipts before any ARM).
+
+**ED'S RULINGS OWED: still the 8** (docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md);
+ruling 2 is the only pack-freeze blocker; ruling 8 gates the
+reason-code SPEC lane (the code lane merged).
 
 ## ✅ CHECKPOINT 2026-08-07 EVENING — 3.5h magistrate window (READ THIS FIRST)
 
