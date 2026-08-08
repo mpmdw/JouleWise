@@ -1,17 +1,17 @@
 # 🟢 BETWEEN RUNS
 
-**Both metrology windows collected + salvage-closed; both verdicts FAILED as-issued and ADJUDICATED (D-100/D-106): window A permanently non-claim-bearing, window B's re-evaluation was EXECUTED 2026-08-03 under the full license and STOPPED correctly — license exhausted as drawn (D-112), r06 disposition parked for Ed; next window (C) awaits a fresh Ed §5A + the 140W adapter identity**
+**D-117 pre-window state; this document does not assert a measurement is in flight. 2026-08-07 supersession (D-117): the historical a10/re-mint and old C/D plan are retired. Claim authority can now arise only from the prospective alpha, beta, and gamma windows; the separately named Window C characterization night remains Ed ruling #1.**
 
 | | |
 |---|---|
 | State | `between` |
-| Updated | 2026-08-01 ~07:45 PT (post window B, post both verdicts) |
+| Updated | 2026-08-07 (documentation correction; no machine-setting assertion) |
 
 ## Does anything need you?
 
-One thing: **restore network time** (`sudo systemsetup
--setusingnetworktime on`) — disabled for last night's §5A and still off.
-Wall-meter purchase (D-092) remains open, nothing blocks on it.
+Verify network-time state directly before the next §5A sequence; this
+document does not assert the current machine setting. Wall-meter purchase
+(D-092) remains open.
 
 Expectation-setting on the two FAILED verdicts below (adjudicated
 2026-08-01/02, D-100 + D-106): the collected bundles are banked and
@@ -22,9 +22,10 @@ re-collects in window C. **Window B's re-evaluation ran 2026-08-03** after the
 D-108 gate cleared (`D100-BII-BINDING-01` CLOSED, PR #99): the governed
 run REFUSED correctly pre-verdict on one bundle's collection-time
 clock-anchor failure (r06; cold gate D-112: correct machinery; license
-EXHAUSTED AS DRAWN). The original FAILED verdict stands untouched; the
-next move — r06 removal channel or window-C re-collection — is Ed's
-(`WINB-R06-DISPOSITION-01`).
+EXHAUSTED AS DRAWN). The original FAILED verdict stands untouched.
+**2026-08-05 supersession (D-113): Window B is permanently
+non-claim-bearing; its re-evaluation/license chain is retired and no
+set-aside or claim-consumption decision remains pending.**
 
 ## Detail
 
@@ -39,17 +40,20 @@ instrument finding, see the run report), which fired the escalation
 trigger and went to a bounded Sol consult; launch 2 ran under a new
 suspended-cloud-sync protocol and passed pre-cal on the first attempt.
 Failure #3's cause is recorded honestly: the operating session's own
-output streaming during a member's idle gate. Remainder (null_o2048,
-long_holds, one additivity slot) moves to metrology window C.
+output streaming during a member's idle gate. Under the superseded plan,
+the remainder (null_o2048, long_holds, one additivity slot) was assigned
+to metrology Window C; the D-117 supersession in the headline now governs.
 
 Both metrology verdicts **FAILED and stand as issued** — window A on the
 dangling quarantined slot + refused deviation post-cal, window B on
 manifest/membership resolution + NEG-8 bracket evaluation. The
 three-part machinery adjudication is COMPLETE (D-100, 2026-08-01) and
 the repair is mainline (PR #94, 2026-08-02); window B's re-evaluation
-EXECUTED and stopped correctly 2026-08-03 (D-112; r06 disposition
-parked for Ed); window C waits on a fresh Ed §5A and the 140W adapter
-identity (the Anker currently negotiates 70W).
+EXECUTED and stopped correctly 2026-08-03 (D-112). D-113 permanently
+retired Window B's re-evaluation/license chain; no set-aside or
+claim-consumption decision remains pending. D-117 governs the prospective
+alpha/beta/gamma path separately from the named Window C characterization
+night.
 
 **New standing doc:** `CLAIMS_STATUS.md` (repo root) — the single home
 for what is claimable right now, what is holding, and which numbers must

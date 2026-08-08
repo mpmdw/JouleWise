@@ -135,11 +135,19 @@ be re-derived by a future agent gets an entry here.
 | D-110 | Mint #1 retroactively NON-CLAIM-BEARING (taint-and-remint, Ed ruling on sweep finding RT-1: floors embed zero allowance where D-102 pin 3 mandates +max(drift, 0.010818 s)); re-mint gated on D-109 landing + artifact issuance + validator pin widening; RT-2 dependency edge minted (MINT-GENERALIZE-01 hard-blocked on CAL-BRACKET-D079-01); night-consult 7B-mint license suspended; RT-5 recorded: all four PASSED window verdicts untainted | accepted (Ed 2026-08-03, sweep-triggered) |
 | D-111 | Adjudication evidence gains tracked custody: load-bearing adjudication artifacts (cold-gate packets, rulings, refuter reports, cited debate records, re-records, decision-input corpora, archive digests) commit under docs/process_traces/ in the producing session; .desk stays working scratch; named backfill set executed this session | accepted (Ed 2026-08-03, sweep-triggered) |
 | D-112 | Window B re-evaluation STOP gate synthesis: refusal = CORRECT fail-closed machinery (sole cause mtadd-p2048o0128-r06 collection-time clock-anchor failure, falsify-by-removal 69/69 + per-bundle attribution); no repair row; D-100 license EXHAUSTED AS DRAWN; original FAILED verdict stands; r06 removal channel + F7 barred-cell-scope question + NEG-8 bound re-mint PARKED FOR ED; standing correction: condition spellings non-unique to producer | accepted (magistrate synthesis of the convergent cold gate, 2026-08-03; record tracked in process_traces) |
-| D-113 | Window B TERMINALLY CLAIM-RETIRED (Ed ruled D-112 channel (c)): RETAINED_IMMUTABLE / PERMANENTLY_NON_CLAIM_BEARING with labelled forensic use; no new verdict (original FAILED stands); WB-specific D-100/D-106/D-108 license retired, general machinery survives; WINB-R06-DISPOSITION-01 closes ABANDONED_FOR_FRESH_COLLECTION; F7 whole-window voiding AFFIRMED as current semantics (cell-scoped alternative only via D-083 cold gate); NEG-8 WB re-mint MOOT, freshness rule survives by cross-reference; fresh-claim reset beginning Window C (no WB member in replacement basis; MET-WINDOW-C-01 re-scope); standing rigor-first principle + anti-rigor-spiral guardrail; Window C NO-GO until consult Q4 gates green | ratified (Ed 2026-08-05; magistrate transcription after Sol xhigh consult, record in process_traces) |
+| D-113 | Window B TERMINALLY CLAIM-RETIRED (Ed ruled D-112 channel (c)): RETAINED_IMMUTABLE / PERMANENTLY_NON_CLAIM_BEARING with labelled forensic use; no new verdict (original FAILED stands); WB-specific D-100/D-106/D-108 license retired, general machinery survives; WINB-R06-DISPOSITION-01 closes ABANDONED_FOR_FRESH_COLLECTION; F7 whole-window voiding AFFIRMED as current semantics (cell-scoped alternative only via a new Ed-ratified amendment under D-083's revisit rule, including the stated causal-domain proof and preregistration gates); NEG-8 WB re-mint MOOT, freshness rule survives by cross-reference; fresh-claim reset beginning Window C (no WB member in replacement basis; MET-WINDOW-C-01 re-scope); standing rigor-first principle + anti-rigor-spiral guardrail; Window C NO-GO until consult Q4 gates green | ratified (Ed 2026-08-05; magistrate transcription after Sol xhigh consult, record in process_traces) |
 | D-114 | T3-CHAIN DESCOPE (Ed directive, reverses his 2026-08-03 T3-DRIVE priority): t3 stays the INTERACTIVE control plane; t3-resident-during-measurement-windows DROPPED; QUIET-GUARD-01 re-scoped to commit 1 only; commits 2-4 + T3-CHAR-PAIR-01 + WO-T3-VIS-01 + SEC5A-REMOTE-01 shelved; T3-DRIVE gate lifted; Q13 degraded tail accepted; Q10 credential superseded | ratified (Ed, 2026-08-05, in-thread; D-113 number reserved for the parked WINB-R06 disposition) |
 | D-115 | Quiet-guard Q2 setup authority = FIXED INSTALLATION CAPABILITY, not general root authority; binding conditions: fresh interactive sudo authorization (sudo -k), digest-authenticated staged content, real interpreter isolation; installs INACTIVE; renumbered from the contract's proposed D-114 marker (number collision with the descope); entry lands via main + merge-back (packet-letter deviation ruled in the entry) | adjudicated (lead under Ed's standing Q2 license, 2026-08-05) |
 | D-116 | D-079 calibration acceptance artifact ISSUED; ledger genesis import executed (seq 76 / head 08456d50…; issued sha 316113960c…; 30/2/6 dispositions); D-110 condition (b) SATISFIED → MINT-GENERALIZE-01 unblocked for re-mint; two-cold-gate history (plan HELD → consumer impl + gauntlet → bytes PROCEED, sequencing HOLD resolved by consumer-first merge); window_metrologyB calibration fiducials in completeness record are NOT a D-113 violation | executed (Fable magistrate, 2026-08-06; Ed pre-authorized) |
 | D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
+| D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
+| D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
+| D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
+| D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
+| D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
+| D-124 | Common-mode ABBA contrast estimator PROMOTED-AS-CANDIDATE in the TWO-SHARED-EDGE form (shared onset + shared offset parameters, adversarial per-bundle residuals) after the ordered current-semantics replay HELD the bar decisively (a5 decode: worst-case default 8.611855 J vs joint-sweep 1.632422 J, two-shared-edge 1.869502 J — all NON-CLAIM); registration conditions bind (named estimator + named stationarity transfer assumption with evidence; pre-registration in the D-117 packs BEFORE claim data; identical treatment on calibration and consuming contrast; allowance exactly once; full D-118/D-121 gate; issued artifact untouched); the evidentiary limit of the transfer assumption is registered and rides the paper's limitations | adopted (magistrate under the D-123 overnight license; Ed may reverse — flagged for morning review) |
+| D-125 | Ed morning ratification batch (2026-08-08): D-124 common-mode estimator SIGNED OFF ("if instrument gets better, yes"); the Q1+Q13 lineage-envelope adoption RATIFIED on trust ("i trust your decisions there"), with the magistrate's clarification on record that this is successor calibration-acceptance arithmetic (not workload profiles) and only ever strengthens the 0.010818 floor — D-117 cl.1 is accordingly AMENDED for successors to "genesis lower bound + lineage-envelope rule" (the consult's transcription condition is met; freeze-until-ruled ends); 40-hour work window granted — plan of record at docs/strategy/2026-08-08-40h-plan.md | ratified (Ed, in-thread 2026-08-08 morning; transcribed by the magistrate) |
+| D-126 | U2 second-convening synthesis TRANSCRIBED (record: docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS-V2.md): six first-round objections verified moot in code by both sealed judges; Q2/Q4/Q6/Q7/Q9/Q11 + the Q13 n>=19 floor RATIFIED with the cold judge's binding amendments; Q5 ratified WITH the judge's closure definition (decision-log disposition by content_id + successor prior_observation_set record; consuming code waits for the first disposing ruling); Q8 registry authority ratified and the migration shim DELETED by convergent ruling; the Q1+Q13 joint remand is RESOLVED by the D-125 lineage envelopes; Q12 stays OPEN pending full-register re-presentation (packet rule hardened: quotes run to end of document section); Q10 deferred to the recovery gate; rework round 2 + the landing gauntlet (required writer≠reviewer lens over the 965-line successor test surface) bind before any successor issuance; this decision ID replaces the COLD-GATE-U2-PENDING tuple member — an issued artifact may never embed a tuple member with no decision-log entry | adopted (magistrate transcription of the sealed convening, 2026-08-08) |
 
 ---
 
@@ -526,6 +534,9 @@ correctness (not convenience).
 
 ## D-010: Run ID scheme
 
+**2026-08-07 supersession note:** The clause later superseded by D-022 is
+retained unchanged as historical context. Current rule ownership: D-022.
+
 - Date: 2026-06-09
 - Status: accepted
 - Phase: 2+
@@ -720,6 +731,10 @@ case Mac headline numbers move to remote-controlled runs.
 
 ## D-014: Statistical protocol for repeated runs
 
+**2026-08-07 supersession note:** The clauses later superseded by D-053 and
+D-077 are retained unchanged as historical context. Current rule ownership:
+D-053 and D-077.
+
 - Date: 2026-06-09
 - Status: accepted (draft to be ratified against real variance data at Phase 4
   Stage 4.0)
@@ -836,6 +851,9 @@ documented), or vLLM's disaggregation API stabilizes early enough to matter.
 ---
 
 ## D-016: Benchmark model selection
+
+**2026-08-07 supersession note:** The clause later superseded by D-073 is
+retained unchanged as historical context. Current rule ownership: D-073.
 
 - Date: 2026-06-09
 - Status: open (criteria fixed now; closure requires Phase 1 supervisor scope
@@ -1459,6 +1477,9 @@ default validation, so all consumers inherit it identically (D-025).
 
 ## D-028: `reduce` verb rewrites `summary_metrics.json` in place
 
+**2026-08-07 supersession note:** The clause later superseded by D-078 is
+retained unchanged as historical context. Current rule ownership: D-078.
+
 - Date: 2026-07-06
 - Status: accepted (Slice 2N.6)
 - Phase: 2
@@ -1847,6 +1868,9 @@ time of this addendum). Recoverability evidence table:
 forward: integration fixes and site-script behavior changes require
 their own PR; this addendum does not amend D-031's text, it records
 its breach. History is not rewritten; the commits stand.
+
+**2026-08-07 pointer note:** `docs/reviews/c027/retro_b6_review.md` was
+not recovered in the repository and is unavailable for citation.
 
 ---
 
@@ -2239,6 +2263,9 @@ insufficient, or a profile genuinely cannot ride the generic mechanism.
 
 ## D-041: Benchmark interop — frozen-subset imports + marker-shim energy layer
 
+**2026-08-07 supersession note:** The clause later superseded by D-060 is
+retained unchanged as historical context. Current rule ownership: D-060.
+
 - Date: 2026-07-08
 - Status: accepted
 - Phase: 2+ (all implementation post-2M per D-034; see stop-line)
@@ -2444,6 +2471,9 @@ REMOVED (non-default values rejected). See ed-rulings.json R4.
 ---
 
 ## D-045: Suite substrate execution semantics
+
+**2026-08-07 supersession note:** The clause later superseded by D-056 is
+retained unchanged as historical context. Current rule ownership: D-056.
 
 - Date: 2026-07-08
 - Status: accepted (suite-build adjudication; A4/A5/A6/A8/C6 + attack-round guards)
@@ -2712,6 +2742,9 @@ tightly enough to model it instead of measuring per leg.
 
 ## D-050: Active stop cards and process-trace manifests
 
+**2026-08-07 supersession note:** The clause later superseded by D-064 is
+retained unchanged as historical context. Current rule ownership: D-064.
+
 - Date: 2026-07-09
 - Status: accepted (user-directed meta-process cleanup after CP-5 pause)
 - Phase: cross-project process
@@ -2834,6 +2867,9 @@ long-form source; the full retained-route/page inventory and any
 compatibility endpoint decision remain with AUD-WO-039 at its landing.
 
 ## D-052: Capstone scope contract — frozen umbrella headline and contribution ladder
+
+**2026-08-07 supersession note:** The clause later superseded by D-060 is
+retained unchanged as historical context. Current rule ownership: D-060.
 
 - Date: 2026-07-09
 - Status: accepted
@@ -2983,6 +3019,9 @@ ruled enforce/descriptive/reserved/removed semantics in v2 bundle
 manifests.
 
 ## D-057: Uncertainty terms — drift is a bound; claim-gate reason codes are stable vocabulary
+
+**2026-08-07 supersession note:** The clause later superseded by D-077 is
+retained unchanged as historical context. Current rule ownership: D-077.
 
 - Date: 2026-07-09
 - Status: accepted (promotes stream-ledger P29-2/P29-3)
@@ -3517,6 +3556,9 @@ revert 913a2a6). Both recorded with approvals and reasons in
 `.codex-bridge/workspace-lease-events.jsonl`; the harness classifier
 correctly refused every lead self-approval attempt first.
 
+**2026-08-07 pointer note:** `.codex-bridge/workspace-lease-events.jsonl`
+was not recovered in the repository and is unavailable for citation.
+
 Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in
 `docs/run_reports/2026-07-13-bridge-v11.md`; tracked invocation
@@ -3637,6 +3679,10 @@ Scope note: no re-measurement — bundles already record both bases over
 preserved raw traces; this is a reporting/wording change.
 
 ## D-068: Site deployment is Ed-manual; sessions end with a drift report, never a deploy
+
+**2026-08-07 supersession note:** The clause later superseded by D-101 is
+retained unchanged as historical context. Current rule ownership: D-101 and
+its addenda.
 
 - Date: 2026-07-14 (Ed-directed; provenance `docs/axi-handoff.md` §2.3)
 - Status: accepted (C-033 coherence-reviewed; process-layer; effective
@@ -4705,7 +4751,8 @@ project:
 Context. The production policy constant `calibration_bracket_max_drift_s`
 (currently `0.01`, `configs/campaign_policies/quiet_mac_p2_production.json`)
 decides whether a window may bear claims: the reducer refuses when bracket
-drift exceeds it (`joulewise/calibration_bracketing.py:291`). That constant
+drift exceeds it
+(`joulewise/calibration_bracketing.py::evaluate_calibration_bracket`). That constant
 was never derived. It sat *below* the repeatability of the very estimator it
 judges — structurally the same defect D-078 clause 10 diagnosed and repaired
 for the NEG-8 drift gate, where an underived 0.05 J constant was compared
@@ -4834,7 +4881,7 @@ therefore the derived limit, unchanged.
    chosen.
 
 4. **One general scope name for post-window-A production windows.**
-   `_CALIBRATION_SCOPES` (`joulewise/detection_floor.py:87`) is currently
+   `joulewise/detection_floor.py::_CALIBRATION_SCOPES` is currently
    `("window_a", "window_b_revalidation", "smoke")`. Windows C and D have no
    legal scope name, which blocks minting any canonical floor artifact from
    them. Adopted: add **one** general scope name covering post-window-A
@@ -4857,7 +4904,7 @@ therefore the derived limit, unchanged.
 5. **Publish the decode-phase floor now; pursue prefill separately
    (Ed-ratified).** A cell reaches `claim_ready` only when it has *both* an
    absolute and a comparative floor component in the same cell
-   (`joulewise/detection_floor.py:2011`). Window a10 supplies the absolute
+   (`joulewise/detection_floor.py::_validate_cell`). Window a10 supplies the absolute
    component. Window C (40 decode ABBA members; the first comparative window
    in project history to pass its whole-window verdict) supplies the decode
    comparative component. Both windows are on disk and both passed. Adopted:
@@ -5362,12 +5409,14 @@ binding on the order:
 
 - **C1** — the consumer enumeration is **AUDITED, not trusted**: the delta
   re-audit independently re-derives the enumeration (CLI intake
-  `cli.py:1905` → artifact emission) and diffs it against the implementer's;
+  `joulewise/cli.py::_cmd_analyze_claims` → artifact emission) and diffs it
+  against the implementer's;
   any consumer in the auditor's list missing from the implementer's is a
   FIX-8 failure.
 - **C2** — phase order is a **magistrate ruling, not the implementer's
   choice**. The cold instance verified that `_validate_output_separation`
-  (`__init__.py:85`, called at `:1206`) runs BEFORE inputs load, so the
+  (`joulewise/analysis_engine/__init__.py::_validate_output_separation`,
+  called by `analyze_claims`) runs BEFORE inputs load, so the
   filtered mapping does not exist there; the fix therefore requires either an
   early declared-roots read or a phase reorder — design-bearing either way.
 - **C3** — **the escalation trigger ARMS NOW**: if FIX-8's delta re-audit
@@ -5389,9 +5438,12 @@ declared-filtered mapping produced by ONE exported helper owned by
 would alter refusal precedence and that is deferred
 vocabulary-ratification territory. **The magistrate's own earlier two-phase
 reorder proposal is WITHDRAWN.** **M2 adopted:** the Opus-verified closed
-consumer list (`cli.py:1870-1891` builder; `__init__.py:1211` separation =
-the sole defect; `__init__.py:1219` load path already filtering at
-`_normalize_evidence_roots:807`; `artifact.py` zero occurrences) becomes a
+consumer list (`joulewise/cli.py::_cmd_analyze_claims` builder;
+`joulewise/analysis_engine/__init__.py::_validate_output_separation` =
+the sole defect; `joulewise/analysis_engine/__init__.py::analyze_claims`
+load path already filtering at
+`joulewise/analysis_engine/inputs.py::_normalize_evidence_roots`;
+`joulewise/analysis_engine/artifact.py` zero occurrences) becomes a
 verified **precondition**, plus hunk-by-hunk reconciliation of FIX-6 against
 `f63a334`; the C1 audit independently re-derives both. **M4 adopted:** the
 operator checklist mandates exact evidence-root mappings regardless of FIX-8.
@@ -5425,6 +5477,9 @@ magistrate dissent that Ed sees), or the pairing's catch record over further
 exercises justifies changing the mechanism.
 
 ## D-088: Cooldown-join escalation — no FIX-11; ratified join contract; conditioned merge license (cold gate + refuter synthesis)
+
+**2026-08-07 supersession note:** The clause later superseded by D-089 is
+retained unchanged as historical context. Current rule ownership: D-089.
 
 Date: 2026-07-30. Authority: magistrate synthesis of a mandatory rule-11 cold
 gate (fresh Fable instance, no loop context) paired with an Opus contract-lens
@@ -5532,6 +5587,9 @@ behaviour is identical pre- and post-fix (**57/57 verified, both supersessions
 consumed**). Tonight's collection was unaffected — the defects live in
 claim-side joins over malformed manifests. Audit drivers are preserved as
 `scratchpad/driver_b1.py` and `driver_b2.py`.
+
+**2026-08-07 pointer note:** those two driver files were not recovered in
+the repository and are unavailable for citation.
 
 *On the record (magistrate reconciliation, 2026-07-31):* B1/B2 are the
 FIX-10 audit report's own labels for the SAME two findings D-088
@@ -6087,6 +6145,10 @@ for window B.]
 
 ## D-100: Salvage-dangler terminal semantic — cold-gate synthesis (S2-A as redrawn, landed in the S3 semantics-dispatch shape)
 
+**2026-08-07 supersession note:** The Window-B clause later superseded by
+D-113 is retained unchanged as historical context. Current rule ownership:
+D-113.
+
 - Date: 2026-08-01
 - Status: accepted (rule-11 mandatory cold gate: cold Fable instance ruling
   + one bounded factual follow-up + independent Opus contract-lens
@@ -6099,7 +6161,8 @@ for window B.]
 
 Question ruled: the terminal whole-window semantic for a §10-quarantined
 member occurrence with zero surviving bundles in a D-087 salvage-closed
-window (packet: `.desk/adjudication_packet_20260801/`, retained with the
+window (packet:
+`docs/process_traces/2026-08-03-d111-backfill/adjudication_packet_20260801/`, retained with the
 audit, both rulings, and the refutation as the session record).
 
 **1. Unanimous machinery repairs (both instances converged; land as one
@@ -6205,6 +6268,10 @@ falsifier (admission-gate sensitivity blind spot correlated with the
 dangler's intruder class) gains evidence.
 
 ## D-101: The site gates nothing — publication chain fully decoupled from CI pass/fail and session doctrine
+
+**2026-08-07 supersession note:** The clauses later superseded by D-101
+addendum II are retained unchanged as historical context. Current rule
+ownership: D-101 addendum II.
 
 - Date: 2026-08-01
 - Status: accepted (Ed-directed 2026-08-01, verbatim intent: "stop gating
@@ -6464,6 +6531,9 @@ gate), or any rider text conflicts with observed writer behavior.
 
 ## D-104: C3 residuals cold-gate synthesis — acquisition-identity lock tokens, positive writer-grammar tail recognizer (convergent gate; both magistrate candidates rejected)
 
+**2026-08-07 supersession note:** The clauses later superseded by D-105 are
+retained unchanged as historical context. Current rule ownership: D-105.
+
 - Date: 2026-08-02
 - Status: accepted (second rule-11 cold gate on gauntlet commit 3: cold
   Fable ruling + independent Opus refutation CONVERGED on rejecting both
@@ -6648,6 +6718,10 @@ their reports.
 
 ## D-106: b-ii residual synthesis — Variant D (land the inert branch, register NOTHING, window B blocked on two decidable fixes; cold instance overruled with dissent)
 
+**2026-08-07 supersession note:** The clauses later superseded by D-107,
+D-108, and D-113 are retained unchanged as historical context. Current rule
+ownership: D-107, D-108, and D-113.
+
 - Date: 2026-08-02
 - Status: accepted (cold gate: cold Fable ruled Option A + window-B YES;
   Opus refuter demonstrated the fence and the YES unsound on
@@ -6735,6 +6809,10 @@ does not weaken any existing D-078 refusal spelling.
 
 ## D-101 addendum (2026-08-02): live-content site tests leave the blocking gate
 
+**2026-08-07 supersession note:** The clause later superseded by D-101
+addendum II is retained unchanged as historical context. Current rule
+ownership: D-101 addendum II.
+
 - Status: accepted (Ed-directed 2026-08-02: the site was ratified as
   gating nothing, yet a decision-log edit still turned main red)
 - Applies to: `tests/test_build_site_parsers.py`,
@@ -6803,7 +6881,9 @@ external consumer whose freshness matters (same triggers as D-101).
   decision-level disposition. Ed sees this entry.)
 - Applies to: joulewise/salvage_dangler.py b-ii license surfaces, row
   D100-BII-BINDING-01 (acceptance amended), window B re-evaluation
-  gating. Custody: `.desk/coldgate_d100_bii/` (packet 2, both
+  gating. Custody:
+  `docs/process_traces/2026-08-03-d111-backfill/coldgate_d100_bii/`
+  (packet 2, both
   instruments, fix-1 + delta reports).
 
 **Trigger record (corrected on the refuter's probe):** formulation 1
@@ -6920,17 +7000,24 @@ precondition [magistrate + refuter recommendation], or land a
 mechanically-derived cardinality-closed grammar with the numeric
 residual explicitly ruled. Fix rounds 1+2 are held UNCOMMITTED/untrusted
 on branch `impl/d100-bii-binding`; nothing this addendum describes is
-landed. Full record: `.desk/coldgate_d100_bii/` (PACKET-3, both cold
+landed. Full record:
+`docs/process_traces/2026-08-03-d111-backfill/coldgate_d100_bii/`
+(PACKET-3, both cold
 rulings, refuter-3, SYNTHESIS-gate3-FOR-ED). This supersedes D-107's
 "fix round 2 proceeds now" license pending the D-108 ruling.
 
 ## D-108: D100-BII-BINDING-01 clause (c) RETIRED as a license precondition — row closes on (a)+(b)+(d), with the clause-(d) three-occurrence re-record carrying the formal load
 
+**2026-08-07 supersession note:** The Window-B clause later superseded by
+D-113 is retained unchanged as historical context. Current rule ownership:
+D-113.
+
 - Date: 2026-08-03
 - Status: accepted (Ed ruling 2026-08-03: explicit deferral to the
   joint magistrate + Sol recommendation — "i defer to you and sol's
   decision". Inputs: cold gate 3 (two cold Fable instances + Opus
-  refuter, all recommending retirement; `.desk/coldgate_d100_bii/`)
+  refuter, all recommending retirement;
+  `docs/process_traces/2026-08-03-d111-backfill/coldgate_d100_bii/`)
   plus an Ed-requested 2-round adversarial Sol xhigh consult over the
   decision packet (thread `019fc9bb-73fd-7042-8faf-2a72d74ee5b3`,
   record `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/` (tracked; scratch original in .desk); tracked copy: `docs/process_traces/2026-08-03-d111-backfill/debate-d108-d109/`), which CONVERGED
@@ -6974,7 +7061,9 @@ unclosable duty that does not warrant a license precondition.
    derivation + full probe transcript (immutable input hashes for the
    26 b-ii bundles, generated grammar, 26/26 admission results, every
    carrier mutation INCLUDING why the seventh carrier survives, tool
-   identity) in `.desk/coldgate_d100_bii/` at or before row close. It
+   identity) in
+   `docs/process_traces/2026-08-03-d111-backfill/coldgate_d100_bii/` at
+   or before row close. It
    must never be described as zero-output or substitution closure.
 4. Fix rounds 1+2 held uncommitted on `impl/d100-bii-binding`: the
    clause-(c) grammar work is discarded or demoted per clause 3; the
@@ -6986,6 +7075,10 @@ unclosable duty that does not warrant a license precondition.
 6. Window B re-evaluation unblocks when the row closes per clause 2.
 
 ## D-109: CAL-BRACKET-D079-01 F3 — A-min-with-reservation adopted (writer-enforced receipt ledger, reservation-first, repo-committed head pin); R1 ledger-authority and R2 prior-observation-set rulings
+
+**2026-08-07 supersession note:** The issuance clause later superseded by
+D-116 is retained unchanged as historical context. Current rule ownership:
+D-116.
 
 - Date: 2026-08-03
 - Status: accepted (Ed ruling 2026-08-03: same explicit deferral to the
@@ -7156,7 +7249,9 @@ D-102 epoch; the taint is confined to floor artifacts.
 2. `.desk/` remains legitimate working scratch; nothing load-bearing
    terminates there.
 3. BACKFILL (this session): the D-100/D100-BII cold-gate packets and
-   rulings (`.desk/coldgate_d100_bii/`, `.desk/adjudication_packet_20260801/`),
+   rulings
+   (`docs/process_traces/2026-08-03-d111-backfill/coldgate_d100_bii/`,
+   `docs/process_traces/2026-08-03-d111-backfill/adjudication_packet_20260801/`),
    the D-108/D-109 debate record, the night-consult rulings memo, the
    clause-(d) re-record JSON, the CAL-BRACKET F3 memos
    (`.desk/calbracket_d079/`), the TEST-SPEED timing corpus
@@ -7165,6 +7260,10 @@ D-102 epoch; the taint is confined to floor artifacts.
    by a digest manifest with the bytes retained in `.desk` + backup.
 
 ## D-112: Window B re-evaluation STOP gate — classification (i) adopted; the D-100 license is EXHAUSTED AS DRAWN; the r06 disposition ruling is PARKED FOR ED
+
+**2026-08-07 supersession note:** The parked Window-B disposition later
+superseded by D-113 is retained unchanged as historical context. Current
+rule ownership: D-113.
 
 - Date: 2026-08-03 (magistrate synthesis of the night's cold gate; both
   instruments convergent by independent methods; full verbatim record
@@ -7293,8 +7392,9 @@ and quality of the project and claims above all").
    status has no upstream authentication effect. Recorded explicitly as
    CONFIRMATION of the ratified fail-closed semantics, not as a finding
    that whole-window invalidation is always the physically correct
-   causal scope. Any future cell-scoped semantic requires the D-083
-   cold gate, a causal-domain proof, preregistration before collection,
+   causal scope. Any future cell-scoped semantic requires a new
+   Ed-ratified amendment under D-083's revisit rule, including the stated
+   causal-domain proof and preregistration gates,
    a new explicit semantics identity, and anti-claim-shopping
    regressions — none of which is built now (the only use case was
    abandoned). Blast radius is managed prospectively via shorter,
@@ -7361,6 +7461,10 @@ re-scope and the claim-window start fence register as queued work;
 RUN_STATE's parked-decisions list drops D-113.
 
 ## D-114: T3-CHAIN DESCOPE — t3 stays the interactive control plane; t3-resident-during-measurement-windows is DROPPED (Ed directive, supersedes the 2026-08-03 T3-DRIVE priority)
+
+**2026-08-07 supersession note:** The readiness clause later superseded by
+D-117 is retained unchanged as historical context. Current rule ownership:
+D-117.
 
 **Date:** 2026-08-05 (Ed, in-thread, during the desk session).
 **Status:** RATIFIED by the directive's own author. This reverses Ed's
@@ -7488,6 +7592,10 @@ QUIET-GUARD-01 row cannot land while any condition lacks enforcement.
 
 ## D-116: D-079 calibration acceptance artifact ISSUED; ledger genesis import executed (D-110 condition (b) SATISFIED)
 
+**2026-08-07 supersession note:** The historical re-mint consequence later
+superseded by D-117 is retained unchanged as historical context. Current
+rule ownership: D-117.
+
 **Date:** 2026-08-06 (Fable magistrate, overnight; issuance pre-authorized by Ed 2026-08-05 conditional on the gate passing).
 **Status:** EXECUTED. This retires the schema fixture and issues the authoritative calibration acceptance artifact — the anchor all future floor-mint claims authenticate against. D-110 re-mint condition (b) ("R2 backfill verified, ledger bootstrapped, head pinned") is now SATISFIED; (a) was satisfied by PR #100, (c) by PR #105. **MINT-GENERALIZE-01 is UNBLOCKED for the re-mint.**
 
@@ -7565,3 +7673,317 @@ structural closure live-reproduced at `c537386`; Sol xhigh consult run
    extraction specs / order manifests / evidence-root ids / contrast
    manifest; synthetic three-window live-ledger integration regression;
    D-102 successor-artifact packet; results/methods prose placeholders.
+
+## D-118: NOTHING APPROACHES MERGE WITHOUT THE FULL COUNCIL — the merge gate is enumerated and mechanically checked (Ed directive)
+
+**Date:** 2026-08-07 (Ed, in-thread, verbatim: "make sure they get a
+comprehensive fable pass, and make sure NOTHING gets near merge status
+ever again without the full council..."). **Status:** RATIFIED — apex
+authority; binds every future session and every agent role.
+
+**Trigger (recorded honestly):** three D-117 units (PRs #111/#112/#113)
+merged the same day after a strong but INCOMPLETE gate. They received
+paired audit lenses, lead-written FIX contracts, fix rounds, delta
+re-audits, second fix rounds, second deltas, lead-replayed full suites,
+and green CI. They did NOT receive: (a) the apex Fable diff gate — the
+magistrate substituted test evidence and spot-checks for reading ~9,200
+merged insertions; (b) the mandatory overbuild/merge-ability prune lens
+(Ed's own standing addition); (c) Opus counter-review, which Ed had
+explicitly asked to be in the instrument mix; and (d) for U4, the
+final-head rule — its L5 fix landed after its delta and was merged with
+no fresh pass. Gaps (a)-(d) were self-reported by the magistrate on Ed's
+direct question, then closed retroactively.
+
+**THE GATE (all of it, every time; no item is discretionary):**
+
+1. **Independent audit** of the implementation by a fresh reviewer that
+   did not write it. Never self-graded.
+2. **PAIRED LENSES, distinct angles** — minimum contract + execution.
+   Measurement-adjacent work adds the physics/causality lens.
+3. **Lead-written FIX contract** with dictated closure shapes; findings
+   are triaged and dispositioned, never silently applied.
+4. **DELTA RE-AUDIT of every fix round** — fix rounds introduce defects;
+   this project has proven it repeatedly, including twice on 2026-08-07,
+   where BOTH units' original defect classes survived round one in new
+   forms and only the delta caught them.
+5. **Same-signature statement required** from every delta. A surviving
+   class fires the escalation trigger: the next spend is a consult, not
+   another fix round.
+6. **OPUS COUNTER-REVIEW** on the near-final head — cross-model
+   diversity, not a second Sol pass.
+7. **APEX FABLE DIFF GATE** — a Fable-class judgment pass that READS THE
+   CODE and answers design-level questions (is this the right shape or a
+   workaround frozen into a contract; would a maintainer want to own it).
+   **This MAY be delegated to Fable subagents** (Ed, same exchange:
+   "you can delegate fable missions to other instances of fable") — the
+   magistrate owns the ADJUDICATION of their findings, not the reading.
+   What may never happen is the gate being skipped or downgraded to a
+   cheaper model tier.
+8. **OVERBUILD / MERGE-ABILITY PRUNE** — "would I want to maintain this
+   diff"; surplus abstraction and test bloat are pruned BEFORE merge, as
+   no downstream layer re-asks it.
+9. **Lead full-suite replay, unpiped, on the INTEGRATION tree** (not the
+   stale branch), with the exact tail recorded.
+10. **FINAL-HEAD RULE** — any commit landing after the last review round
+    gets one more fresh-eyes pass before merge, however small. No
+    exceptions; this rule previously caught a live crash path here.
+11. **CI green on the final head**, and for a multi-unit wave, a
+    **post-merge cross-unit integration review** hunting interaction
+    defects no isolated layer can see.
+
+**Mechanical enforcement (so this is not memory-dependent):** every PR
+description must carry a GATE LEDGER listing items 1-11 with the
+evidence path or commit for each, and any item marked NOT-RUN blocks the
+merge. A PR without a complete gate ledger is not merge-eligible
+regardless of CI state. The D-072 self-merge authority is CONDITIONED on
+this ledger being complete — it was never a license to merge on green
+alone.
+
+**Scope note:** a burn/liberal-delegation license (Ed, 2026-08-07)
+increases the volume of work fed INTO this gate. It never reduces the
+gate. If throughput and gate completeness conflict, throughput yields.
+
+## D-119: Claim-LANGUAGE rulings delegated to the magistrate, conservative-by-default, until Ed joins the draft loop
+
+**Date:** 2026-08-07 (Ed, in-thread, after the operator-attested
+adjudication: "it's a language issue not a software/hardware issue. yeah
+rule conservative on those, fable i trust you to rule on that for now
+until i start being in the loop on drafts"). **Status:** RATIFIED.
+
+**What is delegated.** How a claim is WORDED — the strength of a
+provenance/custody statement, whether a result is described as
+demonstrated vs designed, how a limitation is framed, which verb a
+guarantee gets. The magistrate rules these directly and records them,
+without waiting on Ed.
+
+**The standing rule for those rulings: CONSERVATIVE BY DEFAULT.** When
+two honest phrasings are available, take the weaker one. An overclaim in
+front of a metrology-expert advisor costs credibility that is expensive
+to rebuy; an underclaim costs a sentence. Where a stronger phrasing is
+actually warranted by evidence, it may be used — but the evidence is
+named in the same breath.
+
+**What is NOT delegated** (unchanged, still Ed's): what to MEASURE, what
+to fund with quiet nights, scope decisions, venue and calendar, anything
+irreversible, and any ruling that changes what the project claims to
+have DONE rather than how it says it.
+
+**Boundary case that prompted this:** the floor artifact's custody
+statement. The finding was that the paper implied third-party
+verifiability where the system provides tamper-evidence within a
+single-operator trust model. No measurement, instrument, calibration, or
+datum was affected — the fix was wording. That class is now magistrate
+territory.
+
+**Termination:** this delegation ends when Ed begins reviewing drafts
+directly. He may reverse any ruling at any time; none of them bind him.
+
+
+## D-121: The magistrate's contextual final review is the terminal merge-gate item (Ed directive; amends D-118)
+
+**Date:** 2026-08-08 (Ed, in-thread: "fable should do a final review of
+everything that is gonna touch main after every other pass. with
+relevant context"). **Status:** RATIFIED. Ed's ruling moots the rule-11
+cold gate on process amendments.
+
+**The rule.** Nothing merges to main until the magistrate (the directing
+Fable instance) has personally reviewed the exact merge candidate — the
+final head, its full diff, and its completed gate ledger — AFTER every
+other gate item has finished. This review is:
+1. **Terminal:** it is D-118 item 12, sequenced strictly after items
+   1-11 (including CI). A fix landing after it re-triggers it (the
+   final-head rule composes: any new commit restarts at item 4's delta
+   and ends at item 12 again).
+2. **Contextual, by design:** unlike cold gates and fresh subagent
+   passes (which exist to remove loop context), this slot exists to
+   apply it — the magistrate reads the candidate knowing the session's
+   escalations, adjudications, deferred items, and cross-branch state
+   that no fresh reviewer holds.
+3. **Non-delegable:** delegated Fable subagent diff/final-head passes
+   remain valid as EARLIER ledger items; they never satisfy item 12.
+   The magistrate adjudicates and signs the ledger.
+
+**Why (the session evidence that prompted it):** on 2026-08-07 the
+apex-delegable reading let merges complete where the magistrate's own
+last-look happened mid-gauntlet rather than last; separately, a
+counter-review caught a branch falsifying a PAPER sentence — a
+cross-surface fact only context-holding review reliably connects. The
+terminal slot puts the accountable reviewer at the accountable moment.
+
+**Ledger form:** item 12 reads "Magistrate final review — <head sha>,
+<verdict>, <one-line disposition of any deferred items>."
+
+
+## D-122: Prefill contrast IN SCOPE — 256-token prospectively frozen arm on gamma (Ed ruling 4)
+
+**Date:** 2026-08-08 (Ed, in-thread: the small-prefill measurability
+problem is answered by sizing up the workloads; "I don't want a decode
+only paper/scope if at all possible"). **Status:** RATIFIED. Reverses
+the adjudication's RECOMMEND-no; Ed's apex authority controls.
+
+**Evidence basis (labelled NON-CLAIM sizing scout,
+docs/process_traces/2026-08-07-prefill-feasibility/):** at the
+historical 128-token prompt the best ABBA estimate of the 7B-1.5B
+prefill delta is 5.809930 J against the ~5 J practical bar (D-078/D-083
+composition) — 16% point headroom with the diagnostic interval's lower
+side below the bar: MARGINAL. Proportional sensitivity for a 256-token
+prompt projects ~11.619860 J, comfortably clear. No historical 7B
+corpus above 128 prompt tokens exists, so 256-tok is a sizing
+projection, not demonstrated evidence — which is acceptable because the
+arm is PROSPECTIVELY FROZEN and the claim machinery fails closed.
+
+**Consequences:**
+1. Gamma's campaign pack gains a 256-token prefill ABBA arm (frozen
+   prompt, frozen member/minute budget — lands in the U7 pack under the
+   adopted stage_launch.v1 contract). Night budget grows; the operator
+   packet states the new duration.
+2. Prefill FLOOR cells continue to ride alpha/beta unchanged (D-117).
+3. If the collected contrast lands below the decision bar, the verdict
+   refuses per doctrine and the marginality analysis publishes as
+   prospective sizing evidence — never a quiet omission.
+4. The D-117 clause "contrast decode-only by default; 256-tok arm stays
+   Ed's option" is SUPERSEDED by this exercise of that option.
+
+
+## D-123: Ruling 2 YES + the signal-size doctrine + the overnight license (Ed, 2026-08-08)
+
+**Date:** 2026-08-08, in-thread, Ed's last exchange before an ~12h
+autonomous overnight window. **Status:** RATIFIED.
+
+1. **Reported-energy cells: YES.** The alpha/beta packs pre-register
+   reader-facing phase-energy means alongside the floor cells — same 50
+   members, zero added collection — conditional on the pack-gate check
+   proving the addition leaves every floor computation byte-identical.
+   Ed's framing accepted: what freezes is the PROCEDURE (measurand +
+   reduction method), never the number; exploration stays allowed and
+   labelled.
+2. **Signal-size doctrine (standing preference).** Ed: making the
+   workload bigger is "basically free to the instrument" — the
+   legitimate knob against the fixed ~1 J attribution blur is effect
+   size, not averaging. Apply wherever free: D-122's 256-token prefill
+   arm is the first exercise; future designs default to sized-up
+   signals unless sizing destabilizes a proven design or breaks
+   comparability with pinned claims.
+3. **Attribution debate ordered.** A bounded Sol consult on whether
+   phase ATTRIBUTION itself can be improved within the ruled instrument
+   scope (no instrument-improvement program). If the answer is "no
+   headroom beyond signal sizing," that is recorded and the question
+   closes.
+4. **Overnight license.** ~12h autonomous; goal "keep working until
+   you've got a defensible paper"; Sol liberal on fast tier; the
+   magistrate (Fable) oversees — D-121 terminal reviews bind every
+   merge; Opus lenses continue ("other eyes never hurt").
+
+
+## D-124: Common-mode contrast estimator — promoted as the registered candidate (two-shared-edge form)
+
+**Date:** 2026-08-08 overnight (magistrate adjudication under the D-123
+license; Ed-reversible, flagged for morning). **Trigger:** Ed's
+attribution debate (D-123 item 3) -> adopted memo -> ordered replay.
+
+**Evidence (NON-CLAIM, custodied at
+docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md):**
+on the exact a5 decode ABBA corpus under CURRENT issued semantics, the
+worst-case-sum default composes an 8.611855 J comparative floor; the
+common-mode joint sweep gives 1.632422 J; the more faithful
+two-shared-edge variant 1.869502 J. The promotion bar (>=2x or >=2 J)
+holds by every variant. Material for D-117: the prefill contrast's
+~11.6 J projected signal is thin against an 8.6 J-class worst-case
+floor and comfortable against a ~1.9 J-class common-mode floor.
+
+**What is promoted:** the TWO-SHARED-EDGE estimator (the replay's own
+soundness objection to the 1-D shared-shift form is sustained). It is a
+CANDIDATE until its implementing unit lands through the full gate and
+its identity is pre-registered in the D-117 pack bytes; if either
+fails, contrasts fall back to the worst-case default and the paper says
+so.
+
+**Registration conditions (all bind):** named estimator identity;
+named block-timescale stationarity/transfer assumption WITH the
+bracket-calibration evidence (onset/offset spans) and its honest limit
+(the historical corpus records bounds, not realized member-level
+errors) carried into the paper's limitations; pre-registration before
+any claim-bearing data; identical covariance treatment on calibration
+floor blocks and the consuming science contrast; D-102 never-zero
+allowance applied exactly once inside the shared operative bound; full
+D-118/D-121 gate on the implementing unit; the issued acceptance
+artifact is not reopened and no raw calibration corpus is voided.
+
+**Sequencing:** the implementing unit rides AFTER the trust branch
+merges (shared floor_extraction/estimator surface) and BEFORE pack
+freeze (the packs name the estimator identity). FLOOR-COMMONMODE-01's
+kernel row sharpens to this form.
+
+
+## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window
+
+**Date:** 2026-08-08 morning. **Status:** RATIFIED (Ed, in-thread).
+
+1. **D-124 signed off.** Ed's condition ("if instrument gets better")
+   is exactly the property: the two-shared-edge common-mode estimator
+   tightens comparative floors 4-5x on repo-demonstrated evidence, under
+   the full registration conditions of D-124. FLOOR-COMMONMODE-01's
+   implementation must land through the full gate BEFORE pack freeze so
+   the estimator identity pre-registers in pack bytes.
+2. **Q1+Q13 envelope adoption ratified on trust.** Magistrate
+   clarification recorded: this governs SUCCESSOR calibration-acceptance
+   arithmetic (drift screen + budget ceiling derivation), not workload
+   profiles; screens/ceilings become lineage-monotone t-family envelopes
+   inheriting the genesis screen 0.010818 as a lower bound — the
+   allowance can only strengthen. With Ed's ratification the consult's
+   transcription condition is met: **D-117 clause 1 is AMENDED for
+   successor artifacts** from "every mint uses max(drift, 0.010818)" to
+   "genesis lower bound + lineage-envelope rule"; the genesis literal
+   remains binding as the floor and for every mint under the issued
+   artifact. Freeze-until-ruled ends.
+3. **The 40-hour window.** Ed grants ~40 continuous hours including
+   quiet-window nights (Ed available for §5A arm/disarm taps). The plan
+   of record is `docs/strategy/2026-08-08-40h-plan.md`; RUN_STATE points
+   to it as the resume script across /clear.
+
+## D-126: U2 second convening — synthesis of record; COLD-GATE-U2-PENDING resolves to this entry
+
+**Date:** 2026-08-08. **Status:** ADOPTED (magistrate transcription of
+the sealed second convening; both judges' rulings custodied at
+`docs/process_traces/2026-08-07-u2-coldgate/`).
+
+1. **Outcome.** Partial ratification + one joint remand, per
+   SYNTHESIS-V2.md: six first-round objections verified moot in the
+   exhibit's bytes by both sealed judges (Q2 observed-max screen, Q4
+   one-way door, Q6 abandoned-brick, Q7 bare-None loader, Q9
+   unbarriered publication, Q11 fabricated successor_probe).
+2. **Ratified with binding amendments:** Q2; Q4 (plus the two-site
+   freeze test obligation on `_SUPPORTED_COUNT_BOUNDARY_RULES` and its
+   recompute branch); Q5 (the cold judge's closure definition is
+   BINDING — an observation ceases to be "new" only via an explicit
+   decision-log disposition by content_id plus the next successor's
+   prior_observation_set recording the disposing decision ID; consuming
+   code lands with the first disposing ruling, not before); Q6; Q7; Q8
+   (registry authority ratified; the migration shim DELETED by
+   convergent ruling — `_load_registry_for_current_active_selection`
+   collapses to the plain committed load); Q9 (strict with the shim
+   gone); Q11; the Q13 n>=19 licensing floor.
+3. **Q1+Q13 joint remand: RESOLVED** by the lineage-monotone envelope
+   design (Q1Q13-REMAND-CONSULT.md), ratified by Ed as D-125. The
+   silent clamp is removed; issuance refuses
+   `successor_screen_exceeds_budget_ceiling` when screen >= ceiling;
+   cap = ceiling − screen with no max(0,·); runtime classification and
+   record fields per consult §6.
+4. **Q12 OPEN** pending re-presentation on the FULL register text.
+   Packet rule hardened (second occurrence of the truncation class):
+   register/finding quotes run to END OF DOCUMENT SECTION, never to an
+   assembler-chosen paragraph boundary.
+5. **Q10 DEFERRED** to the recovery gate; the exception may not be
+   exercised on a live night before the predicate re-verifies on the
+   ledger-resident substrate.
+6. **Cross-cutting:** CH-1 (writer copied-scalar unit) deadline is
+   before the first successor issuance or any live night relying on
+   writer dispositions, whichever comes first. The U2 landing gauntlet
+   REQUIRES a writer≠reviewer lens over the 965-line successor test
+   surface (torn-publication, rollback, durability-uncertain,
+   receipt-authentication paths). No successor can issue until rework
+   round 2 + the remand resolution + the landing gauntlet + CH-1 have
+   all landed.
+7. **Tuple rule:** this decision ID replaces `COLD-GATE-U2-PENDING`;
+   an issued artifact may never embed a tuple member with no
+   decision-log entry.

@@ -4036,8 +4036,39 @@ def evaluate_calibration_bracket(
             or candidate.bracket_runs_root != observation.bracket_runs_root
         ):
             return result, ("calibration_ledger_off_ledger_artifact",)
-    has_session_candidates = any(
-        candidate.bracket_session_id is not None for candidate in candidates
+    # A complete session pair makes the binding mandatory only for a window
+    # that pair can causally and freshly bracket.  ``candidates`` still spans
+    # the full registered universe above, preserving the anti-withholding
+    # equality check without coupling historical ordinary windows to later
+    # session observations.
+    matching = [
+        candidate
+        for candidate in candidates
+        if candidate.protocol_id == PROTOCOL_ID
+        and all(
+            candidate.bindings.get(field) == bindings.get(field)
+            for field in V2_BINDING_FIELDS
+        )
+    ]
+    window_session_pre_ids = {
+        candidate.bracket_session_id
+        for candidate in matching
+        if candidate.bracket_session_id is not None
+        and candidate.bracket_slot == "pre"
+        and candidate.capture_wall_time_s <= window_start_s
+        and window_end_s <= candidate.capture_wall_time_s + MAX_AGE_S
+    }
+    window_session_post_ids = {
+        candidate.bracket_session_id
+        for candidate in matching
+        if candidate.bracket_session_id is not None
+        and candidate.bracket_slot == "post"
+        and candidate.capture_wall_time_s >= window_end_s
+        and candidate.capture_wall_time_s - window_start_s <= MAX_AGE_S
+    }
+    has_session_candidates = (
+        bool(window_session_pre_ids & window_session_post_ids)
+        or bracket_binding is not None
     )
     bound_observations: tuple[LedgerObservation, LedgerObservation] | None = None
     if has_session_candidates:
@@ -4097,15 +4128,6 @@ def evaluate_calibration_bracket(
                 return result, ("calibration_bracket_binding_invalid",)
     # v2 remains an authenticated validation/reduction artifact, but only the
     # 59-pulse v3 protocol carries the governed 95/95 claim calibration.
-    matching = [
-        candidate
-        for candidate in candidates
-        if candidate.protocol_id == PROTOCOL_ID
-        and all(
-            candidate.bindings.get(field) == bindings.get(field)
-            for field in V2_BINDING_FIELDS
-        )
-    ]
     matching_decimals: dict[int, Decimal] = {}
     for candidate in matching:
         candidate_decimal = _candidate_decimal(candidate)
@@ -4237,6 +4259,14 @@ def evaluate_calibration_bracket(
     if bound_observations is None:
         pre = max(fresh_pre, key=lambda candidate: candidate.capture_wall_time_s)
         post = min(fresh_post, key=lambda candidate: candidate.capture_wall_time_s)
+        # Session observations are reserved to bracket their own window via an
+        # exact binding; they never serve as unbound endpoints, even one-sided
+        # (a lone causally-eligible slot must not stand in for a neighbour).
+        if (
+            pre.bracket_session_id is not None
+            or post.bracket_session_id is not None
+        ):
+            return result, ("calibration_bracket_binding_missing",)
     else:
         candidate_by_receipt = {
             candidate.ledger_receipt_digest: candidate for candidate in matching

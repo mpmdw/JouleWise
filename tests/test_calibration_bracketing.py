@@ -1354,6 +1354,112 @@ class CalibrationBracketingTests(unittest.TestCase):
             )
         )
 
+    def test_ordinary_historical_window_still_evaluates_after_session_finalization(
+        self,
+    ) -> None:
+        snapshot, candidates, _binding = self._bound_session_fixture()
+        historical_times = {
+            "attempt-neighbor-pre": 89.0,
+            "attempt-neighbor-post": 96.0,
+        }
+        candidates = [
+            replace(
+                candidate,
+                capture_wall_time_s=historical_times.get(
+                    candidate.attempt_id,
+                    candidate.capture_wall_time_s,
+                ),
+            )
+            for candidate in candidates
+        ]
+        snapshot = replace(
+            snapshot,
+            observations=tuple(
+                replace(
+                    observation,
+                    capture_wall_time_s=str(
+                        historical_times.get(
+                            observation.attempt_id,
+                            observation.capture_wall_time_s,
+                        )
+                    ),
+                )
+                for observation in snapshot.observations
+            ),
+        )
+
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=90.0,
+                window_end_s=95.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+
+        self.assertEqual(reasons, ())
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["pre"]["attempt_id"], "attempt-neighbor-pre")
+        self.assertEqual(result["post"]["attempt_id"], "attempt-neighbor-post")
+
+    def test_one_sided_session_endpoint_never_serves_unbound(self) -> None:
+        # Delta-audit counterexample: only ONE slot of a finalized session is
+        # causally eligible for a later window, so the pair predicate does not
+        # make bindings mandatory -- but selection must still refuse to use the
+        # session observation as an unbound endpoint for a window it was never
+        # reserved to bracket.
+        snapshot, candidates, _binding = self._bound_session_fixture()
+        shifted_times = {
+            "attempt-neighbor-pre": 89.0,
+            "attempt-neighbor-post": 130.0,
+        }
+        candidates = [
+            replace(
+                candidate,
+                capture_wall_time_s=shifted_times.get(
+                    candidate.attempt_id,
+                    candidate.capture_wall_time_s,
+                ),
+            )
+            for candidate in candidates
+        ]
+        snapshot = replace(
+            snapshot,
+            observations=tuple(
+                replace(
+                    observation,
+                    capture_wall_time_s=str(
+                        shifted_times.get(
+                            observation.attempt_id,
+                            observation.capture_wall_time_s,
+                        )
+                    ),
+                )
+                for observation in snapshot.observations
+            ),
+        )
+
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=_unissued_acceptance_fixture(),
+        ):
+            result, reasons = _evaluate_calibration_bracket(
+                candidates,
+                window_start_s=112.0,
+                window_end_s=120.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+
+        self.assertEqual(reasons, ("calibration_bracket_binding_missing",))
+
     def test_open_and_aborted_session_observations_never_leak_as_candidates(self) -> None:
         snapshot, candidates, _binding = self._bound_session_fixture()
         session = snapshot.bracket_sessions[0]

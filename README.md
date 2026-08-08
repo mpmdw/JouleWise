@@ -1,15 +1,13 @@
 # JouleWise
 
-> **🖥️ MACHINE: OVERNIGHT SESSION WRAPPING — non-claim characterization
-> captures may be running.** 2026-08-04 early AM: no claim window
-> tonight; no window in flight. This line updates only at defined
-> moments; rules in [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
->
-> **✅ T3 HANDOFF: READY** — point a NEW t3 thread at the top checkpoint
-> block of [`RUN_STATE.md`](RUN_STATE.md) (the
-> `2026-08-04 early AM — T3 HANDOFF` block) and it takes over as
-> magistrate. One open review branch and two operator acknowledgements
-> are listed in that block.
+> **🟡 MACHINE: BETWEEN RUNS — D-117 pre-window state.** This document
+> does not assert that a measurement window is in flight; verify live
+> machine state directly before acting. Current work is the U1-U10
+> readiness path followed by the prospective alpha, beta, and gamma
+> claim windows. Live selection remains owned by the generated
+> state-kernel regions in [`RUN_STATE.md`](RUN_STATE.md) and
+> [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
+> [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
@@ -34,15 +32,14 @@ published floors. The SCREEN+BUDGET rules are ratified and merged
 they screen gross and idle-subtracted energy separately, retain a nonzero
 drift allowance for each family, require a fresh 24-hour bound, reject
 fallback-clock members from floor cells, and bar mock evidence from claims.
-Five prospective quiet-machine windows have since passed under those rules
-(C, D, a10, the 7B floor window, and the contrast window). The first floor
-artifact was minted on 2026-07-30, but D-110 has since made that mint
-**NON-CLAIM-BEARING until it is re-derived under the repaired calibration
-selector**. The Splitwise head-to-head contrast (1.5B vs 7B decode) has been
-collected and passed its collection and whole-window verdict gates; its
-bookkeeping machinery and generalized mint tooling are mainline, but D-110
-blocks claim use and the next floor mint until the ruled repair and remint
-conditions are satisfied. The a8 re-verdict path is closed. The
+Five pre-genesis quiet-machine windows passed under those rules (C, D, a10,
+the 7B floor window, and the contrast window), but they are now diagnostic
+or rule-establishing evidence rather than the prospective claim path.
+**2026-08-07 supersession (D-117): the historical a10/re-mint and old C/D
+plan are retired. Claim authority can now arise only from the prospective
+alpha, beta, and gamma windows; the separately named Window C
+characterization night remains Ed ruling #1.** The a8 re-verdict path is
+closed. The
 project's framing is now metrology-centric (D-091): the measurement
 instrument itself is the product, and model comparisons are demonstrations
 of what it can resolve.
@@ -113,13 +110,13 @@ evidence.
 Quiet-machine windows still require Ed and a quiet Mac, and each one follows
 the run-book: mint the drift bound inside the window, then collect a start
 triplet, midpoint reference, and end triplet around the science members. That
-protocol has now run five times and passed five times — windows C, D, a10, the
-7B floor window, and the contrast window — under the merged screening and
-uncertainty-budget rules (D-078 clause 10). Their first minted floor artifact
-is now **NON-CLAIM-BEARING under D-110** pending governed re-derivation and
-remint; the 7B floor mint and any gated contrast consumption wait on the same
-repair chain. The Splitwise contrast window collected clean and passed its
-verdict, but its diagnostic result is not a gated claim. The a8 retrospective path is closed, and the earlier
+protocol ran five times and passed five times — windows C, D, a10, the 7B
+floor window, and the contrast window — under the merged screening and
+uncertainty-budget rules (D-078 clause 10). Those pre-genesis results are
+diagnostic or rule-establishing evidence, not the live claim path. Claim
+authority can arise only from the prospective alpha, beta, and gamma windows
+under D-117; the separately named Window C characterization night remains Ed
+ruling #1. The a8 retrospective path is closed, and the earlier
 222-bundle floor publication is a permanently voided historical record under
 D-078. Use the
 generated state kernel—not this summary—to select the next live or agent-lane

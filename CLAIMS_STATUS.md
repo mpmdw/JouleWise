@@ -39,6 +39,12 @@ proven honest: the full pinned replay (2026-08-03) reproduced both
 extraction reports, the artifact, and the statement BYTE-IDENTICAL
 (`docs/process_traces/2026-08-03-q1-remint-bytecompare/`). The taint is
 semantic (the selector the era used), not derivational.
+
+**2026-08-07 supersession (D-117):** the historical a10/re-mint and old
+C/D plan are retired. Claim authority can now arise only from the
+prospective alpha, beta, and gamma windows; the separately named Window C
+characterization night remains Ed ruling #1.
+
 **2026-08-07 (D-117):** the historical re-mint order is SUPERSEDED —
 all three former re-mint conditions completed (D-109 via PR #100;
 issuance via D-116/PR #109; pin widening via PR #105) and the FIRST
@@ -107,13 +113,13 @@ default consumption. Outcomes per window:
   under D-113; the near-run-time freshness rule continues to bind
   every future window (runbook + D-078, by cross-reference).
 
-| Paper claim | Campaign | Collected | State after D-100 |
+| Paper claim | Campaign | Collected | Current state (D-113/D-117) |
 |---|---|---|---|
-| **C1 — linearity** | `linearity_ramp` | **40/40** (window A) | DEAD for claims (window A permanent FAIL); re-collect (window C/D); data usable as design input (micro_delta slope) + corroboration diagnostics only |
-| **C2 — null ladder** | `null_ladder` | o0128 + o0512 collected in window B — **returned to uncollected-for-claim state (D-113)**; o2048 never collected | Re-collect ALL of C2 fresh (window C, or split per the frozen plan); no WB member enters a replacement claim basis |
+| **C1 — linearity** | `linearity_ramp` | **40/40** (window A) | DEAD for claims (window A permanent FAIL); re-collection belongs to the separately named Window C characterization plan, not alpha/beta/gamma; data usable as design input (micro_delta slope) + corroboration diagnostics only |
+| **C2 — null ladder** | `null_ladder` | o0128 + o0512 collected in window B — **returned to uncollected-for-claim state (D-113)**; o2048 never collected | Re-collect ALL of C2 under the separately named Window C characterization plan; no WB member enters a replacement claim basis |
 | **C3 — micro-delta** | `micro_delta` | not collected | Plan is draft-pending-slope by design; slope fit may consume window A ramp as DESIGN input (not a claim) |
-| **C4 — additivity** | `additivity_shapes` | 23/24 single-root collected in window B — **returned to uncollected-for-claim state (D-113)**; 21/24 window-A corroborating remain labelled non-claim diagnostics | Re-collect C4 fresh (window C/D per the frozen plan). F7 ANSWERED by D-113: whole-window voiding affirmed as current semantics; no cell-scoped salvage |
-| **C5 — long holds** | `long_holds` | not collected → window C | — |
+| **C4 — additivity** | `additivity_shapes` | 23/24 single-root collected in window B — **returned to uncollected-for-claim state (D-113)**; 21/24 window-A corroborating remain labelled non-claim diagnostics | Re-collect C4 under the separately named Window C characterization plan. F7 ANSWERED by D-113: whole-window voiding affirmed as current semantics; no cell-scoped salvage |
+| **C5 — long holds** | `long_holds` | not collected; assigned to the separately named Window C characterization plan | — |
 
 ## 4. Standing gates on EVERY claim consumption
 
@@ -138,8 +144,8 @@ default consumption. Outcomes per window:
   7.377086 J, a10 components 3.823787 / 3.592138 J, window C
   comparative 7.377086 J** — retroactively non-claim-bearing (zero
   allowance where D-102 pin 3 mandates +max(drift, 0.010818 s));
-  citable again only after the ruled re-mint under the repaired
-  selector.
+  the historical re-mint route is retired under D-117. Claim authority
+  can arise only from the prospective alpha, beta, and gamma windows.
 - **146.730349 J as "the contrast claim"** — it is the
   idle_subtracted_energy_j whole-request diagnostic; the registered
   claim metric is phase_energy_j.decode = 141.29 J (sweep DC-1). Either
@@ -158,7 +164,10 @@ default consumption. Outcomes per window:
 - All pre-repair (pre-D-078) powermetrics corpora for claim use —
   time-anchor defect (D-078 soundness gate).
 - Window A/B metrology numbers as claims — see §3 (verdicts FAILED as
-  issued; window A permanently dead for claims; window B only via a NEW Ed ruling (D-112: the re-evaluation was performed 2026-08-03 and correctly refused; license exhausted as drawn).
+  issued; window A permanently dead for claims). **2026-08-05
+  supersession (D-113): Window B is permanently non-claim-bearing; its
+  re-evaluation/license chain is retired and no set-aside or
+  claim-consumption decision remains pending.**
 - **Window A C1 linearity figures in any claim context** — the corpus
   is design-input/diagnostic only, permanently (D-100 + the immutable
   T1-incompatible retry).
