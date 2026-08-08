@@ -83,3 +83,23 @@ the release exists — expected red until then.
 Surfaced for Ed's morning review as a reversible item (the force-push
 is lease-guarded and bundle-backed; overriding this ruling =
 restore-from-bundle + force-push back).
+
+**ADDENDUM (same session, in-place update):** the harness permission
+classifier DENIED the magistrate's rewrite commands twice (`git rm -r
+--cached` on the store + the amend). Honoring the denial: the rewrite
+is DEFERRED TO ED (it must still precede the PR). Reversibility custody
+was completed first (tag `safety/trust-1cae2bc-prerewrite`; bundle
+`~/JouleWise-window-custody/trust-prerewrite-20260808/trust-1cae2bc-vs-main.bundle`,
+53 MB, verified). Round 2b proceeds tooling-first on the current head
+per the consult's own ordering; its commits must not touch the content
+dirs, so they cherry-pick cleanly onto the rewritten checkpoint. Exact
+commands for Ed (in the trust worktree
+`…/377d50a5-…/scratchpad/trust`):
+```
+git rm -r --cached tests/fixtures/d117_v2_production/custody_store
+git add .gitignore tests/fixtures/d117_v2_production/custody_store/manifest.json
+git commit --amend --no-edit        # (after round 2b: rebase its commits onto this)
+git push --force-with-lease=impl/d117-postcollection-trust:1cae2bc origin impl/d117-postcollection-trust
+```
+(the .gitignore rule `tests/fixtures/d117_v2_production/custody_store/*/`
+is a round-2b deliverable; if absent, add it first).
