@@ -17,6 +17,17 @@ EVENING block. Everything under those is executed history.**
 
 ## ▶ SUCCESSOR SCRIPT (2026-08-08 wrap — start here)
 
+**OVERNIGHT RUN LIVE (D-123 license):** rulings D-122/D-123 transcribed;
+attribution debate adopted (means: signal-sizing only; contrasts:
+common-mode estimator replay ORDERED pre-freeze, promotion bar >=2x/2J).
+Streams in flight: trust tripwire delta + lead replay (merge-or-escalate
+on the same-signature ruling), recovery adversarial audit, common-mode
+replay, U2 exhibit rework (synthesis blockers). A `caffeinate -i -m`
+(pid recorded in session log, 12h cap) holds the LOCKED machine awake —
+it dies with the session; if a future QUIET WINDOW ever finds a stray
+caffeinate, kill it before arming. Workflow tool re-authorized by Ed
+for tonight at magistrate discretion.
+
 **MERGED this window (all on main):** PR #114 (paper trust language),
 PR #115 (U1 night fixes — F2 fixed on main), PR #116 (reason-code
 plumbing — FIRST merge under the full 12-item D-121 gate). Decisions
