@@ -12,6 +12,7 @@
       "active": true,
       "parent_acceptance_id": null,
       "parent_artifact_sha256": null,
+      "count_boundary_rule": "d102_initial_total_valid_same_epoch_count_38",
       "ledger_cutoff": {
         "sequence": 76,
         "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",

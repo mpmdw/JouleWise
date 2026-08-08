@@ -88,31 +88,45 @@ _D102_OPERATIVE_VALUES = {
 SUCCESSOR_CORPUS_SELECTION = (
     "all_content_distinct_valid_same_epoch_observations_through_cutoff"
 )
-# COLD-GATE-Q2: retain both protections; the successor level screen is the
-# larger of the observed maximum and the 95% two-draw prediction.
-SUCCESSOR_PREFLIGHT_SCREEN_RULE = "max(observed_maximum,prediction_95_two_draw)"
-# COLD-GATE-Q3: dependency-free Decimal incomplete-beta inversion is pinned at
-# 80 digits. The D-102 df=18 coefficients remain explicit compatibility pins.
+# COLD-GATE-Q2: the successor level screen is the observed corpus maximum
+# alone. The 95% two-draw prediction remains recorded derivation evidence but
+# is never an input to this systematic-failure comparator.
+SUCCESSOR_PREFLIGHT_SCREEN_RULE = "observed_corpus_maximum"
+# COLD-GATE-Q3: dependency-free Decimal incomplete-beta inversion runs at 80
+# digits. The D-102 df=18 coefficients remain explicit compatibility pins, and
+# the public bypass supports independent verification of the numerical path.
 SUCCESSOR_QUANTILE_METHOD = "decimal_incomplete_beta_bisection_v1"
 SUCCESSOR_DECIMAL_PRECISION = 80
+SUCCESSOR_CONTINUED_FRACTION_MAX_ITERATIONS = 10_000
 # COLD-GATE-Q4: a range successor below the pending boundary retains it; once
 # crossed, the next boundary is twice the newly issued corpus count.
-SUCCESSOR_COUNT_BOUNDARY_RULE = "retain_until_crossed_then_double_issued_count"
+_COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE = (
+    "retain_until_crossed_then_double_issued_count"
+)
+SUCCESSOR_COUNT_BOUNDARY_RULE = _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE
+GENESIS_COUNT_BOUNDARY_RULE = "d102_initial_total_valid_same_epoch_count_38"
+_SUPPORTED_COUNT_BOUNDARY_RULES = frozenset(
+    {GENESIS_COUNT_BOUNDARY_RULE, _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE}
+)
+# Versioning prevents a later rule from being applied retroactively to an
+# ancestor. It does not make issued history reversible: each entry's recorded
+# rule and resulting boundary remain authenticated, immutable chain facts.
 # COLD-GATE-Q5: a new systematic observation remains new and blocks every
 # automatic build until an authority ruling disposes it.
 SUCCESSOR_SYSTEMATIC_POLICY = "persistent_refusal_pending_new_ruling"
-# COLD-GATE-Q6: no-content attempts are recorded, but only an explicit unused
-# U1 slot closed by its terminal abort is non-concealing; other shapes refuse.
-SUCCESSOR_NONCONTENT_POLICY = "record_and_refuse_unless_governed_unused_slot"
+# COLD-GATE-Q6: authenticated terminal abandoned/no-content attempts and
+# explicit unused U1 slots are recorded and excluded from the content universe;
+# malformed, content-bearing, or unresolved shapes still refuse.
+SUCCESSOR_NONCONTENT_POLICY = "exclude_authenticated_terminal_no_content"
 # COLD-GATE-Q7: v3 artifacts use cutoff-derived immutable names, remain present
 # in the checkout, and form a single-parent ancestry rooted at the issued v2.
 SUCCESSOR_LINEAGE_POLICY = "immutable_present_single_parent_cutoff_named_v3"
 # COLD-GATE-Q8: the checked-in registry is the sole rotating trust anchor; it
 # has exactly one active row and authenticates that artifact's exact bytes.
 ACCEPTANCE_REGISTRY_AUTHORITY = "committed_registry_one_active_exact_sha256"
-# COLD-GATE-Q9: publish immutable artifact bytes first and switch the registry
-# last; the registry replace is the authority commit point. The head is input.
-SUCCESSOR_PUBLICATION_POLICY = "artifact_first_registry_last_head_input_only"
+# COLD-GATE-Q9: publication creates one two-path Git commit through an isolated
+# index, atomically advances HEAD, then verifies committed-mode selection.
+SUCCESSOR_PUBLICATION_POLICY = "single_commit_two_path_atomic_head_update_verified"
 # COLD-GATE-Q10: a pre-science probe may inspect exactly U1's governed open
 # two-slot extension; a triggered build requires an aborted/finalized terminal
 # session and a committed head before issuance.
@@ -123,6 +137,10 @@ POST_SUCCESSOR_POLICY = "require_explicit_parent_judgment_lineage"
 # COLD-GATE-Q12: this four-file exhibit closes the authenticated probe API;
 # writer scalar removal and the U8 arm-path call remain separately scoped.
 WRITER_INTEGRATION_SCOPE_STATUS = "probe_closed_writer_and_arm_path_residual"
+# COLD-GATE-Q13: the allowance generalization remains the exhibit's current
+# answer, but n<19 is not licensed while Q13 is pending. The guard prevents the
+# df=1 / t~=63.66 path from becoming an issued comparator by accident.
+SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 SUCCESSOR_DECISION_IDS = (
     "D-102",
     "D-109",
@@ -156,6 +174,22 @@ _D102_RATIFIED_T_QUANTILES = {
         "2.8784404727135853941939366597008136821841052811738896572381901955286218320347263"
     ),
 }
+
+
+class CalibrationAcceptanceNumericalRefusal(ValueError):
+    """A successor numerical kernel could not produce a governed result."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
+class CalibrationAcceptanceRegistryRefusal(ValueError):
+    """The rotating registry authority failed with a stable reason code."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
 
 
 def _registry_bootstrap_issued_sha256() -> str:
@@ -317,7 +351,8 @@ def _decimal_beta_continued_fraction(
     c = one
     d = one / guarded(one - qab * x / qap)
     result = d
-    for iteration in range(1, 10_001):
+    for iteration in range(1, SUCCESSOR_CONTINUED_FRACTION_MAX_ITERATIONS + 1):
+        iteration_start = result
         i = Decimal(iteration)
         doubled = Decimal(2 * iteration)
         numerator = i * (b - i) * x / ((qam + doubled) * (a + doubled))
@@ -335,9 +370,15 @@ def _decimal_beta_continued_fraction(
         c = guarded(one + numerator / c)
         change = d * c
         result *= change
-        if abs(change - one) <= epsilon:
+        if (
+            abs(change - one) <= epsilon
+            and abs(result - iteration_start)
+            <= epsilon * max(one, abs(result))
+        ):
             return result
-    raise ArithmeticError("Decimal incomplete beta did not converge")
+    raise CalibrationAcceptanceNumericalRefusal(
+        "successor_quantile_continued_fraction_nonconvergence"
+    )
 
 
 def _decimal_regularized_incomplete_beta_df_half(
@@ -371,7 +412,12 @@ def _decimal_student_t_survival(value: Decimal, df: int) -> Decimal:
     )
 
 
-def decimal_student_t_quantile(probability: str, df: int) -> Decimal:
+def decimal_student_t_quantile(
+    probability: str,
+    df: int,
+    *,
+    use_compatibility_pin: bool = True,
+) -> Decimal:
     """Return the pinned deterministic Student-t quantile as a Decimal."""
 
     if isinstance(df, bool) or not isinstance(df, int) or df < 1:
@@ -379,7 +425,13 @@ def decimal_student_t_quantile(probability: str, df: int) -> Decimal:
     target = _decimal(probability)
     if target is None or not Decimal(0) < target < Decimal(1):
         raise ValueError("probability must be a finite decimal between zero and one")
-    pinned = _D102_RATIFIED_T_QUANTILES.get((df, probability))
+    if not isinstance(use_compatibility_pin, bool):
+        raise ValueError("use_compatibility_pin must be boolean")
+    pinned = (
+        _D102_RATIFIED_T_QUANTILES.get((df, probability))
+        if use_compatibility_pin
+        else None
+    )
     if pinned is not None:
         return pinned
     if target == Decimal("0.5"):
@@ -408,8 +460,10 @@ def derive_successor_decimal_derivation(
 ) -> dict[str, Any]:
     """Derive the complete v3 Decimal record from authenticated members."""
 
-    if len(members) < 2:
-        raise ValueError("successor derivation requires at least two members")
+    if len(members) < SUCCESSOR_MINIMUM_CORPUS_SIZE:
+        raise ValueError(
+            "successor_corpus_below_pending_q13_minimum_19"
+        )
     content_ids: list[str] = []
     values: list[Decimal] = []
     for member in members:
@@ -453,8 +507,7 @@ def derive_successor_decimal_derivation(
         bracket_screen = observed_range.quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_EVEN
         )
-        preflight_source = max(maximum, prediction_95)
-        preflight_screen = preflight_source.quantize(
+        preflight_screen = maximum.quantize(
             Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
         )
         maximum_budgetable_drift = prediction_99_display
@@ -521,6 +574,8 @@ def derive_successor_decimal_derivation(
             "maximum_budgetable_drift_s": _decimal_text(
                 maximum_budgetable_drift
             ),
+            # COLD-GATE-Q13: deliberately unchanged pending the re-convened
+            # ruling; n<19 is refused above so this cannot reach df=1.
             "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
             "operative_bound_rule": (
                 "max(pre_b_fiducial_s,post_b_fiducial_s)"
@@ -609,6 +664,7 @@ def _valid_registry(value: Any) -> bool:
         "active",
         "parent_acceptance_id",
         "parent_artifact_sha256",
+        "count_boundary_rule",
         "ledger_cutoff",
     }
     ids: set[str] = set()
@@ -632,6 +688,8 @@ def _valid_registry(value: Any) -> bool:
             or not isinstance(entry.get("generation"), int)
             or entry["generation"] < 1
             or not isinstance(entry.get("active"), bool)
+            or entry.get("count_boundary_rule")
+            not in _SUPPORTED_COUNT_BOUNDARY_RULES
             or not isinstance(cutoff, Mapping)
             or set(cutoff) != {"sequence", "head_digest", "ledger_schema"}
             or isinstance(cutoff.get("sequence"), bool)
@@ -659,7 +717,12 @@ def _valid_registry(value: Any) -> bool:
         parent_sha = entry["parent_artifact_sha256"]
         if parent_id is None:
             roots += 1
-            if parent_sha is not None or entry["generation"] != 1:
+            if (
+                parent_sha is not None
+                or entry["generation"] != 1
+                or entry["artifact_schema"] != ACCEPTANCE_BOUND_SCHEMA
+                or entry["count_boundary_rule"] != GENESIS_COUNT_BOUNDARY_RULE
+            ):
                 return False
             continue
         parent = entries_by_id.get(parent_id)
@@ -668,6 +731,7 @@ def _valid_registry(value: Any) -> bool:
             or parent is None
             or parent_sha != parent["artifact_sha256"]
             or entry["generation"] != parent["generation"] + 1
+            or entry["artifact_schema"] != ACCEPTANCE_SUCCESSOR_SCHEMA
             or entry["ledger_cutoff"]["sequence"]
             <= parent["ledger_cutoff"]["sequence"]
         ):
@@ -714,38 +778,61 @@ def load_calibration_acceptance_registry(
     *,
     repo_root: Path = _REPO_ROOT,
     require_committed: bool = True,
-) -> dict[str, Any] | None:
-    """Load the single-active acceptance registry and authenticate ancestry."""
+) -> dict[str, Any]:
+    """Load the single-active registry or raise one stable refusal reason.
+
+    COLD-GATE-Q7: every fail-closed branch below has a diagnosable code; no
+    invalid registry path collapses to a bare ``None``.
+    """
 
     path = Path(path)
     lexical_repo_root = Path(repo_root).absolute()
     repo_root = Path(repo_root).resolve()
+    if _path_has_symlink_component(path.absolute(), lexical_repo_root):
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_path_substituted"
+        )
     try:
-        if _path_has_symlink_component(path.absolute(), lexical_repo_root):
-            return None
         resolved = path.resolve(strict=True)
         resolved.relative_to(repo_root)
         raw = resolved.read_bytes()
         value = json.loads(raw)
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_unreadable_or_outside_repository"
+        ) from None
     if require_committed and _git_head_bytes(resolved, repo_root) != raw:
-        return None
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_missing_commit"
+        )
     if not _valid_registry(value):
-        return None
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_schema_or_ancestry_invalid"
+        )
     entries_by_id = {entry["acceptance_id"]: entry for entry in value["entries"]}
     artifacts_by_id: dict[str, Mapping[str, Any]] = {}
     for entry in value["entries"]:
         artifact_path = repo_root / entry["artifact_path"]
+        if _path_has_symlink_component(artifact_path.absolute(), repo_root):
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_artifact_path_substituted"
+            )
         try:
-            if _path_has_symlink_component(artifact_path.absolute(), repo_root):
-                return None
             artifact_resolved = artifact_path.resolve(strict=True)
             artifact_resolved.relative_to(repo_root)
             artifact_raw = artifact_resolved.read_bytes()
             artifact = json.loads(artifact_raw)
         except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
-            return None
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_artifact_unreadable_or_outside_repository"
+            ) from None
+        if (
+            require_committed
+            and _git_head_bytes(artifact_resolved, repo_root) != artifact_raw
+        ):
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_artifact_missing_commit"
+            )
         if (
             hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]
             or not _valid_acceptance_bound(artifact)
@@ -758,7 +845,9 @@ def load_calibration_acceptance_registry(
             }
             != entry["ledger_cutoff"]
         ):
-            return None
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_artifact_authentication_failed"
+            )
         artifacts_by_id[entry["acceptance_id"]] = artifact
         if entry["artifact_schema"] == ACCEPTANCE_SUCCESSOR_SCHEMA:
             filename_match = _SUCCESSOR_ARTIFACT_NAME_RE.fullmatch(
@@ -771,7 +860,9 @@ def load_calibration_acceptance_registry(
                 or filename_match.group(2)
                 != entry["ledger_cutoff"]["head_digest"][:16]
             ):
-                return None
+                raise CalibrationAcceptanceRegistryRefusal(
+                    "acceptance_registry_successor_name_invalid"
+                )
     for entry in value["entries"]:
         if entry["artifact_schema"] != ACCEPTANCE_SUCCESSOR_SCHEMA:
             continue
@@ -780,22 +871,43 @@ def load_calibration_acceptance_registry(
         parent_entry = entries_by_id.get(entry["parent_acceptance_id"])
         parent = artifacts_by_id.get(entry["parent_acceptance_id"])
         if parent_entry is None or parent is None:
-            return None
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_parent_missing"
+            )
         count = artifact["derivation_corpus"]["n"]
         parent_boundary = _artifact_count_boundary(parent)
-        expected_boundary = parent_boundary if count < parent_boundary else 2 * count
+        boundary_rule = entry["count_boundary_rule"]
+        artifact_boundary_rule = artifact["prospective_rederivation"][
+            "count_trigger"
+        ]["rule"]
+        if boundary_rule != artifact_boundary_rule:
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_boundary_rule_mismatch"
+            )
+        if boundary_rule == _COUNT_BOUNDARY_RULE_RETAIN_THEN_DOUBLE:
+            expected_boundary = (
+                parent_boundary if count < parent_boundary else 2 * count
+            )
+        else:
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_boundary_rule_unsupported"
+            )
+        if artifact["prospective_rederivation"]["count_trigger"][
+            "next_boundary"
+        ] != expected_boundary:
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_boundary_value_invalid"
+            )
         if (
             lineage["generation"] != entry["generation"]
             or lineage["parent_acceptance_id"] != entry["parent_acceptance_id"]
             or lineage["parent_artifact_sha256"] != parent_entry["artifact_sha256"]
             or lineage["parent_derivation_sha256"] != parent["derivation_sha256"]
             or lineage["parent_ledger_cutoff"] != parent_entry["ledger_cutoff"]
-            or artifact["prospective_rederivation"]["count_trigger"][
-                "next_boundary"
-            ]
-            != expected_boundary
         ):
-            return None
+            raise CalibrationAcceptanceRegistryRefusal(
+                "acceptance_registry_lineage_invalid"
+            )
     return dict(value)
 
 
@@ -806,6 +918,70 @@ def _active_registry_entry(registry: Mapping[str, Any]) -> Mapping[str, Any] | N
         if isinstance(entry, Mapping) and entry.get("active") is True
     ]
     return active[0] if len(active) == 1 else None
+
+
+def _load_registry_for_current_active_selection() -> dict[str, Any]:
+    """Load committed authority, with one legacy-root schema migration."""
+
+    try:
+        return load_calibration_acceptance_registry(require_committed=True)
+    except CalibrationAcceptanceRegistryRefusal as exc:
+        if exc.reason != "acceptance_registry_missing_commit":
+            raise
+    committed_raw = _git_head_bytes(
+        DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT
+    )
+    try:
+        committed = json.loads(committed_raw) if committed_raw is not None else None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        committed = None
+    # This branch exists only while the exhibit's additive per-entry field is
+    # uncommitted. It authenticates the old HEAD registry and its HEAD artifact;
+    # it never consumes a worktree registry or permits an active-entry switch.
+    if (
+        not isinstance(committed, Mapping)
+        or not isinstance(committed.get("entries"), list)
+        or len(committed["entries"]) != 1
+        or not isinstance(committed["entries"][0], Mapping)
+        or "count_boundary_rule" in committed["entries"][0]
+    ):
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_missing_commit"
+        )
+    migrated = {
+        **committed,
+        "entries": [
+            {
+                **committed["entries"][0],
+                "count_boundary_rule": GENESIS_COUNT_BOUNDARY_RULE,
+            }
+        ],
+    }
+    if not _valid_registry(migrated):
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_schema_or_ancestry_invalid"
+        )
+    entry = migrated["entries"][0]
+    artifact_path = _REPO_ROOT / entry["artifact_path"]
+    try:
+        artifact_raw = artifact_path.read_bytes()
+        artifact = json.loads(artifact_raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_artifact_unreadable_or_outside_repository"
+        ) from None
+    if (
+        _git_head_bytes(artifact_path.resolve(), _REPO_ROOT) != artifact_raw
+        or hashlib.sha256(artifact_raw).hexdigest() != entry["artifact_sha256"]
+        or not _valid_acceptance_bound(artifact)
+        or artifact.get("acceptance_id") != entry["acceptance_id"]
+        or artifact.get("schema_version") != entry["artifact_schema"]
+        or artifact.get("derivation_sha256") != entry["derivation_sha256"]
+    ):
+        raise CalibrationAcceptanceRegistryRefusal(
+            "acceptance_registry_artifact_authentication_failed"
+        )
+    return migrated
 
 
 def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
@@ -938,7 +1114,11 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         or set(prospective["count_trigger"])
         != {"source_corpus_count", "next_boundary", "rule"}
         or prospective["count_trigger"].get("rule")
-        != SUCCESSOR_COUNT_BOUNDARY_RULE
+        not in {
+            rule
+            for rule in _SUPPORTED_COUNT_BOUNDARY_RULES
+            if rule != GENESIS_COUNT_BOUNDARY_RULE
+        }
     ):
         return False
     if (
@@ -947,7 +1127,7 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         or corpus.get("selection") != SUCCESSOR_CORPUS_SELECTION
         or isinstance(corpus.get("n"), bool)
         or not isinstance(corpus.get("n"), int)
-        or corpus["n"] < 2
+        or corpus["n"] < SUCCESSOR_MINIMUM_CORPUS_SIZE
         or not isinstance(corpus.get("members"), list)
         or len(corpus["members"]) != corpus["n"]
         or prospective["count_trigger"].get("source_corpus_count") != corpus["n"]
@@ -1025,6 +1205,9 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
         or not isinstance(prior.get("noncontent_attempts"), list)
     ):
         return False
+    all_attempt_ids: set[str] = set()
+    all_sequences: set[int] = set()
+    all_receipts: set[str] = set()
     for row in prior["noncontent_attempts"]:
         if (
             not isinstance(row, Mapping)
@@ -1043,17 +1226,21 @@ def _valid_successor_acceptance_bound(value: Mapping[str, Any]) -> bool:
             or row["closure_sequence"] < 1
             or row["closure_sequence"] > cutoff["sequence"]
             or not _valid_sha256(row.get("receipt_digest"))
-            or row.get("disposition") != "governed-unused-slot"
+            or row.get("disposition")
+            not in {"governed-unused-slot", "abandoned"}
             or not isinstance(row.get("custody_locator"), str)
             or not row["custody_locator"]
+            or row["attempt_id"] in all_attempt_ids
+            or row["closure_sequence"] in all_sequences
+            or row["receipt_digest"] in all_receipts
         ):
             return False
+        all_attempt_ids.add(row["attempt_id"])
+        all_sequences.add(row["closure_sequence"])
+        all_receipts.add(row["receipt_digest"])
     prior_ids: list[str] = []
     valid_active_ids: set[str] = set()
     prior_by_id: dict[str, Mapping[str, Any]] = {}
-    all_attempt_ids: set[str] = set()
-    all_sequences: set[int] = set()
-    all_receipts: set[str] = set()
     for observation in prior["observations"]:
         if (
             not isinstance(observation, Mapping)
@@ -1441,16 +1628,8 @@ def load_calibration_acceptance_bound(
     """
 
     if path is None:
-        # The exhibit must execute before its new registry can be committed.
-        # Once this path exists at Git HEAD (the only landing shape), every
-        # ordinary consumer automatically upgrades to strict commit equality.
-        registry_head_bytes = _git_head_bytes(
-            DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT
-        )
-        registry = load_calibration_acceptance_registry(
-            require_committed=registry_head_bytes is not None,
-        )
-        active = _active_registry_entry(registry) if registry is not None else None
+        registry = _load_registry_for_current_active_selection()
+        active = _active_registry_entry(registry)
         if active is None:
             return None
         requested = _REPO_ROOT / str(active["artifact_path"])
@@ -1519,13 +1698,8 @@ def _authenticated_explicit_acceptance_bound(
 def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
     """Return the reviewed exact-byte pin for a validated artifact role."""
 
-    registry = load_calibration_acceptance_registry(
-        require_committed=(
-            _git_head_bytes(DEFAULT_ACCEPTANCE_REGISTRY_PATH.resolve(), _REPO_ROOT)
-            is not None
-        )
-    )
-    active = _active_registry_entry(registry) if registry is not None else None
+    registry = _load_registry_for_current_active_selection()
+    active = _active_registry_entry(registry)
     if active is not None and active.get("acceptance_id") == artifact.get("acceptance_id"):
         return str(active["artifact_sha256"])
     return (
@@ -1625,6 +1799,57 @@ def _group_probe_observations(
     return result, tuple(sorted(noncontent, key=lambda observation: observation.sequence))
 
 
+def _terminal_no_content_rows(
+    noncontent: Sequence[LedgerObservation],
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    cutoff_sequence: int,
+) -> list[dict[str, Any]]:
+    """Authenticate terminal no-content closures and project their audit rows."""
+
+    rows: list[dict[str, Any]] = []
+    for observation in noncontent:
+        if observation.sequence > cutoff_sequence:
+            continue
+        if (
+            observation.disposition != "abandoned"
+            or observation.content_id is not None
+            or bool(observation.artifact_sha256)
+            or observation.exact_bound_lexeme_s is not None
+            or not isinstance(observation.attempt_id, str)
+            or not observation.attempt_id
+            or not isinstance(observation.custody_locator, str)
+            or not observation.custody_locator
+            or observation.sequence < 1
+            or observation.sequence > len(ledger_snapshot.receipts)
+        ):
+            raise ValueError("successor_terminal_no_content_closure_invalid")
+        receipt = ledger_snapshot.receipts[observation.sequence - 1]
+        artifacts = receipt.get("artifact_sha256") if isinstance(receipt, Mapping) else None
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("event")
+            not in {"finalization", "bracket-session-slot-finalization"}
+            or receipt.get("receipt_digest") != observation.receipt_digest
+            or receipt.get("attempt_id") != observation.attempt_id
+            or receipt.get("disposition") != "abandoned"
+            or receipt.get("content_id") is not None
+            or not isinstance(artifacts, Mapping)
+            or bool(artifacts)
+            or receipt.get("exact_bound_lexeme_s") is not None
+        ):
+            raise ValueError("successor_terminal_no_content_receipt_malformed")
+        rows.append(
+            {
+                "attempt_id": observation.attempt_id,
+                "closure_sequence": observation.sequence,
+                "receipt_digest": observation.receipt_digest,
+                "disposition": "abandoned",
+                "custody_locator": observation.custody_locator,
+            }
+        )
+    return rows
+
+
 def _observation_custody_authentic(observation: LedgerObservation) -> bool:
     if observation.content_id is None or not observation.artifact_sha256:
         return False
@@ -1705,12 +1930,22 @@ def probe_calibration_acceptance_trigger(
     empty_snapshot = isinstance(ledger_snapshot, CalibrationLedgerSnapshot)
     if not empty_snapshot:
         raise TypeError("ledger_snapshot must be a CalibrationLedgerSnapshot")
-    registry = load_calibration_acceptance_registry(
-        registry_path,
-        repo_root=repo_root,
-        require_committed=require_committed_registry,
-    )
-    active = _active_registry_entry(registry) if registry is not None else None
+    try:
+        registry = load_calibration_acceptance_registry(
+            registry_path,
+            repo_root=repo_root,
+            require_committed=require_committed_registry,
+        )
+    except CalibrationAcceptanceRegistryRefusal as exc:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=None,
+            artifact=None,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            refusal_reasons=(exc.reason,),
+        )
+    active = _active_registry_entry(registry)
     artifact: dict[str, Any] | None = None
     if active is not None:
         try:
@@ -1816,7 +2051,21 @@ def probe_calibration_acceptance_trigger(
         for observation in noncontent
         if observation.sequence > cutoff["sequence"]
     ]
-    if new_noncontent or any(
+    try:
+        _terminal_no_content_rows(
+            new_noncontent, ledger_snapshot, ledger_snapshot.head_sequence
+        )
+    except ValueError as exc:
+        return _probe_result(
+            outcome="authentication_or_epoch_refusal",
+            active=active,
+            artifact=artifact,
+            snapshot=ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            new_content_ids=new_ids,
+            refusal_reasons=(str(exc),),
+        )
+    if any(
         observation.classification_disposition
         not in {"valid", "systematic-invalid", "ordinary-invalid"}
         for observation in new_observations
@@ -2396,8 +2645,28 @@ def _governed_unused_slot_rows(
         aborted = [row for row in receipts if row.get("event") == "bracket-session-abort"]
         if len(opened) != 1 or len(aborted) != 1:
             return None
-        for slot in aborted[0]["unused_slots"]:
-            reservation = opened[0]["slots"][slot]
+        unused_slots = aborted[0].get("unused_slots")
+        reservations = opened[0].get("slots")
+        if (
+            not isinstance(unused_slots, Sequence)
+            or isinstance(unused_slots, (str, bytes))
+            or not isinstance(reservations, Mapping)
+        ):
+            return None
+        for slot in unused_slots:
+            reservation = reservations.get(slot)
+            if (
+                not isinstance(slot, str)
+                or not isinstance(reservation, Mapping)
+                or not isinstance(reservation.get("attempt_id"), str)
+                or not reservation["attempt_id"]
+                or not isinstance(reservation.get("custody_locator"), str)
+                or not reservation["custody_locator"]
+                or isinstance(aborted[0].get("sequence"), bool)
+                or not isinstance(aborted[0].get("sequence"), int)
+                or not _valid_sha256(aborted[0].get("receipt_digest"))
+            ):
+                return None
             rows.append(
                 {
                     "attempt_id": reservation["attempt_id"],
@@ -2407,6 +2676,27 @@ def _governed_unused_slot_rows(
                     "custody_locator": reservation["custody_locator"],
                 }
             )
+    return sorted(rows, key=lambda row: (row["closure_sequence"], row["attempt_id"]))
+
+
+def _governed_noncontent_rows(
+    noncontent: Sequence[LedgerObservation],
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    cutoff_sequence: int,
+) -> list[dict[str, Any]]:
+    terminal_rows = _terminal_no_content_rows(
+        noncontent, ledger_snapshot, cutoff_sequence
+    )
+    unused_rows = _governed_unused_slot_rows(ledger_snapshot, cutoff_sequence)
+    if unused_rows is None:
+        raise ValueError("successor_governed_unused_slot_closure_malformed")
+    rows = [*terminal_rows, *unused_rows]
+    keys = [
+        (row["closure_sequence"], row["attempt_id"], row["receipt_digest"])
+        for row in rows
+    ]
+    if len(keys) != len(set(keys)):
+        raise ValueError("successor_noncontent_closure_conflict")
     return sorted(rows, key=lambda row: (row["closure_sequence"], row["attempt_id"]))
 
 
@@ -2463,12 +2753,11 @@ def _prior_set_matches_import_cutoff_prefix(
                 or row["attempts"] != expected_attempts
             ):
                 return False
-        if noncontent:
-            return False
-        expected_noncontent = _governed_unused_slot_rows(
-            ledger_snapshot, cutoff["sequence"]
-        )
-        if expected_noncontent is None:
+        try:
+            expected_noncontent = _governed_noncontent_rows(
+                noncontent, ledger_snapshot, cutoff["sequence"]
+            )
+        except ValueError:
             return False
         return (
             artifact["prior_observation_set"]["noncontent_attempts"]
@@ -3078,6 +3367,8 @@ def evaluate_calibration_bracket(
     if drift_decimal > maximum_drift:
         return result, ("instrument_calibration_mismatch",)
 
+    # COLD-GATE-Q13: current-answer allowance generalization; the re-convened
+    # packet can flip this isolated site without touching downstream shape.
     allowance = max(drift_decimal, screen)
     operative_bound = endpoint_max_decimal + allowance
     result.update(

@@ -145,13 +145,22 @@ def _snapshot(
                     "receipt_digest": _digest(f"padding-{sequence}"),
                 }
             )
-        receipts.append(
-            {
-                "sequence": extra.sequence,
-                "event": "finalization",
-                "receipt_digest": extra.receipt_digest,
-            }
-        )
+        receipt = {
+            "sequence": extra.sequence,
+            "event": "finalization",
+            "receipt_digest": extra.receipt_digest,
+        }
+        if extra.disposition == "abandoned":
+            receipt.update(
+                {
+                    "attempt_id": extra.attempt_id,
+                    "disposition": extra.disposition,
+                    "content_id": extra.content_id,
+                    "artifact_sha256": dict(extra.artifact_sha256),
+                    "exact_bound_lexeme_s": extra.exact_bound_lexeme_s,
+                }
+            )
+        receipts.append(receipt)
         observations.append(extra)
     head_digest = receipts[-1]["receipt_digest"]
     return CalibrationLedgerSnapshot(
@@ -176,6 +185,24 @@ def _probe(snapshot: CalibrationLedgerSnapshot) -> dict:
         require_committed_registry=False,
         verify_custody=False,
     )
+
+
+def _init_publication_repo(root: Path) -> tuple[Path, Path]:
+    config = root / "configs/calibration"
+    config.mkdir(parents=True)
+    (config / ACCEPTANCE_PATH.name).write_bytes(ACCEPTANCE_PATH.read_bytes())
+    registry = config / REGISTRY_PATH.name
+    registry.write_bytes(REGISTRY_PATH.read_bytes())
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "anchor"], cwd=root, check=True)
+    return registry, config
 
 
 def _open_pre_snapshot() -> CalibrationLedgerSnapshot:
@@ -308,11 +335,13 @@ class RegistryTrustAnchorTests(unittest.TestCase):
                 )
             )
             registry_path.write_bytes(registry_path.read_bytes() + b" ")
-            self.assertIsNone(
+            with self.assertRaisesRegex(
+                bracketing.CalibrationAcceptanceRegistryRefusal,
+                "acceptance_registry_missing_commit",
+            ):
                 bracketing.load_calibration_acceptance_registry(
                     registry_path, repo_root=root, require_committed=True
                 )
-            )
 
     def test_registry_rejects_symlink_artifact_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -324,11 +353,13 @@ class RegistryTrustAnchorTests(unittest.TestCase):
             (config / "calibration_acceptance_d079_v2.json").symlink_to(target)
             registry_path = config / "calibration_acceptance_registry.json"
             registry_path.write_bytes(REGISTRY_PATH.read_bytes())
-            self.assertIsNone(
+            with self.assertRaisesRegex(
+                bracketing.CalibrationAcceptanceRegistryRefusal,
+                "acceptance_registry_artifact_path_substituted",
+            ):
                 bracketing.load_calibration_acceptance_registry(
                     registry_path, repo_root=root, require_committed=False
                 )
-            )
 
 
 class TriggerProbeTests(unittest.TestCase):
@@ -392,7 +423,7 @@ class TriggerProbeTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "accepted_under_active_artifact")
         self.assertEqual(len(result["new_content_ids"]), 1)
 
-    def test_unresolved_or_null_content_refuses(self) -> None:
+    def test_authenticated_terminal_no_content_is_excluded_without_refusal(self) -> None:
         observation = replace(
             _new_observation(0, disposition="abandoned"),
             content_id=None,
@@ -400,8 +431,28 @@ class TriggerProbeTests(unittest.TestCase):
             exact_bound_lexeme_s=None,
         )
         result = _probe(_snapshot((observation,)))
+        self.assertEqual(result["outcome"], "accepted_under_active_artifact")
+        self.assertEqual(result["new_content_ids"], [])
+        self.assertEqual(result["refusal_reasons"], [])
+
+    def test_terminal_no_content_receipt_variation_has_named_refusal(self) -> None:
+        observation = replace(
+            _new_observation(0, disposition="abandoned"),
+            content_id=None,
+            artifact_sha256={},
+            exact_bound_lexeme_s=None,
+        )
+        snapshot = _snapshot((observation,))
+        malformed_receipt = dict(snapshot.receipts[-1])
+        malformed_receipt.pop("attempt_id")
+        result = _probe(
+            replace(snapshot, receipts=(*snapshot.receipts[:-1], malformed_receipt))
+        )
         self.assertEqual(result["outcome"], "authentication_or_epoch_refusal")
-        self.assertIn("unresolved_or_unclassifiable_observation", result["refusal_reasons"])
+        self.assertEqual(
+            result["refusal_reasons"],
+            ["successor_terminal_no_content_receipt_malformed"],
+        )
 
     def test_same_content_alias_does_not_increment_count(self) -> None:
         original = _parent_observations()[0]
@@ -508,10 +559,17 @@ class DecimalDerivationTests(unittest.TestCase):
         self.assertEqual(operatives["preflight_level_screen_s"], "0.033558756679900")
         self.assertEqual(operatives["max_budgetable_excess_s"], "0.001275166090593858")
 
-    def test_half_even_long_lexeme_and_preflight_max_rule(self) -> None:
+    def test_preflight_screen_equals_half_even_quantized_observed_maximum(self) -> None:
         members = [
-            {"content_id": "1" * 64, "b_fiducial_s": "0.0000000000000000000000000000000"},
-            {"content_id": "2" * 64, "b_fiducial_s": "0.0000005000000000000000000000000"},
+            {
+                "content_id": f"{index:064x}",
+                "b_fiducial_s": (
+                    "0.0000000000000000"
+                    if index <= 9
+                    else "0.0000000000000005"
+                ),
+            }
+            for index in range(1, 20)
         ]
         derived = bracketing.derive_successor_decimal_derivation(members)
         self.assertEqual(derived["ratified_operatives"]["bracket_screen_s"], "0.000000")
@@ -519,9 +577,16 @@ class DecimalDerivationTests(unittest.TestCase):
             derived["rounding"]["preflight_level_screen"]["source_rule"],
             bracketing.SUCCESSOR_PREFLIGHT_SCREEN_RULE,
         )
+        quantized_maximum = Decimal(
+            derived["source_statistics"]["maximum_s"]
+        ).quantize(Decimal("0.000000000000001"), rounding=bracketing.ROUND_HALF_EVEN)
         self.assertGreater(
-            Decimal(derived["ratified_operatives"]["preflight_level_screen_s"]),
+            Decimal(derived["source_statistics"]["prediction_95_two_draw_s"]),
             Decimal(derived["source_statistics"]["maximum_s"]),
+        )
+        self.assertEqual(
+            Decimal(derived["ratified_operatives"]["preflight_level_screen_s"]),
+            quantized_maximum,
         )
 
     def test_negative_nonfinite_and_binary_float_inputs_refuse(self) -> None:
@@ -546,6 +611,54 @@ class DecimalDerivationTests(unittest.TestCase):
                 "2.8784404727135853941939366597008136821841052811738896572381901955286218320347263"
             ),
         )
+        bypassed = bracketing.decimal_student_t_quantile(
+            "0.995", 18, use_compatibility_pin=False
+        )
+        self.assertLess(
+            abs(
+                bypassed
+                - Decimal(
+                    "2.8784404727386081178058787265646316079030323608869115266837277466388674896049174"
+                )
+            ),
+            Decimal("1e-60"),
+        )
+
+    def test_nonpinned_df37_matches_checked_in_independent_reference(self) -> None:
+        self.assertLess(
+            abs(
+                bracketing.decimal_student_t_quantile(
+                    "0.995", 37, use_compatibility_pin=False
+                )
+                - Decimal(
+                    "2.71540872154998830130830201963737496013944012008966094097330087289823817193540197518371053830804074116858911770212594477"
+                )
+            ),
+            Decimal("1e-60"),
+        )
+
+    def test_quantile_continued_fraction_nonconvergence_is_governed(self) -> None:
+        with patch.object(
+            bracketing, "SUCCESSOR_CONTINUED_FRACTION_MAX_ITERATIONS", 0
+        ):
+            with self.assertRaisesRegex(
+                bracketing.CalibrationAcceptanceNumericalRefusal,
+                "successor_quantile_continued_fraction_nonconvergence",
+            ):
+                bracketing.decimal_student_t_quantile(
+                    "0.995", 17, use_compatibility_pin=False
+                )
+
+    def test_q13_pending_minimum_refuses_n_below_19(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, "successor_corpus_below_pending_q13_minimum_19"
+        ):
+            bracketing.derive_successor_decimal_derivation(
+                [
+                    {"content_id": "1" * 64, "b_fiducial_s": "0"},
+                    {"content_id": "2" * 64, "b_fiducial_s": "0.1"},
+                ]
+            )
 
 
 class SuccessorBuilderTests(unittest.TestCase):
@@ -561,6 +674,8 @@ class SuccessorBuilderTests(unittest.TestCase):
         self.assertEqual(build.artifact["prospective_rederivation"]["count_trigger"]["next_boundary"], 38)
         self.assertTrue(bracketing._valid_acceptance_bound(build.artifact))
         self.assertEqual(build.successor_probe["outcome"], "accepted_under_active_artifact")
+        self.assertEqual(build.successor_probe["refusal_reasons"], [])
+        self.assertNotIn("parent_judgment_policy", build.successor_probe)
         self.assertEqual(build.artifact["lineage"]["parent_acceptance_id"], "d079_calibration_acceptance_v2_n19")
         self.assertIn(_digest("live-content-0"), build.artifact["lineage"]["trigger_judgment"]["new_content_ids"])
 
@@ -594,6 +709,38 @@ class SuccessorBuilderTests(unittest.TestCase):
         self.assertEqual(build.artifact["derivation_corpus"]["n"], 38)
         self.assertEqual(build.artifact["prospective_rederivation"]["count_trigger"]["next_boundary"], 76)
 
+    def test_ancestor_boundary_rule_is_validated_from_its_entry(self) -> None:
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((_new_observation(0, bound="0.02"),)),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for entry in build.registry["entries"]:
+                destination = root / entry["artifact_path"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(
+                    build.artifact_bytes
+                    if entry["acceptance_id"] == build.artifact["acceptance_id"]
+                    else (REPO_ROOT / entry["artifact_path"]).read_bytes()
+                )
+            registry = root / "configs/calibration/calibration_acceptance_registry.json"
+            registry.write_bytes(build.registry_bytes)
+            with patch.object(
+                bracketing,
+                "SUCCESSOR_COUNT_BOUNDARY_RULE",
+                "future_rule_not_applied_to_ancestors",
+            ):
+                loaded = bracketing.load_calibration_acceptance_registry(
+                    registry, repo_root=root, require_committed=False
+                )
+            self.assertEqual(
+                loaded["entries"][0]["count_boundary_rule"],
+                bracketing.GENESIS_COUNT_BOUNDARY_RULE,
+            )
+
     def test_systematic_and_unresolved_never_build(self) -> None:
         cases = (
             _snapshot((_new_observation(0, disposition="systematic-invalid"),)),
@@ -608,6 +755,58 @@ class SuccessorBuilderTests(unittest.TestCase):
                         require_committed_registry=False,
                         verify_custody=False,
                     )
+
+    def test_no_content_closure_does_not_brick_range_successor(self) -> None:
+        abandoned = replace(
+            _new_observation(0, disposition="abandoned"),
+            content_id=None,
+            artifact_sha256={},
+            exact_bound_lexeme_s=None,
+        )
+        build = successor.build_calibration_acceptance_successor(
+            _snapshot((abandoned, _new_observation(1, bound="0.02"))),
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        self.assertEqual(
+            build.artifact["prior_observation_set"]["noncontent_attempts"],
+            [
+                {
+                    "attempt_id": abandoned.attempt_id,
+                    "closure_sequence": abandoned.sequence,
+                    "receipt_digest": abandoned.receipt_digest,
+                    "disposition": "abandoned",
+                    "custody_locator": abandoned.custody_locator,
+                }
+            ],
+        )
+        self.assertEqual(
+            build.successor_probe["outcome"], "accepted_under_active_artifact"
+        )
+
+    def test_real_successor_probe_rejection_blocks_build(self) -> None:
+        snapshot = _snapshot((_new_observation(0, bound="0.02"),))
+        parent_probe = _probe(snapshot)
+        rejected = {
+            "outcome": "authentication_or_epoch_refusal",
+            "refusal_reasons": ["synthetic_real_probe_rejection"],
+        }
+        with patch.object(
+            successor,
+            "probe_calibration_acceptance_trigger",
+            side_effect=(parent_probe, rejected),
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "successor_real_probe_refused:authentication_or_epoch_refusal",
+            ):
+                successor.build_calibration_acceptance_successor(
+                    snapshot,
+                    observed_identity_epoch=_parent_artifact()["identity_epoch"],
+                    require_committed_registry=False,
+                    verify_custody=False,
+                )
 
     def test_nonterminal_or_uncommitted_head_refuses(self) -> None:
         snapshot = _snapshot((_new_observation(0),))
@@ -634,9 +833,7 @@ class SuccessorBuilderTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            registry = root / "configs/calibration/calibration_acceptance_registry.json"
-            registry.parent.mkdir(parents=True)
-            registry.write_bytes(REGISTRY_PATH.read_bytes())
+            registry, _ = _init_publication_repo(root)
             artifact = root / build.artifact_path
             artifact.write_text("occupied", encoding="utf-8")
             before = registry.read_bytes()
@@ -651,7 +848,7 @@ class SuccessorBuilderTests(unittest.TestCase):
             self.assertEqual(artifact.read_text(encoding="utf-8"), "occupied")
             self.assertEqual(registry.read_bytes(), before)
 
-    def test_registry_last_publication_and_exact_orphan_retry(self) -> None:
+    def test_publication_co_lands_both_paths_and_verifies_committed_mode(self) -> None:
         build = successor.build_calibration_acceptance_successor(
             _snapshot((_new_observation(0),)),
             observed_identity_epoch=_parent_artifact()["identity_epoch"],
@@ -662,16 +859,12 @@ class SuccessorBuilderTests(unittest.TestCase):
             with self.subTest(prepublish_artifact=prepublish_artifact):
                 with tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
-                    config = root / "configs/calibration"
-                    config.mkdir(parents=True)
-                    (config / ACCEPTANCE_PATH.name).write_bytes(ACCEPTANCE_PATH.read_bytes())
-                    registry = config / REGISTRY_PATH.name
-                    registry.write_bytes(REGISTRY_PATH.read_bytes())
+                    registry, _ = _init_publication_repo(root)
                     artifact = root / build.artifact_path
                     if prepublish_artifact:
                         artifact.write_bytes(build.artifact_bytes)
                     before = registry.read_bytes()
-                    successor.publish_successor(
+                    verification = successor.publish_successor(
                         build,
                         artifact_destination=artifact,
                         registry_destination=registry,
@@ -680,14 +873,82 @@ class SuccessorBuilderTests(unittest.TestCase):
                     )
                     self.assertEqual(artifact.read_bytes(), build.artifact_bytes)
                     self.assertEqual(registry.read_bytes(), build.registry_bytes)
+                    self.assertTrue(verification["committed_mode_verified"])
+                    committed_paths = subprocess.run(
+                        [
+                            "git",
+                            "diff-tree",
+                            "--no-commit-id",
+                            "--name-only",
+                            "-r",
+                            "HEAD",
+                        ],
+                        cwd=root,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.splitlines()
+                    self.assertEqual(
+                        set(committed_paths),
+                        {
+                            build.artifact_path,
+                            "configs/calibration/calibration_acceptance_registry.json",
+                        },
+                    )
                     loaded = bracketing.load_calibration_acceptance_registry(
-                        registry, repo_root=root, require_committed=False
+                        registry, repo_root=root, require_committed=True
                     )
                     self.assertIsNotNone(loaded)
                     self.assertEqual(
                         bracketing._active_registry_entry(loaded)["acceptance_id"],
                         build.artifact["acceptance_id"],
                     )
+
+    def test_uncommitted_registry_replacement_names_missing_commit_everywhere(self) -> None:
+        snapshot = _snapshot((_new_observation(0, bound="0.02"),))
+        build = successor.build_calibration_acceptance_successor(
+            snapshot,
+            observed_identity_epoch=_parent_artifact()["identity_epoch"],
+            require_committed_registry=False,
+            verify_custody=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry, _ = _init_publication_repo(root)
+            artifact = root / build.artifact_path
+            artifact.write_bytes(build.artifact_bytes)
+            registry.write_bytes(build.registry_bytes)
+
+            with self.assertRaisesRegex(
+                bracketing.CalibrationAcceptanceRegistryRefusal,
+                "acceptance_registry_missing_commit",
+            ):
+                bracketing.load_calibration_acceptance_registry(
+                    registry, repo_root=root, require_committed=True
+                )
+            probe = bracketing.probe_calibration_acceptance_trigger(
+                snapshot,
+                observed_identity_epoch=_parent_artifact()["identity_epoch"],
+                registry_path=registry,
+                repo_root=root,
+                require_committed_registry=True,
+                verify_custody=False,
+            )
+            self.assertEqual(
+                probe["refusal_reasons"], ["acceptance_registry_missing_commit"]
+            )
+            with self.assertRaisesRegex(
+                bracketing.CalibrationAcceptanceRegistryRefusal,
+                "acceptance_registry_missing_commit",
+            ):
+                successor.build_calibration_acceptance_successor(
+                    snapshot,
+                    observed_identity_epoch=_parent_artifact()["identity_epoch"],
+                    registry_path=registry,
+                    repo_root=root,
+                    require_committed_registry=True,
+                    verify_custody=False,
+                )
 
     def test_dry_run_build_writes_nothing(self) -> None:
         before = {path: path.read_bytes() for path in (ACCEPTANCE_PATH, REGISTRY_PATH)}

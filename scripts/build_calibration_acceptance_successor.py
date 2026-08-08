@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build and optionally publish one deterministic D-102 successor artifact.
 
-Dry-run is the default. Issuance publishes immutable artifact bytes first and
-switches the committed registry last; it never writes the ledger head pin.
+Dry-run is the default. Issuance creates one commit containing the immutable
+artifact and registry transition, atomically advances HEAD, and verifies the
+successor through committed-mode loading. It never writes the ledger head pin.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -29,16 +31,18 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     ACCEPTANCE_REGISTRY_AUTHORITY,
     ACCEPTANCE_SUCCESSOR_SCHEMA,
     DEFAULT_ACCEPTANCE_REGISTRY_PATH,
-    POST_SUCCESSOR_POLICY,
     SUCCESSOR_CORPUS_SELECTION,
     SUCCESSOR_COUNT_BOUNDARY_RULE,
     SUCCESSOR_DECISION_IDS,
+    SUCCESSOR_MINIMUM_CORPUS_SIZE,
     SUCCESSOR_PUBLICATION_POLICY,
     SUCCESSOR_QUANTILE_METHOD,
     _active_registry_entry,
     _artifact_count_boundary,
     _canonical_sha256,
     _group_probe_observations,
+    _governed_noncontent_rows,
+    _git_head_bytes,
     _observation_custody_authentic,
     _probe_observation_universe,
     _valid_acceptance_bound,
@@ -48,7 +52,6 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     probe_calibration_acceptance_trigger,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
-    BRACKET_SESSION_ABORT_EVENT,
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
     LEDGER_SCHEMA,
@@ -100,7 +103,7 @@ class SuccessorBuild:
 
 
 class SuccessorDurabilityUncertain(RuntimeError):
-    """Registry authority switched, but its directory sync failed."""
+    """The authority commit landed, but post-commit verification failed."""
 
 
 def _pretty_json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -144,59 +147,6 @@ def _attempt_row(observation: LedgerObservation) -> dict[str, Any]:
     }
 
 
-def _governed_unused_slots(
-    snapshot: CalibrationLedgerSnapshot,
-) -> list[dict[str, Any]]:
-    """Record only unused U1 slots whose terminal abort proves no capture."""
-
-    rows: list[dict[str, Any]] = []
-    receipts_by_session: dict[str, list[Mapping[str, Any]]] = {}
-    for receipt in snapshot.receipts:
-        session_id = receipt.get("session_id")
-        if isinstance(session_id, str):
-            receipts_by_session.setdefault(session_id, []).append(receipt)
-    for session in snapshot.bracket_sessions:
-        if session.state != "aborted":
-            continue
-        receipts = receipts_by_session.get(session.session_id, [])
-        opens = [receipt for receipt in receipts if receipt.get("event") == "bracket-session-open"]
-        aborts = [
-            receipt
-            for receipt in receipts
-            if receipt.get("event") == BRACKET_SESSION_ABORT_EVENT
-        ]
-        if len(opens) != 1 or len(aborts) != 1:
-            raise ValueError("aborted bracket session lacks one authenticated closure")
-        opened = opens[0]
-        aborted = aborts[0]
-        for slot in aborted["unused_slots"]:
-            reservation = opened["slots"][slot]
-            rows.append(
-                {
-                    "attempt_id": reservation["attempt_id"],
-                    "closure_sequence": aborted["sequence"],
-                    "receipt_digest": aborted["receipt_digest"],
-                    "disposition": "governed-unused-slot",
-                    "custody_locator": reservation["custody_locator"],
-                }
-            )
-    return rows
-
-
-def _noncontent_rows(
-    noncontent: Sequence[LedgerObservation],
-    snapshot: CalibrationLedgerSnapshot,
-) -> list[dict[str, Any]]:
-    if noncontent:
-        # A terminal `abandoned` receipt can still conceal already-created
-        # classifiable bytes. Q6 requires a ruling before automatic issuance.
-        raise ValueError("noncontent observation blocks automatic successor issuance")
-    return sorted(
-        _governed_unused_slots(snapshot),
-        key=lambda row: (row["closure_sequence"], row["attempt_id"]),
-    )
-
-
 def _load_parent_artifact(
     registry: Mapping[str, Any], repo_root: Path
 ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
@@ -231,6 +181,53 @@ def _assert_terminal_committed_snapshot(snapshot: CalibrationLedgerSnapshot) -> 
         raise ValueError("successor issuance requires a committed terminal ledger head")
 
 
+def _probe_proposed_successor(
+    ledger_snapshot: CalibrationLedgerSnapshot,
+    *,
+    observed_identity_epoch: Mapping[str, Any],
+    proposed_registry: Mapping[str, Any],
+    artifact_path: str,
+    artifact_bytes: bytes,
+    repo_root: Path,
+    verify_custody: bool,
+) -> dict[str, Any]:
+    """Run the production probe against an isolated copy of proposed bytes."""
+
+    with tempfile.TemporaryDirectory(prefix="joulewise-successor-probe-") as tmp:
+        probe_root = Path(tmp)
+        for entry in proposed_registry["entries"]:
+            relative = str(entry["artifact_path"])
+            destination = probe_root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            payload = (
+                artifact_bytes
+                if relative == artifact_path
+                else (repo_root / relative).read_bytes()
+            )
+            destination.write_bytes(payload)
+        registry_path = (
+            probe_root
+            / "configs"
+            / "calibration"
+            / "calibration_acceptance_registry.json"
+        )
+        registry_path.write_bytes(_pretty_json_bytes(proposed_registry))
+        result = probe_calibration_acceptance_trigger(
+            ledger_snapshot,
+            observed_identity_epoch=observed_identity_epoch,
+            registry_path=registry_path,
+            repo_root=probe_root,
+            require_committed_registry=False,
+            verify_custody=verify_custody,
+        )
+    if result.get("outcome") != "accepted_under_active_artifact":
+        reasons = ",".join(result.get("refusal_reasons", ()))
+        raise ValueError(
+            f"successor_real_probe_refused:{result.get('outcome')}:{reasons}"
+        )
+    return result
+
+
 def build_calibration_acceptance_successor(
     ledger_snapshot: CalibrationLedgerSnapshot,
     *,
@@ -243,6 +240,7 @@ def build_calibration_acceptance_successor(
     """Build deterministic artifact and registry buffers without writing."""
 
     repo_root = Path(repo_root).resolve()
+    registry_path = Path(registry_path).resolve(strict=False)
     _assert_terminal_committed_snapshot(ledger_snapshot)
     registry = load_calibration_acceptance_registry(
         registry_path,
@@ -261,8 +259,10 @@ def build_calibration_acceptance_successor(
         verify_custody=verify_custody,
     )
     if parent_probe["outcome"] != "successor_required":
+        refusal_reasons = ",".join(parent_probe.get("refusal_reasons", ()))
         raise ValueError(
-            f"active artifact does not require a successor: {parent_probe['outcome']}"
+            "active artifact does not require a successor: "
+            f"{parent_probe['outcome']}:{refusal_reasons}"
         )
 
     grouped_result = _group_probe_observations(
@@ -271,7 +271,9 @@ def build_calibration_acceptance_successor(
     if grouped_result is None:
         raise ValueError("content identity has conflicting classifications or bytes")
     grouped, noncontent = grouped_result
-    noncontent_rows = _noncontent_rows(noncontent, ledger_snapshot)
+    noncontent_rows = _governed_noncontent_rows(
+        noncontent, ledger_snapshot, ledger_snapshot.head_sequence
+    )
     active_epoch = dict(parent["identity_epoch"])
     if dict(observed_identity_epoch) != active_epoch:
         raise ValueError("observed identity epoch differs from the parent artifact")
@@ -279,6 +281,13 @@ def build_calibration_acceptance_successor(
     epoch_values: dict[str, dict[str, Any]] = {"active_epoch": active_epoch}
     prior_rows: list[dict[str, Any]] = []
     corpus_members: list[dict[str, Any]] = []
+    parent_new_ids = set(parent_probe["new_content_ids"])
+    parent_prior_ids = {
+        row["content_id"]
+        for row in parent["prior_observation_set"]["observations"]
+    }
+    if set(grouped) - parent_prior_ids != parent_new_ids:
+        raise ValueError("successor_parent_judgment_content_set_mismatch")
     for content_id, aliases in grouped.items():
         representative = aliases[0]
         epoch_id = _epoch_id(representative.identity_epoch, active_epoch)
@@ -297,6 +306,12 @@ def build_calibration_acceptance_successor(
             or epoch_id != "active_epoch"
         ):
             continue
+        # COLD-GATE-Q11: conservative default. A trigger observation enters
+        # the corpus only after the real parent probe has dispositioned it
+        # under the prior artifact (D-109 R2.6). This isolated predicate is
+        # the flippable site for the re-convened conjunct-scope ruling.
+        if content_id in parent_new_ids and parent_probe["outcome"] != "successor_required":
+            raise ValueError("successor_trigger_lacks_parent_disposition")
         if verify_custody and any(
             not _observation_custody_authentic(alias) for alias in aliases
         ):
@@ -322,8 +337,8 @@ def build_calibration_acceptance_successor(
         )
     prior_rows.sort(key=lambda row: row["content_id"])
     corpus_members.sort(key=lambda member: member["content_id"])
-    if len(corpus_members) < 2:
-        raise ValueError("successor corpus has fewer than two valid same-epoch members")
+    if len(corpus_members) < SUCCESSOR_MINIMUM_CORPUS_SIZE:
+        raise ValueError("successor_corpus_below_pending_q13_minimum_19")
 
     derivation = derive_successor_decimal_derivation(corpus_members)
     parent_boundary = _artifact_count_boundary(parent)
@@ -436,6 +451,7 @@ def build_calibration_acceptance_successor(
             "active": True,
             "parent_acceptance_id": parent["acceptance_id"],
             "parent_artifact_sha256": parent_entry["artifact_sha256"],
+            "count_boundary_rule": SUCCESSOR_COUNT_BOUNDARY_RULE,
             "ledger_cutoff": cutoff_core,
         }
     )
@@ -448,18 +464,15 @@ def build_calibration_acceptance_successor(
         raise ValueError("constructed registry fails ancestry validation")
     registry_bytes = _pretty_json_bytes(proposed_registry)
 
-    # Step 16's self-fit guard is explicit: every parent-new content ID is now
-    # in the successor prior set, while the next count boundary is above n.
-    successor_prior_ids = {row["content_id"] for row in prior_rows}
-    if not set(parent_probe["new_content_ids"]).issubset(successor_prior_ids):
-        raise ValueError("successor omits a parent-judged trigger observation")
-    successor_probe = {
-        "outcome": "accepted_under_active_artifact",
-        "active_acceptance_id": acceptance_id,
-        "new_content_ids": [],
-        "observed_triggers": [],
-        "parent_judgment_policy": POST_SUCCESSOR_POLICY,
-    }
+    successor_probe = _probe_proposed_successor(
+        ledger_snapshot,
+        observed_identity_epoch=observed_identity_epoch,
+        proposed_registry=proposed_registry,
+        artifact_path=artifact_path,
+        artifact_bytes=artifact_bytes,
+        repo_root=repo_root,
+        verify_custody=verify_custody,
+    )
     return SuccessorBuild(
         artifact=artifact,
         artifact_bytes=artifact_bytes,
@@ -506,8 +519,8 @@ def publish_successor(
     registry_destination: Path,
     expected_registry_bytes: bytes,
     repo_root: Path = REPO_ROOT,
-) -> None:
-    """Publish validated buffers with the registry as the commit point."""
+) -> dict[str, Any]:
+    """Co-land artifact and registry in one commit and verify committed mode."""
 
     repo_root = Path(repo_root).resolve()
     artifact_destination = Path(artifact_destination)
@@ -525,13 +538,43 @@ def publish_successor(
         or registry_destination.is_symlink()
     ):
         raise ValueError("issuance destinations changed or are substituted")
+    artifact_destination = artifact_destination.resolve(strict=False)
+    registry_destination = registry_destination.resolve(strict=False)
     try:
         registry_stat = registry_destination.stat()
     except OSError as exc:
         raise ValueError("registry destination is absent") from exc
     if not stat.S_ISREG(registry_stat.st_mode) or registry_stat.st_nlink != 1:
         raise ValueError("registry destination is not one regular unaliased file")
-    lock_path = registry_destination.with_name(f"{registry_destination.name}.lock")
+    try:
+        top_level = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        old_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        git_lock_name = subprocess.run(
+            ["git", "rev-parse", "--git-path", "joulewise-successor-publish.lock"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("successor_publication_git_repository_invalid") from exc
+    if Path(top_level).resolve() != repo_root:
+        raise ValueError("successor_publication_repo_root_mismatch")
+    lock_path = Path(git_lock_name)
+    if not lock_path.is_absolute():
+        lock_path = repo_root / lock_path
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
     try:
         lock_descriptor = os.open(lock_path, flags, 0o600)
@@ -542,7 +585,17 @@ def publish_successor(
         if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
             raise ValueError("registry lock is not one regular unaliased file")
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
-        if registry_destination.read_bytes() != expected_registry_bytes:
+        artifact_relative = artifact_destination.relative_to(repo_root).as_posix()
+        registry_relative = registry_destination.relative_to(repo_root).as_posix()
+        if _git_head_bytes(registry_destination, repo_root) != expected_registry_bytes:
+            raise ValueError("acceptance_registry_expected_parent_commit_mismatch")
+        if _git_head_bytes(artifact_destination, repo_root) is not None:
+            raise ValueError("successor_artifact_already_committed_without_registry")
+        initial_registry_bytes = registry_destination.read_bytes()
+        if initial_registry_bytes not in {
+            expected_registry_bytes,
+            build.registry_bytes,
+        }:
             raise ValueError("registry changed since the successor was built")
         artifact_already_published = artifact_destination.exists()
         if (
@@ -550,26 +603,182 @@ def publish_successor(
             and artifact_destination.read_bytes() != build.artifact_bytes
         ):
             raise ValueError("immutable successor artifact path is occupied")
+        try:
+            staged = subprocess.run(
+                ["git", "diff", "--cached", "--name-only", "-z"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+            ).stdout
+            tracked_dirty = subprocess.run(
+                ["git", "diff", "--name-only", "-z"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+            ).stdout
+            untracked = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError("successor_publication_git_preflight_failed") from exc
+
+        def names(raw: bytes) -> set[str]:
+            return {
+                item.decode("utf-8")
+                for item in raw.split(b"\0")
+                if item
+            }
+
+        if names(staged):
+            raise ValueError("successor_publication_index_not_clean")
+        if names(tracked_dirty) - {registry_relative}:
+            raise ValueError("successor_publication_worktree_not_clean")
+        if names(untracked) - {artifact_relative}:
+            raise ValueError("successor_publication_untracked_paths_present")
         artifact_stage = (
             None
             if artifact_already_published
             else _stage_bytes(artifact_destination, build.artifact_bytes)
         )
         registry_stage = _stage_bytes(registry_destination, build.registry_bytes)
+        ref_advanced = False
         try:
-            # An interruption after this replace leaves only an inert
-            # unregistered immutable artifact. Authority changes only at the
-            # registry replace; an exact orphan is an idempotent retry state.
             if artifact_stage is not None:
                 os.replace(artifact_stage, artifact_destination)
                 _fsync_directory(artifact_destination.parent)
             os.replace(registry_stage, registry_destination)
+            _fsync_directory(registry_destination.parent)
+
+            index_descriptor, index_name = tempfile.mkstemp(
+                prefix="joulewise-successor-index-"
+            )
+            os.close(index_descriptor)
+            index_path = Path(index_name)
+            index_path.unlink()
+            index_environment = dict(os.environ)
+            index_environment["GIT_INDEX_FILE"] = str(index_path)
             try:
-                _fsync_directory(registry_destination.parent)
-            except OSError as exc:
-                raise SuccessorDurabilityUncertain(
-                    "registry committed with directory durability uncertain"
+                subprocess.run(
+                    ["git", "read-tree", old_head],
+                    cwd=repo_root,
+                    env=index_environment,
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "add", "--", artifact_relative, registry_relative],
+                    cwd=repo_root,
+                    env=index_environment,
+                    check=True,
+                    capture_output=True,
+                )
+                committed_paths_raw = subprocess.run(
+                    ["git", "diff", "--cached", "--name-only", "-z", old_head],
+                    cwd=repo_root,
+                    env=index_environment,
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                if names(committed_paths_raw) != {
+                    artifact_relative,
+                    registry_relative,
+                }:
+                    raise ValueError("successor_publication_commit_pathset_invalid")
+                tree = subprocess.run(
+                    ["git", "write-tree"],
+                    cwd=repo_root,
+                    env=index_environment,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                commit_message = (
+                    "Issue calibration acceptance successor "
+                    f"{build.artifact['acceptance_id']}"
+                )
+                commit = subprocess.run(
+                    ["git", "commit-tree", tree, "-p", old_head, "-m", commit_message],
+                    cwd=repo_root,
+                    env=index_environment,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ValueError("successor_publication_commit_creation_failed") from exc
+            finally:
+                index_path.unlink(missing_ok=True)
+
+            try:
+                committed_paths = names(
+                    subprocess.run(
+                        [
+                            "git",
+                            "diff-tree",
+                            "--no-commit-id",
+                            "--name-only",
+                            "-r",
+                            "-z",
+                            commit,
+                        ],
+                        cwd=repo_root,
+                        check=True,
+                        capture_output=True,
+                    ).stdout
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ValueError(
+                    "successor_publication_commit_inspection_failed"
                 ) from exc
+            if committed_paths != {artifact_relative, registry_relative}:
+                raise ValueError("successor_publication_commit_pathset_invalid")
+            try:
+                subprocess.run(
+                    ["git", "update-ref", "HEAD", commit, old_head],
+                    cwd=repo_root,
+                    check=True,
+                    capture_output=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ValueError("successor_publication_head_update_failed") from exc
+            ref_advanced = True
+
+            try:
+                loaded = load_calibration_acceptance_registry(
+                    registry_destination,
+                    repo_root=repo_root,
+                    require_committed=True,
+                )
+                active = _active_registry_entry(loaded)
+            except (OSError, TypeError, ValueError) as exc:
+                raise SuccessorDurabilityUncertain(
+                    "successor_post_commit_selection_verification_failed"
+                ) from exc
+            if (
+                active is None
+                or active.get("acceptance_id") != build.artifact["acceptance_id"]
+                or _git_head_bytes(artifact_destination, repo_root)
+                != build.artifact_bytes
+            ):
+                raise SuccessorDurabilityUncertain(
+                    "successor_post_commit_selection_verification_failed"
+                )
+            return {
+                "policy": SUCCESSOR_PUBLICATION_POLICY,
+                "commit": commit,
+                "committed_paths": sorted(committed_paths),
+                "committed_mode_active_acceptance_id": active["acceptance_id"],
+                "committed_mode_verified": True,
+            }
+        except BaseException:
+            if not ref_advanced:
+                registry_destination.write_bytes(initial_registry_bytes)
+                if not artifact_already_published:
+                    artifact_destination.unlink(missing_ok=True)
+            raise
         finally:
             if artifact_stage is not None:
                 artifact_stage.unlink(missing_ok=True)
@@ -626,10 +835,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             require_committed_registry=True,
             verify_custody=True,
         )
+        publication_verification: dict[str, Any] | None = None
         if args.issue:
             if args.artifact_out is None or args.registry_out is None:
                 raise ValueError("--issue requires --artifact-out and --registry-out")
-            publish_successor(
+            publication_verification = publish_successor(
                 build,
                 artifact_destination=args.artifact_out,
                 registry_destination=args.registry_out,
@@ -638,7 +848,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         elif args.artifact_out is not None or args.registry_out is not None:
             raise ValueError("dry-run forbids output destinations")
-        sys.stdout.buffer.write(_pretty_json_bytes(build.output_record()))
+        output = build.output_record()
+        if publication_verification is not None:
+            output["publication_verification"] = publication_verification
+        sys.stdout.buffer.write(_pretty_json_bytes(output))
         return 0
     except SuccessorDurabilityUncertain as exc:
         print(f"committed_durability_uncertain: {exc}", file=sys.stderr)
