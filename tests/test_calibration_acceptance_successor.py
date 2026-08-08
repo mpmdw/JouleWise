@@ -2217,6 +2217,20 @@ class SuccessorBuilderTests(unittest.TestCase):
         )
         self.assertEqual(before, {path: path.read_bytes() for path in before})
 
+    def test_successor_decision_ids_resolve_in_decision_log(self) -> None:
+        log_text = Path("docs/decision_log.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            list(bracketing.SUCCESSOR_DECISION_IDS),
+            ["D-102", "D-109", "D-117", "D-125", "D-126"],
+        )
+        for decision_id in bracketing.SUCCESSOR_DECISION_IDS:
+            self.assertIn(
+                f"| {decision_id} |", log_text,
+                f"{decision_id} has no decision-log index row; an issued "
+                "artifact may never embed a tuple member with no "
+                "decision-log entry (D-126)",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
