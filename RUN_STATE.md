@@ -10,8 +10,9 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-08 morning — **THE 40-HOUR WINDOW IS LIVE
-(D-125). A NEW SESSION STARTS HERE:**
+Last updated: 2026-08-08 late morning — **THE 40-HOUR WINDOW IS LIVE
+(D-125); T0 SESSION RUNNING — three Phase A Sol streams IN FLIGHT (see
+T0 block below). A NEW SESSION STARTS HERE:**
 
 ## ▶▶ RESUME SCRIPT FOR THE 40-HOUR WINDOW (post-/clear; read FIRST)
 
@@ -38,6 +39,33 @@ reason-code SPEC lane only.
 
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
+
+## ▶ T0 SESSION 2026-08-08 (40h window) — three Phase A streams IN FLIGHT
+
+- Session scratchpad (prompts, scopes, consult copies, out-files):
+  `/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad`.
+  Worktrees are the PRIOR session's (still live, clean, branches pushed):
+  `…/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad/{trust,recovery,u2rework}`.
+- **A1 trust rework** (registration-at-read, consult-shaped) — Sol xhigh
+  enforced-scope in worktree `trust` @ ad16fb2; out
+  `<SP>/trust-rework-out.md` (8h cap). Gate on harvest: fresh delta vs
+  the 16-question relocation checklist → replay → integration-merge →
+  PR → CI → D-121 → merge lifts the MINT BAR.
+- **A2 recovery integrated round** (exit-completeness, four elements
+  TOGETHER) — Sol xhigh in worktree `recovery` @ c0e0257; out
+  `<SP>/recovery-rework-out.md` (6h cap). Merge discharges the ARMING
+  BLOCKER only with all four landed together; integration-tree with
+  post-trust main first (shared calibration_ledger.py).
+- **A6 U2 rework round 2** — Sol xhigh in worktree `u2rework` @ ad5f3f7;
+  out `<SP>/u2rework-r2-out.md` (5h cap). Envelope arithmetic per the
+  D-125-ratified Q1Q13 design; Q8 shim delete; Q5 record-shape; Q4
+  freeze test; Q3 evidence regen; COLD-GATE-U2-PENDING → D-126.
+- **D-126 MINTED + pushed (`1a1dac0`)**: the U2 second-convening
+  synthesis transcribed; it is the tuple-member replacement ID.
+- If a stream's process dies, the WORKTREE DIFF is the artifact —
+  harvest, never re-run blind. A3 (CH-1 writer scalar) is queued after
+  A2 lands (shared writer file); A4 (estimator) + A5 (U11 tool) queue
+  after A1 merges (shared mint/floor surfaces).
 
 ## ▶ MORNING STATE 2026-08-08 (overnight run complete — READ THIS FIRST)
 
