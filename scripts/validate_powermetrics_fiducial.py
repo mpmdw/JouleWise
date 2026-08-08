@@ -62,6 +62,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     finalize_bracket_session_slot,
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
+    normalize_calibration_custody_path,
     terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
@@ -372,7 +373,9 @@ class _CaptureLedgerLifecycle:
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
-        self.custody_locator = custody_locator
+        self.custody_locator = normalize_calibration_custody_path(
+            custody_locator
+        )
         self.identity_epoch: Mapping[str, Any] = identity_epoch
         self.t1_bindings: Mapping[str, Any] = t1_bindings
         self.capture_wall_time_s: str | None = None
@@ -595,7 +598,7 @@ def main(argv: list[str] | None = None) -> int:
         else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
     )
     out_dir = args.output_root / validation_id
-    custody_locator = str(out_dir.resolve())
+    custody_locator = normalize_calibration_custody_path(out_dir)
     planned_epoch = {
         "os_build": _sysctl_identity("kern.osversion"),
         "hardware_model": _sysctl_identity("hw.model"),
