@@ -1,0 +1,11 @@
+{
+  "archive_format": "tar.zst",
+  "archive_sha256": "f1286bc814c9b392667a82443a2aa73df087ca126056d5046da597a310db9553",
+  "asset_name": "d117_v2_production_custody_store.tar.zst",
+  "custody_manifest_sha256": "dc90e366235343abeca97f7fc16b6cb5d257cb4a9c9a17d6042b12a4dec49370",
+  "fixture_id": "d117_v2_production",
+  "logical_bytes": 3333877627,
+  "logical_file_count": 191,
+  "release_tag": "fixture-d117-v2-production-v1",
+  "schema_version": "joulewise.d117_fixture_transport.v1"
+}

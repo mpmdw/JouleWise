@@ -1,0 +1,55 @@
+{
+  "hardware_target": {
+    "device_kind": "test",
+    "host": null,
+    "id": "synthetic_mac",
+    "notes": null,
+    "runtime_backend": "mock",
+    "telemetry_backend": "powermetrics",
+    "transport": "local"
+  },
+  "interconnect": {
+    "link_speed_mbps": null,
+    "name": "local",
+    "notes": null
+  },
+  "model": {
+    "context_window": 1024,
+    "family": "mock",
+    "name": "mock-model",
+    "revision": null,
+    "source": null,
+    "weight_format": "mock"
+  },
+  "quantization": {
+    "bits": null,
+    "group_size": null,
+    "name": "none"
+  },
+  "run_id": "seed",
+  "run_metadata": {
+    "ambient_temp_c": null,
+    "notes": null,
+    "operator": "test",
+    "project": "capstone-joulewise",
+    "tags": [
+      "phase1",
+      "mock"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 1.5,
+    "power_hz": 20.0,
+    "warmup_seconds": 0.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "dataset_ref": null,
+    "name": "mock_smoke",
+    "output_tokens": 8,
+    "prompt_text": null,
+    "prompt_tokens": 32,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}

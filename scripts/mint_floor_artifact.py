@@ -25,6 +25,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.analysis_engine.inputs import scientific_config_identity  # noqa: E402
+from joulewise.authentication_io import (  # noqa: E402
+    V2AuthenticationInputError,
+    read_authentication_input,
+    sha256_authentication_input,
+)
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     STACK_IDENTITY_DOMAIN,
@@ -59,6 +64,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
+    CUSTODY_STORE_MANIFEST_SCHEMA,
     CalibrationLedgerSnapshot,
     load_calibration_ledger_snapshot,
 )
@@ -174,6 +180,12 @@ class AuthenticatedComponent:
     source_regime: Mapping[str, Any]
     scientific_config_identity_sha256: str
     backend: str
+    # The authenticated whole-window verdict owns the bracket that covered
+    # this component.  Generalized v2 consumers use this exact basis record
+    # to prevent a supplied bracket binding from choosing its own window.
+    # Historical v1 records did not retain the projection in memory, so the
+    # optional default preserves their construction and artifact bytes.
+    whole_window_calibration_bracket: Mapping[str, Any] | None = None
 
 
 def _sha256(raw: bytes) -> str:
@@ -182,7 +194,9 @@ def _sha256(raw: bytes) -> str:
 
 def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="json", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
     try:
@@ -196,7 +210,9 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
 
 def _load_json_lines(path: Path, label: str) -> tuple[list[Mapping[str, Any]], bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(path, grammar="jsonl", label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
     rows: list[Mapping[str, Any]] = []
@@ -258,14 +274,20 @@ def _assert_path_independent(value: object, label: str = "artifact") -> None:
 
 
 def _metric_value(summary: Mapping[str, Any]) -> float:
-    phases = summary.get("phase_energy_j")
-    value = phases.get("decode") if isinstance(phases, Mapping) else None
-    return _finite(value, "summary phase_energy_j.decode")
+    if METRIC.startswith("phase_energy_j."):
+        phases = summary.get("phase_energy_j")
+        phase = METRIC.split(".", 1)[1]
+        value = phases.get(phase) if isinstance(phases, Mapping) else None
+    else:
+        value = summary.get(METRIC)
+    return _finite(value, f"summary {METRIC}")
 
 
 def _sha256_file(path: Path, label: str) -> str:
     try:
-        return _sha256(path.read_bytes())
+        return sha256_authentication_input(path, label=label)
+    except V2AuthenticationInputError as exc:
+        raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
 
@@ -386,14 +408,15 @@ def _source_admissible_half_width(
     summary: Mapping[str, Any], bundle_id: str
 ) -> float:
     envelopes = summary.get("energy_anchor_shift_envelopes")
+    envelope_key = f"/{METRIC.replace('.', '/')}"
     envelope = (
-        envelopes.get("/phase_energy_j/decode")
+        envelopes.get(envelope_key)
         if isinstance(envelopes, Mapping)
         else None
     )
     if not isinstance(envelope, Mapping):
         raise MintError(
-            f"{bundle_id}: decode anchor-shift envelope is unavailable"
+            f"{bundle_id}: {METRIC} anchor-shift envelope is unavailable"
         )
     point = _finite(envelope.get("point_j"), f"{bundle_id} anchor point")
     lower = _finite(envelope.get("lower_j"), f"{bundle_id} anchor lower")
@@ -514,6 +537,7 @@ def _authenticated_consumption_summaries(
     target_bundle_ids: set[str],
     consumption_semantics_id: str | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> tuple[Mapping[str, Mapping[str, Any]], str]:
     """Replay the authenticated whole-window consumption semantics once."""
 
@@ -525,6 +549,7 @@ def _authenticated_consumption_summaries(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
         ),
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        calibration_bracket_binding=calibration_bracket_binding,
     )
     reasons = whole_window_refusal_reasons(
         runs_root,
@@ -754,10 +779,10 @@ def _verify_report_widths(
         )
 
 
-def _evaluation_basis_members(
+def _authenticated_evaluation_basis(
     rows: Sequence[Mapping[str, Any]], expected_sha256: str
-) -> frozenset[str]:
-    member_sets: list[frozenset[str]] = []
+) -> Mapping[str, Any]:
+    matching_bases: list[Mapping[str, Any]] = []
     for row in rows:
         basis = row.get("evaluation_basis")
         if not isinstance(basis, Mapping) or basis.get("sha256") != expected_sha256:
@@ -772,12 +797,21 @@ def _evaluation_basis_members(
         member_ids = [item["bundle_id"] for item in occurrences]
         if len(member_ids) != len(set(member_ids)):
             raise MintError("evaluation basis contains duplicate member occurrences")
-        member_sets.append(frozenset(member_ids))
-    if len(member_sets) != 1:
+        matching_bases.append(basis)
+    if len(matching_bases) != 1:
         raise MintError(
             f"campaign log must contain exactly one evaluation basis {expected_sha256}"
         )
-    return member_sets[0]
+    return matching_bases[0]
+
+
+def _evaluation_basis_members(
+    rows: Sequence[Mapping[str, Any]], expected_sha256: str
+) -> frozenset[str]:
+    basis = _authenticated_evaluation_basis(rows, expected_sha256)
+    return frozenset(
+        item["bundle_id"] for item in basis["member_occurrences"]
+    )
 
 
 def _order_manifest_ids(order_manifest: Mapping[str, Any]) -> list[str]:
@@ -804,7 +838,10 @@ def _validate_order(
     spec_ids: Sequence[str],
 ) -> None:
     ordered = _order_manifest_ids(order_manifest)
-    if set(ordered) != set(spec_ids) or len(ordered) != len(spec_ids):
+    unique_spec_ids = list(dict.fromkeys(spec_ids))
+    if set(ordered) != set(unique_spec_ids) or len(ordered) != len(
+        unique_spec_ids
+    ):
         raise MintError("order manifest membership differs from extraction spec")
     selected = [bundle_id for bundle_id in ordered if bundle_id in set(target_ids)]
     if selected != list(target_ids):
@@ -1021,6 +1058,7 @@ def _authenticate_component(
     allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
     expected_consumption_semantics_id: str | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> AuthenticatedComponent:
     if calibration_ledger_snapshot is None:
         acceptance = load_calibration_acceptance_bound()
@@ -1089,6 +1127,7 @@ def _authenticate_component(
         target_bundle_ids=target_ids,
         consumption_semantics_id=expected_consumption_semantics_id,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        calibration_bracket_binding=calibration_bracket_binding,
     )
     if semantics != actual_semantics:
         raise MintError(
@@ -1126,8 +1165,11 @@ def _authenticate_component(
         paths.evidence_root / "campaign_log.jsonl", "campaign log"
     )
     campaign_log_sha256 = _sha256(campaign_raw)
-    basis_members = _evaluation_basis_members(
+    evaluation_basis = _authenticated_evaluation_basis(
         campaign_rows, expected_basis_sha256
+    )
+    basis_members = frozenset(
+        item["bundle_id"] for item in evaluation_basis["member_occurrences"]
     )
     if not set(spec_ids).issubset(basis_members):
         raise MintError(
@@ -1232,6 +1274,13 @@ def _authenticate_component(
         source_regime=regime,
         scientific_config_identity_sha256=scientific_hash,
         backend=backend,
+        whole_window_calibration_bracket=(
+            dict(evaluation_basis["calibration_bracket_set"])
+            if isinstance(
+                evaluation_basis.get("calibration_bracket_set"), Mapping
+            )
+            else None
+        ),
     )
 
 
@@ -1661,6 +1710,43 @@ def _binding_cache_key(
     return (str(root.resolve()), basis_sha256, tuple(members))
 
 
+def _expected_custody_store_provenance(
+    snapshot: CalibrationLedgerSnapshot,
+) -> Mapping[str, str] | None:
+    manifest_sha256 = getattr(snapshot, "custody_store_manifest_sha256", None)
+    manifest_schema = getattr(snapshot, "custody_store_manifest_schema", None)
+    if manifest_sha256 is None and manifest_schema is None:
+        return None
+    if (
+        manifest_schema != CUSTODY_STORE_MANIFEST_SCHEMA
+        or not isinstance(manifest_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", manifest_sha256) is None
+    ):
+        raise MintError("authenticated custody-store snapshot provenance is invalid")
+    return {
+        "schema_version": manifest_schema,
+        "manifest_sha256": manifest_sha256,
+    }
+
+
+def _validate_custody_store_provenance(
+    artifact: Mapping[str, Any],
+    snapshot: CalibrationLedgerSnapshot,
+) -> None:
+    provenance = artifact.get("provenance")
+    observed = (
+        provenance.get("calibration_custody_store")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    expected = _expected_custody_store_provenance(snapshot)
+    if observed != expected:
+        raise MintError(
+            "artifact custody-store provenance differs from the authenticated "
+            "calibration ledger snapshot"
+        )
+
+
 def bind_floor_artifact_evidence(
     artifact: Mapping[str, Any],
     floor_path: Path,
@@ -1668,6 +1754,7 @@ def bind_floor_artifact_evidence(
     *,
     strict_validator: StrictValidator,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
     """Rebind a constructed artifact to plan, campaign, and bundle bytes.
 
@@ -1696,6 +1783,7 @@ def bind_floor_artifact_evidence(
         raise MintError(f"cannot bind invalid floor artifact: {validator_errors[0]}")
     _assert_path_independent(artifact)
     provenance = artifact.get("provenance")
+    _validate_custody_store_provenance(artifact, calibration_ledger_snapshot)
     plan_pin = (
         provenance.get("calibration_plan")
         if isinstance(provenance, Mapping)
@@ -1773,6 +1861,7 @@ def bind_floor_artifact_evidence(
                         },
                         consumption_semantics_id=semantics,
                         calibration_ledger_snapshot=calibration_ledger_snapshot,
+                        calibration_bracket_binding=calibration_bracket_binding,
                     )
                 )
                 if actual_semantics != semantics:

@@ -25,6 +25,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from joulewise.authentication_io import (
+    open_authentication_input,
+    read_authentication_input,
+    read_authentication_text,
+)
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
 
@@ -206,7 +211,11 @@ def _sha256_text(value: object) -> bool:
 
 def _read_json_object(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_bytes())
+        value = json.loads(
+            read_authentication_input(
+                path, grammar="json", label=f"salvage JSON evidence {path.name}"
+            )
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise SalvageAuthorizationError(f"unreadable JSON evidence: {path}") from exc
     if not isinstance(value, dict):
@@ -215,7 +224,9 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 
 def _descriptor(path: Path, *, relative_to: Path | None = None) -> dict[str, Any]:
-    raw = path.read_bytes()
+    raw = read_authentication_input(
+        path, grammar="raw", label=f"salvage evidence descriptor {path.name}"
+    )
     name = (
         path.relative_to(relative_to).as_posix()
         if relative_to is not None
@@ -312,7 +323,12 @@ def _validated_digest_manifest(
 def _jsonl_rows(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_authentication_text(
+            path,
+            grammar="jsonl",
+            label=f"salvage JSONL evidence {path.name}",
+            encoding="utf-8",
+        ).splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         raise SalvageAuthorizationError(f"unreadable JSONL evidence: {path}") from exc
     if not lines:
@@ -599,7 +615,12 @@ def _raw_file_contains_identity(path: Path, identities: Sequence[bytes]) -> bool
 
     overlap = max(len(identity) for identity in identities) - 1
     tail = b""
-    with path.open("rb") as handle:
+    with open_authentication_input(
+        path,
+        "rb",
+        grammar="raw",
+        label=f"salvage raw identity evidence {path.name}",
+    ) as handle:
         while True:
             chunk = handle.read(1024 * 1024)
             if not chunk:
@@ -617,7 +638,14 @@ def _telemetry_timestamp_bounds(
     power_row_ends: list[float] = []
     power_path = bundle_path / "power_trace.csv"
     try:
-        with power_path.open("r", encoding="utf-8", newline="") as handle:
+        with open_authentication_input(
+            power_path,
+            "r",
+            grammar="raw",
+            label=f"salvage bundle {bundle_path.name} power trace",
+            encoding="utf-8",
+            newline="",
+        ) as handle:
             reader = csv.DictReader(handle)
             rows = list(reader)
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
@@ -1227,7 +1255,13 @@ def load_salvage_closure(
     return {
         **value,
         "path": str(path),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "sha256": hashlib.sha256(
+            read_authentication_input(
+                path,
+                grammar="json",
+                label="salvage closure digest re-read",
+            )
+        ).hexdigest(),
         "size": path.stat().st_size,
         "inspected_occurrences": inspected,
     }

@@ -1,0 +1,3 @@
+1786206670.947753 resolved telemetry adapter 'powermetrics'
+1786206674.155004 idle baseline: mean 0.46916166134386217 W over 1.786351777 s (30 samples)
+1786206676.207337 measured window captured 225 power sample(s)

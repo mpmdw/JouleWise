@@ -9,6 +9,10 @@ import math
 from pathlib import Path
 from typing import Any
 
+from joulewise.authentication_io import (
+    read_authentication_input,
+    read_authentication_text,
+)
 from joulewise.environment import evaluate_environment_policy
 from joulewise.schemas import CampaignPolicy, SchemaError
 
@@ -76,7 +80,12 @@ def _attempt_capture_interval(
         else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
     )
     try:
-        lines = (Path(bundle_path) / name).read_text(encoding="utf-8").splitlines()
+        lines = read_authentication_text(
+            Path(bundle_path) / name,
+            grammar="jsonl",
+            label=f"bundle {Path(bundle_path).name} environment idle records",
+            encoding="utf-8",
+        ).splitlines()
     except (OSError, UnicodeDecodeError):
         return None
     starts: list[float] = []
@@ -215,7 +224,11 @@ def _registered_campaign_policy(metadata: Any) -> CampaignPolicy | None:
         return None
     for path in candidates:
         try:
-            raw = path.read_bytes()
+            raw = read_authentication_input(
+                path,
+                grammar="json",
+                label=f"registered environment campaign policy {path.name}",
+            )
         except OSError:
             continue
         if hashlib.sha256(raw).hexdigest() != expected:
@@ -304,10 +317,18 @@ def _window_thermal_pressure_refusals(
             else f"powermetrics_idle_attempt_{attempt_number}.plist"
         )
         idle_records = parse_powermetrics_records(
-            (bundle_path / "raw" / idle_name).read_bytes(),
+            read_authentication_input(
+                bundle_path / "raw" / idle_name,
+                grammar="raw",
+                label=f"bundle {bundle_path.name} idle powermetrics evidence",
+            ),
             timestamp_anchor_s=admission_start_s,
         )
-        raw = (bundle_path / "raw" / "powermetrics.plist").read_bytes()
+        raw = read_authentication_input(
+            bundle_path / "raw" / "powermetrics.plist",
+            grammar="raw",
+            label=f"bundle {bundle_path.name} powermetrics evidence",
+        )
         native = parse_powermetrics_records(raw)
         uncertainty = metadata.get("uncertainty_evidence")
         clock_anchor = (

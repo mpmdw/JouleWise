@@ -30,6 +30,10 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.authentication_io import (
+    read_authentication_input,
+    sha256_authentication_input,
+)
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -325,11 +329,11 @@ def complete_bundle_sha256(path: Path) -> str:
             raise ValueError(
                 f"calibration bundle member is not a regular file: {relative}"
             )
-        digest = hashlib.sha256()
         try:
-            with candidate.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
+            digest = sha256_authentication_input(
+                candidate,
+                label=f"complete bundle {root.name} member {relative}",
+            )
         except OSError as exc:
             raise ValueError(
                 f"cannot read calibration bundle member {relative}: {exc}"
@@ -337,7 +341,7 @@ def complete_bundle_sha256(path: Path) -> str:
         records.append(
             {
                 "path": relative,
-                "sha256": digest.hexdigest(),
+                "sha256": digest,
                 "size_bytes": file_stat.st_size,
             }
         )
@@ -1367,7 +1371,11 @@ _PROVENANCE_KEYS = {
     "mint_tool_version",
     "implementation",
 }
-_PROVENANCE_OPTIONAL_KEYS = {"producer_calibration_plans"}
+_PROVENANCE_OPTIONAL_KEYS = {
+    "producer_calibration_plans",
+    "assurance",
+    "calibration_custody_store",
+}
 _CALIBRATION_PLAN_KEYS = {
     "plan_id",
     "declared_calibration_scope",
@@ -1381,6 +1389,34 @@ _IMPLEMENTATION_KEYS = {
     "project_commit",
     "project_tree_state",
     "python_package",
+}
+_IMPLEMENTATION_OPTIONAL_KEYS = {
+    "mint_commit_contained_in_origin_main",
+    "head_pin_commit_contained_in_origin_main",
+}
+_ASSURANCE_KEYS = {
+    "profile_id",
+    "independent_attestation",
+    "establishes",
+    "does_not_establish",
+}
+_CALIBRATION_CUSTODY_STORE_KEYS = {"schema_version", "manifest_sha256"}
+_CALIBRATION_CUSTODY_STORE_SCHEMA = (
+    "joulewise.calibration_custody_store_manifest.v1"
+)
+_V2_ASSURANCE_PROFILE = {
+    "profile_id": "single_authority_hash_bound_replay.v1",
+    "independent_attestation": False,
+    "establishes": [
+        "exact-byte consistency with disclosed commitments",
+        "ledger and verdict consistency under the recorded code",
+        "deterministic rederivability of mint inputs",
+    ],
+    "does_not_establish": [
+        "honesty of the trusted operator",
+        "independent witness of physical collection",
+        "resistance to coordinated prepublication rewrite",
+    ],
 }
 _CELL_PROVENANCE_KEYS = {"absolute", "comparative"}
 _COMPONENT_PROVENANCE_KEYS = {
@@ -1894,7 +1930,11 @@ def _project_floor_mint_pinset_v2(
             return None
         if len(set(custody_pins)) != 1:
             return None
-        if len(producer_members) != extraction["member_count"]:
+        # The authenticated extraction specification may govern reference
+        # cells that are not inputs to the floor mint.  The explicit pinset
+        # therefore closes the mint-member subset while the production
+        # inventory check authenticates the complete specification census.
+        if len(producer_members) > extraction["member_count"]:
             return None
     if (
         len(set(plan_ids)) != 2
@@ -2001,7 +2041,9 @@ def _read_floor_mint_pinset(
     if not stat.S_ISREG(file_stat.st_mode):
         return None, "pinset file must be a regular file"
     try:
-        raw = path.read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="floor mint pinset validator read"
+        )
     except OSError as exc:
         return None, f"cannot read pinset file: {exc.strerror or type(exc).__name__}"
     if expected_sha256 is not None:
@@ -2286,10 +2328,13 @@ def _validate_provenance(
     ):
         errors.append(f"{where}.mint_tool_version: must be a nonempty string")
 
+    mint_tool_version = provenance["mint_tool_version"]
+    is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2
     implementation = provenance["implementation"]
-    if _check_keys(
+    if _check_keys_with_optional(
         implementation,
         _IMPLEMENTATION_KEYS,
+        _IMPLEMENTATION_OPTIONAL_KEYS,
         f"{where}.implementation",
         errors,
     ):
@@ -2307,6 +2352,65 @@ def _validate_provenance(
             errors.append(
                 f"{where}.implementation.python_package: must be 'joulewise'"
             )
+        for containment_key in (
+            "mint_commit_contained_in_origin_main",
+            "head_pin_commit_contained_in_origin_main",
+        ):
+            key_present = containment_key in implementation
+            contains_commit = implementation.get(containment_key)
+            if is_v2 and not (
+                key_present
+                and (
+                    contains_commit is None
+                    or isinstance(contains_commit, bool)
+                )
+            ):
+                errors.append(
+                    f"{where}.implementation.{containment_key}: "
+                    "required boolean-or-null for the v2 mint"
+                )
+            if not is_v2 and key_present:
+                errors.append(
+                    f"{where}.implementation.{containment_key}: "
+                    "allowed only for the v2 mint"
+                )
+    assurance = provenance.get("assurance")
+    if is_v2:
+        if not _check_keys(
+            assurance,
+            _ASSURANCE_KEYS,
+            f"{where}.assurance",
+            errors,
+        ) or assurance != _V2_ASSURANCE_PROFILE:
+            errors.append(
+                f"{where}.assurance: must equal the canonical "
+                "single_authority_hash_bound_replay.v1 profile"
+            )
+    elif assurance is not None:
+        errors.append(f"{where}.assurance: allowed only for the v2 mint")
+    custody_store = provenance.get("calibration_custody_store")
+    if custody_store is not None:
+        custody_where = f"{where}.calibration_custody_store"
+        if not is_v2:
+            errors.append(
+                f"{custody_where}: allowed only for the v2 mint"
+            )
+        elif _check_keys(
+            custody_store,
+            _CALIBRATION_CUSTODY_STORE_KEYS,
+            custody_where,
+            errors,
+        ):
+            if custody_store["schema_version"] != (
+                _CALIBRATION_CUSTODY_STORE_SCHEMA
+            ):
+                errors.append(
+                    f"{custody_where}.schema_version: invalid custody store schema"
+                )
+            if not _is_hex(custody_store["manifest_sha256"]):
+                errors.append(
+                    f"{custody_where}.manifest_sha256: must be 64 lowercase hex chars"
+                )
     producer_plans = provenance.get("producer_calibration_plans")
     if producer_plans is None:
         return (

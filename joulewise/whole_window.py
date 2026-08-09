@@ -23,6 +23,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.authentication_io import (
+    read_authentication_input,
+    read_authentication_text,
+    sha256_authentication_input,
+)
 from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
     IdleAdmissionExtension,
@@ -40,6 +45,7 @@ from joulewise.environment_admission import (
     environment_admission_refusals,
 )
 from joulewise.calibration_bracketing import (
+    build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
 )
@@ -426,6 +432,7 @@ class AuthenticatedConsumptionSession:
         evaluation_basis_sha256: str | None = None,
         consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+        calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
     ) -> None:
         if consumption_semantics_id not in {
@@ -441,6 +448,7 @@ class AuthenticatedConsumptionSession:
         self.evaluation_basis_sha256 = evaluation_basis_sha256
         self.consumption_semantics_id = consumption_semantics_id
         self.calibration_ledger_snapshot = calibration_ledger_snapshot
+        self.calibration_bracket_binding = calibration_bracket_binding
         self._allow_unissued_calibration_fixture = (
             _allow_unissued_calibration_fixture
         )
@@ -478,6 +486,88 @@ class AuthenticatedConsumptionSession:
     @property
     def ready(self) -> bool:
         return self._prepared and not self.refusal_reasons
+
+    def _basis_bracket_binding(self) -> Mapping[str, Any] | None:
+        """Recover one exact session binding from the authenticated basis wire.
+
+        A current verdict persists the full pre/post session descriptors in
+        ``calibration_bracket_set``.  Those descriptors are selectors only:
+        the authenticated ledger snapshot remains senior and the rebuilt
+        binding must validate back to its unique finalized session.
+        """
+
+        if isinstance(self.calibration_bracket_binding, Mapping):
+            return self.calibration_bracket_binding
+        if (
+            not isinstance(self.evaluation_basis_sha256, str)
+            or not isinstance(self.calibration_ledger_snapshot, CalibrationLedgerSnapshot)
+        ):
+            return None
+        try:
+            rows = [
+                json.loads(line)
+                for line in read_authentication_text(
+                    self.runs_root / "campaign_log.jsonl",
+                    grammar="jsonl",
+                    label="whole-window bracket-binding campaign log",
+                    encoding="utf-8",
+                ).splitlines()
+                if line.strip()
+            ]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        candidates: list[Mapping[str, Any]] = []
+        for row in rows:
+            basis = row.get("evaluation_basis") if isinstance(row, Mapping) else None
+            if (
+                isinstance(basis, Mapping)
+                and basis.get("sha256") == self.evaluation_basis_sha256
+                and isinstance(basis.get("calibration_bracket_set"), Mapping)
+            ):
+                candidates.append(basis["calibration_bracket_set"])
+        if len(candidates) != 1:
+            return None
+        pre = candidates[0].get("pre")
+        post = candidates[0].get("post")
+        descriptor_fields = (
+            "bracket_session_id",
+            "bracket_window_id",
+            "bracket_plan_id",
+            "bracket_plan_sha256",
+            "bracket_evidence_root_id",
+            "bracket_runs_root",
+        )
+        if (
+            not isinstance(pre, Mapping)
+            or not isinstance(post, Mapping)
+            or any(pre.get(field) != post.get(field) for field in descriptor_fields)
+            or pre.get("bracket_slot") != "pre"
+            or post.get("bracket_slot") != "post"
+        ):
+            return None
+        try:
+            binding = build_calibration_bracket_binding(
+                self.calibration_ledger_snapshot,
+                session_id=str(pre["bracket_session_id"]),
+                window_id=str(pre["bracket_window_id"]),
+                plan_id=str(pre["bracket_plan_id"]),
+                plan_sha256=str(pre["bracket_plan_sha256"]),
+                evidence_root_id=str(pre["bracket_evidence_root_id"]),
+                runs_root=str(pre["bracket_runs_root"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+        for role, descriptor in (("pre", pre), ("post", post)):
+            endpoint = binding["endpoints"][role]
+            if (
+                endpoint["attempt_id"] != descriptor.get("attempt_id")
+                or endpoint["receipt_digest"]
+                != descriptor.get("ledger_receipt_digest")
+                or endpoint["content_digest"] != descriptor.get("content_id")
+            ):
+                return None
+        self.calibration_bracket_binding = binding
+        return binding
 
     def _fail_global(self, reasons: set[str] | tuple[str, ...]) -> None:
         """Clear every authenticated cache when any global refusal exists."""
@@ -532,7 +622,11 @@ class AuthenticatedConsumptionSession:
             )
             return
 
-        if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+        bracket_binding = self._basis_bracket_binding()
+        if (
+            self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID
+            and bracket_binding is None
+        ):
             for bundle_id, path in sorted(bundle_paths.items()):
                 stored_summary = _read_json_object(path / "summary_metrics.json")
                 if not isinstance(stored_summary, Mapping):
@@ -548,6 +642,27 @@ class AuthenticatedConsumptionSession:
             [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
             policy.calibration_bracketing,
             ledger_snapshot=self.calibration_ledger_snapshot,
+            bracket_binding=bracket_binding,
+            bracket_window_id=(
+                bracket_binding.get("window_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_plan_id=(
+                bracket_binding.get("plan_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_plan_sha256=(
+                bracket_binding.get("plan_sha256")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
+            bracket_evidence_root_id=(
+                bracket_binding.get("evidence_root_id")
+                if isinstance(bracket_binding, Mapping)
+                else None
+            ),
             _allow_unissued_fixture=self._allow_unissued_calibration_fixture,
         )
         self.calibration_bracket = bracket
@@ -564,6 +679,16 @@ class AuthenticatedConsumptionSession:
             self._fail_global(reasons)
             return
         operative_bound = float(raw_bound)
+        if self.consumption_semantics_id == MINTED_CONSUMPTION_SEMANTICS_ID:
+            for bundle_id, path in sorted(bundle_paths.items()):
+                stored_summary = _read_json_object(path / "summary_metrics.json")
+                if not isinstance(stored_summary, Mapping):
+                    reasons.add("whole_window_verdict_provenance_invalid")
+                else:
+                    self._summaries[bundle_id] = stored_summary
+            if reasons:
+                self._fail_global(reasons)
+            return
         self.operative_fiducial_bound_s = operative_bound
 
         physics_cache: dict[str, float] = {}
@@ -874,7 +999,11 @@ def custody_telemetry_identity(
         if legacy_mock_class == TelemetryBackend.MOCK.value:
             metadata_class = legacy_mock_class
     try:
-        config_raw = (path / "config.json").read_bytes()
+        config_raw = read_authentication_input(
+            path / "config.json",
+            grammar="json",
+            label=f"bundle {path.name} custody config",
+        )
     except OSError:
         config_raw = None
     custody_bound = bool(
@@ -1473,7 +1602,9 @@ def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | 
     if path is None:
         return None
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="NEG-8 drift-bound artifact"
+        )
         from joulewise.determinism_gate import (  # noqa: PLC0415
             _reject_duplicate_json_pairs,
         )
@@ -1913,7 +2044,11 @@ def source_manifest_descriptors(
         resolved = path.resolve()
         if resolved == root or root not in resolved.parents:
             raise ValueError(f"whole-window source manifest escapes runs root: {value}")
-        raw = resolved.read_bytes()
+        raw = read_authentication_input(
+            resolved,
+            grammar="json",
+            label=f"whole-window source manifest {resolved.name}",
+        )
         result.append(
             {
                 "path": resolved.relative_to(root).as_posix(),
@@ -2128,7 +2263,15 @@ def _occurrence_descriptor_valid(
     path = _safe_source_path(runs_root, source.get("path"))
     expected_sha = source.get("sha256")
     try:
-        raw = path.read_bytes() if path is not None else None
+        raw = (
+            read_authentication_input(
+                path,
+                grammar="json",
+                label=f"occurrence source manifest for {bundle_id}",
+            )
+            if path is not None
+            else None
+        )
         manifest = json.loads(raw) if raw is not None else None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
@@ -2210,7 +2353,11 @@ def validate_occurrence_supersession_entry(
     ):
         expected = quarantine.get(field)
         try:
-            raw = (quarantine_path / name).read_bytes()
+            raw = read_authentication_input(
+                quarantine_path / name,
+                grammar="json",
+                label=f"supersession quarantine {bundle_id} {name}",
+            )
         except OSError:
             return False
         if (
@@ -2272,7 +2419,12 @@ def supersession_entry_validation_results(
         else Path(runs_root) / "campaign_log.jsonl"
     )
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = read_authentication_text(
+            path,
+            grammar="jsonl",
+            label="supersession campaign log",
+            encoding="utf-8",
+        ).splitlines()
     except FileNotFoundError:
         return ([], [])
     except (OSError, UnicodeDecodeError):
@@ -2370,7 +2522,11 @@ def _evidence_map(path: Path) -> dict[str, bytes]:
     if not path.is_dir():
         return result
     for candidate in sorted(path.glob("*.json")):
-        raw = candidate.read_bytes()
+        raw = read_authentication_input(
+            candidate,
+            grammar="json",
+            label=f"attempt evidence {candidate.name}",
+        )
         digest = hashlib.sha256(raw).hexdigest()
         if digest in result:
             raise ValueError("duplicate attempt evidence digest")
@@ -2390,8 +2546,12 @@ def validated_attempt_selection(
     if ledger is None or manifest_path is None:
         return None
     try:
-        ledger_raw = ledger.read_bytes()
-        manifest_raw = manifest_path.read_bytes()
+        ledger_raw = read_authentication_input(
+            ledger, grammar="jsonl", label="attempt ledger"
+        )
+        manifest_raw = read_authentication_input(
+            manifest_path, grammar="json", label="attempt analysis manifest"
+        )
         manifest = json.loads(manifest_raw)
         rows = [
             json.loads(line)
@@ -2549,7 +2709,15 @@ def _manifest_members(
         ledger = _safe_source_path(runs_root, selection.get("attempt_ledger_path"))
         ledger_sha = selection.get("attempt_ledger_sha256")
         try:
-            ledger_raw = ledger.read_bytes() if ledger is not None else None
+            ledger_raw = (
+                read_authentication_input(
+                    ledger,
+                    grammar="jsonl",
+                    label="attempt ledger membership re-read",
+                )
+                if ledger is not None
+                else None
+            )
         except OSError:
             return None
         if (
@@ -2642,7 +2810,11 @@ def _neg8_position(role: Any, sentinel_position: Any) -> str | None:
 
 def _read_json_object(path: Path) -> Mapping[str, Any] | None:
     try:
-        value = json.loads(path.read_bytes().decode("utf-8"))
+        value = json.loads(
+            read_authentication_input(
+                path, grammar="json", label=f"JSON object {path.name}"
+            ).decode("utf-8")
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return value if isinstance(value, Mapping) else None
@@ -2829,9 +3001,11 @@ def _bundle_evidence_sha256(bundle_path: Path) -> str:
         if path.is_symlink():
             raise ValueError("NEG-8 reference bundle inventory contains a symlink")
         if path.is_file():
-            inventory[path.relative_to(bundle_path).as_posix()] = hashlib.sha256(
-                path.read_bytes()
-            ).hexdigest()
+            relative = path.relative_to(bundle_path).as_posix()
+            inventory[relative] = sha256_authentication_input(
+                path,
+                label=f"NEG-8 reference bundle {bundle_path.name} {relative}",
+            )
     if not inventory:
         raise ValueError("NEG-8 reference bundle inventory is empty")
     return canonical_sha256(inventory)
@@ -2844,7 +3018,11 @@ def mint_neg8_drift_bound_artifact(
 
     root = Path(runs_root).resolve()
     manifest_path = Path(corpus_manifest_path)
-    raw = manifest_path.read_bytes()
+    raw = read_authentication_input(
+        manifest_path,
+        grammar="json",
+        label="NEG-8 reference corpus manifest",
+    )
     try:
         from joulewise.determinism_gate import (  # noqa: PLC0415
             _reject_duplicate_json_pairs,
@@ -2973,7 +3151,11 @@ def _registered_policy(policy_sha256: Any) -> Mapping[str, Any] | None:
         return None
     for path in candidates:
         try:
-            raw = path.read_bytes()
+            raw = read_authentication_input(
+                path,
+                grammar="json",
+                label=f"registered campaign policy {path.name}",
+            )
         except OSError:
             continue
         if hashlib.sha256(raw).hexdigest() != policy_sha256:
@@ -3014,7 +3196,11 @@ def _scientific_config_identity(bundle_path: Path) -> tuple[str | None, bool]:
     config = _read_json_object(bundle_path / "config.json")
     metadata = _read_json_object(bundle_path / "metadata.json")
     try:
-        raw = (bundle_path / "config.json").read_bytes()
+        raw = read_authentication_input(
+            bundle_path / "config.json",
+            grammar="json",
+            label=f"bundle {bundle_path.name} scientific config",
+        )
         normalized = BenchmarkConfig.from_mapping(dict(config or {})).to_dict()
     except (OSError, TypeError, ValueError):
         return None, False
@@ -3278,7 +3464,12 @@ def _load_idle_records(bundle_path: Path, attempt: int) -> list[dict[str, Any]] 
         else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
     )
     try:
-        lines = (bundle_path / name).read_text(encoding="utf-8").splitlines()
+        lines = read_authentication_text(
+            bundle_path / name,
+            grammar="jsonl",
+            label=f"bundle {bundle_path.name} idle records {name}",
+            encoding="utf-8",
+        ).splitlines()
     except (OSError, UnicodeDecodeError):
         return None
     rows: list[dict[str, Any]] = []
@@ -3919,7 +4110,11 @@ def _validated_evaluation_basis(
         ):
             expected = occurrence.get(field)
             try:
-                raw = (path / name).read_bytes()
+                raw = read_authentication_input(
+                    path / name,
+                    grammar="json",
+                    label=f"evaluation-basis occurrence {path.name} {name}",
+                )
             except OSError:
                 return None
             if (
@@ -3945,8 +4140,11 @@ def _validated_evaluation_basis(
 
 def _supersession_is_logged(entry: Mapping[str, Any], runs_root: Path) -> bool:
     try:
-        lines = (Path(runs_root) / "campaign_log.jsonl").read_text(
-            encoding="utf-8"
+        lines = read_authentication_text(
+            Path(runs_root) / "campaign_log.jsonl",
+            grammar="jsonl",
+            label="supersession campaign-log verification",
+            encoding="utf-8",
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return False
@@ -4750,8 +4948,11 @@ def whole_window_refusal_reasons(
     ):
         return ("whole_window_verdict_provenance_invalid",)
     try:
-        lines = (Path(runs_root) / "campaign_log.jsonl").read_text(
-            encoding="utf-8"
+        lines = read_authentication_text(
+            Path(runs_root) / "campaign_log.jsonl",
+            grammar="jsonl",
+            label="whole-window verdict campaign log",
+            encoding="utf-8",
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return missing
@@ -4914,8 +5115,11 @@ def whole_window_drift_allowances(
     try:
         rows = [
             value
-            for line in (root / "campaign_log.jsonl").read_text(
-                encoding="utf-8"
+            for line in read_authentication_text(
+                root / "campaign_log.jsonl",
+                grammar="jsonl",
+                label="whole-window drift-allowance campaign log",
+                encoding="utf-8",
             ).splitlines()
             if line.strip()
             and isinstance((value := json.loads(line)), Mapping)
