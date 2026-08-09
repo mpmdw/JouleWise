@@ -174,6 +174,14 @@ Example `window.env`:
 
 ```sh
 WINDOW_ID=window_a9_YYYYMMDD
+BRACKET_SESSION_ID=window_a9_YYYYMMDD-calibration
+FROZEN_PLAN=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/calibration-reservation.json
+PLAN_ID=window_a9_YYYYMMDD-plan
+EVIDENCE_ROOT_ID=window_a9_YYYYMMDD-evidence
+IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/identity-epoch.json
+T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/t1-bindings.json
+PRE_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-pre
+POST_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-post
 RUNS_ROOT=/Users/edr/code/JouleWise/runs_window_a9_YYYYMMDD
 BOUND_RUNS_ROOT=/Users/edr/code/JouleWise/runs_window_a9_YYYYMMDD_bound
 CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD
@@ -263,6 +271,37 @@ it lands on and will fail CPU admission. That is the gate working, not a false
 alarm: window a9's first bound-corpus member was lost exactly this way and was
 correctly caught. The response is always preserve, quarantine, supersede, then
 relaunch (§10). It is never a waiver and never `--environment-override`.
+
+### D-117 §5 amendment — calibration-ledger readiness before arming
+
+This checklist is in force for every prospective calibration bracket. Run the
+machine command against the exact frozen reservation plan; `inspect` remains
+diagnostic and never authorizes ARM.
+
+- [ ] Run `recover_calibration_ledger.py readiness --phase pre-reserve
+  --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN"` before reservation
+  and the exact `--phase pre-slot --session-id ... --slot ...
+  --attempt-id ... --plan "$FROZEN_PLAN"` check before each slot.
+- [ ] Treat structured `status: ready` from the public readiness command as
+  diagnostic early warning only. Never infer ARM permission from it or from
+  `inspection.state`, even when either field says `clean`.
+- [ ] Confirm the phase-appropriate pin relation: `exact` at pre-reserve,
+  the exact governed session extension at pre-slot, and an authenticated
+  terminal candidate at terminal.
+- [ ] Confirm the machine reports no active legacy journal, append intent,
+  residue, incompatible operation target, partial custody, or live writer.
+- [ ] Read the D-117 §10 procedure below and prepare truthful operator identity
+  and attestation values before the quiet window begins.
+- [ ] Treat `needs_pin_commit: true` as desk work that ends a 2 a.m. attempt.
+  It never licenses an uncommitted-pin override.
+
+The public readiness, `audit`, `audit-observations`, and `validate-slot`
+commands are early warning or validation only and never emit `ready_to_arm`.
+Only the reservation CLI's enforcing `pre-reserve` check and the writer's
+enforcing `pre-slot` check can emit `ready_to_arm`, and only while holding the
+resolved-ledger-identity lease. Both inspect custody across every finalized
+session in the authenticated snapshot. The writer holds that same lease
+continuously through countdown, capture, finalization, or governed abort.
 
 ## 5A. Pre-window clock stabilization (administrator step; Ed performs it)
 
@@ -451,7 +490,134 @@ collected and no retry can help: preserve everything, record it in the
 close-out, do not budget the excess (D-079 clause 2), and refer the
 disposition to the lead.
 
+## 5C. D-117 manual arming and quiet handoff (cold-gate ruling 2026-08-08)
+
+Use this final checklist only after §4 has frozen the plan and you have
+read §§5, 5A, and 5B. It exists because the recovery cold gate ruled that
+ARM authority is **not** any automated artifact: the witness corpus and
+every readiness command are evidence *toward* arming, never the arming
+authority. Arming happens only when the plan-bound GO record is green, the
+lead has completed the rule-1 desk verification below, and Ed performs the
+physical steps himself.
+
+**Entry gate (desk, before the night).**
+Confirm `git status --short --branch` shows a clean measurement checkout
+and `git rev-parse HEAD` equals the exact reviewed, merged `main` commit
+named in the plan-specific GO record. Require the plan-specific
+arm-readiness record at the exact path and SHA-256 named by the frozen
+plan. A missing record, placeholder text, any applicable row other than
+GO, a stale recorded commit, or a hash mismatch is NO-GO. The pre-freeze
+three-night packet is background context and may not substitute for the
+plan-specific record. (BETA and GAMMA plans name their own records; none
+inherits ALPHA's filename.)
+
+**Lead live verification — desk evidence, not live-night authority
+(rule 1, non-delegable).**
+On the exact reviewed commit, the lead personally runs the frozen plan's
+literal readiness-validator command and its complete under-lease synthetic
+rehearsal. The rehearsal must execute the real reservation CLI with
+`--execute` and the real writer CLI through both reserved calibration
+slots against a synthetic root. Record the complete commands, commit
+hash, frozen-plan SHA-256, exit codes, stdout, and stderr in the §12
+close-out record. Require `calibration_pre_reserve_authorized`,
+`status: reserved`, and the phase-correct
+`calibration_writer_arm_authorized` events. Missing commands, a skipped
+phase, or any identity mismatch is NO-GO. A lead who has not personally
+seen these pass on this checkout has not verified; a subagent's or a
+prior session's pass does not transfer. These desk results are evidence
+toward arming; they do not authorize the live night.
+
+**Order of operations at the machine (each step gates the next):**
+
+1. Complete §5 (machine and operator preflight) and Ed's §5A clock
+   procedure. §5B is **not** a separate manual step before launch: the
+   foreground chain performs it after the pre-slot enforcing gate and
+   pre-calibration capture, and before member 1.
+2. After all agents are closed, Ed runs the complete §6
+   diagnostic-readiness command and reservation command exactly as
+   frozen. Require the diagnostic to echo the exact frozen-plan SHA-256.
+   Require the reservation to emit `calibration_pre_reserve_authorized`
+   and finish with `status: reserved`. Do not look for a visible
+   `ready_to_arm` field — the enforcing checks are internal to the
+   reservation CLI and the writer, and no diagnostic word (`clean`,
+   `ready`) licenses anything. `needs_pin_commit: true` is desk work and
+   ends the attempt; no override exists at night.
+3. ARM: Ed launches the frozen foreground chain exactly once, from an
+   ordinary foreground shell, with the absolute frozen plan root. The
+   chain begins with the frozen 180-second settle; Ed steps away
+   immediately after launch and does not touch or monitor the machine.
+   Inside the chain, the writer's enforcing pre-slot check gates each
+   calibration slot, and the automatic §5B screen gates member 1.
+   "Exactly once" means once per frozen bracket-session attempt; a
+   prospectively licensed new attempt (below) is a new frozen session,
+   never a relaunch of the same one.
+4. **If anything refuses:** any refusal stops forward progress
+   immediately. Preserve the exact stdout, stderr, and durable evidence.
+   For a registered ledger refusal, follow only its §10 row; continue
+   only when that route returns `operation_completed` and the documented
+   phase is repeated from its entry point. `night_stopped_preserved`,
+   `needs_pin_commit: true`, an unmapped failure, or failed preservation
+   ends the night. A §5B level failure ends the current attempt; only a
+   pre-registered retry after a named cause has been removed may begin a
+   newly frozen session. For non-ledger failures, send the lead the
+   exact observed condition and complete output (plus the operator ABORT
+   alias if using the packet's reporting table). A refused night is
+   evidence, not an obstacle course.
+
+**Limitation carried into this procedure (cold-gate L1, surfaced to Ed).**
+The calibration-ledger witness corpus certifies the recovery code against
+production regression and witness drift; it does not certify against a
+future adversarial rewrite of the tests themselves. That residual class
+is carried by review discipline — and it is one of the reasons the entry
+gate and lead verification above are human gates: the corpus feeds the
+desk verdict, it never replaces it.
+
 ## 6. The foreground measurement chain
+
+### D-117 §6 amendment — durable bracket dispatch and slot resume
+
+The frozen plan, ledger capability, and exact custody locators are the only
+dispatch authority. Shell-local directory discovery and a lexicographically
+"latest" calibration are prohibited. On supervisor restart, run
+`session-status`; dispatch only its exact `next_slot`/`attempt_id`. Complete
+custody uses `resume-finalize`; partial custody uses `abort-session`. Both
+commands run in a fresh process and preserve the custody directory.
+
+Before quiet time, freeze `FROZEN_PLAN` as canonical JSON containing at least
+the exact `plan_id`; record its SHA-256 together with `window.env`, the exact
+identity-epoch JSON, and the exact T1-bindings JSON. After every agent is
+closed, create the durable capability exactly once:
+
+```sh
+. "$WINDOW_PLAN_ROOT/window.env"
+PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}')"
+
+.venv/bin/python scripts/recover_calibration_ledger.py readiness \
+  --phase pre-reserve \
+  --session-id "$BRACKET_SESSION_ID" \
+  --plan "$FROZEN_PLAN"
+
+.venv/bin/python scripts/reserve_calibration_window_bracket.py \
+  --session-id "$BRACKET_SESSION_ID" \
+  --window-id "$WINDOW_ID" \
+  --plan-id "$PLAN_ID" \
+  --plan-sha256 "$PLAN_SHA256" \
+  --plan "$FROZEN_PLAN" \
+  --evidence-root-id "$EVIDENCE_ROOT_ID" \
+  --runs-root "$RUNS_ROOT" \
+  --pre-attempt-id "$PRE_ATTEMPT_ID" \
+  --post-attempt-id "$POST_ATTEMPT_ID" \
+  --pre-custody-locator "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
+  --post-custody-locator "$RUNS_ROOT/instrument_validation/$POST_ATTEMPT_ID" \
+  --identity-epoch-json "$IDENTITY_EPOCH_JSON" \
+  --t1-bindings-json "$T1_BINDINGS_JSON" \
+  --execute
+```
+
+Require the readiness output to echo the exact frozen-plan SHA-256 and the
+reservation output to say `status: reserved`. On restart, do not reserve
+again from remembered shell state: run `session-status` with the exact
+session and frozen plan and dispatch only its durable `next_slot`.
 
 Save the following as `WINDOW_PLAN_ROOT/window-chain.zsh`, review it, and
 record its SHA-256 before closing all agents:
@@ -509,66 +675,23 @@ quarantine_stale_lock() {
     "$QUARANTINE_ROOT/$(basename "$root").campaign.lock.$(TZ=UTC date '+%Y%m%dT%H%M%SZ')"
 }
 
-latest_calibration() {
-  /usr/bin/find "$RUNS_ROOT/instrument_validation" \
-    -mindepth 1 -maxdepth 1 -type d -print |
-    /usr/bin/sort |
-    /usr/bin/tail -n 1
-}
-
-arm_for_calibration() {
-  echo "$(timestamp) calibration display arm: 20-second countdown" \
-    >> "$OPERATOR_LOG_ROOT/window-chain.log"
-  /bin/sleep 20
-  /usr/bin/pmset displaysleepnow \
-    >> "$OPERATOR_LOG_ROOT/window-chain.log" 2>&1
-  /bin/sleep 5
-}
-
-calibrate_once() {
-  local label="$1"
-  arm_for_calibration
+calibrate_slot() {
+  local slot="$1"
+  local attempt_id="$2"
   "$PY" "$REPO/scripts/validate_powermetrics_fiducial.py" \
     --allow-live \
+    --arm-countdown-s 20 \
+    --sleep-display-before-capture \
     --output-root "$RUNS_ROOT/instrument_validation" \
+    --session-id "$BRACKET_SESSION_ID" \
+    --slot "$slot" \
+    --attempt-id "$attempt_id" \
     --power-policy "$POWER_POLICY" \
-    >> "$OPERATOR_LOG_ROOT/${label}-calibration.log" 2>&1
-}
-
-calibrate_with_clock_retry() {
-  local label="$1"
-  local before candidate rc reasons
-
-  settle
-  before="$(latest_calibration)"
-  set +e
-  calibrate_once "$label"
-  rc=$?
-  set -e
-  candidate="$(latest_calibration)"
-
-  if [ "$rc" -eq 0 ] && [ -n "$candidate" ] && [ "$candidate" != "$before" ]; then
-    print -r -- "$candidate"
-    return 0
-  fi
-
-  [ -n "$candidate" ] || return 1
-  reasons="$(/usr/bin/jq -r '.reasons[]?' \
-    "$candidate/instrument_evidence.json" | /usr/bin/sort -u)"
-  if [ "$reasons" != "clock_anchor_unresolved" ]; then
-    echo "$label calibration failed: $reasons" >&2
-    return 1
-  fi
-
-  settle
-  before="$candidate"
-  set +e
-  calibrate_once "${label}-retry"
-  rc=$?
-  set -e
-  candidate="$(latest_calibration)"
-  [ "$rc" -eq 0 ] && [ -n "$candidate" ] && [ "$candidate" != "$before" ] || return 1
-  print -r -- "$candidate"
+    >> "$OPERATOR_LOG_ROOT/${slot}-calibration.log" 2>&1
+  "$PY" "$REPO/scripts/recover_calibration_ledger.py" session-status \
+    --session-id "$BRACKET_SESSION_ID" \
+    --plan "$FROZEN_PLAN" |
+    /usr/bin/jq -er --arg slot "$slot" '.slots[$slot].custody_locator'
 }
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
@@ -628,21 +751,26 @@ run_stage_list() {
   while IFS= read -r stage; do
     [ -z "$stage" ] && continue
     [[ "$stage" = \#* ]] && continue
-    run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_DIR" "$stage"
+    run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage"
   done < "$list"
 }
 
 cd "$REPO"
 echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
-PRE_CAL_DIR="$(calibrate_with_clock_retry pre)"
-echo "$(timestamp) pre_calibration=$PRE_CAL_DIR" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+# Final settle is chain-owned (D-117 §5C): operator activity ends at launch,
+# and §1's post-activity settle happens here, before the pre-calibration.
+settle
+echo "$(timestamp) launch_settle_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+
+PRE_CAL_CUSTODY="$(calibrate_slot pre "$PRE_ATTEMPT_ID")"
+echo "$(timestamp) pre_calibration=$PRE_CAL_CUSTODY" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
 # Abort before member 1 if the pre-calibration is out of family (§5B).
-screen_pre_calibration "$PRE_CAL_DIR"
+screen_pre_calibration "$PRE_CAL_CUSTODY"
 
 # The reference corpus and bound are minted inside this same quiet window.
-run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_DIR" \
+run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_CUSTODY" \
   neg8-bound-corpus
 
 "$PY" "$REPO/scripts/run_campaign.py" \
@@ -652,21 +780,21 @@ run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_DIR" \
   >> "$OPERATOR_LOG_ROOT/bound-mint.log" 2>&1
 echo "$(timestamp) neg8_bound=$NEG8_DRIFT_BOUND" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
-run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet" "$PRE_CAL_DIR" \
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet" "$PRE_CAL_CUSTODY" \
   start-reference-triplet
 
 run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"
 
-run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint" "$PRE_CAL_DIR" \
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint" "$PRE_CAL_CUSTODY" \
   midpoint-reference
 
 run_stage_list "$WINDOW_PLAN_ROOT/after_midpoint_stages.txt"
 
-run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet" "$PRE_CAL_DIR" \
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet" "$PRE_CAL_CUSTODY" \
   end-reference-triplet
 
-POST_CAL_DIR="$(calibrate_with_clock_retry post)"
-echo "$(timestamp) post_calibration=$POST_CAL_DIR" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+POST_CAL_CUSTODY="$(calibrate_slot post "$POST_ATTEMPT_ID")"
+echo "$(timestamp) post_calibration=$POST_CAL_CUSTODY" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 ```
 
@@ -794,6 +922,49 @@ historical window; that remains a separate lead-controlled step.
 
 ## 10. Failure playbook
 
+### D-117 §10 amendment — calibration-ledger refusals and governed exits
+
+Use the emitted refusal `code`, never prose recognition. For any
+operator-emitted code, the registry route is available as structured JSON:
+
+```sh
+.venv/bin/python scripts/recover_calibration_ledger.py explain "$REFUSAL_CODE"
+```
+
+Registry rows classified `internal_invariant` are deliberately absent from
+this operator table: public workflows supply those arguments from authenticated
+durable state, so the corresponding guards have focused unit evidence rather
+than an operator command.
+
+| Registered code / exit | Required command and terminal result |
+|---|---|
+| `calibration_ledger_recovery_required` / `repair` | Run `repair`; require `operation_completed` or another registered code. |
+| `calibration_tail_requires_abandon` / `abandon-tail-then-repair` | Run `abandon-tail --operator-identity "$OPERATOR_ID" --attestation-reason "$ATTESTATION_REASON"`, then `repair`; require `operation_completed`. If this advanced the physical head, follow the desk-only pin row before readiness can become `ready_to_arm`. |
+| `calibration_intent_target_malformed` / `abandon-tail-then-repair` | Treat the admitted malformed intent and any target bytes as quarantine-only residue. Run the same operator-attested `abandon-tail`, then `repair`; require `operation_completed`. Never execute, replay, admit, or finalize the malformed target. |
+| `calibration_custody_complete_use_resume` / `resume-finalize` | Run `resume-finalize --session-id "$BRACKET_SESSION_ID" --slot "$SLOT" --plan "$FROZEN_PLAN"`; require `operation_completed`. |
+| `calibration_custody_partial` / `abort-session` | Run `abort-session --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN" --reason "$ABORT_REASON"`; require `session_aborted` and `custody_preserved: true`. |
+| `calibration_live_writer_contention` | Wait for or intentionally stop the live holder. Never run `abort-session` underneath it. After a crash, the kernel releases the lease; rerun `session-status`, then its exact `resume-finalize` or `abort-session` route. |
+| `calibration_ledger_head_mismatch` with `needs_pin_commit: true` / guarded advancement | End the 2 a.m. attempt. At the desk, review the candidate, run `advance-head-pin` with its exact sequence/digest plus operator attestation and `--execute`, commit the pin, require a clean checkout, and repeat readiness. |
+| malformed ledger, unsafe lock inode, unreadable/archive-conflicting legacy journal, unreadable custody, divergent pin, or nonconvergent recovery | `night_stopped_preserved`: stop, preserve all ledger/lock/journal/custody/pin bytes, and escalate. Hash before and after the mapped exit; require byte identity and the same lock inode. Never delete a lock inode or integrity evidence. |
+| torn `manifest.json` after a writer crash | `session-status` must report unreadable custody, never complete or resumable. A fresh `resume-finalize` attempt must emit the registered `calibration_custody_unreadable` hard stop with `night_stopped_preserved`; verify ledger, pin, lock inode, and all custody bytes are unchanged. |
+
+`inspect` is diagnostic only. So are `audit`, `audit-observations`, and
+`validate-slot`; none is an ARM-permission route. A `clean` parser state with
+a non-null `legacy_journal_path` is blocked. No night command accepts an
+uncommitted-pin override.
+
+Fresh-process recovery examples:
+
+```sh
+.venv/bin/python scripts/recover_calibration_ledger.py session-status \
+  --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN"
+.venv/bin/python scripts/recover_calibration_ledger.py resume-finalize \
+  --session-id "$BRACKET_SESSION_ID" --slot "$SLOT" --plan "$FROZEN_PLAN"
+.venv/bin/python scripts/recover_calibration_ledger.py abort-session \
+  --session-id "$BRACKET_SESSION_ID" --plan "$FROZEN_PLAN" \
+  --reason "$ABORT_REASON"
+```
+
 | Symptom or refusal | Meaning | Required action |
 |---|---|---|
 | Display awake, screensaver engaged, `environment_admission_failed`, or CPU admission failure | The measurement environment was contaminated or unknown. | Lose the affected member. Stop the stage, remove the cause, settle 180 seconds, and rerun into a clean slot. Never waive admission. |
@@ -880,9 +1051,10 @@ rows byte-for-byte.
 
 ### Post-calibration failure and the a10 recorded deviation
 
-The chain retries a calibration exactly once, and only when the sole reason is
-`clock_anchor_unresolved` (`calibrate_with_clock_retry`, §6). Any other
-calibration reason aborts, as the table above requires.
+The pre-D-117 chain retried a calibration exactly once when the sole reason
+was `clock_anchor_unresolved`. The D-117 durable-session chain does not infer
+or dispatch a retry from a shell directory; it stops at the registered exit
+and requires a newly frozen session when the prospective plan licenses one.
 
 Window a10 recorded an operator deviation against that rule. Its first post
 calibration, `20260725T055825`, failed with pulse-detection reasons rather
@@ -948,6 +1120,10 @@ replace instrument uncertainty, and it is never silently omitted.
 Record:
 
 - the exact Git commit and policy hash;
+- the §5C lead live-verification record: the literal commands, commit hash,
+  frozen-plan SHA-256, exit codes, and the observed
+  `calibration_pre_reserve_authorized` / `status: reserved` /
+  `calibration_writer_arm_authorized` outputs from the desk rehearsal;
 - the window ID, start/end times, and power-supply identity;
 - pre/post calibration IDs, bounds, and bracket drift;
 - the 12 bound-corpus bundle IDs, bound derivation SHA-256, mint time, expiry,
@@ -977,7 +1153,7 @@ It is recorded here so the argument is not lost between sessions.
 
 ### 13.1 A governed member-level retry for `clock_anchor_unresolved`
 
-**Observation.** `calibrate_with_clock_retry` (§6) already treats
+**Observation (historical pre-D-117 chain).** The former shell chain treated
 `clock_anchor_unresolved` as the one retryable condition **for calibrations**,
 retrying once after a settle. There is no equivalent retry for **members**. A
 single member that hits the same transient clock condition fails that member,

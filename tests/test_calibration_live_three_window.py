@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+import joulewise.calibration_ledger as calibration_ledger_module
 from joulewise.calibration_bracketing import (
     CalibrationCandidate,
     _canonical_sha256 as bracketing_canonical_sha256,
@@ -26,9 +27,13 @@ from joulewise.calibration_bracketing import (
     validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (
+    APPEND_INTENT_EVENT,
+    APPEND_RECORDS_PER_OPERATION,
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SLOT_CLAIM_EVENT,
+    BRACKET_SESSION_SLOTS,
+    CONTROL_SCHEMA,
     GOVERNED_ARTIFACTS,
     HISTORICAL_IMPORT_FINALIZATION_EVENT,
     HISTORICAL_IMPORT_RESERVATION_EVENT,
@@ -51,6 +56,7 @@ from joulewise.powermetrics_fiducial import (
 )
 from joulewise.schemas import CalibrationBracketingPolicy
 from scripts import validate_powermetrics_fiducial as production_writer
+from tests.receipt_corpus import ReceiptCorpus
 
 
 _FIXTURE = (
@@ -63,10 +69,13 @@ _USE_WINDOW_BINDING = object()
 _USE_WINDOW_RUNS_ROOT = object()
 _ISSUANCE_BASE_SEQUENCE = 76
 _LIVE_SESSION_COUNT = 3
-_PRODUCTION_RECEIPTS_PER_SESSION = 5
+_OPERATIONS_PER_SESSION = 1 + 2 * len(BRACKET_SESSION_SLOTS)
+_PHYSICAL_RECORDS_PER_SESSION = (
+    _OPERATIONS_PER_SESSION * APPEND_RECORDS_PER_OPERATION
+)
 _EXPECTED_TERMINAL_SEQUENCE = (
     _ISSUANCE_BASE_SEQUENCE
-    + _LIVE_SESSION_COUNT * _PRODUCTION_RECEIPTS_PER_SESSION
+    + _LIVE_SESSION_COUNT * _PHYSICAL_RECORDS_PER_SESSION
 )
 
 
@@ -88,7 +97,7 @@ def _receipt(core: dict) -> dict:
     return value
 
 
-def _ledger_bytes(receipts: list[dict]) -> bytes:
+def _ledger_bytes(receipts: ReceiptCorpus) -> bytes:
     return b"".join(canonical_json_bytes(row) + b"\n" for row in receipts)
 
 
@@ -150,14 +159,18 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         cls.base_receipts = base_receipts
         cls.acceptance = acceptance
         cls.base_sequence = len(base_receipts)
-        cls.base_digest = base_receipts[-1]["receipt_digest"]
+        cls.base_digest = base_receipts.one(sequence=cls.base_sequence)[
+            "receipt_digest"
+        ]
 
         ledger = root / "runs" / "ledger.jsonl"
         pin = root / "configs" / "calibration" / "head.json"
         ledger.parent.mkdir(parents=True)
         pin.parent.mkdir(parents=True)
         ledger.write_bytes(_ledger_bytes(base_receipts))
-        pin.write_bytes(_pin_bytes(_pin_for(base_receipts[-1])))
+        pin.write_bytes(
+            _pin_bytes(_pin_for(base_receipts.one(sequence=cls.base_sequence)))
+        )
 
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
         subprocess.run(
@@ -236,6 +249,10 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                     production_writer,
                     "load_calibration_ledger_snapshot",
                     side_effect=load_without_import_custody,
+                ), patch.object(
+                    calibration_ledger_module,
+                    "load_calibration_ledger_snapshot",
+                    side_effect=load_without_import_custody,
                 ):
                     lifecycle.begin()
                 _write_synthetic_custody(
@@ -306,7 +323,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
     @classmethod
     def _build_issuance_equivalent_base(
         cls, source: dict
-    ) -> tuple[list[dict], dict]:
+    ) -> tuple[ReceiptCorpus, dict]:
         artifact = copy.deepcopy(source)
         artifact["identity_epoch"] = dict(cls.epoch)
         artifact["prior_observation_set"]["epoch_catalog"] = {
@@ -421,7 +438,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
 
         cutoff = {
             "sequence": len(receipts),
-            "head_digest": receipts[-1]["receipt_digest"],
+            "head_digest": next(reversed(receipts))["receipt_digest"],
             "ledger_schema": LEDGER_SCHEMA,
         }
         artifact["ledger_cutoff"] = {
@@ -446,7 +463,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
         if not _valid_acceptance_bound(artifact):
             raise AssertionError("synthetic issued acceptance artifact is invalid")
-        return receipts, artifact
+        return ReceiptCorpus(receipts), artifact
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -455,9 +472,9 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self.pin = self.root / "head.json"
         self.ledger.write_bytes(self.final_ledger_bytes)
         self.pin.write_bytes(self.final_pin_bytes)
-        self.receipts = [
+        self.receipts = ReceiptCorpus(
             json.loads(line) for line in self.final_ledger_bytes.splitlines()
-        ]
+        )
         self.snapshot = self._load_snapshot()
         self.candidates = self._discover(self.snapshot)
 
@@ -553,25 +570,92 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 bracket_runs_root=selected_runs_root,
             )
 
-    def _variant_snapshot(self, receipts: list[dict], pin: dict | None = None):
+    def _variant_snapshot(self, receipts: ReceiptCorpus, pin: dict | None = None):
         self.ledger.write_bytes(_ledger_bytes(receipts))
         if pin is None:
-            pin = _pin_for(receipts[-1])
+            pin = _pin_for(receipts.one(sequence=len(receipts)))
         self.pin.write_bytes(_pin_bytes(pin))
         return self._load_snapshot()
 
-    @staticmethod
-    def _rechain(receipts: list[dict]) -> list[dict]:
+    @classmethod
+    def _rechain(cls, receipts: ReceiptCorpus) -> ReceiptCorpus:
+        sources = copy.deepcopy(receipts)
         result: list[dict] = []
         predecessor = "0" * 64
-        for sequence, source in enumerate(receipts, start=1):
+        byte_offset = 0
+        lineage_anchor = sources.one(sequence=1) if len(sources) else None
+        ledger_id = canonical_sha256(
+            {
+                "ledger_schema": LEDGER_SCHEMA,
+                "lineage_anchor_sequence": 1 if sources else 0,
+                "lineage_anchor_digest": (
+                    lineage_anchor["receipt_digest"]
+                    if lineage_anchor is not None
+                    else "0" * 64
+                ),
+            }
+        )
+        pending_intent: dict | None = None
+
+        def append_rechained(source: dict, target: dict | None = None) -> None:
+            nonlocal predecessor, byte_offset
+            sequence = len(result) + 1
             row = copy.deepcopy(source)
             row["sequence"] = sequence
             row["predecessor_digest"] = predecessor
+            if (
+                row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+            ):
+                if target is None or target.get("schema_version") == CONTROL_SCHEMA:
+                    raise AssertionError("fixture intent lacks its semantic target")
+                target_core = cls._target_core(target)
+                operation_key = cls._operation_key(target_core)
+                base_head = {
+                    "sequence": sequence - 1,
+                    "digest": predecessor,
+                    "byte_offset": byte_offset,
+                }
+                target_core_sha256 = canonical_sha256(target_core)
+                row.update(
+                    {
+                        "ledger_id": ledger_id,
+                        "base_head": base_head,
+                        "operation_key": operation_key,
+                        "target_schema_version": target_core["schema_version"],
+                        "target_event": target_core["event"],
+                        "target_core": target_core,
+                        "target_core_sha256": target_core_sha256,
+                        "operation_id": canonical_sha256(
+                            {
+                                "ledger_id": ledger_id,
+                                "base_head": base_head,
+                                "operation_key": operation_key,
+                                "target_core_sha256": target_core_sha256,
+                            }
+                        ),
+                    }
+                )
             row = _receipt(row)
             result.append(row)
             predecessor = row["receipt_digest"]
-        return result
+            byte_offset += len(canonical_json_bytes(row)) + 1
+
+        for source in sources:
+            if pending_intent is not None:
+                append_rechained(pending_intent, source)
+                append_rechained(source)
+                pending_intent = None
+            elif (
+                source.get("schema_version") == CONTROL_SCHEMA
+                and source.get("event") == APPEND_INTENT_EVENT
+            ):
+                pending_intent = copy.deepcopy(source)
+            else:
+                append_rechained(source)
+        if pending_intent is not None:
+            raise AssertionError("fixture intent lacks its semantic target")
+        return ReceiptCorpus(result)
 
     @staticmethod
     def _rehash_binding(binding: dict) -> dict:
@@ -585,22 +669,66 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
         return value
 
-    def _receipt_index(
+    def _receipt_selector(
         self, session_id: str, event: str, slot: str | None = None
-    ) -> int:
-        return next(
-            index
-            for index, row in enumerate(self.receipts)
-            if row.get("session_id") == session_id
+    ):
+        return lambda row: (
+            row.get("session_id") == session_id
             and row.get("event") == event
             and (slot is None or row.get("slot") == slot)
         )
+
+    def _intent_selector(
+        self, session_id: str, event: str, slot: str | None = None
+    ):
+        return lambda row: (
+            row.get("schema_version") == CONTROL_SCHEMA
+            and row.get("event") == APPEND_INTENT_EVENT
+            and row.get("target_core", {}).get("session_id") == session_id
+            and row.get("target_core", {}).get("event") == event
+            and (
+                slot is None
+                or row.get("target_core", {}).get("slot") == slot
+            )
+        )
+
+    def _operation_selector(
+        self, session_id: str, event: str, slot: str | None = None
+    ):
+        receipt = self._receipt_selector(session_id, event, slot)
+        intent = self._intent_selector(session_id, event, slot)
+        return lambda row: receipt(row) or intent(row)
+
+    @staticmethod
+    def _changed(row: dict, change) -> dict:
+        value = copy.deepcopy(row)
+        change(value)
+        return value
+
+    @staticmethod
+    def _target_core(row: dict) -> dict:
+        return {
+            key: copy.deepcopy(value)
+            for key, value in row.items()
+            if key not in {"sequence", "predecessor_digest", "receipt_digest"}
+        }
+
+    @staticmethod
+    def _operation_key(target_core: dict) -> dict:
+        return {
+            "event": target_core["event"],
+            "session_id": target_core.get("session_id"),
+            "slot": target_core.get("slot"),
+            "attempt_id": target_core.get("attempt_id"),
+        }
 
     def test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions(
         self,
     ) -> None:
         expected = self.scenario["issuance_equivalent_base"]
-        prefix = self.snapshot.receipts[: self.base_sequence]
+        prefix = ReceiptCorpus(self.snapshot.receipts).filter(
+            lambda row: row["sequence"] <= self.base_sequence
+        )
         imported = [
             row
             for row in self.snapshot.observations
@@ -815,7 +943,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     snapshot.head_sequence,
-                    self.base_sequence + index * _PRODUCTION_RECEIPTS_PER_SESSION,
+                    self.base_sequence + index * _PHYSICAL_RECORDS_PER_SESSION,
                 )
                 self.assertEqual(pin_value["sequence"], snapshot.head_sequence)
                 self.assertEqual(pin_value["head_digest"], snapshot.head_digest)
@@ -852,23 +980,53 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             self.assertEqual(reasons, ("calibration_ledger_off_ledger_artifact",))
 
     def test_production_writer_receipts_end_at_derived_terminal_sequence(self) -> None:
-        live = self.snapshot.receipts[self.base_sequence :]
+        live = ReceiptCorpus(self.snapshot.receipts).filter(
+            lambda row: row["sequence"] > self.base_sequence
+        )
         expected = self.scenario["expected_live_extension"]
         receipt_model = expected["receipt_model_supersession"]["landed"]
         self.assertEqual(self.snapshot.head_sequence, _EXPECTED_TERMINAL_SEQUENCE)
         self.assertEqual(
             len(live),
-            expected["session_count"] * _PRODUCTION_RECEIPTS_PER_SESSION,
+            expected["session_count"] * _PHYSICAL_RECORDS_PER_SESSION,
         )
+        # The fixture predates the intent protocol and names its semantic
+        # operation count ``receipts_per_session``. Keep that historical
+        # oracle distinct from the physical append cadence.
         self.assertEqual(
             receipt_model["receipts_per_session"],
-            _PRODUCTION_RECEIPTS_PER_SESSION,
+            _OPERATIONS_PER_SESSION,
         )
-        for index, window in enumerate(self.windows.values()):
-            start = index * _PRODUCTION_RECEIPTS_PER_SESSION
-            rows = live[start : start + _PRODUCTION_RECEIPTS_PER_SESSION]
+        self.assertEqual(len(receipt_model["events"]), _OPERATIONS_PER_SESSION)
+        self.assertEqual(_OPERATIONS_PER_SESSION, 5)
+        self.assertEqual(APPEND_RECORDS_PER_OPERATION, 2)
+        self.assertEqual(_PHYSICAL_RECORDS_PER_SESSION, 10)
+        for window in self.windows.values():
+            rows = ReceiptCorpus(
+                row
+                for row in live
+                if row.get("session_id") == window["session_id"]
+                or row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+                and row.get("target_core", {}).get("session_id")
+                == window["session_id"]
+            )
+            business_rows = ReceiptCorpus(
+                row for row in rows if row.get("schema_version") != CONTROL_SCHEMA
+            )
+            intent_rows = ReceiptCorpus(
+                row
+                for row in rows
+                if row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+            )
+            self.assertEqual(len(rows), _PHYSICAL_RECORDS_PER_SESSION)
             self.assertEqual(
-                [row["event"] for row in rows],
+                len(intent_rows),
+                len(business_rows) * (APPEND_RECORDS_PER_OPERATION - 1),
+            )
+            self.assertEqual(
+                [row["event"] for row in business_rows],
                 [
                     BRACKET_SESSION_OPEN_EVENT,
                     BRACKET_SESSION_SLOT_CLAIM_EVENT,
@@ -877,10 +1035,21 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                     BRACKET_SESSION_FINALIZATION_EVENT,
                 ],
             )
-            self.assertEqual({row["session_id"] for row in rows}, {window["session_id"]})
             self.assertEqual(
-                [row["slot"] for row in rows[1:]],
+                {row["session_id"] for row in business_rows},
+                {window["session_id"]},
+            )
+            self.assertEqual(
+                [
+                    row["slot"]
+                    for row in business_rows
+                    if row.get("event") != BRACKET_SESSION_OPEN_EVENT
+                ],
                 ["pre", "pre", "post", "post"],
+            )
+            self.assertEqual(
+                [row["target_event"] for row in intent_rows],
+                [row["event"] for row in business_rows],
             )
         live_observations = [
             observation
@@ -981,9 +1150,15 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
     def test_refuses_import_marker_removal_import_leakage_or_discovery_regression(
         self,
     ) -> None:
-        marker_removed = copy.deepcopy(self.receipts)
-        marker_removed[1]["event"] = "finalization"
-        marker_removed[1] = _receipt(marker_removed[1])
+        marker_removed = self.receipts.replace(
+            lambda row: row.get("sequence") == 2,
+            lambda row: _receipt(
+                self._changed(
+                    row,
+                    lambda value: value.__setitem__("event", "finalization"),
+                )
+            ),
+        )
         snapshot = self._variant_snapshot(marker_removed)
         self.assertIn("calibration_ledger_attempt_conflict", snapshot.refusal_reasons)
 
@@ -1016,34 +1191,49 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self,
     ) -> None:
         alpha_session = self.windows["alpha"]["session_id"]
-        post_claim = self._receipt_index(
+        post_claim = self._operation_selector(
             alpha_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
         )
-        post_final = self._receipt_index(
+        post_final = self._operation_selector(
             alpha_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
         )
-        session_open = self._receipt_index(
+        session_open = self._receipt_selector(
             alpha_session, BRACKET_SESSION_OPEN_EVENT
         )
-        variants: dict[str, list[dict]] = {}
-        variants["missing"] = (
-            self.receipts[:post_final] + self.receipts[post_final + 1 :]
+        variants: dict[str, ReceiptCorpus] = {}
+        variants["missing"] = self._rechain(self.receipts.without(post_final))
+        duplicated_operation = copy.deepcopy(self.receipts.filter(post_final))
+        variants["duplicate"] = self._rechain(
+            self.receipts.insert_after(
+                self._receipt_selector(
+                    alpha_session,
+                    BRACKET_SESSION_FINALIZATION_EVENT,
+                    "post",
+                ),
+                duplicated_operation,
+            )
         )
-        variants["duplicate"] = (
-            self.receipts[: post_final + 1]
-            + [copy.deepcopy(self.receipts[post_final])]
-            + self.receipts[post_final + 1 :]
+        reordered_rows = ReceiptCorpus(
+            (
+                *copy.deepcopy(self.receipts.filter(post_final)),
+                *copy.deepcopy(self.receipts.filter(post_claim)),
+            )
         )
-        reordered = copy.deepcopy(self.receipts)
-        reordered[post_claim], reordered[post_final] = (
-            reordered[post_final],
-            reordered[post_claim],
+        reordered = self.receipts.replace_group(
+            lambda row: post_claim(row) or post_final(row),
+            reordered_rows,
         )
-        variants["reordered"] = reordered
-        conflicting = copy.deepcopy(self.receipts)
-        conflicting[session_open]["window_id"] = "conflicting-alpha-window"
-        conflicting[session_open] = _receipt(conflicting[session_open])
-        variants["conflicting"] = conflicting
+        variants["reordered"] = self._rechain(reordered)
+        conflicting = self.receipts.replace(
+            session_open,
+            lambda row: self._changed(
+                row,
+                lambda value: value.__setitem__(
+                    "window_id", "conflicting-alpha-window"
+                ),
+            ),
+        )
+        variants["conflicting"] = self._rechain(conflicting)
 
         for name, receipts in variants.items():
             with self.subTest(vector=name):
@@ -1052,23 +1242,55 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                     {
                         "calibration_ledger_chain_conflict",
                         "calibration_ledger_bracket_session_conflict",
+                        "calibration_ledger_bracket_session_open",
+                        "calibration_ledger_operation_conflict",
                     }
                     & set(snapshot.refusal_reasons)
                 )
 
     def test_refuses_open_or_abandoned_session_without_governed_closure(self) -> None:
-        open_snapshot = self._variant_snapshot(self.receipts[:-1])
+        gamma_session = self.windows["gamma"]["session_id"]
+        post_final = self._operation_selector(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
+        )
+        open_snapshot = self._variant_snapshot(
+            copy.deepcopy(
+                self.receipts.before(
+                    self._intent_selector(
+                        gamma_session,
+                        BRACKET_SESSION_FINALIZATION_EVENT,
+                        "post",
+                    )
+                )
+            )
+        )
         self.assertIn(
             "calibration_ledger_bracket_session_open",
             open_snapshot.refusal_reasons,
         )
 
-        gamma_session = self.windows["gamma"]["session_id"]
-        post_claim = self._receipt_index(
+        post_claim = self._operation_selector(
             gamma_session, BRACKET_SESSION_SLOT_CLAIM_EVENT, "post"
         )
-        abandoned = copy.deepcopy(self.receipts[:post_claim])
-        abandoned[-1]["disposition"] = "abandoned"
+        abandoned = copy.deepcopy(
+            self.receipts.before(
+                self._intent_selector(
+                    gamma_session,
+                    BRACKET_SESSION_SLOT_CLAIM_EVENT,
+                    "post",
+                )
+            )
+        )
+        pre_final = self._receipt_selector(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "pre"
+        )
+        abandoned = abandoned.replace(
+            pre_final,
+            lambda row: self._changed(
+                row,
+                lambda value: value.__setitem__("disposition", "abandoned"),
+            ),
+        )
         abandoned = self._rechain(abandoned)
         abandoned_snapshot = self._variant_snapshot(abandoned)
         self.assertIn(
@@ -1087,19 +1309,40 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         mismatch = self._variant_snapshot(self.receipts, mismatch_pin)
         self.assertIn("calibration_ledger_head_mismatch", mismatch.refusal_reasons)
 
+        gamma_session = self.windows["gamma"]["session_id"]
+        post_final = self._operation_selector(
+            gamma_session, BRACKET_SESSION_FINALIZATION_EVENT, "post"
+        )
         rollback = self._variant_snapshot(
-            self.receipts[:-1], json.loads(self.final_pin_bytes)
+            copy.deepcopy(
+                self.receipts.before(
+                    self._intent_selector(
+                        gamma_session,
+                        BRACKET_SESSION_FINALIZATION_EVENT,
+                        "post",
+                    )
+                )
+            ),
+            json.loads(self.final_pin_bytes),
         )
         self.assertIn("calibration_ledger_rollback", rollback.refusal_reasons)
 
-        forked = copy.deepcopy(self.receipts)
-        fork_index = self._receipt_index(
+        fork_selector = self._receipt_selector(
             self.windows["gamma"]["session_id"],
             BRACKET_SESSION_SLOT_CLAIM_EVENT,
             "pre",
         )
-        forked[fork_index]["predecessor_digest"] = "e" * 64
-        forked[fork_index] = _receipt(forked[fork_index])
+        forked = self.receipts.replace(
+            fork_selector,
+            lambda row: _receipt(
+                self._changed(
+                    row,
+                    lambda value: value.__setitem__(
+                        "predecessor_digest", "e" * 64
+                    ),
+                )
+            ),
+        )
         fork = self._variant_snapshot(forked)
         self.assertIn("calibration_ledger_chain_conflict", fork.refusal_reasons)
 
@@ -1205,77 +1448,109 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         self,
     ) -> None:
         gamma = self.windows["gamma"]
-        indexes = {
-            "open": next(
-                index
-                for index, row in enumerate(self.receipts)
-                if row.get("session_id") == gamma["session_id"]
-                and row["event"] == BRACKET_SESSION_OPEN_EVENT
+        selectors = {
+            "open": self._receipt_selector(
+                gamma["session_id"],
+                BRACKET_SESSION_OPEN_EVENT,
             ),
-            "pre": next(
-                index
-                for index, row in enumerate(self.receipts)
-                if row.get("session_id") == gamma["session_id"]
-                and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
-                and row.get("slot") == "pre"
+            "pre": self._receipt_selector(
+                gamma["session_id"],
+                BRACKET_SESSION_FINALIZATION_EVENT,
+                "pre",
             ),
-            "post": next(
-                index
-                for index, row in enumerate(self.receipts)
-                if row.get("session_id") == gamma["session_id"]
-                and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
-                and row.get("slot") == "post"
+            "post": self._receipt_selector(
+                gamma["session_id"],
+                BRACKET_SESSION_FINALIZATION_EVENT,
+                "post",
             ),
         }
 
-        variants: dict[str, tuple[list[dict], tuple[str, ...]]] = {}
-        noncausal = copy.deepcopy(self.receipts)
-        noncausal[indexes["pre"]]["capture_wall_time_s"] = str(
-            gamma["window_start_s"] + 1.0
+        variants: dict[str, tuple[ReceiptCorpus, tuple[str, ...]]] = {}
+        noncausal = self.receipts.replace(
+            selectors["pre"],
+            lambda row: self._changed(
+                row,
+                lambda value: value.__setitem__(
+                    "capture_wall_time_s",
+                    str(gamma["window_start_s"] + 1.0),
+                ),
+            ),
         )
         variants["noncausal"] = (
             self._rechain(noncausal),
             ("calibration_bracket_binding_invalid",),
         )
 
-        stale = copy.deepcopy(self.receipts)
-        stale[indexes["post"]]["capture_wall_time_s"] = str(
-            gamma["window_start_s"] + MAX_AGE_S + 1.0
+        stale = self.receipts.replace(
+            selectors["post"],
+            lambda row: self._changed(
+                row,
+                lambda value: value.__setitem__(
+                    "capture_wall_time_s",
+                    str(gamma["window_start_s"] + MAX_AGE_S + 1.0),
+                ),
+            ),
         )
         variants["stale"] = (
             self._rechain(stale),
             ("instrument_calibration_stale",),
         )
 
-        wrong_t1 = copy.deepcopy(self.receipts)
-        wrong_t1[indexes["open"]]["slots"]["pre"]["t1_bindings"][
-            "mlx_version"
-        ] = "wrong-mlx"
-        wrong_t1[indexes["pre"]]["t1_bindings"]["mlx_version"] = "wrong-mlx"
+        def wrong_open_t1(value: dict) -> None:
+            value["slots"]["pre"]["t1_bindings"]["mlx_version"] = "wrong-mlx"
+
+        def wrong_final_t1(value: dict) -> None:
+            value["t1_bindings"]["mlx_version"] = "wrong-mlx"
+
+        wrong_t1 = self.receipts.replace(
+            selectors["open"],
+            lambda row: self._changed(row, wrong_open_t1),
+        ).replace(
+            selectors["pre"],
+            lambda row: self._changed(row, wrong_final_t1),
+        )
         variants["t1"] = (
             self._rechain(wrong_t1),
             ("calibration_bracket_binding_invalid",),
         )
 
-        wrong_protocol = copy.deepcopy(self.receipts)
-        for row in (
-            wrong_protocol[indexes["open"]]["slots"]["pre"],
-            wrong_protocol[indexes["pre"]],
-        ):
-            row["t1_bindings"]["pulse_protocol_id"] = PROTOCOL_V2_ID
-            row["identity_epoch"]["pulse_protocol_id"] = PROTOCOL_V2_ID
+        def wrong_open_protocol(value: dict) -> None:
+            slot = value["slots"]["pre"]
+            slot["t1_bindings"]["pulse_protocol_id"] = PROTOCOL_V2_ID
+            slot["identity_epoch"]["pulse_protocol_id"] = PROTOCOL_V2_ID
+
+        def wrong_final_protocol(value: dict) -> None:
+            value["t1_bindings"]["pulse_protocol_id"] = PROTOCOL_V2_ID
+            value["identity_epoch"]["pulse_protocol_id"] = PROTOCOL_V2_ID
+
+        wrong_protocol = self.receipts.replace(
+            selectors["open"],
+            lambda row: self._changed(row, wrong_open_protocol),
+        ).replace(
+            selectors["pre"],
+            lambda row: self._changed(row, wrong_final_protocol),
+        )
         variants["protocol"] = (
             self._rechain(wrong_protocol),
             ("calibration_bracket_binding_invalid",),
         )
 
-        wrong_epoch = copy.deepcopy(self.receipts)
-        for row in (
-            wrong_epoch[indexes["open"]]["slots"]["pre"],
-            wrong_epoch[indexes["pre"]],
-        ):
-            row["t1_bindings"]["os_build"] = "wrong-os-build"
-            row["identity_epoch"]["os_build"] = "wrong-os-build"
+        def wrong_open_epoch(value: dict) -> None:
+            slot = value["slots"]["pre"]
+            slot["t1_bindings"]["os_build"] = "wrong-os-build"
+            slot["identity_epoch"]["os_build"] = "wrong-os-build"
+
+        def wrong_final_epoch(value: dict) -> None:
+            value["t1_bindings"]["os_build"] = "wrong-os-build"
+            value["identity_epoch"]["os_build"] = "wrong-os-build"
+
+        wrong_epoch = self.receipts.replace(
+            selectors["open"],
+            lambda row: self._changed(row, wrong_open_epoch),
+        ).replace(
+            selectors["pre"],
+            lambda row: self._changed(row, wrong_final_epoch),
+        )
         variants["epoch"] = (
             self._rechain(wrong_epoch),
             ("calibration_bracket_binding_invalid",),
@@ -1336,7 +1611,6 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             session_id=window["session_id"],
             slot="pre",
             attempt_id=attempts["pre"],
-            claim_id="synthetic-systematic-pre-claim",
         )
         finalize_bracket_session_slot(
             self.ledger,
