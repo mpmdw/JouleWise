@@ -18,7 +18,7 @@ U3 pinset v2 / multi-cell mint; U4 three-window regression green; U5-U7
 packs frozen + readiness validator green; reason-code plumbing (register
 item, Ed ruling #3); absolute runs-dir paths in every launch command
 (night-strander R6 mitigation); campaign.lock absent at arm; NEVER kill a
-running verdict (R7 — it can exceed 2 minutes by design).
+running verdict (R7 — it can exceed 2 minutes by design).<br> **2026-08-08 SUPERSESSION NOTE (D-126):** The U2 successor-engine prerequisite above is superseded for this three-night window: keep U2 frozen for its post-window work, and govern ALPHA, BETA, and GAMMA with the issued D-079 calibration-acceptance artifact.
 
 Ed presence: bookends only (~15-20 min each end, §5A sequence in the
 night pages). Everything between the bookends is unattended.
@@ -266,7 +266,7 @@ The first 7B member may take longer because it reads the local model snapshot co
 **Total duration:** `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]`  
 **Do-not-return-before:** `[BUDGET: COMPLETION TIME/SIGNAL]`
 
-Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks 1–5 run before the midpoint reference and blocks 6–10 after it. Do not add a prefill contrast to this night.
+Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks 1–5 run before the midpoint reference and blocks 6–10 after it. Do not add a prefill contrast to this night.<br> **2026-08-08 SUPERSESSION NOTE (D-122):** The no-prefill instruction above is superseded: the frozen GAMMA pack must include the prospectively frozen 256-token prefill ABBA arm, including its members, stages, and budget.
 
 ## T-minus preparation — REMOTE OK
 

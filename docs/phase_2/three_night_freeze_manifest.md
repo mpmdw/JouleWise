@@ -7,15 +7,38 @@ checkpoint. **Current verdict: UNFROZEN / NO-GO.**
 This manifest accounts for every literal token matched by:
 
 ```sh
-rg -n -o '\[(PLACEHOLDER|BUDGET)[^]]*\]' \
+rg -n -o '\[(PLAN-ID|PLACEHOLDER|BUDGET)(: [^]]+)?\]' \
   docs/strategy/2026-08-07-three-night-operator-packet.md
 ```
 
-The command finds **59 occurrences**: three explanatory mentions (packet
-lines 4 and 30) and **56 fill cells**. The tables below enumerate all 59, so
+The command finds **60 occurrences**: four explanatory mentions (packet
+lines 4 and 30) and **56 fill cells**. The tables below enumerate all 60, so
 a future zero-match check cannot hide an unowned value. Line numbers refer to
 the packet before its appended ABORT-code appendix; the appendix adds no
-placeholder or budget token.
+unfilled token.
+
+The exhaustive literal inventory from that command is:
+
+| Literal token | Occurrences |
+|---|---:|
+| `[PLAN-ID]` | 1 |
+| `[PLACEHOLDER]` | 1 |
+| `[PLACEHOLDER: 1.5B FLOOR WINDOW ID]` | 1 |
+| `[PLACEHOLDER: 7B ABSOLUTE + NULL BLOCKS 1–5 CONFIG IDS]` | 1 |
+| `[PLACEHOLDER: 7B FLOOR WINDOW ID]` | 1 |
+| `[PLACEHOLDER: 7B NULL BLOCKS 6–10 CONFIG IDS]` | 1 |
+| `[PLACEHOLDER: BLOCKS 1–5 CONFIG ID]` | 1 |
+| `[PLACEHOLDER: BLOCKS 6–10 CONFIG ID]` | 1 |
+| `[PLACEHOLDER: CONTRAST CONFIG IDS]` | 1 |
+| `[PLACEHOLDER: DECODE CONTRAST WINDOW ID]` | 1 |
+| `[PLACEHOLDER: FROZEN ARTIFACT ID/HASH]` | 2 |
+| `[PLACEHOLDER: FROZEN CONFIG IDS]` | 2 |
+| `[PLACEHOLDER: PLAN ROOT]` | 6 |
+| `[PLACEHOLDER: PREWINDOW LABEL]` | 1 |
+| `[PLACEHOLDER: STAGE IDS]` | 2 |
+| `[BUDGET]` | 31 |
+| `[BUDGET: COMPLETION TIME/SIGNAL]` | 3 |
+| `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]` | 3 |
 
 Status terms:
 
@@ -26,14 +49,17 @@ Status terms:
 - **STALE** — newer binding authority changed the required content.
 
 The upstream names U5, U6, and U7 mean the ALPHA, BETA, and GAMMA campaign-pack
-units defined by D-117 clause 7. “Pack freeze” means Phase B item B2 in the
-40-hour plan: final identifiers, stage-launch recipes, budgets, hashes, fresh
-receipt oracles, and readiness inputs are all bound together.
+units defined by `docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`,
+“Work-order list with enforced WRITE_SCOPE units.” D-117 clause 7 authorizes
+the pack work but does not define those unit names. “Pack freeze” means Phase B
+item B2 in the 40-hour plan: final identifiers, stage-launch recipes, budgets,
+hashes, fresh receipt oracles, and readiness inputs are all bound together.
 
 ## Explanatory mentions — not fill cells
 
 | ID | Packet location and literal | Upstream supplier | T1 status |
 |---|---|---|---|
+| M-00 | line 4, ``[PLAN-ID]`` in the pre-freeze status sentence | U5–U7 pack freeze | Explanatory mention; no replacement value. The statement remains true. |
 | M-01 | line 4, ``[BUDGET]`` in the pre-freeze status sentence | U5–U7 pack freeze | Explanatory mention; no replacement value. The statement remains true. |
 | M-02 | line 30, ``[PLACEHOLDER]`` in the HOLD sentence | U5–U7 pack freeze | Explanatory mention; no replacement value. |
 | M-03 | line 30, ``[BUDGET]`` in the HOLD sentence | U5–U7 pack freeze | Explanatory mention; no replacement value. |
@@ -124,7 +150,7 @@ receipt oracles, and readiness inputs are all bound together.
 ## Freeze closure check
 
 The lead should rerun the exact census command after filling the packet and
-require **zero actionable fill cells**. The three explanatory mentions may
+require **zero actionable fill cells**. The four explanatory mentions may
 remain only if the HOLD prose is still true; otherwise rewrite those
 sentences as ordinary prose and require zero total matches. Independently
 check that the final GAMMA pack and duration include D-122, that every count
