@@ -1,0 +1,31 @@
+{
+  "artifact_id": "SYNTHETIC-BETA-FLOOR",
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-BETA-PROMPT",
+      "eligibility": {
+        "claim_usable": true,
+        "reason_codes": [],
+        "status": "claim_ready"
+      },
+      "floor_abs_j": 333333,
+      "floor_cmp_j": 444444,
+      "floor_gate_j": 444444
+    },
+    {
+      "cell_id": "SYNTHETIC-BETA-DECODE",
+      "eligibility": {
+        "claim_usable": false,
+        "reason_codes": [
+          "synthetic_incomplete"
+        ],
+        "status": "incomplete"
+      },
+      "floor_abs_j": 555555,
+      "floor_cmp_j": null,
+      "floor_gate_j": null
+    }
+  ],
+  "fixture_label": "SYNTHETIC ONLY — obviously synthetic magnitudes",
+  "schema_version": "joulewise.detection_floor_artifact.v2"
+}

@@ -1,0 +1,56 @@
+{
+  "all_cells_extractable": false,
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-ALPHA-PROMPT-ABS",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 111111
+      },
+      "floor_conditions": [
+        "admissible_set_uncertainty_dominates_point_floor"
+      ],
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "kind": "absolute",
+      "operative_floor_j": 111111,
+      "point_floor_diagnostic": {
+        "guarded_floor_j": 10101,
+        "published_claim_floor": false
+      },
+      "refusal_reasons": []
+    },
+    {
+      "cell_id": "SYNTHETIC-ALPHA-PROMPT-CMP",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 222222
+      },
+      "kind": "comparative",
+      "operative_floor_j": 222222,
+      "refusal_reasons": []
+    },
+    {
+      "cell_id": "SYNTHETIC-ALPHA-DECODE-ABS",
+      "extractable": false,
+      "floor": null,
+      "kind": "absolute",
+      "operative_floor_j": null,
+      "refusal_reasons": [
+        "bundle_missing"
+      ]
+    },
+    {
+      "cell_id": "SYNTHETIC-ALPHA-DECODE-CMP",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 333333
+      },
+      "kind": "comparative",
+      "operative_floor_j": 333333,
+      "refusal_reasons": []
+    }
+  ],
+  "fixture_label": "SYNTHETIC ONLY — obviously synthetic magnitudes",
+  "schema_version": "joulewise.detection_floor_extraction.v1"
+}

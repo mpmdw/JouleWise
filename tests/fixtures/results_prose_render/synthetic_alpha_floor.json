@@ -1,0 +1,39 @@
+{
+  "artifact_id": "SYNTHETIC-ALPHA-FLOOR",
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-ALPHA-PROMPT",
+      "eligibility": {
+        "claim_usable": true,
+        "reason_codes": [],
+        "status": "claim_ready"
+      },
+      "floor_abs_j": 111111,
+      "floor_cmp_j": 222222,
+      "floor_gate_j": 222222,
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guarded_floor_j": 10101,
+          "published_claim_floor": false
+        }
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-ALPHA-DECODE",
+      "eligibility": {
+        "claim_usable": false,
+        "reason_codes": [
+          "synthetic_incomplete"
+        ],
+        "status": "incomplete"
+      },
+      "floor_abs_j": null,
+      "floor_cmp_j": 333333,
+      "floor_gate_j": null
+    }
+  ],
+  "fixture_label": "SYNTHETIC ONLY — obviously synthetic magnitudes",
+  "schema_version": "joulewise.detection_floor_artifact.v2"
+}

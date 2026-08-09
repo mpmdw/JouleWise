@@ -1,0 +1,46 @@
+{
+  "campaigns": {
+    "alpha": {
+      "cells": {
+        "decode": {
+          "absolute_extraction_cell_id": "SYNTHETIC-ALPHA-DECODE-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-ALPHA-DECODE-CMP",
+          "floor_cell_id": "SYNTHETIC-ALPHA-DECODE"
+        },
+        "prompt": {
+          "absolute_extraction_cell_id": "SYNTHETIC-ALPHA-PROMPT-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-ALPHA-PROMPT-CMP",
+          "floor_cell_id": "SYNTHETIC-ALPHA-PROMPT"
+        }
+      },
+      "extraction": "synthetic_alpha_extraction.json",
+      "floor_artifact": "synthetic_alpha_floor.json",
+      "verdict": "synthetic_pass_verdict.json"
+    },
+    "beta": {
+      "cells": {
+        "decode": {
+          "absolute_extraction_cell_id": "SYNTHETIC-BETA-DECODE-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-BETA-DECODE-CMP",
+          "floor_cell_id": "SYNTHETIC-BETA-DECODE"
+        },
+        "prompt": {
+          "absolute_extraction_cell_id": "SYNTHETIC-BETA-PROMPT-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-BETA-PROMPT-CMP",
+          "floor_cell_id": "SYNTHETIC-BETA-PROMPT"
+        }
+      },
+      "extraction": "synthetic_beta_extraction.json",
+      "floor_artifact": "synthetic_beta_floor.json",
+      "verdict": "synthetic_pass_verdict.json"
+    }
+  },
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  },
+  "fixture_label": "SYNTHETIC ONLY — exercises D plus Section 6 Variant 0",
+  "gamma": null,
+  "schema_version": "joulewise.results_fill_input.v1"
+}
