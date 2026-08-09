@@ -1,5 +1,7 @@
 # Recovery-exits FROZEN at unexecuted-proof COUNT 3 — cold gate required (2026-08-08 night)
 
+> **RESOLVED (2026-08-08 night) — see COLD-GATE-SYNTHESIS.md.** The cold gate CONFIRMED this freeze and ruled the arming blocker DISCHARGEABLE (ordinary G2/G4/G6 executed-probe fix round + manual arming procedure; witness-integrity rescoped to an out-of-process mutation-kill harness off the critical path; FIX-19 AST-hardening PROHIBITED). Correction to this doc: G2 is a second-occurrence of the lease FAMILY but a first-occurrence MISSED CALL-SITE at the genesis facet (the fixable reading) — the earlier 'first-occurrence' vs 'second occurrence' labels below are reconciled by that distinction.
+
 **Disposition (magistrate, rule 11):** the FIX-14..18 witness-integrity
 round is FROZEN. It does NOT get a fix round. A COLD GATE (fresh Fable
 instance + Opus contract-lens refuter, mechanically-assembled packet)
