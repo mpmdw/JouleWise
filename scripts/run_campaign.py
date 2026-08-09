@@ -663,6 +663,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--calibration-custody-store",
+        help=(
+            "Content-addressed calibration custody store used exclusively "
+            "for minted whole-window calibration evaluation"
+        ),
+    )
+    parser.add_argument(
         "--consumption-semantics-id",
         choices=(
             MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -774,12 +781,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     whole_window_only = (
         args.window_membership_binding is not None
         or args.salvage_closure is not None
+        or args.calibration_custody_store is not None
         or args.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
     )
     if whole_window_only and not args.whole_window_verdict:
         parser.error(
             "--consumption-semantics-id, --window-membership-binding, and "
-            "--salvage-closure are whole-window-verdict options"
+            "--salvage-closure, and --calibration-custody-store are "
+            "whole-window-verdict options"
+        )
+    if (
+        args.calibration_custody_store is not None
+        and args.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
+    ):
+        parser.error(
+            "--calibration-custody-store requires minted consumption semantics"
         )
     salvage_mode = (
         args.consumption_semantics_id
@@ -4193,7 +4209,9 @@ def _neg8_reference_scientific_config_sha256(
     return observed
 
 
-def _load_calibration_snapshot_for_evaluation() -> CalibrationLedgerSnapshot:
+def _load_calibration_snapshot_for_evaluation(
+    calibration_custody_store: str | Path | None = None,
+) -> CalibrationLedgerSnapshot:
     """Load the one D-109 snapshot shared by a complete runner evaluation.
 
     This closes workflow omission, unregistered evidence, and rollback or
@@ -4207,14 +4225,19 @@ def _load_calibration_snapshot_for_evaluation() -> CalibrationLedgerSnapshot:
         if isinstance(acceptance, Mapping)
         else None
     )
-    return load_calibration_ledger_snapshot(
-        baseline_sequence=(
+    loader_arguments: dict[str, Any] = {
+        "baseline_sequence": (
             cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
         ),
-        baseline_digest=(
+        "baseline_digest": (
             cutoff.get("head_digest") if isinstance(cutoff, Mapping) else None
         ),
-    )
+    }
+    if calibration_custody_store is not None:
+        loader_arguments["calibration_custody_store"] = Path(
+            calibration_custody_store
+        )
+    return load_calibration_ledger_snapshot(**loader_arguments)
 
 
 def _idle_admission_core_evaluation(
@@ -5444,7 +5467,9 @@ def _run_whole_window_verdict_locked(
         calibration_ledger_snapshot=(
             consumption_session.calibration_ledger_snapshot
             if consumption_session is not None
-            else _load_calibration_snapshot_for_evaluation()
+            else _load_calibration_snapshot_for_evaluation(
+                getattr(args, "calibration_custody_store", None)
+            )
         ),
     )
     core = core_evaluation.core

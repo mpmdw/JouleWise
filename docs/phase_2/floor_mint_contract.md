@@ -311,6 +311,13 @@ one all-or-nothing mode: every custody-bearing final observation is read only
 from `ROOT/<receipt.content_id>/`; receipt locators remain authenticated ledger
 bytes but are never resolution fallbacks.
 
+The minted production whole-window campaign evaluator accepts the same
+`--calibration-custody-store ROOT` input and threads it into its single frozen
+calibration-ledger snapshot. When supplied, evaluation is store-exclusive: a
+missing, incomplete, or mismatched store refuses with
+`calibration_ledger_custody_invalid` and never falls back to any receipt
+`custody_locator`; omitting the option preserves the historical locator mode.
+
 `ROOT/manifest.json` has the canonical UTF-8 JSON wire below: sorted keys,
 compact separators, one trailing newline, no duplicate keys, and no non-finite
 numbers. All object key sets are closed. `contents` is sorted by `content_id`;

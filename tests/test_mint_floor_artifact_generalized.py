@@ -46,6 +46,7 @@ from joulewise.calibration_bracketing import (
 from joulewise.calibration_ledger import (
     CUSTODY_STORE_MANIFEST_NAME,
     GENESIS_DIGEST,
+    GOVERNED_ARTIFACTS,
     LEDGER_SCHEMA,
     append_bracket_session_receipt,
     artifact_hashes,
@@ -4085,8 +4086,37 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
             str(policy_path),
             "--neg8-drift-bound",
             str(neg8_drift_bound_path),
+            "--calibration-custody-store",
+            str(custody_store),
             "--whole-window-verdict",
     ]
+    custody_store_manifest = load_json(
+        custody_store / CUSTODY_STORE_MANIFEST_NAME
+    )
+    expected_store_identities = sorted(
+        {
+            str((custody_store / CUSTODY_STORE_MANIFEST_NAME).resolve()),
+            *(
+                str(
+                    (
+                        custody_store
+                        / content["content_id"]
+                        / relative
+                    ).resolve()
+                )
+                for content in custody_store_manifest["contents"]
+                for relative in GOVERNED_ARTIFACTS
+            ),
+        }
+    )
+    legacy_locator_identities = sorted(
+        {
+            str((Path(observation.custody_locator) / relative).resolve())
+            for observation in store_snapshot.observations
+            if observation.custody_locator is not None
+            for relative in GOVERNED_ARTIFACTS
+        }
+    )
     runner_ledger_path = (
         repository / "runs" / "calibration_observation_ledger.jsonl"
     )
@@ -4098,16 +4128,30 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
             "-c",
             (
                 "import sys; "
+                "import json; "
                 "from joulewise.authentication_io import "
                 "V2AuthenticationReadSession; "
                 "from scripts.run_campaign import main; "
                 "session=V2AuthenticationReadSession(); "
                 "session.__enter__(); "
-                "code=main(sys.argv[1:]); "
+                "code=main(sys.argv[1:-2]); "
                 "session.__exit__(None,None,None); "
-                "raise SystemExit(code)"
+                "records=set(session.records); "
+                "expected=set(json.loads(sys.argv[-2])); "
+                "legacy=set(json.loads(sys.argv[-1])); "
+                "missing=expected-records; "
+                "touched=legacy & records; "
+                "failure=("
+                "f'campaign omitted custody-store authentication identities: {sorted(missing)}' "
+                "if missing else "
+                "f'campaign touched legacy custody-locator identities in store mode: {sorted(touched)}' "
+                "if touched else None); "
+                "print(failure,file=sys.stderr) if failure else None; "
+                "raise SystemExit(2 if failure else code)"
             ),
             *campaign_arguments,
+            json.dumps(expected_store_identities),
+            json.dumps(legacy_locator_identities),
         ],
         cwd=repository,
         expected={0, 1},
