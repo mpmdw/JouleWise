@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from joulewise.calibration_ledger import (
@@ -24,10 +25,21 @@ from joulewise.calibration_ledger import (
     finalize_bracket_session_slot,
 )
 from scripts.validate_powermetrics_fiducial import WriterStage
+from tests.owned_process_runner import (
+    OwnedProcessResult,
+    OwnedPublicProcessRunner,
+    assert_no_owned_process_group_survivors,
+    owned_process_group_survivors,
+    spawn_spinning_descendant_for_guard_test,
+)
 from tests.test_calibration_exits import _install_fake_writer_dependencies
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def tearDownModule() -> None:
+    assert_no_owned_process_group_survivors()
 
 
 def _fresh_env() -> dict[str, str]:
@@ -70,6 +82,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.tmp = tempfile.TemporaryDirectory()
         cls.repo = Path(cls.tmp.name).resolve() / "repo"
+        cls.runner = OwnedPublicProcessRunner(Path(cls.tmp.name))
         shutil.copytree(REPO_ROOT / "joulewise", cls.repo / "joulewise")
         (cls.repo / "scripts").mkdir()
         for name in (
@@ -274,16 +287,14 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
         session_id: str,
         custody: dict[str, Path],
         crash_stage: WriterStage | None = None,
-    ) -> subprocess.CompletedProcess[str]:
+    ) -> OwnedProcessResult:
         epoch_path = plan.with_name(f"{session_id}-epoch.json")
         t1_path = plan.with_name(f"{session_id}-t1.json")
         epoch_path.write_text(json.dumps(self.epoch), encoding="utf-8")
         t1_path.write_text(json.dumps(self.t1), encoding="utf-8")
         token = session_id.removeprefix("session-")
         environment = _fresh_env()
-        if crash_stage is not None:
-            environment["JOULEWISE_TEST_WRITER_CRASH_STAGE"] = crash_stage.value
-        return subprocess.run(
+        return self.runner.run(
             [
                 sys.executable,
                 str(self.repo / "scripts" / "reserve_calibration_window_bracket.py"),
@@ -320,11 +331,9 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 "--execute",
             ],
             cwd=self.repo,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             env=environment,
-            check=False,
+            crash_stage=crash_stage.value if crash_stage is not None else None,
+            authorize_crash=crash_stage is not None,
         )
 
     def _writer_cli(
@@ -337,18 +346,21 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
         custody: Path,
         crash_stage: WriterStage,
         sampler_mode: str = "normal",
-    ) -> subprocess.CompletedProcess[str]:
+        authorize_crash: bool = True,
+    ) -> OwnedProcessResult:
         identity = custody.parent / f"{session_id}-identity.json"
         identity.parent.mkdir(parents=True, exist_ok=True)
         identity.write_text(json.dumps(self.epoch) + "\n", encoding="utf-8")
         environment = {
             **_fresh_env(),
-            "JOULEWISE_TEST_WRITER_CRASH_STAGE": crash_stage.value,
             "JW_FAKE_SAMPLER_MODE": sampler_mode,
             "JW_FAKE_HW_MODEL": self.epoch["hardware_model"],
             "JW_FAKE_OS_BUILD": self.epoch["os_build"],
+            "JW_FAKE_SAMPLER_ELAPSED_NS": "200000",
+            "JW_FAKE_TIME_SCALE": "0.001",
+            "JW_FAKE_TIME_ORIGIN": str(time.time()),
         }
-        return subprocess.run(
+        return self.runner.run(
             [
                 sys.executable,
                 str(self.repo / "scripts" / "validate_powermetrics_fiducial.py"),
@@ -380,11 +392,9 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 str(identity),
             ],
             cwd=self.repo,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             env=environment,
-            check=False,
+            crash_stage=crash_stage.value,
+            authorize_crash=authorize_crash,
         )
 
     def _enforcing_readiness(
@@ -439,7 +449,7 @@ print(json.dumps(output, sort_keys=True))
         slot: str,
         custody: dict[str, Path],
         stage: WriterStage,
-    ) -> subprocess.CompletedProcess[str]:
+    ) -> OwnedProcessResult:
         if stage in _ACTUAL_RESERVATION:
             return self._reserve_cli(
                 ledger=ledger,
@@ -458,7 +468,7 @@ print(json.dumps(output, sort_keys=True))
             crash_stage=stage,
         )
 
-    def _payload(self, completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    def _payload(self, completed: subprocess.CompletedProcess[str] | OwnedProcessResult) -> dict[str, object]:
         for stream in (completed.stdout, completed.stderr):
             try:
                 value = json.loads(stream)
@@ -732,6 +742,56 @@ print(json.dumps(output, sort_keys=True))
             for stage in stages
         }
         self.assertEqual(witnessed, expected)
+
+    def test_survivor_guard_detects_spinning_descendant(self) -> None:
+        process = spawn_spinning_descendant_for_guard_test()
+        try:
+            assert process.stdout is not None
+            self.assertEqual(process.stdout.readline().strip(), "SPINNING")
+            self.assertTrue(owned_process_group_survivors())
+            with self.assertRaisesRegex(
+                AssertionError, "owned process-group survivors"
+            ):
+                assert_no_owned_process_group_survivors()
+            process.communicate(timeout=10)
+            self.assertEqual(owned_process_group_survivors(), ())
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate(timeout=10)
+
+    def test_ambient_writer_crash_stage_is_inert_without_capability(self) -> None:
+        _root, ledger, pin, _plan, session_id, custody = self._case(
+            "ambient-stage-inert"
+        )
+        completed = self._writer_cli(
+            ledger=ledger,
+            pin=pin,
+            session_id=session_id,
+            slot="pre",
+            custody=custody["pre"],
+            crash_stage=WriterStage.BEFORE_WRITER_LEASE,
+            authorize_crash=False,
+        )
+        self.assertNotEqual(completed.returncode, -signal.SIGKILL)
+        self.assertIn(completed.returncode, {0, 1}, completed.stdout + completed.stderr)
+        inert = [
+            json.loads(line)
+            for line in completed.stderr.splitlines()
+            if line.startswith("{")
+            and json.loads(line).get("event")
+            == "joulewise_test_writer_crash_hook_inert"
+        ]
+        self.assertEqual(
+            inert,
+            [
+                {
+                    "event": "joulewise_test_writer_crash_hook_inert",
+                    "reason": "missing_or_invalid_harness_authorization",
+                    "requested_stage": "before-writer-lease",
+                }
+            ],
+        )
 
     def test_two_process_lease_contention_then_fresh_resume(self) -> None:
         _root, ledger, pin, plan, session_id, custody = self._case("lease-contention")

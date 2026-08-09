@@ -7,6 +7,7 @@ import io
 import inspect
 import json
 import hashlib
+import os
 from pathlib import Path
 import shutil
 import signal
@@ -28,6 +29,7 @@ from tests.test_calibration_bracketing import (
     _unissued_acceptance_fixture,
     _unissued_acceptance_fixture_bytes,
 )
+from tests.receipt_corpus import ReceiptCorpus
 from joulewise.calibration_bracketing import (
     _canonical_sha256 as acceptance_canonical_sha256,
     _valid_acceptance_bound,
@@ -1764,8 +1766,7 @@ class CalibrationLedgerTests(unittest.TestCase):
                     execute=True,
                     require_committed_pin=False,
                 )
-        self.assertTrue(self.ledger.exists())
-        self.assertEqual(self.ledger.read_bytes(), b"")
+        self.assertFalse(self.ledger.exists())
         self.assertEqual(json.loads(self.pin.read_text())["sequence"], 0)
 
     def test_historical_import_fsync_failure_keeps_visible_ledger_empty(self) -> None:
@@ -1786,7 +1787,7 @@ class CalibrationLedgerTests(unittest.TestCase):
                     execute=True,
                     require_committed_pin=False,
                 )
-        self.assertEqual(self.ledger.read_bytes(), b"")
+        self.assertFalse(self.ledger.exists())
 
     def test_post_replace_dir_fsync_fault_is_committed_and_retry_confirms(
         self,
@@ -1991,90 +1992,38 @@ class CalibrationLedgerTests(unittest.TestCase):
         sync.assert_not_called()
         self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes + b"tampered\n")
 
-    def test_stable_lock_serializes_replace_against_waiting_old_writer(
+    def test_stable_slot_lock_refuses_replacement_against_held_writer(
         self,
     ) -> None:
         checkout, root, custodies, table = self._historical_fixture()
         import_args = self._historical_import_args(table, custodies)
         self.ledger.write_bytes(b"")
         lock_path = calibration_ledger._ledger_lock_path(self.ledger)
-        bootstrap_locked = threading.Event()
-        allow_replace = threading.Event()
-        writer_waiting = threading.Event()
-        real_reauthenticate = calibration_ledger._reauthenticate_historical_import_plan
-        real_flock = calibration_ledger.fcntl.flock
-        bootstrap_results = []
-        bootstrap_errors = []
-        writer_results = []
-        writer_errors = []
-
-        def pause_with_bootstrap_lock(plan):
-            bootstrap_locked.set()
-            if not allow_replace.wait(timeout=5):
-                raise RuntimeError("test timed out before replace release")
-            real_reauthenticate(plan)
-
-        def observe_writer_lock(descriptor, operation):
-            if threading.current_thread().name == "stale-ledger-writer":
-                writer_waiting.set()
-            return real_flock(descriptor, operation)
-
-        def run_bootstrap():
-            try:
-                bootstrap_results.append(
-                    bootstrap_historical_import(
-                        self.ledger,
-                        head_pin_path=self.pin,
-                        roots=[root],
-                        checkout_root=checkout,
-                        **import_args,
-                        execute=True,
-                        require_committed_pin=False,
-                    )
-                )
-            except Exception as exc:  # pragma: no cover - asserted below
-                bootstrap_errors.append(exc)
-
-        def run_writer():
-            try:
-                writer_results.append(self._reserve("stale-writer", self.root / "x"))
-            except Exception as exc:
-                writer_errors.append(exc)
-
-        with (
-            mock.patch.object(
-                calibration_ledger,
-                "_reauthenticate_historical_import_plan",
-                side_effect=pause_with_bootstrap_lock,
-            ),
-            mock.patch.object(
-                calibration_ledger.fcntl,
-                "flock",
-                side_effect=observe_writer_lock,
-            ),
-        ):
-            bootstrap_thread = threading.Thread(target=run_bootstrap)
-            bootstrap_thread.start()
-            self.assertTrue(bootstrap_locked.wait(timeout=5))
+        with calibration_ledger.CalibrationWriterLease(self.ledger):
             lock_inode_before = lock_path.stat().st_ino
-            writer_thread = threading.Thread(
-                target=run_writer, name="stale-ledger-writer"
+            with self.assertRaises(CalibrationLedgerError) as raised:
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+            self.assertEqual(
+                raised.exception.code, RefusalCode.LIVE_WRITER_CONTENTION
             )
-            writer_thread.start()
-            self.assertTrue(writer_waiting.wait(timeout=5))
-            allow_replace.set()
-            bootstrap_thread.join(timeout=5)
-            writer_thread.join(timeout=5)
-        self.assertFalse(bootstrap_thread.is_alive())
-        self.assertFalse(writer_thread.is_alive())
-        self.assertEqual(bootstrap_errors, [])
-        self.assertEqual(len(bootstrap_results), 1)
-        self.assertEqual(writer_results, [])
-        self.assertEqual(len(writer_errors), 1)
-        self.assertIn("head differs", str(writer_errors[0]))
-        self.assertEqual(
-            self.ledger.read_bytes(), bootstrap_results[0].ledger_bytes
+        plan = bootstrap_historical_import(
+            self.ledger,
+            head_pin_path=self.pin,
+            roots=[root],
+            checkout_root=checkout,
+            **import_args,
+            execute=True,
+            require_committed_pin=False,
         )
+        self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes)
         self.assertTrue(lock_path.exists())
         self.assertEqual(lock_path.stat().st_ino, lock_inode_before)
 
@@ -2154,6 +2103,105 @@ class CalibrationLedgerTests(unittest.TestCase):
                 holder.kill()
             holder.communicate(timeout=10)
 
+    def test_hard_link_alias_cannot_acquire_a_second_writer_lease(self) -> None:
+        self.ledger.write_bytes(b"")
+        alias = self.root / "ledger-hard-link.jsonl"
+        os.link(self.ledger, alias)
+        first = calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+        try:
+            with self.assertRaises(CalibrationLedgerError) as raised:
+                calibration_ledger.CalibrationWriterLease(alias).acquire()
+            self.assertEqual(
+                raised.exception.code, RefusalCode.LIVE_WRITER_CONTENTION
+            )
+        finally:
+            first.release()
+
+    def test_distinct_ledgers_and_release_reacquire_remain_available(self) -> None:
+        self.ledger.write_bytes(b"")
+        other = self.root / "distinct-ledger.jsonl"
+        other.write_bytes(b"")
+        first = calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+        second = calibration_ledger.CalibrationWriterLease(other).acquire()
+        self.assertTrue(first.held)
+        self.assertTrue(second.held)
+        second.release()
+        first.release()
+        reacquired = calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+        self.assertTrue(reacquired.held)
+        reacquired.release()
+
+    def test_missing_ledger_slot_contention_and_locked_genesis_upgrade(self) -> None:
+        self.assertFalse(self.ledger.exists())
+        first = calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+        try:
+            self.assertIsNone(first.identity.object_key)
+            with self.assertRaises(CalibrationLedgerError) as raised:
+                calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+            self.assertEqual(
+                raised.exception.code, RefusalCode.LIVE_WRITER_CONTENTION
+            )
+            real_link = os.link
+
+            def publish_only_after_staging_lock(source, target, *args, **kwargs):
+                probe = os.open(source, os.O_RDONLY)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        calibration_ledger.fcntl.flock(
+                            probe,
+                            calibration_ledger.fcntl.LOCK_EX
+                            | calibration_ledger.fcntl.LOCK_NB,
+                        )
+                finally:
+                    os.close(probe)
+                return real_link(source, target, *args, **kwargs)
+
+            with mock.patch.object(
+                calibration_ledger.os,
+                "link",
+                side_effect=publish_only_after_staging_lock,
+            ):
+                descriptor = first.open_append_descriptor()
+            os.close(descriptor)
+            self.assertTrue(self.ledger.is_file())
+            self.assertIsNotNone(first.identity.object_key)
+            alias = self.root / "genesis-hard-link.jsonl"
+            os.link(self.ledger, alias)
+            with self.assertRaises(CalibrationLedgerError) as object_raised:
+                calibration_ledger.CalibrationWriterLease(alias).acquire()
+            self.assertEqual(
+                object_raised.exception.code,
+                RefusalCode.LIVE_WRITER_CONTENTION,
+            )
+        finally:
+            first.release()
+
+    def test_replacement_in_place_is_refused_until_original_lease_releases(self) -> None:
+        self.ledger.write_bytes(b"original-ledger\n")
+        first = calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+        replacement = self.root / "replacement.jsonl"
+        replacement.write_bytes(b"replacement-ledger\n")
+        os.replace(replacement, self.ledger)
+        try:
+            with self.assertRaises(CalibrationLedgerError) as contender:
+                calibration_ledger.CalibrationWriterLease(self.ledger).acquire()
+            self.assertEqual(
+                contender.exception.code, RefusalCode.LIVE_WRITER_CONTENTION
+            )
+            with self.assertRaises(CalibrationLedgerError) as append_refusal:
+                first.open_append_descriptor()
+            self.assertEqual(
+                append_refusal.exception.code, RefusalCode.UNSAFE_LOCK_INODE
+            )
+            self.assertEqual(self.ledger.read_bytes(), b"replacement-ledger\n")
+        finally:
+            first.release()
+        replacement_lease = calibration_ledger.CalibrationWriterLease(
+            self.ledger
+        ).acquire()
+        self.assertTrue(replacement_lease.held)
+        replacement_lease.release()
+
     def test_sigkill_mid_import_leaves_retryable_genesis(self) -> None:
         checkout, root, custodies, table = self._historical_fixture()
         import_args = self._historical_import_args(table, custodies)
@@ -2182,7 +2230,7 @@ module.bootstrap_historical_import(
 """
         killed = subprocess.run([sys.executable, "-c", code], check=False)
         self.assertEqual(killed.returncode, -signal.SIGKILL)
-        self.assertEqual(self.ledger.read_bytes(), b"")
+        self.assertFalse(self.ledger.exists())
         plan = bootstrap_historical_import(
             self.ledger,
             head_pin_path=self.pin,
@@ -2225,7 +2273,7 @@ module.bootstrap_historical_import(
                     execute=True,
                     require_committed_pin=False,
                 )
-        self.assertEqual(self.ledger.read_bytes(), b"")
+        self.assertFalse(self.ledger.exists())
 
     def test_historical_import_marker_is_not_a_post_cutoff_live_observation(
         self,
@@ -2479,32 +2527,35 @@ module.bootstrap_historical_import(
                 self.assertEqual(result.state, "clean")
                 self.assertTrue(after.startswith(before))
                 parsed = calibration_ledger._scan_physical_ledger(after)
-                business = [
+                business = ReceiptCorpus(
                     row
                     for row in parsed.receipts
                     if row.get("schema_version")
                     != calibration_ledger.CONTROL_SCHEMA
-                ]
+                )
                 self.assertEqual(
                     [row.get("attempt_id") for row in business],
                     ["operation-a"],
                 )
-                abandonments = [
+                abandonments = ReceiptCorpus(
                     row
                     for row in parsed.receipts
                     if row.get("event") == calibration_ledger.ABANDONMENT_EVENT
-                ]
+                )
                 mismatches = not bytes_a.startswith(injected)
                 self.assertEqual(bool(abandonments), mismatches)
                 if mismatches:
-                    abandonment = abandonments[-1]
+                    abandonment = abandonments.one(
+                        event=calibration_ledger.ABANDONMENT_EVENT
+                    )
                     self.assertEqual(abandonment["residue_length"], len(injected))
                     self.assertEqual(
                         abandonment["residue_sha256"],
                         hashlib.sha256(injected).hexdigest(),
                     )
                     self.assertLess(
-                        abandonment["sequence"], business[-1]["sequence"]
+                        abandonment["sequence"],
+                        business.one(attempt_id="operation-a")["sequence"],
                     )
 
     def test_bare_business_pair_after_protocol_activation_is_named_refusal(
@@ -2844,14 +2895,14 @@ raise SystemExit('crash hook was not reached')
                 final = calibration_ledger._scan_physical_ledger(after)
                 self.assertFalse(final.reasons)
                 self.assertIsNone(final.active_intent)
-                business = [
+                business = ReceiptCorpus(
                     row
                     for row in final.receipts
                     if row.get("schema_version")
                     != calibration_ledger.CONTROL_SCHEMA
-                ]
+                )
                 if case == "during-intent":
-                    self.assertEqual(business, [])
+                    self.assertEqual(len(business), 0)
                     self.assertTrue(
                         any(
                             row.get("event")
@@ -2867,7 +2918,7 @@ raise SystemExit('crash hook was not reached')
                         else self.root / "crash"
                     )
                     retry = self._reserve(attempt_id, retry_custody)
-                    self.assertEqual(retry, business[-1])
+                    self.assertEqual(retry, business.one(attempt_id=attempt_id))
 
     def test_legacy_journal_is_hashed_archived_and_never_replayed(self) -> None:
         legacy = calibration_ledger._legacy_append_journal_path(self.ledger)

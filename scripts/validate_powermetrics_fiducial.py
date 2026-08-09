@@ -24,11 +24,13 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hmac
 import hashlib
 import json
 import math
 import os
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -50,7 +52,7 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
     parse_powermetrics_records,
     samples_from_records,
 )
-from joulewise.clock import SystemClock  # noqa: E402
+from joulewise.clock import ClockStamp, SystemClock  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -110,6 +112,53 @@ PROTOCOL_V2_PATH = (
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
+TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
+    "joulewise.test_writer_crash_authorization.v1"
+)
+_AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
+_CRASH_HOOK_DIAGNOSTIC_EMITTED = False
+
+
+class _AcceleratedSystemClock:
+    """Expose test-scaled real time without bypassing the production clock seam."""
+
+    def __init__(self, scale: float, *, epoch_origin_s: float | None = None) -> None:
+        self._scale = scale
+        self._clock = SystemClock()
+        self._origin = self._clock.stamp()
+        self._epoch_origin_s = (
+            self._origin.epoch_s if epoch_origin_s is None else epoch_origin_s
+        )
+        self._monotonic_origin_s = (
+            self._origin.monotonic_before_s
+            + self._origin.monotonic_after_s
+        ) / 2.0
+        self._accelerated_epoch_origin_s = self._scaled(
+            self._origin.epoch_s,
+            self._epoch_origin_s,
+        )
+        self._wall_minus_monotonic_s = (
+            self._accelerated_epoch_origin_s - self._monotonic_origin_s
+        )
+
+    def _scaled(self, value: float, origin: float) -> float:
+        return origin + ((value - origin) / self._scale)
+
+    def now(self) -> float:
+        return self._scaled(time.time(), self._epoch_origin_s)
+
+    def stamp(self) -> ClockStamp:
+        epoch_s = self.now()
+        accelerated_monotonic_s = epoch_s - self._wall_minus_monotonic_s
+        return ClockStamp(
+            epoch_s=epoch_s,
+            monotonic_before_s=accelerated_monotonic_s,
+            monotonic_after_s=accelerated_monotonic_s,
+            wall_resolution_s=self._origin.wall_resolution_s / self._scale,
+            monotonic_resolution_s=(
+                self._origin.monotonic_resolution_s / self._scale
+            ),
+        )
 
 
 class WriterStage(str, Enum):
@@ -160,10 +209,94 @@ class WriterStage(str, Enum):
     AFTER_TERMINAL_PIN_BEFORE_OUTPUT = "after-terminal-pin-before-output"
 
 
-def _writer_stage(stage: WriterStage) -> None:
-    """Real production boundary with one process-level test kill switch."""
+def _emit_inert_crash_hook_diagnostic(requested_stage: str) -> None:
+    global _CRASH_HOOK_DIAGNOSTIC_EMITTED
+    if _CRASH_HOOK_DIAGNOSTIC_EMITTED:
+        return
+    print(
+        json.dumps(
+            {
+                "event": "joulewise_test_writer_crash_hook_inert",
+                "reason": "missing_or_invalid_harness_authorization",
+                "requested_stage": requested_stage,
+            },
+            separators=(",", ":"),
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+    _CRASH_HOOK_DIAGNOSTIC_EMITTED = True
 
-    if os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE") == stage.value:
+
+def _configure_writer_crash_authorization(
+    authorization_path: Path | None,
+    *,
+    entry_point: Path,
+) -> None:
+    """Consume and validate one explicit harness capability, if supplied."""
+
+    global _AUTHORIZED_WRITER_CRASH_STAGE
+    _AUTHORIZED_WRITER_CRASH_STAGE = None
+    requested_stage = os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE")
+    token = os.environ.get("JOULEWISE_TEST_WRITER_CRASH_TOKEN")
+    valid_stage: str | None = None
+    descriptor = -1
+    path = Path(authorization_path) if authorization_path is not None else None
+    try:
+        if path is None:
+            raise ValueError("missing explicit crash authorization path")
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        status = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(status.st_mode)
+            or status.st_uid != os.getuid()
+            or stat.S_IMODE(status.st_mode) != 0o600
+            or status.st_nlink != 1
+        ):
+            raise ValueError("unsafe crash authorization inode")
+        raw = os.read(descriptor, 65537)
+        if len(raw) > 65536:
+            raise ValueError("oversized crash authorization")
+        payload = json.loads(raw)
+        resolved_entry = Path(entry_point).resolve(strict=True)
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("schema_version")
+            != TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA
+            or payload.get("stage") != requested_stage
+            or payload.get("stage") not in {stage.value for stage in WriterStage}
+            or payload.get("entry_point") != str(resolved_entry)
+            or payload.get("entry_point_sha256")
+            != hashlib.sha256(resolved_entry.read_bytes()).hexdigest()
+            or not isinstance(payload.get("nonce"), str)
+            or not isinstance(token, str)
+            or not hmac.compare_digest(payload["nonce"], token)
+        ):
+            raise ValueError("crash authorization fields do not match")
+        valid_stage = str(payload["stage"])
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        valid_stage = None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+            assert path is not None
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+    if valid_stage is not None:
+        _AUTHORIZED_WRITER_CRASH_STAGE = valid_stage
+    elif requested_stage is not None:
+        _emit_inert_crash_hook_diagnostic(requested_stage)
+
+
+def _writer_stage(stage: WriterStage) -> None:
+    """Real production boundary armed only by two matching logical keys."""
+
+    if (
+        os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE") == stage.value
+        and _AUTHORIZED_WRITER_CRASH_STAGE == stage.value
+    ):
         os.kill(os.getpid(), signal.SIGKILL)
 
 
@@ -537,6 +670,19 @@ class _CaptureLedgerLifecycle:
                 assert readiness.refusal_code is not None
                 raise CalibrationLedgerError(readiness.refusal_code)
             self._validate_slot()
+            print(
+                json.dumps(
+                    {
+                        "event": "calibration_writer_arm_authorized",
+                        "session_id": self.session_id,
+                        "slot": self.slot,
+                        "attempt_id": self.attempt_id,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
             _writer_stage(WriterStage.AFTER_SLOT_VALIDATION)
             claim_bracket_session_slot(
                 self.ledger_path,
@@ -718,6 +864,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--test-writer-crash-authorization",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--rederive-from", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--pulse-count", type=int, default=PULSE_COUNT)
@@ -740,6 +891,10 @@ def main(argv: list[str] | None = None) -> int:
         help="operator-recorded power policy identity (e.g. 'ac_high_power'); required",
     )
     args = parser.parse_args(argv)
+    _configure_writer_crash_authorization(
+        args.test_writer_crash_authorization,
+        entry_point=Path(__file__),
+    )
     bracket_values = (args.session_id, args.slot, args.attempt_id)
     bracket_mode = all(value is not None and value != "" for value in bracket_values)
     if any(value is not None for value in bracket_values) and not bracket_mode:
@@ -797,7 +952,18 @@ def main(argv: list[str] | None = None) -> int:
 
     import mlx.core as mx  # noqa: PLC0415
 
-    clock = SystemClock()
+    clock = (
+        SystemClock()
+        if args.time_scale_for_test == 1
+        else _AcceleratedSystemClock(
+            args.time_scale_for_test,
+            epoch_origin_s=(
+                float(os.environ["JW_FAKE_TIME_ORIGIN"])
+                if "JW_FAKE_TIME_ORIGIN" in os.environ
+                else None
+            ),
+        )
+    )
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -959,7 +1125,12 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     first_parse = clock.stamp()
                     break
-        time.sleep(min(0.05, args.sampler_ready_timeout_s / 4))
+        time.sleep(
+            min(
+                0.05 * args.time_scale_for_test,
+                args.sampler_ready_timeout_s / 4,
+            )
+        )
     if first_parse is None:
         process.terminate()
         finalize_abandoned("powermetrics_never_ready")
@@ -974,7 +1145,10 @@ def main(argv: list[str] | None = None) -> int:
             capture_path,
             process,
             timeout_s=args.rollover_timeout_s,
-            poll_s=min(0.05, args.rollover_timeout_s / 4),
+            poll_s=min(
+                0.05 * args.time_scale_for_test,
+                args.rollover_timeout_s / 4,
+            ),
         )
     except RuntimeError as exc:
         events.close()

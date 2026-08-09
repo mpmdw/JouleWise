@@ -30,11 +30,12 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
@@ -2569,21 +2570,182 @@ def _require_genesis_bootstrap_state(
 
 
 def _ledger_lock_path(ledger_path: Path) -> Path:
-    # Resolve lexical aliases before selecting the permanent lock inode.  A
-    # symlink to one ledger therefore cannot mint a second adjacent lock.
     ledger = Path(ledger_path).resolve(strict=False)
     return ledger.with_name(f"{ledger.name}.lock")
 
 
-def _open_ledger_lock(ledger_path: Path) -> int:
-    """Open one dedicated, non-aliased regular lock inode for a writer."""
+_LOCAL_FILESYSTEM_TYPES = frozenset(
+    {
+        "apfs",
+        "btrfs",
+        "devfs",
+        "ext2",
+        "ext3",
+        "ext4",
+        "hfs",
+        "hfsplus",
+        "overlay",
+        "tmpfs",
+        "ufs",
+        "xfs",
+        "zfs",
+    }
+)
+_REMOTE_FILESYSTEM_TYPES = frozenset(
+    {
+        "9p",
+        "afs",
+        "cifs",
+        "fuse.sshfs",
+        "nfs",
+        "nfs4",
+        "smbfs",
+        "webdav",
+    }
+)
 
-    ledger = Path(ledger_path)
+
+def _filesystem_type(path: Path) -> str | None:
+    """Return a platform-confirmed filesystem type for the canonical parent."""
+
+    if sys.platform == "darwin":
+        try:
+            completed = subprocess.run(
+                ["/sbin/mount"],
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        resolved = str(Path(path).resolve(strict=True))
+        candidates: list[tuple[int, str]] = []
+        for line in completed.stdout.splitlines():
+            match = re.match(r"^.+ on (.+) \(([^,]+), (.+)\)$", line)
+            if match is None:
+                continue
+            mount_point, fs_type, raw_options = match.groups()
+            options = {option.strip() for option in raw_options.split(",")}
+            if "local" not in options:
+                continue
+            if resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"):
+                candidates.append((len(mount_point), fs_type.lower()))
+        return max(candidates, default=(0, ""))[1] or None
+    mountinfo = Path("/proc/self/mountinfo")
+    if sys.platform.startswith("linux") and mountinfo.is_file():
+        resolved = str(Path(path).resolve(strict=True))
+        candidates: list[tuple[int, str]] = []
+        try:
+            lines = mountinfo.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        for line in lines:
+            fields = line.split()
+            try:
+                separator = fields.index("-")
+                mount_point = fields[4].replace("\\040", " ")
+                fs_type = fields[separator + 1].lower()
+            except (ValueError, IndexError):
+                continue
+            if resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"):
+                candidates.append((len(mount_point), fs_type))
+        return max(candidates, default=(0, ""))[1] or None
+    return None
+
+
+def _affirm_local_filesystem(path: Path) -> None:
+    fs_type = _filesystem_type(path)
+    if fs_type in _LOCAL_FILESYSTEM_TYPES:
+        return
+    reason = "remote_filesystem" if fs_type in _REMOTE_FILESYSTEM_TYPES else "filesystem_capability_indeterminate"
+    raise CalibrationLedgerError(
+        RefusalCode.UNSAFE_LOCK_INODE,
+        context={"reason": reason, "filesystem_type": fs_type},
+    )
+
+
+@dataclass(frozen=True)
+class LedgerLeaseIdentity:
+    canonical_path: Path
+    canonical_parent: Path
+    canonical_basename: str
+    parent_descriptor: int
+    slot_key: tuple[int, int, str]
+    object_key: tuple[int, int] | None
+    object_descriptor: int | None
+
+
+def resolve_ledger_lease_identity(ledger_path: Path) -> LedgerLeaseIdentity:
+    """Resolve one canonical pathname slot and optional regular ledger object."""
+
+    canonical_path = Path(ledger_path).resolve(strict=False)
+    canonical_parent = canonical_path.parent.resolve(strict=True)
+    canonical_basename = canonical_path.name
+    if not canonical_basename or canonical_basename in {".", ".."}:
+        raise CalibrationLedgerError(
+            RefusalCode.UNSAFE_LOCK_INODE,
+            context={"reason": "invalid_canonical_basename"},
+        )
+    _affirm_local_filesystem(canonical_parent)
+    try:
+        parent_descriptor = os.open(
+            canonical_parent,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+    except OSError as exc:
+        raise CalibrationLedgerError(
+            RefusalCode.UNSAFE_LOCK_INODE,
+            context={"reason": "canonical_parent_open_failed"},
+        ) from exc
+    object_descriptor: int | None = None
+    try:
+        parent_stat = os.fstat(parent_descriptor)
+        slot_key = (parent_stat.st_dev, parent_stat.st_ino, canonical_basename)
+        try:
+            object_descriptor = os.open(
+                canonical_basename,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=parent_descriptor,
+            )
+        except FileNotFoundError:
+            object_key = None
+        except OSError as exc:
+            raise CalibrationLedgerError(
+                RefusalCode.PHYSICAL_LEDGER_UNREADABLE,
+                context={"reason": "identity_unreadable"},
+            ) from exc
+        else:
+            object_stat = os.fstat(object_descriptor)
+            if not stat.S_ISREG(object_stat.st_mode):
+                raise CalibrationLedgerError(
+                    RefusalCode.UNSAFE_LOCK_INODE,
+                    context={"reason": "ledger_not_regular"},
+                )
+            object_key = (object_stat.st_dev, object_stat.st_ino)
+        return LedgerLeaseIdentity(
+            canonical_path=canonical_path,
+            canonical_parent=canonical_parent,
+            canonical_basename=canonical_basename,
+            parent_descriptor=parent_descriptor,
+            slot_key=slot_key,
+            object_key=object_key,
+            object_descriptor=object_descriptor,
+        )
+    except Exception:
+        if object_descriptor is not None:
+            os.close(object_descriptor)
+        os.close(parent_descriptor)
+        raise
+
+
+def _open_slot_sidecar(identity: LedgerLeaseIdentity) -> int:
     try:
         descriptor = os.open(
-            _ledger_lock_path(ledger),
+            f"{identity.canonical_basename}.lock",
             os.O_NOFOLLOW | os.O_CREAT | os.O_RDWR,
             0o600,
+            dir_fd=identity.parent_descriptor,
         )
     except OSError as exc:
         raise CalibrationLedgerError(
@@ -2597,49 +2759,66 @@ def _open_ledger_lock(ledger_path: Path) -> int:
                 RefusalCode.UNSAFE_LOCK_INODE,
                 context={"reason": "not_dedicated_regular_file"},
             )
-        try:
-            ledger_stat = os.stat(ledger)
-        except FileNotFoundError:
-            ledger_stat = None
-        except OSError as exc:
-            raise CalibrationLedgerError(
-                RefusalCode.PHYSICAL_LEDGER_UNREADABLE,
-                context={"reason": "identity_unreadable"},
-            ) from exc
-        if ledger_stat is not None and (
-            lock_stat.st_dev,
-            lock_stat.st_ino,
-        ) == (ledger_stat.st_dev, ledger_stat.st_ino):
+        if identity.object_key == (lock_stat.st_dev, lock_stat.st_ino):
             raise CalibrationLedgerError(
                 RefusalCode.UNSAFE_LOCK_INODE,
                 context={"reason": "aliases_ledger"},
             )
         return descriptor
     except Exception:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
+        os.close(descriptor)
         raise
 
 
-_ACTIVE_WRITER_LEASES: dict[Path, tuple[int, int]] = {}
+def _open_ledger_lock(ledger_path: Path) -> int:
+    """Compatibility helper returning the canonical permanent slot sidecar."""
+
+    identity = resolve_ledger_lease_identity(Path(ledger_path))
+    try:
+        return _open_slot_sidecar(identity)
+    finally:
+        if identity.object_descriptor is not None:
+            os.close(identity.object_descriptor)
+        os.close(identity.parent_descriptor)
+
+
+_LeaseRegistryKey = tuple[str, int, int] | tuple[str, int, int, str]
+_ACTIVE_WRITER_LEASES: dict[_LeaseRegistryKey, "CalibrationWriterLease"] = {}
 _ACTIVE_WRITER_LEASES_GUARD = threading.Lock()
 
 
-def _lease_key(ledger_path: Path) -> Path:
-    # The real path is stable before first creation and after append, unlike
-    # an inode-only key.  It also unifies every symlink spelling in-process.
-    return Path(ledger_path).resolve(strict=False)
+class _LedgerPublicationDurabilityUncertain(OSError):
+    """The ledger name is published and locked, but directory fsync failed."""
 
 
-def _current_writer_lease_descriptor(ledger_path: Path) -> int | None:
-    key = _lease_key(ledger_path)
-    with _ACTIVE_WRITER_LEASES_GUARD:
-        held = _ACTIVE_WRITER_LEASES.get(key)
-    if held is None or held[0] != threading.get_ident():
-        return None
-    return held[1]
+def _registry_keys(identity: LedgerLeaseIdentity) -> tuple[_LeaseRegistryKey, ...]:
+    slot = ("slot", *identity.slot_key)
+    if identity.object_key is None:
+        return (slot,)
+    return (slot, ("object", *identity.object_key))
+
+
+def _close_identity(identity: LedgerLeaseIdentity) -> None:
+    if identity.object_descriptor is not None:
+        os.close(identity.object_descriptor)
+    os.close(identity.parent_descriptor)
+
+
+def _current_writer_lease(ledger_path: Path) -> "CalibrationWriterLease | None":
+    identity = resolve_ledger_lease_identity(Path(ledger_path))
+    try:
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            held = {
+                _ACTIVE_WRITER_LEASES[key]
+                for key in _registry_keys(identity)
+                if key in _ACTIVE_WRITER_LEASES
+            }
+        if len(held) != 1:
+            return None
+        lease = next(iter(held))
+        return lease if lease._owner_thread == threading.get_ident() else None
+    finally:
+        _close_identity(identity)
 
 
 class CalibrationWriterLease:
@@ -2651,53 +2830,218 @@ class CalibrationWriterLease:
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
         self.ledger_path = Path(ledger_path)
-        self.descriptor: int | None = None
+        self.identity: LedgerLeaseIdentity | None = None
+        self.slot_descriptor: int | None = None
         self._owner_thread: int | None = None
 
     @property
     def held(self) -> bool:
-        return self.descriptor is not None
+        return self.slot_descriptor is not None
 
-    def acquire(self) -> "CalibrationWriterLease":
+    @property
+    def descriptor(self) -> int | None:
+        """Backward-compatible diagnostic name for the slot descriptor."""
+
+        return self.slot_descriptor
+
+    def acquire(self, *, nonblocking: bool = True) -> "CalibrationWriterLease":
         if self.held:
             return self
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        key = _lease_key(self.ledger_path)
+        identity = resolve_ledger_lease_identity(self.ledger_path)
+        keys = _registry_keys(identity)
         with _ACTIVE_WRITER_LEASES_GUARD:
-            if key in _ACTIVE_WRITER_LEASES:
+            if any(key in _ACTIVE_WRITER_LEASES for key in keys):
+                _close_identity(identity)
                 raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION)
-        descriptor = _open_ledger_lock(self.ledger_path)
+        slot_descriptor = _open_slot_sidecar(identity)
+        flags = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(slot_descriptor, flags)
         except BlockingIOError as exc:
-            os.close(descriptor)
+            os.close(slot_descriptor)
+            _close_identity(identity)
+            raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION) from exc
+        try:
+            if identity.object_descriptor is not None:
+                fcntl.flock(identity.object_descriptor, flags)
+        except BlockingIOError as exc:
+            fcntl.flock(slot_descriptor, fcntl.LOCK_UN)
+            os.close(slot_descriptor)
+            _close_identity(identity)
             raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION) from exc
         owner = threading.get_ident()
         with _ACTIVE_WRITER_LEASES_GUARD:
-            if key in _ACTIVE_WRITER_LEASES:
-                # This protects same-process callers on platforms whose flock
-                # semantics might otherwise permit a second local open.
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-                os.close(descriptor)
+            if any(key in _ACTIVE_WRITER_LEASES for key in keys):
+                if identity.object_descriptor is not None:
+                    fcntl.flock(identity.object_descriptor, fcntl.LOCK_UN)
+                fcntl.flock(slot_descriptor, fcntl.LOCK_UN)
+                os.close(slot_descriptor)
+                _close_identity(identity)
                 raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION)
-            _ACTIVE_WRITER_LEASES[key] = (owner, descriptor)
-        self.descriptor = descriptor
+            for key in keys:
+                _ACTIVE_WRITER_LEASES[key] = self
+        self.identity = identity
+        self.slot_descriptor = slot_descriptor
         self._owner_thread = owner
         return self
 
-    def release(self) -> None:
-        descriptor = self.descriptor
-        if descriptor is None:
+    def _verify_current_path(self) -> None:
+        identity = self.identity
+        if identity is None or identity.object_key is None:
             return
-        key = _lease_key(self.ledger_path)
-        with _ACTIVE_WRITER_LEASES_GUARD:
-            if _ACTIVE_WRITER_LEASES.get(key) == (self._owner_thread, descriptor):
-                del _ACTIVE_WRITER_LEASES[key]
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            current = os.stat(
+                identity.canonical_basename,
+                dir_fd=identity.parent_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError as exc:
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "leased_path_replaced"},
+            ) from exc
+        if not stat.S_ISREG(current.st_mode) or (
+            current.st_dev,
+            current.st_ino,
+        ) != identity.object_key:
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "leased_path_replaced"},
+            )
+
+    def _adopt_object(self, descriptor: int) -> None:
+        identity = self.identity
+        if identity is None:
+            raise AssertionError("cannot adopt an object without a held slot")
+        status = os.fstat(descriptor)
+        object_key = (status.st_dev, status.st_ino)
+        new_key: _LeaseRegistryKey = ("object", *object_key)
+        old_key = (
+            ("object", *identity.object_key)
+            if identity.object_key is not None
+            else None
+        )
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            conflict = _ACTIVE_WRITER_LEASES.get(new_key)
+            if conflict is not None and conflict is not self:
+                raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION)
+            if old_key is not None and _ACTIVE_WRITER_LEASES.get(old_key) is self:
+                del _ACTIVE_WRITER_LEASES[old_key]
+            _ACTIVE_WRITER_LEASES[new_key] = self
+        old_descriptor = identity.object_descriptor
+        self.identity = replace(
+            identity,
+            object_key=object_key,
+            object_descriptor=descriptor,
+        )
+        if old_descriptor is not None:
+            try:
+                fcntl.flock(old_descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(old_descriptor)
+
+    def _publish_locked_inode(self, descriptor: int, staging_path: Path) -> None:
+        identity = self.identity
+        if identity is None:
+            raise AssertionError("cannot publish without a held slot")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if identity.object_key is None:
+            try:
+                os.link(staging_path, identity.canonical_path)
+            except FileExistsError as exc:
+                raise CalibrationLedgerError(
+                    RefusalCode.UNSAFE_LOCK_INODE,
+                    context={"reason": "genesis_path_appeared"},
+                ) from exc
+            staging_path.unlink()
+        else:
+            self._verify_current_path()
+            os.replace(staging_path, identity.canonical_path)
+        self._adopt_object(descriptor)
+        try:
+            _fsync_parent_directory(identity.canonical_parent)
+        except OSError as exc:
+            raise _LedgerPublicationDurabilityUncertain from exc
+
+    def publish_genesis_payload(self, payload: bytes) -> None:
+        identity = self.identity
+        if identity is None:
+            raise AssertionError("cannot publish without a held lease")
+        descriptor, staging_name = tempfile.mkstemp(
+            prefix=f".{identity.canonical_basename}.genesis-",
+            dir=identity.canonical_parent,
+        )
+        staging_path = Path(staging_name)
+        adopted = False
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(os.dup(descriptor), "wb") as handle:
+                _write_bootstrap_payload(handle, payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            self._publish_locked_inode(descriptor, staging_path)
+            adopted = True
         finally:
+            if (
+                self.identity is not None
+                and self.identity.object_descriptor == descriptor
+            ):
+                adopted = True
+            if staging_path.exists():
+                staging_path.unlink()
+            if not adopted:
+                os.close(descriptor)
+
+    def open_append_descriptor(self) -> int:
+        identity = self.identity
+        if identity is None:
+            raise AssertionError("append requires a held lease")
+        if identity.object_descriptor is None:
+            self.publish_genesis_payload(b"")
+            identity = self.identity
+            assert identity is not None
+        self._verify_current_path()
+        assert identity.object_descriptor is not None
+        try:
+            descriptor = os.open(
+                identity.canonical_basename,
+                os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=identity.parent_descriptor,
+            )
+        except OSError:
+            raise
+        status = os.fstat(descriptor)
+        if (status.st_dev, status.st_ino) != identity.object_key:
             os.close(descriptor)
-            self.descriptor = None
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "leased_path_replaced"},
+            )
+        return descriptor
+
+    def release(self) -> None:
+        slot_descriptor = self.slot_descriptor
+        identity = self.identity
+        if slot_descriptor is None or identity is None:
+            return
+        keys = _registry_keys(identity)
+        with _ACTIVE_WRITER_LEASES_GUARD:
+            for key in keys:
+                if _ACTIVE_WRITER_LEASES.get(key) is self:
+                    del _ACTIVE_WRITER_LEASES[key]
+        try:
+            if identity.object_descriptor is not None:
+                try:
+                    fcntl.flock(identity.object_descriptor, fcntl.LOCK_UN)
+                finally:
+                    os.close(identity.object_descriptor)
+            fcntl.flock(slot_descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(slot_descriptor)
+            os.close(identity.parent_descriptor)
+            self.identity = None
+            self.slot_descriptor = None
             self._owner_thread = None
 
     def __enter__(self) -> "CalibrationWriterLease":
@@ -2711,37 +3055,53 @@ class CalibrationWriterLease:
 def _ledger_lock(ledger_path: Path, *, nonblocking: bool = False):
     """Reuse the current thread's held writer lease or acquire a short lock."""
 
-    existing = _current_writer_lease_descriptor(ledger_path)
+    existing = _current_writer_lease(ledger_path)
     if existing is not None:
-        yield existing
+        yield existing.descriptor
         return
-    descriptor = _open_ledger_lock(ledger_path)
+    lease = CalibrationWriterLease(ledger_path)
     try:
-        flags = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
-        try:
-            fcntl.flock(descriptor, flags)
-        except BlockingIOError as exc:
-            raise CalibrationLedgerError(RefusalCode.LIVE_WRITER_CONTENTION) from exc
-        yield descriptor
+        lease.acquire(nonblocking=nonblocking)
+        yield lease.descriptor
     finally:
-        os.close(descriptor)
+        lease.release()
 
 
 def writer_lease_is_live(ledger_path: Path = DEFAULT_LEDGER_PATH) -> bool:
     """Return a diagnostic liveness snapshot; never use it to authorize ARM."""
 
-    if _current_writer_lease_descriptor(ledger_path) is not None:
+    if _current_writer_lease(ledger_path) is not None:
         return False
-    descriptor = _open_ledger_lock(Path(ledger_path))
+    lease = CalibrationWriterLease(Path(ledger_path))
     try:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            lease.acquire(nonblocking=True)
+        except CalibrationLedgerError as exc:
+            if exc.code != RefusalCode.LIVE_WRITER_CONTENTION:
+                raise
             return True
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
         return False
     finally:
-        os.close(descriptor)
+        lease.release()
+
+
+def _open_ledger_append_descriptor(ledger_path: Path) -> int:
+    lease = _current_writer_lease(Path(ledger_path))
+    if lease is None:
+        raise AssertionError("ledger append attempted without the current writer lease")
+    return lease.open_append_descriptor()
+
+
+def _verify_current_writer_lease_for_handle(handle: BinaryIO) -> None:
+    try:
+        status = os.fstat(handle.fileno())
+    except (AttributeError, OSError):
+        return
+    key: _LeaseRegistryKey = ("object", status.st_dev, status.st_ino)
+    with _ACTIVE_WRITER_LEASES_GUARD:
+        lease = _ACTIVE_WRITER_LEASES.get(key)
+    if lease is not None and lease._owner_thread == threading.get_ident():
+        lease._verify_current_path()
 
 
 def _fsync_parent_directory(path: Path) -> None:
@@ -2838,13 +3198,7 @@ def bootstrap_historical_import(
 
     payload = plan.ledger_bytes
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    lock_descriptor = _open_ledger_lock(ledger)
-    try:
-        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
-        ledger_descriptor = os.open(
-            ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
-        )
-        os.close(ledger_descriptor)
+    with CalibrationWriterLease(ledger) as lease:
         already_committed = _require_genesis_bootstrap_state(
             ledger,
             pin,
@@ -2860,44 +3214,18 @@ def bootstrap_historical_import(
                 raise HistoricalImportDurabilityUncertain(plan) from exc
             return plan
 
-        staging_descriptor = -1
-        staging_path: Path | None = None
         try:
-            try:
-                staging_descriptor, staging_name = tempfile.mkstemp(
-                    prefix=f".{ledger.name}.bootstrap-",
-                    dir=ledger.parent,
-                )
-                staging_path = Path(staging_name)
-                staging = os.fdopen(staging_descriptor, "wb")
-                staging_descriptor = -1
-                with staging:
-                    _write_bootstrap_payload(staging, payload)
-                    staging.flush()
-                    os.fsync(staging.fileno())
-                os.replace(staging_path, ledger)
-                staging_path = None
-            except Exception as exc:
-                raise CalibrationLedgerError(
-                    "historical import append failed atomically"
-                ) from exc
-            try:
-                _fsync_parent_directory(ledger.parent)
-            except OSError as exc:
-                raise HistoricalImportDurabilityUncertain(plan) from exc
-        finally:
-            if staging_descriptor >= 0:
-                os.close(staging_descriptor)
-            if staging_path is not None:
-                try:
-                    staging_path.unlink()
-                except FileNotFoundError:
-                    pass
-    finally:
+            lease.publish_genesis_payload(payload)
+        except _LedgerPublicationDurabilityUncertain as exc:
+            raise HistoricalImportDurabilityUncertain(plan) from exc
+        except Exception as exc:
+            raise CalibrationLedgerError(
+                "historical import append failed atomically"
+            ) from exc
         try:
-            os.close(lock_descriptor)
-        except OSError:
-            pass
+            _fsync_parent_directory(ledger.parent)
+        except OSError as exc:
+            raise HistoricalImportDurabilityUncertain(plan) from exc
     return plan
 
 
@@ -2922,6 +3250,7 @@ def _append_and_fsync(
     stage: str,
     boundary: Any | None = None,
 ) -> None:
+    _verify_current_writer_lease_for_handle(handle)
     handle.seek(0, os.SEEK_END)
     if boundary is not None:
         boundary(f"{stage}-write")
@@ -3301,7 +3630,7 @@ def repair_calibration_ledger(
     ledger = Path(ledger_path)
     ledger.parent.mkdir(parents=True, exist_ok=True)
     with _ledger_lock(ledger):
-        descriptor = os.open(ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+        descriptor = _open_ledger_append_descriptor(ledger)
         try:
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 raw = handle.read()
@@ -3356,9 +3685,7 @@ def abandon_calibration_ledger_tail(
     ledger.parent.mkdir(parents=True, exist_ok=True)
     with _ledger_lock(ledger):
         try:
-            descriptor = os.open(
-                ledger, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
-            )
+            descriptor = _open_ledger_append_descriptor(ledger)
         except OSError as exc:
             raise CalibrationLedgerError(RefusalCode.ABANDON_NOT_CLEAN) from exc
         try:
@@ -3418,9 +3745,7 @@ def _locked_append(
     ledger_path = Path(ledger_path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     with _ledger_lock(ledger_path, nonblocking=nonblocking):
-        descriptor = os.open(
-            ledger_path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600
-        )
+        descriptor = _open_ledger_append_descriptor(ledger_path)
         try:
             with os.fdopen(descriptor, "r+b", closefd=False) as handle:
                 handle.seek(0)
@@ -4182,7 +4507,7 @@ def calibration_readiness(
             RefusalCode.RESERVATION_INPUT_INVALID,
             context={"phase": phase},
         )
-    if enforcing_under_lease and _current_writer_lease_descriptor(ledger_path) is None:
+    if enforcing_under_lease and _current_writer_lease(ledger_path) is None:
         raise CalibrationLedgerError(RefusalCode.PRE_SLOT_NOT_READY)
     inspection = inspect_calibration_ledger(ledger_path)
     snapshot = load_calibration_ledger_snapshot(
@@ -4507,10 +4832,19 @@ def resume_finalize_bracket_session(
             or any(evidence_hashes.get(name) != hashes[name] for name in EVIDENCE_BOUND_ARTIFACTS)
             or evidence.get("validation_id") != reserved["attempt_id"]
             or manifest.get("validation_id") != reserved["attempt_id"]
-            or _normalized_vector(evidence.get("bindings"), T1_FIELDS)
-            != dict(reserved["t1_bindings"])
         ):
             raise CalibrationLedgerError(RefusalCode.CUSTODY_UNREADABLE)
+        if (
+            _normalized_vector(evidence.get("bindings"), T1_FIELDS)
+            != dict(reserved["t1_bindings"])
+        ):
+            # The manifest authenticates the evidence bytes and the evidence
+            # authenticates the governed artifacts.  A mismatch against the
+            # reserved binding is therefore a finalization conflict, not
+            # structurally unreadable custody.  This refusal precedes claim.
+            raise CalibrationLedgerError(
+                RefusalCode.FINALIZATION_BINDING_CONFLICT
+            )
         try:
             lexemes = _number_lexemes(
                 raw_by_name["instrument_evidence.json"],

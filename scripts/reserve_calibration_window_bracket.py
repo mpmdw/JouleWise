@@ -84,11 +84,24 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--test-writer-crash-authorization",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    from scripts.validate_powermetrics_fiducial import (  # noqa: PLC0415
+        _configure_writer_crash_authorization,
+    )
+
+    _configure_writer_crash_authorization(
+        args.test_writer_crash_authorization,
+        entry_point=Path(__file__),
+    )
     try:
         epoch = _json_object(args.identity_epoch_json)
         t1 = _json_object(args.t1_bindings_json)
@@ -175,6 +188,17 @@ def main(argv: list[str] | None = None) -> int:
                         raise
                 else:
                     _writer_stage(WriterStage.AFTER_PRE_RESERVE_READINESS)
+                    print(
+                        json.dumps(
+                            {
+                                "event": "calibration_pre_reserve_authorized",
+                                "session_id": args.session_id,
+                            },
+                            sort_keys=True,
+                        ),
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 receipt = append_bracket_session_receipt(
                     args.ledger,
                     session_id=args.session_id,

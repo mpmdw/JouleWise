@@ -129,6 +129,8 @@ class RefusalRecord:
     terminal_result: TerminalResult
     night_loss: bool
     description: str
+    correction_surface: str
+    corrected_success: str
     process_exit: int = 2
 
 
@@ -149,6 +151,8 @@ def _record(
     witness_note: str = "reachable through governed public operations or crash recovery",
     night_loss: bool = True,
     process_exit: int = 2,
+    correction_surface: str = "",
+    corrected_success: str = "",
 ) -> RefusalRecord:
     return RefusalRecord(
         code=code,
@@ -171,6 +175,8 @@ def _record(
         terminal_result=terminal_result,
         night_loss=night_loss,
         description=description,
+        correction_surface=correction_surface,
+        corrected_success=corrected_success,
         process_exit=process_exit,
     )
 
@@ -478,6 +484,32 @@ def _route(code: RefusalCode) -> RefusalRecord:
             night_loss=True,
         )
     elif code in _PREFLIGHT:
+        if code in {
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            RefusalCode.RESERVATION_JSON_INVALID,
+            RefusalCode.PLAN_UNREADABLE,
+            RefusalCode.PLAN_HASH_MISMATCH,
+            RefusalCode.PRE_RESERVE_NOT_READY,
+        }:
+            correction_surface = "scripts/reserve_calibration_window_bracket.py"
+            corrected_success = "reservation_execute_reserved"
+        elif code is RefusalCode.TERMINAL_NOT_READY:
+            correction_surface = "scripts/recover_calibration_ledger.py"
+            corrected_success = "terminal_head_pin_emitted"
+        else:
+            correction_surface = "scripts/validate_powermetrics_fiducial.py"
+            corrected_success = (
+                "rederive_valid_then_writer_capture_valid_slot_finalized"
+                if code
+                in {
+                    RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+                    RefusalCode.FROZEN_PROTOCOL_INVALID,
+                    RefusalCode.REDERIVE_OUTPUT_REQUIRED,
+                    RefusalCode.REDERIVE_FAILED,
+                    RefusalCode.OUTPUT_REQUIRES_REDERIVE,
+                }
+                else "writer_capture_valid_slot_finalized"
+            )
         kwargs.update(
             phase="preflight",
             retry_class="after-correction",
@@ -486,6 +518,8 @@ def _route(code: RefusalCode) -> RefusalRecord:
             command="recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN",
             night_loss=False,
             terminal_result=TerminalResult.READY_TO_ARM,
+            correction_surface=correction_surface,
+            corrected_success=corrected_success,
         )
     if code is RefusalCode.CUSTODY_UNREADABLE:
         kwargs.update(

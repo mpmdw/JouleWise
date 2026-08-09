@@ -266,79 +266,79 @@ with a non-null `legacy_journal_path` is blocked by the machine gate.
 ## Generated cross-layer refusal projection
 
 <!-- BEGIN GENERATED: calibration-refusal-registry -->
-| Code | Witness class | Component | Phase | Exit ID | Terminal result | Night loss | Witness |
-|---|---|---|---|---|---|---:|---|
-| `calibration_ledger_missing` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_missing` |
-| `calibration_ledger_malformed` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_malformed` |
-| `calibration_ledger_chain_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_chain_conflict` |
-| `calibration_ledger_attempt_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_attempt_conflict` |
-| `calibration_ledger_bracket_session_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_bracket_session_conflict` |
-| `calibration_ledger_bracket_slot_claimed` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_bracket_slot_claimed` |
-| `calibration_ledger_bracket_session_open` | `operational` | ledger | operation | `abort-session` | `session_aborted` | `true` | `witness.calibration_ledger_bracket_session_open` |
-| `calibration_ledger_content_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_content_conflict` |
-| `calibration_ledger_pending` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_pending` |
-| `calibration_ledger_head_uncommitted` | `operational` | ledger | operation | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_head_uncommitted` |
-| `calibration_ledger_head_mismatch` | `operational` | ledger | operation | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_head_mismatch` |
-| `calibration_ledger_rollback` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_rollback` |
-| `calibration_ledger_recovery_required` | `operational` | ledger | operation | `repair` | `operation_completed` | `false` | `witness.calibration_ledger_recovery_required` |
-| `calibration_ledger_operation_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_operation_conflict` |
-| `calibration_ledger_ungoverned_business` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_ungoverned_business` |
-| `calibration_ledger_baseline_missing` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_baseline_missing` |
-| `calibration_ledger_custody_invalid` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_invalid` |
-| `calibration_ledger_snapshot_required` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_snapshot_required` |
-| `calibration_ledger_off_ledger_artifact` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_off_ledger_artifact` |
-| `calibration_observation_unclassifiable` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_observation_unclassifiable` |
-| `calibration_live_writer_contention` | `operational` | lease | writer-lease | `live-writer-contention` | `operation_completed` | `false` | `witness.calibration_live_writer_contention` |
-| `calibration_unsafe_lock_inode` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_unsafe_lock_inode` |
-| `calibration_physical_ledger_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_physical_ledger_unreadable` |
-| `calibration_legacy_journal_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_unreadable` |
-| `calibration_legacy_journal_archive_conflict` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_conflict` |
-| `calibration_legacy_journal_archive_failed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_failed` |
-| `calibration_tail_requires_abandon` | `operational` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_tail_requires_abandon` |
-| `calibration_intent_target_malformed` | `corruption_backstop` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_intent_target_malformed` |
-| `calibration_recovery_nonconvergent` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_nonconvergent` |
-| `calibration_recovery_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_credentials_invalid` |
-| `calibration_abandon_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_credentials_invalid` |
-| `calibration_abandon_pin_mismatch` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_pin_mismatch` |
-| `calibration_abandon_active_intent` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_active_intent` |
-| `calibration_abandon_not_clean` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_not_clean` |
-| `calibration_head_pin_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_unreadable` |
-| `calibration_head_pin_malformed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_malformed` |
-| `calibration_head_pin_not_committed` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_not_committed` |
-| `calibration_reservation_input_invalid` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_reservation_input_invalid` |
-| `calibration_reservation_head_mismatch` | `operational` | reservation-cli | pre-reserve | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_reservation_head_mismatch` |
-| `calibration_reservation_identity_conflict` | `operational` | reservation-cli | pre-reserve | `abort-session` | `session_aborted` | `true` | `witness.calibration_reservation_identity_conflict` |
-| `calibration_reserved_slot_mismatch` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_reserved_slot_mismatch` |
-| `calibration_session_not_found` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_found` |
-| `calibration_session_not_open` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_open` |
-| `calibration_slot_order_conflict` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_slot_order_conflict` |
-| `calibration_claim_id_invalid` | `operational` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_claim_id_invalid` |
-| `calibration_finalization_binding_conflict` | `corruption_backstop` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_finalization_binding_conflict` |
-| `calibration_session_not_terminal` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_terminal` |
-| `calibration_session_terminal_not_head` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_terminal_not_head` |
-| `calibration_custody_partial` | `operational` | recovery-cli | recovery | `abort-session` | `session_aborted` | `true` | `witness.calibration_custody_partial` |
-| `calibration_custody_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_custody_unreadable` |
-| `calibration_custody_complete_use_resume` | `operational` | recovery-cli | recovery | `resume-finalize` | `operation_completed` | `false` | `witness.calibration_custody_complete_use_resume` |
-| `calibration_plan_unreadable` | `operational` | recovery-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_plan_unreadable` |
-| `calibration_plan_hash_mismatch` | `operational` | recovery-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_plan_hash_mismatch` |
-| `calibration_pre_reserve_not_ready` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_pre_reserve_not_ready` |
-| `calibration_pre_slot_not_ready` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_pre_slot_not_ready` |
-| `calibration_terminal_not_ready` | `operational` | ledger | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_terminal_not_ready` |
-| `calibration_pin_advancement_not_needed` | `operational` | recovery-cli | recovery | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_pin_advancement_not_needed` |
-| `calibration_pin_advancement_unsafe` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_pin_advancement_unsafe` |
-| `calibration_pin_candidate_mismatch` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_pin_candidate_mismatch` |
-| `calibration_reservation_json_invalid` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_reservation_json_invalid` |
-| `calibration_writer_bracket_arguments` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_writer_bracket_arguments` |
-| `calibration_writer_bracket_rederive_conflict` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_writer_bracket_rederive_conflict` |
-| `calibration_frozen_protocol_invalid` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_frozen_protocol_invalid` |
-| `calibration_rederive_output_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_rederive_output_required` |
-| `calibration_rederive_failed` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_rederive_failed` |
-| `calibration_output_requires_rederive` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_output_requires_rederive` |
-| `calibration_quiet_mac_auth_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_quiet_mac_auth_required` |
-| `calibration_power_policy_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_power_policy_required` |
-| `calibration_display_arm_failed` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_display_arm_failed` |
-| `calibration_sampler_never_ready` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_sampler_never_ready` |
-| `pulse_calibration_rollover_gate_timeout` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.pulse_calibration_rollover_gate_timeout` |
+| Code | Witness class | Component | Phase | Exit ID | Terminal result | Night loss | Witness | Correction surface | Corrected success |
+|---|---|---|---|---|---|---:|---|---|---|
+| `calibration_ledger_missing` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_missing` | `` | `` |
+| `calibration_ledger_malformed` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_malformed` | `` | `` |
+| `calibration_ledger_chain_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_chain_conflict` | `` | `` |
+| `calibration_ledger_attempt_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_attempt_conflict` | `` | `` |
+| `calibration_ledger_bracket_session_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_bracket_session_conflict` | `` | `` |
+| `calibration_ledger_bracket_slot_claimed` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_bracket_slot_claimed` | `` | `` |
+| `calibration_ledger_bracket_session_open` | `operational` | ledger | operation | `abort-session` | `session_aborted` | `true` | `witness.calibration_ledger_bracket_session_open` | `` | `` |
+| `calibration_ledger_content_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_content_conflict` | `` | `` |
+| `calibration_ledger_pending` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_pending` | `` | `` |
+| `calibration_ledger_head_uncommitted` | `operational` | ledger | operation | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_head_uncommitted` | `` | `` |
+| `calibration_ledger_head_mismatch` | `operational` | ledger | operation | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_head_mismatch` | `` | `` |
+| `calibration_ledger_rollback` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_rollback` | `` | `` |
+| `calibration_ledger_recovery_required` | `operational` | ledger | operation | `repair` | `operation_completed` | `false` | `witness.calibration_ledger_recovery_required` | `` | `` |
+| `calibration_ledger_operation_conflict` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_operation_conflict` | `` | `` |
+| `calibration_ledger_ungoverned_business` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_ungoverned_business` | `` | `` |
+| `calibration_ledger_baseline_missing` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_baseline_missing` | `` | `` |
+| `calibration_ledger_custody_invalid` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_ledger_custody_invalid` | `` | `` |
+| `calibration_ledger_snapshot_required` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_snapshot_required` | `` | `` |
+| `calibration_ledger_off_ledger_artifact` | `internal_invariant` | ledger | operation | `internal-invariant` | `night_stopped_preserved` | `true` | `unit.calibration_ledger_off_ledger_artifact` | `` | `` |
+| `calibration_observation_unclassifiable` | `operational` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_observation_unclassifiable` | `` | `` |
+| `calibration_live_writer_contention` | `operational` | lease | writer-lease | `live-writer-contention` | `operation_completed` | `false` | `witness.calibration_live_writer_contention` | `` | `` |
+| `calibration_unsafe_lock_inode` | `corruption_backstop` | ledger | operation | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_unsafe_lock_inode` | `` | `` |
+| `calibration_physical_ledger_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_physical_ledger_unreadable` | `` | `` |
+| `calibration_legacy_journal_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_unreadable` | `` | `` |
+| `calibration_legacy_journal_archive_conflict` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_conflict` | `` | `` |
+| `calibration_legacy_journal_archive_failed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_legacy_journal_archive_failed` | `` | `` |
+| `calibration_tail_requires_abandon` | `operational` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_tail_requires_abandon` | `` | `` |
+| `calibration_intent_target_malformed` | `corruption_backstop` | recovery-cli | recovery | `abandon-tail-then-repair` | `operation_completed` | `false` | `witness.calibration_intent_target_malformed` | `` | `` |
+| `calibration_recovery_nonconvergent` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_nonconvergent` | `` | `` |
+| `calibration_recovery_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_recovery_credentials_invalid` | `` | `` |
+| `calibration_abandon_credentials_invalid` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_credentials_invalid` | `` | `` |
+| `calibration_abandon_pin_mismatch` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_pin_mismatch` | `` | `` |
+| `calibration_abandon_active_intent` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_active_intent` | `` | `` |
+| `calibration_abandon_not_clean` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_abandon_not_clean` | `` | `` |
+| `calibration_head_pin_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_unreadable` | `` | `` |
+| `calibration_head_pin_malformed` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_malformed` | `` | `` |
+| `calibration_head_pin_not_committed` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_head_pin_not_committed` | `` | `` |
+| `calibration_reservation_input_invalid` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_reservation_input_invalid` | `scripts/reserve_calibration_window_bracket.py` | `reservation_execute_reserved` |
+| `calibration_reservation_head_mismatch` | `operational` | reservation-cli | pre-reserve | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_reservation_head_mismatch` | `` | `` |
+| `calibration_reservation_identity_conflict` | `operational` | reservation-cli | pre-reserve | `abort-session` | `session_aborted` | `true` | `witness.calibration_reservation_identity_conflict` | `` | `` |
+| `calibration_reserved_slot_mismatch` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_reserved_slot_mismatch` | `` | `` |
+| `calibration_session_not_found` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_found` | `` | `` |
+| `calibration_session_not_open` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_open` | `` | `` |
+| `calibration_slot_order_conflict` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_slot_order_conflict` | `` | `` |
+| `calibration_claim_id_invalid` | `operational` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_claim_id_invalid` | `` | `` |
+| `calibration_finalization_binding_conflict` | `corruption_backstop` | writer | pre-slot-or-capture | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_finalization_binding_conflict` | `` | `` |
+| `calibration_session_not_terminal` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_not_terminal` | `` | `` |
+| `calibration_session_terminal_not_head` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_session_terminal_not_head` | `` | `` |
+| `calibration_custody_partial` | `operational` | recovery-cli | recovery | `abort-session` | `session_aborted` | `true` | `witness.calibration_custody_partial` | `` | `` |
+| `calibration_custody_unreadable` | `corruption_backstop` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_custody_unreadable` | `` | `` |
+| `calibration_custody_complete_use_resume` | `operational` | recovery-cli | recovery | `resume-finalize` | `operation_completed` | `false` | `witness.calibration_custody_complete_use_resume` | `` | `` |
+| `calibration_plan_unreadable` | `operational` | recovery-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_plan_unreadable` | `scripts/reserve_calibration_window_bracket.py` | `reservation_execute_reserved` |
+| `calibration_plan_hash_mismatch` | `operational` | recovery-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_plan_hash_mismatch` | `scripts/reserve_calibration_window_bracket.py` | `reservation_execute_reserved` |
+| `calibration_pre_reserve_not_ready` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_pre_reserve_not_ready` | `scripts/reserve_calibration_window_bracket.py` | `reservation_execute_reserved` |
+| `calibration_pre_slot_not_ready` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_pre_slot_not_ready` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_terminal_not_ready` | `operational` | ledger | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_terminal_not_ready` | `scripts/recover_calibration_ledger.py` | `terminal_head_pin_emitted` |
+| `calibration_pin_advancement_not_needed` | `operational` | recovery-cli | recovery | `guarded-head-pin-advancement` | `night_stopped_preserved` | `true` | `witness.calibration_pin_advancement_not_needed` | `` | `` |
+| `calibration_pin_advancement_unsafe` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_pin_advancement_unsafe` | `` | `` |
+| `calibration_pin_candidate_mismatch` | `operational` | recovery-cli | recovery | `hard-stop-preserved` | `night_stopped_preserved` | `true` | `witness.calibration_pin_candidate_mismatch` | `` | `` |
+| `calibration_reservation_json_invalid` | `operational` | reservation-cli | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_reservation_json_invalid` | `scripts/reserve_calibration_window_bracket.py` | `reservation_execute_reserved` |
+| `calibration_writer_bracket_arguments` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_writer_bracket_arguments` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_writer_bracket_rederive_conflict` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_writer_bracket_rederive_conflict` | `scripts/validate_powermetrics_fiducial.py` | `rederive_valid_then_writer_capture_valid_slot_finalized` |
+| `calibration_frozen_protocol_invalid` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_frozen_protocol_invalid` | `scripts/validate_powermetrics_fiducial.py` | `rederive_valid_then_writer_capture_valid_slot_finalized` |
+| `calibration_rederive_output_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_rederive_output_required` | `scripts/validate_powermetrics_fiducial.py` | `rederive_valid_then_writer_capture_valid_slot_finalized` |
+| `calibration_rederive_failed` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_rederive_failed` | `scripts/validate_powermetrics_fiducial.py` | `rederive_valid_then_writer_capture_valid_slot_finalized` |
+| `calibration_output_requires_rederive` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_output_requires_rederive` | `scripts/validate_powermetrics_fiducial.py` | `rederive_valid_then_writer_capture_valid_slot_finalized` |
+| `calibration_quiet_mac_auth_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_quiet_mac_auth_required` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_power_policy_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_power_policy_required` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_display_arm_failed` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_display_arm_failed` | `` | `` |
+| `calibration_sampler_never_ready` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_sampler_never_ready` | `` | `` |
+| `pulse_calibration_rollover_gate_timeout` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.pulse_calibration_rollover_gate_timeout` | `` | `` |
 <!-- END GENERATED: calibration-refusal-registry -->
 
 This table is generated from `REFUSAL_INVENTORY`. Its exact freshness is a
