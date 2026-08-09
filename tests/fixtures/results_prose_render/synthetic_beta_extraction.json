@@ -1,0 +1,47 @@
+{
+  "all_cells_extractable": false,
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-BETA-PROMPT-ABS",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 333333
+      },
+      "kind": "absolute",
+      "operative_floor_j": 333333,
+      "refusal_reasons": []
+    },
+    {
+      "cell_id": "SYNTHETIC-BETA-PROMPT-CMP",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 444444
+      },
+      "kind": "comparative",
+      "operative_floor_j": 444444,
+      "refusal_reasons": []
+    },
+    {
+      "cell_id": "SYNTHETIC-BETA-DECODE-ABS",
+      "extractable": true,
+      "floor": {
+        "drift_widened_guarded_floor_j": 555555
+      },
+      "kind": "absolute",
+      "operative_floor_j": 555555,
+      "refusal_reasons": []
+    },
+    {
+      "cell_id": "SYNTHETIC-BETA-DECODE-CMP",
+      "extractable": false,
+      "floor": null,
+      "kind": "comparative",
+      "operative_floor_j": null,
+      "refusal_reasons": [
+        "admissible_set_uncertainty_dominates_point_floor"
+      ]
+    }
+  ],
+  "fixture_label": "SYNTHETIC ONLY — obviously synthetic magnitudes",
+  "schema_version": "joulewise.detection_floor_extraction.v1"
+}

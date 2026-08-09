@@ -1,0 +1,131 @@
+{
+  "fixture_label": "SYNTHETIC ONLY — canonical predicate truth-table cases, no measurements",
+  "section6": [
+    {
+      "atoms": {
+        "all_rows_supported": false,
+        "funded": false,
+        "run": false,
+        "some_row_not_supported": true,
+        "verdict_exists": false,
+        "verdict_pass": false,
+        "verdict_refused": false
+      },
+      "expected": "0"
+    },
+    {
+      "atoms": {
+        "all_rows_supported": true,
+        "funded": true,
+        "run": true,
+        "some_row_not_supported": false,
+        "verdict_exists": true,
+        "verdict_pass": true,
+        "verdict_refused": false
+      },
+      "expected": "A"
+    },
+    {
+      "atoms": {
+        "all_rows_supported": false,
+        "funded": true,
+        "run": true,
+        "some_row_not_supported": true,
+        "verdict_exists": true,
+        "verdict_pass": true,
+        "verdict_refused": false
+      },
+      "expected": "B"
+    },
+    {
+      "atoms": {
+        "all_rows_supported": false,
+        "funded": true,
+        "run": true,
+        "some_row_not_supported": true,
+        "verdict_exists": true,
+        "verdict_pass": false,
+        "verdict_refused": true
+      },
+      "expected": "C"
+    }
+  ],
+  "section7": [
+    {
+      "atoms": {
+        "claim_bound_present": true,
+        "claim_floor_defined": true,
+        "contrast_interval_present": true,
+        "contrast_signed_present": true,
+        "decode_1p5B_published": true,
+        "decode_7B_published": true,
+        "direction_gate_pass": true,
+        "floor_gate_pass": true,
+        "tokenizer_identity_match": true,
+        "window_1p5B_pass": true,
+        "window_7B_pass": true
+      },
+      "expected": "7_A"
+    },
+    {
+      "atoms": {
+        "claim_bound_present": true,
+        "claim_floor_defined": true,
+        "contrast_magnitude_present": true,
+        "decode_1p5B_published": true,
+        "decode_7B_published": true,
+        "floor_gate_refused": true,
+        "tokenizer_identity_match": true,
+        "window_1p5B_pass": true,
+        "window_7B_pass": true
+      },
+      "expected": "7_B1"
+    },
+    {
+      "atoms": {
+        "claim_bound_present": true,
+        "claim_floor_defined": true,
+        "contrast_interval_present": true,
+        "contrast_signed_present": true,
+        "decode_1p5B_published": true,
+        "decode_7B_published": true,
+        "direction_gate_refused": true,
+        "floor_gate_pass": true,
+        "tokenizer_identity_match": true,
+        "window_1p5B_pass": true,
+        "window_7B_pass": true
+      },
+      "expected": "7_B2"
+    },
+    {
+      "atoms": {
+        "decode_1p5B_nonpublication": true,
+        "decode_7B_published": true,
+        "window_1p5B_pass": true,
+        "window_7B_pass": true
+      },
+      "expected": "7_D"
+    },
+    {
+      "atoms": {
+        "window_1p5B_pass": true,
+        "window_7B_refused": true
+      },
+      "expected": "7_C1"
+    },
+    {
+      "atoms": {
+        "window_1p5B_refused": true,
+        "window_7B_pass": true
+      },
+      "expected": "7_C2"
+    },
+    {
+      "atoms": {
+        "window_1p5B_refused": true,
+        "window_7B_refused": true
+      },
+      "expected": "7_C3"
+    }
+  ]
+}

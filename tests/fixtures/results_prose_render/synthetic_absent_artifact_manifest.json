@@ -1,0 +1,21 @@
+{
+  "campaigns": {
+    "alpha": {
+      "cells": {},
+      "extraction": "synthetic_alpha_extraction.json",
+      "floor_artifact": "SYNTHETIC-ABSENT-FLOOR.json",
+      "verdict": "synthetic_pass_verdict.json"
+    },
+    "beta": {
+      "verdict": "synthetic_pass_verdict.json"
+    }
+  },
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  },
+  "fixture_label": "SYNTHETIC ONLY — absent-artifact refusal",
+  "gamma": null,
+  "schema_version": "joulewise.results_fill_input.v1"
+}

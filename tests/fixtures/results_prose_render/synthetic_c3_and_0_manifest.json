@@ -1,0 +1,18 @@
+{
+  "campaigns": {
+    "alpha": {
+      "verdict": "synthetic_refused_verdict.json"
+    },
+    "beta": {
+      "verdict": "synthetic_refused_verdict.json"
+    }
+  },
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  },
+  "fixture_label": "SYNTHETIC ONLY — exercises C3 plus Section 6 Variant 0",
+  "gamma": null,
+  "schema_version": "joulewise.results_fill_input.v1"
+}

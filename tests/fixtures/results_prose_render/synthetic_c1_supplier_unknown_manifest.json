@@ -1,0 +1,32 @@
+{
+  "campaigns": {
+    "alpha": {
+      "cells": {
+        "decode": {
+          "absolute_extraction_cell_id": "SYNTHETIC-ALPHA-DECODE-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-ALPHA-DECODE-CMP",
+          "floor_cell_id": "SYNTHETIC-ALPHA-DECODE"
+        },
+        "prompt": {
+          "absolute_extraction_cell_id": "SYNTHETIC-ALPHA-PROMPT-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-ALPHA-PROMPT-CMP",
+          "floor_cell_id": "SYNTHETIC-ALPHA-PROMPT"
+        }
+      },
+      "extraction": "synthetic_alpha_extraction.json",
+      "floor_artifact": "synthetic_alpha_floor.json",
+      "verdict": "synthetic_pass_verdict.json"
+    },
+    "beta": {
+      "verdict": "synthetic_refused_verdict.json"
+    }
+  },
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  },
+  "fixture_label": "SYNTHETIC ONLY — C1 must stop on a SUPPLIER_UNKNOWN mean row",
+  "gamma": null,
+  "schema_version": "joulewise.results_fill_input.v1"
+}

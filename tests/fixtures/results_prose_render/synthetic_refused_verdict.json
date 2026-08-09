@@ -1,0 +1,13 @@
+{
+  "claim_licensing": false,
+  "fixture_label": "SYNTHETIC ONLY — no measured campaign values",
+  "idle_admission_core": {
+    "conditions": [
+      "synthetic_fixture_refusal"
+    ]
+  },
+  "member_failures": [],
+  "record_type": "idle_admission_whole_window_verdict",
+  "schema_version": "joulewise.idle_admission_whole_window_verdict.v1",
+  "status": "failed"
+}
