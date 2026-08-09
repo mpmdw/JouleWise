@@ -45,7 +45,7 @@
       "production-window",
       "floor-calibration",
       "df-condition=df-ph-decode",
-      "calibration-plan-sha256=95f68d00b1b0243c827b80968918b4309363554688590be05075ee99733cee86",
+      "calibration-plan-sha256=05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
       "rep6",
       "calibration-abba-block-id=d117-df-cmp-abba-ph-decode-qwen25-1p5b-b06",
       "calibration-abba-label=B",

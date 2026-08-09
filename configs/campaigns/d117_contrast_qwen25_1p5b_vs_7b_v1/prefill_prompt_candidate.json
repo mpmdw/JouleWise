@@ -1,6 +1,6 @@
 {
   "schema_version": "joulewise.d117_prompt_candidate.v1",
-  "artifact_status": "UNFROZEN_DRAFT",
+  "draft_status": "unfrozen_draft",
   "candidate_status": "PROPOSED-PENDING-LEAD-RATIFICATION",
   "authority": {
     "prompt_length": "D-122 clause 1",

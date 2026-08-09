@@ -1,6 +1,6 @@
 {
   "schema_version": "joulewise.d117_consumer_family_declaration.v1",
-  "artifact_status": "UNFROZEN_DRAFT",
+  "draft_status": "unfrozen_draft",
   "declaration_kind": "consumer_family_declaration",
   "binding_mode": "declaration_only",
   "byte_binding_pinset": false,
@@ -13,7 +13,11 @@
     "floor_rule": "cross_stack_armwise_max.v1"
   },
   "prefill_p256_floor_dependency": {
-    "cell_ids": [],
+    "cell_ids": {
+      "status": "EMPTY",
+      "value": [],
+      "todo": "TODO(lead authority): D-122 does not identify ruled 256-token prefill floor cells"
+    },
     "transport_rule": {
       "status": "EMPTY",
       "value": "",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,10 +34,10 @@ TODO_BRANCH = "impl/d117-ledger-recovery"
 
 EXPECTED_SHA256 = {
     "calibration_plan.json": (
-        "969137e868d8615535576ae0c4eda263045c81c7f228b87c042d3f2da11f3d3e"
+        "56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7"
     ),
     "calibration_plan.sha256": (
-        "708a8ed324ceca3ffb8c776d56d7f17b2812db02ea129f50c055bf3b37a925b0"
+        "a6685b22b21dbf5c24755a9ee5254316ef4b9c100e6f6ef20dbac3d1ba827743"
     ),
     "condition_families/condition_family_df_ph_decode_qwen25_7b.json": (
         "d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb"
@@ -46,32 +47,32 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
     "generate_configs.py": (
-        "bc4c173d4a4f1b4778957eba8d97796429ed97cfae893cb2e5fe9124f6790d1e"
+        "437675aa288c7e1aee7ab6eb7b8263b39e043204640aa1033b4cce0d5e1face6"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
-        "7f87bd9e21eb7540d8ee20de43f64ba99a4ddf960c6800925c74c11edef81187"
+        "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
     ),
     "02_phase_decode_abba_blocks_01_05/order_manifest.json": (
-        "c54ad639b64a5a7cde03cbf164f368f5cccef136031e73be7b6cb32cc1fecab1"
+        "a53f2e158cc8dcea94d48dde5e442007c9d893181bb6fbb2c05e57a5be4007c2"
     ),
     "03_phase_decode_abba_blocks_06_10/order_manifest.json": (
-        "0be1844b00af9233b733237b938c50303aa47199735ca29ec51e6b03cf8df21a"
+        "b38238eaac0376cfaa22c88b9b2e278650bd14fc322efd10ee803d8b05b03c65"
     ),
     "order_manifest.json": (
-        "dec729ebddc8ae8bd8defe9b2a2be0f9ee24c80ecbd1e474f3b973b5fbfcfbc9"
+        "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
     ),
     "plan_tree.json": (
-        "f1e8cdcd6d50d4cc2862bbb01f7fb6231c1981dd644788601231a9d36a779b87"
+        "a0e8bb6d889109c3ff58f731e0cc907dae69253def2b20d8568594ecbb9f1e9b"
     ),
     "plan_tree.sha256": (
-        "31b9e84ef1ad81d4b3469b32638fc6870070ce90d6ea39a223480ca2cd373bce"
+        "4060b98eeac84f3ec15fc6ab50010b2ef8146e8cfad6c8b2b031bf36f2bb2566"
     ),
     "producer_contract.json": (
-        "353f389ccf2d7d230ea515dfa9a48c88b5cd3d15c939f16d09b63e69185ca97d"
+        "9cd35c0a3959ded11313f90b63d1858f7a9347750c27cc80e643b191ca37ef4e"
     ),
 }
 EXPECTED_SPEC_SHA256 = (
-    "836994639d6e3b3ef73d127713cf8aefe1a6bf7fb73372bd010df7e91a80401e"
+    "634d5dc22365bb9bf60fbd77d752b4ddc0f01f049b0b20afeb73f95d23e731c8"
 )
 
 
@@ -145,6 +146,13 @@ def cell_member_ids(cell: dict) -> list[str]:
     ]
 
 
+def observed_manifest_block_order(rows: list[dict]) -> list[tuple[int, str, int]]:
+    return [
+        (row["block_index"], row["position"], row["position_in_block"])
+        for row in rows
+    ]
+
+
 class D117Qwen25SevenBPlanTests(unittest.TestCase):
     maxDiff = None
 
@@ -212,6 +220,33 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("draft check passed", result.stdout)
 
+    def test_generator_check_rejects_extra_pack_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-beta-inventory-") as temp:
+            check_root = Path(temp)
+            shutil.copytree(PACK, check_root / PACK.relative_to(REPO_ROOT))
+            (check_root / SPEC.relative_to(REPO_ROOT)).parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            shutil.copy2(SPEC, check_root / SPEC.relative_to(REPO_ROOT))
+            (check_root / PACK.relative_to(REPO_ROOT) / "stray-review-probe.txt").write_text(
+                "unexpected\n", encoding="utf-8"
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "--check",
+                    "--output-root",
+                    str(check_root),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("extras=stray-review-probe.txt", result.stderr)
+
     def test_manifest_order_and_midpoint_split(self) -> None:
         root = load_json(PACK / "order_manifest.json")
         rows = root["executed_order"]
@@ -241,18 +276,14 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         for stage_index, expected_blocks in ((1, range(1, 6)), (2, range(6, 11))):
             stage_path = REPO_ROOT / stages[stage_index]["manifest_path"]
             stage_rows = load_json(stage_path)["executed_order"]
-            observed = []
-            for block in expected_blocks:
-                block_rows = [row for row in stage_rows if row["block_index"] == block]
-                observed.append(block)
-                self.assertEqual(
-                    [row["position_in_block"] for row in block_rows], [1, 2, 3, 4]
+            expected_order = [
+                (block, position, sequence)
+                for block in expected_blocks
+                for sequence, position in enumerate(
+                    ("A1", "B1", "B2", "A2"), start=1
                 )
-                self.assertEqual(
-                    [row["run_id"].rsplit("-", 1)[1] for row in block_rows],
-                    ["a1", "b1", "b2", "a2"],
-                )
-            self.assertEqual(observed, list(expected_blocks))
+            ]
+            self.assertEqual(observed_manifest_block_order(stage_rows), expected_order)
 
         graph_ids = [
             stage["stage_id"]
@@ -266,6 +297,30 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             graph_ids.index("beta-reference-midpoint"),
             graph_ids.index("beta-science-abba-06-10"),
         )
+
+    def test_manifest_order_assertion_rejects_cross_block_mutation(self) -> None:
+        source = PACK / "02_phase_decode_abba_blocks_01_05/order_manifest.json"
+        with tempfile.TemporaryDirectory(prefix="d117-beta-order-mutation-") as temp:
+            mutated = Path(temp) / "order_manifest.json"
+            shutil.copy2(source, mutated)
+            payload = load_json(mutated)
+            rows = payload["executed_order"]
+            rows[0], rows[4] = rows[4], rows[0]
+            mutated.write_text(
+                json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+            )
+            observed = observed_manifest_block_order(
+                load_json(mutated)["executed_order"]
+            )
+            expected_order = [
+                (block, position, sequence)
+                for block in range(1, 6)
+                for sequence, position in enumerate(
+                    ("A1", "B1", "B2", "A2"), start=1
+                )
+            ]
+            with self.assertRaises(AssertionError):
+                self.assertEqual(observed, expected_order)
 
     def test_stack_family_identity_and_fresh_ids(self) -> None:
         plan = load_json(PACK / "calibration_plan.json")
@@ -296,6 +351,39 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(first["model"]["revision"], stack["model_revision"])
         self.assertEqual(first["workload_profile"]["prompt_tokens"], 128)
         self.assertEqual(first["workload_profile"]["output_tokens"], 512)
+        for row in root["executed_order"]:
+            tags = load_json(PACK / row["config"])["run_metadata"]["tags"]
+            self.assertNotIn("splitwise-decode-floor-v1", tags)
+
+    def test_calibration_plan_shape_and_abba_members_are_family_canonical(self) -> None:
+        plan = load_json(PACK / "calibration_plan.json")
+        siblings = [
+            load_json(
+                REPO_ROOT
+                / "configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json"
+            ),
+            load_json(
+                REPO_ROOT
+                / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/calibration_plan.json"
+            ),
+        ]
+        for sibling in siblings:
+            self.assertEqual(sibling["schema_version"], plan["schema_version"])
+            self.assertEqual(set(sibling), set(plan))
+        for cell in plan["floor_cells"]:
+            if cell["kind"] in {"comparative_abba", "comparative_contrast"}:
+                for block in cell["ordered_blocks"]:
+                    self.assertEqual(
+                        [member["position"] for member in block["members"]],
+                        ["A1", "B1", "B2", "A2"],
+                    )
+                    self.assertTrue(
+                        all(
+                            set(member)
+                            == {"position", "plan_label", "plan_sequence_index", "bundle_id"}
+                            for member in block["members"]
+                        )
+                    )
 
     def test_rider_families_and_four_floor_cells(self) -> None:
         decode_path = (
@@ -365,6 +453,10 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 "d124_block_bracket_edges_shared_within_abba.v1",
             )
             self.assertEqual(
+                cell["estimator_registration"]["covariance_treatment"],
+                "two_shared_edges_plus_bundle_specific_adversarial_terms",
+            )
+            self.assertEqual(
                 cell["calibration_basis"]["allowance_embedding_count"], 1
             )
 
@@ -372,6 +464,10 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         spec = load_json(SPEC)
         for cell in spec["cells"]:
             issued = cell["calibration_basis"]["issued_acceptance"]
+            self.assertEqual(
+                cell["calibration_basis"]["acceptance_selection"],
+                "issued_d116_artifact_only",
+            )
             self.assertEqual(
                 issued["acceptance_id"], "d079_calibration_acceptance_v2_n19"
             )
@@ -528,6 +624,17 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
     def test_producer_contract_is_beta_position_and_roles(self) -> None:
         producer = load_json(PACK / "producer_contract.json")
         self.assertEqual(producer["draft_status"], "unfrozen_draft")
+        for manifest_path in [PACK / "order_manifest.json", *sorted(PACK.glob("*/order_manifest.json"))]:
+            self.assertEqual(load_json(manifest_path)["draft_status"], "unfrozen_draft")
+        spec = load_json(SPEC)
+        self.assertIn(
+            "A successor acceptance artifact issuing before arm REQUIRES pack regeneration",
+            spec["successor_acceptance_artifact_policy"],
+        )
+        self.assertIn(
+            spec["successor_acceptance_artifact_policy"],
+            (PACK / "README.md").read_text(encoding="utf-8"),
+        )
         self.assertEqual(producer["producer_index"], 2)
         self.assertEqual(
             producer["component_artifact_id"],
@@ -546,10 +653,11 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(set(projection["projected_pins"].values()), {None})
         self.assertIsNone(projection["projection_receipt"])
 
-    def test_generator_has_no_directory_discovery(self) -> None:
+    def test_generator_has_only_inventory_directory_discovery(self) -> None:
         source = GENERATOR.read_text(encoding="utf-8")
-        for forbidden in (".glob(", ".rglob(", "os.walk", "Path.walk"):
+        for forbidden in (".glob(", "os.walk", "Path.walk"):
             self.assertNotIn(forbidden, source)
+        self.assertIn('.rglob("*")', source)
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))

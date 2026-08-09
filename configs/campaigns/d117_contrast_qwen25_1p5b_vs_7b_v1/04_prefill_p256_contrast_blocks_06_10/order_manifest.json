@@ -1,16 +1,17 @@
 {
   "schema_version": "joulewise.order_manifest.v1",
-  "artifact_status": "UNFROZEN_DRAFT",
-  "manifest_id": "d117-gamma-04_prefill_p256_contrast_blocks_06_10-order-v1",
+  "draft_status": "unfrozen_draft",
+  "manifest_id": "d117-gamma-04-prefill-p256-contrast-blocks-06-10-order-v1",
   "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
-  "calibration_plan_sha256": "e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
+  "calibration_plan_sha256": "8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
+  "successor_stage_id": "gamma-reference-end",
   "ordering_note": "Fixed contiguous A/B/B/A blocks 6-10 for prefill_p256; numbering does not reset across the split.",
   "planned_n_bundles": 20,
   "executed_order": [
     {
       "index": 1,
       "config": "d117c15v7-prefill-p256-contrast-b06-a1.json",
-      "config_sha256": "6ecd8c218f3b956e68ffd367441c37c65e9c99c83fe256eff45f0a8d7daf13de",
+      "config_sha256": "8ede7ed15cf9158333240470a6087284048657ff2e54005eb3dd5db13d14eb16",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -26,7 +27,7 @@
     {
       "index": 2,
       "config": "d117c15v7-prefill-p256-contrast-b06-b1.json",
-      "config_sha256": "2a9588cce9ed818a8da208c32215d4c8a2986f879e7dfaab2b35e6abc76b6c51",
+      "config_sha256": "45ac7369780a34e4417b761276ff3d9e0aea10946d552fcc9ef948ef3d78b5ca",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-b1",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -42,7 +43,7 @@
     {
       "index": 3,
       "config": "d117c15v7-prefill-p256-contrast-b06-b2.json",
-      "config_sha256": "ddf4d66563ee2f92ea02340903d545130eedccdd2e8303c4e1d70beec59e31b1",
+      "config_sha256": "387afce7a9db3a569692c5bbe95f117727dee4f8134142601c12b9762e7ad3fe",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-b2",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -58,7 +59,7 @@
     {
       "index": 4,
       "config": "d117c15v7-prefill-p256-contrast-b06-a2.json",
-      "config_sha256": "254173bf71e620febcb16394586535abef2f5727aeb3590712e91183d6d1043b",
+      "config_sha256": "3ee0e6ddae3780da96da8068772c83d5b650c3b7220aaba4adde1cc1e354767c",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -74,7 +75,7 @@
     {
       "index": 5,
       "config": "d117c15v7-prefill-p256-contrast-b07-a1.json",
-      "config_sha256": "63198bd8cad65fb56f3e86dfef6b2a3c0131d59b06572f22230340aa35393c6a",
+      "config_sha256": "ebb7cb96c55a40e7fdb8d7143e7c7bad8698d2952943e8e7c6db9a6f11fb1e70",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -90,7 +91,7 @@
     {
       "index": 6,
       "config": "d117c15v7-prefill-p256-contrast-b07-b1.json",
-      "config_sha256": "b1369c1568338ac925171e1901be2f557d8e6a1582ccf42f168c0e379794922a",
+      "config_sha256": "bc0daebb5c235f0f5b94371720fb7efead67242a752fa194275f705cb2defbdd",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-b1",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -106,7 +107,7 @@
     {
       "index": 7,
       "config": "d117c15v7-prefill-p256-contrast-b07-b2.json",
-      "config_sha256": "af73344cad343bc991e596b5d9a338ab62a12ffcb717ca39f879f5f063ad1218",
+      "config_sha256": "ea30a3ba3297a771bd5c368a9f1a1ab437fcf92bcc160aa8f0c1a6f151a058e8",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-b2",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -122,7 +123,7 @@
     {
       "index": 8,
       "config": "d117c15v7-prefill-p256-contrast-b07-a2.json",
-      "config_sha256": "d21c8edbb2487f1c4ba14fb2fbb96e923b1c24d8802f794ab3b12b7530f9e680",
+      "config_sha256": "9cbf83b942565197a15970bbd73512f0fa0d459cb5ed797dc36c47db5ff7a5c6",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -138,7 +139,7 @@
     {
       "index": 9,
       "config": "d117c15v7-prefill-p256-contrast-b08-a1.json",
-      "config_sha256": "b7ffef2383c9cb3bad3452d6925697276873151865b9aea053aa81f9c4cb8e58",
+      "config_sha256": "d2de6e1bb7ebff09526f395773687a7281a2e018abc0725c1ea399e043d1d82f",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -154,7 +155,7 @@
     {
       "index": 10,
       "config": "d117c15v7-prefill-p256-contrast-b08-b1.json",
-      "config_sha256": "10f8f2502b63e19f3fc6d7da18e530556b3ba46653654209aaf1ae0d448f1a91",
+      "config_sha256": "8cdebde8e6f16772d5e2a5ce02168f75d3f3c9fcc0c06e8de79a63ca957ec066",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-b1",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -170,7 +171,7 @@
     {
       "index": 11,
       "config": "d117c15v7-prefill-p256-contrast-b08-b2.json",
-      "config_sha256": "a65db295dcd3f6b2b691bddc32b4031306a6e9e5e32aa167fce1de3becd9918d",
+      "config_sha256": "02a2127b9e019cfdd993e0c5b453777526e7867ebe8ef4f4826c4ee142bd134c",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-b2",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -186,7 +187,7 @@
     {
       "index": 12,
       "config": "d117c15v7-prefill-p256-contrast-b08-a2.json",
-      "config_sha256": "a2c7bd7268e4150e263ecce87d0c1ae3ca49363769f1f82b1190626d84c608a6",
+      "config_sha256": "ed3c4328a496bec4a896eb408ecab48849a62d35cad1a3d3e7e65ad5902f0d24",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -202,7 +203,7 @@
     {
       "index": 13,
       "config": "d117c15v7-prefill-p256-contrast-b09-a1.json",
-      "config_sha256": "42ab2462b7c8543639c88b358c858474c63b6cca505118f02e825f73e977d2c2",
+      "config_sha256": "c878dda445802137d9ce310a3afc59ed3a4f0082813d43da600c52f6e1469be3",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -218,7 +219,7 @@
     {
       "index": 14,
       "config": "d117c15v7-prefill-p256-contrast-b09-b1.json",
-      "config_sha256": "b37a8a2e85424cb9597efe6358e8241bf2d1e25ad54a697eecc5a4667ee5f6e4",
+      "config_sha256": "f9cb1c10a9365488c9868c8a28929dd29bfd5c3110daa906f9782cab97a60e19",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-b1",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -234,7 +235,7 @@
     {
       "index": 15,
       "config": "d117c15v7-prefill-p256-contrast-b09-b2.json",
-      "config_sha256": "a53dc06a405f55c7127d6ef4aac298edd79625f4c6e8f278b15cf6105e022b70",
+      "config_sha256": "d37cd3ea7efd12c7cb8dbe7457d56415354546c175c8ca16d14d09ff9de141ce",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-b2",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -250,7 +251,7 @@
     {
       "index": 16,
       "config": "d117c15v7-prefill-p256-contrast-b09-a2.json",
-      "config_sha256": "1f6a1d87641b2371b99e8ad58a8a1b9a375d9a4cce385410b6abd6bfa28446e7",
+      "config_sha256": "59eef5d70f6a2a9f99fa4f3c1910a1e4c5e8b45b8bebba53aabe4bd6fb545ecf",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -266,7 +267,7 @@
     {
       "index": 17,
       "config": "d117c15v7-prefill-p256-contrast-b10-a1.json",
-      "config_sha256": "903526e29ea9c98a64a11c0a2ed85a7ab9a1c0016fb3bd3a8f3675bf817e1f58",
+      "config_sha256": "e477f7a830f643b84024b87944feff15d08d69184a2c6157f8f30642280f5a6c",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",
@@ -282,7 +283,7 @@
     {
       "index": 18,
       "config": "d117c15v7-prefill-p256-contrast-b10-b1.json",
-      "config_sha256": "0555bd1b8acbd554f7a224be97692847bb0081fb7515dcc51db3d680dfd9415c",
+      "config_sha256": "73e12c56a80d11e18959564fd3d4d216ba63d51a66da0a75e109635a95f3deb0",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-b1",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -298,7 +299,7 @@
     {
       "index": 19,
       "config": "d117c15v7-prefill-p256-contrast-b10-b2.json",
-      "config_sha256": "c31c3e5da638578f4b8be1a4266f03053a0c4521935d19a70849abe7072b8455",
+      "config_sha256": "6047f71a55bedccaec7c4cf1e5de931f77416987950014833226c747159776ba",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-b2",
       "model_tag": "qwen25-7b-mlx",
       "role": "comparative_contrast_member",
@@ -314,7 +315,7 @@
     {
       "index": 20,
       "config": "d117c15v7-prefill-p256-contrast-b10-a2.json",
-      "config_sha256": "340fafeef06ca136898463b29a22a20420d153316fbf626c11e67df7fec5c801",
+      "config_sha256": "f35b3ad2e327c55480b27daaaef5672f076209f10e886be3e9a4fc128921cd16",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "role": "comparative_contrast_member",

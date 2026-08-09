@@ -1,8 +1,9 @@
 {
   "schema_version": "joulewise.order_manifest.v1",
+  "draft_status": "unfrozen_draft",
   "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
   "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
-  "calibration_plan_sha256": "95f68d00b1b0243c827b80968918b4309363554688590be05075ee99733cee86",
+  "calibration_plan_sha256": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
   "planned_n_bundles": 50,
   "subcampaign_order": [
     {
@@ -14,7 +15,7 @@
       "ordering_note": "Ten fixed absolute decode repeats in repetition order.",
       "manifest_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/order_manifest.json",
       "manifest_id": "d117-floor-qwen25-1p5b-v1-01-phase-decode-absolute-order-v1",
-      "manifest_sha256": "86aabcbc4e63e6c055f9f0b589926d9c852ff4a70c9642ffec7ac3ab86e117a4"
+      "manifest_sha256": "dcffc65a503fa727174019b8c10bd27393b55f735e8d4c48ddbebeb30393a07c"
     },
     {
       "index": 2,
@@ -25,7 +26,7 @@
       "ordering_note": "Fixed contiguous null A/B/B/A decode blocks 1-5.",
       "manifest_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/02_phase_decode_abba_blocks_01_05/order_manifest.json",
       "manifest_id": "d117-floor-qwen25-1p5b-v1-02-phase-decode-abba-blocks-01-05-order-v1",
-      "manifest_sha256": "4528185770675519f43d2f3e81a2b655484af6730b06fa58c7213391012e7269"
+      "manifest_sha256": "77a9cd871996cc96307ad4bfa3a13134ba589095e49e5f01a9bafb70cebdb70f"
     },
     {
       "index": 3,
@@ -36,14 +37,14 @@
       "ordering_note": "Fixed contiguous null A/B/B/A decode blocks 6-10.",
       "manifest_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/03_phase_decode_abba_blocks_06_10/order_manifest.json",
       "manifest_id": "d117-floor-qwen25-1p5b-v1-03-phase-decode-abba-blocks-06-10-order-v1",
-      "manifest_sha256": "e78031e9902e3b74bffc84686c8c9147c9c22fe657ed4ab37e51ace1a006e75e"
+      "manifest_sha256": "65c3e1b9a4daf1b5b742d609ad001e5c8a616d827b5fe5134a7b7f0c84353f97"
     }
   ],
   "executed_order": [
     {
       "index": 1,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json",
-      "config_sha256": "eb968e39674ba37676d526fe6832a8becd8966b8c3fa600ae3a55b41c9e93372",
+      "config_sha256": "412f3ef582774119eddb8aca280de0128593852b3f30c1ed73cc89ad170edae9",
       "run_id": "d117f15-df-ph-decode-abs-r01",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -58,7 +59,7 @@
     {
       "index": 2,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r02.json",
-      "config_sha256": "b24a98a975734762911bcaf16f552fd820cb8cce1fb50297243a1facedf381e5",
+      "config_sha256": "00ae98f1a439675d02d2815de2291a5538a72f095e9bbc230cf2801a06df634f",
       "run_id": "d117f15-df-ph-decode-abs-r02",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -73,7 +74,7 @@
     {
       "index": 3,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r03.json",
-      "config_sha256": "21389d99a306ee4823983bcbad2141f3156d773eb583cf1c962630fe2b27251e",
+      "config_sha256": "53d20bdc43b84aa8e6ab7cffda5dddafa949adc06d7687aa4c0f26c462efdcf9",
       "run_id": "d117f15-df-ph-decode-abs-r03",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -88,7 +89,7 @@
     {
       "index": 4,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r04.json",
-      "config_sha256": "6491a7407c3f4487fc7414999bde64259fcf53b1e0955e7f8b54f0be5eaef2ff",
+      "config_sha256": "a5acdd9f1a5d9327c082e301baddbd68dbe34bc05132ab610ea5bffdf39656e1",
       "run_id": "d117f15-df-ph-decode-abs-r04",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -103,7 +104,7 @@
     {
       "index": 5,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r05.json",
-      "config_sha256": "273ba8b0c91d62d069bfdad214d7ff461401fa349077bab56d2ef02d6fbdba6e",
+      "config_sha256": "f321a2b8b190ba111ebcad7e67555808c25645ee5e08b93c345b42872dad1e7e",
       "run_id": "d117f15-df-ph-decode-abs-r05",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -118,7 +119,7 @@
     {
       "index": 6,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r06.json",
-      "config_sha256": "caebbf7210b5975965ce2a4b7b1bc41fbf5083ee36be3851b884ebfe19ffb102",
+      "config_sha256": "f025cc90a093693eedf777d6d04222a351a58d6c61fd52733083427909cf4e16",
       "run_id": "d117f15-df-ph-decode-abs-r06",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -133,7 +134,7 @@
     {
       "index": 7,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r07.json",
-      "config_sha256": "a0764870c2d9e15317b99620abcff27e76e46328ba6d936af14fe41664a545a2",
+      "config_sha256": "b86716bb22a508bf3b233697db6d40ca9e38f43014fa8b74ca018e7e5fe66a80",
       "run_id": "d117f15-df-ph-decode-abs-r07",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -148,7 +149,7 @@
     {
       "index": 8,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r08.json",
-      "config_sha256": "9f9a545663c0d605c542192b45271146905c56c89cd3309c117702e853f138d7",
+      "config_sha256": "da911ee903636719efe4ea01d22b96791722dc4d4e8e3454c7ff0c9401d9048e",
       "run_id": "d117f15-df-ph-decode-abs-r08",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -163,7 +164,7 @@
     {
       "index": 9,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r09.json",
-      "config_sha256": "a9c37f37741f782d682ef42568e24c9050154db4517a64fbf50b53a9d7c3bcbf",
+      "config_sha256": "0dba2fecbc13e1998729feec1a3c9fb0943f581bf9e1651b45eff2de2e6215f4",
       "run_id": "d117f15-df-ph-decode-abs-r09",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -178,7 +179,7 @@
     {
       "index": 10,
       "config": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r10.json",
-      "config_sha256": "64ace3d1076af8f719ff66adc73ddf92ed31cdffe7f1c31268dc6845a4667bc9",
+      "config_sha256": "a73859dc2a819a5ae1412182caed38d922571b5197df25685e11129e56ec3aad",
       "run_id": "d117f15-df-ph-decode-abs-r10",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,
@@ -193,7 +194,7 @@
     {
       "index": 11,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-a1.json",
-      "config_sha256": "1885ac30f6982c0b13386c61478845e987c66cb26223dcda5ca50d95b0818b5e",
+      "config_sha256": "2af41fcd3b1d383a38079b141d031a083e80959401f65860eb06438a21e049fd",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b01-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -208,7 +209,7 @@
     {
       "index": 12,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-b1.json",
-      "config_sha256": "00cf7ec3cfdbdfca28f021984910f0ba5a6975caf1af1236a629d1c2adec28fc",
+      "config_sha256": "e073aef03b44c169b7ad2872b05c565678cede13ad73e5291a4bbc2f30fb1a28",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b01-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -223,7 +224,7 @@
     {
       "index": 13,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-b2.json",
-      "config_sha256": "94c92fc3c54753d97c8a1a49e5b34793c8e5495afa123d778d93a152a84e5fa2",
+      "config_sha256": "8545535a02f51eb1342a5497c1436b8eec51ddcb769fd033746041781faf4142",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b01-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -238,7 +239,7 @@
     {
       "index": 14,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-a2.json",
-      "config_sha256": "319ce6357d8133674cb4e1b61d3f6327a3796cb569b48a41465266fd2425cba0",
+      "config_sha256": "3b42e1def48996cfba496aa2ff21dbedb3beaf3c7050be1b896366d7275f4069",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b01-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -253,7 +254,7 @@
     {
       "index": 15,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-a1.json",
-      "config_sha256": "226d47f4e0f1ef16e80abfa2b917bb0f73ee9430b4c121bb48152c3e893dcfe3",
+      "config_sha256": "bd0300227d8a20fe8eb673d77c66241dc90fca0db9bc05a181ce62d7177123c9",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b02-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -268,7 +269,7 @@
     {
       "index": 16,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-b1.json",
-      "config_sha256": "11153f687405810cffa5551578f3beb77b69c46cc5c233a992ea7c1810990097",
+      "config_sha256": "2d84f927fb88a882a35ea764daddfd3743e0d99108e01ca8c1f9a107ebdffe7c",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b02-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -283,7 +284,7 @@
     {
       "index": 17,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-b2.json",
-      "config_sha256": "bfb1584f836ed9cd054ff66c5721f1ce4e4a1b3d88ac3f6b0ae08166224eec3b",
+      "config_sha256": "677c82c82b823f5e8d7182f13cac61f6c1a5c03c391a6b84c49cb7efa1626a6c",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b02-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -298,7 +299,7 @@
     {
       "index": 18,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-a2.json",
-      "config_sha256": "a3d92e7f11fbea2f56679be4a8af1ff44387220b9f8285eb0799e5600be69c9c",
+      "config_sha256": "b3426f4c371c9ac4ff206de1959e19259c92f907d38a58d29ffe4e3e1189b835",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b02-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -313,7 +314,7 @@
     {
       "index": 19,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-a1.json",
-      "config_sha256": "aaef23fa1870020c832e988d799eaf440a2ead4dfbce36af0c410e1b642a02cc",
+      "config_sha256": "c4ba4b6adf5e69b57f59f63115d74a37a1ecd653602725846c5ea30b43b7115d",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b03-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -328,7 +329,7 @@
     {
       "index": 20,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-b1.json",
-      "config_sha256": "06293d536cca7c4bba4217150035eeb79862888445017854052d16324d91c72b",
+      "config_sha256": "adfae862c1007c0f2049d8f5f86a74e498cda7065e022450cde1a4b6ec394e0e",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b03-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -343,7 +344,7 @@
     {
       "index": 21,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-b2.json",
-      "config_sha256": "575480eaa26845b1a0df5b2dc70185c674c9d09de29b43d4acef4897e04777d6",
+      "config_sha256": "8950167b66d6c66ed3b54a5da892f5c1549e8942522584f8c7de661decfae1a3",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b03-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -358,7 +359,7 @@
     {
       "index": 22,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-a2.json",
-      "config_sha256": "550bd68180cc395216d29a598aab7cb3cae4320b124929a99ea03b858ac172c4",
+      "config_sha256": "84c5d075fcb0678453cf21ddc296b8912d1253ab80e32b2871e3df4d027c7621",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b03-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -373,7 +374,7 @@
     {
       "index": 23,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-a1.json",
-      "config_sha256": "62abf0f6303571ce92e5ce245229d1e267911a0ac8c5cb8d97cfd503cca09c3a",
+      "config_sha256": "df6f5f4ccc47bbe0811449dab87abb79278b6c92ecb719af173fe73c3e48b763",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b04-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -388,7 +389,7 @@
     {
       "index": 24,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-b1.json",
-      "config_sha256": "c0c937c593c8adca5ef1344ea31f9b54fe53f6e12349f695a7b05d20e0d3de30",
+      "config_sha256": "491c425a772db7a196989591e55653d410712d9800cb197ddd8abfa1fed59bd7",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b04-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -403,7 +404,7 @@
     {
       "index": 25,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-b2.json",
-      "config_sha256": "8014b375f3c21545b63e725b026dd010e301c74f3c5ea9c21967868aa307d8ad",
+      "config_sha256": "abc5a6e28de2246d45d3dec248b42c41c05435a976d6ffa379f115a636197b03",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b04-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -418,7 +419,7 @@
     {
       "index": 26,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-a2.json",
-      "config_sha256": "78fd581916f9f78e4c3801f5be64bd74ee2f3cf98b1c0b13fac3feb943742901",
+      "config_sha256": "717efcafd9294a4cfa79803b3abea10b32b7805c2582500849fc8e00d88ec2b1",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b04-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -433,7 +434,7 @@
     {
       "index": 27,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-a1.json",
-      "config_sha256": "6bd200376b11fee566d7917b1771625ce9892e8af8ec2301f02947e323399878",
+      "config_sha256": "035dc19bc24bc2db1f7331ebbdb2004b6a388ed620cdb28a833fa793265834d4",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b05-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -448,7 +449,7 @@
     {
       "index": 28,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-b1.json",
-      "config_sha256": "148a963c7151ca78b6ec6303abc778d74a27abce0274afde3e368ba287508268",
+      "config_sha256": "91aa63713d304d524266cd197edf827e5eb78206e87d7d62f328fef3535c5581",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b05-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -463,7 +464,7 @@
     {
       "index": 29,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-b2.json",
-      "config_sha256": "04088b14655be96ee7d295c25f683cc6b125256f429a15cba25057e61200e7bb",
+      "config_sha256": "dc33f83c94ed9759e8b70b0ef7c880589509e5d786be28ae58226d8773b2b1c5",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b05-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -478,7 +479,7 @@
     {
       "index": 30,
       "config": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-a2.json",
-      "config_sha256": "1f529893f202d1dee7b5b9fbd1969bda407f2792aa1f9492d2477f48d466ade5",
+      "config_sha256": "2a07b8e482961bf308c5d659f4dcca06f54e3032fa98b7c6eaf13b0884facc87",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b05-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -493,7 +494,7 @@
     {
       "index": 31,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-a1.json",
-      "config_sha256": "9d1651bc8e99de488b91512facad2d3e2366ca2972df5b55d49d7cd6628f775e",
+      "config_sha256": "27e7c913a5dd203e227664397b37f228ca9d22c927224c08c0b0ab9714425505",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b06-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -508,7 +509,7 @@
     {
       "index": 32,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-b1.json",
-      "config_sha256": "28393a4023f017853430d4aeb68128b03940f795c9fd00a886298ac7b1c2a6bd",
+      "config_sha256": "dc857a8fbe233141ed1bea7d81a0b645b40f0dac497f9d06c912c91e02dc31c2",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b06-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -523,7 +524,7 @@
     {
       "index": 33,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-b2.json",
-      "config_sha256": "8b6187aff33a7c4ed9f55db5861798d45b75b117a6ec66bef43a434131fe2183",
+      "config_sha256": "e46d6400080493819f89f7e70fb6a1cd32192fee4967c2c10c48cae04c0c218d",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b06-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -538,7 +539,7 @@
     {
       "index": 34,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-a2.json",
-      "config_sha256": "8e6aa23021c8baa5b32d942e3eb6d23a2efa3ef5c39c9f62f39feeea890f536f",
+      "config_sha256": "f772157b24d1663962c214014b99c312b8f291c20960d26fc4ba25d9890648a1",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b06-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -553,7 +554,7 @@
     {
       "index": 35,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-a1.json",
-      "config_sha256": "e0585973a27ecd119afd87afa0aaf1beddb1183919f260db6fef08062bd7e673",
+      "config_sha256": "ed9f45efde52b60f9cb8f41bccf4908c54cd01ea8ab054da30d5aedb6e1fee33",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b07-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -568,7 +569,7 @@
     {
       "index": 36,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-b1.json",
-      "config_sha256": "1d6acce75ab10e6c8590046b3ab911bc816fb0dbdd205f958c9c7ad1f42034ed",
+      "config_sha256": "11a28d871b5d5e984f45d7dd8bb8e8c5b29703a1af41d99763e27db0bf081a42",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b07-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -583,7 +584,7 @@
     {
       "index": 37,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-b2.json",
-      "config_sha256": "399f9ffdd68e7ce24b12bffafa2918eff8227aa0dc2ba940d0a7dce5538f1d6d",
+      "config_sha256": "6d33862333eaff42bfd6f534d90cc4c32d1ef6702bdc0869780b26b78880cace",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b07-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -598,7 +599,7 @@
     {
       "index": 38,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-a2.json",
-      "config_sha256": "c5ec40baf236ffe836c3039de801fe5fd8b0874942af71a3fe7ad3c615d81c8a",
+      "config_sha256": "1eeba202a62fce1f09d061434e9811fbfcb85fb03268bd840dfd977d9e6f286d",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b07-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -613,7 +614,7 @@
     {
       "index": 39,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-a1.json",
-      "config_sha256": "1c57252921a98494a52075aa7004ed477c4d3e3481a4d2117c68a6dc81237f93",
+      "config_sha256": "bc4001975a3a896cca81964f9044f7e7d8fa84a06e299b77dbd426f38c877ace",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b08-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -628,7 +629,7 @@
     {
       "index": 40,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-b1.json",
-      "config_sha256": "4d0df2cd87de47d3dd7fa025446ffc1bcc7b47d3e576c1f09a882f46a20ad114",
+      "config_sha256": "de926baaa97df8c5ccaf61d28a3451e9a7fa492f6def923381b421d70767375d",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b08-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -643,7 +644,7 @@
     {
       "index": 41,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-b2.json",
-      "config_sha256": "d4d1e0c02804f94145b59383b508726792b6810918b4506c73e0e7e6428b2950",
+      "config_sha256": "94b14c0d5a20365ed55497e971f58e18db5b0ea1d4d4f7efd1a79371a981f1d2",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b08-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -658,7 +659,7 @@
     {
       "index": 42,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-a2.json",
-      "config_sha256": "52cdbd1a394ac7b020877b4099b8baa404874dee5aeadaefa475c22b1a67d7cf",
+      "config_sha256": "8c1a8d0abd0fe4e372b1217af1c096e90bc48902332e69d72f585520df499e52",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b08-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -673,7 +674,7 @@
     {
       "index": 43,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-a1.json",
-      "config_sha256": "2efaa0b69d4d845635373f7d16570f157375019b58fb23a4818c01ba95c7d8eb",
+      "config_sha256": "4df22fd011a2e47fe8cc02196cc8c24401e5556ed54f04f6bd0a5b4a00d1a95b",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b09-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -688,7 +689,7 @@
     {
       "index": 44,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-b1.json",
-      "config_sha256": "3f52602c7e228ada69df6d57cc16597088636fe55bbd270705a8a337ed63bc71",
+      "config_sha256": "2118ee3c38fc7c118b435add7e25e6545927e0f7ff79f486118b3f75d0646f0f",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b09-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -703,7 +704,7 @@
     {
       "index": 45,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-b2.json",
-      "config_sha256": "c0fe8aa122e8c0c6ef4252d85e8abdb3cbca44190ab629c6c0035e8b2bfc50c6",
+      "config_sha256": "36abc3c24ffd241dc6981031b75a52197793384bebd336fbab7f51dc4ce51970",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b09-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -718,7 +719,7 @@
     {
       "index": 46,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-a2.json",
-      "config_sha256": "a9f21153415ad388a5fc76b7b594aecadacfb76449ce4efd3c405aa82e2c5fe0",
+      "config_sha256": "647bdbc6103575af411d68bd0376711febec7e6a734a4c738a9a1a6720dd7252",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b09-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -733,7 +734,7 @@
     {
       "index": 47,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-a1.json",
-      "config_sha256": "354ecadbbbe9ae20beb49c14edc1f1677037c97a4264af1f6f774233bc8c603f",
+      "config_sha256": "ca9887127602dc107fd0abfd1eca739435109945c92d233e07eab5fe6bda1e97",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b10-a1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,
@@ -748,7 +749,7 @@
     {
       "index": 48,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-b1.json",
-      "config_sha256": "a4a78f434308c5eea2966f5b74ddfa7b0715dc202ab309ef83c7523944a189eb",
+      "config_sha256": "822a3a21cb760169367584e32dd2860b09f9208ec1451b3641a0caeb86db0760",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b10-b1",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,
@@ -763,7 +764,7 @@
     {
       "index": 49,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-b2.json",
-      "config_sha256": "837b4c16085fb82248b7ae396e553b42abae4ceb61cd3f9c7d71c9dd86c7ac2f",
+      "config_sha256": "304bd2bec212e2930c6277bf364e7e8f739ccfeee2ba3f4c02f3ff5ea221ee65",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b10-b2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,
@@ -778,7 +779,7 @@
     {
       "index": 50,
       "config": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-a2.json",
-      "config_sha256": "c15933035a8d74971b354e9a96ba05ffaafe1bacfa311801c800663b878ea232",
+      "config_sha256": "f3c4b8587254a82dfd3e0053e2a20fc7e2c99e97f12beab02b25d67130ed6b5d",
       "run_id": "d117f15-df-cmp-abba-ph-decode-b10-a2",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,

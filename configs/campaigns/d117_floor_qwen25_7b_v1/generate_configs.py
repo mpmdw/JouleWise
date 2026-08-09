@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -42,10 +41,19 @@ MODEL_TAG = "qwen25-7b-mlx"
 DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
 CAMPAIGN_TAG = "d117-floor-qwen25-7b-v1"
+DRAFT_STATUS = "unfrozen_draft"
 TODO_BRANCH = "impl/d117-ledger-recovery"
 D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
+D124_COVARIANCE_TREATMENT = (
+    "two_shared_edges_plus_bundle_specific_adversarial_terms"
+)
 IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
+SUCCESSOR_REGENERATION_RULE = (
+    "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
+    "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
+    "as a freeze-time lead decision)."
+)
 
 PLAN_SET_ID = "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1"
 AGGREGATE_ARTIFACT_ID = "d117-qwen25-phase-floor-set-v1"
@@ -316,7 +324,6 @@ def config_for(run: Mapping[str, Any], plan_sha256: str) -> dict[str, Any]:
             "operator": "lead",
             "tags": [
                 "phase2",
-                "splitwise-decode-floor-v1",
                 CAMPAIGN_TAG,
                 "production-window",
                 "floor-calibration",
@@ -366,9 +373,7 @@ def family_binding(
 def calibration_basis() -> dict[str, Any]:
     return {
         "calibration_scope": "production_window",
-        "acceptance_selection": (
-            "issued_or_authenticated_d102_descendant_before_member_1"
-        ),
+        "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
             "path": ACCEPTANCE_REL.as_posix(),
             "acceptance_id": "d079_calibration_acceptance_v2_n19",
@@ -407,9 +412,7 @@ def common_mode_registration() -> dict[str, Any]:
                 "member-level timing errors."
             ),
         },
-        "covariance_treatment": (
-            "two_shared_edges_plus_bundle_specific_adversarial_terms"
-        ),
+        "covariance_treatment": D124_COVARIANCE_TREATMENT,
         "never_zero_allowance_application_count": 1,
     }
 
@@ -580,7 +583,8 @@ def extraction_spec(
     ]
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
+        "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
         "cells": cells,
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
@@ -643,7 +647,7 @@ def producer_contract(
 
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan_set_id": PLAN_SET_ID,
         "aggregate_artifact_id": AGGREGATE_ARTIFACT_ID,
         "producer_index": 2,
@@ -1181,7 +1185,7 @@ def plan_tree(
 ) -> dict[str, Any]:
     return {
         "schema_version": PLAN_TREE_SCHEMA,
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
             "plan_id": PLAN_ID,
@@ -1381,6 +1385,7 @@ def readme() -> bytes:
         f"pending `{TODO_BRANCH}`, arm-time identities require U11 projection, "
         "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
+        f"{SUCCESSOR_REGENERATION_RULE}\n\n"
         "Regenerate or check with:\n\n"
         "```text\n"
         "python3 configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py\n"
@@ -1437,7 +1442,7 @@ def build_artifacts() -> dict[Path, bytes]:
 
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -1462,6 +1467,7 @@ def build_artifacts() -> dict[Path, bytes]:
             "calibration_retries": 0,
             "science_member_replacements": 0,
             "outcome_dependent_top_up": "forbidden",
+            "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "floor_cells": [
             {
@@ -1612,6 +1618,7 @@ def build_artifacts() -> dict[Path, bytes]:
         )
         leaf_manifest = {
             "schema_version": ORDER_SCHEMA,
+            "draft_status": DRAFT_STATUS,
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
@@ -1635,6 +1642,7 @@ def build_artifacts() -> dict[Path, bytes]:
     root_manifest_id = "d117-floor-qwen25-7b-v1-order-v1"
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
+        "draft_status": DRAFT_STATUS,
         "manifest_id": root_manifest_id,
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,
@@ -1756,6 +1764,14 @@ def write_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
         path.write_bytes(content)
 
 
+def actual_pack_paths(pack_root: Path) -> set[Path]:
+    return {
+        path.relative_to(pack_root)
+        for path in pack_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
 def compare_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
     problems: list[str] = []
     for relative, expected in artifacts.items():
@@ -1771,13 +1787,25 @@ def compare_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> Non
         raise ValueError("generated draft check failed: " + "; ".join(problems))
 
 
+def check_inventory(output_root: Path) -> None:
+    expected = set(expected_pack_files())
+    observed = actual_pack_paths(output_root / PACK_REL)
+    missing = sorted(expected - observed)
+    extras = sorted(observed - expected)
+    if missing or extras:
+        details: list[str] = []
+        if missing:
+            details.append("missing=" + ",".join(path.as_posix() for path in missing))
+        if extras:
+            details.append("extras=" + ",".join(path.as_posix() for path in extras))
+        raise ValueError("pack inventory differs: " + "; ".join(details))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--output-root", type=Path)
     args = parser.parse_args()
-    if args.check and args.output_root is not None:
-        parser.error("--check and --output-root are mutually exclusive")
     return args
 
 
@@ -1785,11 +1813,9 @@ def main() -> int:
     args = parse_args()
     artifacts = build_artifacts()
     if args.check:
-        with tempfile.TemporaryDirectory(prefix="d117-floor-7b-check-") as temp:
-            temp_root = Path(temp)
-            write_artifacts(temp_root, artifacts)
-            compare_artifacts(REPO_ROOT, artifacts)
-            compare_artifacts(temp_root, artifacts)
+        check_root = args.output_root.resolve() if args.output_root else REPO_ROOT
+        check_inventory(check_root)
+        compare_artifacts(check_root, artifacts)
         print(
             "draft check passed: 50 science configs, 4 floor cells, "
             "2 reporting cells"

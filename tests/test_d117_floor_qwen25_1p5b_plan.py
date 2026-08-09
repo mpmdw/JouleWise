@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -36,15 +37,15 @@ from joulewise.schemas import BenchmarkConfig  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "68077373c0e599210cb8e2f9bd33347e1b9acd52a41dc004413af50613774d04"
+EXPECTED_PACK_SHA256 = "23eb67bfee35284f3f705dd0a46c1db6aa1bb2eacf5132e9345a6b1b0502154a"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "60d48550c957ef8dc1f850b006d03102f7345512a49b4f1df04fd279f82222ab",
-    "calibration_plan.json": "95f68d00b1b0243c827b80968918b4309363554688590be05075ee99733cee86",
-    "calibration_plan.sha256": "c843590dee7e1740e5e39224c294d85cbb52c2da4f055646a2685ca600278981",
-    "order_manifest.json": "e83afdb5f315fdf27ca01622ba6465e9b98f67f99e780c2c84c8368c7b2a990b",
-    "plan_tree.json": "8cc26238d61053a83ce5d966a76498265deac7ae9555fb2807fdb0a08ab70571",
-    "plan_tree.sha256": "2f7725e1f67d5e2d3394b723e9f8fb8120da0c5f636817dfb1225ddded270884",
-    "producer_contract.json": "c580fb78804d2335b1537a7ff937d140636494525b8a5e85b96b846044d96862",
+    "generate_configs.py": "1dbffadfb5d5d1993609042c4aae6cea254930556a0c4ec3d916be2c480a9d47",
+    "calibration_plan.json": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
+    "calibration_plan.sha256": "35586fedd9d56b1c1ea69cf58cdc5a69cfd26cea7c58ecb5789ea88da3f891d1",
+    "order_manifest.json": "ce4a4e9a3197a28d1f5bcf218cae29a52a7b12d6fb99d9eb2dcece73d2af08e9",
+    "plan_tree.json": "924a59abc7b5da851e87c423aaa52e8a476bf766f9fd03c7f4df3c440680dcfc",
+    "plan_tree.sha256": "78eaeccf32869aaf6babaec966fd313e3c09e10ca335a72c0d13b11bbcb76474",
+    "producer_contract.json": "10bb8e2f117e97daf10b4a9e48301335b2e3209cfac2d9413692806762c2189f",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -52,7 +53,7 @@ EXPECTED_FILE_SHA256 = {
         "985a4e5370724698b601303b2ba99027d298060eedc95a65d20112df413043ad"
     ),
 }
-EXPECTED_SPEC_SHA256 = "aacef3e157aa249387771485c33a49da2363ad8786e98a8a2630a1f4e9b7b93c"
+EXPECTED_SPEC_SHA256 = "d2fa755de2121207c68983df1641bb83c695be0616ad3552191b6751b17807b3"
 EXPECTED_FAMILY_DOMAIN_SHA256 = {
     "df-ph-decode": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
     "df-ph-prefill-p128-qwen25-1p5b": (
@@ -215,6 +216,31 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             )
             self.assertEqual((Path(first) / SPEC_REL).read_bytes(), SPEC_PATH.read_bytes())
 
+    def test_generator_check_rejects_extra_pack_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-alpha-inventory-") as temp:
+            check_root = Path(temp)
+            shutil.copytree(PACK_ROOT, check_root / PACK_REL)
+            (check_root / SPEC_REL).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SPEC_PATH, check_root / SPEC_REL)
+            (check_root / PACK_REL / "stray-review-probe.txt").write_text(
+                "unexpected\n", encoding="utf-8"
+            )
+            checked = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "--check",
+                    "--output-root",
+                    str(check_root),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("extras=stray-review-probe.txt", checked.stderr)
+
     def test_plan_sidecars_and_embedded_hashes_recompute(self) -> None:
         plan_sha = sha256_file(PACK_ROOT / "calibration_plan.json")
         tree_sha = sha256_file(PACK_ROOT / "plan_tree.json")
@@ -302,6 +328,35 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         entries, warning = load_order_entries(PACK_ROOT)
         self.assertIsNone(warning)
         self.assertEqual([entry.run_id for entry in entries], [row["run_id"] for row in rows])
+
+    def test_calibration_plan_shape_and_abba_members_are_family_canonical(self) -> None:
+        sibling_plans = [
+            load_json(
+                ROOT
+                / "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json"
+            ),
+            load_json(
+                ROOT
+                / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/calibration_plan.json"
+            ),
+        ]
+        for sibling in sibling_plans:
+            self.assertEqual(sibling["schema_version"], self.plan["schema_version"])
+            self.assertEqual(set(sibling), set(self.plan))
+        for cell in self.plan["floor_cells"]:
+            if cell["kind"] == "comparative_abba":
+                for block in cell["ordered_blocks"]:
+                    self.assertEqual(
+                        [set(member) for member in block["members"]],
+                        [
+                            {"position", "plan_label", "plan_sequence_index", "bundle_id"}
+                        ]
+                        * 4,
+                    )
+                    self.assertEqual(
+                        [member["position"] for member in block["members"]],
+                        ["A1", "B1", "B2", "A2"],
+                    )
 
     def test_science_configs_preserve_stack_and_change_only_prospective_identity(self) -> None:
         plan_sha = sha256_file(PACK_ROOT / "calibration_plan.json")
@@ -404,6 +459,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         for cell in self.spec["cells"]:
             basis = cell["calibration_basis"]
             self.assertEqual(basis["issued_acceptance"], expected_acceptance)
+            self.assertEqual(
+                basis["acceptance_selection"], "issued_d116_artifact_only"
+            )
             self.assertEqual(basis["allowance_rule"], "max(observed_drift_s,0.010818)")
             self.assertEqual(basis["allowance_embedding_count"], 1)
             self.assertEqual(basis["component_composition"], "componentwise_max_never_sum.v1")
@@ -498,6 +556,19 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(self.plan["draft_status"], "unfrozen_draft")
         self.assertEqual(self.tree["draft_status"], "unfrozen_draft")
         self.assertEqual(self.producer["draft_status"], "unfrozen_draft")
+        for manifest_path in [
+            PACK_ROOT / "order_manifest.json",
+            *sorted(PACK_ROOT.glob("*/order_manifest.json")),
+        ]:
+            self.assertEqual(load_json(manifest_path)["draft_status"], "unfrozen_draft")
+        self.assertIn(
+            "A successor acceptance artifact issuing before arm REQUIRES pack regeneration",
+            self.spec["successor_acceptance_artifact_policy"],
+        )
+        self.assertIn(
+            self.spec["successor_acceptance_artifact_policy"],
+            (PACK_ROOT / "README.md").read_text(encoding="utf-8"),
+        )
         projection = self.producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
@@ -506,7 +577,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertIn(RECOVERY_BRANCH, json.dumps(self.tree, sort_keys=True))
         self.assertIn(f"TODO({RECOVERY_BRANCH})", json.dumps(self.tree, sort_keys=True))
 
-    def test_no_historical_claim_bytes_or_directory_discovery(self) -> None:
+    def test_no_historical_claim_bytes_or_generation_discovery(self) -> None:
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK_ROOT.rglob("*"))
@@ -523,8 +594,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, generated_text)
         source = GENERATOR.read_text(encoding="utf-8")
-        for forbidden in (".glob(", ".rglob(", "os.walk("):
+        for forbidden in (".glob(", "os.walk(", "Path.walk("):
             self.assertNotIn(forbidden, source)
+        self.assertIn('.rglob("*")', source)
 
 
 if __name__ == "__main__":

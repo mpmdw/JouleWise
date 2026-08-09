@@ -33,7 +33,8 @@
     "predeclared_before_data": true,
     "calibration_retries": 0,
     "science_member_replacements": 0,
-    "outcome_dependent_top_up": "forbidden"
+    "outcome_dependent_top_up": "forbidden",
+    "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
   },
   "floor_cells": [
     {

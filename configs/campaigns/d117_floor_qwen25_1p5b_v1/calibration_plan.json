@@ -70,12 +70,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b01-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b01-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b01-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b01-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b02",
@@ -85,12 +105,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b02-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b02-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b02-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b02-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b03",
@@ -100,12 +140,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b03-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b03-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b03-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b03-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b04",
@@ -115,12 +175,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b04-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b04-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b04-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b04-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b05",
@@ -130,12 +210,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b05-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b05-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b05-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b05-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b06",
@@ -145,12 +245,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b06-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b06-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b06-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b06-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b07",
@@ -160,12 +280,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b07-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b07-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b07-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b07-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b08",
@@ -175,12 +315,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b08-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b08-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b08-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b08-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b09",
@@ -190,12 +350,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b09-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b09-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b09-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b09-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b10",
@@ -205,12 +385,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b10-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b10-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b10-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b10-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
         }
       ],
       "estimator": "d124_two_shared_edge_common_mode.v1"
@@ -248,12 +448,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b01-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b01-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b01-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b01-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b02",
@@ -263,12 +483,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b02-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b02-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b02-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b02-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b03",
@@ -278,12 +518,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b03-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b03-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b03-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b03-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b04",
@@ -293,12 +553,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b04-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b04-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b04-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b04-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b05",
@@ -308,12 +588,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b05-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b05-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b05-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b05-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b06",
@@ -323,12 +623,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b06-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b06-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b06-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b06-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b07",
@@ -338,12 +658,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b07-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b07-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b07-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b07-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b08",
@@ -353,12 +693,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b08-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b08-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b08-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b08-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b09",
@@ -368,12 +728,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b09-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b09-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b09-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b09-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
         },
         {
           "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b10",
@@ -383,12 +763,32 @@
             "B",
             "A"
           ],
-          "members": {
-            "A1": "d117f15-df-cmp-abba-ph-decode-b10-a1",
-            "B1": "d117f15-df-cmp-abba-ph-decode-b10-b1",
-            "B2": "d117f15-df-cmp-abba-ph-decode-b10-b2",
-            "A2": "d117f15-df-cmp-abba-ph-decode-b10-a2"
-          }
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
         }
       ],
       "estimator": "d124_two_shared_edge_common_mode.v1"

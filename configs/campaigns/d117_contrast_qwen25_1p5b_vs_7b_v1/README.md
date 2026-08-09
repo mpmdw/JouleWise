@@ -4,10 +4,17 @@ This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-122, D-125, D-124, D-123, then D-117. D-122 supersedes
-the older design-memo and plan-factory decode-only text. The retained
-`joulewise.frozen_plan_tree.v1` string is the adopted compatibility schema
-identifier; `artifact_status = UNFROZEN_DRAFT` is the status of these bytes.
+Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
+the older design-memo and plan-factory decode-only text. The plan tree uses
+the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
+artifact declares `draft_status = unfrozen_draft`.
+
+The binding 40-member cadence is
+`docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md` §6, “U7 — gamma
+implementation session”: one midpoint between two 20-member ABBA halves. It
+does not settle a mixed two-arm 80-member interpretation. This draft therefore
+places references after science members 20, 40, and 60: both arm midpoints
+plus the decode/prefill boundary, pending lead ratification at freeze.
 
 The prefill prompt text is a labelled
 `PROPOSED-PENDING-LEAD-RATIFICATION` candidate. The pack records exact draft

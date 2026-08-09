@@ -1,18 +1,16 @@
 {
   "schema_version": "joulewise.detection_floor_calibration_plan.v1",
-  "artifact_status": "UNFROZEN_DRAFT",
+  "draft_status": "unfrozen_draft",
   "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
-  "identifier_note": "The plan-factory gamma identifier is retained while D-122 supersedes the older decode-only scope text.",
   "calibration_scope": "production_window",
-  "freeze_status": "unfrozen_draft",
-  "authority_order": [
+  "fixed_n": 10,
+  "authorities": [
+    "D-117",
     "D-122",
-    "D-125",
-    "D-124",
     "D-123",
-    "D-117"
+    "D-124",
+    "D-125"
   ],
-  "fixed_n_blocks_per_arm": 10,
   "stack_scope": {
     "hardware_target": "macbook_m3_max",
     "runtime_backend": "mlx",
@@ -100,7 +98,7 @@
     "outcome_dependent_top_up": "forbidden",
     "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
   },
-  "cells": [
+  "floor_cells": [
     {
       "cell_id": "d117-sw-decode-contrast-qwen25-1p5b-vs-7b",
       "measurement_arm": "decode",
@@ -114,7 +112,7 @@
       "difference_orientation": "condition_b_minus_condition_a",
       "point_estimator": "abba_block_arm_mean_difference_t_v1",
       "floor_estimator_registration": {
-        "identity": "d124_two_shared_edge_common_mode_abba_v1",
+        "identity": "d124_two_shared_edge_common_mode.v1",
         "identity_status": "PROPOSED-PENDING-FLOOR-COMMONMODE-01-IMPLEMENTATION",
         "form": "shared onset and shared offset parameters across each ABBA block, with adversarial per-bundle residuals",
         "stationarity_transfer_assumption": {
@@ -127,8 +125,9 @@
           },
           "evidentiary_limit": "The historical corpus records admissible bounds, not realized member-level boundary errors; transfer is an assumption, not an observed covariance claim."
         },
-        "calibration_treatment": "two_shared_edge_common_mode_per_abba_block",
-        "consuming_decode_contrast_treatment": "two_shared_edge_common_mode_per_abba_block",
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_decode_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
         "identical_covariance_treatment_required": true,
         "allowance": {
           "rule": "genesis_lower_bound_plus_lineage_envelope_rule",
@@ -146,6 +145,7 @@
       "family_alpha": 0.05,
       "multiplicity": "Holm",
       "family_m": 1,
+      "multiplicity_note": "family_m=1 is contingent on unresolved decode/prefill family-cardinality ratification; see the prefill_p256 cell's multiplicity TODO.",
       "equivalence_margin": null,
       "mde": null,
       "ordered_blocks": [
@@ -525,7 +525,7 @@
       "point_estimator": "abba_block_arm_mean_difference_t_v1",
       "prompt_candidate": {
         "path": "prefill_prompt_candidate.json",
-        "sha256": "740883726cc980cc469188d8f55c413384db1093a02e965ee4191e77431bf4c7",
+        "sha256": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
         "status": "PROPOSED-PENDING-LEAD-RATIFICATION"
       },
       "test": {
@@ -914,31 +914,29 @@
       ]
     }
   ],
-  "execution_modes": {
-    "production_contrast_window": {
-      "selected_for_this_draft": true,
-      "ordered_subcampaign_ids": [
-        "01_decode_contrast_blocks_01_05",
-        "02_decode_contrast_blocks_06_10",
-        "03_prefill_p256_contrast_blocks_01_05",
-        "04_prefill_p256_contrast_blocks_06_10"
-      ],
-      "planned_bundles": 80,
-      "decode_members": 40,
-      "prefill_p256_members": 40
-    }
+  "reported_energy_cells": [],
+  "execution_mode": {
+    "ordered_science_stage_ids": [
+      "01_decode_contrast_blocks_01_05",
+      "02_decode_contrast_blocks_06_10",
+      "03_prefill_p256_contrast_blocks_01_05",
+      "04_prefill_p256_contrast_blocks_06_10"
+    ],
+    "planned_science_bundles": 80,
+    "planned_bound_bundles": 12,
+    "planned_reference_bundles": 9,
+    "planned_calibration_observations": 2
   },
-  "prompt_candidate": {
-    "path": "prefill_prompt_candidate.json",
-    "sha256": "740883726cc980cc469188d8f55c413384db1093a02e965ee4191e77431bf4c7",
-    "status": "PROPOSED-PENDING-LEAD-RATIFICATION"
+  "roots": {
+    "claim_root_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "bound_root_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1_bound"
   },
-  "consumer_family_declaration": {
-    "path": "consumer_family_declaration.json",
-    "sha256": "5a458a1935d0cb292bc2e85d6dd0aa9373ea749b7c231cfe49c25d417ab521aa",
-    "binding_mode": "declaration_only"
-  },
-  "runs_dir_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1",
+  "runs_dir": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1",
   "order_manifest": "order_manifest.json",
-  "campaign_log_leaf": "campaign_log.jsonl"
+  "campaign_log": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  }
 }

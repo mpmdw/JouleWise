@@ -35,6 +35,7 @@ EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-1p5b-v1"
 CLAIM_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1"
 BOUND_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1_bound"
 CAMPAIGN_TAG = "d117-floor-qwen25-1p5b-v1"
+DRAFT_STATUS = "unfrozen_draft"
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 TREE_SCHEMA = "joulewise.d117_plan_tree.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
@@ -98,8 +99,16 @@ NEG8_SETTLED_SHA256 = (
 )
 D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
+D124_COVARIANCE_TREATMENT = (
+    "two_shared_edges_plus_bundle_specific_adversarial_terms"
+)
 IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 RECOVERY_BRANCH = "impl/d117-ledger-recovery"
+SUCCESSOR_REGENERATION_RULE = (
+    "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
+    "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
+    "as a freeze-time lead decision)."
+)
 
 MODEL = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -286,6 +295,28 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[str], list[dict[str, An
             }
         )
     return stages, absolute_ids, blocks
+
+
+def calibration_plan_blocks(
+    blocks: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    positions = (("A1", "A"), ("B1", "B"), ("B2", "B"), ("A2", "A"))
+    return [
+        {
+            "block_id": block["block_id"],
+            "executed_labels": ["A", "B", "B", "A"],
+            "members": [
+                {
+                    "position": position,
+                    "plan_label": label,
+                    "plan_sequence_index": index,
+                    "bundle_id": block["members"][position],
+                }
+                for index, (position, label) in enumerate(positions, start=1)
+            ],
+        }
+        for block in blocks
+    ]
 
 
 def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
@@ -680,7 +711,7 @@ def stage_graph(
 
 
 def definition_binding(
-    arm: str, family_id: str, definition: dict[str, Any], domain_sha256: str
+    family_id: str, definition: dict[str, Any], domain_sha256: str
 ) -> dict[str, Any]:
     return {
         "condition_family_id": family_id,
@@ -692,7 +723,7 @@ def definition_binding(
 def calibration_basis() -> dict[str, Any]:
     return {
         "calibration_scope": "production_window",
-        "acceptance_selection": "issued_or_authenticated_d102_descendant_before_member_1",
+        "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
             "acceptance_id": "d079_calibration_acceptance_v2_n19",
             "path": ACCEPTANCE_REL.as_posix(),
@@ -726,7 +757,7 @@ def common_mode_registration() -> dict[str, Any]:
                 "member-level timing errors."
             ),
         },
-        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "covariance_treatment": D124_COVARIANCE_TREATMENT,
         "never_zero_allowance_application_count": 1,
     }
 
@@ -773,7 +804,7 @@ def build_extraction_spec(
             "target_precheck_path": precheck,
             "condition_family_id": family_id,
             "condition_family_definitions": {
-                "all": definition_binding("all", family_id, definition, definition_sha256)
+                "all": definition_binding(family_id, definition, definition_sha256)
             },
             "expected_n": N,
             "estimator": "d054_false_effect_guard.v1",
@@ -795,7 +826,7 @@ def build_extraction_spec(
         definition: dict[str, Any],
         definition_sha256: str,
     ) -> dict[str, Any]:
-        family = definition_binding("A", family_id, definition, definition_sha256)
+        family = definition_binding(family_id, definition, definition_sha256)
         return {
             "cell_id": cell_id,
             "kind": "comparative",
@@ -887,7 +918,8 @@ def build_extraction_spec(
     ]
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
+        "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
         "cells": cells,
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
@@ -955,7 +987,7 @@ def build_producer_contract(
     ]
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan_set_id": "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
         "aggregate_artifact_id": "d117-qwen25-phase-floor-set-v1",
         "producer_index": 1,
@@ -1027,6 +1059,7 @@ def readme_bytes() -> bytes:
         f"pending `{RECOVERY_BRANCH}`, arm-time identities require U11 projection, "
         "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
+        f"{SUCCESSOR_REGENERATION_RULE}\n\n"
         "Generate or verify with:\n\n"
         "```text\n"
         "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py\n"
@@ -1076,9 +1109,10 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "ordered_bundle_ids": all_ids,
         },
     ]
+    canonical_blocks = calibration_plan_blocks(blocks)
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -1119,7 +1153,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 "kind": "comparative_abba",
                 "metric": "phase_energy_j.decode",
                 "condition_family_id": DECODE_FAMILY_ID,
-                "ordered_blocks": blocks,
+                "ordered_blocks": canonical_blocks,
                 "estimator": D124_ESTIMATOR_ID,
             },
             {
@@ -1135,7 +1169,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 "kind": "comparative_abba",
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": PREFILL_FAMILY_ID,
-                "ordered_blocks": blocks,
+                "ordered_blocks": canonical_blocks,
                 "estimator": D124_ESTIMATOR_ID,
             },
         ],
@@ -1208,6 +1242,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         manifest_id = f"d117-floor-qwen25-1p5b-v1-{stage_id.replace('_', '-')}-order-v1"
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
+            "draft_status": DRAFT_STATUS,
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha256,
@@ -1226,6 +1261,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
+        "draft_status": DRAFT_STATUS,
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha256,
@@ -1279,7 +1315,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     graph = stage_graph(stage_manifest_refs, external_inputs)
     tree = {
         "schema_version": TREE_SCHEMA,
-        "draft_status": "unfrozen_draft",
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "path": (PACK_REL / "calibration_plan.json").as_posix(),
             "plan_id": PLAN_ID,
@@ -1475,18 +1511,39 @@ def expected_pack_paths() -> list[Path]:
     return paths
 
 
-def check_current() -> tuple[int, str, str]:
+def actual_pack_paths(pack_root: Path) -> set[Path]:
+    return {
+        path.relative_to(pack_root)
+        for path in pack_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
+def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
     with tempfile.TemporaryDirectory(prefix="d117-u5-check-") as tmp:
         temp_root = Path(tmp)
         count, plan_sha256, tree_sha256 = generate(temp_root)
-        for relative in expected_pack_paths():
+        expected_paths = set(expected_pack_paths())
+        observed_paths = actual_pack_paths(check_root / PACK_REL)
+        missing = sorted(expected_paths - observed_paths)
+        extras = sorted(observed_paths - expected_paths)
+        if missing or extras:
+            detail = []
+            if missing:
+                detail.append(
+                    "missing=" + ",".join(path.as_posix() for path in missing)
+                )
+            if extras:
+                detail.append(
+                    "extras=" + ",".join(path.as_posix() for path in extras)
+                )
+            raise ValueError("pack inventory differs: " + "; ".join(detail))
+        for relative in expected_paths:
             expected = (temp_root / PACK_REL / relative).read_bytes()
-            actual_path = REPO_ROOT / PACK_REL / relative
-            if not actual_path.is_file():
-                raise ValueError(f"missing generated file: {(PACK_REL / relative).as_posix()}")
+            actual_path = check_root / PACK_REL / relative
             if actual_path.read_bytes() != expected:
                 raise ValueError(f"generated file drifted: {(PACK_REL / relative).as_posix()}")
-        if (REPO_ROOT / SPEC_REL).read_bytes() != (temp_root / SPEC_REL).read_bytes():
+        if (check_root / SPEC_REL).read_bytes() != (temp_root / SPEC_REL).read_bytes():
             raise ValueError(f"generated file drifted: {SPEC_REL.as_posix()}")
         return count, plan_sha256, tree_sha256
 
@@ -1500,15 +1557,14 @@ def parse_args() -> argparse.Namespace:
         help="write under this temporary repository root instead of the checkout",
     )
     args = parser.parse_args()
-    if args.check and args.output_root is not None:
-        parser.error("--check and --output-root are mutually exclusive")
     return args
 
 
 def main() -> int:
     args = parse_args()
     if args.check:
-        count, plan_sha256, tree_sha256 = check_current()
+        check_root = args.output_root.resolve() if args.output_root else REPO_ROOT
+        count, plan_sha256, tree_sha256 = check_current(check_root)
         verb = "verified"
     else:
         output_root = args.output_root.resolve() if args.output_root else REPO_ROOT

@@ -4,6 +4,8 @@ This pack pre-registers the beta window's 10 absolute decode members, ten null A
 
 The pack is not armable. The receipt oracle is intentionally empty pending `impl/d117-ledger-recovery`, arm-time identities require U11 projection, the D-124 estimator identity still requires implementation confirmation, and lead review must complete before any later release step.
 
+A successor acceptance artifact issuing before arm REQUIRES pack regeneration (packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded as a freeze-time lead decision).
+
 Regenerate or check with:
 
 ```text

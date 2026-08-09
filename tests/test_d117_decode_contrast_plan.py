@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,11 +24,11 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "calibration_plan.json": "e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
-    "plan_tree.json": "ab2a90e42ea4acb4b797b28ad3003bdb606703ab19efbbb3457614112ff543a3",
-    "analysis_manifest_v3.json": "eb17fb336c3f4ec43ec9f134e46c3a136accd1907be7d7dcd63ca7b1ed07a7dc",
-    "prefill_prompt_candidate.json": "740883726cc980cc469188d8f55c413384db1093a02e965ee4191e77431bf4c7",
-    "consumer_family_declaration.json": "5a458a1935d0cb292bc2e85d6dd0aa9373ea749b7c231cfe49c25d417ab521aa",
+    "calibration_plan.json": "8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
+    "plan_tree.json": "e8701708cdc366632785bf02fe8bf428b05708fbf15d9ce3ad356581671299db",
+    "analysis_manifest_v3.json": "550fe3dfce03f4878a25d198fee1f3ddd0d3948ead7909f8049cd65d18368526",
+    "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
+    "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
 POSITIONS = ["A1", "B1", "B2", "A2"]
 LABELS = ["A", "B", "B", "A"]
@@ -121,13 +122,38 @@ class D117GammaPlanTest(unittest.TestCase):
         self.assertEqual(checked.returncode, 0, checked.stderr)
         self.assertIn("checked UNFROZEN D-117 gamma draft", checked.stdout)
 
+    def test_generator_check_rejects_extra_pack_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-gamma-inventory-") as temp:
+            check_root = Path(temp)
+            shutil.copytree(PACK, check_root / GENERATOR_MODULE.PACK_REL)
+            (check_root / GENERATOR_MODULE.PACK_REL / "stray-review-probe.txt").write_text(
+                "unexpected\n", encoding="utf-8"
+            )
+            checked = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "--check",
+                    "--output-root",
+                    str(check_root),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("extras=stray-review-probe.txt", checked.stderr)
+
     def test_both_arms_have_ten_complete_abba_blocks(self) -> None:
         entries = self.root_manifest["executed_order"]
         self.assertEqual(self.root_manifest["planned_n_bundles"], 80)
         self.assertEqual([entry["index"] for entry in entries], list(range(1, 81)))
         self.assertEqual(len({entry["run_id"] for entry in entries}), 80)
 
-        cells = {cell["measurement_arm"]: cell for cell in self.plan["cells"]}
+        cells = {
+            cell["measurement_arm"]: cell for cell in self.plan["floor_cells"]
+        }
         self.assertEqual(set(cells), {"decode", "prefill_p256"})
         self.assertEqual(cells["decode"]["metric"], "phase_energy_j.decode")
         self.assertEqual(cells["prefill_p256"]["metric"], "phase_energy_j.prefill")
@@ -163,6 +189,64 @@ class D117GammaPlanTest(unittest.TestCase):
             stage_blocks,
             [list(range(1, 6)), list(range(6, 11)), list(range(1, 6)), list(range(6, 11))],
         )
+        for subcampaign in self.root_manifest["subcampaign_order"]:
+            stage_manifest = read_json(PACK / subcampaign["manifest_path"])
+            self.assertEqual(
+                stage_manifest["successor_stage_id"],
+                subcampaign["successor_stage_id"],
+            )
+        self.assertEqual(
+            [
+                (row["after_science_member"], row["stage_id"])
+                for row in self.root_manifest["interior_reference_stages"]
+            ],
+            [
+                (20, "gamma-reference-decode-midpoint"),
+                (40, "gamma-reference-arm-boundary"),
+                (60, "gamma-reference-prefill-midpoint"),
+            ],
+        )
+        cadence = self.root_manifest["reference_cadence"]
+        self.assertEqual(cadence, self.tree["reference_cadence"])
+        self.assertEqual(
+            cadence["authority"],
+            "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md "
+            "§6 U7 gamma implementation session",
+        )
+        self.assertEqual(
+            cadence["two_arm_interpretation"], "arm_midpoints_plus_arm_boundary"
+        )
+        self.assertEqual(
+            cadence["freeze_ratification"], "PENDING-LEAD-RATIFICATION"
+        )
+
+    def test_calibration_plan_shape_and_member_encoding_match_floor_packs(self) -> None:
+        siblings = [
+            read_json(
+                ROOT
+                / "configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json"
+            ),
+            read_json(
+                ROOT
+                / "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json"
+            ),
+        ]
+        for sibling in siblings:
+            self.assertEqual(sibling["schema_version"], self.plan["schema_version"])
+            self.assertEqual(set(sibling), set(self.plan))
+        for cell in self.plan["floor_cells"]:
+            for block in cell["ordered_blocks"]:
+                self.assertEqual(
+                    [member["position"] for member in block["members"]],
+                    POSITIONS,
+                )
+                self.assertTrue(
+                    all(
+                        set(member)
+                        == {"position", "plan_label", "plan_sequence_index", "bundle_id"}
+                        for member in block["members"]
+                    )
+                )
 
     def test_all_configs_and_embedded_hashes_recompute(self) -> None:
         entries = self.root_manifest["executed_order"]
@@ -211,7 +295,7 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_prefill_prompt_candidate_is_shared_by_all_prefill_members(self) -> None:
         prompt = read_json(PACK / "prefill_prompt_candidate.json")
-        self.assertEqual(prompt["artifact_status"], "UNFROZEN_DRAFT")
+        self.assertEqual(prompt["draft_status"], "unfrozen_draft")
         self.assertEqual(
             prompt["candidate_status"], "PROPOSED-PENDING-LEAD-RATIFICATION"
         )
@@ -234,11 +318,13 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_d124_decode_estimator_registration_conditions(self) -> None:
         decode = next(
-            cell for cell in self.plan["cells"] if cell["measurement_arm"] == "decode"
+            cell
+            for cell in self.plan["floor_cells"]
+            if cell["measurement_arm"] == "decode"
         )
         registration = decode["floor_estimator_registration"]
         self.assertEqual(
-            registration["identity"], "d124_two_shared_edge_common_mode_abba_v1"
+            registration["identity"], "d124_two_shared_edge_common_mode.v1"
         )
         self.assertEqual(
             registration["stationarity_transfer_assumption"]["identity"],
@@ -249,6 +335,10 @@ class D117GammaPlanTest(unittest.TestCase):
             registration["stationarity_transfer_assumption"]["evidentiary_limit"],
         )
         self.assertTrue(registration["identical_covariance_treatment_required"])
+        self.assertEqual(
+            registration["covariance_treatment"],
+            "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        )
         self.assertEqual(
             registration["calibration_treatment"],
             registration["consuming_decode_contrast_treatment"],
@@ -263,7 +353,7 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_consumer_family_is_a_declaration_not_a_pinset(self) -> None:
         declaration = read_json(PACK / "consumer_family_declaration.json")
-        self.assertEqual(declaration["artifact_status"], "UNFROZEN_DRAFT")
+        self.assertEqual(declaration["draft_status"], "unfrozen_draft")
         self.assertEqual(declaration["binding_mode"], "declaration_only")
         self.assertIs(declaration["byte_binding_pinset"], False)
         self.assertEqual(
@@ -275,7 +365,18 @@ class D117GammaPlanTest(unittest.TestCase):
                 "floor_rule": "cross_stack_armwise_max.v1",
             },
         )
-        self.assertEqual(declaration["prefill_p256_floor_dependency"]["cell_ids"], [])
+        self.assertEqual(
+            declaration["prefill_p256_floor_dependency"]["cell_ids"]["status"],
+            "EMPTY",
+        )
+        self.assertEqual(
+            declaration["prefill_p256_floor_dependency"]["cell_ids"]["value"],
+            [],
+        )
+        self.assertIn(
+            "TODO",
+            declaration["prefill_p256_floor_dependency"]["cell_ids"]["todo"],
+        )
         self.assertEqual(
             declaration["prefill_p256_floor_dependency"]["transport_rule"]["status"],
             "EMPTY",
@@ -296,9 +397,9 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_stage_launch_recipes_and_runtime_budgets_cover_both_arms(self) -> None:
         stages = self.tree["stage_graph"]
-        self.assertEqual([stage["ordinal"] for stage in stages], list(range(1, 15)))
+        self.assertEqual([stage["ordinal"] for stage in stages], list(range(1, 17)))
         self.assertEqual(
-            sum(len(stage["launch"]["commands"]) for stage in stages), 15
+            sum(len(stage["launch"]["commands"]) for stage in stages), 17
         )
         for index, stage in enumerate(stages):
             self.assertEqual(stage["launch"]["schema_version"], "joulewise.stage_launch.v1")
@@ -329,15 +430,35 @@ class D117GammaPlanTest(unittest.TestCase):
         self.assertEqual(budget["decode"]["members"], 40)
         self.assertEqual(budget["decode"]["minutes_with_margin"], 168.0)
         self.assertEqual(budget["prefill_p256"]["members"], 40)
-        self.assertEqual(budget["prefill_p256"]["core_minutes"], 110.0)
+        self.assertEqual(budget["prefill_p256"]["core_minutes_before_margin"], 110.0)
         self.assertEqual(budget["prefill_p256"]["minutes_with_20_percent_margin"], 130.0)
-        self.assertEqual(budget["combined_minutes_with_margin"], 298.0)
+        self.assertEqual(budget["combined_minutes_with_margin"], 308.0)
+        self.assertEqual(
+            budget["interior_reference_augmentation"]["additional_references"], 2
+        )
+        self.assertEqual(
+            budget["interior_reference_augmentation"]["authority"],
+            self.tree["reference_cadence"]["authority"],
+        )
+
+        stage_ids = [stage["stage_id"] for stage in stages]
+        expected_interior = [
+            "gamma-reference-decode-midpoint",
+            "gamma-reference-arm-boundary",
+            "gamma-reference-prefill-midpoint",
+        ]
+        self.assertEqual(
+            [stage_id for stage_id in stage_ids if stage_id in expected_interior],
+            expected_interior,
+        )
 
     def test_unfrozen_language_and_generator_has_no_discovery(self) -> None:
-        self.assertEqual(self.plan["artifact_status"], "UNFROZEN_DRAFT")
-        self.assertEqual(self.plan["freeze_status"], "unfrozen_draft")
-        self.assertEqual(self.tree["plan"]["artifact_status"], "UNFROZEN_DRAFT")
-        self.assertEqual(self.analysis["artifact_status"], "UNFROZEN_DRAFT")
+        self.assertEqual(self.plan["draft_status"], "unfrozen_draft")
+        self.assertEqual(self.tree["draft_status"], "unfrozen_draft")
+        self.assertEqual(self.analysis["draft_status"], "unfrozen_draft")
+        self.assertEqual(self.tree["schema_version"], "joulewise.d117_plan_tree.v1")
+        for manifest_path in [PACK / "order_manifest.json", *sorted(PACK.glob("*/order_manifest.json"))]:
+            self.assertEqual(read_json(manifest_path)["draft_status"], "unfrozen_draft")
         authored = "\n".join(
             (PACK / name).read_text(encoding="utf-8")
             for name in (
@@ -348,9 +469,29 @@ class D117GammaPlanTest(unittest.TestCase):
             )
         )
         self.assertNotIn("frozen_before_measurement", authored)
+        self.assertNotIn("artifact_status", authored)
+        self.assertNotIn("freeze_status", authored)
         generator_source = GENERATOR.read_text(encoding="utf-8")
-        for forbidden in (".glob(", ".rglob(", "os.walk", "Path.walk"):
+        for forbidden in (".glob(", "os.walk", "Path.walk"):
             self.assertNotIn(forbidden, generator_source)
+        self.assertIn('.rglob("*")', generator_source)
+
+    def test_decode_multiplicity_is_explicitly_contingent(self) -> None:
+        decode = next(
+            cell
+            for cell in self.plan["floor_cells"]
+            if cell["measurement_arm"] == "decode"
+        )
+        self.assertEqual(decode["family_m"], 1)
+        self.assertIn("contingent", decode["multiplicity_note"])
+        self.assertIn("prefill_p256", decode["multiplicity_note"])
+        analysis_decode = next(
+            contrast
+            for contrast in self.analysis["contrasts"]
+            if contrast["measurement_arm"] == "decode"
+        )
+        self.assertEqual(analysis_decode["multiplicity"]["m"], 1)
+        self.assertIn("contingent", analysis_decode["multiplicity"]["note"])
 
 
 if __name__ == "__main__":

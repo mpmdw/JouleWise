@@ -14,7 +14,6 @@ from typing import Any, Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACK_REL = Path("configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1")
-DEFAULT_OUT = REPO_ROOT / PACK_REL
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -27,12 +26,12 @@ from joulewise.floor_extraction import (  # noqa: E402
 )
 
 
-DRAFT_STATUS = "UNFROZEN_DRAFT"
+DRAFT_STATUS = "unfrozen_draft"
 PROMPT_STATUS = "PROPOSED-PENDING-LEAD-RATIFICATION"
 EMPTY_STATUS = "EMPTY"
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
-TREE_SCHEMA = "joulewise.frozen_plan_tree.v1"
+TREE_SCHEMA = "joulewise.d117_plan_tree.v1"
 PLAN_ID = "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-contrast-qwen25-1p5b-vs-7b-v1"
 CLAIM_ROOT_LEAF = "runs_d117_contrast_qwen25_1p5b_vs_7b_v1"
@@ -114,9 +113,13 @@ PREFILL_PROMPT_SHA256 = hashlib.sha256(PREFILL_PROMPT_TEXT.encode("utf-8")).hexd
 SHARED_TOKENIZER_JSON_SHA256 = (
     "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf"
 )
+REFERENCE_CADENCE_AUTHORITY = (
+    "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md "
+    "§6 U7 gamma implementation session"
+)
 
 DECODE_ESTIMATOR_REGISTRATION = {
-    "identity": "d124_two_shared_edge_common_mode_abba_v1",
+    "identity": "d124_two_shared_edge_common_mode.v1",
     "identity_status": "PROPOSED-PENDING-FLOOR-COMMONMODE-01-IMPLEMENTATION",
     "form": (
         "shared onset and shared offset parameters across each ABBA block, "
@@ -142,9 +145,14 @@ DECODE_ESTIMATOR_REGISTRATION = {
             "observed covariance claim."
         ),
     },
-    "calibration_treatment": "two_shared_edge_common_mode_per_abba_block",
+    "covariance_treatment": (
+        "two_shared_edges_plus_bundle_specific_adversarial_terms"
+    ),
+    "calibration_treatment": (
+        "two_shared_edges_plus_bundle_specific_adversarial_terms"
+    ),
     "consuming_decode_contrast_treatment": (
-        "two_shared_edge_common_mode_per_abba_block"
+        "two_shared_edges_plus_bundle_specific_adversarial_terms"
     ),
     "identical_covariance_treatment_required": True,
     "allowance": {
@@ -190,6 +198,13 @@ STAGE_SPECS = (
     },
 )
 
+REFERENCE_AFTER_STAGE = {
+    "01_decode_contrast_blocks_01_05": "gamma-reference-decode-midpoint",
+    "02_decode_contrast_blocks_06_10": "gamma-reference-arm-boundary",
+    "03_prefill_p256_contrast_blocks_01_05": "gamma-reference-prefill-midpoint",
+    "04_prefill_p256_contrast_blocks_06_10": "gamma-reference-end",
+}
+
 POLICY_PATH = Path("configs/campaign_policies/quiet_mac_p2_production.json")
 NEG8_MANIFEST_PATH = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
 NEG8_CORPUS_PATH = Path(
@@ -231,8 +246,10 @@ def repo_sha(path: Path) -> str:
     return file_sha256(REPO_ROOT / path)
 
 
-def empty_slot(todo: str, *, branch: str | None = None) -> dict[str, Any]:
-    row: dict[str, Any] = {"status": EMPTY_STATUS, "value": "", "todo": todo}
+def empty_slot(
+    todo: str, *, branch: str | None = None, value: Any = ""
+) -> dict[str, Any]:
+    row: dict[str, Any] = {"status": EMPTY_STATUS, "value": value, "todo": todo}
     if branch is not None:
         row["branch"] = branch
     return row
@@ -368,7 +385,7 @@ def family_relpath(measurement_arm: str, arm: str) -> Path:
 def prompt_candidate() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_prompt_candidate.v1",
-        "artifact_status": DRAFT_STATUS,
+        "draft_status": DRAFT_STATUS,
         "candidate_status": PROMPT_STATUS,
         "authority": {
             "prompt_length": "D-122 clause 1",
@@ -393,7 +410,7 @@ def prompt_candidate() -> dict[str, Any]:
 def consumer_declaration() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_consumer_family_declaration.v1",
-        "artifact_status": DRAFT_STATUS,
+        "draft_status": DRAFT_STATUS,
         "declaration_kind": "consumer_family_declaration",
         "binding_mode": "declaration_only",
         "byte_binding_pinset": False,
@@ -408,7 +425,11 @@ def consumer_declaration() -> dict[str, Any]:
             "floor_rule": "cross_stack_armwise_max.v1",
         },
         "prefill_p256_floor_dependency": {
-            "cell_ids": [],
+            "cell_ids": empty_slot(
+                "TODO(lead authority): D-122 does not identify ruled 256-token "
+                "prefill floor cells",
+                value=[],
+            ),
             "transport_rule": empty_slot(
                 "TODO(lead authority): D-122 does not ratify transport from the "
                 "alpha/beta 128-token prefill floor cells to this 256-token estimand"
@@ -504,16 +525,11 @@ def build_plan(
 ) -> dict[str, Any]:
     return {
         "schema_version": PLAN_SCHEMA,
-        "artifact_status": DRAFT_STATUS,
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
-        "identifier_note": (
-            "The plan-factory gamma identifier is retained while D-122 supersedes "
-            "the older decode-only scope text."
-        ),
         "calibration_scope": "production_window",
-        "freeze_status": "unfrozen_draft",
-        "authority_order": ["D-122", "D-125", "D-124", "D-123", "D-117"],
-        "fixed_n_blocks_per_arm": N_BLOCKS,
+        "fixed_n": N_BLOCKS,
+        "authorities": ["D-117", "D-122", "D-123", "D-124", "D-125"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -539,7 +555,7 @@ def build_plan(
             "outcome_dependent_top_up": "forbidden",
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
-        "cells": [
+        "floor_cells": [
             {
                 "cell_id": "d117-sw-decode-contrast-qwen25-1p5b-vs-7b",
                 "measurement_arm": "decode",
@@ -555,6 +571,11 @@ def build_plan(
                 "family_alpha": 0.05,
                 "multiplicity": "Holm",
                 "family_m": 1,
+                "multiplicity_note": (
+                    "family_m=1 is contingent on unresolved decode/prefill "
+                    "family-cardinality ratification; see the prefill_p256 cell's "
+                    "multiplicity TODO."
+                ),
                 "equivalence_margin": None,
                 "mde": None,
                 "ordered_blocks": ordered_blocks(runs, "decode"),
@@ -591,28 +612,28 @@ def build_plan(
                 "ordered_blocks": ordered_blocks(runs, "prefill_p256"),
             },
         ],
-        "execution_modes": {
-            "production_contrast_window": {
-                "selected_for_this_draft": True,
-                "ordered_subcampaign_ids": [stage["subcampaign_id"] for stage in STAGE_SPECS],
-                "planned_bundles": TOTAL_SCIENCE_MEMBERS,
-                "decode_members": MEMBERS_PER_ARM,
-                "prefill_p256_members": MEMBERS_PER_ARM,
-            }
+        "reported_energy_cells": [],
+        "execution_mode": {
+            "ordered_science_stage_ids": [
+                stage["subcampaign_id"] for stage in STAGE_SPECS
+            ],
+            "planned_science_bundles": TOTAL_SCIENCE_MEMBERS,
+            "planned_bound_bundles": 12,
+            "planned_reference_bundles": 9,
+            "planned_calibration_observations": 2,
         },
-        "prompt_candidate": {
-            "path": "prefill_prompt_candidate.json",
-            "sha256": prompt_sha,
-            "status": PROMPT_STATUS,
+        "roots": {
+            "claim_root_leaf": CLAIM_ROOT_LEAF,
+            "bound_root_leaf": BOUND_ROOT_LEAF,
         },
-        "consumer_family_declaration": {
-            "path": "consumer_family_declaration.json",
-            "sha256": declaration_sha,
-            "binding_mode": "declaration_only",
-        },
-        "runs_dir_leaf": CLAIM_ROOT_LEAF,
+        "runs_dir": CLAIM_ROOT_LEAF,
         "order_manifest": "order_manifest.json",
-        "campaign_log_leaf": "campaign_log.jsonl",
+        "campaign_log": f"{CLAIM_ROOT_LEAF}/campaign_log.jsonl",
+        "campaign_policy": {
+            "policy_id": "quiet-mac-p2-production",
+            "path": POLICY_PATH.as_posix(),
+            "sha256": repo_sha(POLICY_PATH),
+        },
     }
 
 
@@ -891,7 +912,7 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         )
     )
     for stage in STAGE_SPECS[:2]:
-        stage_id = f"gamma-science-{stage['subcampaign_id']}"
+        stage_id = f"gamma-science-{stage['subcampaign_id'].replace('_', '-')}"
         stages.append(
             (
                 stage_id,
@@ -904,15 +925,25 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
         if stage["last_block"] == 5:
             stages.append(
                 (
-                    "gamma-reference-midpoint",
+                    "gamma-reference-decode-midpoint",
                     "campaign_collection",
                     1,
                     {"kind": "external_input", "input_id": "midpoint_reference"},
-                    [campaign_command("gamma-reference-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
+                    [campaign_command("gamma-reference-decode-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
+                )
+            )
+        else:
+            stages.append(
+                (
+                    "gamma-reference-arm-boundary",
+                    "campaign_collection",
+                    1,
+                    {"kind": "external_input", "input_id": "midpoint_reference"},
+                    [campaign_command("gamma-reference-arm-boundary", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
                 )
             )
     for stage in STAGE_SPECS[2:]:
-        stage_id = f"gamma-science-{stage['subcampaign_id']}"
+        stage_id = f"gamma-science-{stage['subcampaign_id'].replace('_', '-')}"
         stages.append(
             (
                 stage_id,
@@ -922,6 +953,16 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                 [campaign_command(stage_id, (PACK_REL / stage["subcampaign_id"]).as_posix(), "claim_runs_root")],
             )
         )
+        if stage["last_block"] == 5:
+            stages.append(
+                (
+                    "gamma-reference-prefill-midpoint",
+                    "campaign_collection",
+                    1,
+                    {"kind": "external_input", "input_id": "midpoint_reference"},
+                    [campaign_command("gamma-reference-prefill-midpoint", MID_REF_MANIFEST_PATH.parent.as_posix(), "claim_runs_root")],
+                )
+            )
     stages.append(
         (
             "gamma-reference-end",
@@ -1045,7 +1086,9 @@ def build_analysis_manifest(
     def contrast(measurement_arm: str) -> dict[str, Any]:
         entries = [entry for entry in all_entries if entry["measurement_arm"] == measurement_arm]
         common: dict[str, Any] = {
-            "contrast_id": f"ctr-d117-{measurement_arm}-qwen25-1p5b-vs-7b",
+            "contrast_id": (
+                f"ctr-d117-{measurement_arm.replace('_', '-')}-qwen25-1p5b-vs-7b"
+            ),
             "measurement_arm": measurement_arm,
             "metric": metric_for(measurement_arm),
             "target_precheck_path": ["phase", "decode" if measurement_arm == "decode" else "prefill"],
@@ -1074,7 +1117,16 @@ def build_analysis_manifest(
                     "floor_estimator_registration": DECODE_ESTIMATOR_REGISTRATION,
                     "test": "two_sided",
                     "scientific_hypothesis_direction": "positive",
-                    "multiplicity": {"method": "Holm", "alpha": 0.05, "m": 1},
+                    "multiplicity": {
+                        "method": "Holm",
+                        "alpha": 0.05,
+                        "m": 1,
+                        "note": (
+                            "family_m=1 is contingent on unresolved decode/prefill "
+                            "family-cardinality ratification; see the prefill_p256 "
+                            "contrast multiplicity TODO."
+                        ),
+                    },
                     "equivalence_margin": None,
                     "mde": None,
                     "floor_dependency": {
@@ -1109,7 +1161,7 @@ def build_analysis_manifest(
 
     return {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
-        "artifact_status": DRAFT_STATUS,
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "plan_id": PLAN_ID,
             "path": "calibration_plan.json",
@@ -1162,8 +1214,8 @@ def build_tree(
     )
     return {
         "schema_version": TREE_SCHEMA,
+        "draft_status": DRAFT_STATUS,
         "plan": {
-            "artifact_status": DRAFT_STATUS,
             "path": "calibration_plan.json",
             "plan_id": PLAN_ID,
             "actual_sha256": plan_sha,
@@ -1177,6 +1229,14 @@ def build_tree(
         },
         "window_identity": {"window_id": PLAN_ID, "evidence_root_id": EVIDENCE_ROOT_ID},
         "roots": {"claim_leaf": CLAIM_ROOT_LEAF, "bound_leaf": BOUND_ROOT_LEAF},
+        "reference_cadence": {
+            "authority": REFERENCE_CADENCE_AUTHORITY,
+            "binding_40_member_rule": (
+                "one midpoint reference between two 20-member halves of each ABBA arm"
+            ),
+            "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
+            "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+        },
         "campaign_policy": {
             "path": POLICY_PATH.as_posix(),
             "sha256": repo_sha(POLICY_PATH),
@@ -1281,20 +1341,30 @@ def build_tree(
             "binding_mode": "declaration_only",
         },
         "runtime_budget": {
-            "status": DRAFT_STATUS,
+            "draft_status": DRAFT_STATUS,
             "decode": {
                 "members": MEMBERS_PER_ARM,
                 "minutes_with_margin": 168.0,
-                "authority": "plan-factory U7 gamma field derivations",
+                "authority": REFERENCE_CADENCE_AUTHORITY,
             },
             "prefill_p256": {
                 "members": MEMBERS_PER_ARM,
-                "core_minutes": 110.0,
+                "core_minutes_before_margin": 110.0,
                 "minutes_with_20_percent_margin": 130.0,
                 "authority": "D-122 sizing scout rough ABBA arm and runtime",
             },
-            "combined_minutes_with_margin": 298.0,
-            "combined_derivation": "168.0 + 130.0",
+            "interior_reference_augmentation": {
+                "additional_references": 2,
+                "minutes": 10.0,
+                "placement": [
+                    "after_decode_member_40_arm_boundary",
+                    "after_prefill_member_20_arm_midpoint",
+                ],
+                "authority": REFERENCE_CADENCE_AUTHORITY,
+                "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+            },
+            "combined_minutes_with_margin": 308.0,
+            "combined_derivation": "168.0 + 130.0 + 10.0",
             "member_replacement_authority": False,
         },
     }
@@ -1306,10 +1376,17 @@ This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-122, D-125, D-124, D-123, then D-117. D-122 supersedes
-the older design-memo and plan-factory decode-only text. The retained
-`joulewise.frozen_plan_tree.v1` string is the adopted compatibility schema
-identifier; `artifact_status = UNFROZEN_DRAFT` is the status of these bytes.
+Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
+the older design-memo and plan-factory decode-only text. The plan tree uses
+the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
+artifact declares `draft_status = unfrozen_draft`.
+
+The binding 40-member cadence is
+`docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md` §6, “U7 — gamma
+implementation session”: one midpoint between two 20-member ABBA halves. It
+does not settle a mixed two-arm 80-member interpretation. This draft therefore
+places references after science members 20, 40, and 60: both arm midpoints
+plus the decode/prefill boundary, pending lead ratification at freeze.
 
 The prefill prompt text is a labelled
 `PROPOSED-PENDING-LEAD-RATIFICATION` candidate. The pack records exact draft
@@ -1379,10 +1456,11 @@ def generate(output_repo_root: Path) -> dict[str, str]:
             root_index += 1
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
-            "artifact_status": DRAFT_STATUS,
-            "manifest_id": f"d117-gamma-{stage_id}-order-v1",
+            "draft_status": DRAFT_STATUS,
+            "manifest_id": f"d117-gamma-{stage_id.replace('_', '-')}-order-v1",
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
+            "successor_stage_id": REFERENCE_AFTER_STAGE[stage_id],
             "ordering_note": (
                 f"Fixed contiguous A/B/B/A blocks {stage['first_block']}-"
                 f"{stage['last_block']} for {stage['measurement_arm']}; numbering "
@@ -1404,6 +1482,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
             "manifest_path": stage_manifest_path.as_posix(),
             "manifest_id": stage_manifest["manifest_id"],
             "manifest_sha256": stage_manifest_sha,
+            "successor_stage_id": REFERENCE_AFTER_STAGE[stage_id],
         }
         stage_manifest_rows.append(manifest_row)
         stage_manifest_refs[stage_id] = {
@@ -1414,12 +1493,37 @@ def generate(output_repo_root: Path) -> dict[str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
-        "artifact_status": DRAFT_STATUS,
+        "draft_status": DRAFT_STATUS,
         "manifest_id": "d117-gamma-qwen25-1p5b-vs-7b-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,
         "planned_n_bundles": len(root_entries),
         "subcampaign_order": stage_manifest_rows,
+        "reference_cadence": {
+            "authority": REFERENCE_CADENCE_AUTHORITY,
+            "binding_40_member_rule": (
+                "one midpoint reference between two 20-member halves of each ABBA arm"
+            ),
+            "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
+            "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+        },
+        "interior_reference_stages": [
+            {
+                "after_science_member": 20,
+                "stage_id": "gamma-reference-decode-midpoint",
+                "purpose": "decode_arm_midpoint",
+            },
+            {
+                "after_science_member": 40,
+                "stage_id": "gamma-reference-arm-boundary",
+                "purpose": "decode_prefill_arm_boundary",
+            },
+            {
+                "after_science_member": 60,
+                "stage_id": "gamma-reference-prefill-midpoint",
+                "purpose": "prefill_arm_midpoint",
+            },
+        ],
         "executed_order": root_entries,
     }
     root_manifest_bytes = render_json(root_manifest)
@@ -1456,8 +1560,8 @@ def generate(output_repo_root: Path) -> dict[str, str]:
     science_rows = [
         {
             "ordinal": entry["index"],
-            "stage_id": next(
-                stage["subcampaign_id"]
+            "stage_id": "gamma-science-" + next(
+                stage["subcampaign_id"].replace("_", "-")
                 for stage in STAGE_SPECS
                 if entry["config"].startswith(stage["subcampaign_id"] + "/")
             ),
@@ -1498,34 +1602,59 @@ def generate(output_repo_root: Path) -> dict[str, str]:
     }
 
 
-def check() -> dict[str, str]:
+def actual_pack_paths(pack_root: Path) -> set[Path]:
+    return {
+        path.relative_to(pack_root)
+        for path in pack_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
+def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
     with tempfile.TemporaryDirectory(prefix="d117-gamma-check-") as temporary:
         temp_root = Path(temporary)
         hashes = generate(temp_root)
         generated = temp_root / PACK_REL
+        expected_paths = set(expected_pack_paths())
+        observed_paths = actual_pack_paths(check_root / PACK_REL)
+        missing = sorted(expected_paths - observed_paths)
+        extras = sorted(observed_paths - expected_paths)
+        if missing or extras:
+            detail: list[str] = []
+            if missing:
+                detail.append("missing=" + ",".join(path.as_posix() for path in missing))
+            if extras:
+                detail.append("extras=" + ",".join(path.as_posix() for path in extras))
+            raise ValueError("pack inventory differs: " + "; ".join(detail))
         for relative in expected_pack_paths(include_generator=False):
             expected_path = generated / relative
-            actual_path = DEFAULT_OUT / relative
+            actual_path = check_root / PACK_REL / relative
             if not expected_path.is_file():
                 raise ValueError(f"generated expected path missing: {relative}")
             if not actual_path.is_file():
                 raise ValueError(f"production expected path missing: {relative}")
             if expected_path.read_bytes() != actual_path.read_bytes():
                 raise ValueError(f"production bytes differ from regeneration: {relative}")
+        checked_generator = check_root / PACK_REL / "generate_configs.py"
+        if checked_generator.read_bytes() != (REPO_ROOT / PACK_REL / "generate_configs.py").read_bytes():
+            raise ValueError("production bytes differ from regeneration: generate_configs.py")
         return hashes
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--check", action="store_true")
-    group.add_argument("--output-root", type=Path)
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--output-root", type=Path)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    hashes = check() if args.check else generate(args.output_root or REPO_ROOT)
+    hashes = (
+        check(args.output_root.resolve() if args.output_root else REPO_ROOT)
+        if args.check
+        else generate(args.output_root or REPO_ROOT)
+    )
     mode = "checked" if args.check else "generated"
     print(
         f"{mode} UNFROZEN D-117 gamma draft: "

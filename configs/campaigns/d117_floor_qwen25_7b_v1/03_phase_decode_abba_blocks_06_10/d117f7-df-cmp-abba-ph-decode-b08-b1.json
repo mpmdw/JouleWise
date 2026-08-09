@@ -41,12 +41,11 @@
     "operator": "lead",
     "tags": [
       "phase2",
-      "splitwise-decode-floor-v1",
       "d117-floor-qwen25-7b-v1",
       "production-window",
       "floor-calibration",
       "df-condition=df-ph-decode-qwen25-7b",
-      "calibration-plan-sha256=969137e868d8615535576ae0c4eda263045c81c7f228b87c042d3f2da11f3d3e",
+      "calibration-plan-sha256=56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7",
       "rep8",
       "calibration-abba-block-id=d117-df-cmp-abba-ph-decode-qwen25-7b-b08",
       "calibration-abba-label=B",

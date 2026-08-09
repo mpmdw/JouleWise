@@ -46,11 +46,11 @@
       "comparative-contrast",
       "measurement-arm=prefill_p256",
       "df-condition=sw-prefill-p256-b-qwen25-7b",
-      "calibration-plan-sha256=e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
+      "calibration-plan-sha256=8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
       "calibration-abba-block-id=d117-prefill-p256-contrast-b01",
       "calibration-abba-label=B",
       "calibration-abba-sequence-index=3",
-      "UNFROZEN_DRAFT",
+      "unfrozen_draft",
       "prompt-tokens=256",
       "prompt-text-sha256=f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf",
       "prompt-status=PROPOSED-PENDING-LEAD-RATIFICATION"

@@ -46,11 +46,11 @@
       "comparative-contrast",
       "measurement-arm=decode",
       "df-condition=sw-decode-b-qwen25-7b",
-      "calibration-plan-sha256=e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
+      "calibration-plan-sha256=8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
       "calibration-abba-block-id=d117-decode-contrast-b04",
       "calibration-abba-label=B",
       "calibration-abba-sequence-index=3",
-      "UNFROZEN_DRAFT"
+      "unfrozen_draft"
     ]
   }
 }

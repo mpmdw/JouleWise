@@ -1,17 +1,17 @@
 {
-  "schema_version": "joulewise.frozen_plan_tree.v1",
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "draft_status": "unfrozen_draft",
   "plan": {
-    "artifact_status": "UNFROZEN_DRAFT",
     "path": "calibration_plan.json",
     "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
-    "actual_sha256": "e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
-    "declared_sha256": "e8190a5ba0fdac4276bd7459fc45578f3d6301f9394641017a649bff1f8dd1eb",
+    "actual_sha256": "8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
+    "declared_sha256": "8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
     "sidecar_path": "calibration_plan.sha256",
-    "sidecar_sha256": "8ec47438aecc8707fcd2a5ab9e28ad5f00da0b40568be6d2d84569c0191f13d0"
+    "sidecar_sha256": "2d25de21da9650081378b97c44e4ac0153dd64651401cee702af1a6272831c09"
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py",
-    "sha256": "54d194430f1903852a15b3f7aa619ad116a41c26f4a8e59e183b7b6db0c963d7"
+    "sha256": "5ad666ac5406ab3f2896729b328ed3fef0105c998efd555383de8ff7432f826c"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
@@ -20,6 +20,12 @@
   "roots": {
     "claim_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1",
     "bound_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v1_bound"
+  },
+  "reference_cadence": {
+    "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+    "binding_40_member_rule": "one midpoint reference between two 20-member halves of each ABBA arm",
+    "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
+    "freeze_ratification": "PENDING-LEAD-RATIFICATION"
   },
   "campaign_policy": {
     "path": "configs/campaign_policies/quiet_mac_p2_production.json",
@@ -79,9 +85,9 @@
   "science": [
     {
       "ordinal": 1,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json",
-      "config_sha256": "748d21f800fccefbfd3956664cee21f0a9fa34818d211d1b5d7b7c6609de5ab7",
+      "config_sha256": "86e824c2f87dbd4656b2ae9f414a46d4c64f17d0d8c00091a489c2f08889ac42",
       "run_id": "d117c15v7-decode-contrast-b01-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -92,9 +98,9 @@
     },
     {
       "ordinal": 2,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b1.json",
-      "config_sha256": "f67976547d74e511f3eb1f6afd821a49dc81da85a4dbcc20736e569c34a1cc8e",
+      "config_sha256": "9fc7f6f645b00562f397fc1ba8dc2b940a732e2736227020bf639452a164dd89",
       "run_id": "d117c15v7-decode-contrast-b01-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -105,9 +111,9 @@
     },
     {
       "ordinal": 3,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
-      "config_sha256": "e3796296e2d9a905bd5da69a80311a87bef8bdfa456c23e915acbbe4e2090f86",
+      "config_sha256": "689f14ce2fe30493da9c12f89cc292a578950505c1ac308fc8c7430fcbf91ec2",
       "run_id": "d117c15v7-decode-contrast-b01-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -118,9 +124,9 @@
     },
     {
       "ordinal": 4,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a2.json",
-      "config_sha256": "f85d240ec422afe59ca32ee6aa74f29f0e73ed3f52e7c2a54ae90b647ea5a45f",
+      "config_sha256": "0a2b3ff9c7e504e52c99253b3adea014807c0ef4bc3ac93f49897e4cacbdbd21",
       "run_id": "d117c15v7-decode-contrast-b01-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -131,9 +137,9 @@
     },
     {
       "ordinal": 5,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a1.json",
-      "config_sha256": "5d6f3299a692b262e467ef5c0cdef95767eb81b54175e9d9ff6ec00e949f2b25",
+      "config_sha256": "6960ca4d38fa59f9f1ab3e580b89204f979df16bfb436971e3f1c462d78bba2d",
       "run_id": "d117c15v7-decode-contrast-b02-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -144,9 +150,9 @@
     },
     {
       "ordinal": 6,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b1.json",
-      "config_sha256": "ce9954b2cf8443847dd36793318b45804da4b012b666e1235ee9fbbaa863471e",
+      "config_sha256": "0fee527024e68634af8c48291f88913725406f1edc6ed0da1f30256dc19dcccb",
       "run_id": "d117c15v7-decode-contrast-b02-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -157,9 +163,9 @@
     },
     {
       "ordinal": 7,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b2.json",
-      "config_sha256": "1f66a71da4cb59c5737fa572e0a0020a88e5a180d174449a7001d7cbb910efa2",
+      "config_sha256": "35bad4f2e1804d0afc35f5df5dbc576c18ff0f250d250192a7b009ab0e5590d8",
       "run_id": "d117c15v7-decode-contrast-b02-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -170,9 +176,9 @@
     },
     {
       "ordinal": 8,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a2.json",
-      "config_sha256": "adcd1f84a49c95964aed855fcd0f4027fc98517c6283497e68939b97e764f236",
+      "config_sha256": "67ed2e2063c50f6e6be230c14aed2379d8697bccda8ae6c946207c3128b59ab8",
       "run_id": "d117c15v7-decode-contrast-b02-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -183,9 +189,9 @@
     },
     {
       "ordinal": 9,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a1.json",
-      "config_sha256": "afabe5bf693dac0007fe2e5bb77249d09235a0e2f3f492ace6064dea4ea6ea22",
+      "config_sha256": "a23af2bb6e6c12a80cb0a81e906a83eebcd87ce63806df2644df24edcb50cf2d",
       "run_id": "d117c15v7-decode-contrast-b03-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -196,9 +202,9 @@
     },
     {
       "ordinal": 10,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b1.json",
-      "config_sha256": "bef9008f4a2813879157a991ee16ef565d092a0aa5ec15b90536dd16de19d9ca",
+      "config_sha256": "86c337e521b24f941fcbe91a645882dbd6bd4a67f637a7f533a73fbe4299b0a6",
       "run_id": "d117c15v7-decode-contrast-b03-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -209,9 +215,9 @@
     },
     {
       "ordinal": 11,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b2.json",
-      "config_sha256": "905cb6dac6ed0d5bef37f34ffcfdfd7b735997f95413d8222e427817754f6435",
+      "config_sha256": "ec4b32b3754bb2ccd059a9759cb961c0bcc891ecc040b729233f075fe2c2d0be",
       "run_id": "d117c15v7-decode-contrast-b03-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -222,9 +228,9 @@
     },
     {
       "ordinal": 12,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a2.json",
-      "config_sha256": "16f845e39823ffeeba7b6079ea482ca06d69cf257a007f52fd46f25a508766b4",
+      "config_sha256": "4d2d5e63b2e41f4ba1ec4f09147ab038d7c8961ab615292bfc359ea525236933",
       "run_id": "d117c15v7-decode-contrast-b03-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -235,9 +241,9 @@
     },
     {
       "ordinal": 13,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a1.json",
-      "config_sha256": "a6d0ccd122b0c457a4432903555632cf72ab937e013ccfbee2906da1985e26ca",
+      "config_sha256": "786600e1ef90987c37904541e17b0a8423d8134ea2f4fbda7bc63ab29ab57685",
       "run_id": "d117c15v7-decode-contrast-b04-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -248,9 +254,9 @@
     },
     {
       "ordinal": 14,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b1.json",
-      "config_sha256": "425bcf988a189d51165a7ae95829c4b4f429966626a15b4d5c53b94d7e1edf66",
+      "config_sha256": "47faeaa733fcbff5488d6c056b4ba457de0fe74c09fb1c3740e2c0018537cb6b",
       "run_id": "d117c15v7-decode-contrast-b04-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -261,9 +267,9 @@
     },
     {
       "ordinal": 15,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b2.json",
-      "config_sha256": "1bbdade5b9d18f75e2808b0b07ce5edfd7cb5b6c61d8c9cb9cebffeed474aeeb",
+      "config_sha256": "5d2e3db20bd70443129fbf3337c1e1da9b84233aa297180e20952f9b796f6bfb",
       "run_id": "d117c15v7-decode-contrast-b04-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -274,9 +280,9 @@
     },
     {
       "ordinal": 16,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a2.json",
-      "config_sha256": "6f5c9de3706dc000edfe1953ad45e36f8a6ca76234df61615eba6c54499ff1e0",
+      "config_sha256": "e63824a656b6d7a6a1867ffff87af125fb5649e358c18cc3778f2be7ccced406",
       "run_id": "d117c15v7-decode-contrast-b04-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -287,9 +293,9 @@
     },
     {
       "ordinal": 17,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a1.json",
-      "config_sha256": "c5108de7d089f4eb0a951fc2d8b8a95bff27f7f709799a853f86fac8463001d0",
+      "config_sha256": "d57448aeeb07dedfe82415a4bd2aef79208f1a0550750d370463ec90955fb38e",
       "run_id": "d117c15v7-decode-contrast-b05-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -300,9 +306,9 @@
     },
     {
       "ordinal": 18,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b1.json",
-      "config_sha256": "1339a24dafb594961888e4175e8b8021fa5428d3e458fa10fc40c9c3373fcd7b",
+      "config_sha256": "7e0a0b4185d0f3998c1ce74091b148dd453c27526c9d1e115cd009e450aff1df",
       "run_id": "d117c15v7-decode-contrast-b05-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -313,9 +319,9 @@
     },
     {
       "ordinal": 19,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b2.json",
-      "config_sha256": "0c5952696e06213cc68da25272f4dd7e4437ecadc7aed07e67f37d67dc9553c1",
+      "config_sha256": "795dc0ffb84fcc3876f7bfd4b4623aa90fb62c731ebd3b6eb0f2fdefb73ced99",
       "run_id": "d117c15v7-decode-contrast-b05-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -326,9 +332,9 @@
     },
     {
       "ordinal": 20,
-      "stage_id": "01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a2.json",
-      "config_sha256": "be6b34ed83bc6ff0932bc465dee4211cd13e80f21907369f1866edced4a6ec78",
+      "config_sha256": "3a646779ee3d6a288ba4b2bc7c4b6f470f37b40f720de2d67c17ea1b53d6552a",
       "run_id": "d117c15v7-decode-contrast-b05-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -339,9 +345,9 @@
     },
     {
       "ordinal": 21,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a1.json",
-      "config_sha256": "6fd3a45efa10593b9b299518624269039f7eff9e215699b6460531b6e8ffb5c7",
+      "config_sha256": "3d343ba85875e458852c0fc0d2ea943b39b2f7f3a84f6d31b1b7350f539b4337",
       "run_id": "d117c15v7-decode-contrast-b06-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -352,9 +358,9 @@
     },
     {
       "ordinal": 22,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b1.json",
-      "config_sha256": "6e6399d09a8b82ad66a400254ea62aab15f9b8b1d739ff14e2709ae6bbbd67a2",
+      "config_sha256": "7598d088131cc59953439aa2364a7fdd9597389771d121d9c4fb86d415adceec",
       "run_id": "d117c15v7-decode-contrast-b06-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -365,9 +371,9 @@
     },
     {
       "ordinal": 23,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b2.json",
-      "config_sha256": "d43c592cad3c8301fad8a613b8f5a662e7541991dd59bfef1d2274b991907454",
+      "config_sha256": "45ee2667479b1e36f62e10c7d8078f648d5f395ee99dfb8f1ac0fa700d939fdd",
       "run_id": "d117c15v7-decode-contrast-b06-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -378,9 +384,9 @@
     },
     {
       "ordinal": 24,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a2.json",
-      "config_sha256": "1c4d64faa2718bda462903ee4601fa2b8708df0d315360d6aea4c629d102dcff",
+      "config_sha256": "36cb3c9aa43b4ca133a15cbbe79d3820f7200e6b5e057fe3bb9b7da9505ff98c",
       "run_id": "d117c15v7-decode-contrast-b06-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -391,9 +397,9 @@
     },
     {
       "ordinal": 25,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a1.json",
-      "config_sha256": "ef802b33d4450b4667be8d2371236e9962f3dfd1d4825ad516b8258c7ebe884c",
+      "config_sha256": "08ad7dd43f26100fd74183ce6ef6cdc4882fbe4d829b5d70cb5923490cc81b4f",
       "run_id": "d117c15v7-decode-contrast-b07-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -404,9 +410,9 @@
     },
     {
       "ordinal": 26,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b1.json",
-      "config_sha256": "be92cb5bd87aa43d4e1491c3b320a595efaedccdbeb4a8bdeeb5e79a74b19555",
+      "config_sha256": "41076337cd9474af4903abb05722c08e8c7e1370f5ad81b64ae0714b2b9aa970",
       "run_id": "d117c15v7-decode-contrast-b07-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -417,9 +423,9 @@
     },
     {
       "ordinal": 27,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b2.json",
-      "config_sha256": "59e86d8bca4f405c3b8177f7e45d609bc7df906520670ca087d9448ed5603871",
+      "config_sha256": "5c7683fc66da92811b31457d4f433073ccaa8ae3fb7d85be5cc60c5f010b35e7",
       "run_id": "d117c15v7-decode-contrast-b07-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -430,9 +436,9 @@
     },
     {
       "ordinal": 28,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a2.json",
-      "config_sha256": "1231dee18aa522f1abfaf1ceef6a321a29edd1e05ae05ffd38d4e66c939f9f60",
+      "config_sha256": "d34ebd7ade20184d206f1747204ad03b23e8e277c5f19d9177c5dd4a5b94eb38",
       "run_id": "d117c15v7-decode-contrast-b07-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -443,9 +449,9 @@
     },
     {
       "ordinal": 29,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a1.json",
-      "config_sha256": "9d2924c0dc4ed2f2646582abd24a88cbc4f24037a09a755640665d79cd3e67ad",
+      "config_sha256": "8d6c11c8067a9e40f936c6ce9c6c262fba6c16f88c77da837a355bd6751fcd92",
       "run_id": "d117c15v7-decode-contrast-b08-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -456,9 +462,9 @@
     },
     {
       "ordinal": 30,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b1.json",
-      "config_sha256": "6ab309fda4e680f63784305bf354052c59cabd56b40ddda61807ec6a83fa6aec",
+      "config_sha256": "14f242c5254bec108776cfcf17dec433882b748cf9eedffd848663a9ab96e90b",
       "run_id": "d117c15v7-decode-contrast-b08-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -469,9 +475,9 @@
     },
     {
       "ordinal": 31,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b2.json",
-      "config_sha256": "2c2ae5aa2736dd873bc0d702f81f4b9fe1810d3e0aca45dc2417a21dcfa0739d",
+      "config_sha256": "8d4ce7780a2c77c1f086ebb3b44d82eaf20f59b545978144f809ec7e29d73d3d",
       "run_id": "d117c15v7-decode-contrast-b08-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -482,9 +488,9 @@
     },
     {
       "ordinal": 32,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a2.json",
-      "config_sha256": "fe3e2b150e68f375e822898105a5072280547aeb30215be022a5471a418d223d",
+      "config_sha256": "f561e15a25346a161895a61b469e6e478179fb095e9d07e49e03d47ea48f7f11",
       "run_id": "d117c15v7-decode-contrast-b08-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -495,9 +501,9 @@
     },
     {
       "ordinal": 33,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a1.json",
-      "config_sha256": "adfc203326dcb2bea62eb5c063e0ddad3935cf577a9443927bf44e906d606ef6",
+      "config_sha256": "5d22cdfaf9dd0b50436b54fc633d60cbdbcb138cff35c7def50bf8e40447b90c",
       "run_id": "d117c15v7-decode-contrast-b09-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -508,9 +514,9 @@
     },
     {
       "ordinal": 34,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b1.json",
-      "config_sha256": "9543b9e19a556d3c8d4fd47e405f659d3d1164dd8410fd61deee97a9bc9a1d5e",
+      "config_sha256": "cdb0b982e7c6601254cb2210114178e46b0427e2695ce08e2a7f09cd158c37d9",
       "run_id": "d117c15v7-decode-contrast-b09-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -521,9 +527,9 @@
     },
     {
       "ordinal": 35,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b2.json",
-      "config_sha256": "4e0110e8ca8fac5c65ed653d72d2eb7d1ea1a44f89ac5679b044169a2e588bc0",
+      "config_sha256": "5a9de991bbe25dbba86bf667bca881c206024f33811b25120cade0697bec53c8",
       "run_id": "d117c15v7-decode-contrast-b09-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -534,9 +540,9 @@
     },
     {
       "ordinal": 36,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a2.json",
-      "config_sha256": "3cfa99bfababfbeaccf17e84a250da54e46e62d80abbd689eac6372667b9a606",
+      "config_sha256": "7fe2bd3b5da5eb00edce83ec2a58ba93cde66993ab7c351e9212275a9a3b9a16",
       "run_id": "d117c15v7-decode-contrast-b09-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -547,9 +553,9 @@
     },
     {
       "ordinal": 37,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a1.json",
-      "config_sha256": "236064fe442c9d620fd97459029bc055ac728eff9f68c3647d04f74672dcf91a",
+      "config_sha256": "473b8ddd9265f7200501f4e5cfa23712ba63f559c79a43ab9b6f3bf354161a2a",
       "run_id": "d117c15v7-decode-contrast-b10-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -560,9 +566,9 @@
     },
     {
       "ordinal": 38,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b1.json",
-      "config_sha256": "9219167995ea8ee815ca5f359e3c862119753c898c8a6208789bcec50eeff729",
+      "config_sha256": "008f2ef1b117d58c2e66e84447a64d3967c82e227c656002da314320de2cb14b",
       "run_id": "d117c15v7-decode-contrast-b10-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -573,9 +579,9 @@
     },
     {
       "ordinal": 39,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b2.json",
-      "config_sha256": "1bbdfd29ae58a0d98616525ae870807caa158dae187f8becda3a8c8b3f58f114",
+      "config_sha256": "67cbb80003ab7b78c901d9816a8bd12c5d4ca1aed62bcdeea11c16d607bf8f5f",
       "run_id": "d117c15v7-decode-contrast-b10-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -586,9 +592,9 @@
     },
     {
       "ordinal": 40,
-      "stage_id": "02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a2.json",
-      "config_sha256": "3dbb65291b00eac9258c332b9f1bede37dedb22ea9aa7c89b5cc76d9dbd5dd2b",
+      "config_sha256": "e33977e7e34527dad1e0c3d2927c882ef51374b85cbb1c8ed67e2a4cefef4aa7",
       "run_id": "d117c15v7-decode-contrast-b10-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "decode",
@@ -599,9 +605,9 @@
     },
     {
       "ordinal": 41,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a1.json",
-      "config_sha256": "ec4a2e08304ee5e374d056467e15aaa088d86604ebb521247e628887e3220888",
+      "config_sha256": "a568c95e22f0a9da34626312bae1a0e071220c57b305763af3d7706b841c993f",
       "run_id": "d117c15v7-prefill-p256-contrast-b01-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -612,9 +618,9 @@
     },
     {
       "ordinal": 42,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b1.json",
-      "config_sha256": "ec81990ab57d589cecee2178651cd82dbc0d70de01d7da6f33bd21afcb1d6f97",
+      "config_sha256": "c22617c3c98e25b086836c009d9fb1563c20d034710958c3280ac0d27cb49b22",
       "run_id": "d117c15v7-prefill-p256-contrast-b01-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -625,9 +631,9 @@
     },
     {
       "ordinal": 43,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b2.json",
-      "config_sha256": "3cf5116d8cd6d483617c61a3aa5f035b15ab799e2036ef509c5539d9639d4fb5",
+      "config_sha256": "7cc6a78e7a7899a1cf45cd303379ed8d59ffe614a70a76dfd14903dcbd9e45a4",
       "run_id": "d117c15v7-prefill-p256-contrast-b01-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -638,9 +644,9 @@
     },
     {
       "ordinal": 44,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a2.json",
-      "config_sha256": "0079f36f81ea295b448701b787df1699b124859f42b9ee5ca048b21ff43aafb3",
+      "config_sha256": "c311f86aef7b0f00d2b22b6b41362ec8abbde28c3713145c5cd5e2025b0b2dba",
       "run_id": "d117c15v7-prefill-p256-contrast-b01-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -651,9 +657,9 @@
     },
     {
       "ordinal": 45,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a1.json",
-      "config_sha256": "6fe5313840399148193b0dcc74638ec8225ea587ca93a35d879ccfdd62a9f0b8",
+      "config_sha256": "833d4f28ab798565a6ed318a31dbab90537cc5a3de90fbd6a0ba848f92517483",
       "run_id": "d117c15v7-prefill-p256-contrast-b02-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -664,9 +670,9 @@
     },
     {
       "ordinal": 46,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b1.json",
-      "config_sha256": "b0bac9845873ab7051cc01bd64934c9b780324306c4784505a132a72332360aa",
+      "config_sha256": "bec50d38d4ebcd954f1edb0450d9763df2a5cebffadf5148a5bbcc44959eb655",
       "run_id": "d117c15v7-prefill-p256-contrast-b02-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -677,9 +683,9 @@
     },
     {
       "ordinal": 47,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b2.json",
-      "config_sha256": "bffca5c1ac9682a251385d64871e21a95d2cdfa75f8320f0b312924fe53bc4aa",
+      "config_sha256": "f7092286074d73f53a7c8514d76f4d8ab2bf95880f539f98c009070f40991025",
       "run_id": "d117c15v7-prefill-p256-contrast-b02-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -690,9 +696,9 @@
     },
     {
       "ordinal": 48,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a2.json",
-      "config_sha256": "90cd6da36fdde5b10489255ef7608212f232e6c1443cd29129d759327d42d105",
+      "config_sha256": "8ccac98ae7ab1b4ae6ec5dc5db49a2f86f57b3d18c4686f3b02ed6e997d6ff50",
       "run_id": "d117c15v7-prefill-p256-contrast-b02-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -703,9 +709,9 @@
     },
     {
       "ordinal": 49,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a1.json",
-      "config_sha256": "c0464d6bc4f3862077b7791aa9b30d54e7e88fdf9a256bb4cd730dcd0379a6e3",
+      "config_sha256": "d5ab55d89e76b1ef938969ddccd7c3290e801d26252bcf92b24f80cb4600caac",
       "run_id": "d117c15v7-prefill-p256-contrast-b03-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -716,9 +722,9 @@
     },
     {
       "ordinal": 50,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b1.json",
-      "config_sha256": "f56316777544d478dab1bae5dad7a5c1ad17881410e24183d4ae115f84ea40c8",
+      "config_sha256": "1b6357254b9fde25b9df9342ed8887b2c6ec2ad3b4d98cb22965fe4f2cf99e12",
       "run_id": "d117c15v7-prefill-p256-contrast-b03-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -729,9 +735,9 @@
     },
     {
       "ordinal": 51,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b2.json",
-      "config_sha256": "4802e4f1d75dede21d4d3958774797d147ade304818bde32d0eaf77bfab54056",
+      "config_sha256": "a64ec75f2e842e4c521b58db9607e6f676d4ef5672c9dc7373e7e211c9963e13",
       "run_id": "d117c15v7-prefill-p256-contrast-b03-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -742,9 +748,9 @@
     },
     {
       "ordinal": 52,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a2.json",
-      "config_sha256": "ad36434cb74ecbd25e7f2c9f4ec3c079c3de0fcfe79bbca1dce5a13c10d7f4de",
+      "config_sha256": "038c7b570d33daa08e09841dd733b9a1e71dd3002a58cec34b3674c872098f07",
       "run_id": "d117c15v7-prefill-p256-contrast-b03-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -755,9 +761,9 @@
     },
     {
       "ordinal": 53,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a1.json",
-      "config_sha256": "08f5850c15b1fdcf784a39fddd2bfec7f0441e3adcdcd024d5c5a097b75c436a",
+      "config_sha256": "99f2bd23ae625fcf413b59a22f95491d83ae341264f47c13b46717f64d370e48",
       "run_id": "d117c15v7-prefill-p256-contrast-b04-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -768,9 +774,9 @@
     },
     {
       "ordinal": 54,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b1.json",
-      "config_sha256": "2b795a8354633741a8954a8cba615568530a537028e0f4f110da44a3eb1015f3",
+      "config_sha256": "c29380c5de2dd480eebfdd0232dc15f07f4f61b67b20e78c249fd8c8a51f3f8d",
       "run_id": "d117c15v7-prefill-p256-contrast-b04-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -781,9 +787,9 @@
     },
     {
       "ordinal": 55,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b2.json",
-      "config_sha256": "09b87dbcb71f9cf09e02a7586b5ee756fa28269fbb1c1aa49a00f6d3bd0919a0",
+      "config_sha256": "73487b8ace94e5d920e01a7ef1ebd8d2f8982e9aaaa516b5428ba01c5de87394",
       "run_id": "d117c15v7-prefill-p256-contrast-b04-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -794,9 +800,9 @@
     },
     {
       "ordinal": 56,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a2.json",
-      "config_sha256": "8261881d304e34ab25cc801e8c934b500c7314b4b26fa2c355b9ec37602471c9",
+      "config_sha256": "a9088bd1ecbcd56303d9c9bca6f747456b5ce23ccdb5ff87b7a5ee7cee38f0f5",
       "run_id": "d117c15v7-prefill-p256-contrast-b04-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -807,9 +813,9 @@
     },
     {
       "ordinal": 57,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a1.json",
-      "config_sha256": "fcf562ffd388f73ed9874a0cc9ac77723e19fdb286079dacc6f4c32d4bb58e89",
+      "config_sha256": "500079f1c895e3162e34da583d6e61342cad8df38e79da396d4aa44eb412313c",
       "run_id": "d117c15v7-prefill-p256-contrast-b05-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -820,9 +826,9 @@
     },
     {
       "ordinal": 58,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b1.json",
-      "config_sha256": "12b5f83e87d3a81e5c31445ddde2e8315ed6f71c16aa965f9c928a968884c213",
+      "config_sha256": "3b8031398d9d90a160321513770b86f5f495fdbf9cec52a454c21dfaedadb5c3",
       "run_id": "d117c15v7-prefill-p256-contrast-b05-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -833,9 +839,9 @@
     },
     {
       "ordinal": 59,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b2.json",
-      "config_sha256": "8ca7047d1bd4113572d4b4986f333f82b703d02376f3b275bce083c20d22c063",
+      "config_sha256": "f5c0eed61267730e836e8196cc033d54a17ab3f5228a7ed621b1518a56473b1c",
       "run_id": "d117c15v7-prefill-p256-contrast-b05-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -846,9 +852,9 @@
     },
     {
       "ordinal": 60,
-      "stage_id": "03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a2.json",
-      "config_sha256": "1eea7418489c6bf0c0bcbed85331d67335ae4369656737fbc509ab73a5cd28ab",
+      "config_sha256": "c6aa456021c7095c422a697d7872a01290e817d9ec37938e0030eda168f94481",
       "run_id": "d117c15v7-prefill-p256-contrast-b05-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -859,9 +865,9 @@
     },
     {
       "ordinal": 61,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a1.json",
-      "config_sha256": "6ecd8c218f3b956e68ffd367441c37c65e9c99c83fe256eff45f0a8d7daf13de",
+      "config_sha256": "8ede7ed15cf9158333240470a6087284048657ff2e54005eb3dd5db13d14eb16",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -872,9 +878,9 @@
     },
     {
       "ordinal": 62,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b1.json",
-      "config_sha256": "2a9588cce9ed818a8da208c32215d4c8a2986f879e7dfaab2b35e6abc76b6c51",
+      "config_sha256": "45ac7369780a34e4417b761276ff3d9e0aea10946d552fcc9ef948ef3d78b5ca",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -885,9 +891,9 @@
     },
     {
       "ordinal": 63,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b2.json",
-      "config_sha256": "ddf4d66563ee2f92ea02340903d545130eedccdd2e8303c4e1d70beec59e31b1",
+      "config_sha256": "387afce7a9db3a569692c5bbe95f117727dee4f8134142601c12b9762e7ad3fe",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -898,9 +904,9 @@
     },
     {
       "ordinal": 64,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a2.json",
-      "config_sha256": "254173bf71e620febcb16394586535abef2f5727aeb3590712e91183d6d1043b",
+      "config_sha256": "3ee0e6ddae3780da96da8068772c83d5b650c3b7220aaba4adde1cc1e354767c",
       "run_id": "d117c15v7-prefill-p256-contrast-b06-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -911,9 +917,9 @@
     },
     {
       "ordinal": 65,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a1.json",
-      "config_sha256": "63198bd8cad65fb56f3e86dfef6b2a3c0131d59b06572f22230340aa35393c6a",
+      "config_sha256": "ebb7cb96c55a40e7fdb8d7143e7c7bad8698d2952943e8e7c6db9a6f11fb1e70",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -924,9 +930,9 @@
     },
     {
       "ordinal": 66,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b1.json",
-      "config_sha256": "b1369c1568338ac925171e1901be2f557d8e6a1582ccf42f168c0e379794922a",
+      "config_sha256": "bc0daebb5c235f0f5b94371720fb7efead67242a752fa194275f705cb2defbdd",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -937,9 +943,9 @@
     },
     {
       "ordinal": 67,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b2.json",
-      "config_sha256": "af73344cad343bc991e596b5d9a338ab62a12ffcb717ca39f879f5f063ad1218",
+      "config_sha256": "ea30a3ba3297a771bd5c368a9f1a1ab437fcf92bcc160aa8f0c1a6f151a058e8",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -950,9 +956,9 @@
     },
     {
       "ordinal": 68,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a2.json",
-      "config_sha256": "d21c8edbb2487f1c4ba14fb2fbb96e923b1c24d8802f794ab3b12b7530f9e680",
+      "config_sha256": "9cbf83b942565197a15970bbd73512f0fa0d459cb5ed797dc36c47db5ff7a5c6",
       "run_id": "d117c15v7-prefill-p256-contrast-b07-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -963,9 +969,9 @@
     },
     {
       "ordinal": 69,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a1.json",
-      "config_sha256": "b7ffef2383c9cb3bad3452d6925697276873151865b9aea053aa81f9c4cb8e58",
+      "config_sha256": "d2de6e1bb7ebff09526f395773687a7281a2e018abc0725c1ea399e043d1d82f",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -976,9 +982,9 @@
     },
     {
       "ordinal": 70,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b1.json",
-      "config_sha256": "10f8f2502b63e19f3fc6d7da18e530556b3ba46653654209aaf1ae0d448f1a91",
+      "config_sha256": "8cdebde8e6f16772d5e2a5ce02168f75d3f3c9fcc0c06e8de79a63ca957ec066",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -989,9 +995,9 @@
     },
     {
       "ordinal": 71,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b2.json",
-      "config_sha256": "a65db295dcd3f6b2b691bddc32b4031306a6e9e5e32aa167fce1de3becd9918d",
+      "config_sha256": "02a2127b9e019cfdd993e0c5b453777526e7867ebe8ef4f4826c4ee142bd134c",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1002,9 +1008,9 @@
     },
     {
       "ordinal": 72,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a2.json",
-      "config_sha256": "a2c7bd7268e4150e263ecce87d0c1ae3ca49363769f1f82b1190626d84c608a6",
+      "config_sha256": "ed3c4328a496bec4a896eb408ecab48849a62d35cad1a3d3e7e65ad5902f0d24",
       "run_id": "d117c15v7-prefill-p256-contrast-b08-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1015,9 +1021,9 @@
     },
     {
       "ordinal": 73,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a1.json",
-      "config_sha256": "42ab2462b7c8543639c88b358c858474c63b6cca505118f02e825f73e977d2c2",
+      "config_sha256": "c878dda445802137d9ce310a3afc59ed3a4f0082813d43da600c52f6e1469be3",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1028,9 +1034,9 @@
     },
     {
       "ordinal": 74,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b1.json",
-      "config_sha256": "b37a8a2e85424cb9597efe6358e8241bf2d1e25ad54a697eecc5a4667ee5f6e4",
+      "config_sha256": "f9cb1c10a9365488c9868c8a28929dd29bfd5c3110daa906f9782cab97a60e19",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1041,9 +1047,9 @@
     },
     {
       "ordinal": 75,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b2.json",
-      "config_sha256": "a53dc06a405f55c7127d6ef4aac298edd79625f4c6e8f278b15cf6105e022b70",
+      "config_sha256": "d37cd3ea7efd12c7cb8dbe7457d56415354546c175c8ca16d14d09ff9de141ce",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1054,9 +1060,9 @@
     },
     {
       "ordinal": 76,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a2.json",
-      "config_sha256": "1f6a1d87641b2371b99e8ad58a8a1b9a375d9a4cce385410b6abd6bfa28446e7",
+      "config_sha256": "59eef5d70f6a2a9f99fa4f3c1910a1e4c5e8b45b8bebba53aabe4bd6fb545ecf",
       "run_id": "d117c15v7-prefill-p256-contrast-b09-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1067,9 +1073,9 @@
     },
     {
       "ordinal": 77,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a1.json",
-      "config_sha256": "903526e29ea9c98a64a11c0a2ed85a7ab9a1c0016fb3bd3a8f3675bf817e1f58",
+      "config_sha256": "e477f7a830f643b84024b87944feff15d08d69184a2c6157f8f30642280f5a6c",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-a1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1080,9 +1086,9 @@
     },
     {
       "ordinal": 78,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b1.json",
-      "config_sha256": "0555bd1b8acbd554f7a224be97692847bb0081fb7515dcc51db3d680dfd9415c",
+      "config_sha256": "73e12c56a80d11e18959564fd3d4d216ba63d51a66da0a75e109635a95f3deb0",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-b1",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1093,9 +1099,9 @@
     },
     {
       "ordinal": 79,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b2.json",
-      "config_sha256": "c31c3e5da638578f4b8be1a4266f03053a0c4521935d19a70849abe7072b8455",
+      "config_sha256": "6047f71a55bedccaec7c4cf1e5de931f77416987950014833226c747159776ba",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-b2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1106,9 +1112,9 @@
     },
     {
       "ordinal": 80,
-      "stage_id": "04_prefill_p256_contrast_blocks_06_10",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a2.json",
-      "config_sha256": "340fafeef06ca136898463b29a22a20420d153316fbf626c11e67df7fec5c801",
+      "config_sha256": "f35b3ad2e327c55480b27daaaef5672f076209f10e886be3e9a4fc128921cd16",
       "run_id": "d117c15v7-prefill-p256-contrast-b10-a2",
       "role": "comparative_contrast_member",
       "measurement_arm": "prefill_p256",
@@ -1511,7 +1517,7 @@
       "kind": "campaign_collection",
       "expected_count": 3,
       "predecessor": "gamma-bound-derivation",
-      "successor": "gamma-science-01_decode_contrast_blocks_01_05",
+      "successor": "gamma-science-01-decode-contrast-blocks-01-05",
       "input_ref": {
         "kind": "external_input",
         "input_id": "start_references"
@@ -1605,23 +1611,23 @@
       }
     },
     {
-      "stage_id": "gamma-science-01_decode_contrast_blocks_01_05",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
       "ordinal": 6,
       "kind": "campaign_collection",
       "expected_count": 20,
       "predecessor": "gamma-reference-start",
-      "successor": "gamma-reference-midpoint",
+      "successor": "gamma-reference-decode-midpoint",
       "input_ref": {
         "kind": "pack_manifest",
         "path": "01_decode_contrast_blocks_01_05/order_manifest.json",
-        "manifest_id": "d117-gamma-01_decode_contrast_blocks_01_05-order-v1",
-        "sha256": "90e9d2235f50069b59fc33d483b833c830a24f2bf880c39ec580f9c16844daf3"
+        "manifest_id": "d117-gamma-01-decode-contrast-blocks-01-05-order-v1",
+        "sha256": "6c4853c907e537d680556291af0f9e941f44e7f050a7d3d40d837a0ccf14783c"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
         "commands": [
           {
-            "command_id": "gamma-science-01_decode_contrast_blocks_01_05.collect",
+            "command_id": "gamma-science-01-decode-contrast-blocks-01-05.collect",
             "command_kind": "campaign_collection",
             "argv_template": {
               "tool_id": "campaign_runner",
@@ -1706,12 +1712,12 @@
       }
     },
     {
-      "stage_id": "gamma-reference-midpoint",
+      "stage_id": "gamma-reference-decode-midpoint",
       "ordinal": 7,
       "kind": "campaign_collection",
       "expected_count": 1,
-      "predecessor": "gamma-science-01_decode_contrast_blocks_01_05",
-      "successor": "gamma-science-02_decode_contrast_blocks_06_10",
+      "predecessor": "gamma-science-01-decode-contrast-blocks-01-05",
+      "successor": "gamma-science-02-decode-contrast-blocks-06-10",
       "input_ref": {
         "kind": "external_input",
         "input_id": "midpoint_reference"
@@ -1720,7 +1726,7 @@
         "schema_version": "joulewise.stage_launch.v1",
         "commands": [
           {
-            "command_id": "gamma-reference-midpoint.collect",
+            "command_id": "gamma-reference-decode-midpoint.collect",
             "command_kind": "campaign_collection",
             "argv_template": {
               "tool_id": "campaign_runner",
@@ -1805,23 +1811,23 @@
       }
     },
     {
-      "stage_id": "gamma-science-02_decode_contrast_blocks_06_10",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
       "ordinal": 8,
       "kind": "campaign_collection",
       "expected_count": 20,
-      "predecessor": "gamma-reference-midpoint",
-      "successor": "gamma-science-03_prefill_p256_contrast_blocks_01_05",
+      "predecessor": "gamma-reference-decode-midpoint",
+      "successor": "gamma-reference-arm-boundary",
       "input_ref": {
         "kind": "pack_manifest",
         "path": "02_decode_contrast_blocks_06_10/order_manifest.json",
-        "manifest_id": "d117-gamma-02_decode_contrast_blocks_06_10-order-v1",
-        "sha256": "c80b88afce8df72fdc8fdd02f038f554834d216f07798c6cd194fee37b37c294"
+        "manifest_id": "d117-gamma-02-decode-contrast-blocks-06-10-order-v1",
+        "sha256": "d24fd9420719d3dc5ecc70bf76f006c65359832ba370790c78909254585e27bb"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
         "commands": [
           {
-            "command_id": "gamma-science-02_decode_contrast_blocks_06_10.collect",
+            "command_id": "gamma-science-02-decode-contrast-blocks-06-10.collect",
             "command_kind": "campaign_collection",
             "argv_template": {
               "tool_id": "campaign_runner",
@@ -1906,23 +1912,122 @@
       }
     },
     {
-      "stage_id": "gamma-science-03_prefill_p256_contrast_blocks_01_05",
+      "stage_id": "gamma-reference-arm-boundary",
       "ordinal": 9,
       "kind": "campaign_collection",
-      "expected_count": 20,
-      "predecessor": "gamma-science-02_decode_contrast_blocks_06_10",
-      "successor": "gamma-science-04_prefill_p256_contrast_blocks_06_10",
+      "expected_count": 1,
+      "predecessor": "gamma-science-02-decode-contrast-blocks-06-10",
+      "successor": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
       "input_ref": {
-        "kind": "pack_manifest",
-        "path": "03_prefill_p256_contrast_blocks_01_05/order_manifest.json",
-        "manifest_id": "d117-gamma-03_prefill_p256_contrast_blocks_01_05-order-v1",
-        "sha256": "6264d0c4b153b5fd8ab63ce72468367baa399609b5abff35df311a12a9940b12"
+        "kind": "external_input",
+        "input_id": "midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
         "commands": [
           {
-            "command_id": "gamma-science-03_prefill_p256_contrast_blocks_01_05.collect",
+            "command_id": "gamma-reference-arm-boundary.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
+      "ordinal": 10,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-arm-boundary",
+      "successor": "gamma-reference-prefill-midpoint",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "03_prefill_p256_contrast_blocks_01_05/order_manifest.json",
+        "manifest_id": "d117-gamma-03-prefill-p256-contrast-blocks-01-05-order-v1",
+        "sha256": "3a69a526f98c65113747097ec5d866274d3bb833bc30e9c83f713a5a518cf03c"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05.collect",
             "command_kind": "campaign_collection",
             "argv_template": {
               "tool_id": "campaign_runner",
@@ -2007,23 +2112,122 @@
       }
     },
     {
-      "stage_id": "gamma-science-04_prefill_p256_contrast_blocks_06_10",
-      "ordinal": 10,
+      "stage_id": "gamma-reference-prefill-midpoint",
+      "ordinal": 11,
       "kind": "campaign_collection",
-      "expected_count": 20,
-      "predecessor": "gamma-science-03_prefill_p256_contrast_blocks_01_05",
-      "successor": "gamma-reference-end",
+      "expected_count": 1,
+      "predecessor": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
+      "successor": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "input_ref": {
-        "kind": "pack_manifest",
-        "path": "04_prefill_p256_contrast_blocks_06_10/order_manifest.json",
-        "manifest_id": "d117-gamma-04_prefill_p256_contrast_blocks_06_10-order-v1",
-        "sha256": "f8160516da3cc3ce060f13f7832bddff4cef0206f4ef21cdd37ec914b2282145"
+        "kind": "external_input",
+        "input_id": "midpoint_reference"
       },
       "launch": {
         "schema_version": "joulewise.stage_launch.v1",
         "commands": [
           {
-            "command_id": "gamma-science-04_prefill_p256_contrast_blocks_06_10.collect",
+            "command_id": "gamma-reference-prefill-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
+      "ordinal": 12,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "gamma-reference-prefill-midpoint",
+      "successor": "gamma-reference-end",
+      "input_ref": {
+        "kind": "pack_manifest",
+        "path": "04_prefill_p256_contrast_blocks_06_10/order_manifest.json",
+        "manifest_id": "d117-gamma-04-prefill-p256-contrast-blocks-06-10-order-v1",
+        "sha256": "a62afae022f9e0238bb65b7a74fc83862616062719d5fb77db6188b560bbb4f6"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10.collect",
             "command_kind": "campaign_collection",
             "argv_template": {
               "tool_id": "campaign_runner",
@@ -2109,10 +2313,10 @@
     },
     {
       "stage_id": "gamma-reference-end",
-      "ordinal": 11,
+      "ordinal": 13,
       "kind": "campaign_collection",
       "expected_count": 3,
-      "predecessor": "gamma-science-04_prefill_p256_contrast_blocks_06_10",
+      "predecessor": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
       "successor": "gamma-calibration-post",
       "input_ref": {
         "kind": "external_input",
@@ -2208,7 +2412,7 @@
     },
     {
       "stage_id": "gamma-calibration-post",
-      "ordinal": 12,
+      "ordinal": 14,
       "kind": "calibration_capture",
       "expected_count": 1,
       "predecessor": "gamma-reference-end",
@@ -2287,7 +2491,7 @@
     },
     {
       "stage_id": "gamma-whole-window-verdict",
-      "ordinal": 13,
+      "ordinal": 15,
       "kind": "whole_window_verdict",
       "expected_count": 0,
       "predecessor": "gamma-calibration-post",
@@ -2359,7 +2563,7 @@
     },
     {
       "stage_id": "gamma-backup",
-      "ordinal": 14,
+      "ordinal": 16,
       "kind": "backup",
       "expected_count": 0,
       "predecessor": "gamma-whole-window-verdict",
@@ -2674,26 +2878,36 @@
   },
   "downstream_contract": {
     "analysis_manifest_path": "analysis_manifest_v3.json",
-    "analysis_manifest_sha256": "eb17fb336c3f4ec43ec9f134e46c3a136accd1907be7d7dcd63ca7b1ed07a7dc",
+    "analysis_manifest_sha256": "550fe3dfce03f4878a25d198fee1f3ddd0d3948ead7909f8049cd65d18368526",
     "consumer_family_declaration_path": "consumer_family_declaration.json",
-    "consumer_family_declaration_sha256": "5a458a1935d0cb292bc2e85d6dd0aa9373ea749b7c231cfe49c25d417ab521aa",
+    "consumer_family_declaration_sha256": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
     "binding_mode": "declaration_only"
   },
   "runtime_budget": {
-    "status": "UNFROZEN_DRAFT",
+    "draft_status": "unfrozen_draft",
     "decode": {
       "members": 40,
       "minutes_with_margin": 168.0,
-      "authority": "plan-factory U7 gamma field derivations"
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session"
     },
     "prefill_p256": {
       "members": 40,
-      "core_minutes": 110.0,
+      "core_minutes_before_margin": 110.0,
       "minutes_with_20_percent_margin": 130.0,
       "authority": "D-122 sizing scout rough ABBA arm and runtime"
     },
-    "combined_minutes_with_margin": 298.0,
-    "combined_derivation": "168.0 + 130.0",
+    "interior_reference_augmentation": {
+      "additional_references": 2,
+      "minutes": 10.0,
+      "placement": [
+        "after_decode_member_40_arm_boundary",
+        "after_prefill_member_20_arm_midpoint"
+      ],
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+      "freeze_ratification": "PENDING-LEAD-RATIFICATION"
+    },
+    "combined_minutes_with_margin": 308.0,
+    "combined_derivation": "168.0 + 130.0 + 10.0",
     "member_replacement_authority": false
   }
 }
