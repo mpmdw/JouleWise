@@ -110,7 +110,9 @@ nights (Ed does §5A taps), now +0.5–1.5d from the recovery cold gate.
 
 **OWED bookkeeping (first desk block):** council C-052 (this session:
 substrate ruling, fast-mode, recovery cold gate, trust wall+2c);
-skill-usage log; T1 run report. Trust 2c harvest + recovery armfix
+skill-usage log; T1 run report. **DISCHARGED by the T2 session
+(2026-08-08 night): C-052 + docs/run_reports/2026-08-08-t1-window-session.md
++ skill-usage rows installed (Sol-drafted, lead-reviewed).** Trust 2c harvest + recovery armfix
 relaunch are the two night-critical resumes.
 
 ## ▶▶ T1 mid-session detail (superseded by the FINAL block above; kept for pointers)
