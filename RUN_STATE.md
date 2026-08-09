@@ -46,7 +46,66 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T2 SESSION UPDATE (2026-08-09 ~07:40, Fable magistrate) — READ FIRST
+## ▶▶ T2 SESSION FINAL CHECKPOINT (2026-08-09 ~08:30, Ed checkpoint order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**Nothing in flight** (all Sol runs harvested; flake-verify loop stopped mid-run
+harmlessly). Durable custody of every load-bearing session artifact (trace
+notes, all Sol reports, THE THREE RESOLVED TRUST FILES):
+`~/JouleWise-window-custody/t2-session-20260809/`. Session scratchpad (tmp, may
+vanish): `/private/tmp/claude-501/-Users-edr-code-JouleWise/6811852b-72f8-4299-b497-3c4949e29b9d/scratchpad`.
+
+**SESSION RESULT: 5 PRs MERGED** (#117 packs, #118 recovery→ARMING code+
+procedure discharged, #119 operator surface, #120 results scaffold, #121
+methods+draft), suite-green repair + prose-linter 3.11 fix + T1 bookkeeping on
+main, pack-freeze plan RULED (incl. Ed's Q1/Q8 taps + "better paper" guiding
+light — see memory + docs/strategy/2026-08-09-pack-freeze-plan.md), trust mint
+bar PROVEN + landing fully integrated pending final assembly.
+
+**SUCCESSOR ORDER:**
+1. **TRUST LANDING — final assembly (all judgment DONE, ~1h mechanical+gates):**
+   R1 IS ADJUDICATED AND SECURITY-APPROVED (magistrate): 3 evidence reads
+   routed through read_authentication_input (legacy-journal metadata, physical
+   ledger JSONL, frozen reservation plan); 6 descriptor/OS-metadata sites
+   narrowly exempted via line-anchored CLASSIFIED_NON_AUTHENTICATION_READS
+   entries w/ per-site justifications; guard 14/14 green + 106 focused green
+   (Sol in-run). The THREE RESOLVED FILES (calibration_ledger.py,
+   decision_log.md, test_authentication_io.py) are custodied at
+   `~/JouleWise-window-custody/t2-session-20260809/`. ASSEMBLY (method doc =
+   docs/strategy/2026-08-09-trust-landing-integration.md): fresh worktree off
+   CURRENT origin/main → `git merge --no-commit safety/trust-a89f279-checkpoint`
+   → overwrite the 2 conflicted files (+ guard test) with the custodied
+   resolved versions → `git rm -r --cached` custody_store content subdirs
+   (keep manifest.json) → verify `git ls-files | grep 'custody_store/[^/]+/'`
+   EMPTY → **`git commit-tree <tree> -p origin/main`** (sever dirty ancestry)
+   → verify `git rev-list --objects | grep custody_store/.*/ ` EMPTY → full
+   suite (green now that the flake fix exists — merge/land it first or run
+   with it) → PUBLISH release fixture-d117-v2-production-v1 (CI job downloads
+   the asset anonymously; archive at 92058940 scratchpad MAY BE GONE — asset
+   already uploaded+sha-verified on the draft release, publishing needs no
+   local archive) → PR → CI d117-production-proof (authoritative decisive) →
+   D-121 → merge = **MINT BAR LIFTS**.
+2. **Flake fix branch impl/recovery-flake-fix (PUSHED, ~PR-ready):** teardown
+   race fixed, Sol 30-loop + full suite green; lead 8x verify loop was cut
+   short at checkpoint — rerun it, then PR→merge (it unhangs every future
+   full-suite run; consider landing BEFORE the trust final suite).
+3. **Then the freeze critical path (order per pack-freeze plan):**
+   FLOOR-COMMONMODE-01 (D-124 estimator impl, AFTER trust merges — shared
+   floor_extraction surface; full gauntlet) → p256 floor cells (Ed FUNDED, Q8)
+   + the 4 engineering proofs in the freeze plan → regenerate packs → freeze.
+4. **Owed bookkeeping (first desk block of successor):** T2 run report +
+   council C-053 + skill-usage finalization (trace-notes.md + skill-log rows
+   already appended live); consistency sweep (many docs touched); worktree
+   pruning (tmp worktrees: trustclean/flakefix/packfam/recint/oplane/rlane/
+   m1lane/u5-7pack/tv-* — ALL branches pushed, safe to lose; also the T1-era
+   stale .claude/worktrees/wf_d910c76a + cs-pedagogy audit item stands).
+5. **Kernel gate T1-2026-08-08-NIGHT:** recovery clearance CLOSED; gate clears
+   fully when trust merges (then update the 2 test_gen_state fidelity tests
+   per their documented clear-back note).
+6. **Ed's §5A/night steps remain the only path to measured numbers** once
+   trust + freeze land; arm via runbook §5C (plan-bound GO record + lead live
+   verification).
+
+## ▶▶ T2 SESSION UPDATE (2026-08-09 ~07:40, Fable magistrate) — superseded by FINAL above; kept for detail
 
 **Since the ~03:40 block below:** 3 paper PRs opened (#119 operator
 arm-readiness, #120 results scaffold, #121 methods+draft — #119/#120 CI GREEN;
