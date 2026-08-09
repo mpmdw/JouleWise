@@ -14,6 +14,7 @@ import builtins
 import hashlib
 import io
 import json
+import math
 import os
 import stat
 import threading
@@ -153,12 +154,20 @@ def _nonfinite_number(value: str) -> None:
     )
 
 
+def _finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _nonfinite_number(value)
+    return parsed
+
+
 def _strict_json(raw: bytes, label: str) -> None:
     try:
         json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_duplicate_key,
             parse_constant=_nonfinite_number,
+            parse_float=_finite_float,
         )
     except V2AuthenticationInputError as exc:
         raise V2AuthenticationInputError(exc.reason, f"{label}: {exc.detail}") from exc
@@ -584,6 +593,14 @@ def direct_read_violations(
                         name = "os.open"
                 elif _readable_open(child, method=True):
                     name = "open"
+            elif (
+                isinstance(target, ast.Attribute)
+                and target.attr == "fdopen"
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "os"
+                and _readable_open(child, method=False)
+            ):
+                name = "os.fdopen"
             if name is not None:
                 violations.append(f"{node.name}:{child.lineno}:{name}")
     return tuple(sorted(set(violations)))

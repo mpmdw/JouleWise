@@ -49,7 +49,10 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     "joulewise/calibration_ledger.py:_filesystem_type:2842:read_text",
     # The lock sidecar descriptor is used for inode/lock state, never content.
     "joulewise/calibration_ledger.py:_open_slot_sidecar:2946:os.open",
-    # This writer-lease descriptor is an append handle, not an evidence read.
+    # O_RDWR descriptor factory for the writer lane; its read-consumers are
+    # classified at their own sites (_locked_append writer-exempt;
+    # repair/abandon below). This supersedes the earlier "append handle"
+    # description, which its callers falsified.
     "joulewise/calibration_ledger.py:open_append_descriptor:3277:os.open",
     # The exclusive genesis staging descriptor receives newly written output.
     "joulewise/calibration_ledger.py:publish_genesis_payload:3222:os.open",
@@ -57,6 +60,20 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:2894:os.open",
     # The ledger fd is fstat-only here to bind inode identity, not read bytes.
     "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:2908:os.open",
+    # Writer-lease repair scan of possibly-corrupt physical ledger bytes;
+    # recovery/operator lane only (callers: governed exit paths
+    # resume_finalize_bracket_session/abort_calibration_session,
+    # scripts/recover_calibration_ledger.py, and
+    # scripts/validate_powermetrics_fiducial.py), not reachable from the v2
+    # mint evidence-read perimeter. Registration is inapplicable because the
+    # bytes' integrity is the thing under repair.
+    "joulewise/calibration_ledger.py:repair_calibration_ledger:3906:os.fdopen",
+    # Writer-lease tail-abandonment scan of possibly-corrupt physical ledger
+    # bytes; recovery/operator lane only (caller:
+    # scripts/recover_calibration_ledger.py), not reachable from the v2 mint
+    # evidence-read perimeter. Registration is inapplicable because the
+    # bytes' integrity is the thing under repair.
+    "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:3963:os.fdopen",
 }
 ISSUED_REDUCE_SHA256 = (
     "5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615"
@@ -142,6 +159,41 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
                             read_authentication_input(
                                 path, grammar=grammar, label=name
                             )
+
+    def test_overflow_numbers_refuse_json_and_jsonl_but_finite_value_parses(self) -> None:
+        cases = (
+            ("overflow.json", b'{"x":1e999}'),
+            ("overflow.jsonl", b'{"row":1}\n{"x":1e999}\n'),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, raw in cases:
+                with self.subTest(name=name):
+                    path = root / name
+                    path.write_bytes(raw)
+                    grammar = "jsonl" if name.endswith(".jsonl") else "json"
+                    with V2AuthenticationReadSession() as session:
+                        with self.assertRaisesRegex(
+                            V2AuthenticationInputError,
+                            "non-finite JSON number '1e999'",
+                        ):
+                            read_authentication_input(
+                                path, grammar=grammar, label=name
+                            )
+                        self.assertEqual(dict(session.records), {})
+
+            finite = root / "finite.json"
+            finite.write_bytes(b'{"x":1e308}')
+            with V2AuthenticationReadSession() as session:
+                self.assertEqual(
+                    read_authentication_input(
+                        finite, grammar="json", label="finite.json"
+                    ),
+                    b'{"x":1e308}',
+                )
+                self.assertTrue(
+                    session.records[str(finite.resolve())].strict_parse_succeeded
+                )
 
     def test_json_suffix_cannot_be_downgraded_to_raw(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -351,6 +403,22 @@ def authenticate():
             (
                 "authenticate:4:open",
                 "authenticate:6:os.open",
+            ),
+        )
+
+    def test_guard_detects_readable_fdopen_and_ignores_write_only_fdopen(self) -> None:
+        source = """
+import os
+def authenticate(fd):
+    os.fdopen(fd, "r+b")
+    os.fdopen(fd, "rb")
+    os.fdopen(fd, "wb")
+"""
+        self.assertEqual(
+            direct_read_violations(source, marked_functions={"authenticate"}),
+            (
+                "authenticate:4:os.fdopen",
+                "authenticate:5:os.fdopen",
             ),
         )
 
