@@ -113,7 +113,7 @@
       "point_estimator": "abba_block_arm_mean_difference_t_v1",
       "floor_estimator_registration": {
         "identity": "d124_two_shared_edge_common_mode.v1",
-        "identity_status": "PROPOSED-PENDING-FLOOR-COMMONMODE-01-IMPLEMENTATION",
+        "identity_status": "candidate_pending_floor_commonmode_01",
         "form": "shared onset and shared offset parameters across each ABBA block, with adversarial per-bundle residuals",
         "stationarity_transfer_assumption": {
           "identity": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
@@ -124,6 +124,11 @@
             "onset_offset_spans_required_at_arm": true
           },
           "evidentiary_limit": "The historical corpus records admissible bounds, not realized member-level boundary errors; transfer is an assumption, not an observed covariance claim."
+        },
+        "sibling_assumption_cross_reference": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "shared_gate": "FLOOR-COMMONMODE-01",
+          "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
         },
         "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
         "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",

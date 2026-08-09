@@ -45,6 +45,12 @@ DRAFT_STATUS = "unfrozen_draft"
 TODO_BRANCH = "impl/d117-ledger-recovery"
 D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
+D124_SIBLING_ASSUMPTION_ID = (
+    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
+)
+D124_EVIDENCE_RECORD_PATH = (
+    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+)
 D124_COVARIANCE_TREATMENT = (
     "two_shared_edges_plus_bundle_specific_adversarial_terms"
 )
@@ -392,7 +398,7 @@ def calibration_basis() -> dict[str, Any]:
 def common_mode_registration() -> dict[str, Any]:
     return {
         "estimator_id": D124_ESTIMATOR_ID,
-        "status": "candidate_pending_implementation_identity_confirmation",
+        "status": "candidate_pending_floor_commonmode_01",
         "transfer_assumption": {
             "assumption_id": D124_ASSUMPTION_ID,
             "statement": (
@@ -401,16 +407,18 @@ def common_mode_registration() -> dict[str, Any]:
                 "residual terms remain adversarial."
             ),
             "evidence": [
-                (
-                    "docs/process_traces/2026-08-08-attribution-debate/"
-                    "COMMONMODE-REPLAY.md"
-                ),
+                D124_EVIDENCE_RECORD_PATH,
                 "docs/decision_log.md#d-124",
             ],
             "limitation": (
                 "Historical evidence records uncertainty bounds, not realized "
                 "member-level timing errors."
             ),
+        },
+        "sibling_assumption_cross_reference": {
+            "assumption_id": D124_SIBLING_ASSUMPTION_ID,
+            "shared_gate": "FLOOR-COMMONMODE-01",
+            "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
         },
         "covariance_treatment": D124_COVARIANCE_TREATMENT,
         "never_zero_allowance_application_count": 1,
@@ -1162,14 +1170,6 @@ def external_inputs() -> dict[str, dict[str, Any]]:
     }
 
 
-def binding(binding_id: str, binding_type: str, constraints: list[str]) -> dict[str, Any]:
-    return {
-        "binding_id": binding_id,
-        "type": binding_type,
-        "constraints": constraints,
-    }
-
-
 def plan_tree(
     *,
     generator_sha256: str,
@@ -1211,7 +1211,7 @@ def plan_tree(
             "sha256": EXPECTED_EXTERNAL_SHA256[POLICY_REL.as_posix()],
         },
         "acceptance_policy": {
-            "selection": "issued_or_authenticated_d102_descendant_before_member_1",
+            "selection": "issued_d116_artifact_only",
             "issued_acceptance": calibration_basis()["issued_acceptance"],
             "issued_ledger_head": {
                 "path": LEDGER_HEAD_REL.as_posix(),
@@ -1375,7 +1375,7 @@ def plan_tree(
 
 def readme() -> bytes:
     return (
-        "# D-117 Qwen2.5-7B phase-floor campaign — UNFROZEN DRAFT\n\n"
+        "# D-117 Qwen2.5-7B phase-floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the beta window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
         "rider over the same 50 physical bundles. It retains the D-085 7B stack "

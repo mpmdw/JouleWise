@@ -99,6 +99,12 @@ NEG8_SETTLED_SHA256 = (
 )
 D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
+D124_SIBLING_ASSUMPTION_ID = (
+    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
+)
+D124_EVIDENCE_RECORD_PATH = (
+    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+)
 D124_COVARIANCE_TREATMENT = (
     "two_shared_edges_plus_bundle_specific_adversarial_terms"
 )
@@ -740,7 +746,7 @@ def calibration_basis() -> dict[str, Any]:
 def common_mode_registration() -> dict[str, Any]:
     return {
         "estimator_id": D124_ESTIMATOR_ID,
-        "status": "candidate_pending_implementation_identity_confirmation",
+        "status": "candidate_pending_floor_commonmode_01",
         "transfer_assumption": {
             "assumption_id": D124_ASSUMPTION_ID,
             "statement": (
@@ -749,13 +755,18 @@ def common_mode_registration() -> dict[str, Any]:
                 "remain adversarial."
             ),
             "evidence": [
-                "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+                D124_EVIDENCE_RECORD_PATH,
                 "docs/decision_log.md#d-124",
             ],
             "limitation": (
                 "Historical evidence records uncertainty bounds, not realized "
                 "member-level timing errors."
             ),
+        },
+        "sibling_assumption_cross_reference": {
+            "assumption_id": D124_SIBLING_ASSUMPTION_ID,
+            "shared_gate": "FLOOR-COMMONMODE-01",
+            "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
         },
         "covariance_treatment": D124_COVARIANCE_TREATMENT,
         "never_zero_allowance_application_count": 1,
@@ -1050,7 +1061,7 @@ def build_producer_contract(
 
 def readme_bytes() -> bytes:
     return (
-        "# D-117 Qwen2.5-1.5B floor campaign — UNFROZEN DRAFT\n\n"
+        "# D-117 Qwen2.5-1.5B floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the alpha window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
         "rider over the same 50 physical bundles. It also registers two D-123 "
@@ -1341,7 +1352,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "sha256": POLICY_SHA256,
         },
         "acceptance_policy": {
-            "selection": "issued_or_authenticated_d102_descendant_before_member_1",
+            "selection": "issued_d116_artifact_only",
             "issued_acceptance": {
                 "acceptance_id": "d079_calibration_acceptance_v2_n19",
                 "path": ACCEPTANCE_REL.as_posix(),
@@ -1571,7 +1582,7 @@ def main() -> int:
         count, plan_sha256, tree_sha256 = generate(output_root)
         verb = "generated"
     print(
-        f"{verb} UNFROZEN DRAFT: {count} science configs; "
+        f"{verb} unfrozen draft: {count} science configs; "
         f"calibration_plan_sha256={plan_sha256}; plan_tree_sha256={tree_sha256}"
     )
     return 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the UNFROZEN D-117 gamma contrast campaign draft."""
+"""Generate the unfrozen D-117 gamma contrast campaign draft."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ HARDWARE = {
     "device_kind": "apple_silicon_unified_memory",
     "notes": (
         "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; "
-        "normal powermetrics sampler set only; pack status UNFROZEN_DRAFT."
+        "normal powermetrics sampler set only; pack status unfrozen_draft."
     ),
 }
 SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
@@ -117,26 +117,30 @@ REFERENCE_CADENCE_AUTHORITY = (
     "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md "
     "§6 U7 gamma implementation session"
 )
+D124_PRODUCER_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
+D124_CONSUMER_ASSUMPTION_ID = (
+    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
+)
+D124_EVIDENCE_RECORD_PATH = (
+    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+)
 
 DECODE_ESTIMATOR_REGISTRATION = {
     "identity": "d124_two_shared_edge_common_mode.v1",
-    "identity_status": "PROPOSED-PENDING-FLOOR-COMMONMODE-01-IMPLEMENTATION",
+    "identity_status": "candidate_pending_floor_commonmode_01",
     "form": (
         "shared onset and shared offset parameters across each ABBA block, "
         "with adversarial per-bundle residuals"
     ),
     "stationarity_transfer_assumption": {
-        "identity": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+        "identity": D124_CONSUMER_ASSUMPTION_ID,
         "statement": (
             "Within one ABBA block governed by one calibration bracket, onset and "
             "offset boundary errors transfer as block-shared nuisance parameters."
         ),
         "evidence": {
             "authority": "D-124/D-125",
-            "record": (
-                "docs/process_traces/2026-08-08-attribution-debate/"
-                "COMMONMODE-REPLAY.md"
-            ),
+            "record": D124_EVIDENCE_RECORD_PATH,
             "onset_offset_spans_required_at_arm": True,
         },
         "evidentiary_limit": (
@@ -144,6 +148,11 @@ DECODE_ESTIMATOR_REGISTRATION = {
             "member-level boundary errors; transfer is an assumption, not an "
             "observed covariance claim."
         ),
+    },
+    "sibling_assumption_cross_reference": {
+        "assumption_id": D124_PRODUCER_ASSUMPTION_ID,
+        "shared_gate": "FLOOR-COMMONMODE-01",
+        "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
     },
     "covariance_treatment": (
         "two_shared_edges_plus_bundle_specific_adversarial_terms"
@@ -670,7 +679,6 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
                 f"calibration-abba-block-id={run['block_id']}",
                 f"calibration-abba-label={run['arm']}",
                 f"calibration-abba-sequence-index={run['position_in_block']}",
-                DRAFT_STATUS,
                 *prompt_tags,
             ],
         },
@@ -1242,9 +1250,7 @@ def build_tree(
             "sha256": repo_sha(POLICY_PATH),
         },
         "acceptance_policy": {
-            "selection": (
-                "issued artifact or authenticated D-102 descendant selected before member one"
-            ),
+            "selection": "issued_d116_artifact_only",
             "issued_artifact_id": "d079_calibration_acceptance_v2_n19",
             "issued_artifact_sha256": (
                 "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
@@ -1355,7 +1361,8 @@ def build_tree(
             },
             "interior_reference_augmentation": {
                 "additional_references": 2,
-                "minutes": 10.0,
+                "core_minutes_before_margin": 10.0,
+                "minutes_with_20_percent_margin": 12.0,
                 "placement": [
                     "after_decode_member_40_arm_boundary",
                     "after_prefill_member_20_arm_midpoint",
@@ -1363,14 +1370,14 @@ def build_tree(
                 "authority": REFERENCE_CADENCE_AUTHORITY,
                 "freeze_ratification": "PENDING-LEAD-RATIFICATION",
             },
-            "combined_minutes_with_margin": 308.0,
-            "combined_derivation": "168.0 + 130.0 + 10.0",
+            "combined_minutes_with_margin": 310.0,
+            "combined_derivation": "168.0 + 130.0 + 12.0",
             "member_replacement_authority": False,
         },
     }
 
 
-README_TEXT = """# D-117 gamma contrast pack v1 — UNFROZEN DRAFT
+README_TEXT = """# D-117 gamma contrast pack v1 — unfrozen draft
 
 This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
@@ -1635,9 +1642,8 @@ def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
                 raise ValueError(f"production expected path missing: {relative}")
             if expected_path.read_bytes() != actual_path.read_bytes():
                 raise ValueError(f"production bytes differ from regeneration: {relative}")
-        checked_generator = check_root / PACK_REL / "generate_configs.py"
-        if checked_generator.read_bytes() != (REPO_ROOT / PACK_REL / "generate_configs.py").read_bytes():
-            raise ValueError("production bytes differ from regeneration: generate_configs.py")
+        # The generator is source input, not generated output. Its SHA is embedded in
+        # plan_tree.json; comparing the repository path to itself would prove nothing.
         return hashes
 
 
@@ -1657,7 +1663,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     mode = "checked" if args.check else "generated"
     print(
-        f"{mode} UNFROZEN D-117 gamma draft: "
+        f"{mode} unfrozen D-117 gamma draft: "
         f"decode_members={MEMBERS_PER_ARM} prefill_p256_members={MEMBERS_PER_ARM} "
         f"plan_sha256={hashes['plan_sha256']} tree_sha256={hashes['tree_sha256']}"
     )

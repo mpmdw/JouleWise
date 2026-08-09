@@ -19,7 +19,7 @@
     "runtime_backend": "mlx",
     "telemetry_backend": "powermetrics",
     "device_kind": "apple_silicon_unified_memory",
-    "notes": "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; normal powermetrics sampler set only; pack status UNFROZEN_DRAFT."
+    "notes": "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; normal powermetrics sampler set only; pack status unfrozen_draft."
   },
   "workload_profile": {
     "name": "df_ph_decode",
@@ -46,11 +46,10 @@
       "comparative-contrast",
       "measurement-arm=decode",
       "df-condition=sw-decode-a-qwen25-1p5b",
-      "calibration-plan-sha256=8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
+      "calibration-plan-sha256=951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
       "calibration-abba-block-id=d117-decode-contrast-b01",
       "calibration-abba-label=A",
-      "calibration-abba-sequence-index=4",
-      "unfrozen_draft"
+      "calibration-abba-sequence-index=4"
     ]
   }
 }

@@ -47,7 +47,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
     "generate_configs.py": (
-        "437675aa288c7e1aee7ab6eb7b8263b39e043204640aa1033b4cce0d5e1face6"
+        "3c70cd799184ccf759341ebf5e72bc139a20dea228e119556c71edc81cab3dc0"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
@@ -62,17 +62,17 @@ EXPECTED_SHA256 = {
         "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
     ),
     "plan_tree.json": (
-        "a0e8bb6d889109c3ff58f731e0cc907dae69253def2b20d8568594ecbb9f1e9b"
+        "1ae3890e9750c012e2d3ee327755379f39d7e5a3645a36ee104379d33cf72ed3"
     ),
     "plan_tree.sha256": (
-        "4060b98eeac84f3ec15fc6ab50010b2ef8146e8cfad6c8b2b031bf36f2bb2566"
+        "f5b333a7592fd761aebf7958e7fb45e92d3d0f884712545f5131d5540d8da712"
     ),
     "producer_contract.json": (
-        "9cd35c0a3959ded11313f90b63d1858f7a9347750c27cc80e643b191ca37ef4e"
+        "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
     ),
 }
 EXPECTED_SPEC_SHA256 = (
-    "634d5dc22365bb9bf60fbd77d752b4ddc0f01f049b0b20afeb73f95d23e731c8"
+    "dc84ca037e59f47b587fe7deb1b610bf8bb91fd42541729bf92f357352537491"
 )
 
 
@@ -453,6 +453,18 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 "d124_block_bracket_edges_shared_within_abba.v1",
             )
             self.assertEqual(
+                cell["estimator_registration"]["status"],
+                "candidate_pending_floor_commonmode_01",
+            )
+            self.assertEqual(
+                cell["estimator_registration"]["sibling_assumption_cross_reference"],
+                {
+                    "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+                    "shared_gate": "FLOOR-COMMONMODE-01",
+                    "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+                },
+            )
+            self.assertEqual(
                 cell["estimator_registration"]["covariance_treatment"],
                 "two_shared_edges_plus_bundle_specific_adversarial_terms",
             )
@@ -461,6 +473,11 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             )
 
     def test_issued_acceptance_and_reported_mean_registration(self) -> None:
+        tree = load_json(PACK / "plan_tree.json")
+        self.assertEqual(
+            tree["acceptance_policy"]["selection"],
+            "issued_d116_artifact_only",
+        )
         spec = load_json(SPEC)
         for cell in spec["cells"]:
             issued = cell["calibration_basis"]["issued_acceptance"]

@@ -1,4 +1,4 @@
-# D-117 Qwen2.5-1.5B floor campaign — UNFROZEN DRAFT
+# D-117 Qwen2.5-1.5B floor campaign — unfrozen draft
 
 This pack pre-registers the alpha window's 10 absolute decode members, ten null A/B/B/A blocks (40 members), and a zero-member prefill metric rider over the same 50 physical bundles. It also registers two D-123 reported phase-energy means without adding collection.
 

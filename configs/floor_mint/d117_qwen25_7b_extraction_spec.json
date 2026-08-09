@@ -201,7 +201,7 @@
       "estimator": "d124_two_shared_edge_common_mode.v1",
       "estimator_registration": {
         "estimator_id": "d124_two_shared_edge_common_mode.v1",
-        "status": "candidate_pending_implementation_identity_confirmation",
+        "status": "candidate_pending_floor_commonmode_01",
         "transfer_assumption": {
           "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
           "statement": "Within an ABBA block governed by one calibration bracket, onset and offset fiducial terms are shared edges; bundle-specific residual terms remain adversarial.",
@@ -210,6 +210,11 @@
             "docs/decision_log.md#d-124"
           ],
           "limitation": "Historical evidence records uncertainty bounds, not realized member-level timing errors."
+        },
+        "sibling_assumption_cross_reference": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "shared_gate": "FLOOR-COMMONMODE-01",
+          "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
         },
         "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
         "never_zero_allowance_application_count": 1
@@ -687,7 +692,7 @@
       "estimator": "d124_two_shared_edge_common_mode.v1",
       "estimator_registration": {
         "estimator_id": "d124_two_shared_edge_common_mode.v1",
-        "status": "candidate_pending_implementation_identity_confirmation",
+        "status": "candidate_pending_floor_commonmode_01",
         "transfer_assumption": {
           "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
           "statement": "Within an ABBA block governed by one calibration bracket, onset and offset fiducial terms are shared edges; bundle-specific residual terms remain adversarial.",
@@ -696,6 +701,11 @@
             "docs/decision_log.md#d-124"
           ],
           "limitation": "Historical evidence records uncertainty bounds, not realized member-level timing errors."
+        },
+        "sibling_assumption_cross_reference": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "shared_gate": "FLOOR-COMMONMODE-01",
+          "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
         },
         "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
         "never_zero_allowance_application_count": 1
@@ -1514,7 +1524,7 @@
     "authority": "D-123",
     "procedure_only": true,
     "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
-    "floor_projection_sha256": "113d9f0f22b59ec72ad1a15aeebba99552b5e096e9ca4aca78f9559f03c94831",
+    "floor_projection_sha256": "2a8cb35ad96b90f8d116d804db2bbf4008e7465d7f48cc4458b095c9cfd6e4a7",
     "no_semantics_change_rule": "Floor extraction consumes only cells; reported_energy_cells is a disjoint registered projection over the same physical bundle universe."
   },
   "reference_counts": {

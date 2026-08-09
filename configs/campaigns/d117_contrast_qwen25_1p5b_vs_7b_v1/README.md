@@ -1,4 +1,4 @@
-# D-117 gamma contrast pack v1 — UNFROZEN DRAFT
+# D-117 gamma contrast pack v1 — unfrozen draft
 
 This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is

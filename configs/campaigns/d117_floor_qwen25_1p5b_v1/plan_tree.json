@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py",
-    "sha256": "1dbffadfb5d5d1993609042c4aae6cea254930556a0c4ec3d916be2c480a9d47"
+    "sha256": "83a5d60ddd6a0dc4dc549842673258bb055634085f3b22d032bd512ee40ab509"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
@@ -26,7 +26,7 @@
     "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
   },
   "acceptance_policy": {
-    "selection": "issued_or_authenticated_d102_descendant_before_member_1",
+    "selection": "issued_d116_artifact_only",
     "issued_acceptance": {
       "acceptance_id": "d079_calibration_acceptance_v2_n19",
       "path": "configs/calibration/calibration_acceptance_d079_v2.json",
@@ -2169,11 +2169,11 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json",
-      "sha256": "d2fa755de2121207c68983df1641bb83c695be0616ad3552191b6751b17807b3"
+      "sha256": "6b01a4919db1971a824f41c74005f7b391cdb76e86c148a49a2e410b6f014d1d"
     },
     "producer_contract": {
       "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/producer_contract.json",
-      "sha256": "10bb8e2f117e97daf10b4a9e48301335b2e3209cfac2d9413692806762c2189f"
+      "sha256": "4906106f4dfae0e74b25ce6ca3ff4b5fafc3adb50a75bf8a84b6353ebcf7ee95"
     },
     "prefill_phase_presence": "required_for_all_50_physical_bundles",
     "missing_registered_phase": "refuse"

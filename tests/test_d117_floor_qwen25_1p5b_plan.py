@@ -37,15 +37,15 @@ from joulewise.schemas import BenchmarkConfig  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "23eb67bfee35284f3f705dd0a46c1db6aa1bb2eacf5132e9345a6b1b0502154a"
+EXPECTED_PACK_SHA256 = "67198cde644517a356251dcc278263ea05de039c01d1fef608febc0f987aa74f"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "1dbffadfb5d5d1993609042c4aae6cea254930556a0c4ec3d916be2c480a9d47",
+    "generate_configs.py": "83a5d60ddd6a0dc4dc549842673258bb055634085f3b22d032bd512ee40ab509",
     "calibration_plan.json": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
     "calibration_plan.sha256": "35586fedd9d56b1c1ea69cf58cdc5a69cfd26cea7c58ecb5789ea88da3f891d1",
     "order_manifest.json": "ce4a4e9a3197a28d1f5bcf218cae29a52a7b12d6fb99d9eb2dcece73d2af08e9",
-    "plan_tree.json": "924a59abc7b5da851e87c423aaa52e8a476bf766f9fd03c7f4df3c440680dcfc",
-    "plan_tree.sha256": "78eaeccf32869aaf6babaec966fd313e3c09e10ca335a72c0d13b11bbcb76474",
-    "producer_contract.json": "10bb8e2f117e97daf10b4a9e48301335b2e3209cfac2d9413692806762c2189f",
+    "plan_tree.json": "3efee38b1458f55af591cb4a700bf74f4a92345b580bdafbd1b64c1b5abf9808",
+    "plan_tree.sha256": "a9136d8cf58dc795bd2659f8dc682a9933b712ff587d5ad72fd13aab8328b03c",
+    "producer_contract.json": "4906106f4dfae0e74b25ce6ca3ff4b5fafc3adb50a75bf8a84b6353ebcf7ee95",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -53,7 +53,7 @@ EXPECTED_FILE_SHA256 = {
         "985a4e5370724698b601303b2ba99027d298060eedc95a65d20112df413043ad"
     ),
 }
-EXPECTED_SPEC_SHA256 = "d2fa755de2121207c68983df1641bb83c695be0616ad3552191b6751b17807b3"
+EXPECTED_SPEC_SHA256 = "6b01a4919db1971a824f41c74005f7b391cdb76e86c148a49a2e410b6f014d1d"
 EXPECTED_FAMILY_DOMAIN_SHA256 = {
     "df-ph-decode": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
     "df-ph-prefill-p128-qwen25-1p5b": (
@@ -189,7 +189,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(checked.returncode, 0, checked.stderr)
-        self.assertIn("verified UNFROZEN DRAFT: 50 science configs", checked.stdout)
+        self.assertIn("verified unfrozen draft: 50 science configs", checked.stdout)
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             for output_root in (first, second):
                 generated = subprocess.run(
@@ -449,6 +449,10 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         )
 
     def test_issued_acceptance_and_d124_candidate_are_registered(self) -> None:
+        self.assertEqual(
+            self.tree["acceptance_policy"]["selection"],
+            "issued_d116_artifact_only",
+        )
         expected_acceptance = {
             "acceptance_id": "d079_calibration_acceptance_v2_n19",
             "path": "configs/calibration/calibration_acceptance_d079_v2.json",
@@ -468,8 +472,16 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         for cell in (self.spec["cells"][1], self.spec["cells"][3]):
             self.assertEqual(cell["estimator"], "d124_two_shared_edge_common_mode.v1")
             registration = cell["estimator_registration"]
-            self.assertEqual(registration["status"], "candidate_pending_implementation_identity_confirmation")
+            self.assertEqual(registration["status"], "candidate_pending_floor_commonmode_01")
             self.assertEqual(registration["transfer_assumption"]["assumption_id"], "d124_block_bracket_edges_shared_within_abba.v1")
+            self.assertEqual(
+                registration["sibling_assumption_cross_reference"],
+                {
+                    "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+                    "shared_gate": "FLOOR-COMMONMODE-01",
+                    "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+                },
+            )
             self.assertEqual(registration["never_zero_allowance_application_count"], 1)
 
     def test_typed_launch_recipes_are_complete_and_portable(self) -> None:

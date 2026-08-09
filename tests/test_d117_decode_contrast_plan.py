@@ -24,9 +24,9 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "calibration_plan.json": "8f4833d0f66071163dbadcd35b20e32b3646ff1745072a905864b186a87ea552",
-    "plan_tree.json": "e8701708cdc366632785bf02fe8bf428b05708fbf15d9ce3ad356581671299db",
-    "analysis_manifest_v3.json": "550fe3dfce03f4878a25d198fee1f3ddd0d3948ead7909f8049cd65d18368526",
+    "calibration_plan.json": "951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
+    "plan_tree.json": "11a2cb8629e4d64df3a1f00f75993741d5f2c16aafb47fffd08dbf8329b4d9e1",
+    "analysis_manifest_v3.json": "e24e214e52b2dc958fb2b8704c943e80fa68495ac005d6e334c2b2afbf355da5",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
@@ -120,7 +120,7 @@ class D117GammaPlanTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(checked.returncode, 0, checked.stderr)
-        self.assertIn("checked UNFROZEN D-117 gamma draft", checked.stdout)
+        self.assertIn("checked unfrozen D-117 gamma draft", checked.stdout)
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-gamma-inventory-") as temp:
@@ -257,6 +257,11 @@ class D117GammaPlanTest(unittest.TestCase):
             config_data = read_json(config_path)
             parsed = BenchmarkConfig.from_mapping(config_data)
             self.assertEqual(parsed.run_id, entry["run_id"])
+            self.assertNotIn("unfrozen_draft", parsed.run_metadata.tags)
+            self.assertIn(
+                "pack status unfrozen_draft.",
+                config_data["hardware_target"]["notes"],
+            )
             self.assertIn(
                 f"calibration-plan-sha256={plan_sha}", parsed.run_metadata.tags
             )
@@ -317,6 +322,10 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(workload["prompt_text"], text)
 
     def test_d124_decode_estimator_registration_conditions(self) -> None:
+        self.assertEqual(
+            self.tree["acceptance_policy"]["selection"],
+            "issued_d116_artifact_only",
+        )
         decode = next(
             cell
             for cell in self.plan["floor_cells"]
@@ -327,8 +336,20 @@ class D117GammaPlanTest(unittest.TestCase):
             registration["identity"], "d124_two_shared_edge_common_mode.v1"
         )
         self.assertEqual(
+            registration["identity_status"],
+            "candidate_pending_floor_commonmode_01",
+        )
+        self.assertEqual(
             registration["stationarity_transfer_assumption"]["identity"],
             "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+        )
+        self.assertEqual(
+            registration["sibling_assumption_cross_reference"],
+            {
+                "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+                "shared_gate": "FLOOR-COMMONMODE-01",
+                "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+            },
         )
         self.assertIn(
             "bounds, not realized member-level boundary errors",
@@ -432,10 +453,19 @@ class D117GammaPlanTest(unittest.TestCase):
         self.assertEqual(budget["prefill_p256"]["members"], 40)
         self.assertEqual(budget["prefill_p256"]["core_minutes_before_margin"], 110.0)
         self.assertEqual(budget["prefill_p256"]["minutes_with_20_percent_margin"], 130.0)
-        self.assertEqual(budget["combined_minutes_with_margin"], 308.0)
+        self.assertEqual(budget["combined_minutes_with_margin"], 310.0)
         self.assertEqual(
             budget["interior_reference_augmentation"]["additional_references"], 2
         )
+        self.assertEqual(
+            budget["interior_reference_augmentation"]["core_minutes_before_margin"],
+            10.0,
+        )
+        self.assertEqual(
+            budget["interior_reference_augmentation"]["minutes_with_20_percent_margin"],
+            12.0,
+        )
+        self.assertEqual(budget["combined_derivation"], "168.0 + 130.0 + 12.0")
         self.assertEqual(
             budget["interior_reference_augmentation"]["authority"],
             self.tree["reference_cadence"]["authority"],
