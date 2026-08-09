@@ -1,0 +1,84 @@
+# D-117 pack-freeze plan (T2, 2026-08-09) — magistrate rulings + Ed taps
+
+Sol drafted a per-question decision packet (xhigh, read-only, custodied at
+session scratchpad `packfreeze-packet-out.md`). The magistrate has ruled the
+process/metrology/method questions; two remain genuine **Ed taps**. None of
+this lands measured numbers without a quiet night, so freeze is gated on the
+work orders below AND Ed's two taps — no urgency beyond keeping it ready.
+
+## ⇒ TWO ED TAPS (everything else is decided)
+
+- **Q1 — gamma p256 prompt text [ED-DECIDES].** Recommend FREEZE the
+  constructed 256-token prompt (35× "The plan remains easy to audit." + one
+  "The plan remains easy to audit and simple to review."). It encodes to the
+  **same 256 token IDs on BOTH the 1.5B and 7B tokenizers**
+  (token-ID sha `83099a66…`), so the contrast is tokenizer-matched, and the
+  repetition makes it auditable. Claim must say "this fixed synthetic
+  256-token prompt," not content-general prefill. YES → the arm's prompt bytes
+  freeze; NO → gamma waits for replacement text passing the same dual-model
+  exact-token proof.
+- **Q8 — fund dedicated p256 prefill floor cells? [ED-DECIDES].** Because
+  transport from the p128 floors is refused (Q2C), the only claim-capable path
+  for a p256 prefill ENERGY contrast is dedicated exact-window p256 floor
+  cells for both stacks — extra quiet-window budget. YES → gamma can carry an
+  L2/L3 prefill energy claim; NO → the p256 arm publishes only as
+  descriptive/prospective sizing evidence (no energy-contrast claim), or you
+  narrow D-122 and drop the arm.
+
+## MAGISTRATE RULINGS (decided; Sol-backed, adopt at freeze)
+
+- **Q2A prefill inferential test — RULED:** decode-matched two-sided
+  one-sample t-test over the 10 ABBA block estimates, D_i=(B1+B2)/2−(A1+A2)/2,
+  B−A = 7B−1.5B, α=0.05, positive direction required for a positive claim.
+- **Q2B multiplicity — RULED:** ONE gamma Holm family = {decode contrast,
+  p256 prefill contrast}, α=0.05, **m=2**, both registered pre-collection. No
+  third gamma contrast without prospective refreeze.
+- **Q2C p128→p256 transport — RULED:** NONE. No scaling/transport formula; the
+  `same_stack_componentwise_worst_case.v1` rule may evaluate only inside the
+  measured source envelope, else `NOT RESOLVABLE` (fail-closed). (This is what
+  makes Q8 load-bearing.)
+- **Q3 reference cadence — RULED:** keep the 9-reference schedule (3 start +
+  singles after members 20/40/60 + 3 end); 20 & 60 are the arm midpoints, 40
+  is the decode/prefill boundary.
+- **Q4 acceptance selection — RULED:** keep **issued-only** (issued D-116
+  artifact, sha `31611396…`); a successor issuing before arm ⇒ pack
+  regeneration. D-125's lineage envelope stays available but is not required
+  per-pack.
+- **Q7 D-124 estimator — RULED (a gate, not a choice):** packs may NOT freeze
+  while the estimator is `candidate_pending_floor_commonmode_01`; D-125
+  requires implementation first ⇒ **FLOOR-COMMONMODE-01 work order** (below)
+  must land through the full D-118/D-121 gauntlet before pack regeneration.
+
+## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed)
+
+1. **FLOOR-COMMONMODE-01** — implement the D-124 two-shared-edge common-mode
+   estimator (two shared edges + bundle-specific adversarial terms, once-only
+   allowance, transfer limitation, identical calibration/consumer covariance
+   treatment) → D-118/D-121 gauntlet → pin its implementation identity in all
+   affected packs. **The long pole for freeze.**
+2. **D-123 byte-identity proof (Q5)** — strengthen both floor packs'
+   `test_reporting_section_does_not_change_floor_output` to serialize extractor
+   results through the production canonical output path and compare raw
+   bytes+SHA with/without the reporting keys (7B currently proves object
+   equality only; 1.5B proves validation+projection only).
+3. **Receipt-oracle re-derivation (Q6)** — lead-owned arm-materialization from
+   MERGED-MAIN cadence (10 physical receipts / 5 logical ops per session; the
+   3-window production regression is the authoritative oracle). Derive from the
+   authenticated live head; never hand-author receipt literals. Replaces the
+   stale `impl/d117-ledger-recovery` TODO markers (surfaced by the T2
+   post-merge integration review as CS1).
+4. **Prefill phase-recording proof (Q9)** — re-run the plan-factory amendment-5
+   desk proof on the custodied 1.5B+7B bundles; prove `phase_energy_j.prefill`
+   isolates the prompt phase (token identity alone does not prove phase
+   attribution).
+
+## Fastest path to a frozen, armable pack set
+
+Ed taps Q1+Q8 (one pass) → land FLOOR-COMMONMODE-01 (gauntlet) → the three
+engineering proofs (2–4) → regenerate all three packs from the resulting head
+→ generator `--check` + focused/canonical suites → issue readiness + identity
+projections → materialize the first arm against the authenticated ledger head.
+(Freeze also assumes the trust mint bar has landed.)
+
+Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
+no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
