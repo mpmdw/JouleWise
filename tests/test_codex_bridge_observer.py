@@ -154,9 +154,12 @@ class CodexBridgeObserverTests(unittest.TestCase):
             manifest = json.loads((bridge_dir / "invocation_manifest.jsonl").read_text())
             self.assertEqual(manifest["observer_index"], str(index))
             self.assertEqual(manifest["observer_file"], str(observer_files[0]))
-            self.assertEqual(manifest["service_tier"], "default")
+            # 2026-08-08: Codex Fast Mode is the STANDING DEFAULT on the
+            # bridge (de759c9, Ed directive); CODEX_SERVICE_TIER=default
+            # is the per-call opt-out, covered by its own test below.
+            self.assertEqual(manifest["service_tier"], "fast")
             arguments = json.loads(args_log.read_text(encoding="utf-8"))
-            tier_index = arguments.index("service_tier=default")
+            tier_index = arguments.index("service_tier=fast")
             self.assertEqual(arguments[tier_index - 1], "-c")
 
     def test_fast_service_tier_reaches_standalone_cli(self) -> None:
