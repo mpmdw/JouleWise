@@ -87,6 +87,24 @@ p256 floor cells vs narrow prefill claim).
   ~/JouleWise-window-custody/trust-prerewrite-20260808/.
 - The recorded T1 rewrite procedure (git rm --cached + amend) was found
   INSUFFICIENT (only strips tip; blobs stay in 1cae2bc parent) — do NOT use it.
+- **~08:00 — trust landing ATTEMPTED, revealed a real integration seam; full
+  plan custodied `docs/strategy/2026-08-09-trust-landing-integration.md`.** The
+  3-way merge reduced to 4 ledger conflicts + decision-log: H1/H4/decision-log
+  = clean UNION; **H2/H3 = KEEP-HEAD** (trust's `_read_append_journal` /
+  `_record_append_recovery` are the OLD SIDECAR subsystem recovery
+  architecturally DELETED — pasting them back = undefined-symbol dead code).
+  **R1 (the real remaining work, blocker):** recovery added 9 direct-I/O sites
+  in calibration_ledger.py that trust's registration-at-read guard
+  (test_authentication_io) rejects — each needs a per-site SECURITY
+  classification (content-read → auth helper; descriptor-only → justified
+  exemption; NEVER broad-exempt = silent hole in the trust guarantee). This is
+  a **careful FRESH cycle**, not a marker finish (deliberately not rushed at
+  hour 9 with the suite gate still down). Throwaway merge aborted; worktree
+  clean; a89f279 tag-safe. Needs the flake fix (impl/recovery-flake-fix) landed
+  first so the suite doesn't hang in test_calibration_exits.
+- **ALL 5 PRs MERGED tonight: #117 packs, #118 recovery-arming, #119 operator,
+  #120 results-scaffold, #121 methods+draft.** #121's earlier CI fail was the
+  same test_calibration_exits flake (reran green).
 
 **MERGED TONIGHT (both under full gates + D-121 terminal review):**
 - **PR #118 (`05ce39b`) — RECOVERY MERGED; the ARMING blocker's code+procedure
