@@ -19,8 +19,8 @@ Defaults: model gpt-5.6-sol, reasoning effort high. Callers select xhigh for
 hard individual work or ultra only for sessions that must spawn subagents by
 setting CODEX_REASONING_EFFORT deliberately.
 
-Opt in to Codex Fast Mode for one call with:
-  CODEX_SERVICE_TIER=fast scripts/codex-bridge new ...
+Fast Mode is the DEFAULT tier (Ed, 2026-08-08). Opt out for one call with:
+  CODEX_SERVICE_TIER=default scripts/codex-bridge new ...
 
 When .codex-bridge/app-host-thread-id exists, new and review run their real
 turn in that Codex desktop task so the native pet sees app-owned activity.
@@ -148,7 +148,7 @@ mkdir -p "$bridge_dir" "$prompt_dir" "$response_dir"
 codex_bin="${CODEX_BIN:-codex}"
 codex_model="${CODEX_MODEL:-gpt-5.6-sol}"
 codex_effort="${CODEX_REASONING_EFFORT:-high}"
-codex_service_tier="${CODEX_SERVICE_TIER:-default}"
+codex_service_tier="${CODEX_SERVICE_TIER:-fast}"
 case "$codex_service_tier" in
   default|fast) ;;
   *)

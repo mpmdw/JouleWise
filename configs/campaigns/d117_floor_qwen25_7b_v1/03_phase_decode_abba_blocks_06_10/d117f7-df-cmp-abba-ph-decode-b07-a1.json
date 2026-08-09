@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "run_id": "d117f7-df-cmp-abba-ph-decode-b07-a1",
+  "model": {
+    "name": "Qwen2.5-7B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "D-117 beta Qwen2.5-7B phase-floor campaign on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "df_ph_decode",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 512
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "d117-floor-qwen25-7b-v1",
+      "production-window",
+      "floor-calibration",
+      "df-condition=df-ph-decode-qwen25-7b",
+      "calibration-plan-sha256=56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7",
+      "rep7",
+      "calibration-abba-block-id=d117-df-cmp-abba-ph-decode-qwen25-7b-b07",
+      "calibration-abba-label=A",
+      "calibration-abba-sequence-index=1"
+    ]
+  }
+}

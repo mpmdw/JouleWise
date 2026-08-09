@@ -80,7 +80,10 @@ standing instructions.
 | C-047 | 2026-08-03 | The 16h runway (Ed-granted; joint Fable+Sol decision authority; concurrent sweep instance mid-flight): D-108/D-109 debate+rulings executed, D-110/D-111 sweep-triggered rulings, winB STOP cold gate -> D-112, two Sol gauntlets, pinned byte-identical mint replay, checkpoint for harness switch | D-108 closed via PR #99 + re-record; CAL-BRACKET held at 2e61ff9 (B1 residual, rule-11 gate owed); winB license exhausted as drawn (r06 disposition parked for Ed); mint chain D-110-blocked; CLAIMS_STATUS section 1 honestly NONE; sweep propagation fixes landed; layer yield in the run report |
 | C-048 | 2026-08-04 | Integration-collision resolution on the CAL-BRACKET-D079-01 lead gate: bounded pre-decision Sol HIGH consult -> consult-shaped signature amendment -> fresh delta re-audit -> bench guard hardening -> merge-ref CI | The delta re-audit PROVED a live repr-'None' default spoof against the rendered-signature guard (hardened with a regression); the consult corrected the byte-identity oracle to integration-tree core-vs-wrapper parity (a historical-digest replay would have contradicted D-110); lead integration-tree replay 2487 OK exit-0 unpiped; PR #100 gate-complete, merged 2026-08-05 (`f75d12b`) |
 | C-049 | 2026-08-05/06 | The 12h autonomous marathon: six PRs (#102-#104, #106-#108) + PR #109 issuance gauntlet; two rule-11 escalation consults (CGV F3 closure, QG census Option C); the D-079 issuance cold gate (split verdict, HOLD upheld); D-113/D-115/D-116; then the first re-mint consumption attempt exposed a structural closure -> Sol xhigh fork consult | The cold gate's HOLD prevented an irreversible ledger write paired with a production-refused artifact (F1 no-consumer-path, F2 digest-role coupling — issuance reframed as implementation and re-gauntleted as PRs #108/#109); xhigh delta re-audits again caught introduced defects (QG init-durability F1; CGV live-proved receipt-serialization B1 + phantom-fence B2); historical max-bracket consumption proved structurally closed at main — Option 2 (three fresh prospective windows) recommended by consult + magistrate; Ed's ruling OWED at close |
+| C-050b | 2026-08-07/08 | The evening double-window: PR #114 re-gate + merge; U1 split -> PR #115 (paired lenses, convergent P1, bench fix, full 11-item ledger) merged; two escalation consults ADOPTED (ledger-resident recovery shape; U5-U7 launch contract); U2 cold gate convened -> NOT RATIFIED, packet remanded; trust + reasoncode gauntlets; PR #116 merged as the FIRST full D-121 gate; D-120/D-121 minted | Layer catches: Sol delta found the one-sided session-endpoint P1 the original gate-debt delta missed (Opus counter-review converged independently — the paired-lens design proven); the Opus U2 refuter found the packet quoted the WRONG authority set (D-109 omitted, operative for 7/12 questions) — a defect the cold judge structurally could not see; Opus trust counter-review caught the branch FALSIFYING a paper sentence (cross-surface, context-dependent); Sol trust audit ruled same-signature YES round 1 (binding chooses its own window) -> fix round 2 with the escalation tripwire armed; recovery round 1 NEEDS_SCOPE surfaced the receipt-cadence doubling as a design consequence needing a ruling, not a patch; magistrate bench: golden fixture-review method (reverse-transform must reproduce old hashes before adopting new), two lead errors closed structurally (repo-cwd reviewer detached main; piped-replay recurrence) |
 | C-050 | 2026-08-07 | Paper-first session under Ed's Sol-burn license: the MVP capstone paper through a full round-2 gauntlet (2 lenses → bibliography/novelty audit → Sol xhigh fix round → delta re-audit → bench fidelity corrections) + D-117 transcription + plan-freeze ratification + night-hardening 3-lens sweep + a 24-direction paper-portfolio factory (Sol fast proposals → Opus 5 referees → dual opposing-prior Sol xhigh syntheses → magistrate adjudication) + U1/U3 implementation gauntlets + read-only meta-sweeps and a far-ahead plan factory | Paper SHIPPED as a complete draft (PR #110 merged, `6a70707`); D-117 + the plan-freeze design memo ratified (gates 1-8, work orders U1-U10); portfolio arc adopted (MVP + Window C → quantization BF16/Q4/Q8 → MoE stretch) with 7 night-cheap riders folded in; the PAIRED AUDIT LENSES were the session's highest-yield layer by a wide margin (U3 contract lens live-proved that fabricated custody hashes plus tampered drift/allowance still minted the four-cell artifact; U1 execution lens live-proved concurrent double-arm acceptance and a "never leak" test that asserts the leak); the delta re-audit again caught an INTRODUCED blocker (recovery boundary, 7/8 closed) and the Opus referee corps caught a portfolio-wide ~5 J-vs-~14 J floor-sizing error, the Window-C/§6 evidence gap, and the paper's missing advisor-lineage citations; U1/U3 branches pushed awaiting final gates; Ed's rulings ##1-7 OWED |
+| C-051 | 2026-08-08 | T0 window session under D-128 (morning → ~13:40, ended by Ed's stop order): three Phase A streams — trust round 2 (7-step ruled sequence), recovery gauntlet + FIX-1..13, U2 attestation rework — plus the results-prose merge (`1e6fa16`, class dead after 4 deltas); trust banked UNGATED at `1cae2bc` on a mid-run kill at ~4h22m; recovery banked UNGATED at `468e0a6` (delta owed with 3 questions); U2 FROZEN at attestation count 3; D-126/D-127/D-128 minted; trust F1/F2 (`fe85b09`) + recovery witness-scope (`6981d2b`) rulings custodied | Escalation discipline held 3-for-3 (trust delta classes at count 2 → consult; recovery ungoverned-refusal at count 2 → exit-completeness consult; U2 attestation at count 3 → freeze + cold-gate packet — no round-3 fix anywhere); gauntlet lenses A/B both FAILED the recovery round-3 corpus with reproduced production defects (fix-rounds-introduce-defects doctrine held again); the U2 delta executed a live forgery — a ledger-absent epoch accepted as `VerifiedAcceptance` through auto-enrolled always-true verifiers — the Potemkin catch that ended the stream; the trust F1/F2 consult out-designed both magistrate proposals (A→B→A TOCTOU proof killed boundary hashing; content-addressed custody store over the relocation table) and was ADOPTED IN FULL; magistrate bench caught the recovery harness's own 8-orphan SIGKILL leak (routed to the successor delta per the two-writers rule, not injected live) and the ~3.1GB fixture push blocker (substrate ruling opened); mid-run kill adjudicated as bank-with-written-trust-nothing-rider; entry successor-written (dictated-fills), spend snapshot not captured |
+| C-052 | 2026-08-08 | T1 Phase-A continuation under D-128: fixture-substrate ruling (`8788891`/`b7aad49`); Codex Fast Mode standing default (`de759c9`); recovery delta-1 → ESC-2 → FIX-14..18 → six-lens count-3 freeze → two-instance cold gate → adopted discharge path (`721593b`, `bc01908`, `4495609`, `0c30993`, `e265c9c`); trust 2b eight-hour wall + recovered partial proof and 2c verification tail with no captured report (`trust2b-out.manifest.jsonl`, `trust2b-report-recovery.md`, `trust2c-out.manifest.jsonl`) | Substrate consult out-designed the listed storage options and release hydration was adopted; fast became Codex's standing default with an explicit opt-out; recovery's freeze was confirmed, FIX-19 AST hardening prohibited, ARMING made conditionally dischargeable through a G2/G4/G6 executed-probe round + manual arming + lead live verification, while witness integrity moved to an off-path mutation-kill harness; trust 2b proved selected core/mint stages but failed the decisive regression and never reached v1 parity/full suite, while all 2c proof outcomes remain UNVERIFIED because report capture failed. Per-layer catches were non-overlapping: delta-1 caught recurring under-proof; ESC-2 supplied terminating designs; delta-2's six lenses each returned NOT-CLOSED; Opus caught the G2 label contradiction/core-seam dissent; cold Fable caught the unattainable in-process property; the lead honored classifier denial and Ed reset fast/parallelism policy. (Evidence: `trace-notes.md` lines 39–194; `e265c9c` synthesis; trust manifest line 2 records.) |
 
 ---
 
@@ -3028,3 +3031,211 @@ the pack hashes freeze (time-critical), reason-code plumbing before
 night one, the 256-token prefill arm, the P2 commitment, calendar
 dates, and public-artifact scope — all recorded in
 `docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md`.
+
+
+## C-050b: The evening double-window — two merges under the maturing gate, two adopted shapes, and the remand that proved the refuter's seat (2026-08-07/08)
+
+Session: Fable magistrate, resumed cold from the /clear checkpoint
+(`a871c9b`), ~3.5h + two extensions on Ed's word; fast tier spammed on
+every read-only Sol run per directive. Full records: RUN_STATE EVENING +
+EXTENDED + D-121-era blocks (this session's running record),
+`docs/process_traces/2026-08-07-d117-u-units/RECOVERY-SHAPE-CONSULT.md`,
+`docs/process_traces/2026-08-07-plan-factory/PACK-LAUNCH-CONTRACT-CONSULT.md`,
+`docs/process_traces/2026-08-07-u2-coldgate/` (both sealed rulings +
+SYNTHESIS), PR #114/#115/#116 gate ledgers, D-119..D-121.
+
+**Merged:** #114 (paper trust language; delta FAIL -> conservative fix ->
+ACCEPT + final-head PASS), #115 (U1 night fixes; the port's paired
+lenses CONVERGED on a one-sided session-endpoint P1 the original
+delta-verified round had missed — fixed at the bench, delta ACCEPT
+same-signature NO), #116 (reason-code plumbing; the first merge through
+the complete 12-item D-121 gate, magistrate terminal review recorded).
+
+**Adopted:** the ledger-resident recovery shape (sidecar journal
+deleted; three rounds of prior work discarded rather than patched); the
+typed stage-launch pack contract (U5-U7 amendment 3). U11 chartered
+(amendment 4). D-120 (trust closure) and D-121 (terminal magistrate
+review) minted; D-121 was exercised same-session on #116.
+
+**The U2 remand (the entry's headline):** cold Fable judge ruled 7
+RATIFY / 3 AMEND / 2 DEFER; the adverse Opus refuter proved the packet
+quoted D-102/D-116 while the exhibit's own `SUCCESSOR_DECISION_IDS`
+declares D-102/D-109/D-117 — D-109's rulings are operative for seven of
+twelve questions the judge answered without them. Outcome: NOT
+RATIFIED, packet remanded; convergent technical blockers bind the
+rework (Q2 screen source, Q3 kernel verification, Q11 fabricated
+successor_probe, Q6 abandoned-row brick, Q9 barrier, Q4 one-way door,
+allowance rule as new Q13). New packet rule: quote every entry the
+exhibit itself declares as authority, mechanically diffed. Charter
+erratum #2: worktree convening does not suppress harness injection for
+subagents — the disclosure line is the working control.
+
+**Open at close:** trust fix round 2 (window-anchor closure; escalation
+tripwire at count 2) and the recovery resume (scope expansion ruled:
+receipt-cadence doubling is a design consequence; derived-count fixture
+discipline) both in flight; U5-U7 receipt oracles flagged
+stale-on-recovery-landing before any pack freeze.
+
+**Lead errors (closed structurally):** a repo-cwd Opus reviewer
+detached the main tree via checkout and a bookkeeping commit landed on
+the detached lineage (cherry-pick recovery; rule: reviewers get
+worktree isolation + pre-commit branch check); the lead's first replay
+was piped — the twice-recorded rule recurred and the replay was redone
+unpiped.
+
+## C-051: The T0 window — three streams, a mid-run kill, and the fixture the push refused (2026-08-08)
+
+Session: Fable magistrate, morning → ~13:40, ended mid-run by Ed's stop
+order; three parallel Sol streams (trust/recovery/u2rework worktrees)
+under enforced WRITE_SCOPE plus a read-only consult lane. Entry written
+post-session by a successor bookkeeping agent under the dictated-fills
+pattern (facts verified against the primary evidence; anything
+reconstructed is labelled in the run report). Full records: run report
+`docs/run_reports/2026-08-08-t0-window-session.md`, RUN_STATE T0 FINAL
+CHECKPOINT (`18d007a`), scratchpad consults
+(trust-RULING-CONSULT/ESCALATION, recovery-WITNESS-SCOPE-RULING/
+ESCALATION, u2-SYNTHESIS-V2, checkpoint-notes.md),
+`docs/process_traces/2026-08-08-recovery-exits-escalation/` (gauntlet
+lenses + triage, on the recovery branch), U2-FROZEN-COUNT3.md
+(`5b00200`), D-126/D-127/D-128.
+
+**Merged:** results-prose template + fail-closed linter (`1e6fa16`) —
+the unconditional-assertion class ruled DEAD after 4 delta rounds; the
+only fully gated landing of the session. **Banked UNGATED:** trust
+round 2 at `1cae2bc` (mid-run kill at ~4h22m; worktree diff is ground
+truth; round-2 proofs NOT run); recovery FIX-1..13 at `468e0a6` (2770 OK
+in-run per the report; delta re-audit owed). **Frozen:** U2 at
+attestation count 3.
+
+**Deliberations that decided things:**
+
+- *Trust F1/F2 ruling consult* — the magistrate presented its proposed
+  R1/R2 with explicit license to disagree and was out-designed on both:
+  boundary pre/post hashing rejected on a concrete A→B→A TOCTOU proof in
+  favor of a registration-aware path capability; the relocation table
+  rejected for a content-addressed custody store keyed by receipt
+  content_id with manifest-vs-ledger equality. ADOPTED IN FULL,
+  superseding (`fe85b09`); the 7-step sequencing bound the resumed
+  round. Another rule-2 data point: invited design judgment beat the
+  lead's proposals.
+- *Recovery triage (consult-vs-fix)* — with the ungoverned-refusal class
+  already escalated at count 2 (exit-completeness consult →
+  witness-scope ruling `6981d2b`), the gauntlet's two NEW prohibited
+  shapes (unexecuted-proof-reference; inspect-as-permission) were each
+  ruled FIRST occurrence, count 1 — licensing exactly one dictated fix
+  round with the count-2 → consult rule pre-armed in writing for the
+  next delta.
+- *U2 count-3 freeze* — the delta ruled the attestation-binding class
+  same-signature YES a third time with an executed forgery (ledger-absent
+  epoch accepted as `VerifiedAcceptance`; enrollment auto-generated with
+  always-true verifiers). Per rule 11 the answer is a deliberate cold
+  gate, not fix round three; the freeze costs the paper nothing
+  (issuance already gated behind Q12 + the third convening).
+- *Mid-run kill adjudication* (Ed's stop order at ~4h22m of trust
+  round 2) — bank the worktree diff as an explicitly UNGATED checkpoint
+  with a written trust-nothing rider enumerating the six unrun round-2
+  proofs, rather than let a truncated run (report absent, status
+  ACCEPTANCE_FAILED) pose as a result.
+
+**Unique catches by layer:** gauntlet lenses A/B — round-3-introduced
+production defects, reproduced (aliased-lock double lease; POST
+readiness blind to PRE custody corruption; pin advancement admitting a
+pending business head): the fix-rounds-introduce-defects doctrine held
+again. U2 delta — the Potemkin enrollment (a catch that terminated a
+stream). Magistrate bench — the recovery harness's own 8-orphan SIGKILL
+leak (an instance of the exact orphan class the stream governs), kept
+OUT of the live fix round per the two-writers rule and routed to the
+successor delta with a timing-distortion question over the suite
+numbers; and the fixture-size blocker (~3.1 GB, 38 content-IDs) surfaced
+by the GitHub push warning → new substrate ruling opened. Ed — the stop
+order itself.
+
+**Escalation discipline (the entry's headline):** the same-signature
+trigger fired three times across 2026-08-07/08 — trust delta classes at
+count 2, recovery ungoverned-refusal at count 2, U2 attestation at
+count 3 — and all three were honored: consult, consult, freeze. No
+round-3 fix was attempted anywhere. The rule-11 shape (escalations
+redirected to consults instead of eaten) ran clean for a full window.
+
+**Dissents:** none recorded; both adopted rulings superseded magistrate
+proposals without magistrate dissent.
+
+**Follow-ups:** fixture-substrate ruling (blocking trust); recovery
+delta with the three questions → replay → integration → PR (arming
+blocker); U2 cold gate post-window; D-127 build adoption; assertion-61
+pre-patch determination before the wrapper retention patch re-lands;
+consistency sweep after the next merge wave. Spend snapshot: NOT
+captured — the session was killed before entry close and the successor
+agent cannot reconstruct per-tier spend; noted as a gap rather than
+estimated.
+
+## C-052: T1 — the substrate ruling, the fast default, the recovery freeze/cold-gate arc, and the trust verification wall (2026-08-08)
+
+Session: Fable magistrate under D-128, continuing T0's Phase-A recovery/trust frontier with a desk bookkeeping lane; the trace records disjoint recovery, trust, and main-tree footprints, later expanding recovery to six parallel graders and two fresh cold-gate judges. (Evidence: `trace-notes.md` §§0, “Shape”, “Launches”, and lines 105–113/167–194.) Exact overall session wall time is **UNVERIFIED**; `RUN_STATE.md` records the night stop order and no processes left in flight. (Evidence: `RUN_STATE.md` lines 49–55.) Full records: T1 `trace-notes.md`; `RUN_STATE.md` lines 49–187; main commits `8788891`, `b7aad49`, `de759c9`, `2ba514a`, `d071a3d`; recovery commits `721593b`, `bc01908`, `4495609`, `0c30993`, `e265c9c`; trust checkpoint `1cae2bc`; and the supplied 2b/2c manifests and recovered report. (Evidence: `git log d81c78a..d071a3d`; recovery branch log `468e0a6..e265c9c`; manifest line 1 records.)
+
+**What shipped and what did not.** The session shipped the fixture-substrate ruling/addendum, tracked bridge fast-default change, recovery escalation and cold-gate custody, and consistency fixes; it did not ship either recovery or trust through PR/CI/D-121/merge. (Evidence: `RUN_STATE.md` lines 57–101; `git log d81c78a..d071a3d`; `e265c9c`.) The primary recovery merge/ARMING discharge therefore remained open, while the trust stream was design-unblocked but verification- and integration-incomplete. (Evidence: `trace-notes.md` §0; `RUN_STATE.md` lines 58–89.)
+
+### Substrate ruling
+
+The substrate consult rejected the listed Git-as-is/LFS-style choices in favor of release-asset hydration: the trace records 3.087 GiB of plists compressing to ~142 MiB, eight full CI checkouts under Git-as-is, and LFS metering raw bytes; the magistrate adopted the consult in full. (Evidence: `trace-notes.md` lines 42–45; ruling `8788891`.) The ruling requires a digest-pinned tar.zst asset, hydrator, census manifest, and production-proof CI job, with 38 content directories removed from Git history later under a lease-guarded rewrite. (Evidence: `8788891` commit message; `RUN_STATE.md` lines 81–87.)
+
+Two lead-side rewrite attempts were denied by the classifier; the lead honored the denials, created a safety tag and verified 53-MB bundle, deferred the rewrite, and proceeded tooling-first. (Evidence: `trace-notes.md` lines 46–60; addendum `b7aad49`.) Ed later granted four rewrite permission rules, but the rewrite remained deferred until after trust harvest and still had not occurred at close. (Evidence: `trace-notes.md` lines 57–60; `RUN_STATE.md` lines 84–89/103–109.)
+
+### Fast-mode standing default and parallelism ruling
+
+Ed directed fast mode everywhere for Codex, not Anthropic, with Claude/Fable kept scarce and lean; the tracked bridge changed to fast by default, `CODEX_SERVICE_TIER=default` became the opt-out, and the machine-local v3 wrapper was changed in place with a backup. (Evidence: `trace-notes.md` lines 87–96; `de759c9`; `RUN_STATE.md` lines 123–130.) The trace records a smoke test observing `service_tier=fast` on the child command line and successful output; independent post-session re-verification of the machine-local wrapper is **UNVERIFIED**. (Evidence: `trace-notes.md` lines 91–94.)
+
+Ed also made harder parallelism the standing direction: read-only work fans out, implementation parcels by disjoint footprint, and a monolith requires a named reason. (Evidence: `trace-notes.md` lines 87–99; `RUN_STATE.md` lines 103–106.) The session supplied the motivating counterexample: trust 2b bundled separable substrate/auth work into an eight-hour monolith, while the six-lens recovery delta showed the new fan-out shape's yield. (Evidence: `trace-notes.md` lines 97–113/147–158; `trust2b-out.manifest.jsonl` line 2.)
+
+### Recovery: failure → escalation → freeze → cold gate → ruling
+
+Delta 1 failed FIX-1..13: unexecuted-proof survived at count 2; hard-link lease aliasing, late preservation sampling, lint blindness, and a confirmed orphan leak formed the convergent under-proof signature; inspect-as-permission was ruled dead. (Evidence: `721593b`; `trace-notes.md` lines 61–70.) The rule-11 trigger fired, so the lead convened ESC-2 rather than authorizing a reflexive fix round. (Evidence: `trace-notes.md` lines 61–75.)
+
+ESC-2 was adopted in full: dual slot/object lease identity, two-invocation binding-conflict evidence, a universal preservation guard, owned public-process execution with double-keyed crash capability, a receipt corpus/provenance analyzer, and the 17→15→16→14→18 implementation order; the magistrate added the RefusalCode registry/witness/census rider. (Evidence: `bc01908`; `trace-notes.md` lines 76–83.) The resulting FIX-14..18 implementation reported mutations killed and `2785 OK`, but remained ungated. (Evidence: `4495609`; `trace-notes.md` lines 100–104.)
+
+Delta 2 then returned all six lenses NOT-CLOSED. G1 reproduced the unexecuted-proof class at count 3; G2 found genesis staging/publication not dirfd-bound; G3 executed a deferred-fingerprint timing mutation; G4 found a process-runner inherited-pipe hang; G5 found analyzer laundering; G6 found cleanup that could unlink an invalid supplied path. (Evidence: `0c30993`; `trace-notes.md` lines 121–145; `e265c9c` synthesis item 2a.) The repeated lease and preservation families came after a “terminating” consult, satisfying the mandatory cold-gate trigger and prohibiting an automatic FIX-19. (Evidence: `trace-notes.md` lines 137–145.)
+
+Both cold instances independently reproduced G1's count-3 bypass. (Evidence: `e265c9c:docs/process_traces/2026-08-08-recovery-exits-escalation/COLD-GATE-SYNTHESIS.md`, “Both instances agree.”) The cold Fable adjudicator ruled the FIX-14 claim category-false: Python has no in-process trust boundary capable of making test evidence unfabricable through source gates, so additional AST evasion patches cannot terminate the class. (Evidence: same synthesis section.) The Opus refuter ruled a bare clean-core landing unsafe because the lease seam/G2 lived in the core and the pre-arming corpus was forgeable; it also caught the packet's contradictory G2 first/second-occurrence labels and refined G6's arming severity. (Evidence: `trace-notes.md` lines 175–191; synthesis “The split” and final paragraph.)
+
+The magistrate synthesized rather than erased the dissent: both positions rejected landing as-is; the adopted path licenses one executed-probe production/support round for G2, G6, and G4, followed by D-117 manual arming and lead live verification. (Evidence: `e265c9c` synthesis, “MAGISTRATE RULING” item 2.) Witness integrity moved off the critical path to an out-of-process mutation-kill harness; AST/corpus gates remain only as drift lint, with an L1 limitation that the corpus does not certify against an adversarial in-repo test author. (Evidence: same synthesis items 3–4.) Another lease facet after the G2 fix escalates to an IDENTITY-MODEL consult. (Evidence: same synthesis item 5.)
+
+The ruled G2/G4/G6 round was killed before writing; no recovery merge or ARMING discharge occurred. (Evidence: `RUN_STATE.md` lines 58–69; `d071a3d`.)
+
+### Trust: 2b wall and 2c verification tail
+
+Trust 2b ran Sol xhigh for 28,803,970 ms from `1cae2bc`, changed 12 in-scope paths, incurred no scope violation, and ended `ACCEPTANCE_FAILED` solely at missing report capture. (Evidence: `trust2b-out.manifest.jsonl` lines 1–2.) The recovered report records passing reduce.py SHA, ABA, absent-mode parity, 14/7/7 authentication/custody/transport suites, four V2 pinset tests, 190/190 census, archive self-verification, and one authentic unpatched production mint as an internal stage. (Evidence: `trust2b-report-recovery.md` V1–V6 and “Verification notes.”)
+
+The decisive regression itself failed after 4,056.083 s in the test-only open auditor, before full production equality and before the coordinated attack/mutation matrix. (Evidence: `trust2b-report-recovery.md` V7/flag F1.) A repaired-auditor diagnostic later reported 193/193 equality, but the report explicitly denies that this substitutes for the interrupted final proof. (Evidence: its “Bidirectional production open/registry equality” section.) V1 parity, final focused verification, `git diff --check`, and the full suite were not run. (Evidence: V8–V9/flag F2.)
+
+The built archive measured 3,333,877,627 logical bytes and 191 logical files with SHA `f1286bc…`; a draft release asset was uploaded and freshly downloaded with a matching SHA, but publication remained gated on lead verification/hydrator census. (Evidence: `trust2b-report-recovery.md` “Change”; `trace-notes.md` lines 114–116; `RUN_STATE.md` lines 81–86.) Independent lead verification and publication are **UNVERIFIED**. (Evidence: recovered report F4.)
+
+Trust 2c ran Sol high for 3,782,506 ms from the same head with an 18-path verification scope, changed no paths, and again ended `ACCEPTANCE_FAILED` at missing report capture with semantic status/completion unknown. (Evidence: `trust2c-out.manifest.jsonl` lines 1–2.) `RUN_STATE.md` says the tail ran and should be harvested from disk, but no supplied primary artifact establishes any 2c test result; every claimed 2c proof is **UNVERIFIED**. (Evidence: `RUN_STATE.md` lines 73–80; 2c manifest line 2.)
+
+### Unique catches by layer
+
+- **Substrate Sol design consult:** found the release-hydration shape that the listed options missed; adopted in full. (Evidence: `8788891`; `trace-notes.md` lines 42–45.)
+- **Recovery delta 1:** caught the surviving unexecuted-proof mutation, lease alias, preservation timing, lint blind spot, and real orphan leak; killed inspect-as-permission. (Evidence: `721593b`; `trace-notes.md` lines 61–70.)
+- **ESC-2 Sol design consult:** rejected single-key identity and supplied five exact terminating contracts plus sequencing. (Evidence: `bc01908`; `trace-notes.md` lines 76–83.)
+- **Recovery implementer:** caught that `git diff` omitted four untracked support files before commit. (Evidence: `trace-notes.md` lines 100–104.)
+- **Delta-2 G1:** executed the EvidenceAlias/direct-readiness fabrication and established count 3. (Evidence: `0c30993`; `e265c9c` “Both instances agree.”)
+- **G2:** found the never-executed genesis dirfd-binding miss; the cold synthesis resolved it as second occurrence of the family but first missed genesis call-site. (Evidence: `trace-notes.md` lines 121–123/184–188; `e265c9c` final paragraph.)
+- **G3:** executed the manifest-corruption/deferred-fingerprint timing bypass. (Evidence: `trace-notes.md` lines 124–126.)
+- **G4:** found the inherited-pipe runner hang. (Evidence: `0c30993` commit message; `e265c9c` item 2a.)
+- **G5:** found kw-only-helper and nested-comprehension analyzer laundering. (Evidence: `trace-notes.md` lines 127–128.)
+- **G6:** found unlink-on-validation-failure destruction; Opus later refined it from blocker to should-fix for arming reachability. (Evidence: `trace-notes.md` lines 129–131/189–191.)
+- **Cold Opus refuter:** caught the G2 packet contradiction and forced the lease-core/F1 decomposition objection into the final ruling. (Evidence: `trace-notes.md` lines 175–188; `e265c9c` “The split.”)
+- **Cold Fable adjudicator:** caught that the claimed in-process property was unattainable and replaced it with an out-of-process mutation-kill property. (Evidence: `e265c9c` “Both instances agree”/item 3.)
+- **Trust implementer/test tail:** exposed a 68-minute irreducible test atom and the `/dev/fd` no-follow auditor bug after authentic mint. (Evidence: `trace-notes.md` lines 147–158; `trust2b-report-recovery.md` V7.)
+- **Lead/Ed:** honored classifier denial, preserved custody, held release publication, changed fast/parallel policy, and stopped all processes at close. (Evidence: `trace-notes.md` lines 46–60/87–99/114–116; `RUN_STATE.md` lines 49–51.)
+
+### Deliberation resolutions and dissent
+
+The substrate design was adopted in full without recorded dissent. (Evidence: `trace-notes.md` lines 42–45; `8788891`.) The cold gate preserved a real disagreement—Opus UNSAFE versus Fable GRANTED—but the synthesis reconciled it because both rejected a bare merge; the Fable path was adopted with the refuter's seam/F1 objections as mandatory reasons for the fix round and limitation. (Evidence: `e265c9c` “The split.”) The synthesis records no magistrate dissent from the cold-instance verdict. (Evidence: `e265c9c` final paragraph.)
+
+### Process findings and follow-ups
+
+The first ESC-2 launch repeated the documented literal-`WRITE_SCOPE` failure, and parallel `--write-scope` launches exposed a per-worktree scoped-runner lock; the workaround was prompt-line scope plus post-harvest clean-status verification for read-only graders. (Evidence: `trace-notes.md` lines 71–75/108–113.) Security-vocabulary tier instability blanked G2 until neutral software-engineering wording was used, motivating neutral-SE refuter phrasing. (Evidence: `trace-notes.md` lines 132–135.) The trace and final checkpoint report folds for parcel-by-footprint, neutral wording, scoped-lock handling, and parallelism-by-default, but independent current skill-file verification is **UNVERIFIED**. (Evidence: `RUN_STATE.md` lines 97–100.)
+
+**Follow-ups:** recovery G2/G4/G6 fix → scoped delta → replay/integration/PR/CI/D-121/merge/manual arming; trust worktree harvest → load-bearing reruns → commit split → release publication → history rewrite → 16-question delta → PR; U2 remains post-window frozen. (Evidence: `RUN_STATE.md` lines 57–90.)
+
+**Yield/spend:** the trace names at least 15 model-bearing lanes/roles plus one instant failed wrapper launch, but exact launch count and whole-session cost are **UNVERIFIED**. (Evidence: `trace-notes.md` “Launches,” lines 71–113/147–194; cold synthesis.) Trust 2b and 2c exact runner durations were 8:00:03.970 and 1:03:02.506; both manifests record `token_usage:null`. (Evidence: each manifest line 2.) The recovered 2b transcript ends with `1,909,882` tokens, but its billing meaning and relation to resumed context are **UNVERIFIED**, so no total-spend claim is made. (Evidence: `trust2b-report-recovery.md` final line.)

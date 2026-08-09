@@ -10,11 +10,541 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-07 EVENING — **window-end checkpoint. Read the
-EVENING block first;** the earlier /clear checkpoint below it is
-executed history except where the EVENING block says otherwise.
+Last updated: 2026-08-08 late morning — **THE 40-HOUR WINDOW IS LIVE
+(D-125); T0 SESSION RUNNING — three Phase A Sol streams IN FLIGHT (see
+T0 block below). A NEW SESSION STARTS HERE:**
+
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
+
+## ▶▶ RESUME SCRIPT FOR THE 40-HOUR WINDOW (post-/clear; read FIRST)
+
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
+
+**THE PLAN OF RECORD IS `docs/strategy/2026-08-08-40h-plan.md` — read
+it in full and execute from the earliest incomplete item.** In one
+line: Phase A (trust/recovery/writer-literal/estimator/U11/U2 reworks —
+ALL DESIGNS ADOPTED, consult memos custodied and cited in the plan;
+execution + full D-118/D-121 gates) → Phase B (packs generated AND
+frozen; Ed rulings D-122/D-123 in hand) → Phase C (Window ALPHA night 1,
+BETA night 2, gamma if hours remain; Ed does §5A taps only). Morning
+mints put the FIRST MEASURED NUMBERS in the paper.
+
+Standing context that survives /clear: D-121 terminal magistrate
+review binds every merge; the same-signature escalation trigger is
+armed (three fired 2026-08-07/08 — consult, never round three); Codex
+Fast Mode is the standing DEFAULT on both `scripts/codex-bridge` and
+`codex-run-v3`; `CODEX_SERVICE_TIER=default` is the per-call opt-out;
+CODEX ONLY, never Anthropic fast. Use codex-run-v3 for enforced-WRITE_SCOPE
+implementations (prompt needs a literal `WRITE_SCOPE: [...]` line;
+CODEX_APP_BRIDGE=off for concurrent bridge runs); review agents get
+isolation:worktree and a no-checkout line; never gate on a piped test;
+quiet windows need a caffeinate-free machine (kill any stray
+keep-alive before arming). Ed's remaining owed rulings: the original
+8 minus 2/4 (ruled as D-122/D-123); ruling 8 still gates the
+reason-code SPEC lane only.
+
+The MORNING STATE block below records how the overnight ended;
+everything under it is executed history.
+
+## ▶▶ T1 SESSION FINAL CHECKPOINT (2026-08-08 night, Ed stop order) — /clear-SAFE; READ FIRST
+
+**Nothing in flight — all codex processes killed, workflow stopped.**
+Scratchpad:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/92058940-b39f-4e0e-aed5-3be9f831f90f/scratchpad`
+(trace-notes.md is the full running trace of this session). Worktrees
+under `…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+
+**SUCCESSOR ORDER (Phase A continuation; D-128 governs):**
+1. **RECOVERY (arming blocker) — the cold gate RULED; the ruled fix
+   round did NOT land.** Branch impl/d117-ledger-recovery @ `e265c9c`
+   (cold-gate ruling custodied). The G2/G4/G6 arming-path fix round was
+   killed before writing anything (recovery worktree is CLEAN — work
+   not-started, relaunch fresh). Contract:
+   `<SP>/recovery-armfix-prompt.md`. It implements ONLY the three
+   first-occurrence production defects the cold gate licensed (FIX-A
+   G2 genesis dirfd-binding; FIX-B G6 crash-auth unlink-only-on-valid;
+   FIX-C G4 runner timeout) with EXECUTED probes, per
+   COLD-GATE-SYNTHESIS.md on the branch. Then scoped delta → lead
+   replay → integration tree vs main → PR → CI → D-121 → merge
+   discharges ARMING. The witness-integrity MUTATION-KILL HARNESS is a
+   SEPARATE off-critical-path track (do NOT try to re-harden the FIX-14
+   AST gates — PROHIBITED by the cold gate). L1 witness-integrity
+   limitation is surfaced for Ed's review (COLD-GATE-SYNTHESIS §4).
+2. **TRUST (mint bar) — round 2c (verification tail) ran; HARVEST from
+   disk.** Branch impl/d117-postcollection-trust head `1cae2bc` +
+   uncommitted 2c work; worktree diff is ground truth (report may be
+   thin — recover via `codex-bridge resume` if needed). Round 2b PROVED:
+   reduce.py pinned, auth-core suites green, ONE authentic unpatched
+   production mint. Round 2c was completing the ~68-min decisive
+   regression (auditor already repaired 193/193) + v1 parity + full
+   suite. On harvest: LEAD-VERIFY the load-bearing proofs yourself →
+   commit-split (auth-core vs substrate parcels) → publish the DRAFT
+   RELEASE (already created+uploaded+sha-verified:
+   fixture-d117-v2-production-v1, archive sha f1286bc8…; publish AFTER
+   a hydrator census) → HISTORY REWRITE (Ed's 4 permission rules cover
+   it; exact commands in trust-fixture-substrate/RULING.md addendum;
+   the 38 content dirs leave git per the substrate ruling) → 16-question
+   Workflow delta → PR. Safety bundle for the pre-rewrite state:
+   tag `safety/trust-1cae2bc-prerewrite` + 53MB verified bundle in
+   `~/JouleWise-window-custody/trust-prerewrite-20260808/`.
+3. **U2:** still FROZEN count 3 (branch 5b00200) — post-window cold gate.
+
+**LANDED to main this session (all pushed):** T0 bookkeeping
+(`d81c78a`); substrate RULING + addendum (`8788891`/`b7aad49`); **Codex
+Fast Mode = STANDING DEFAULT** both routes (`de759c9`; Codex-only,
+never Anthropic — Ed); recovery ESC-2 consult+adoption (`bc01908`) +
+delta-1 FAIL + FREEZE (`0c30993`) + COLD-GATE ruling (`e265c9c`, on the
+branch); consistency-sweep fixes (`2ba514a`). Skills folded (live on
+disk, ~/.claude not versioned): parcel-by-footprint default,
+neutral-SE refuter phrasing, --write-scope-lock trap, parallelism-is-
+default. Memory: instrument-mix superseded (fast default);
+rust-rewrite-witness-integrity (Ed floated Rust — HARD NO for MVP, P3).
+
+**ED DIRECTIVES THIS SESSION (durable):** fast everywhere for Codex,
+Claude scarce/lean; HARDER PARALLELISM (Workflow fan-outs for read-only,
+footprint-parceled implementation, monoliths need a named reason —
+validated: two 8h monoliths, one walled reportless); 4 history-rewrite
+rules + `gh release:*` added to settings.local.json (REMOVABLE after
+the trust PR merges); ~30h grind; paper ETA 4–6 days gated on 2–3 QUIET
+nights (Ed does §5A taps), now +0.5–1.5d from the recovery cold gate.
+
+**OWED bookkeeping (first desk block):** council C-052 (this session:
+substrate ruling, fast-mode, recovery cold gate, trust wall+2c);
+skill-usage log; T1 run report. **DISCHARGED by the T2 session
+(2026-08-08 night): C-052 + docs/run_reports/2026-08-08-t1-window-session.md
++ skill-usage rows installed (Sol-drafted, lead-reviewed).** Trust 2c harvest + recovery armfix
+relaunch are the two night-critical resumes.
+
+## ▶▶ T1 mid-session detail (superseded by the FINAL block above; kept for pointers)
+
+**Session = T0's successor under D-128.** Scratchpad:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/92058940-b39f-4e0e-aed5-3be9f831f90f/scratchpad`
+(trace-notes.md is the running trace). Worktrees still under
+`…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+
+**LANDED on main this session (all pushed):** T0 owed bookkeeping —
+run report `docs/run_reports/2026-08-08-t0-window-session.md` + council
+C-051 + skill-usage (`d81c78a`); fixture-substrate RULING
+(`8788891`+addendum `b7aad49`); **Codex Fast Mode is now the STANDING
+DEFAULT** on both `scripts/codex-bridge` (`de759c9`) and (Ed-authorized
+in-place) `~/.local/bin/codex-run-v3` (backup
+`codex-run-v3.bak-20260808-prefast`); `CODEX_SERVICE_TIER=default`
+opts out. Fast = CODEX ONLY, never Anthropic fast (Ed).
+
+**ED DIRECTIVES THIS SESSION (durable):** (a) fast everywhere for
+Codex; Claude/Fable scarce, stays lean. (b) HARDER PARALLELISM —
+read-only layers are Workflow/parallel fan-outs; implementation
+parcels by disjoint footprint; long single streams need an explicit
+reason (validated: two 8h monoliths this session, one hit the wall).
+(c) 4 history-rewrite permission rules added to
+`.claude/settings.local.json` + `gh release:*` — REMOVABLE after the
+trust PR merges. (d) ~30h grind window; paper ETA 4-6 days gated on
+2-3 QUIET nights (Ed does §5A taps), now +0.5-1.5d from the recovery
+cold gate below.
+
+**RECOVERY (arming blocker) — FROZEN at unexecuted-proof COUNT 3 →
+COLD GATE, not a fix round** (`0c30993`, pushed; branch
+impl/d117-ledger-recovery). FIX-14..18 landed (`4495609`) but the
+parallel 6-lens delta 2 returned ALL SIX NOT-CLOSED; G1 reproduced the
+unexecuted-proof class at count 3 (EvidenceAlias fabrication + direct
+readiness passed the FIX-14 gates). Same-signature 2nd occurrence on
+lease (G2) + preservation (G3) AFTER the terminating ESC-2 consult →
+rule-11 mandatory cold gate. **Freeze is ON the paper critical path**
+(discharging recovery = the arming blocker). NEXT: convene a COLD
+FABLE instance + Opus refuter on the mechanical packet
+(docs/process_traces/2026-08-08-recovery-exits-escalation/FREEZE-COUNT3.md
+— best done from a FRESH context, that is the point). Decomposition
+question the cold gate must rule: can the CLEAN custody core + runbook
+D-117 amendment land to discharge arming while witness-corpus
+integrity is resolved separately? Do NOT decide alone; do NOT spawn
+FIX-19. Custody core was ruled CLEAN by the escalation.
+
+**TRUST (mint bar) — round 2b ran the FULL 8h, hit the wall, NO
+REPORT** (`ACCEPTANCE_FAILED` = report_capture missing, NOT a scope
+violation; all 12 changed paths in-scope). Ground truth = worktree
+diff at head `1cae2bc` (uncommitted 2b work on top; branch
+impl/d117-postcollection-trust). Verified at bench: reduce.py AT the
+pinned SHA (5118849d); substrate deliverables all present (packager,
+hydrator, `.github/workflows/d117-production-proof.yml`, transport
+descriptor+test, .gitignore rule); decisive regression +539/-97.
+Archive built + self-verified mid-run (SP/fixture-archive/, sha
+f1286bc8…). Draft RELEASE created + asset uploaded + fresh-download
+sha VERIFIED (fixture-d117-v2-production-v1, unpublished). PROOF
+STATUS UNKNOWN pending report recovery (bridge resume in flight,
+session 019fe33b…). NEXT: harvest recovery report → LEAD-VERIFY the
+load-bearing proofs (authentic mint, ABA, bidirectional equality,
+190-census, full suite) → commit-split (auth-core vs substrate — they
+PARCEL cleanly) → publish release after census-via-hydrator → history
+rewrite (Ed's rules cover it; the 38 content dirs leave git) →
+16-question Workflow delta → PR. Substrate is a clean separate parcel
+from auth-core (the lesson: should have been split at launch).
+
+**U2:** still FROZEN count 3 (5b00200) — untouched, post-window cold
+gate.
+
+**In flight at this checkpoint:** trust report-recovery resume
+(`bwp1082g1`). Recovery graders all harvested. If a /clear happens:
+the cold gate + trust proof-verification are the two live threads;
+both are documented above and in the branch trace dirs.
+
+## ▶▶ T0 SESSION FINAL CHECKPOINT (2026-08-08 ~13:40, Ed stop order) — /clear-SAFE; SUCCESSOR STARTS HERE
+
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night).**
+
+**Nothing in flight. Zero live codex processes. All branches pushed.**
+Session scratchpad (prompts/reports/consult copies + checkpoint-notes.md):
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad`.
+Worktrees {trust,recovery,u2rework} under `…/377d50a5-…/scratchpad/` —
+clean, branches pushed, safe to lose.
+
+**SUCCESSOR ORDER (Phase A continuation; D-128 mandate governs):**
+1. **TRUST (mint bar):** round 2 was KILLED mid-run at ~4h22 by Ed's
+   stop order; partial state banked `1cae2bc` (pushed). Core round-2
+   work landed in-tree (authentication_io, custody_store fixture 38
+   content-IDs, conversions); report thin/absent — TRUST NOTHING
+   without the round-2 proofs (reduce.py SHA 5118849d… revert proof,
+   ABA regression, absent-mode parity, fixture hash census, authentic
+   unpatched mint, bidirectional auditor equality). Resume per
+   trust2-prompt.final.md + RULING-CONSULT.md from the checkpoint diff
+   (fresh session; --resume ambiguous after consults ran in that cwd).
+   ⚠ NEW RULING NEEDED FIRST: the fixture is 3.1GB (38×83MB plists);
+   GitHub warned on push. Adjudicate substrate (LFS / thinned traces /
+   generated-at-test-time) BEFORE more fixture work or any PR.
+2. **RECOVERY (arming blocker):** FIX-1..13 ALL CLOSED, banked
+   `468e0a6` (pushed), full suite 2770 OK in-run. Next: fresh gauntlet
+   delta with THREE explicit questions — unexecuted-proof class
+   (count 1), inspect-as-permission class (count 1), and the
+   orphan-reaping finding (checkpoint-notes.md: harness leaked 8
+   spinning SIGKILL children, lead-killed; verify reaping + whether it
+   distorted suite timing). Then lead replay → integration-tree with
+   post-trust main → PR → CI → D-121 → merge discharges ARMING BLOCKER.
+3. **U2: FROZEN at count 3** (branch 5b00200; U2-FROZEN-COUNT3.md is
+   the cold-gate packet). Post-window item. Do not touch outside a
+   cold gate.
+4. **D-127/D-128:** consult custodied `daf9644` (assessed sound,
+   adoption = build session's first move; recovery lands FIRST).
+   D-128 standing mandate: run the loop until a defensible paper.
+5. **Owed bookkeeping (first desk block):** council log C-051 +
+   skill-usage log + session run report (this block is the interim
+   record); consistency sweep after the next merge wave.
+
+**HARDWARE-FOOTPRINT items (Ed directive, task #8 + memory):**
+405GB stale codex-run-v3 scope snapshots purged (88%→43% disk);
+wrapper retention patch written but REVERTED after its test suite
+failed assertion 61 (patched copy: ~/.local/bin/codex-run-v3.patched-
+20260808-DEFERRED; known-good restored + verified; determine whether
+assertion 61 fails PRE-patch before re-landing). Ed authorized codex
+tooling changes for machine-health. Audit scope in task #8: snapshot
+content (exclude runs_* corpora?), enforced-scope launch discipline,
+orphan reaping, full-suite frequency, disk checks in fleet-health
+cadence.
+
+**MERGED to main this session:** results-prose template + linter
+(`1e6fa16`, class ruled dead after 4 deltas — ready for alpha
+numbers). **Decisions minted:** D-126 (U2 synthesis), D-127 (autonomous
+loop, ratified), D-128 (standing run-the-loop mandate). **Rulings
+custodied on main:** trust F1/F2 (`fe85b09`), recovery witness-scope
+(`6981d2b`), D-127 consult (`daf9644`).
+
+## ▶ T0 SESSION 2026-08-08 (40h window) — mid-session state (SUPERSEDED by the final checkpoint above; kept as history)
+
+- Session scratchpad (prompts, scopes, consult copies, out-files):
+  `/private/tmp/claude-501/-Users-edr-code-JouleWise/8f13f748-d7d8-43aa-a780-691dddf6a2f4/scratchpad` (SP).
+  Worktrees: `…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+- **DONE: RESULTS_PROSE landed on main (`1e6fa16`)** — fillable results
+  template with terminating conditional structure + fail-closed linter
+  (15 refusing mutations); the unconditional-assertion class ruled DEAD
+  after 4 delta rounds; full record in
+  docs/process_traces/2026-08-07-plan-factory/PROSE-ESCALATION.md.
+  Ready to receive alpha numbers.
+- **A1 trust** @ 97fd4c1 (registration-at-read core BANKED; round 1
+  early-returned on two authority conflicts). F1/F2 RULED + custodied
+  (`RULING-CONSULT.md`, main `fe85b09`): reduce.py reverts (pin
+  senior), path-capability registration, content-addressed custody
+  store. **Round 2 IN FLIGHT** (out `SP/trust2-out.md`, 8h cap,
+  7-step sequence; step-3 diff checkpoints to trust2-commit1.diff).
+  Then 16-question delta → gate → merge lifts MINT BAR.
+- **A2 recovery** @ b0c8f6d (four elements BANKED, suite 2763 OK;
+  arming blocker held open on witness gap). 71-code census; WITNESS-
+  SCOPE-RULING custodied (main `6981d2b`): corruption construction
+  legitimate, witness_class tri-state, per-class executed-witness
+  gates. **Witness round 3 IN FLIGHT** (out `SP/recovery3-out.md`, 8h
+  cap, family-checkpoint resumable). Then gauntlet → integration-tree
+  post-trust → merge discharges ARMING BLOCKER.
+- **A6 U2** @ 5b00200 — **FROZEN at attestation count 3 (cold-gate
+  item; U2-FROZEN-COUNT3.md).** Envelope rework + gauntlet fix + the
+  enrollment attestation rework all landed on the branch, but the delta
+  ruled the attestation-binding class same-signature YES a THIRD time:
+  the enrollment registry was auto-generated with always-true verifiers
+  (Potemkin), so a ledger-absent epoch_catalog entry passed every layer.
+  Per rule-11 escalation discipline, this is NOT answered with another
+  loop fix — U2 is frozen pending a deliberate cold gate (fresh
+  instance, mechanical packet), schedulable POST-WINDOW. **Freeze costs
+  the paper nothing:** U2 issuance was already gated behind Q12 (open) +
+  the third convening (not held); the issued D-079 artifact governs
+  alpha/beta/gamma. Sound-and-landed (preserve on resume): trigger-set
+  recomputation, the 4 non-class closures, the 5-ID resolution test,
+  the clean integration merge, all must-not-change items. Resolution
+  packet is written in U2-FROZEN-COUNT3.md §"What a resolution must
+  establish".
+- **D-126 minted** (`1a1dac0`); prose merge `1e6fa16`; ruling commits
+  `fe85b09`, `6981d2b` — all pushed.
+- If a stream's process dies, the WORKTREE DIFF is the artifact —
+  harvest, never re-run blind (codex-run-v3 --resume for died
+  workspace-write runs). A3 (CH-1) queued after A2; A4 (estimator) +
+  A5 (U11 tool) queued after A1 merges. Same-signature counters live:
+  trust relocation classes (delta grades vs 16-question checklist);
+  recovery witness-coverage (first occurrence, honest); U2 attestation
+  class count 2 (consult-shaped rework in flight — if its delta finds
+  the class again, that is count 3 at the enrollment level: cold-gate
+  territory, not another fix).
+
+## ▶ MORNING STATE 2026-08-08 (overnight run complete — READ THIS FIRST)
+
+**The night in one breath:** PR #116 merged early (reason-code
+diagnostics, full 12-item gate). After that the gates got STRICTER than
+the code: THREE standing escalation triggers fired (trust
+regression/scoping classes; recovery ungoverned-refusal class across
+layers), each redirected to a design consult, and all three consults
+returned TERMINATING designs that are now ADOPTED and custodied. The
+U2 cold gate re-convened on a workflow-assembled, byte-verified packet
+and ruled: six first-round objections verified moot; Q1+Q13 remanded
+and then DESIGNED (lineage-monotone envelopes); Q8 shim deleted. The
+common-mode estimator (D-124) and the attribution question are settled
+with evidence. Nothing unsound merged; the mint bar and arming blocker
+correctly stayed up.
+
+**ED'S MORNING REVIEW (reversible items, newest first):**
+1. **Q1+Q13 envelope adoption** (Q1Q13-REMAND-CONSULT.md): successor
+   screen/ceiling become lineage-monotone t-family envelopes inheriting
+   0.010818 as the floor (can only strengthen). The D-117 cl.1
+   successor amendment transcribes only with your ack; until then
+   freeze-until-ruled controls (costless for the three nights).
+2. **D-124** common-mode contrast estimator (two-shared-edge), 4-5x
+   floor improvement on contrasts, full registration conditions.
+3. Your own D-122 (256-tok prefill arm) + D-123 (reported-energy cells,
+   signal-size doctrine) as transcribed — check the wording.
+
+**SUCCESSOR QUEUE (all designs adopted; execution + full gates):**
+1. **Trust rework** (registration-at-read; 2026-08-08-trust-scoping-
+   escalation/CONSULT-RESPONSE.md): strict-read session, traversal
+   deleted, decisive regression replaced on the real-fixture
+   no-substitution contract → gate → MERGE LIFTS THE MINT BAR.
+2. **Recovery integrated round** (2026-08-08-recovery-exits-
+   escalation/CONSULT-RESPONSE.md): stable claim + held lease,
+   under-lease ARM readiness, registry-at-raise with executed
+   witnesses, §5/§6/§10 runbook amendments → gate → merge DISCHARGES
+   THE ARMING BLOCKER (only when all four elements land together).
+3. **U2 rework round 2** (SYNTHESIS-V2.md + Q1Q13 consult): envelope
+   arithmetic, shim delete, Q5 closure plumbing, Q4 freeze test,
+   Q3 evidence regeneration (the lead's 40-digit grid bug), Q13
+   refusal rename → re-present Q12 on the FULL register text.
+4. **U5-U7 packs:** Ed rulings 2+4 are IN HAND (D-122/D-123) — packs
+   generate + freeze once recovery lands (receipt-oracle re-derivation)
+   with reported-energy cells, the 256-tok prefill arm, stage_launch
+   recipes, and the D-124 estimator identity if its registration lands.
+5. Operator packet refresh + results-prose re-run + paper touch-ups
+   (D-122 scope wording is already magistrate territory under D-119).
+
+**In-flight at close: NOTHING.** All Sol runs harvested; all agents
+returned; caffeinate dies with the session. Scratchpad worktrees
+trust/recovery/u2rework remain (branches pushed; safe to lose).
+
+## ▶ SUCCESSOR SCRIPT (2026-08-08 wrap — start here)
+
+**OVERNIGHT RUN LIVE (D-123 license):** rulings D-122/D-123 transcribed;
+attribution debate adopted (means: signal-sizing only; contrasts:
+common-mode estimator replay ORDERED pre-freeze, promotion bar >=2x/2J).
+OVERNIGHT, LATER (state at ~03:30): **U2 second convening RULED**
+(SYNTHESIS-V2.md, both sealed rulings custodied): six first-round
+objections verified moot in code by BOTH judges; Q5 closure defined and
+adopted; Q8 migration shim deleted by convergent ruling; Q9 barrier
+verified mechanical; **Q1+Q13 jointly REMANDED to design** (the
+refuter PROVED the range-based successor screen crosses the shrinking
+t-ceiling at ~67% at the actual n=30 first-successor corpus — silent
+clamp + incoherent runtime refusal; consult IN FLIGHT
+`<scratchpad>/q1q13-consult-out.md`); Q12 open (the packet truncated
+the register AGAIN one paragraph later — packet rule hardened:
+quote to end of document section); Q10 defers to recovery. **RECOVERY:
+escalation FIRED at count 2 ACROSS LAYERS**
+(docs/process_traces/2026-08-08-recovery-exits-escalation/ESCALATION.md
+— the Opus lens PROVED by executed probes that the writer's
+per-process claim_id wedges the night permanently after the design's
+own canonical crash, all three governed exits non-functional; runbook
+amendment sits under a not-in-force banner). No fix round 2;
+exit-completeness design consult IN FLIGHT
+(`<scratchpad>/exits-consult-out.md`). The recovery branch's custody
+core is CLEAN (no path admits a control receipt as evidence) — the
+class lives in the operator/liveness layer. TRUST: delta4 FAILED — both
+round-3 classes at COUNT 2 (regression still substitutes the
+production chain; strict-parse both under- and over-scans) → the
+trigger FIRED here too
+(docs/process_traces/2026-08-08-trust-scoping-escalation/ESCALATION.md);
+registration-at-read consult IN FLIGHT
+(`<scratchpad>/trust-scoping-consult-out.md`). The custody-authority
+class stays DEAD; the MINT BAR STAYS UP tonight — the trust merge
+waits for the consult-shaped rework + full gate. THREE consults now
+in flight (exits, q1q13, trust-scoping): the night's remaining spend
+is consult-harvest -> terminating-shape reworks, not fix-round churn.
+
+OVERNIGHT PROGRESS: trust tripwire delta RULED **same-signature NO —
+the operator-authored-authority class is DEAD** (authority terminates in
+authenticated ledger/session evidence, committed head pin, code-pinned
+D-079 acceptance, authenticated campaign evidence, extractor
+recomputation); FAIL only on two first-occurrence items (decisive
+regression bypasses the file-backed production entry; strict-parse
+over-scans unreferenced files) → **fix round 3 in flight**
+(`<scratchpad>/trust-fix3-out.md`; lead replay at fix-2 head banked:
+2747 OK unpiped). Recovery audit **FAIL — all three historical classes
+found alive as implementation misses** (bare-business-receipt admission
+after activation; junk+orphaned-finalization deletion-only state;
+count-only pin check; abandonment-head pin rejection; two
+non-discriminating test findings; two fixture-discipline P2s) → **fix
+round 1 in flight with dictated closures**
+(`<scratchpad>/recovery-fix-out.md`); ITS delta is a tripwire: any
+class alive again = count 2 = consult. Common-mode replay: bar HELD
+decisively → **D-124** (two-shared-edge estimator promoted-as-candidate,
+Ed-reversible). U2 exhibit rework still in flight. A `caffeinate -i -m`
+(pid recorded in session log, 12h cap) holds the LOCKED machine awake —
+it dies with the session; if a future QUIET WINDOW ever finds a stray
+caffeinate, kill it before arming. Workflow tool re-authorized by Ed
+for tonight at magistrate discretion.
+
+**MERGED this window (all on main):** PR #114 (paper trust language),
+PR #115 (U1 night fixes — F2 fixed on main), PR #116 (reason-code
+plumbing — FIRST merge under the full 12-item D-121 gate). Decisions
+minted: D-119 (claim language), D-120 (trust closure), **D-121 (the
+magistrate's OWN contextual final review is the TERMINAL merge-gate
+item — binds every merge, non-delegable, after CI)**. Council record:
+C-050. Skill-usage log updated.
+
+**TWO SOL RUNS WERE IN FLIGHT at wrap** (background processes die with
+the session; the WORKTREE DIFF on disk is then the artifact — harvest,
+never re-run blind):
+1. **Trust fix round 2** — worktree `<session-377d…>/scratchpad/trust`,
+   branch `impl/d117-postcollection-trust` (last pushed head `4fcb687`;
+   Sol was editing uncommitted on top). Contract:
+   `<scratchpad>/trust-fix-prompt.md`; report (if finished):
+   `<scratchpad>/trust-fix-out.md`. It closes the round-1 audit FAIL
+   (A1 window-anchor-from-verdict; A2 production-path decisive
+   regression; A3 recursive strict-parse; A4 head-pin-commit
+   containment). **On harvest: fresh delta re-audit — if the
+   operator-authored-authority class survives in ANY form, that is
+   same-signature COUNT 2 and the next spend is an ESCALATION CONSULT,
+   never a round-3 fix.** Then replay -> PR -> CI -> D-121 terminal
+   review -> merge. The v2 mint bar lifts only then.
+2. **Recovery resume** — worktree `<session-377d…>/scratchpad/recovery`,
+   branch `impl/d117-ledger-recovery` (nothing pushed yet; round 1
+   returned NEEDS_SCOPE, magistrate approved expansion to the two
+   positional fixture sets with derived-count discipline). Report
+   appends to `<scratchpad>/recovery-out.md`. On harvest: commit
+   ungated -> full D-118/D-121 gauntlet -> PR. **Its receipt-cadence
+   change (5->10 per session) makes the U5-U7 '5-receipt/91' oracles
+   STALE — pack generation must re-derive from this branch, and packs
+   stay unfrozen anyway pending Ed ruling 2.**
+
+Session scratchpad root:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/377d50a5-4fb9-4f74-b609-0a370965fdf2/scratchpad`
+(prompts, all Sol outputs, worktrees trust/recovery/reasoncode/split†;
+† split worktree pruned post-merge). If the scratchpad is gone, the
+pushed branches + the prompt texts recorded in `.codex-bridge/` and the
+v3 manifests reconstruct everything.
+
+**THEN the queue (unchanged order):** trust merge (mint-bar lift) ->
+recovery gauntlet (discharges the night-1 arming blocker via its
+runbook amendment) -> U2 packet reassembly + rework (per
+`2026-08-07-u2-coldgate/SYNTHESIS.md`) -> U5-U7 pack generation on Ed
+ruling 2 (with re-derived receipt oracles + the adopted stage_launch.v1
+contract + U11 projection receipts before any ARM).
+
+**ED'S RULINGS OWED: still the 8** (docs/strategy/2026-08-07-paper-portfolio/ADJUDICATION.md);
+ruling 2 is the only pack-freeze blocker; ruling 8 gates the
+reason-code SPEC lane (the code lane merged).
 
 ## ✅ CHECKPOINT 2026-08-07 EVENING — 3.5h magistrate window (READ THIS FIRST)
+
+### D-121 ERA (Ed directive, 2026-08-08 ~late) + second extension
+
+- **D-121 RATIFIED and transcribed** (decision log + memory): the
+  magistrate's OWN contextual final review is the TERMINAL merge-gate
+  item (D-118 item 12) — after every other pass INCLUDING CI,
+  non-delegable; subagent Fable passes count only as earlier items.
+- **Reasoncode: PR #116 MERGED** under the FULL 12-item D-121 gate
+  (CI 11/11; magistrate terminal review PASS at `fc93ec1`, recorded in
+  the PR ledger). The reason-code plumbing is ON MAIN for the three
+  nights; only the spec-ratification lane (Ed ruling 8 + S1-domain +
+  SF2 waiver code) remains. Original status line:** Fix round
+  1 landed (`fc93ec1`): degrade-not-raise on the emitter (the crash was
+  REACHABLE under producer drift — delta proved a synthetic drift case
+  crashed the parent), discriminating dedup regression, whitespace
+  aligned, dead regex pruned. Delta: ACCEPT, same-signature NO. Full
+  replay 2747 OK unpiped. Remaining: CI (watcher armed) → **D-121
+  magistrate terminal review → merge**. Opus SF2 (waiver reason code)
+  deferred by design to the spec-ratification lane.
+- **Trust: adversarial audit round 1 = FAIL, same-signature YES** — the
+  operator-authored-authority class survives at ONE site the memo
+  already answered: the supplied binding chooses its own window; the
+  authenticated VERDICT's bracket must anchor window identity (memo §3).
+  Plus: decisive regression not production-path (memo §8), recursive
+  JSON not strict-parsed, containment field measures the mint HEAD not
+  the head-pin commit (adjudication consequence 2). **Fix round 2 IN
+  FLIGHT** (Sol xhigh, contract at `<scratchpad>/trust-fix-prompt.md`,
+  report to `<scratchpad>/trust-fix-out.md`). IF ITS DELTA STILL FINDS
+  THE CLASS: same-signature at count 2 → ESCALATION CONSULT, mandatory,
+  no round 3. Then: fresh delta → replay → PR → CI → D-121 terminal
+  review → merge; the v2 mint bar lifts only then.
+- **Recovery implementation: round 1 returned NEEDS_SCOPE (correct
+  early-return)** — the adopted intent protocol inherently DOUBLES the
+  physical receipt cadence (every business receipt gains a durable
+  intent receipt; a five-operation bracket session becomes ten
+  physical receipts), breaking two out-of-scope positional fixture
+  sets (U4's live-three-window regression and a bracketing fixture).
+  **Magistrate ruled: cadence change is a consequence of the ADOPTED
+  design, not a defect; scope expansion APPROVED for both test files
+  with derived-count discipline (no positional hard-coding — the U4
+  amendments' own rule). Resume in flight**
+  (`<scratchpad>/recovery-resume-launch.log`, report appends to
+  `recovery-out.md`). **BINDING DOWNSTREAM NOTE: the '5-receipt/91'
+  oracle the U5-U7 pack plans re-derived is STALE once recovery lands —
+  pack generation must re-derive receipt-model oracles from the
+  recovery branch (packs are unfrozen pending Ed ruling 2, so no
+  regeneration cost if sequenced recovery-first).**
+
+### EXTENDED WINDOW (+90min, same evening) — trust + reasoncode gauntlets advanced; three Sol streams in flight at final close
+
+- **Trust branch (`impl/d117-postcollection-trust`) @ `4fcb687`, pushed:**
+  integration-merged with post-#115 main (2745 full-suite OK unpiped,
+  lead-run); Opus counter-review DONE: PASS-WITH-SHOULD-FIX, no
+  blockers, deletion complete, #115 seam clean, assurance qualifier
+  byte-exact. Fix round 1 APPLIED at the bench: paper §5/§11 corrected
+  (branch had falsified the "mint does not run git" sentence);
+  origin/main containment records unknown instead of refusing; field
+  renamed `mint_commit_contained_in_origin_main` with a PROVEN golden
+  fixture-review (reverse-rename byte-reproduces every old golden on
+  synthetic AND CLI paths; cascaded producer pins/set re-derived);
+  dirty-tree refusal names paths; **D-120 transcribed on the branch**
+  (index row + body; docs tests green). **OWED before PR/merge:**
+  harvest `<scratchpad>/trust-audit-out.md` (Sol adversarial per-field
+  authority walk, IN FLIGHT at close — it gates everything), fix-round
+  delta over `049df4b..4fcb687`, final-head pass, full replay at head,
+  CI. Deferred with record (counter-review S4/S6/N1-N3): opaque
+  binding-refusal message, labelled-floor profile coverage, allowance
+  nit, terminal-head fallback nit, duplicated literal nit.
+- **Reasoncode branch:** Opus counter-review DONE: PASS-WITH-SHOULD-FIX,
+  no blockers — identity seam PROVEN byte-equivalent (20k-row fuzz, 0
+  mismatches), round-trip exact (30k emissions). SF1 (producer-union
+  subset test — uncaught ValueError could suppress a verdict row if the
+  frozen tuple drifts) + SF2 (waived members invisible in the new
+  surface) + 4 nits NOT yet applied — they are the successor's fix
+  round, with `<scratchpad>/reasoncode-audit-out.md` (Sol audit, IN
+  FLIGHT at close) to fold in. Lead full replay: `<scratchpad>/reasoncode-lead-replay.log`.
+- **Recovery implementation** (`impl/d117-ledger-recovery`, worktree
+  `<scratchpad>/recovery`): Sol xhigh IN FLIGHT at close implementing
+  the adopted ledger-resident intent/finalize/abandon shape incl. the
+  runbook D-117 amendment (which discharges the arming blocker).
+  Report lands at `<scratchpad>/recovery-out.md`; if the process died,
+  the worktree diff is the artifact — commit ungated + gauntlet.
+
 
 **Executed this window (all pushed):** resume items 1, 2 (both
 consults), 3, and 5 of the /clear checkpoint, plus the reason-code code
@@ -604,8 +1134,8 @@ re-audit accepts.
 1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
    restored); prior HIGH-only directive retired by its author.
 2. **Codex Fast Mode (service tier)**: 1.5x speed / 2.5x credits;
-   Ed specified the exact bridge implementation (per-call opt-in via
-   `CODEX_SERVICE_TIER=fast`, never a standing default) — being
+   Ed specified the then-authorized call-scoped setting via
+   `CODEX_SERVICE_TIER=fast`, without a standing default — being
    implemented on `impl/codex-fast-tier`. License: use fast on xhigh
    runs by default, fast-on-high when other streams block on the
    result.
@@ -2221,23 +2751,32 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-NONE — no global work-selection gate is active.
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `T1-2026-08-08-NIGHT`
+
+T1 is the sole live checkpoint: recovery is FROZEN at unexecuted-proof count 3; U2 is FROZEN at attestation count 3; trust is unmerged with 2c proof verification in flight; Codex Fast Mode is the standing default
+
+- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
+- Allowed kernel task IDs: NONE.
+- Authority: RUN_STATE.md T1 checkpoint (2026-08-08 night).
+- Clearance: Recovery count-3 cold gate and trust proof verification must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-05). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-08). Latest report: [T1 checkpoint 2026-08-08 night: recovery FROZEN at unexecuted-proof count 3; U2 FROZEN at attestation count 3; trust unmerged with 2c proof verification in flight; Codex Fast Mode standing default](RUN_STATE.md).
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- GATED — E1 `P1-008` (excluded by: T1-2026-08-08-NIGHT): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- GATED — Q2 `P2-006` (excluded by: T1-2026-08-08-NIGHT): Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- GATED — A0 `P2-035` (excluded by: T1-2026-08-08-NIGHT): RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -2683,10 +3222,9 @@ the top of this file.
 
 ## Current Verification
 
-- **Current-main verification gap (2026-08-07): this document does not
-  assert a full-suite result on current main; verify directly before use.
-  The 2,689-test and 2,687-test results are branch results, not main
-  results, and are not promoted here.**
+- **Current main: full suite `Ran 2770 tests`. The `2785` count belongs
+  only to unmerged recovery commit `4495609` (15 added tests) and is
+  FROZEN branch-only evidence, not a current-main result.**
 - **Merged main at the PR #95 composed tree (2026-08-02, historical):
   full suite `Ran 2418 tests`, `OK (skipped=22)`, lead-run on the
   exact 94+95 integration tree merged as `200e6db`; verdict CI green
@@ -2930,7 +3468,9 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-08-02, CURRENT) `main` and `origin/main` at `bcbc10b`; working
+- (2026-08-08 night, CURRENT checkpoint) `main` and `origin/main` are
+  both at `4c6a8fb558d7b979672dd4244efc797689785548`; the worktree is clean.
+- (2026-08-02, historical) `main` and `origin/main` at `bcbc10b`; working
   tree clean except the untracked private `CLAUDE.local.md` (Ed's;
   never commit) and `.desk/` (adjudication custody; never commit).
   PR #93 merged (the c3 branch is closed). Branch

@@ -114,6 +114,37 @@ NEG8_POINT_DRIFT_CONDITION_CODES = frozenset(
 )
 NEG8_WHOLE_WINDOW_ALLOWANCE_TERM = "E_whole_window_drift_allowance_j"
 
+# Prospective whole-window row diagnostics have their own code namespace.
+# This tuple is deliberately separate from every ratified refusal-scope
+# registry and conveys no refusal-scope classification.
+PROSPECTIVE_MEMBER_FAILURE_REASON_CODES = (
+    "cpu_admission_unenforced",
+    "cpu_baseline_sample_count_insufficient",
+    "cpu_baseline_telemetry_malformed",
+    "cpu_baseline_telemetry_missing",
+    "cpu_busy_ratio_p95_exceeded",
+    "environment_admission_failed",
+    "environment_admission_missing",
+    "gpu_idle_admission_not_passed",
+    "gpu_idle_admission_unknown",
+    "idle_admission_attempt_ledger_invalid",
+    "processor_combined_power_w_p95_exceeded",
+    "thermal_pressure_elevated_in_window",
+    "whole_window_bundle_invalid",
+)
+MEMBER_FAILURE_DETAIL_MAX_CHARS = 512
+
+# The additive diagnostic field must remain outside this six-key verdict
+# identity. Old and enriched rows with the same basis stay semantically equal.
+WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS = (
+    "status",
+    "bundle_ids",
+    "campaign_policy",
+    "idle_admission_core",
+    "row_provenance",
+    "evaluation_basis",
+)
+
 
 @dataclass(frozen=True)
 class WholeWindowDriftAllowanceResult:
@@ -4061,6 +4092,82 @@ def _salvage_binding_matches_verified_manifest_set(
     return excluded_bundle_id in declared_members
 
 
+def _validated_member_failures(
+    row: Mapping[str, Any],
+) -> list[dict[str, str]] | None:
+    """Parse the optional prospective member-failure diagnostic surface.
+
+    ``None`` means the field is absent on a legacy row. A present empty list
+    is preserved as ``[]`` so callers can distinguish evaluated-empty from
+    legacy unknown. Present malformed data also returns ``None``; validation
+    callers distinguish that case by testing key presence.
+    """
+
+    if "member_failures" not in row:
+        return None
+    raw = row.get("member_failures")
+    if not isinstance(raw, list):
+        return None
+
+    member_ids = {
+        value
+        for value in row.get("bundle_ids", [])
+        if isinstance(value, str) and value
+    } if isinstance(row.get("bundle_ids"), list) else set()
+    for field in ("excluded_bundles", "waived_bundles"):
+        records = row.get(field, [])
+        if not isinstance(records, list):
+            continue
+        member_ids.update(
+            record.get("bundle_id")
+            for record in records
+            if isinstance(record, Mapping)
+            and isinstance(record.get("bundle_id"), str)
+            and record.get("bundle_id")
+        )
+
+    parsed: list[dict[str, str]] = []
+    pairs: set[tuple[str, str]] = set()
+    order: list[tuple[str, str, str]] = []
+    for record in raw:
+        if not isinstance(record, Mapping) or set(record) != {
+            "member_id",
+            "reason_code",
+            "detail",
+        }:
+            return None
+        member_id = record.get("member_id")
+        reason_code = record.get("reason_code")
+        detail = record.get("detail")
+        if (
+            not isinstance(member_id, str)
+            or not member_id.strip()
+            or member_id not in member_ids
+            or not isinstance(reason_code, str)
+            or not reason_code.strip()
+            or reason_code not in PROSPECTIVE_MEMBER_FAILURE_REASON_CODES
+            or not isinstance(detail, str)
+            or not detail.strip()
+            or len(detail) > MEMBER_FAILURE_DETAIL_MAX_CHARS
+        ):
+            return None
+        pair = (member_id, reason_code)
+        if pair in pairs:
+            return None
+        pairs.add(pair)
+        order.append((member_id, reason_code, detail))
+        parsed.append(
+            {
+                "member_id": member_id,
+                "reason_code": reason_code,
+                "detail": detail,
+            }
+        )
+    if order != sorted(order):
+        return None
+    return parsed
+
+
 def _validate_row(
     row: Mapping[str, Any],
     runs_root: Path,
@@ -4192,6 +4299,9 @@ def _validate_row_uncached(
         and isinstance(row_exclusion, Mapping)
         and row_exclusion.get("bundle_id") in bundle_ids
     ):
+        reasons.add("whole_window_verdict_provenance_invalid")
+    member_failures = _validated_member_failures(row)
+    if "member_failures" in row and member_failures is None:
         reasons.add("whole_window_verdict_provenance_invalid")
 
     policy = row.get("campaign_policy")
@@ -4586,6 +4696,16 @@ def _row_references_current_strict_member(
     )
 
 
+def _whole_window_semantic_identity(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the frozen six-key identity used for same-basis comparison."""
+
+    identity = {
+        key: row.get(key) for key in WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS
+    }
+    identity["bundle_ids"] = sorted(row.get("bundle_ids", []))
+    return identity
+
+
 def whole_window_refusal_reasons(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -4759,16 +4879,7 @@ def whole_window_refusal_reasons(
     if len(valid) != len(overlapping):
         return ("whole_window_verdict_conflict",)
     semantic = {
-        canonical_sha256(
-            {
-                "status": row.get("status"),
-                "bundle_ids": sorted(row.get("bundle_ids", [])),
-                "campaign_policy": row.get("campaign_policy"),
-                "idle_admission_core": row.get("idle_admission_core"),
-                "row_provenance": row.get("row_provenance"),
-                "evaluation_basis": row.get("evaluation_basis"),
-            }
-        )
+        canonical_sha256(_whole_window_semantic_identity(row))
         for row in valid
     }
     if len(semantic) != 1:
@@ -4998,6 +5109,9 @@ __all__ = [
     "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
     "NEG8_WHOLE_WINDOW_ALLOWANCE_TERM",
+    "MEMBER_FAILURE_DETAIL_MAX_CHARS",
+    "PROSPECTIVE_MEMBER_FAILURE_REASON_CODES",
+    "WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS",
     "CONSUMPTION_PROVENANCE_PRECHECK_KEY",
     "MAX_BRACKET_CONSUMPTION_SEMANTICS_ID",
     "MINTED_CONSUMPTION_SEMANTICS_ID",
