@@ -1,0 +1,2192 @@
+{
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "draft_status": "unfrozen_draft",
+  "plan": {
+    "path": "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json",
+    "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+    "actual_sha256": "56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7",
+    "declared_sha256": "56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7",
+    "sidecar_path": "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.sha256",
+    "sidecar_sha256": "a6685b22b21dbf5c24755a9ee5254316ef4b9c100e6f6ef20dbac3d1ba827743"
+  },
+  "generator": {
+    "path": "configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py",
+    "sha256": "3c70cd799184ccf759341ebf5e72bc139a20dea228e119556c71edc81cab3dc0"
+  },
+  "window_identity": {
+    "window_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+    "evidence_root_id": "evidence-d117-floor-qwen25-7b-v1"
+  },
+  "roots": {
+    "claim_root_leaf": "runs_d117_floor_qwen25_7b_v1",
+    "bound_root_leaf": "runs_d117_floor_qwen25_7b_v1_bound"
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  },
+  "acceptance_policy": {
+    "selection": "issued_d116_artifact_only",
+    "issued_acceptance": {
+      "path": "configs/calibration/calibration_acceptance_d079_v2.json",
+      "acceptance_id": "d079_calibration_acceptance_v2_n19",
+      "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+      "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+      "schema_version": "joulewise.calibration_acceptance_bound.v2"
+    },
+    "issued_ledger_head": {
+      "path": "configs/calibration/calibration_ledger_head.json",
+      "file_sha256": "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902",
+      "head_sha256": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7"
+    },
+    "successor_effect": "invalidate_and_reissue_readiness_and_pin_projection",
+    "arming_prerequisites": [
+      {
+        "id": "D117-U2",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "D117-POSTCOLLECTION-TRUST-01",
+        "status": "required_before_mint"
+      },
+      {
+        "id": "D117-U11-IDPIN-PROJECTION",
+        "status": "required_before_arm"
+      },
+      {
+        "id": "FLOOR-COMMONMODE-01",
+        "status": "implementation_identity_required_before_release"
+      },
+      {
+        "id": "impl/d117-ledger-recovery",
+        "status": "unmerged_arm_blocker"
+      }
+    ]
+  },
+  "condition_families": [
+    {
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/condition_families/condition_family_df_ph_decode_qwen25_7b.json",
+      "byte_sha256": "d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb",
+      "condition_family_id": "df-ph-decode-qwen25-7b",
+      "domain_sha256": "a20018d57f06d69ffcc14e1e9365ab0121b73804ec480f9b08302384bd583843"
+    },
+    {
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/condition_families/condition_family_df_ph_prefill_p128_qwen25_7b.json",
+      "byte_sha256": "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
+      "condition_family_id": "df-ph-prefill-p128-qwen25-7b",
+      "domain_sha256": "b95688675b5518ab6675b8688ce4475b0d756653ecfb10ec80fa913ee49d69f1"
+    }
+  ],
+  "science": [
+    {
+      "ordinal": 1,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r01.json",
+      "config_sha256": "fd63dbe0deb0c2a3bf8b54b36d6270e240ffd5b67a7e61f43da1fd79828a6db1",
+      "run_id": "d117f7-df-ph-decode-abs-r01",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 1,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 2,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r02.json",
+      "config_sha256": "66e68adc0da91580b342eb459c9549cb07e7d39da4e5c5fe73cca6e482438a5c",
+      "run_id": "d117f7-df-ph-decode-abs-r02",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 2,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 3,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r03.json",
+      "config_sha256": "49cf94605fee1514e4ca8261f0c746f05f2a2a7f1740de07b9f78cb30570ea95",
+      "run_id": "d117f7-df-ph-decode-abs-r03",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 3,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 4,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r04.json",
+      "config_sha256": "51d4ef4630a9e7ba60507a15b18ea3a449ffad7a6610756880f6c70f2392590b",
+      "run_id": "d117f7-df-ph-decode-abs-r04",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 4,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 5,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r05.json",
+      "config_sha256": "8b71cdbaf594cfd42412228fe4facfd584c4154b8059e667d276bcb0eb1ce16d",
+      "run_id": "d117f7-df-ph-decode-abs-r05",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 5,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 6,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r06.json",
+      "config_sha256": "a42efe9d0d9602614f9e10b7eb3bb4e799a144ba859f750931324b76b7ae8e61",
+      "run_id": "d117f7-df-ph-decode-abs-r06",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 6,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 7,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r07.json",
+      "config_sha256": "c3fd434ee3976dccaede205d20a9e91fe58c06eec6c100f214cc8299594bbe8f",
+      "run_id": "d117f7-df-ph-decode-abs-r07",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 7,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 8,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r08.json",
+      "config_sha256": "daa1772f9dddca3f721922e1a870c50c5f72ac6b1d3fa84eb079bbade442d4cb",
+      "run_id": "d117f7-df-ph-decode-abs-r08",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 8,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 9,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r09.json",
+      "config_sha256": "8c3a9d4264e9891f84d4aca52ef0f812d50f1f9d67b1595d4333377d003a92c7",
+      "run_id": "d117f7-df-ph-decode-abs-r09",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 9,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 10,
+      "stage_id": "01_phase_decode_absolute",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/d117f7-df-ph-decode-abs-r10.json",
+      "config_sha256": "ec3a064431e1ea9a7e536356abd83dd314e377f6d418ad062826a2c2b3c7697b",
+      "run_id": "d117f7-df-ph-decode-abs-r10",
+      "role": "absolute_repeat",
+      "block_id": null,
+      "block_index": 10,
+      "position": null,
+      "arm": null
+    },
+    {
+      "ordinal": 11,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a1.json",
+      "config_sha256": "d47ed4983f5d858314a38dfbab8bc2c9a65ae2b53aa6ecb9832b5088ca8f6766",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b01-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b01",
+      "block_index": 1,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 12,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b1.json",
+      "config_sha256": "507b67252d9a4bf2a707bb65ac0d93d816fc0986093d8b006942e6cc7897f826",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b01-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b01",
+      "block_index": 1,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 13,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b2.json",
+      "config_sha256": "d10021a4f32e06251363862a85c77b55480a6b87f1025306c7d27402546b16b4",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b01-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b01",
+      "block_index": 1,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 14,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a2.json",
+      "config_sha256": "7f4242caf8890342ad911f54c67f4cbe9241c0a079e1177bc234cab5b933a7e4",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b01-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b01",
+      "block_index": 1,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 15,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a1.json",
+      "config_sha256": "4dd9e7b5c81e2811ad8b37086a34a35c941dcbe375e64031dbc4a03db19f3343",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b02-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b02",
+      "block_index": 2,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 16,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b1.json",
+      "config_sha256": "846d709ba52c54943accfe322c5c057425bb96d50f3b569a14e3048b7cbabe73",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b02-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b02",
+      "block_index": 2,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 17,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b2.json",
+      "config_sha256": "359e3c459e5d4c7f2da020eec5239206e9e6a15ec2fcc14eba958cca6ebbaebd",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b02-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b02",
+      "block_index": 2,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 18,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a2.json",
+      "config_sha256": "a0e420cf897f1417c4680379af3b906c2d15454627d4dec4079fefeee62f2ed3",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b02-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b02",
+      "block_index": 2,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 19,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a1.json",
+      "config_sha256": "f2c656ed2278653bf27f2bc1692dfaca11ded2c2b1efb351fe379691c3c0e750",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b03-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b03",
+      "block_index": 3,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 20,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b1.json",
+      "config_sha256": "6df677dd00fb0132d379a759e9b273752af0f3359f77a04307ba6f758181aa9b",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b03-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b03",
+      "block_index": 3,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 21,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b2.json",
+      "config_sha256": "0017c4e0e11af7ba1c24a11804ca54e991cb8564061be35e4f86ee0f0c16b004",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b03-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b03",
+      "block_index": 3,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 22,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a2.json",
+      "config_sha256": "12efca6a897c4abc8bbc388cafa04d35612be60a11780dfca820c3431e1c4972",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b03-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b03",
+      "block_index": 3,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 23,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a1.json",
+      "config_sha256": "f457888fe5788ddc4d7e50825f90fa5aa18f636a009a9d4e3d4462724db7f340",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b04-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b04",
+      "block_index": 4,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 24,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b1.json",
+      "config_sha256": "59e59feadf0cbd9362bf3bbbeaa7441cd8b76763a2804440f46ee10d954e9ca5",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b04-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b04",
+      "block_index": 4,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 25,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b2.json",
+      "config_sha256": "7a2af0fd8ef8374a73e0a2c0278e1bb439653d0e4f08c5d3e8e829ff9de5fb34",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b04-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b04",
+      "block_index": 4,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 26,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a2.json",
+      "config_sha256": "0dce8c80685730f3c5ea949f5673683307b74a4340e373abe05fc24abeac3d41",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b04-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b04",
+      "block_index": 4,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 27,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a1.json",
+      "config_sha256": "79a9e0be1a02e61f5a536dcec75a35ce7c3dfb31a1cbb5158f8d905e007d50ad",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b05-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b05",
+      "block_index": 5,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 28,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b1.json",
+      "config_sha256": "43a16ddd53c441439f7681fd9d4408096630aaf60e4b91f21280839accedc0d0",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b05-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b05",
+      "block_index": 5,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 29,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b2.json",
+      "config_sha256": "ef1cdaf9e1a2857b9ec8d9bc577c85f0c3bd133c2b9f9e64cec2aa95a9d57513",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b05-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b05",
+      "block_index": 5,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 30,
+      "stage_id": "02_phase_decode_abba_blocks_01_05",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a2.json",
+      "config_sha256": "d5108ea48419a1502ca82b398422afaaef54e590de9d227b19ed4e90341feeb7",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b05-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b05",
+      "block_index": 5,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 31,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a1.json",
+      "config_sha256": "95ade2e256540ceea3c494b78b5524b180c988e7fa865b1f5cca003f4b04c302",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b06-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b06",
+      "block_index": 6,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 32,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b1.json",
+      "config_sha256": "0b143712ee16f6958485f1e76e281db2eeb5a00f0b3e320f4d2c2f00b0b8dc1c",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b06-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b06",
+      "block_index": 6,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 33,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b2.json",
+      "config_sha256": "c573c8ac6e8e22069473773318d508fb610b162b429b08ad1851d30b62f9654e",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b06-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b06",
+      "block_index": 6,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 34,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a2.json",
+      "config_sha256": "648cc20f77f48d41a1612be1576232e7d9f358813199ff92df4cfa5247cd79ce",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b06-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b06",
+      "block_index": 6,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 35,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a1.json",
+      "config_sha256": "80737aca0579cfeae78f39e1fd2ba3047187c52fc442f98dcdd8d900afc90561",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b07-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b07",
+      "block_index": 7,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 36,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b1.json",
+      "config_sha256": "6f52dd9b78137071e6cfafa1933850cd4ed05341dc6b67252f1c56cbf33f8f93",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b07-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b07",
+      "block_index": 7,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 37,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b2.json",
+      "config_sha256": "6bea7b2033d1435b9e938fe6250f731b3c08c51e2c7cb5c06e03044d909a978b",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b07-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b07",
+      "block_index": 7,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 38,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a2.json",
+      "config_sha256": "4c422349dc777e8c192e237bea122c5ba3c314e308cd117cd6df13e708be9544",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b07-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b07",
+      "block_index": 7,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 39,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a1.json",
+      "config_sha256": "4fd9ce6af503e8916973a6a1c3eb261b090b303bee56a732732752e986fe7b25",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b08-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b08",
+      "block_index": 8,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 40,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b1.json",
+      "config_sha256": "23b2a14fc1db6b7c2ba7fb7194e84ab0fa01b604a4d2c2d1a1738c2751ab3137",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b08-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b08",
+      "block_index": 8,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 41,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b2.json",
+      "config_sha256": "4806efe5361e063e424fa05c7defa39ef04f820ace65bc93df4aac808e9d1910",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b08-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b08",
+      "block_index": 8,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 42,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a2.json",
+      "config_sha256": "f9ab053c47ddbac09338ef9b4394c4875514b752c1b06a233fea2b3f0383fce3",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b08-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b08",
+      "block_index": 8,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 43,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a1.json",
+      "config_sha256": "2c0302995616308e11df9732ab4fb6833e8d3d0101059733e7f843d2a3b82f07",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b09-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b09",
+      "block_index": 9,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 44,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b1.json",
+      "config_sha256": "03dfd944795ba39ed58fea88019092e648e62dc7559ea1696d5fa1a219198505",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b09-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b09",
+      "block_index": 9,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 45,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b2.json",
+      "config_sha256": "7aa734de3c55bc6016f59b71a845afe88103460c516526166e3de09374b527fd",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b09-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b09",
+      "block_index": 9,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 46,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a2.json",
+      "config_sha256": "fafb327ab1f307a357e253d947f0653be854882c9f33bdd3f250275417f6fb8b",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b09-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b09",
+      "block_index": 9,
+      "position": "A2",
+      "arm": "A"
+    },
+    {
+      "ordinal": 47,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a1.json",
+      "config_sha256": "371a3326f8f739128caf30352c56779ca2b7621b50ffe98cc427c6ff02f73845",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b10-a1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b10",
+      "block_index": 10,
+      "position": "A1",
+      "arm": "A"
+    },
+    {
+      "ordinal": 48,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b1.json",
+      "config_sha256": "49dd4a499065512c0983fa6c1945d6a2679b0f686f602637ee7a17ebaebbc4e2",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b10-b1",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b10",
+      "block_index": 10,
+      "position": "B1",
+      "arm": "B"
+    },
+    {
+      "ordinal": 49,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b2.json",
+      "config_sha256": "7a33e7ee2ba68d465c60cef92e6c67df7bbaf8800ba4a765f1050622ffbe4550",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b10-b2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b10",
+      "block_index": 10,
+      "position": "B2",
+      "arm": "B"
+    },
+    {
+      "ordinal": 50,
+      "stage_id": "03_phase_decode_abba_blocks_06_10",
+      "config_path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a2.json",
+      "config_sha256": "71d5b84e55d6b8e6698de51ef02feaf78de6df479a616e4279a46a2b42b70429",
+      "run_id": "d117f7-df-cmp-abba-ph-decode-b10-a2",
+      "role": "comparative_abba_member",
+      "block_id": "d117-df-cmp-abba-ph-decode-qwen25-7b-b10",
+      "block_index": 10,
+      "position": "A2",
+      "arm": "A"
+    }
+  ],
+  "stage_graph": [
+    {
+      "stage_id": "beta-bracket-reservation",
+      "ordinal": 1,
+      "kind": "bracket_reservation",
+      "expected_count": 1,
+      "predecessor": null,
+      "successor": "beta-pre-calibration",
+      "input": {
+        "kind": "arm_bindings"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-bracket-reservation.reserve",
+            "command_kind": "bracket_reservation",
+            "argv_template": {
+              "tool_id": "bracket_reserver",
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-pre-calibration",
+      "ordinal": 2,
+      "kind": "calibration_capture",
+      "expected_count": 1,
+      "predecessor": "beta-bracket-reservation",
+      "successor": "beta-bound-collection",
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "pre"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-pre-calibration.capture",
+            "command_kind": "calibration_capture",
+            "argv_template": {
+              "tool_id": "fiducial_capture",
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "instrument_validation"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-bound-collection",
+      "ordinal": 3,
+      "kind": "campaign_collection",
+      "expected_count": 12,
+      "predecessor": "beta-pre-calibration",
+      "successor": "beta-bound-derivation",
+      "input": {
+        "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+        "manifest_id": "neg8-reference-corpus-order-v1",
+        "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-bound-collection.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-bound-derivation",
+      "ordinal": 4,
+      "kind": "bound_derivation",
+      "expected_count": 1,
+      "predecessor": "beta-bound-collection",
+      "successor": "beta-reference-start",
+      "input": {
+        "kind": "external_artifact",
+        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-bound-derivation.derive",
+            "command_kind": "bound_derivation",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "neg8-drift-bound.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-reference-start",
+      "ordinal": 5,
+      "kind": "campaign_collection",
+      "expected_count": 3,
+      "predecessor": "beta-bound-derivation",
+      "successor": "beta-science-absolute",
+      "input": {
+        "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+        "manifest_id": "neg8-window-reference-start-triplet-v1",
+        "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-reference-start.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-science-absolute",
+      "ordinal": 6,
+      "kind": "campaign_collection",
+      "expected_count": 10,
+      "predecessor": "beta-reference-start",
+      "successor": "beta-science-abba-01-05",
+      "input": {
+        "kind": "manifest",
+        "path": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute/order_manifest.json",
+        "manifest_id": "d117-floor-qwen25-7b-v1-01-phase-decode-absolute-order-v1",
+        "sha256": "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-science-absolute.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_floor_qwen25_7b_v1/01_phase_decode_absolute"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-science-abba-01-05",
+      "ordinal": 7,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "beta-science-absolute",
+      "successor": "beta-reference-midpoint",
+      "input": {
+        "kind": "manifest",
+        "path": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05/order_manifest.json",
+        "manifest_id": "d117-floor-qwen25-7b-v1-02-phase-decode-abba-blocks-01-05-order-v1",
+        "sha256": "a53f2e158cc8dcea94d48dde5e442007c9d893181bb6fbb2c05e57a5be4007c2"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-science-abba-01-05.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_floor_qwen25_7b_v1/02_phase_decode_abba_blocks_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-reference-midpoint",
+      "ordinal": 8,
+      "kind": "campaign_collection",
+      "expected_count": 1,
+      "predecessor": "beta-science-abba-01-05",
+      "successor": "beta-science-abba-06-10",
+      "input": {
+        "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+        "manifest_id": "neg8-window-reference-midpoint-v1",
+        "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-reference-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-science-abba-06-10",
+      "ordinal": 9,
+      "kind": "campaign_collection",
+      "expected_count": 20,
+      "predecessor": "beta-reference-midpoint",
+      "successor": "beta-reference-end",
+      "input": {
+        "kind": "manifest",
+        "path": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10/order_manifest.json",
+        "manifest_id": "d117-floor-qwen25-7b-v1-03-phase-decode-abba-blocks-06-10-order-v1",
+        "sha256": "b38238eaac0376cfaa22c88b9b2e278650bd14fc322efd10ee803d8b05b03c65"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-science-abba-06-10.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_floor_qwen25_7b_v1/03_phase_decode_abba_blocks_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-reference-end",
+      "ordinal": 10,
+      "kind": "campaign_collection",
+      "expected_count": 3,
+      "predecessor": "beta-science-abba-06-10",
+      "successor": "beta-post-calibration",
+      "input": {
+        "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+        "manifest_id": "neg8-window-reference-end-triplet-v1",
+        "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-reference-end.collect",
+            "command_kind": "campaign_collection",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-post-calibration",
+      "ordinal": 11,
+      "kind": "calibration_capture",
+      "expected_count": 1,
+      "predecessor": "beta-reference-end",
+      "successor": "beta-whole-window-verdict",
+      "input": {
+        "kind": "arm_bindings",
+        "slot": "post"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-post-calibration.capture",
+            "command_kind": "calibration_capture",
+            "argv_template": {
+              "tool_id": "fiducial_capture",
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "instrument_validation"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-whole-window-verdict",
+      "ordinal": 12,
+      "kind": "whole_window_verdict",
+      "expected_count": 1,
+      "predecessor": "beta-post-calibration",
+      "successor": "beta-backup",
+      "input": {
+        "kind": "collected_roots"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-whole-window-verdict.evaluate",
+            "command_kind": "whole_window_verdict",
+            "argv_template": {
+              "tool_id": "campaign_runner",
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "claim_runs_root",
+                  "relative": "campaign_log.jsonl"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "value": "bound_runs_root",
+                  "relative": "neg8-drift-bound.json"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "stage_id": "beta-backup",
+      "ordinal": 13,
+      "kind": "backup",
+      "expected_count": 2,
+      "predecessor": "beta-whole-window-verdict",
+      "successor": null,
+      "input": {
+        "kind": "collected_roots"
+      },
+      "launch": {
+        "schema_version": "joulewise.stage_launch.v1",
+        "commands": [
+          {
+            "command_id": "beta-backup.claim",
+            "command_kind": "backup",
+            "argv_template": {
+              "tool_id": "backup_runs",
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "command_id": "beta-backup.bound",
+            "command_kind": "backup",
+            "argv_template": {
+              "tool_id": "backup_runs",
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ]
+            },
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "external_inputs": {
+    "manifests": [
+      {
+        "external_input_id": "neg8_bound",
+        "manifest": {
+          "path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+          "manifest_id": "neg8-reference-corpus-order-v1",
+          "sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f"
+        },
+        "expected_count": 12,
+        "members": [
+          {
+            "ordinal": 1,
+            "run_id": "neg8-refcorpus-r01",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r01.json",
+            "sha256": "08ad3cf5b1f39339cc1c226856b92e17d8d03b72397c9b366f4f56418161ef0e"
+          },
+          {
+            "ordinal": 2,
+            "run_id": "neg8-refcorpus-r02",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r02.json",
+            "sha256": "418641328b0d66a013ec083198665d0090893b624ea120cb1f981cb779f34a23"
+          },
+          {
+            "ordinal": 3,
+            "run_id": "neg8-refcorpus-r03",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r03.json",
+            "sha256": "3eda26dc2009f040d93d6dabb158a0135555f4d2cc8a679e9ca04988dd085482"
+          },
+          {
+            "ordinal": 4,
+            "run_id": "neg8-refcorpus-r04",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r04.json",
+            "sha256": "c450c0f5555d607df1ca42569f05521771b7e9dd1504c04630cde0496ec01f7b"
+          },
+          {
+            "ordinal": 5,
+            "run_id": "neg8-refcorpus-r05",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r05.json",
+            "sha256": "c494f0715302d1d18ac74bf064c38350c36e55463be0eb6af31f781a70fe84ae"
+          },
+          {
+            "ordinal": 6,
+            "run_id": "neg8-refcorpus-r06",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r06.json",
+            "sha256": "e4dc2a282e853430f1355453460c9ca7a2ae99c05d1afb45fc83f78d534a21b3"
+          },
+          {
+            "ordinal": 7,
+            "run_id": "neg8-refcorpus-r07",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r07.json",
+            "sha256": "4d4ef567e41e61bda368502fb87b3a3dda0ea18ac72db71b72709e5b2922eb86"
+          },
+          {
+            "ordinal": 8,
+            "run_id": "neg8-refcorpus-r08",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r08.json",
+            "sha256": "d11124bf2ab266236ad4eaa6bc18e10e20a08f6a1f8176ea7486a4d96397f903"
+          },
+          {
+            "ordinal": 9,
+            "run_id": "neg8-refcorpus-r09",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r09.json",
+            "sha256": "0c45014316cb95b439c846eba0ac2b0734a2e38bb80b48a422e8aab74808c902"
+          },
+          {
+            "ordinal": 10,
+            "run_id": "neg8-refcorpus-r10",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r10.json",
+            "sha256": "74c207c32bda7be6869045f72f33c358e927ce21009670daf50ed3c01ba57312"
+          },
+          {
+            "ordinal": 11,
+            "run_id": "neg8-refcorpus-r11",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r11.json",
+            "sha256": "16e2d75e12174336a896632af278c3aef7f8685bca85c8d9b71053acec9d0553"
+          },
+          {
+            "ordinal": 12,
+            "run_id": "neg8-refcorpus-r12",
+            "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r12.json",
+            "sha256": "fd00f4ab3d16fcbe18ead64acffdded0c1b3ea7b196f41f7d39d3399f0d39b31"
+          }
+        ]
+      },
+      {
+        "external_input_id": "start_reference",
+        "manifest": {
+          "path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+          "manifest_id": "neg8-window-reference-start-triplet-v1",
+          "sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0"
+        },
+        "expected_count": 3,
+        "members": [
+          {
+            "ordinal": 1,
+            "run_id": "neg8-window-start-r1",
+            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r1.json",
+            "sha256": "e0c63accf536d026ed9dec4ef4a1cdbf9c795e4708025f85f48f56ac5cbbb704"
+          },
+          {
+            "ordinal": 2,
+            "run_id": "neg8-window-start-r2",
+            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r2.json",
+            "sha256": "85065db3e71d3cf6693e80723d54feacaf24abdd4f4af1e8b726f912e568db4f"
+          },
+          {
+            "ordinal": 3,
+            "run_id": "neg8-window-start-r3",
+            "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r3.json",
+            "sha256": "96c3fafdf6327afc3d23c9d40c54983df6613423a68e72dfb69565d9b432abfd"
+          }
+        ]
+      },
+      {
+        "external_input_id": "midpoint_reference",
+        "manifest": {
+          "path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+          "manifest_id": "neg8-window-reference-midpoint-v1",
+          "sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21"
+        },
+        "expected_count": 1,
+        "members": [
+          {
+            "ordinal": 1,
+            "run_id": "neg8-window-midpoint",
+            "path": "configs/campaigns/window_references/midpoint/neg8-window-midpoint.json",
+            "sha256": "321b96d8580eac8e338575a95c4db26ee2e4b24d2f27effc6fee107da32fe9ff"
+          }
+        ]
+      },
+      {
+        "external_input_id": "end_reference",
+        "manifest": {
+          "path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+          "manifest_id": "neg8-window-reference-end-triplet-v1",
+          "sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67"
+        },
+        "expected_count": 3,
+        "members": [
+          {
+            "ordinal": 1,
+            "run_id": "neg8-window-end-r1",
+            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r1.json",
+            "sha256": "fd7b43938b6aa13bea4c949d3ab61266b3282530db7869d56c622bf2392507b0"
+          },
+          {
+            "ordinal": 2,
+            "run_id": "neg8-window-end-r2",
+            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r2.json",
+            "sha256": "72593d4ba2382591ae3f0b01e70673ae0cc605546471e00254cea01eac4a3204"
+          },
+          {
+            "ordinal": 3,
+            "run_id": "neg8-window-end-r3",
+            "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r3.json",
+            "sha256": "c7720a668409eb62cecd22dbbcd4d972cc7d87d83bf9ccf4ede0bcf1b9b451be"
+          }
+        ]
+      }
+    ],
+    "artifacts": [
+      {
+        "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+        "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+      }
+    ]
+  },
+  "attempt_policy": {
+    "policy": "abort_window_on_any_required_member_failure",
+    "predeclared_before_data": true,
+    "calibration_retries": 0,
+    "science_member_replacements": 0,
+    "outcome_dependent_top_up": "forbidden",
+    "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
+  },
+  "arm_attachments": {
+    "launch": {
+      "schema_version": "joulewise.stage_launch_bindings.v1",
+      "bindings": [
+        {
+          "name": "repo_root",
+          "type": "existing_absolute_directory"
+        },
+        {
+          "name": "ledger_path",
+          "type": "existing_absolute_file"
+        },
+        {
+          "name": "claim_runs_root",
+          "type": "fresh_absolute_directory",
+          "leaf": "runs_d117_floor_qwen25_7b_v1"
+        },
+        {
+          "name": "bound_runs_root",
+          "type": "fresh_absolute_directory",
+          "leaf": "runs_d117_floor_qwen25_7b_v1_bound"
+        },
+        {
+          "name": "operator_log_root",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "pre_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "post_calibration_dir",
+          "type": "absolute_directory"
+        },
+        {
+          "name": "claim_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bound_backup_destination",
+          "type": "absolute_path"
+        },
+        {
+          "name": "bracket_session_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "pre_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "post_attempt_id",
+          "type": "nonempty_string"
+        },
+        {
+          "name": "identity_epoch_json",
+          "type": "authenticated_absolute_file"
+        },
+        {
+          "name": "t1_bindings_json",
+          "type": "authenticated_absolute_file"
+        }
+      ],
+      "derived_path_rules": [
+        "pre_calibration_dir=claim_runs_root/instrument_validation/pre_attempt_id",
+        "post_calibration_dir=claim_runs_root/instrument_validation/post_attempt_id"
+      ]
+    },
+    "identity_pin_projection": {
+      "work_order": "D117-U11-IDPIN-PROJECTION",
+      "mode": "derive_never_operator_enter",
+      "required_before_arm": true,
+      "expected_config_set_sha256": "7c998cbd8379d7a19c38eed67f1f3f00d2fff95a69e091dddf5ce8c7c9e567a8",
+      "projected_pins": {
+        "model_artifact_sha256": null,
+        "runtime_identity_sha256": null,
+        "config_set_sha256": null
+      },
+      "projection_receipt": null
+    },
+    "receipt_oracle": {
+      "status": "blocked_on_unmerged_branch",
+      "branch": "impl/d117-ledger-recovery",
+      "todo": "TODO(impl/d117-ledger-recovery): re-derive cadence and populate only during lead-owned arm materialization after that branch lands.",
+      "receipt_count": null,
+      "terminal_sequence": null,
+      "arm_time_receipts": []
+    }
+  },
+  "closeout_attachments": {
+    "bracket_binding_sha256": null,
+    "terminal_ledger_head": null,
+    "whole_window_verdict_sha256": null,
+    "evaluation_basis_sha256": null,
+    "extraction_report_sha256": null,
+    "postcollection_receipt_digests": [],
+    "todo": "TODO(impl/d117-ledger-recovery): leave receipt-derived closeout fields empty until the landed recovery oracle and a completed claim window supply them.",
+    "backup_requirements": {
+      "claim_root_verified": true,
+      "bound_root_verified": true,
+      "required_successful_backups": 2
+    }
+  },
+  "downstream_contract": {
+    "extraction_spec": {
+      "path": "configs/floor_mint/d117_qwen25_7b_extraction_spec.json",
+      "sha256": "dc84ca037e59f47b587fe7deb1b610bf8bb91fd42541729bf92f357352537491"
+    },
+    "producer_contract": {
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/producer_contract.json",
+      "sha256": "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
+    },
+    "prefill_phase_presence": "required_for_all_50_physical_bundles",
+    "missing_registered_phase": "refuse"
+  },
+  "runtime_budget": {
+    "planning_estimate_minutes_with_margin": 194.4,
+    "planning_estimate_hours_with_margin": 3.24,
+    "margin_percent": 20,
+    "margin_authority": "time_headroom_only_never_member_replacement",
+    "science_count": 50,
+    "bound_count": 12,
+    "reference_count": 7,
+    "calibration_observation_count": 2
+  }
+}
