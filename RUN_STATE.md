@@ -46,7 +46,74 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T1 SESSION CHECKPOINT (2026-08-08 night, mid-session) — READ FIRST
+## ▶▶ T1 SESSION FINAL CHECKPOINT (2026-08-08 night, Ed stop order) — /clear-SAFE; READ FIRST
+
+**Nothing in flight — all codex processes killed, workflow stopped.**
+Scratchpad:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/92058940-b39f-4e0e-aed5-3be9f831f90f/scratchpad`
+(trace-notes.md is the full running trace of this session). Worktrees
+under `…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+
+**SUCCESSOR ORDER (Phase A continuation; D-128 governs):**
+1. **RECOVERY (arming blocker) — the cold gate RULED; the ruled fix
+   round did NOT land.** Branch impl/d117-ledger-recovery @ `e265c9c`
+   (cold-gate ruling custodied). The G2/G4/G6 arming-path fix round was
+   killed before writing anything (recovery worktree is CLEAN — work
+   not-started, relaunch fresh). Contract:
+   `<SP>/recovery-armfix-prompt.md`. It implements ONLY the three
+   first-occurrence production defects the cold gate licensed (FIX-A
+   G2 genesis dirfd-binding; FIX-B G6 crash-auth unlink-only-on-valid;
+   FIX-C G4 runner timeout) with EXECUTED probes, per
+   COLD-GATE-SYNTHESIS.md on the branch. Then scoped delta → lead
+   replay → integration tree vs main → PR → CI → D-121 → merge
+   discharges ARMING. The witness-integrity MUTATION-KILL HARNESS is a
+   SEPARATE off-critical-path track (do NOT try to re-harden the FIX-14
+   AST gates — PROHIBITED by the cold gate). L1 witness-integrity
+   limitation is surfaced for Ed's review (COLD-GATE-SYNTHESIS §4).
+2. **TRUST (mint bar) — round 2c (verification tail) ran; HARVEST from
+   disk.** Branch impl/d117-postcollection-trust head `1cae2bc` +
+   uncommitted 2c work; worktree diff is ground truth (report may be
+   thin — recover via `codex-bridge resume` if needed). Round 2b PROVED:
+   reduce.py pinned, auth-core suites green, ONE authentic unpatched
+   production mint. Round 2c was completing the ~68-min decisive
+   regression (auditor already repaired 193/193) + v1 parity + full
+   suite. On harvest: LEAD-VERIFY the load-bearing proofs yourself →
+   commit-split (auth-core vs substrate parcels) → publish the DRAFT
+   RELEASE (already created+uploaded+sha-verified:
+   fixture-d117-v2-production-v1, archive sha f1286bc8…; publish AFTER
+   a hydrator census) → HISTORY REWRITE (Ed's 4 permission rules cover
+   it; exact commands in trust-fixture-substrate/RULING.md addendum;
+   the 38 content dirs leave git per the substrate ruling) → 16-question
+   Workflow delta → PR. Safety bundle for the pre-rewrite state:
+   tag `safety/trust-1cae2bc-prerewrite` + 53MB verified bundle in
+   `~/JouleWise-window-custody/trust-prerewrite-20260808/`.
+3. **U2:** still FROZEN count 3 (branch 5b00200) — post-window cold gate.
+
+**LANDED to main this session (all pushed):** T0 bookkeeping
+(`d81c78a`); substrate RULING + addendum (`8788891`/`b7aad49`); **Codex
+Fast Mode = STANDING DEFAULT** both routes (`de759c9`; Codex-only,
+never Anthropic — Ed); recovery ESC-2 consult+adoption (`bc01908`) +
+delta-1 FAIL + FREEZE (`0c30993`) + COLD-GATE ruling (`e265c9c`, on the
+branch); consistency-sweep fixes (`2ba514a`). Skills folded (live on
+disk, ~/.claude not versioned): parcel-by-footprint default,
+neutral-SE refuter phrasing, --write-scope-lock trap, parallelism-is-
+default. Memory: instrument-mix superseded (fast default);
+rust-rewrite-witness-integrity (Ed floated Rust — HARD NO for MVP, P3).
+
+**ED DIRECTIVES THIS SESSION (durable):** fast everywhere for Codex,
+Claude scarce/lean; HARDER PARALLELISM (Workflow fan-outs for read-only,
+footprint-parceled implementation, monoliths need a named reason —
+validated: two 8h monoliths, one walled reportless); 4 history-rewrite
+rules + `gh release:*` added to settings.local.json (REMOVABLE after
+the trust PR merges); ~30h grind; paper ETA 4–6 days gated on 2–3 QUIET
+nights (Ed does §5A taps), now +0.5–1.5d from the recovery cold gate.
+
+**OWED bookkeeping (first desk block):** council C-052 (this session:
+substrate ruling, fast-mode, recovery cold gate, trust wall+2c);
+skill-usage log; T1 run report. Trust 2c harvest + recovery armfix
+relaunch are the two night-critical resumes.
+
+## ▶▶ T1 mid-session detail (superseded by the FINAL block above; kept for pointers)
 
 **Session = T0's successor under D-128.** Scratchpad:
 `/private/tmp/claude-501/-Users-edr-code-JouleWise/92058940-b39f-4e0e-aed5-3be9f831f90f/scratchpad`
