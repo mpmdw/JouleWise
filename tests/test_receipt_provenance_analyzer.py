@@ -87,6 +87,36 @@ def mutate(snapshot):
             findings,
         )
 
+    def test_keyword_only_helper_alias_is_rejected(self) -> None:
+        source = """
+def relay(*, value):
+    return value
+def mutate(snapshot):
+    opaque = relay(value=snapshot.receipts)
+    return opaque[0]
+"""
+        findings = analyze_sources({"keyword_helper.py": source})
+        self.assertTrue(
+            any(finding.kind == "unwrapped_receipt_return" for finding in findings),
+            findings,
+        )
+        self.assertTrue(
+            any(finding.kind == "positional_receipt_access" for finding in findings),
+            findings,
+        )
+
+    def test_nested_comprehension_alias_is_rejected(self) -> None:
+        source = """
+def mutate(snapshot):
+    opaque = [item for batch in (snapshot.receipts,) for item in batch]
+    return opaque[0]
+"""
+        findings = analyze_sources({"nested_comprehension.py": source})
+        self.assertTrue(
+            any(finding.kind == "positional_receipt_access" for finding in findings),
+            findings,
+        )
+
     def test_safe_semantic_and_nonreceipt_operations_are_accepted(self) -> None:
         source = """
 from tests.receipt_corpus import ReceiptCorpus

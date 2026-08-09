@@ -2144,7 +2144,11 @@ class CalibrationLedgerTests(unittest.TestCase):
             real_link = os.link
 
             def publish_only_after_staging_lock(source, target, *args, **kwargs):
-                probe = os.open(source, os.O_RDONLY)
+                probe = os.open(
+                    source,
+                    os.O_RDONLY,
+                    dir_fd=kwargs.get("src_dir_fd"),
+                )
                 try:
                     with self.assertRaises(BlockingIOError):
                         calibration_ledger.fcntl.flock(
@@ -2174,6 +2178,32 @@ class CalibrationLedgerTests(unittest.TestCase):
                 RefusalCode.LIVE_WRITER_CONTENTION,
             )
         finally:
+            first.release()
+
+    def test_parent_replacement_refuses_genesis_without_publishing_into_replacement(
+        self,
+    ) -> None:
+        parent = self.root / "ledger-parent"
+        parent.mkdir()
+        ledger = parent / "ledger.jsonl"
+        first = calibration_ledger.CalibrationWriterLease(ledger).acquire()
+        original_parent = self.root / "original-ledger-parent"
+        parent.rename(original_parent)
+        parent.mkdir()
+        second = calibration_ledger.CalibrationWriterLease(ledger).acquire()
+        try:
+            with self.assertRaises(CalibrationLedgerError) as raised:
+                first.open_append_descriptor()
+            self.assertEqual(raised.exception.code, RefusalCode.UNSAFE_LOCK_INODE)
+            self.assertFalse(ledger.exists())
+            self.assertIsNone(first.identity.object_key)
+
+            descriptor = second.open_append_descriptor()
+            os.close(descriptor)
+            self.assertTrue(ledger.is_file())
+            self.assertFalse((original_parent / ledger.name).exists())
+        finally:
+            second.release()
             first.release()
 
     def test_replacement_in_place_is_refused_until_original_lease_releases(self) -> None:

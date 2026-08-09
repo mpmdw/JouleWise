@@ -115,6 +115,9 @@ PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
 TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
     "joulewise.test_writer_crash_authorization.v1"
 )
+TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV = (
+    "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
+)
 _AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
 _CRASH_HOOK_DIAGNOSTIC_EMITTED = False
 
@@ -241,11 +244,38 @@ def _configure_writer_crash_authorization(
     token = os.environ.get("JOULEWISE_TEST_WRITER_CRASH_TOKEN")
     valid_stage: str | None = None
     descriptor = -1
+    root_descriptor = -1
+    authorization_basename: str | None = None
     path = Path(authorization_path) if authorization_path is not None else None
     try:
         if path is None:
             raise ValueError("missing explicit crash authorization path")
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        root_raw = os.environ.get(TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV)
+        if root_raw is None:
+            raise ValueError("missing harness crash capability root")
+        resolved_root = Path(root_raw).resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+        if resolved_path.parent != resolved_root:
+            raise ValueError("crash authorization is outside harness capability root")
+        authorization_basename = resolved_path.name
+        root_descriptor = os.open(
+            resolved_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        root_status = os.fstat(root_descriptor)
+        if (
+            not stat.S_ISDIR(root_status.st_mode)
+            or root_status.st_uid != os.getuid()
+            or stat.S_IMODE(root_status.st_mode) != 0o700
+        ):
+            raise ValueError("unsafe harness crash capability root")
+        descriptor = os.open(
+            resolved_path.name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=root_descriptor,
+        )
         status = os.fstat(descriptor)
         if (
             not stat.S_ISREG(status.st_mode)
@@ -279,11 +309,14 @@ def _configure_writer_crash_authorization(
     finally:
         if descriptor >= 0:
             os.close(descriptor)
-            assert path is not None
+        if valid_stage is not None:
+            assert authorization_basename is not None and root_descriptor >= 0
             try:
-                path.unlink()
+                os.unlink(authorization_basename, dir_fd=root_descriptor)
             except FileNotFoundError:
                 pass
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
     if valid_stage is not None:
         _AUTHORIZED_WRITER_CRASH_STAGE = valid_stage
     elif requested_stage is not None:

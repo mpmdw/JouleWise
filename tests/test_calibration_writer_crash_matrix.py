@@ -760,6 +760,116 @@ print(json.dumps(output, sort_keys=True))
                 os.killpg(process.pid, signal.SIGKILL)
                 process.communicate(timeout=10)
 
+    def test_owned_runner_bounds_inherited_pipe_wait_and_reaps_group(self) -> None:
+        runner = OwnedPublicProcessRunner(Path(self.tmp.name))
+        runner.communicate_timeout_s = 0.25
+        descendant_pid = Path(self.tmp.name) / "inherited-pipe-descendant.pid"
+        child_code = "\n".join(
+            (
+                "import pathlib, subprocess, sys",
+                "descendant = subprocess.Popen([sys.executable, '-c', 'while True: pass'])",
+                f"pathlib.Path({str(descendant_pid)!r}).write_text(str(descendant.pid))",
+            )
+        )
+        entry_point = Path(self.tmp.name) / "inherited_pipe_parent.py"
+        entry_point.write_text(child_code, encoding="utf-8")
+        started = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            runner.run(
+                [sys.executable, str(entry_point)],
+                cwd=self.repo,
+                env=_fresh_env(),
+            )
+        self.assertLess(time.monotonic() - started, 3.0)
+        self.assertEqual(owned_process_group_survivors(), ())
+        descendant = int(descendant_pid.read_text(encoding="utf-8"))
+        with self.assertRaises(ProcessLookupError):
+            os.kill(descendant, 0)
+
+    def test_invalid_crash_authorization_is_preserved_and_valid_one_is_consumed(
+        self,
+    ) -> None:
+        malformed_identity = Path(self.tmp.name) / "malformed-identity.json"
+        malformed_identity.write_text("{", encoding="utf-8")
+        invalid_cases = {
+            "fiducial": [
+                sys.executable,
+                str(self.repo / "scripts" / "validate_powermetrics_fiducial.py"),
+            ],
+            "reservation": [
+                sys.executable,
+                str(self.repo / "scripts" / "reserve_calibration_window_bracket.py"),
+                "--session-id",
+                "invalid-authorization-session",
+                "--window-id",
+                "invalid-authorization-window",
+                "--plan-id",
+                "invalid-authorization-plan",
+                "--plan-sha256",
+                "0" * 64,
+                "--evidence-root-id",
+                "invalid-authorization-evidence",
+                "--runs-root",
+                str(Path(self.tmp.name) / "invalid-authorization-runs"),
+                "--pre-attempt-id",
+                "invalid-authorization-pre",
+                "--post-attempt-id",
+                "invalid-authorization-post",
+                "--pre-custody-locator",
+                str(Path(self.tmp.name) / "invalid-authorization-pre"),
+                "--post-custody-locator",
+                str(Path(self.tmp.name) / "invalid-authorization-post"),
+                "--identity-epoch-json",
+                str(malformed_identity),
+                "--t1-bindings-json",
+                str(malformed_identity),
+            ],
+        }
+        for label, command in invalid_cases.items():
+            with self.subTest(entry_point=label):
+                invalid = Path(self.tmp.name) / f"caller-owned-{label}.json"
+                invalid.write_text('{"nonce":"wrong"}\n', encoding="utf-8")
+                invalid.chmod(0o600)
+                completed = subprocess.run(
+                    [
+                        *command,
+                        "--test-writer-crash-authorization",
+                        str(invalid),
+                    ],
+                    cwd=self.repo,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=_fresh_env(),
+                    check=False,
+                )
+                self.assertEqual(
+                    completed.returncode,
+                    2,
+                    completed.stdout + completed.stderr,
+                )
+                refusal = json.loads(completed.stderr)
+                self.assertTrue(str(refusal["code"]).startswith("calibration_"))
+                self.assertTrue(invalid.exists())
+
+        _root, ledger, pin, plan, session_id, custody = self._case(
+            "valid-capability-consumed",
+            reserved=False,
+        )
+        killed = self._reserve_cli(
+            ledger=ledger,
+            pin=pin,
+            plan=plan,
+            session_id=session_id,
+            custody=custody,
+            crash_stage=WriterStage.BEFORE_PRE_RESERVE_READINESS,
+        )
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        capability = Path(
+            killed.args[killed.args.index("--test-writer-crash-authorization") + 1]
+        )
+        self.assertFalse(capability.exists())
+
     def test_ambient_writer_crash_stage_is_inert_without_capability(self) -> None:
         _root, ledger, pin, _plan, session_id, custody = self._case(
             "ambient-stage-inert"

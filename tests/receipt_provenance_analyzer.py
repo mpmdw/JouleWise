@@ -188,7 +188,23 @@ class _ModuleAnalyzer:
                     function,
                     comprehension_overrides,
                 )
-                bound_kind = _ROW if source_kind == _CORPUS else _NONE
+                if isinstance(generator.iter, (ast.List, ast.Tuple, ast.Set)):
+                    item_kinds = {
+                        self._kind(
+                            item,
+                            local,
+                            function,
+                            comprehension_overrides,
+                        )
+                        for item in generator.iter.elts
+                    }
+                    bound_kind = (
+                        _CORPUS
+                        if _CORPUS in item_kinds
+                        else _ROW if _ROW in item_kinds else _NONE
+                    )
+                else:
+                    bound_kind = _ROW if source_kind == _CORPUS else _NONE
                 if isinstance(generator.target, ast.Name):
                     comprehension_overrides[generator.target.id] = bound_kind
                 has_corpus_source = has_corpus_source or source_kind == _CORPUS
@@ -267,6 +283,17 @@ class _ModuleAnalyzer:
             kind = self._kind(argument, environment, function)
             if kind > target_environment.get(parameter.arg, _NONE):
                 target_environment[parameter.arg] = kind
+                changed = True
+        keyword_parameters = {
+            parameter.arg: parameter
+            for parameter in (*target.node.args.args, *target.node.args.kwonlyargs)
+        }
+        for keyword in call.keywords:
+            if keyword.arg is None or keyword.arg not in keyword_parameters:
+                continue
+            kind = self._kind(keyword.value, environment, function)
+            if kind > target_environment.get(keyword.arg, _NONE):
+                target_environment[keyword.arg] = kind
                 changed = True
         return changed
 

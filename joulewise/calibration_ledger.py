@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import subprocess
 import sys
@@ -2910,6 +2911,27 @@ class CalibrationWriterLease:
                 context={"reason": "leased_path_replaced"},
             )
 
+    def _verify_current_parent(self) -> None:
+        identity = self.identity
+        if identity is None:
+            raise AssertionError("cannot verify a parent without a held slot")
+        expected = os.fstat(identity.parent_descriptor)
+        try:
+            current = os.stat(identity.canonical_parent, follow_symlinks=False)
+        except OSError as exc:
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "canonical_parent_replaced"},
+            ) from exc
+        if not stat.S_ISDIR(current.st_mode) or (
+            current.st_dev,
+            current.st_ino,
+        ) != (expected.st_dev, expected.st_ino):
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "canonical_parent_replaced"},
+            )
+
     def _adopt_object(self, descriptor: int) -> None:
         identity = self.identity
         if identity is None:
@@ -2941,38 +2963,81 @@ class CalibrationWriterLease:
             finally:
                 os.close(old_descriptor)
 
-    def _publish_locked_inode(self, descriptor: int, staging_path: Path) -> None:
+    def _publish_locked_inode(self, descriptor: int, staging_basename: str) -> None:
         identity = self.identity
         if identity is None:
             raise AssertionError("cannot publish without a held slot")
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self._verify_current_parent()
         if identity.object_key is None:
             try:
-                os.link(staging_path, identity.canonical_path)
+                os.link(
+                    staging_basename,
+                    identity.canonical_basename,
+                    src_dir_fd=identity.parent_descriptor,
+                    dst_dir_fd=identity.parent_descriptor,
+                    follow_symlinks=False,
+                )
             except FileExistsError as exc:
                 raise CalibrationLedgerError(
                     RefusalCode.UNSAFE_LOCK_INODE,
                     context={"reason": "genesis_path_appeared"},
                 ) from exc
-            staging_path.unlink()
+            os.unlink(staging_basename, dir_fd=identity.parent_descriptor)
         else:
             self._verify_current_path()
-            os.replace(staging_path, identity.canonical_path)
+            os.rename(
+                staging_basename,
+                identity.canonical_basename,
+                src_dir_fd=identity.parent_descriptor,
+                dst_dir_fd=identity.parent_descriptor,
+            )
         self._adopt_object(descriptor)
-        try:
-            _fsync_parent_directory(identity.canonical_parent)
-        except OSError as exc:
-            raise _LedgerPublicationDurabilityUncertain from exc
+        failure: OSError | None = None
+        for _attempt in range(2):
+            try:
+                os.fsync(identity.parent_descriptor)
+                break
+            except OSError as exc:
+                failure = exc
+        else:
+            assert failure is not None
+            raise _LedgerPublicationDurabilityUncertain from failure
 
     def publish_genesis_payload(self, payload: bytes) -> None:
         identity = self.identity
         if identity is None:
             raise AssertionError("cannot publish without a held lease")
-        descriptor, staging_name = tempfile.mkstemp(
-            prefix=f".{identity.canonical_basename}.genesis-",
-            dir=identity.canonical_parent,
-        )
-        staging_path = Path(staging_name)
+        self._verify_current_parent()
+        staging_basename = ""
+        descriptor = -1
+        for _ in range(128):
+            staging_basename = (
+                f".{identity.canonical_basename}.genesis-{secrets.token_hex(12)}"
+            )
+            try:
+                descriptor = os.open(
+                    staging_basename,
+                    os.O_RDWR
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=identity.parent_descriptor,
+                )
+                break
+            except FileExistsError:
+                continue
+            except OSError as exc:
+                raise CalibrationLedgerError(
+                    RefusalCode.UNSAFE_LOCK_INODE,
+                    context={"reason": "genesis_staging_create_failed"},
+                ) from exc
+        if descriptor < 0:
+            raise CalibrationLedgerError(
+                RefusalCode.UNSAFE_LOCK_INODE,
+                context={"reason": "genesis_staging_name_exhausted"},
+            )
         adopted = False
         try:
             os.fchmod(descriptor, 0o600)
@@ -2980,7 +3045,7 @@ class CalibrationWriterLease:
                 _write_bootstrap_payload(handle, payload)
                 handle.flush()
                 os.fsync(handle.fileno())
-            self._publish_locked_inode(descriptor, staging_path)
+            self._publish_locked_inode(descriptor, staging_basename)
             adopted = True
         finally:
             if (
@@ -2988,8 +3053,10 @@ class CalibrationWriterLease:
                 and self.identity.object_descriptor == descriptor
             ):
                 adopted = True
-            if staging_path.exists():
-                staging_path.unlink()
+            try:
+                os.unlink(staging_basename, dir_fd=identity.parent_descriptor)
+            except FileNotFoundError:
+                pass
             if not adopted:
                 os.close(descriptor)
 

@@ -29,6 +29,7 @@ from typing import Any
 CRASH_AUTHORIZATION_SCHEMA = "joulewise.test_writer_crash_authorization.v1"
 _CRASH_STAGE_KEY = "JOULEWISE_TEST_WRITER_CRASH_STAGE"
 _CRASH_TOKEN_KEY = "JOULEWISE_TEST_WRITER_CRASH_TOKEN"
+_CRASH_CAPABILITY_ROOT_KEY = "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
 _CRASH_AUTHORIZATION_ARGUMENT = "--test-writer-crash-authorization"
 _PUBLIC_WRITER_NAMES = frozenset(
     {
@@ -222,7 +223,9 @@ class OwnedPublicProcessRunner:
     def __init__(self, temporary_root: Path) -> None:
         self.temporary_root = Path(temporary_root).resolve()
         self.capability_root = self.temporary_root / "owned-process-capabilities"
-        self.capability_root.mkdir(parents=True, exist_ok=True)
+        self.capability_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.capability_root.chmod(0o700)
+        self.communicate_timeout_s = 120.0
 
     def _crash_capability(self, *, stage: str, entry_point: Path) -> tuple[Path, str]:
         nonce = secrets.token_hex(32)
@@ -266,6 +269,7 @@ class OwnedPublicProcessRunner:
         exact_argv = [os.fspath(value) for value in argv]
         execution_env = dict(env)
         execution_env.pop(_CRASH_TOKEN_KEY, None)
+        execution_env.pop(_CRASH_CAPABILITY_ROOT_KEY, None)
         entry_point = _entry_point(exact_argv)
         capability: Path | None = None
         if crash_stage is not None:
@@ -281,6 +285,7 @@ class OwnedPublicProcessRunner:
             )
             exact_argv.extend([_CRASH_AUTHORIZATION_ARGUMENT, str(capability)])
             execution_env[_CRASH_TOKEN_KEY] = nonce
+            execution_env[_CRASH_CAPABILITY_ROOT_KEY] = str(self.capability_root)
 
         process = subprocess.Popen(
             exact_argv,
@@ -305,7 +310,9 @@ class OwnedPublicProcessRunner:
             )
         start_order = next_execution_order()
         try:
-            stdout, stderr = process.communicate(timeout=timeout)
+            stdout, stderr = process.communicate(
+                timeout=self.communicate_timeout_s if timeout is None else timeout
+            )
             returncode = process.returncode
             if returncode is None:  # pragma: no cover - communicate guarantees this
                 raise AssertionError("direct child has no return code after communicate")
