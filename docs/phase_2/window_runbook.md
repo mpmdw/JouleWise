@@ -490,6 +490,88 @@ collected and no retry can help: preserve everything, record it in the
 close-out, do not budget the excess (D-079 clause 2), and refer the
 disposition to the lead.
 
+## 5C. D-117 manual arming and quiet handoff (cold-gate ruling 2026-08-08)
+
+Use this final checklist only after §4 has frozen the plan and you have
+read §§5, 5A, and 5B. It exists because the recovery cold gate ruled that
+ARM authority is **not** any automated artifact: the witness corpus and
+every readiness command are evidence *toward* arming, never the arming
+authority. Arming happens only when the plan-bound GO record is green, the
+lead has completed the rule-1 desk verification below, and Ed performs the
+physical steps himself.
+
+**Entry gate (desk, before the night).**
+Confirm `git status --short --branch` shows a clean measurement checkout
+and `git rev-parse HEAD` equals the exact reviewed, merged `main` commit
+named in the plan-specific GO record. Require the plan-specific
+arm-readiness record at the exact path and SHA-256 named by the frozen
+plan. A missing record, placeholder text, any applicable row other than
+GO, a stale recorded commit, or a hash mismatch is NO-GO. The pre-freeze
+three-night packet is background context and may not substitute for the
+plan-specific record. (BETA and GAMMA plans name their own records; none
+inherits ALPHA's filename.)
+
+**Lead live verification — desk evidence, not live-night authority
+(rule 1, non-delegable).**
+On the exact reviewed commit, the lead personally runs the frozen plan's
+literal readiness-validator command and its complete under-lease synthetic
+rehearsal. The rehearsal must execute the real reservation CLI with
+`--execute` and the real writer CLI through both reserved calibration
+slots against a synthetic root. Record the complete commands, commit
+hash, frozen-plan SHA-256, exit codes, stdout, and stderr in the §12
+close-out record. Require `calibration_pre_reserve_authorized`,
+`status: reserved`, and the phase-correct
+`calibration_writer_arm_authorized` events. Missing commands, a skipped
+phase, or any identity mismatch is NO-GO. A lead who has not personally
+seen these pass on this checkout has not verified; a subagent's or a
+prior session's pass does not transfer. These desk results are evidence
+toward arming; they do not authorize the live night.
+
+**Order of operations at the machine (each step gates the next):**
+
+1. Complete §5 (machine and operator preflight) and Ed's §5A clock
+   procedure. §5B is **not** a separate manual step before launch: the
+   foreground chain performs it after the pre-slot enforcing gate and
+   pre-calibration capture, and before member 1.
+2. After all agents are closed, Ed runs the complete §6
+   diagnostic-readiness command and reservation command exactly as
+   frozen. Require the diagnostic to echo the exact frozen-plan SHA-256.
+   Require the reservation to emit `calibration_pre_reserve_authorized`
+   and finish with `status: reserved`. Do not look for a visible
+   `ready_to_arm` field — the enforcing checks are internal to the
+   reservation CLI and the writer, and no diagnostic word (`clean`,
+   `ready`) licenses anything. `needs_pin_commit: true` is desk work and
+   ends the attempt; no override exists at night.
+3. ARM: Ed launches the frozen foreground chain exactly once, from an
+   ordinary foreground shell, with the absolute frozen plan root. The
+   chain begins with the frozen 180-second settle; Ed steps away
+   immediately after launch and does not touch or monitor the machine.
+   Inside the chain, the writer's enforcing pre-slot check gates each
+   calibration slot, and the automatic §5B screen gates member 1.
+   "Exactly once" means once per frozen bracket-session attempt; a
+   prospectively licensed new attempt (below) is a new frozen session,
+   never a relaunch of the same one.
+4. **If anything refuses:** any refusal stops forward progress
+   immediately. Preserve the exact stdout, stderr, and durable evidence.
+   For a registered ledger refusal, follow only its §10 row; continue
+   only when that route returns `operation_completed` and the documented
+   phase is repeated from its entry point. `night_stopped_preserved`,
+   `needs_pin_commit: true`, an unmapped failure, or failed preservation
+   ends the night. A §5B level failure ends the current attempt; only a
+   pre-registered retry after a named cause has been removed may begin a
+   newly frozen session. For non-ledger failures, send the lead the
+   exact observed condition and complete output (plus the operator ABORT
+   alias if using the packet's reporting table). A refused night is
+   evidence, not an obstacle course.
+
+**Limitation carried into this procedure (cold-gate L1, surfaced to Ed).**
+The calibration-ledger witness corpus certifies the recovery code against
+production regression and witness drift; it does not certify against a
+future adversarial rewrite of the tests themselves. That residual class
+is carried by review discipline — and it is one of the reasons the entry
+gate and lead verification above are human gates: the corpus feeds the
+desk verdict, it never replaces it.
+
 ## 6. The foreground measurement chain
 
 ### D-117 §6 amendment — durable bracket dispatch and slot resume
@@ -675,6 +757,11 @@ run_stage_list() {
 
 cd "$REPO"
 echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+
+# Final settle is chain-owned (D-117 §5C): operator activity ends at launch,
+# and §1's post-activity settle happens here, before the pre-calibration.
+settle
+echo "$(timestamp) launch_settle_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
 PRE_CAL_CUSTODY="$(calibrate_slot pre "$PRE_ATTEMPT_ID")"
 echo "$(timestamp) pre_calibration=$PRE_CAL_CUSTODY" >> "$OPERATOR_LOG_ROOT/window-chain.log"
@@ -1033,6 +1120,10 @@ replace instrument uncertainty, and it is never silently omitted.
 Record:
 
 - the exact Git commit and policy hash;
+- the §5C lead live-verification record: the literal commands, commit hash,
+  frozen-plan SHA-256, exit codes, and the observed
+  `calibration_pre_reserve_authorized` / `status: reserved` /
+  `calibration_writer_arm_authorized` outputs from the desk rehearsal;
 - the window ID, start/end times, and power-supply identity;
 - pre/post calibration IDs, bounds, and bracket drift;
 - the 12 bound-corpus bundle IDs, bound derivation SHA-256, mint time, expiry,
