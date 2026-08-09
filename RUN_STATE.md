@@ -46,7 +46,47 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T2 SESSION MID-RUN CHECKPOINT (2026-08-09 ~03:40, Fable magistrate) — SUPERSEDES T1's successor order; READ FIRST
+## ▶▶ T2 SESSION UPDATE (2026-08-09 ~07:40, Fable magistrate) — READ FIRST
+
+**Since the ~03:40 block below:** 3 paper PRs opened (#119 operator
+arm-readiness, #120 results scaffold, #121 methods+draft — #119/#120 CI GREEN;
+#121 failed on a FLAKE `test_calibration_exits` OSError Directory-not-empty
+.git/objects [temp-repo teardown race, NOT the edit], reran + flake-fix in
+flight impl/recovery-flake-fix). **Pack-freeze plan CUSTODIED**
+`docs/strategy/2026-08-09-pack-freeze-plan.md`: magistrate RULED Q2A/Q2B/Q2C/
+Q3/Q4/Q7 + 4 engineering work orders (FLOOR-COMMONMODE-01 long pole,
+D-123 byte-identity, receipt-oracle re-derivation, phase-recording proof); TWO
+ED TAPS surfaced — **Q1** (p256 prompt text; Sol built one w/ dual-tokenizer-
+identical 256 IDs, sha 83099a66; recommend freeze) and **Q8** (fund dedicated
+p256 floor cells vs narrow prefill claim).
+
+**TRUST — mint bar PROVEN, landing method VERIFIED, one step from PR:**
+- Decisive regression's failures were ALL test-precision, mint bar INTACT (every
+  tampered domain refused). Sol triage: 11 stale fragments (corrected to
+  canonical guard reasons) + 1 REAL coverage shadow (`primary` — summary_metrics
+  tamper shadowed the bundle_sha256 guard); reworked so the guard is exercised,
+  ISOLATED-PROVEN (pre=not-reached / post=reached+refuses). Corrections
+  checkpoint-committed `a89f279` (tag `safety/trust-a89f279-checkpoint`).
+- LOCAL final-head decisive rerun WEDGED (poll-blocked mint subprocess under
+  load, killed) — belt-and-suspenders only; the attack matrix already ran
+  end-to-end in the earlier 3.5h run (all 15 refused), corrected legs are
+  isolated-proven + focused suites green, and CI's d117-production-proof job is
+  the authoritative decisive run on the clean branch. FOLLOW-UP: investigate the
+  trust test's mint-subprocess pipe handling under load (possible G4-class).
+- **LANDING METHOD (Sol-designed bdltx9fh0, VERIFIED — full detail in session
+  trace-notes.md "TRUST LANDING METHOD"):** clean-branch resynthesis from
+  origin/main (content dirs enter git only at 1cae2bc; A-rank). 3-way MERGE of
+  the 4 both-sides-changed files (calibration_ledger/whole_window/decision_log/
+  test_calibration_bracketing — trust auth-core + recovery durability BOTH must
+  survive), then `git commit-tree -p origin/main` to SEVER dirty ancestry (no
+  blob history in main), `git rm --cached` the custody content subdirs (keep
+  manifest), verify `rev-list --objects | grep custody_store/.*/` EMPTY, full
+  suite, PUBLISH the release (CI downloads asset anonymously — no draft), PR →
+  CI → D-121 → merge = MINT BAR LIFTS. Safety: reversible until PR merge; old
+  branch preserved by tag + 55MB 1cae2bc bundle at
+  ~/JouleWise-window-custody/trust-prerewrite-20260808/.
+- The recorded T1 rewrite procedure (git rm --cached + amend) was found
+  INSUFFICIENT (only strips tip; blobs stay in 1cae2bc parent) — do NOT use it.
 
 **MERGED TONIGHT (both under full gates + D-121 terminal review):**
 - **PR #118 (`05ce39b`) — RECOVERY MERGED; the ARMING blocker's code+procedure
