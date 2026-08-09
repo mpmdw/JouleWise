@@ -466,6 +466,15 @@ def expected_measurement_body(renderer_id: str) -> str:
     model, phase = renderer_id.split("_")
     display = "prompt-processing" if phase == "prompt" else "token-generation"
     token = "prompt" if phase == "prompt" else "output"
+    # Hoisted out of the f-string below: backslash escapes inside an
+    # f-string EXPRESSION are Python 3.12+ (PEP 701); CI runs 3.11.
+    # Behavior-identical compat fix, 2026-08-09.
+    prefill_note = (
+        "\n**This prefill value remains floors-only, so it supports no model-size\n"
+        "direction claim.** Gross joules per request remain primary.\n"
+        if phase == "prompt"
+        else ""
+    )
     return f"""
 
 **PRESENT GUARD:** Emit the gross measurement clause only when the authenticated
@@ -476,7 +485,7 @@ count exist.
 [E_{model}_{phase}_J_per_request] J per request, with a fully composed interval of
 [E_{model}_{phase}_lower_J]–[E_{model}_{phase}_upper_J] J across
 [N_bundles_{model}_{phase}] independent valid run bundles.
-{'''\n**This prefill value remains floors-only, so it supports no model-size\ndirection claim.** Gross joules per request remain primary.\n''' if phase == 'prompt' else ''}
+{prefill_note}
 
 **ABSENT TEXT:** No gross {display} energy estimate is reported because
 the authenticated estimate-and-interval record is unavailable. An absent

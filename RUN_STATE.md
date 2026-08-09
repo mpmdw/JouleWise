@@ -46,6 +46,58 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
+## ▶▶ T2 SESSION MID-RUN CHECKPOINT (2026-08-09 ~03:40, Fable magistrate) — SUPERSEDES T1's successor order; READ FIRST
+
+**MERGED TONIGHT (both under full gates + D-121 terminal review):**
+- **PR #118 (`05ce39b`) — RECOVERY MERGED; the ARMING blocker's code+procedure
+  side is DISCHARGED.** Cold-gate-ruled G2/G4/G6+G5 fix rounds (executed
+  probes, two scoped deltas same-signature NO, mutant-kill closures), ledger
+  CONTRACT durability amendment (fail-closed), runbook **§5C manual arming
+  procedure** + §6 chain-owned settle. Live arming still needs: trust merge,
+  pack freeze, §5C plan-bound GO record + lead live verify + Ed's §5A steps.
+  Witness-integrity = separate off-path mutation-kill track (not started).
+- **PR #117 (`06303b5`) — the three D-117 campaign packs ON MAIN as UNFROZEN
+  drafts** (U5/U6/U7; 30-agent review + 2 fix rounds + deltas; both arms per
+  D-122 in gamma). Freeze-time items reserved for Ed: 256-tok prompt
+  ratification, D-122-unpinned params, receipt-oracle re-derivation (recovery
+  now merged), cadence final ratification, D-125 envelope alternative.
+- Also on main: T1 bookkeeping (01420da), suite-green repair (55a05e3),
+  prose-linter 3.11 compat fix.
+
+**TRUST (mint bar) — decisive regression rerun IN FLIGHT** (task bie5jp9ss,
+started 01:31, hours-scale: attack matrix runs multiple audited 3.3GB mint
+legs). First run failed at 105min in the TEST'S OWN attack leg (None guarded
+floor — legitimate per detection_floor); bench-fixed fabricate-if-None
+(stronger tamper), rides the worktree diff. On green: commit-split
+(auth-core/substrate) → hydrator census → publish release → Ed-permissioned
+history rewrite → 16Q delta → PR merges = MINT BAR LIFTS. Then final-head
+full suite (V5 clone run died inconclusive under load; authoritative run =
+final head, serial).
+
+**BANKED branches (pushed, pre-PR):** impl/d117-operator-arm-readiness
+(GO/NO-GO matrix + freeze manifest + ABORT appendix, review-fixed);
+impl/paper-results-scaffold (fill registry 146 rows + figures plan +
+fail-closed renderer w/ vocabulary-sync tripwire, 26 tests);
+impl/paper-methods-audit (M1 memo: 2 BLOCKER + 4 SHOULD-FIX for the draft
+edit train). PR wave after trust.
+
+**IN FLIGHT:** trust decisive (bie5jp9ss); post-merge cross-stream
+integration review (bjk1oxdn5). Session scratchpad:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/6811852b-72f8-4299-b497-3c4949e29b9d/scratchpad`
+(trace-notes.md = full trace; worktrees: packfam/recint/oplane/rlane/m1lane/
+u5pack/u6pack/u7pack + tv-parity/tv-suite clones — u5/u6/u7pack + tv-* +
+recint prunable after trust lands).
+
+**Ed directives tonight (durable):** Sol counter-reviews LEAD-authored
+specs/designs frequently, Fable adjudicates best-of-both (validated 3-for-3
+tonight: fix contract, §5C procedure — both materially improved); consults
+parallel never blocking; decompose 2h+ serial verification into parallel
+atoms; Fable retains orchestration + all final reviews.
+
+**Kernel gate T1-2026-08-08-NIGHT:** recovery clearance CLOSED by #118; gate
+stays until trust proof verification closes (then clear gate + update the two
+test_gen_state fidelity tests per their documented clear-back note).
+
 ## ▶▶ T1 SESSION FINAL CHECKPOINT (2026-08-08 night, Ed stop order) — /clear-SAFE; READ FIRST
 
 **Nothing in flight — all codex processes killed, workflow stopped.**

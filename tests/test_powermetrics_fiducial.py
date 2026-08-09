@@ -1015,12 +1015,27 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 lifecycle.begin()
             ordinary.assert_not_called()
             receipts = [json.loads(line) for line in ledger.read_text().splitlines()]
-            self.assertEqual(receipts[0], capability)
-            self.assertEqual(
-                receipts[1]["event"],
+            business_by_event = {
+                receipt["event"]: receipt
+                for receipt in receipts
+                if receipt.get("schema_version")
+                == ledger_module.BRACKET_SESSION_SCHEMA
+            }
+            expected_events = {
+                ledger_module.BRACKET_SESSION_OPEN_EVENT,
                 ledger_module.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            }
+            self.assertEqual(set(business_by_event), expected_events)
+            self.assertEqual(
+                business_by_event[ledger_module.BRACKET_SESSION_OPEN_EVENT],
+                capability,
             )
             self.assertFalse(custody["pre"].exists())
+            with self.assertRaisesRegex(
+                ledger_module.CalibrationLedgerError,
+                "calibration_live_writer_contention",
+            ):
+                ledger_module.CalibrationWriterLease(ledger).acquire()
 
             mismatched = validation_script._CaptureLedgerLifecycle(
                 ledger_path=ledger,
@@ -1037,7 +1052,10 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 ledger_module.CalibrationLedgerError, "exact reserved"
             ):
                 mismatched.begin()
-            self.assertEqual(len(ledger.read_text().splitlines()), 2)
+            self.assertEqual(len(ledger.read_text().splitlines()), 4)
+            lifecycle.abandon("test_exact_reservation_cleanup")
+            with ledger_module.CalibrationWriterLease(ledger):
+                self.assertTrue(True)
 
     def test_concurrent_double_arm_accepts_exactly_one_and_loser_cannot_abort_winner(
         self,
@@ -1050,14 +1068,10 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                 self._lifecycle(ledger, pin, epoch, t1, custody, "pre")
                 for _index in range(2)
             ]
-            barrier = threading.Barrier(2)
-            real_validate = validation_script._validate_reserved_bracket_slot
-
-            def synchronize_after_validation(*args, **kwargs):
-                real_validate(*args, **kwargs)
-                barrier.wait(timeout=5)
-
             outcomes: list[tuple[str, object]] = []
+            both_attempted = threading.Event()
+            release_winner = threading.Event()
+            winner_abort: list[object] = []
 
             def arm(lifecycle):
                 try:
@@ -1066,30 +1080,33 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                     outcomes.append(("refused", exc))
                 else:
                     outcomes.append(("accepted", lifecycle))
+                    if len(outcomes) == 2:
+                        both_attempted.set()
+                    release_winner.wait(timeout=10)
+                    winner_abort.append(
+                        lifecycle.abandon("winning_writer_governed_abort")
+                    )
+                    return
+                if len(outcomes) == 2:
+                    both_attempted.set()
 
-            with patch.object(
-                validation_script,
-                "_validate_reserved_bracket_slot",
-                side_effect=synchronize_after_validation,
-            ):
-                threads = [
-                    threading.Thread(target=arm, args=(lifecycle,))
-                    for lifecycle in lifecycles
-                ]
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join(timeout=10)
+            threads = [
+                threading.Thread(target=arm, args=(lifecycle,))
+                for lifecycle in lifecycles
+            ]
+            for thread in threads:
+                thread.start()
+            self.assertTrue(both_attempted.wait(timeout=10))
 
             accepted = [value for status, value in outcomes if status == "accepted"]
             refused = [value for status, value in outcomes if status == "refused"]
             self.assertEqual(len(accepted), 1)
             self.assertEqual(len(refused), 1)
-            self.assertIn(
-                ledger_module.REFUSAL_TAXONOMY[
-                    "calibration_ledger_bracket_slot_claimed"
-                ],
-                str(refused[0]),
+            self.assertEqual(
+                refused[0].code,
+                __import__(
+                    "joulewise.calibration_exits", fromlist=["RefusalCode"]
+                ).RefusalCode.LIVE_WRITER_CONTENTION,
             )
             loser = next(lifecycle for lifecycle in lifecycles if not lifecycle.begun)
             self.assertIsNone(loser.abandon("losing_writer_exit"))
@@ -1100,9 +1117,12 @@ class WriterLedgerIntegrationTests(unittest.TestCase):
                     for receipt in receipts
                 )
             )
-            winner = accepted[0]
-            abort = winner.abandon("winning_writer_governed_abort")
-            self.assertEqual(abort["event"], ledger_module.BRACKET_SESSION_ABORT_EVENT)
+            release_winner.set()
+            for thread in threads:
+                thread.join(timeout=10)
+            self.assertEqual(
+                winner_abort[0]["event"], ledger_module.BRACKET_SESSION_ABORT_EVENT
+            )
 
     def test_session_writer_process_death_leaves_claim_then_governed_abort_recovers(
         self,
@@ -1183,7 +1203,7 @@ os._exit(23)
                 ledger_module.terminal_head_pin_for_session(
                     ledger, session_id="session-writer"
                 )["sequence"],
-                5,
+                10,
             )
 
     def test_main_preserves_symlinked_custody_spelling_used_by_reservation(
@@ -1295,6 +1315,64 @@ os._exit(23)
 
             self.assertEqual(return_code, 2)
             self.assertEqual(observed["custody_locator"], expected_custody)
+
+    def test_writer_repairs_under_lease_and_uses_one_stable_claim(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger, pin, epoch, t1, custody, _capability = self._open_session(
+                Path(tmp)
+            )
+            lifecycle = self._lifecycle(
+                ledger, pin, epoch, t1, custody, "pre"
+            )
+            events: list[str] = []
+            claim_ids: list[str] = []
+            real_repair = validation_script.repair_calibration_ledger
+            real_validate = validation_script._validate_reserved_bracket_slot
+            real_claim = validation_script.claim_bracket_session_slot
+
+            def observe_repair(*args, **kwargs):
+                events.append("repair")
+                return real_repair(*args, **kwargs)
+
+            def observe_validate(*args, **kwargs):
+                events.append("validate")
+                return real_validate(*args, **kwargs)
+
+            def observe_claim(*args, **kwargs):
+                claim_ids.append(kwargs["claim_id"])
+                return real_claim(*args, **kwargs)
+
+            with (
+                patch.object(
+                    validation_script,
+                    "repair_calibration_ledger",
+                    side_effect=observe_repair,
+                ),
+                patch.object(
+                    validation_script,
+                    "_validate_reserved_bracket_slot",
+                    side_effect=observe_validate,
+                ),
+                patch.object(
+                    validation_script,
+                    "claim_bracket_session_slot",
+                    side_effect=observe_claim,
+                ),
+            ):
+                lifecycle.begin()
+            self.assertEqual(events, ["validate", "repair", "validate"])
+            self.assertEqual(claim_ids, [lifecycle.claim_id])
+            self.assertEqual(
+                lifecycle.claim_id,
+                ledger_module.stable_bracket_claim_id(
+                    session_id="session-writer",
+                    slot="pre",
+                    attempt_id="session-writer-pre",
+                ),
+            )
+            lifecycle.abandon("test_stable_claim_cleanup")
 
 
 if __name__ == "__main__":

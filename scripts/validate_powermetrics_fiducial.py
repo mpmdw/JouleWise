@@ -24,21 +24,27 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hmac
 import hashlib
 import json
 import math
+import os
+import signal
+import stat
 import subprocess
 import sys
 import time
 import uuid
 from dataclasses import asdict, replace
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -46,7 +52,7 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
     parse_powermetrics_records,
     samples_from_records,
 )
-from joulewise.clock import SystemClock  # noqa: E402
+from joulewise.clock import ClockStamp, SystemClock  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -54,6 +60,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_LEDGER_PATH,
     DEFAULT_HEAD_PIN_PATH,
     CalibrationLedgerError,
+    CalibrationWriterLease,
+    calibration_readiness,
     abort_bracket_session,
     append_pending_receipt,
     artifact_hashes as ledger_artifact_hashes,
@@ -63,6 +71,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
     head_pin_for_receipt,
     load_calibration_ledger_snapshot,
     normalize_calibration_custody_path,
+    repair_calibration_ledger,
+    stable_bracket_claim_id,
     terminal_head_pin_for_session,
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
@@ -102,6 +112,239 @@ PROTOCOL_V2_PATH = (
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
+TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
+    "joulewise.test_writer_crash_authorization.v1"
+)
+TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV = (
+    "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
+)
+_AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
+_CRASH_HOOK_DIAGNOSTIC_EMITTED = False
+
+
+class _AcceleratedSystemClock:
+    """Expose test-scaled real time without bypassing the production clock seam."""
+
+    def __init__(self, scale: float, *, epoch_origin_s: float | None = None) -> None:
+        self._scale = scale
+        self._clock = SystemClock()
+        self._origin = self._clock.stamp()
+        self._epoch_origin_s = (
+            self._origin.epoch_s if epoch_origin_s is None else epoch_origin_s
+        )
+        self._monotonic_origin_s = (
+            self._origin.monotonic_before_s
+            + self._origin.monotonic_after_s
+        ) / 2.0
+        self._accelerated_epoch_origin_s = self._scaled(
+            self._origin.epoch_s,
+            self._epoch_origin_s,
+        )
+        self._wall_minus_monotonic_s = (
+            self._accelerated_epoch_origin_s - self._monotonic_origin_s
+        )
+
+    def _scaled(self, value: float, origin: float) -> float:
+        return origin + ((value - origin) / self._scale)
+
+    def now(self) -> float:
+        return self._scaled(time.time(), self._epoch_origin_s)
+
+    def stamp(self) -> ClockStamp:
+        epoch_s = self.now()
+        accelerated_monotonic_s = epoch_s - self._wall_minus_monotonic_s
+        return ClockStamp(
+            epoch_s=epoch_s,
+            monotonic_before_s=accelerated_monotonic_s,
+            monotonic_after_s=accelerated_monotonic_s,
+            wall_resolution_s=self._origin.wall_resolution_s / self._scale,
+            monotonic_resolution_s=(
+                self._origin.monotonic_resolution_s / self._scale
+            ),
+        )
+
+
+class WriterStage(str, Enum):
+    BEFORE_PRE_RESERVE_READINESS = "before-pre-reserve-readiness"
+    AFTER_PRE_RESERVE_READINESS = "after-pre-reserve-readiness"
+    RESERVATION_INTENT_WRITE = "reservation-intent-write"
+    RESERVATION_INTENT_FSYNCED = "reservation-intent-fsynced"
+    RESERVATION_TARGET_WRITE = "reservation-target-write"
+    RESERVATION_TARGET_FSYNCED = "reservation-target-fsynced"
+    RESERVATION_RETURNED = "reservation-returned"
+    BEFORE_WRITER_LEASE = "before-writer-lease"
+    AFTER_WRITER_LEASE = "after-writer-lease"
+    AFTER_REPAIR = "after-repair"
+    AFTER_SLOT_VALIDATION = "after-slot-validation"
+    CLAIM_INTENT_WRITE = "claim-intent-write"
+    CLAIM_INTENT_FSYNCED = "claim-intent-fsynced"
+    CLAIM_TARGET_WRITE = "claim-target-write"
+    CLAIM_TARGET_FSYNCED = "claim-target-fsynced"
+    CLAIM_RETURNED_BEFORE_BEGUN = "claim-returned-before-begun"
+    AFTER_BEGUN = "after-begun"
+    BEFORE_EXIT_HANDLER_REGISTRATION = "before-exit-handler-registration"
+    AFTER_EXIT_HANDLER_REGISTRATION = "after-exit-handler-registration"
+    AFTER_CUSTODY_DIRECTORY_CREATION = "after-custody-directory-creation"
+    AFTER_EVENT_STREAM_OPEN = "after-event-stream-open"
+    AFTER_SAMPLER_SPAWN = "after-sampler-spawn"
+    AFTER_SAMPLER_READY = "after-sampler-ready"
+    AFTER_ROLLOVER_READY = "after-rollover-ready"
+    DURING_CAPTURE = "during-capture"
+    AFTER_SAMPLER_TEARDOWN = "after-sampler-teardown"
+    DURING_RAW_EVENTS_ARTIFACT = "during-raw-events-artifact"
+    DURING_TRACE_ARTIFACT = "during-trace-artifact"
+    DURING_EVIDENCE_ARTIFACT = "during-evidence-artifact"
+    DURING_MANIFEST_ARTIFACT = "during-manifest-artifact"
+    ARTIFACTS_COMPLETE_BEFORE_FINALIZATION = "artifacts-complete-before-finalization"
+    FINALIZATION_INTENT_WRITE = "finalization-intent-write"
+    FINALIZATION_INTENT_FSYNCED = "finalization-intent-fsynced"
+    FINALIZATION_TARGET_WRITE = "finalization-target-write"
+    FINALIZATION_TARGET_FSYNCED = "finalization-target-fsynced"
+    FINALIZATION_RETURNED_BEFORE_CLOSED = "finalization-returned-before-closed"
+    AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER = "after-closed-before-handler-unregister"
+    AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH = (
+        "after-pre-finalization-before-supervisor-dispatch"
+    )
+    BEFORE_POST_DISPATCH = "before-post-dispatch"
+    AFTER_POST_FINALIZATION_BEFORE_TERMINAL_PIN = (
+        "after-post-finalization-before-terminal-pin"
+    )
+    AFTER_TERMINAL_PIN_BEFORE_OUTPUT = "after-terminal-pin-before-output"
+
+
+def _emit_inert_crash_hook_diagnostic(requested_stage: str) -> None:
+    global _CRASH_HOOK_DIAGNOSTIC_EMITTED
+    if _CRASH_HOOK_DIAGNOSTIC_EMITTED:
+        return
+    print(
+        json.dumps(
+            {
+                "event": "joulewise_test_writer_crash_hook_inert",
+                "reason": "missing_or_invalid_harness_authorization",
+                "requested_stage": requested_stage,
+            },
+            separators=(",", ":"),
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
+    _CRASH_HOOK_DIAGNOSTIC_EMITTED = True
+
+
+def _configure_writer_crash_authorization(
+    authorization_path: Path | None,
+    *,
+    entry_point: Path,
+) -> None:
+    """Consume and validate one explicit harness capability, if supplied."""
+
+    global _AUTHORIZED_WRITER_CRASH_STAGE
+    _AUTHORIZED_WRITER_CRASH_STAGE = None
+    requested_stage = os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE")
+    token = os.environ.get("JOULEWISE_TEST_WRITER_CRASH_TOKEN")
+    valid_stage: str | None = None
+    descriptor = -1
+    root_descriptor = -1
+    authorization_basename: str | None = None
+    path = Path(authorization_path) if authorization_path is not None else None
+    try:
+        if path is None:
+            raise ValueError("missing explicit crash authorization path")
+        root_raw = os.environ.get(TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV)
+        if root_raw is None:
+            raise ValueError("missing harness crash capability root")
+        resolved_root = Path(root_raw).resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+        if resolved_path.parent != resolved_root:
+            raise ValueError("crash authorization is outside harness capability root")
+        authorization_basename = resolved_path.name
+        root_descriptor = os.open(
+            resolved_root,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        root_status = os.fstat(root_descriptor)
+        if (
+            not stat.S_ISDIR(root_status.st_mode)
+            or root_status.st_uid != os.getuid()
+            or stat.S_IMODE(root_status.st_mode) != 0o700
+        ):
+            raise ValueError("unsafe harness crash capability root")
+        descriptor = os.open(
+            resolved_path.name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=root_descriptor,
+        )
+        status = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(status.st_mode)
+            or status.st_uid != os.getuid()
+            or stat.S_IMODE(status.st_mode) != 0o600
+            or status.st_nlink != 1
+        ):
+            raise ValueError("unsafe crash authorization inode")
+        raw = os.read(descriptor, 65537)
+        if len(raw) > 65536:
+            raise ValueError("oversized crash authorization")
+        payload = json.loads(raw)
+        resolved_entry = Path(entry_point).resolve(strict=True)
+        if (
+            not isinstance(payload, Mapping)
+            or payload.get("schema_version")
+            != TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA
+            or payload.get("stage") != requested_stage
+            or payload.get("stage") not in {stage.value for stage in WriterStage}
+            or payload.get("entry_point") != str(resolved_entry)
+            or payload.get("entry_point_sha256")
+            != hashlib.sha256(resolved_entry.read_bytes()).hexdigest()
+            or not isinstance(payload.get("nonce"), str)
+            or not isinstance(token, str)
+            or not hmac.compare_digest(payload["nonce"], token)
+        ):
+            raise ValueError("crash authorization fields do not match")
+        candidate_stage = str(payload["stage"])
+        assert authorization_basename is not None
+        os.unlink(authorization_basename, dir_fd=root_descriptor)
+        if os.fstat(descriptor).st_nlink != 0:
+            raise ValueError("crash authorization unlink did not consume inode")
+        valid_stage = candidate_stage
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        valid_stage = None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
+    if valid_stage is not None:
+        _AUTHORIZED_WRITER_CRASH_STAGE = valid_stage
+    elif requested_stage is not None:
+        _emit_inert_crash_hook_diagnostic(requested_stage)
+
+
+def _writer_stage(stage: WriterStage) -> None:
+    """Real production boundary armed only by two matching logical keys."""
+
+    if (
+        os.environ.get("JOULEWISE_TEST_WRITER_CRASH_STAGE") == stage.value
+        and _AUTHORIZED_WRITER_CRASH_STAGE == stage.value
+    ):
+        os.kill(os.getpid(), signal.SIGKILL)
+
+
+def _write_text_artifact(path: Path, payload: str, stage: WriterStage) -> None:
+    """Write one artifact with the stage boundary inside the durable write."""
+
+    raw = payload.encode("utf-8")
+    split = max(1, len(raw) // 2)
+    with path.open("xb") as handle:
+        handle.write(raw[:split])
+        handle.flush()
+        os.fsync(handle.fileno())
+        _writer_stage(stage)
+        handle.write(raw[split:])
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def sha256_path(path: Path) -> str:
@@ -345,9 +588,7 @@ def _validate_reserved_bracket_slot(
         or dict(reserved.get("identity_epoch", {})) != dict(identity_epoch)
         or dict(reserved.get("t1_bindings", {})) != dict(t1_bindings)
     ):
-        raise CalibrationLedgerError(
-            "capture does not match the exact reserved bracket session slot"
-        )
+        raise CalibrationLedgerError(RefusalCode.RESERVED_SLOT_MISMATCH)
 
 
 class _CaptureLedgerLifecycle:
@@ -367,9 +608,7 @@ class _CaptureLedgerLifecycle:
         require_committed_pin: bool = True,
     ) -> None:
         if (session_id is None) != (slot is None):
-            raise CalibrationLedgerError(
-                "bracket session id and slot must be supplied together"
-            )
+            raise CalibrationLedgerError(RefusalCode.WRITER_BRACKET_ARGUMENTS)
         self.ledger_path = Path(ledger_path)
         self.head_pin_path = Path(head_pin_path)
         self.attempt_id = attempt_id
@@ -383,7 +622,16 @@ class _CaptureLedgerLifecycle:
         self.session_id = session_id
         self.slot = slot
         self.require_committed_pin = require_committed_pin
-        self.claim_id = uuid.uuid4().hex
+        self.claim_id = (
+            stable_bracket_claim_id(
+                session_id=session_id,
+                slot=slot,
+                attempt_id=attempt_id,
+            )
+            if session_id is not None and slot is not None
+            else None
+        )
+        self.writer_lease = CalibrationWriterLease(self.ledger_path)
         self.begun = False
         self.closed = False
 
@@ -395,26 +643,93 @@ class _CaptureLedgerLifecycle:
         """Reserve ordinarily, or authenticate a previously reserved slot."""
 
         if self.begun:
-            raise CalibrationLedgerError("capture ledger lifecycle already began")
+            raise CalibrationLedgerError(
+                RefusalCode.PRE_SLOT_NOT_READY,
+                context={"reason": "lifecycle_already_began"},
+            )
+        # Early warning only. The same binding is checked again after the
+        # nonblocking lease is held; only that second check can authorize ARM.
+        if self.is_bracket_session:
+            self._validate_slot()
+        try:
+            _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
+            self.writer_lease.acquire()
+            _writer_stage(WriterStage.AFTER_WRITER_LEASE)
+            repair_calibration_ledger(
+                self.ledger_path,
+                engine_identity="validate_powermetrics_fiducial",
+                attestation_reason="automatic pre-capture ledger recovery",
+            )
+            _writer_stage(WriterStage.AFTER_REPAIR)
+            self._begin_once()
+            _writer_stage(WriterStage.CLAIM_RETURNED_BEFORE_BEGUN)
+            self.begun = True
+            _writer_stage(WriterStage.AFTER_BEGUN)
+        except Exception:
+            self.writer_lease.release()
+            raise
+
+    def _validate_slot(self) -> None:
+        assert self.session_id is not None and self.slot is not None
+        _validate_reserved_bracket_slot(
+            self.ledger_path,
+            self.head_pin_path,
+            session_id=self.session_id,
+            slot=self.slot,
+            attempt_id=self.attempt_id,
+            custody_locator=self.custody_locator,
+            identity_epoch=self.identity_epoch,
+            t1_bindings=self.t1_bindings,
+            require_committed_pin=self.require_committed_pin,
+        )
+
+    def _begin_once(self) -> None:
+        """Perform one stable-identity reservation or slot-claim attempt."""
+
         if self.is_bracket_session:
             assert self.session_id is not None and self.slot is not None
-            _validate_reserved_bracket_slot(
+            readiness = calibration_readiness(
                 self.ledger_path,
                 self.head_pin_path,
+                phase="pre-slot",
                 session_id=self.session_id,
                 slot=self.slot,
                 attempt_id=self.attempt_id,
-                custody_locator=self.custody_locator,
-                identity_epoch=self.identity_epoch,
-                t1_bindings=self.t1_bindings,
+                enforcing_under_lease=True,
                 require_committed_pin=self.require_committed_pin,
             )
+            if readiness.status != "ready":
+                assert readiness.refusal_code is not None
+                raise CalibrationLedgerError(readiness.refusal_code)
+            self._validate_slot()
+            print(
+                json.dumps(
+                    {
+                        "event": "calibration_writer_arm_authorized",
+                        "session_id": self.session_id,
+                        "slot": self.slot,
+                        "attempt_id": self.attempt_id,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            _writer_stage(WriterStage.AFTER_SLOT_VALIDATION)
             claim_bracket_session_slot(
                 self.ledger_path,
                 session_id=self.session_id,
                 slot=self.slot,
                 attempt_id=self.attempt_id,
                 claim_id=self.claim_id,
+                _stage_boundary=lambda boundary: _writer_stage(
+                    {
+                        "intent-write": WriterStage.CLAIM_INTENT_WRITE,
+                        "intent-fsynced": WriterStage.CLAIM_INTENT_FSYNCED,
+                        "target-write": WriterStage.CLAIM_TARGET_WRITE,
+                        "target-fsynced": WriterStage.CLAIM_TARGET_FSYNCED,
+                    }[boundary]
+                ),
             )
         else:
             append_pending_receipt(
@@ -426,36 +741,38 @@ class _CaptureLedgerLifecycle:
                 head_pin_path=self.head_pin_path,
                 require_committed_pin=self.require_committed_pin,
             )
-        self.begun = True
 
     def abandon(self, reason: str) -> Mapping[str, Any] | None:
         """Best-effort governed closure for an interrupted writer."""
 
         if not self.begun or self.closed:
             return None
-        if self.is_bracket_session:
-            assert self.session_id is not None
-            receipt = abort_bracket_session(
-                self.ledger_path,
-                session_id=self.session_id,
-                reason=reason,
-            )
-        else:
-            receipt = finalize_attempt_receipt(
-                self.ledger_path,
-                attempt_id=self.attempt_id,
-                disposition="abandoned",
-                custody_locator=self.custody_locator,
-                artifact_sha256=ledger_artifact_hashes(
-                    Path(self.custody_locator)
-                ),
-                identity_epoch=self.identity_epoch,
-                t1_bindings=self.t1_bindings,
-                capture_wall_time_s=self.capture_wall_time_s,
-                exact_bound_lexeme_s=self.exact_bound_lexeme_s,
-            )
-        self.closed = True
-        return receipt
+        try:
+            if self.is_bracket_session:
+                assert self.session_id is not None
+                receipt = abort_bracket_session(
+                    self.ledger_path,
+                    session_id=self.session_id,
+                    reason=reason,
+                )
+            else:
+                receipt = finalize_attempt_receipt(
+                    self.ledger_path,
+                    attempt_id=self.attempt_id,
+                    disposition="abandoned",
+                    custody_locator=self.custody_locator,
+                    artifact_sha256=ledger_artifact_hashes(
+                        Path(self.custody_locator)
+                    ),
+                    identity_epoch=self.identity_epoch,
+                    t1_bindings=self.t1_bindings,
+                    capture_wall_time_s=self.capture_wall_time_s,
+                    exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+                )
+            self.closed = True
+            return receipt
+        finally:
+            self.writer_lease.release()
 
     def finalize(
         self, disposition: str
@@ -463,14 +780,57 @@ class _CaptureLedgerLifecycle:
         """Finalize the exact attempt and return any terminal head candidate."""
 
         if not self.begun or self.closed:
-            raise CalibrationLedgerError("capture ledger lifecycle is not open")
-        artifacts = ledger_artifact_hashes(Path(self.custody_locator))
-        if self.is_bracket_session:
-            assert self.session_id is not None and self.slot is not None
-            receipt = finalize_bracket_session_slot(
+            raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
+        try:
+            artifacts = ledger_artifact_hashes(Path(self.custody_locator))
+            if self.is_bracket_session:
+                assert self.session_id is not None and self.slot is not None
+                receipt = finalize_bracket_session_slot(
+                    self.ledger_path,
+                    session_id=self.session_id,
+                    slot=self.slot,
+                    disposition=disposition,
+                    custody_locator=self.custody_locator,
+                    artifact_sha256=artifacts,
+                    identity_epoch=self.identity_epoch,
+                    t1_bindings=self.t1_bindings,
+                    capture_wall_time_s=self.capture_wall_time_s,
+                    exact_bound_lexeme_s=self.exact_bound_lexeme_s,
+                    _stage_boundary=lambda boundary: _writer_stage(
+                        {
+                            "intent-write": WriterStage.FINALIZATION_INTENT_WRITE,
+                            "intent-fsynced": WriterStage.FINALIZATION_INTENT_FSYNCED,
+                            "target-write": WriterStage.FINALIZATION_TARGET_WRITE,
+                            "target-fsynced": WriterStage.FINALIZATION_TARGET_FSYNCED,
+                        }[boundary]
+                    ),
+                )
+                _writer_stage(WriterStage.FINALIZATION_RETURNED_BEFORE_CLOSED)
+                if self.slot == "pre" and disposition != "valid":
+                    receipt = abort_bracket_session(
+                        self.ledger_path,
+                        session_id=self.session_id,
+                        reason=f"pre_capture_{disposition}",
+                    )
+                self.closed = True
+                _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
+                if self.slot == "post":
+                    _writer_stage(
+                        WriterStage.AFTER_POST_FINALIZATION_BEFORE_TERMINAL_PIN
+                    )
+                head_pin = (
+                    None
+                    if self.slot == "pre" and disposition == "valid"
+                    else terminal_head_pin_for_session(
+                        self.ledger_path, session_id=self.session_id
+                    )
+                )
+                if self.slot == "post":
+                    _writer_stage(WriterStage.AFTER_TERMINAL_PIN_BEFORE_OUTPUT)
+                return receipt, head_pin
+            receipt = finalize_attempt_receipt(
                 self.ledger_path,
-                session_id=self.session_id,
-                slot=self.slot,
+                attempt_id=self.attempt_id,
                 disposition=disposition,
                 custody_locator=self.custody_locator,
                 artifact_sha256=artifacts,
@@ -479,34 +839,12 @@ class _CaptureLedgerLifecycle:
                 capture_wall_time_s=self.capture_wall_time_s,
                 exact_bound_lexeme_s=self.exact_bound_lexeme_s,
             )
-            if self.slot == "pre" and disposition != "valid":
-                receipt = abort_bracket_session(
-                    self.ledger_path,
-                    session_id=self.session_id,
-                    reason=f"pre_capture_{disposition}",
-                )
+            _writer_stage(WriterStage.FINALIZATION_RETURNED_BEFORE_CLOSED)
             self.closed = True
-            head_pin = (
-                None
-                if self.slot == "pre" and disposition == "valid"
-                else terminal_head_pin_for_session(
-                    self.ledger_path, session_id=self.session_id
-                )
-            )
-            return receipt, head_pin
-        receipt = finalize_attempt_receipt(
-            self.ledger_path,
-            attempt_id=self.attempt_id,
-            disposition=disposition,
-            custody_locator=self.custody_locator,
-            artifact_sha256=artifacts,
-            identity_epoch=self.identity_epoch,
-            t1_bindings=self.t1_bindings,
-            capture_wall_time_s=self.capture_wall_time_s,
-            exact_bound_lexeme_s=self.exact_bound_lexeme_s,
-        )
-        self.closed = True
-        return receipt, head_pin_for_receipt(receipt)
+            _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
+            return receipt, head_pin_for_receipt(receipt)
+        finally:
+            self.writer_lease.release()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -517,9 +855,51 @@ def main(argv: list[str] | None = None) -> int:
         help="explicitly confirm a lead-owned quiet-machine live run",
     )
     parser.add_argument(
+        "--arm-countdown-s",
+        type=float,
+        default=0.0,
+        help="count down only after the enforcing pre-slot gate owns the writer lease",
+    )
+    parser.add_argument(
+        "--sleep-display-before-capture",
+        action="store_true",
+        help="run pmset displaysleepnow under the held writer lease after countdown",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=REPO_ROOT / "runs" / "instrument_validation",
+    )
+    parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
+    parser.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
+    parser.add_argument(
+        "--sampler-binary",
+        type=Path,
+        default=Path(POWER_METRICS),
+        help="powermetrics-compatible sampler executable",
+    )
+    parser.add_argument(
+        "--sampler-ready-timeout-s", type=float, default=15.0
+    )
+    parser.add_argument("--rollover-timeout-s", type=float, default=15.0)
+    parser.add_argument(
+        "--display-arm-binary", type=Path, default=Path("/usr/bin/pmset")
+    )
+    parser.add_argument(
+        "--sampler-direct-for-test", action="store_true", help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--identity-epoch-json-for-test",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--test-writer-crash-authorization",
+        type=Path,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--rederive-from", type=Path)
     parser.add_argument("--output", type=Path)
@@ -543,55 +923,79 @@ def main(argv: list[str] | None = None) -> int:
         help="operator-recorded power policy identity (e.g. 'ac_high_power'); required",
     )
     args = parser.parse_args(argv)
+    _configure_writer_crash_authorization(
+        args.test_writer_crash_authorization,
+        entry_point=Path(__file__),
+    )
     bracket_values = (args.session_id, args.slot, args.attempt_id)
     bracket_mode = all(value is not None and value != "" for value in bracket_values)
     if any(value is not None for value in bracket_values) and not bracket_mode:
-        print(
-            "refusing: --session-id, --slot, and --attempt-id must be supplied together",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            stream=sys.stderr,
         )
-        return 2
     if bracket_mode and (args.rederive_from is not None or args.output is not None):
-        print(
-            "refusing: bracket session parameters apply only to live capture",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+            stream=sys.stderr,
         )
-        return 2
     if not verify_frozen_protocol():
-        print(
-            "refusing: frozen powermetrics fiducial protocol is missing, "
-            "incomplete, or disagrees with executable constants",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.FROZEN_PROTOCOL_INVALID,
+            stream=sys.stderr,
         )
-        return 2
     if args.rederive_from is not None:
         if args.output is None:
-            print("refusing: --rederive-from requires --output", file=sys.stderr)
-            return 2
+            return emit_refusal(
+                RefusalCode.REDERIVE_OUTPUT_REQUIRED,
+                stream=sys.stderr,
+            )
         try:
             payload = rederive_artifact(args.rederive_from, args.output)
         except ValueError as exc:
-            print(f"refusing: {exc}", file=sys.stderr)
-            return 2
+            return emit_refusal(
+                RefusalCode.REDERIVE_FAILED,
+                context={"detail": str(exc)},
+                stream=sys.stderr,
+            )
         print(json.dumps({"status": payload["status"], "output": str(args.output)}))
         return 0 if payload["status"] == "valid" else 1
     if args.output is not None:
-        print("refusing: --output requires --rederive-from", file=sys.stderr)
-        return 2
-    if not args.allow_live:
-        print(
-            "refusing: live [QUIET-MAC] calibration is lead-owned; "
-            "pass --allow-live on a quiet machine",
-            file=sys.stderr,
+        return emit_refusal(
+            RefusalCode.OUTPUT_REQUIRES_REDERIVE,
+            stream=sys.stderr,
         )
-        return 77
+    if not args.allow_live:
+        return emit_refusal(
+            RefusalCode.QUIET_MAC_AUTH_REQUIRED,
+            stream=sys.stderr,
+        )
     if not args.power_policy:
-        print("refusing: --power-policy is a binding field", file=sys.stderr)
-        return 2
+        return emit_refusal(
+            RefusalCode.POWER_POLICY_REQUIRED,
+            stream=sys.stderr,
+        )
+    if args.time_scale_for_test <= 0 or args.time_scale_for_test > 1:
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            context={"detail": "test time scale must be in (0, 1]"},
+            stream=sys.stderr,
+        )
 
     import mlx.core as mx  # noqa: PLC0415
 
-    clock = SystemClock()
+    clock = (
+        SystemClock()
+        if args.time_scale_for_test == 1
+        else _AcceleratedSystemClock(
+            args.time_scale_for_test,
+            epoch_origin_s=(
+                float(os.environ["JW_FAKE_TIME_ORIGIN"])
+                if "JW_FAKE_TIME_ORIGIN" in os.environ
+                else None
+            ),
+        )
+    )
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -599,9 +1003,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     out_dir = args.output_root / validation_id
     custody_locator = normalize_calibration_custody_path(out_dir)
+    identity_fixture: Mapping[str, Any] = {}
+    if args.identity_epoch_json_for_test is not None:
+        try:
+            loaded_identity = json.loads(
+                args.identity_epoch_json_for_test.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("test identity fixture is unreadable") from exc
+        if not isinstance(loaded_identity, Mapping):
+            raise ValueError("test identity fixture is malformed")
+        identity_fixture = loaded_identity
     planned_epoch = {
-        "os_build": _sysctl_identity("kern.osversion"),
-        "hardware_model": _sysctl_identity("hw.model"),
+        "os_build": identity_fixture.get("os_build")
+        or _sysctl_identity("kern.osversion"),
+        "hardware_model": identity_fixture.get("hardware_model")
+        or _sysctl_identity("hw.model"),
         "power_policy": args.power_policy,
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
         "estimator_revision": RESIDUAL_REGION_METHOD,
@@ -609,7 +1026,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     planned_t1 = {
         **planned_epoch,
-        "powermetrics_sha256": sha256_path(Path(POWER_METRICS)),
+        "powermetrics_sha256": sha256_path(args.sampler_binary),
         "anchor_method_version": CLOCK_METHOD_V2,
         "mlx_version": getattr(mx, "__version__", None),
         "protocol_sha256": sha256_path(PROTOCOL_PATH),
@@ -619,8 +1036,8 @@ def main(argv: list[str] | None = None) -> int:
     # reserved. Both paths run before directory creation, sampler launch, and
     # all hardware capture.
     ledger_lifecycle = _CaptureLedgerLifecycle(
-        ledger_path=DEFAULT_LEDGER_PATH,
-        head_pin_path=DEFAULT_HEAD_PIN_PATH,
+        ledger_path=args.ledger,
+        head_pin_path=args.head_pin,
         attempt_id=validation_id,
         custody_locator=custody_locator,
         identity_epoch=planned_epoch,
@@ -629,10 +1046,45 @@ def main(argv: list[str] | None = None) -> int:
         slot=args.slot if bracket_mode else None,
     )
     try:
+        if bracket_mode and args.slot == "post":
+            _writer_stage(WriterStage.BEFORE_POST_DISPATCH)
         ledger_lifecycle.begin()
     except CalibrationLedgerError as exc:
-        print(f"refusing: {exc}", file=sys.stderr)
-        return 2
+        return emit_refusal(
+            exc.code or RefusalCode.LEDGER_MALFORMED,
+            context=dict(exc.context) | {"detail": str(exc)},
+            stream=sys.stderr,
+        )
+    try:
+        if args.arm_countdown_s < 0:
+            raise ValueError("arm countdown must be nonnegative")
+        if args.arm_countdown_s or args.sleep_display_before_capture:
+            print(
+                json.dumps(
+                    {
+                        "event": "calibration_display_arm_countdown",
+                        "seconds": args.arm_countdown_s,
+                    }
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(args.arm_countdown_s)
+        if args.sleep_display_before_capture:
+            subprocess.run(
+                [str(args.display_arm_binary), "displaysleepnow"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            time.sleep(5 * args.time_scale_for_test)
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        ledger_lifecycle.abandon("display_arm_failed")
+        return emit_refusal(
+            RefusalCode.DISPLAY_ARM_FAILED,
+            context={"detail": str(exc)},
+            stream=sys.stderr,
+        )
 
     def finalize_abandoned(
         reason: str = "writer_exit_before_slot_finalization",
@@ -647,11 +1099,15 @@ def main(argv: list[str] | None = None) -> int:
     # An actual interpreter-level uncaught exception/interrupt finalizes when
     # possible. A hard crash between these two appends intentionally leaves
     # ``pending``, which every downstream snapshot refuses.
+    _writer_stage(WriterStage.BEFORE_EXIT_HANDLER_REGISTRATION)
     atexit.register(finalize_abandoned)
+    _writer_stage(WriterStage.AFTER_EXIT_HANDLER_REGISTRATION)
     (out_dir / "raw").mkdir(parents=True, exist_ok=False)
+    _writer_stage(WriterStage.AFTER_CUSTODY_DIRECTORY_CREATION)
     capture_path = out_dir / "raw" / "powermetrics.plist"
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
+    _writer_stage(WriterStage.AFTER_EVENT_STREAM_OPEN)
 
     def emit(event_type: str, metadata: dict) -> None:
         events.write(
@@ -670,10 +1126,8 @@ def main(argv: list[str] | None = None) -> int:
         events.flush()
 
     buffers = allocate_matmul_buffers()
-    command = [
-        "sudo",
-        "-n",
-        POWER_METRICS,
+    command = ([] if args.sampler_direct_for_test else ["sudo", "-n"]) + [
+        str(args.sampler_binary),
         "-b",
         "0",
         "-i",
@@ -689,8 +1143,9 @@ def main(argv: list[str] | None = None) -> int:
     process = subprocess.Popen(
         command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
+    _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
     first_parse = None
-    deadline = time.monotonic() + 15.0
+    deadline = time.monotonic() + args.sampler_ready_timeout_s
     while time.monotonic() < deadline:
         if capture_path.exists() and capture_path.stat().st_size > 0:
             first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
@@ -702,24 +1157,43 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     first_parse = clock.stamp()
                     break
-        time.sleep(0.05)
+        time.sleep(
+            min(
+                0.05 * args.time_scale_for_test,
+                args.sampler_ready_timeout_s / 4,
+            )
+        )
     if first_parse is None:
         process.terminate()
         finalize_abandoned("powermetrics_never_ready")
-        print("powermetrics never became ready", file=sys.stderr)
-        return 1
+        return emit_refusal(
+            RefusalCode.SAMPLER_NEVER_READY,
+            stream=sys.stderr,
+        )
+    _writer_stage(WriterStage.AFTER_SAMPLER_READY)
     # D-078: wait for a native whole-second rollover before any workload.
     try:
-        wait_for_preworkload_rollover(capture_path, process)
+        wait_for_preworkload_rollover(
+            capture_path,
+            process,
+            timeout_s=args.rollover_timeout_s,
+            poll_s=min(
+                0.05 * args.time_scale_for_test,
+                args.rollover_timeout_s / 4,
+            ),
+        )
     except RuntimeError as exc:
         events.close()
         finalize_abandoned(str(exc))
-        print(f"refusing: {exc}", file=sys.stderr)
-        return 1
+        return emit_refusal(
+            RefusalCode.ROLLOVER_GATE_TIMEOUT,
+            stream=sys.stderr,
+        )
+    _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
     sampling_started = clock.stamp()
     emit("sampling_started", {})
 
-    time.sleep(BASELINE_S)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
     warmups: list[CommandedPulse] = []
     for warmup_index in range(WARMUP_PULSE_COUNT):
         on_stamp = clock.stamp()
@@ -727,7 +1201,7 @@ def main(argv: list[str] | None = None) -> int:
             "warmup_command_on",
             {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
         )
-        run_matmul_pulse(PULSE_DURATION_S, buffers)
+        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
         off_stamp = clock.stamp()
         emit(
             "warmup_command_off",
@@ -741,8 +1215,8 @@ def main(argv: list[str] | None = None) -> int:
                 off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
-        time.sleep(1.5)
-    time.sleep(BASELINE_S)
+        time.sleep(1.5 * args.time_scale_for_test)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
 
     # Van der Corput spacing is schedule-relative (offsets start at 0 for the
     # first pulse), so the loop cursor MUST be measured from the pulse-loop
@@ -751,7 +1225,10 @@ def main(argv: list[str] | None = None) -> int:
     # made every gap negative and collapsed the pulses back-to-back.
     pulse_loop_mono0 = time.monotonic()
     pulses: list[CommandedPulse] = []
-    for on_offset_s, off_offset_s in pulse_schedule(args.pulse_count):
+    for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
+        on_offset_s = raw_on_offset_s * args.time_scale_for_test
+        off_offset_s = raw_off_offset_s * args.time_scale_for_test
+        _writer_stage(WriterStage.DURING_CAPTURE)
         if pulses:
             elapsed_s = time.monotonic() - pulse_loop_mono0
             time.sleep(max(0.0, on_offset_s - elapsed_s))
@@ -760,7 +1237,7 @@ def main(argv: list[str] | None = None) -> int:
             "pulse_command_on",
             {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
         )
-        run_matmul_pulse(PULSE_DURATION_S, buffers)
+        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
         off_stamp = clock.stamp()
         emit(
             "pulse_command_off",
@@ -774,13 +1251,15 @@ def main(argv: list[str] | None = None) -> int:
                 off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
             )
         )
-    time.sleep(BASELINE_S)
+    time.sleep(BASELINE_S * args.time_scale_for_test)
     sampling_stopped = clock.stamp()
     emit("sampling_stopped", {})
     _terminate_powermetrics(process)
+    _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
     post_parse = clock.stamp()
 
     data = capture_path.read_bytes()
+    _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
     native_records = parse_powermetrics_records(data)
     evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
         stamps={
@@ -809,15 +1288,15 @@ def main(argv: list[str] | None = None) -> int:
         )
     samples = samples_from_records(anchored)
     trace_path = out_dir / "power_trace.csv"
-    with trace_path.open("w", encoding="utf-8") as handle:
-        handle.write(
-            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+    trace_payload = (
+        "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+        + "".join(
+            f"{sample.timestamp_s!r},{sample.power_w!r},{sample.source},"
+            f"{sample.rail},{sample.interval_start_s!r},{sample.interval_end_s!r}\n"
+            for sample in samples
         )
-        for sample in samples:
-            handle.write(
-                f"{sample.timestamp_s!r},{sample.power_w!r},{sample.source},"
-                f"{sample.rail},{sample.interval_start_s!r},{sample.interval_end_s!r}\n"
-            )
+    )
+    _write_text_artifact(trace_path, trace_payload, WriterStage.DURING_TRACE_ARTIFACT)
 
     intervals = [
         TraceInterval(
@@ -842,7 +1321,7 @@ def main(argv: list[str] | None = None) -> int:
     bindings = {
         "hardware_model": device_meta.get("hw_model"),
         "os_build": device_meta.get("kern_osversion"),
-        "powermetrics_sha256": sha256_path(Path(POWER_METRICS)),
+        "powermetrics_sha256": sha256_path(args.sampler_binary),
         "sampling_interval_ms": SAMPLING_INTERVAL_MS,
         "anchor_method_version": evidence["clock_anchor"].get("method"),
         "mlx_version": getattr(mx, "__version__", None),
@@ -882,9 +1361,10 @@ def main(argv: list[str] | None = None) -> int:
         evidence_payload["reasons"] = sorted(
             set(evidence_payload.get("reasons", [])) | {"clock_anchor_unresolved"}
         )
-    (out_dir / "instrument_evidence.json").write_text(
+    _write_text_artifact(
+        out_dir / "instrument_evidence.json",
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        WriterStage.DURING_EVIDENCE_ARTIFACT,
     )
     manifest = {
         "schema_version": "joulewise.instrument_validation_manifest.v1",
@@ -901,9 +1381,12 @@ def main(argv: list[str] | None = None) -> int:
         }
         | {"raw/powermetrics.plist": sha256_path(capture_path)},
     }
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_text_artifact(
+        out_dir / "manifest.json",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        WriterStage.DURING_MANIFEST_ARTIFACT,
     )
+    _writer_stage(WriterStage.ARTIFACTS_COMPLETE_BEFORE_FINALIZATION)
     serialized_evidence = json.loads(
         json.dumps(evidence_payload, sort_keys=True),
         parse_float=str,
@@ -921,7 +1404,19 @@ def main(argv: list[str] | None = None) -> int:
             and Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S
             else "valid"
         )
-    _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+    try:
+        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+    except CalibrationLedgerError as exc:
+        if exc.code == RefusalCode.FINALIZATION_BINDING_CONFLICT:
+            # Binding conflict is corruption evidence.  Do not let the generic
+            # atexit abort mutate the open session underneath it. Other writer
+            # failures retain their automatic governed-abort handler.
+            atexit.unregister(finalize_abandoned)
+        return emit_refusal(
+            exc.code or RefusalCode.LEDGER_MALFORMED,
+            context=dict(exc.context) | {"detail": str(exc)},
+            stream=sys.stderr,
+        )
     atexit.unregister(finalize_abandoned)
     output = {
         "validation_id": validation_id,
@@ -937,6 +1432,8 @@ def main(argv: list[str] | None = None) -> int:
             "slot": args.slot,
             "attempt_id": args.attempt_id,
         }
+    if bracket_mode and args.slot == "pre":
+        _writer_stage(WriterStage.AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH)
     print(json.dumps(output, indent=2))
     return 0 if disposition == "valid" else 1
 

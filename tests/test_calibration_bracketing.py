@@ -32,6 +32,11 @@ from joulewise.calibration_bracketing import (
     validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (
+    APPEND_INTENT_EVENT,
+    APPEND_RECORDS_PER_OPERATION,
+    BRACKET_SESSION_FINALIZATION_EVENT,
+    BRACKET_SESSION_OPEN_EVENT,
+    CONTROL_SCHEMA,
     DEFAULT_HEAD_PIN_PATH,
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
@@ -869,15 +874,61 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def _bound_session_fixture(self):
-        specifications = (
-            ("neighbor-pre", 98.0, "0.025", None, None, 1),
-            ("neighbor-post", 112.0, "0.026", None, None, 2),
-            ("session-pre", 99.0, "0.024", "session-alpha", "pre", 4),
-            ("session-post", 111.0, "0.027", "session-alpha", "post", 5),
+        operations = (
+            {
+                "operation_id": "neighbor-pre",
+                "kind": "observation",
+                "capture": 98.0,
+                "bound": "0.025",
+                "session_id": None,
+                "slot": None,
+            },
+            {
+                "operation_id": "neighbor-post",
+                "kind": "observation",
+                "capture": 112.0,
+                "bound": "0.026",
+                "session_id": None,
+                "slot": None,
+            },
+            {
+                "operation_id": "session-open",
+                "kind": "session-open",
+            },
+            {
+                "operation_id": "session-pre",
+                "kind": "observation",
+                "capture": 99.0,
+                "bound": "0.024",
+                "session_id": "session-alpha",
+                "slot": "pre",
+            },
+            {
+                "operation_id": "session-post",
+                "kind": "observation",
+                "capture": 111.0,
+                "bound": "0.027",
+                "session_id": "session-alpha",
+                "slot": "post",
+            },
         )
+        operation_sequences = {
+            specification["operation_id"]: (
+                operation_number * APPEND_RECORDS_PER_OPERATION
+            )
+            for operation_number, specification in enumerate(operations, start=1)
+        }
         observations = []
         candidates = []
-        for name, capture, bound, session_id, slot, sequence in specifications:
+        for specification in operations:
+            if specification["kind"] != "observation":
+                continue
+            name = specification["operation_id"]
+            capture = specification["capture"]
+            bound = specification["bound"]
+            session_id = specification["session_id"]
+            slot = specification["slot"]
+            sequence = operation_sequences[name]
             manifest = hashlib.sha256(f"manifest:{name}".encode()).hexdigest()
             evidence = hashlib.sha256(f"evidence:{name}".encode()).hexdigest()
             hashes = {
@@ -948,6 +999,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             if observation.bracket_slot is not None
         }
         capability_digest = hashlib.sha256(b"capability-alpha").hexdigest()
+        capability_sequence = operation_sequences["session-open"]
         session = CalibrationBracketSession(
             session_id="session-alpha",
             window_id="window-alpha",
@@ -956,29 +1008,91 @@ class CalibrationBracketingTests(unittest.TestCase):
             evidence_root_id="evidence-alpha",
             runs_root="/synthetic/root-alpha",
             capability_receipt_digest=capability_digest,
-            capability_sequence=3,
+            capability_sequence=capability_sequence,
             slot_attempt_ids=MappingProxyType(
                 {slot: observation.attempt_id for slot, observation in by_slot.items()}
             ),
             state="finalized",
             finalized_slots=MappingProxyType(by_slot),
         )
-        receipt_digests = [
-            observations[0].receipt_digest,
-            observations[1].receipt_digest,
-            capability_digest,
-            by_slot["pre"].receipt_digest,
-            by_slot["post"].receipt_digest,
-        ]
+        observations_by_attempt = {
+            observation.attempt_id: observation for observation in observations
+        }
+        business_receipts = []
+        for specification in operations:
+            if specification["kind"] == "session-open":
+                business_receipts.append(
+                    {
+                        "schema_version": "synthetic-bracket-session",
+                        "event": BRACKET_SESSION_OPEN_EVENT,
+                        "session_id": "session-alpha",
+                        "sequence": operation_sequences[
+                            specification["operation_id"]
+                        ],
+                        "receipt_digest": capability_digest,
+                    }
+                )
+                continue
+            observation = observations_by_attempt[
+                f"attempt-{specification['operation_id']}"
+            ]
+            session_id = specification["session_id"]
+            business_receipts.append(
+                {
+                    "schema_version": (
+                        "synthetic-bracket-session"
+                        if session_id
+                        else "synthetic-observation"
+                    ),
+                    "event": (
+                        BRACKET_SESSION_FINALIZATION_EVENT
+                        if session_id
+                        else "finalization"
+                    ),
+                    **({"session_id": session_id} if session_id else {}),
+                    **(
+                        {"slot": specification["slot"]}
+                        if specification["slot"]
+                        else {}
+                    ),
+                    "sequence": observation.sequence,
+                    "receipt_digest": observation.receipt_digest,
+                }
+            )
+        if APPEND_RECORDS_PER_OPERATION != 2:
+            raise AssertionError("synthetic fixture needs the adopted intent-target pair")
+        physical_receipts = []
+        predecessor_digest = GENESIS_DIGEST
+        for target in business_receipts:
+            intent_digest = hashlib.sha256(
+                f"intent:{target['receipt_digest']}".encode()
+            ).hexdigest()
+            physical_receipts.extend(
+                (
+                    MappingProxyType(
+                        {
+                            "schema_version": CONTROL_SCHEMA,
+                            "event": APPEND_INTENT_EVENT,
+                            "sequence": target["sequence"] - 1,
+                            "predecessor_digest": predecessor_digest,
+                            "receipt_digest": intent_digest,
+                            "target_core": {
+                                "event": target["event"],
+                                "session_id": target.get("session_id"),
+                                "slot": target.get("slot"),
+                            },
+                        }
+                    ),
+                    MappingProxyType(target),
+                )
+            )
+            predecessor_digest = target["receipt_digest"]
         snapshot = CalibrationLedgerSnapshot(
             ledger_schema=LEDGER_SCHEMA,
             ledger_path=Path("synthetic-session-ledger.jsonl"),
-            head_sequence=5,
+            head_sequence=by_slot["post"].sequence,
             head_digest=by_slot["post"].receipt_digest,
-            receipts=tuple(
-                MappingProxyType({"receipt_digest": digest})
-                for digest in receipt_digests
-            ),
+            receipts=tuple(physical_receipts),
             observations=tuple(sorted(observations, key=lambda item: item.sequence)),
             refusal_reasons=(),
             bracket_sessions=(session,),
@@ -1267,6 +1381,27 @@ class CalibrationBracketingTests(unittest.TestCase):
             state="open",
             finalized_slots=MappingProxyType({"pre": session.finalized_slots["pre"]}),
         )
+        open_receipts = tuple(
+            row
+            for row in snapshot.receipts
+            if not (
+                row.get("session_id") == session.session_id
+                and row.get("slot") == "post"
+                or row.get("schema_version") == CONTROL_SCHEMA
+                and row.get("event") == APPEND_INTENT_EVENT
+                and row.get("target_core", {}).get("session_id")
+                == session.session_id
+                and row.get("target_core", {}).get("slot") == "post"
+            )
+        )
+        committed_observation = max(
+            (
+                observation
+                for observation in snapshot.observations
+                if observation.bracket_session_id is None
+            ),
+            key=lambda observation: observation.sequence,
+        )
         open_snapshot = replace(
             snapshot,
             observations=tuple(
@@ -1275,32 +1410,15 @@ class CalibrationBracketingTests(unittest.TestCase):
                 if observation.bracket_slot != "post"
             ),
             bracket_sessions=(open_session,),
-            head_sequence=4,
+            head_sequence=session.finalized_slots["pre"].sequence,
             head_digest=session.finalized_slots["pre"].receipt_digest,
-            receipts=(
-                *snapshot.receipts[:2],
-                MappingProxyType(
-                    {
-                        "event": "bracket-session-open",
-                        "session_id": "session-alpha",
-                        "predecessor_digest": snapshot.receipts[1]["receipt_digest"],
-                        "receipt_digest": session.capability_receipt_digest,
-                    }
-                ),
-                MappingProxyType(
-                    {
-                        "event": "bracket-session-slot-finalization",
-                        "session_id": "session-alpha",
-                        "receipt_digest": session.finalized_slots["pre"].receipt_digest,
-                    }
-                ),
-            ),
+            receipts=open_receipts,
             refusal_reasons=(
                 "calibration_ledger_bracket_session_open",
                 "calibration_ledger_head_mismatch",
             ),
-            committed_head_sequence=2,
-            committed_head_digest=snapshot.receipts[1]["receipt_digest"],
+            committed_head_sequence=committed_observation.sequence,
+            committed_head_digest=committed_observation.receipt_digest,
         )
         by_attempt = {candidate.attempt_id: candidate for candidate in candidates}
         with patch(
