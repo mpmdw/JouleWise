@@ -40,6 +40,78 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
+## ▶▶ T1 SESSION CHECKPOINT (2026-08-08 night, mid-session) — READ FIRST
+
+**Session = T0's successor under D-128.** Scratchpad:
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/92058940-b39f-4e0e-aed5-3be9f831f90f/scratchpad`
+(trace-notes.md is the running trace). Worktrees still under
+`…/377d50a5-…/scratchpad/{trust,recovery,u2rework}`.
+
+**LANDED on main this session (all pushed):** T0 owed bookkeeping —
+run report `docs/run_reports/2026-08-08-t0-window-session.md` + council
+C-051 + skill-usage (`d81c78a`); fixture-substrate RULING
+(`8788891`+addendum `b7aad49`); **Codex Fast Mode is now the STANDING
+DEFAULT** on both `scripts/codex-bridge` (`de759c9`) and (Ed-authorized
+in-place) `~/.local/bin/codex-run-v3` (backup
+`codex-run-v3.bak-20260808-prefast`); `CODEX_SERVICE_TIER=default`
+opts out. Fast = CODEX ONLY, never Anthropic fast (Ed).
+
+**ED DIRECTIVES THIS SESSION (durable):** (a) fast everywhere for
+Codex; Claude/Fable scarce, stays lean. (b) HARDER PARALLELISM —
+read-only layers are Workflow/parallel fan-outs; implementation
+parcels by disjoint footprint; long single streams need an explicit
+reason (validated: two 8h monoliths this session, one hit the wall).
+(c) 4 history-rewrite permission rules added to
+`.claude/settings.local.json` + `gh release:*` — REMOVABLE after the
+trust PR merges. (d) ~30h grind window; paper ETA 4-6 days gated on
+2-3 QUIET nights (Ed does §5A taps), now +0.5-1.5d from the recovery
+cold gate below.
+
+**RECOVERY (arming blocker) — FROZEN at unexecuted-proof COUNT 3 →
+COLD GATE, not a fix round** (`0c30993`, pushed; branch
+impl/d117-ledger-recovery). FIX-14..18 landed (`4495609`) but the
+parallel 6-lens delta 2 returned ALL SIX NOT-CLOSED; G1 reproduced the
+unexecuted-proof class at count 3 (EvidenceAlias fabrication + direct
+readiness passed the FIX-14 gates). Same-signature 2nd occurrence on
+lease (G2) + preservation (G3) AFTER the terminating ESC-2 consult →
+rule-11 mandatory cold gate. **Freeze is ON the paper critical path**
+(discharging recovery = the arming blocker). NEXT: convene a COLD
+FABLE instance + Opus refuter on the mechanical packet
+(docs/process_traces/2026-08-08-recovery-exits-escalation/FREEZE-COUNT3.md
+— best done from a FRESH context, that is the point). Decomposition
+question the cold gate must rule: can the CLEAN custody core + runbook
+D-117 amendment land to discharge arming while witness-corpus
+integrity is resolved separately? Do NOT decide alone; do NOT spawn
+FIX-19. Custody core was ruled CLEAN by the escalation.
+
+**TRUST (mint bar) — round 2b ran the FULL 8h, hit the wall, NO
+REPORT** (`ACCEPTANCE_FAILED` = report_capture missing, NOT a scope
+violation; all 12 changed paths in-scope). Ground truth = worktree
+diff at head `1cae2bc` (uncommitted 2b work on top; branch
+impl/d117-postcollection-trust). Verified at bench: reduce.py AT the
+pinned SHA (5118849d); substrate deliverables all present (packager,
+hydrator, `.github/workflows/d117-production-proof.yml`, transport
+descriptor+test, .gitignore rule); decisive regression +539/-97.
+Archive built + self-verified mid-run (SP/fixture-archive/, sha
+f1286bc8…). Draft RELEASE created + asset uploaded + fresh-download
+sha VERIFIED (fixture-d117-v2-production-v1, unpublished). PROOF
+STATUS UNKNOWN pending report recovery (bridge resume in flight,
+session 019fe33b…). NEXT: harvest recovery report → LEAD-VERIFY the
+load-bearing proofs (authentic mint, ABA, bidirectional equality,
+190-census, full suite) → commit-split (auth-core vs substrate — they
+PARCEL cleanly) → publish release after census-via-hydrator → history
+rewrite (Ed's rules cover it; the 38 content dirs leave git) →
+16-question Workflow delta → PR. Substrate is a clean separate parcel
+from auth-core (the lesson: should have been split at launch).
+
+**U2:** still FROZEN count 3 (5b00200) — untouched, post-window cold
+gate.
+
+**In flight at this checkpoint:** trust report-recovery resume
+(`bwp1082g1`). Recovery graders all harvested. If a /clear happens:
+the cold gate + trust proof-verification are the two live threads;
+both are documented above and in the branch trace dirs.
+
 ## ▶▶ T0 SESSION FINAL CHECKPOINT (2026-08-08 ~13:40, Ed stop order) — /clear-SAFE; SUCCESSOR STARTS HERE
 
 **Nothing in flight. Zero live codex processes. All branches pushed.**
