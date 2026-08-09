@@ -303,18 +303,17 @@ def _configure_writer_crash_authorization(
             or not hmac.compare_digest(payload["nonce"], token)
         ):
             raise ValueError("crash authorization fields do not match")
-        valid_stage = str(payload["stage"])
+        candidate_stage = str(payload["stage"])
+        assert authorization_basename is not None
+        os.unlink(authorization_basename, dir_fd=root_descriptor)
+        if os.fstat(descriptor).st_nlink != 0:
+            raise ValueError("crash authorization unlink did not consume inode")
+        valid_stage = candidate_stage
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         valid_stage = None
     finally:
         if descriptor >= 0:
             os.close(descriptor)
-        if valid_stage is not None:
-            assert authorization_basename is not None and root_descriptor >= 0
-            try:
-                os.unlink(authorization_basename, dir_fd=root_descriptor)
-            except FileNotFoundError:
-                pass
         if root_descriptor >= 0:
             os.close(root_descriptor)
     if valid_stage is not None:

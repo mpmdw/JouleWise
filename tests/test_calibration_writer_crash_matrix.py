@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
@@ -24,7 +25,9 @@ from joulewise.calibration_ledger import (
     claim_bracket_session_slot,
     finalize_bracket_session_slot,
 )
+import scripts.validate_powermetrics_fiducial as fiducial_validator
 from scripts.validate_powermetrics_fiducial import WriterStage
+import tests.owned_process_runner as owned_process_runner
 from tests.owned_process_runner import (
     OwnedProcessResult,
     OwnedPublicProcessRunner,
@@ -779,12 +782,122 @@ print(json.dumps(output, sort_keys=True))
                 [sys.executable, str(entry_point)],
                 cwd=self.repo,
                 env=_fresh_env(),
+                readiness_path=descendant_pid,
+                readiness_timeout_s=2.0,
             )
         self.assertLess(time.monotonic() - started, 3.0)
         self.assertEqual(owned_process_group_survivors(), ())
         descendant = int(descendant_pid.read_text(encoding="utf-8"))
         with self.assertRaises(ProcessLookupError):
             os.kill(descendant, 0)
+
+    def test_teardown_reaps_zombie_only_group_after_term_eperm(self) -> None:
+        pgid = 91_001
+        process = mock.Mock()
+        owned_process_runner._OWNED_PROCESS_GROUPS[pgid] = (
+            owned_process_runner._OwnedGroup(
+                pgid=pgid,
+                child_pid=pgid,
+                label="simulated-zombie-only-group",
+                process=process,
+            )
+        )
+
+        def killpg_outcome(_pgid: int, sig: int) -> None:
+            self.assertEqual(_pgid, pgid)
+            if sig == signal.SIGTERM:
+                raise PermissionError(1, "simulated Darwin zombie EPERM")
+            if sig == 0:
+                raise ProcessLookupError(3, "simulated group ESRCH after reap")
+            self.fail(f"unexpected signal {sig}")
+
+        try:
+            with mock.patch.object(
+                owned_process_runner.os, "killpg", side_effect=killpg_outcome
+            ):
+                owned_process_runner._teardown_group(pgid, grace_s=0)
+            process.wait.assert_called_once_with(timeout=0)
+            self.assertNotIn(pgid, owned_process_runner._OWNED_PROCESS_GROUPS)
+        finally:
+            owned_process_runner._OWNED_PROCESS_GROUPS.pop(pgid, None)
+
+    def test_teardown_propagates_persistent_eperm_for_existing_group(self) -> None:
+        pgid = 91_002
+        process = mock.Mock()
+        owned_process_runner._OWNED_PROCESS_GROUPS[pgid] = (
+            owned_process_runner._OwnedGroup(
+                pgid=pgid,
+                child_pid=pgid,
+                label="simulated-persistent-eperm-group",
+                process=process,
+            )
+        )
+
+        def killpg_outcome(_pgid: int, sig: int) -> None:
+            self.assertEqual(_pgid, pgid)
+            raise PermissionError(1, f"simulated persistent EPERM for signal {sig}")
+
+        try:
+            with mock.patch.object(
+                owned_process_runner.os, "killpg", side_effect=killpg_outcome
+            ):
+                with self.assertRaises(PermissionError):
+                    owned_process_runner._teardown_group(pgid, grace_s=0)
+            process.wait.assert_called_once_with(timeout=0)
+            self.assertIn(pgid, owned_process_runner._OWNED_PROCESS_GROUPS)
+        finally:
+            owned_process_runner._OWNED_PROCESS_GROUPS.pop(pgid, None)
+
+    def test_teardown_propagates_persistent_eperm_after_sigkill(self) -> None:
+        pgid = 91_003
+        process = mock.Mock()
+        owned_process_runner._OWNED_PROCESS_GROUPS[pgid] = (
+            owned_process_runner._OwnedGroup(
+                pgid=pgid,
+                child_pid=pgid,
+                label="simulated-sigkill-eperm-group",
+                process=process,
+            )
+        )
+
+        def killpg_outcome(_pgid: int, sig: int) -> None:
+            self.assertEqual(_pgid, pgid)
+            if sig == signal.SIGTERM:
+                return
+            if sig == signal.SIGKILL or sig == 0:
+                raise PermissionError(1, "simulated persistent SIGKILL EPERM")
+            self.fail(f"unexpected signal {sig}")
+
+        try:
+            with mock.patch.object(
+                owned_process_runner.os, "killpg", side_effect=killpg_outcome
+            ):
+                with self.assertRaises(PermissionError):
+                    owned_process_runner._teardown_group(pgid, grace_s=0)
+            self.assertEqual(process.wait.call_count, 2)
+            self.assertIn(pgid, owned_process_runner._OWNED_PROCESS_GROUPS)
+        finally:
+            owned_process_runner._OWNED_PROCESS_GROUPS.pop(pgid, None)
+
+    def test_teardown_raises_when_group_survives_successful_sigkill(self) -> None:
+        pgid = 91_004
+        process = mock.Mock()
+        owned_process_runner._OWNED_PROCESS_GROUPS[pgid] = (
+            owned_process_runner._OwnedGroup(
+                pgid=pgid,
+                child_pid=pgid,
+                label="simulated-sigkill-survivor",
+                process=process,
+            )
+        )
+        try:
+            with mock.patch.object(owned_process_runner.os, "killpg", return_value=None):
+                with self.assertRaisesRegex(RuntimeError, "survived SIGKILL"):
+                    owned_process_runner._teardown_group(pgid, grace_s=0)
+            self.assertEqual(process.wait.call_count, 2)
+            self.assertIn(pgid, owned_process_runner._OWNED_PROCESS_GROUPS)
+        finally:
+            owned_process_runner._OWNED_PROCESS_GROUPS.pop(pgid, None)
 
     def test_invalid_crash_authorization_is_preserved_and_valid_one_is_consumed(
         self,
@@ -869,6 +982,131 @@ print(json.dumps(output, sort_keys=True))
             killed.args[killed.args.index("--test-writer-crash-authorization") + 1]
         )
         self.assertFalse(capability.exists())
+
+    def test_two_presenters_racing_one_capability_authorize_exactly_one(self) -> None:
+        entry_point = self.repo / "scripts" / "validate_powermetrics_fiducial.py"
+        stage = WriterStage.BEFORE_WRITER_LEASE.value
+        capability, nonce = self.runner._crash_capability(
+            stage=stage,
+            entry_point=entry_point,
+        )
+        barrier_root = Path(self.tmp.name) / "capability-race-barrier"
+        barrier_root.mkdir()
+        code = "\n".join(
+            (
+                "import os, pathlib, sys, time",
+                "import scripts.validate_powermetrics_fiducial as validator",
+                "real_unlink = os.unlink",
+                "ready = pathlib.Path(sys.argv[3]) / ('ready-' + sys.argv[4])",
+                "def synchronized_unlink(basename, *, dir_fd):",
+                "    ready.write_text('ready', encoding='utf-8')",
+                "    deadline = time.monotonic() + 5.0",
+                "    while len(list(ready.parent.glob('ready-*'))) < 2:",
+                "        if time.monotonic() >= deadline: raise RuntimeError('barrier timeout')",
+                "        time.sleep(0.01)",
+                "    release = ready.parent / 'winner-released'",
+                "    if sys.argv[4] != '0':",
+                "        while not release.exists():",
+                "            if time.monotonic() >= deadline: raise RuntimeError('release timeout')",
+                "            time.sleep(0.01)",
+                "    try:",
+                "        real_unlink(basename, dir_fd=dir_fd)",
+                "    except FileNotFoundError:",
+                "        ready.with_name('outcome-' + sys.argv[4]).write_text('lost', encoding='utf-8')",
+                "        raise",
+                "    ready.with_name('outcome-' + sys.argv[4]).write_text('won', encoding='utf-8')",
+                "    release.write_text('released', encoding='utf-8')",
+                "validator.os.unlink = synchronized_unlink",
+                "validator._configure_writer_crash_authorization(pathlib.Path(sys.argv[1]), entry_point=pathlib.Path(sys.argv[2]))",
+                "print('1' if validator._AUTHORIZED_WRITER_CRASH_STAGE else '0')",
+            )
+        )
+        env = _fresh_env()
+        env.update(
+            {
+                "JOULEWISE_TEST_WRITER_CRASH_STAGE": stage,
+                "JOULEWISE_TEST_WRITER_CRASH_TOKEN": nonce,
+                "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT": str(
+                    self.runner.capability_root
+                ),
+            }
+        )
+        presenters = [
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    code,
+                    str(capability),
+                    str(entry_point),
+                    str(barrier_root),
+                    str(index),
+                ],
+                cwd=self.repo,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            for index in range(2)
+        ]
+        outputs = []
+        try:
+            for presenter in presenters:
+                stdout, stderr = presenter.communicate(timeout=10)
+                self.assertEqual(presenter.returncode, 0, stderr)
+                outputs.append(stdout.strip())
+        finally:
+            for presenter in presenters:
+                if presenter.poll() is None:
+                    presenter.kill()
+                    presenter.communicate(timeout=10)
+        outcomes = sorted(
+            path.read_text(encoding="utf-8")
+            for path in barrier_root.glob("outcome-*")
+        )
+        self.assertEqual(
+            outcomes,
+            ["lost", "won"],
+            f"authorizations={outputs}",
+        )
+        self.assertEqual(sorted(outputs), ["0", "1"], f"unlink={outcomes}")
+        self.assertFalse(capability.exists())
+
+    def test_swapped_capability_pathname_fails_link_count_check_closed(self) -> None:
+        entry_point = Path(fiducial_validator.__file__).resolve()
+        stage = WriterStage.BEFORE_WRITER_LEASE.value
+        capability, nonce = self.runner._crash_capability(
+            stage=stage,
+            entry_point=entry_point,
+        )
+        retained = capability.with_name(f"{capability.name}.retained")
+        replacement = capability.with_name(f"{capability.name}.replacement")
+        real_unlink = os.unlink
+
+        def swap_then_unlink(basename: str, *, dir_fd: int) -> None:
+            os.link(capability, retained)
+            replacement.write_text("replacement\n", encoding="utf-8")
+            replacement.chmod(0o600)
+            os.replace(replacement, capability)
+            real_unlink(basename, dir_fd=dir_fd)
+
+        env = {
+            "JOULEWISE_TEST_WRITER_CRASH_STAGE": stage,
+            "JOULEWISE_TEST_WRITER_CRASH_TOKEN": nonce,
+            "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT": str(
+                self.runner.capability_root
+            ),
+        }
+        with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(
+            fiducial_validator.os, "unlink", side_effect=swap_then_unlink
+        ):
+            fiducial_validator._configure_writer_crash_authorization(
+                capability,
+                entry_point=entry_point,
+            )
+        self.assertIsNone(fiducial_validator._AUTHORIZED_WRITER_CRASH_STAGE)
+        self.assertTrue(retained.exists())
 
     def test_ambient_writer_crash_stage_is_inert_without_capability(self) -> None:
         _root, ledger, pin, _plan, session_id, custody = self._case(

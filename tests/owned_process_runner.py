@@ -125,34 +125,36 @@ def _poll_group_gone(pgid: int, timeout_s: float) -> bool:
 def _teardown_group(pgid: int, *, grace_s: float = 0.5) -> None:
     """Boundedly terminate a complete owned group and require ESRCH."""
 
-    try:
-        os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
-        _forget_if_gone(pgid)
-        return
     with _REGISTRY_LOCK:
         owned = _OWNED_PROCESS_GROUPS.get(pgid)
-    if owned is not None and owned.process is not None:
-        try:
-            owned.process.wait(timeout=grace_s)
-        except subprocess.TimeoutExpired:
-            pass
-    if _poll_group_gone(pgid, grace_s):
-        return
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        _forget_if_gone(pgid)
-        return
-    except PermissionError:
-        # Darwin reports EPERM for a group containing only an unreaped zombie.
-        # Reap the owned direct child, then require the group to disappear.
+
+    def reap_direct_child() -> None:
         if owned is not None and owned.process is not None:
             try:
                 owned.process.wait(timeout=grace_s)
             except subprocess.TimeoutExpired:
                 pass
-    _poll_group_gone(pgid, max(2.0, grace_s))
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError) as exc:
+        reap_direct_child()
+        if _poll_group_gone(pgid, grace_s):
+            return
+        raise exc
+    reap_direct_child()
+    if _poll_group_gone(pgid, grace_s):
+        return
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError) as exc:
+        reap_direct_child()
+        if _poll_group_gone(pgid, grace_s):
+            return
+        raise exc
+    reap_direct_child()
+    if not _poll_group_gone(pgid, max(2.0, grace_s)):
+        raise RuntimeError(f"owned process group {pgid} survived SIGKILL")
 
 
 def owned_process_group_survivors() -> tuple[int, ...]:
@@ -265,6 +267,8 @@ class OwnedPublicProcessRunner:
         refusal_code: str | None = None,
         registered_surface: str | None = None,
         durable_postcondition: Callable[[], Mapping[str, Any]] | None = None,
+        readiness_path: Path | None = None,
+        readiness_timeout_s: float = 5.0,
     ) -> OwnedProcessResult:
         exact_argv = [os.fspath(value) for value in argv]
         execution_env = dict(env)
@@ -310,6 +314,19 @@ class OwnedPublicProcessRunner:
             )
         start_order = next_execution_order()
         try:
+            if readiness_path is not None:
+                readiness = Path(readiness_path)
+                deadline = time.monotonic() + readiness_timeout_s
+                while not readiness.exists():
+                    if process.poll() is not None:
+                        raise RuntimeError(
+                            f"owned process exited before readiness path: {readiness}"
+                        )
+                    if time.monotonic() >= deadline:
+                        raise subprocess.TimeoutExpired(
+                            exact_argv, readiness_timeout_s
+                        )
+                    time.sleep(0.01)
             stdout, stderr = process.communicate(
                 timeout=self.communicate_timeout_s if timeout is None else timeout
             )

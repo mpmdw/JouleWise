@@ -2964,6 +2964,14 @@ class CalibrationWriterLease:
                 os.close(old_descriptor)
 
     def _publish_locked_inode(self, descriptor: int, staging_basename: str) -> None:
+        """Publish into the held directory object and confirm it once.
+
+        Path verification is a fail-fast identity snapshot, not serialization
+        against a concurrent parent rename. Publication remains bound to the
+        held directory descriptor, so success while the canonical path has
+        diverged is possible and intentional under this identity model.
+        """
+
         identity = self.identity
         if identity is None:
             raise AssertionError("cannot publish without a held slot")
@@ -2993,16 +3001,10 @@ class CalibrationWriterLease:
                 dst_dir_fd=identity.parent_descriptor,
             )
         self._adopt_object(descriptor)
-        failure: OSError | None = None
-        for _attempt in range(2):
-            try:
-                os.fsync(identity.parent_descriptor)
-                break
-            except OSError as exc:
-                failure = exc
-        else:
-            assert failure is not None
-            raise _LedgerPublicationDurabilityUncertain from failure
+        try:
+            os.fsync(identity.parent_descriptor)
+        except OSError as exc:
+            raise _LedgerPublicationDurabilityUncertain from exc
 
     def publish_genesis_payload(self, payload: bytes) -> None:
         identity = self.identity
@@ -3172,28 +3174,21 @@ def _verify_current_writer_lease_for_handle(handle: BinaryIO) -> None:
 
 
 def _fsync_parent_directory(path: Path) -> None:
-    """Confirm a directory entry, retrying the complete fsync operation once."""
+    """Make one fail-closed directory durability decision on a fresh fd."""
 
-    failure: OSError | None = None
-    for _attempt in range(2):
-        descriptor = -1
-        try:
-            descriptor = os.open(
-                Path(path),
-                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
-            )
-            os.fsync(descriptor)
-            return
-        except OSError as exc:
-            failure = exc
-        finally:
-            if descriptor >= 0:
-                try:
-                    os.close(descriptor)
-                except OSError:
-                    pass
-    assert failure is not None
-    raise failure
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            Path(path),
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        os.fsync(descriptor)
+    finally:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
 
 
 def _write_bootstrap_payload(handle: BinaryIO, payload: bytes) -> None:
@@ -3289,10 +3284,6 @@ def bootstrap_historical_import(
             raise CalibrationLedgerError(
                 "historical import append failed atomically"
             ) from exc
-        try:
-            _fsync_parent_directory(ledger.parent)
-        except OSError as exc:
-            raise HistoricalImportDurabilityUncertain(plan) from exc
     return plan
 
 

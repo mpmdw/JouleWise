@@ -1823,7 +1823,8 @@ class CalibrationLedgerTests(unittest.TestCase):
         self.assertEqual(
             raised.exception.outcome, "committed_durability_uncertain"
         )
-        self.assertEqual(fsync_calls, 3)
+        # The staging file plus one directory fsync: durability is single-shot.
+        self.assertEqual(fsync_calls, 2)
         self.assertEqual(self.ledger.read_bytes(), plan.ledger_bytes)
 
         with mock.patch.object(calibration_ledger.os, "replace") as replace_mock:
@@ -1851,6 +1852,76 @@ class CalibrationLedgerTests(unittest.TestCase):
                 execute=True,
                 require_committed_pin=False,
             )
+
+    def test_first_publication_directory_fsync_failure_is_uncertain(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        real_fsync = calibration_ledger.os.fsync
+        fsync_calls = 0
+
+        def fail_first_directory_fsync_then_succeed(descriptor):
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls == 2:
+                raise OSError("injected first publication directory fsync")
+            return real_fsync(descriptor)
+
+        with mock.patch.object(
+            calibration_ledger.os,
+            "fsync",
+            side_effect=fail_first_directory_fsync_then_succeed,
+        ):
+            with self.assertRaises(HistoricalImportDurabilityUncertain):
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        self.assertEqual(fsync_calls, 2)
+
+    def test_first_idempotent_confirm_fsync_failure_is_uncertain(self) -> None:
+        checkout, root, custodies, table = self._historical_fixture()
+        import_args = self._historical_import_args(table, custodies)
+        plan = bootstrap_historical_import(
+            self.ledger,
+            head_pin_path=self.pin,
+            roots=[root],
+            checkout_root=checkout,
+            **import_args,
+            execute=True,
+            require_committed_pin=False,
+        )
+        real_fsync = calibration_ledger.os.fsync
+        fsync_calls = 0
+
+        def fail_first_confirm_fsync_then_succeed(descriptor):
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls == 1:
+                raise OSError("injected first idempotent confirm fsync")
+            return real_fsync(descriptor)
+
+        with mock.patch.object(
+            calibration_ledger.os,
+            "fsync",
+            side_effect=fail_first_confirm_fsync_then_succeed,
+        ):
+            with self.assertRaises(HistoricalImportDurabilityUncertain) as raised:
+                bootstrap_historical_import(
+                    self.ledger,
+                    head_pin_path=self.pin,
+                    roots=[root],
+                    checkout_root=checkout,
+                    **import_args,
+                    execute=True,
+                    require_committed_pin=False,
+                )
+        self.assertEqual(raised.exception.plan.head_digest, plan.head_digest)
+        self.assertEqual(fsync_calls, 1)
 
     def test_durability_uncertain_cli_emits_full_summary_and_distinct_exit(
         self,

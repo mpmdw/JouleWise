@@ -1,5 +1,11 @@
 """Interprocedural provenance analysis for receipt-bearing test collections."""
 
+# Known evasion classes: **-unpacking keyword delivery; walrus bindings;
+# name-bound comprehension containers; alias rebinds, lambdas, and closure
+# defaults; and recursive relay that would require fixpoint analysis.
+# This analyzer is drift lint, not proof. The out-of-process mutation-kill
+# harness owns the integrity property.
+
 from __future__ import annotations
 
 import ast

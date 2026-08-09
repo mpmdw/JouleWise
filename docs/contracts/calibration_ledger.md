@@ -156,13 +156,21 @@ replacement, readers see only the complete chain. A write, staging-file fsync,
 reauthentication, or replacement failure leaves zero reader-visible receipts.
 Process death mid-stage likewise leaves a retryable genesis ledger.
 
-`os.replace` is the transaction commit point. After replacement, the importer
-fsyncs the parent directory and retries that directory fsync once if it fails.
-If both attempts fail, the chain is **committed with durability uncertain**;
+`os.replace` is the transaction commit point. After replacement, publication
+performs exactly one parent-directory fsync on the held descriptor. Any error
+makes the chain **committed with durability uncertain**;
 it is never reported as an atomic-append failure. The CLI still emits every
 canonical receipt and the full summary, whose machine-readable `outcome` is
 `committed_durability_uncertain`, then exits `3`. The operator must rerun the
 identical `--execute` invocation before updating the head pin.
+
+**Amended 2026-08-09 (fail-closed durability correction):** the former
+retry-then-trust promise was unsound because a later successful fsync cannot
+prove that the failed durability decision persisted the committed directory
+entry. Initial publication is therefore single-shot and performs no redundant
+second directory sync. The idempotent confirmation path opens the directory
+fresh and also makes exactly one fsync attempt; any error remains uncertain
+and recovery belongs to another byte-exact external invocation.
 
 While the committed pin remains genesis, such a rerun recomputes the complete
 plan from the authenticated table, manifest, and custody bytes under the same
@@ -301,7 +309,7 @@ successful initial execution or idempotent durability confirmation, and
 
 CLI exit codes are distinct transaction outcomes: `0` means planned or
 committed as reported in the summary; `2` means refusal or a failure before
-the commit point; and `3` means the ledger committed but parent-directory
-durability remains uncertain after the one retry. Exit `3` is not permission
+the commit point; and `3` means the ledger committed but the single
+parent-directory durability decision failed. Exit `3` is not permission
 to repeat the import as a new transaction: only the byte-exact idempotent
 confirm invocation described above is permitted.
