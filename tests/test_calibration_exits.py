@@ -971,6 +971,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name).resolve() / "repo"
         self.public_runner = OwnedPublicProcessRunner(Path(self.tmp.name))
+        self._holder_process_groups: dict[subprocess.Popen[str], int] = {}
+        self._reaped_holders: list[subprocess.Popen[str]] = []
         shutil.copytree(REPO_ROOT / "joulewise", self.repo / "joulewise")
         (self.repo / "scripts").mkdir()
         for name in (
@@ -1062,7 +1064,60 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         return executed
 
     def tearDown(self) -> None:
+        for holder in tuple(self._holder_process_groups):
+            self._terminate_and_reap_holder(holder)
+        self.assertEqual(self._holder_process_groups, {})
+        self.assertTrue(
+            all(holder.poll() is not None for holder in self._reaped_holders)
+        )
+        # Reaping is the defense: keep cleanup strict so a real filesystem leak
+        # remains visible rather than being hidden by ignore_errors or retries.
         self.tmp.cleanup()
+
+    def _start_holder(self, holder_code: str) -> subprocess.Popen[str]:
+        holder = subprocess.Popen(
+            [sys.executable, "-c", holder_code],
+            cwd=self.repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_fresh_cli_env(),
+            start_new_session=True,
+        )
+        self._holder_process_groups[holder] = holder.pid
+        return holder
+
+    def _terminate_and_reap_holder(
+        self,
+        holder: subprocess.Popen[str],
+        *,
+        timeout_s: float = 10.0,
+    ) -> None:
+        pgid = self._holder_process_groups.get(holder)
+        if pgid is None:
+            self.assertIsNotNone(holder.poll())
+            return
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        holder.communicate(timeout=timeout_s)
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                break
+            if time.monotonic() >= deadline:
+                self.fail(f"holder process group {pgid} survived SIGKILL")
+            time.sleep(0.01)
+        self.assertIsNotNone(holder.poll())
+        if holder.stdout is not None:
+            holder.stdout.close()
+        if holder.stderr is not None:
+            holder.stderr.close()
+        self._holder_process_groups.pop(holder)
+        self._reaped_holders.append(holder)
 
     def _run(self, *args: str) -> OwnedProcessResult:
         return self.public_runner.run(
@@ -2154,14 +2209,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             f"claim_bracket_session_slot(Path({str(self.ledger)!r}), session_id='session-resume', slot='pre', attempt_id='session-resume-pre'); "
             "print('LEASED', flush=True); time.sleep(60)"
         )
-        holder = subprocess.Popen(
-            [sys.executable, "-c", holder_code],
-            cwd=self.repo,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=_fresh_cli_env(),
-        )
+        holder = self._start_holder(holder_code)
         assert holder.stdout is not None
         self.assertEqual(holder.stdout.readline().strip(), "LEASED")
         state["holder"] = holder
@@ -2657,8 +2705,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 terminal = json.loads(exited.stdout)["terminal_result"]
             elif case.code is RefusalCode.LIVE_WRITER_CONTENTION:
                 assert holder is not None
-                os.kill(holder.pid, signal.SIGKILL)
-                holder.communicate(timeout=10)
+                self._terminate_and_reap_holder(holder)
                 exited = self._run(
                     "resume-finalize",
                     "--session-id",
@@ -2930,14 +2977,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             restore = state.get("restore")
             if restore is not None:
                 restore()
-            if holder is not None and holder.poll() is None:
-                holder.kill()
-                holder.communicate(timeout=10)
             if holder is not None:
-                if holder.stdout is not None:
-                    holder.stdout.close()
-                if holder.stderr is not None:
-                    holder.stderr.close()
+                self._terminate_and_reap_holder(holder)
 
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         expected = {case.code for case in WITNESS_CASES}
@@ -2952,14 +2993,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             f"lease=CalibrationWriterLease(Path({str(self.ledger)!r})); "
             "lease.acquire(); print('LEASED', flush=True); time.sleep(60)"
         )
-        holder = subprocess.Popen(
-            [sys.executable, "-c", holder_code],
-            cwd=self.repo,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=_fresh_cli_env(),
-        )
+        holder = self._start_holder(holder_code)
         try:
             assert holder.stdout is not None
             self.assertEqual(holder.stdout.readline().strip(), "LEASED")
@@ -2983,9 +3017,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 self.assertNotIn("terminal_result", payload)
                 self.assertNotIn("ready_to_arm", completed.stdout)
         finally:
-            if holder.poll() is None:
-                holder.kill()
-            holder.communicate(timeout=10)
+            self._terminate_and_reap_holder(holder)
 
         state = self._state_reserved_mismatch()
         state["custody_locator"] = str(
