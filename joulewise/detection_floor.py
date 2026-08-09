@@ -412,7 +412,10 @@ def _clean_values(values_j: Sequence[float], label: str) -> list:
 def _floor_estimate(kind: str, deviations: Sequence[float], mean: float, prediction_extra: float) -> FloorEstimate:
     n = len(deviations)
     dev_mean = sum(deviations) / n
-    s = math.sqrt(sum((d - dev_mean) ** 2 for d in deviations) / (n - 1))
+    # math.fsum: the squared-residual reduction must be identical across
+    # supported interpreters (builtins.sum float summation changed in
+    # CPython 3.12); exact-golden fixtures pin this value bit-for-bit.
+    s = math.sqrt(math.fsum((d - dev_mean) ** 2 for d in deviations) / (n - 1))
     t_critical = student_t_critical_95(n - 1)
     prediction = prediction_extra + t_critical * s * math.sqrt(1.0 + 1.0 / n)
     max_abs = max(abs(d) for d in deviations)
