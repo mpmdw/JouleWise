@@ -1,5 +1,14 @@
 # Window C Readiness and Operator Checklist
 
+> **SUPERSEDED — HISTORICAL MECHANICS REFERENCE ONLY.** D-117 replaced
+> this Window C/D scheduling model with three prospective claim windows:
+> ALPHA, BETA, and GAMMA. Use the
+> [three-night operator packet](../strategy/2026-08-07-three-night-operator-packet.md)
+> and the binding [D-117 decision](../decision_log.md) for current planning.
+> Do **not** use this checklist to schedule or arm a claim window. Its body is
+> preserved unchanged because its physical preparation, custody, salvage,
+> and close-out mechanics remain useful historical guidance.
+
 **Current verdict: NO-GO.** Window C should not be scheduled yet. The science configurations are largely prepared, but the issued calibration acceptance artifact, final Window C/D split, numerical analysis gates, extraction specification, and launcher-verified readiness record are still missing.
 
 A clean Window C can complete an important portion of the instrument characterization. It cannot complete the full A+ characterization by itself: the prepared non-micro-delta science already requires about 3.64 hours before calibrations, references, stage settles, and the required 20% failure margin. Between-session stability also requires at least three independent sessions or days.

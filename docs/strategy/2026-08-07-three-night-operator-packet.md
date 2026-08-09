@@ -18,7 +18,7 @@ U3 pinset v2 / multi-cell mint; U4 three-window regression green; U5-U7
 packs frozen + readiness validator green; reason-code plumbing (register
 item, Ed ruling #3); absolute runs-dir paths in every launch command
 (night-strander R6 mitigation); campaign.lock absent at arm; NEVER kill a
-running verdict (R7 — it can exceed 2 minutes by design).
+running verdict (R7 — it can exceed 2 minutes by design).<br> **2026-08-08 SUPERSESSION NOTE (D-126):** The U2 successor-engine prerequisite above is superseded for this three-night window: keep U2 frozen for its post-window work, and govern ALPHA, BETA, and GAMMA with the issued D-079 calibration-acceptance artifact.
 
 Ed presence: bookends only (~15-20 min each end, §5A sequence in the
 night pages). Everything between the bookends is unattended.
@@ -266,7 +266,7 @@ The first 7B member may take longer because it reads the local model snapshot co
 **Total duration:** `[BUDGET: TOTAL INCLUDING AT LEAST 20% MARGIN]`  
 **Do-not-return-before:** `[BUDGET: COMPLETION TIME/SIGNAL]`
 
-Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks 1–5 run before the midpoint reference and blocks 6–10 after it. Do not add a prefill contrast to this night.
+Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks 1–5 run before the midpoint reference and blocks 6–10 after it. Do not add a prefill contrast to this night.<br> **2026-08-08 SUPERSESSION NOTE (D-122):** The no-prefill instruction above is superseded: the frozen GAMMA pack must include the prospectively frozen 256-token prefill ABBA arm, including its members, stages, and budget.
 
 ## T-minus preparation — REMOTE OK
 
@@ -390,3 +390,47 @@ A failed night is still evidence. It is not permission to clean up and try again
 - Never wake the display or reconnect remotely simply to check progress.
 
 One automatic settled retry is permitted only when the chain itself identifies a calibration failure whose sole reason is the allowed clock-anchor condition. Any other retry requires the frozen cause-removal rule. With no named removable cause, the night ends.
+
+---
+
+# Appendix — ABORT code to run-book §10 cross-reference
+
+These `ABORT-*` labels are operator aliases for reporting a stopped night.
+They are **not new software refusal codes** and do not replace the exact
+machine text. Preserve and send both the alias and the literal refusal. The
+source actions remain in
+[`window_runbook.md` §10](../phase_2/window_runbook.md#10-failure-playbook).
+
+| Operator ABORT code | Exact run-book §10 refusal or symptom | Immediate disposition |
+|---|---|---|
+| `ABORT-ENVIRONMENT` | `environment_admission_failed`; display awake; screensaver engaged; CPU admission failure | Lose the affected member, preserve it, remove the cause, settle, and follow only the frozen recovery. Never waive admission. |
+| `ABORT-CAL-ANCHOR` | `clock_anchor_unresolved` on calibration | Preserve the capture. One settled retry is allowed only when this is the sole reason; otherwise end the attempt. |
+| `ABORT-CAL-ROLLOVER` | `pulse_calibration_rollover_gate_timeout` | Abort calibration, preserve it, and repair machine state outside the window. |
+| `ABORT-CAL-LEVEL` | Pre-calibration fiducial above `0.033558756679900` (symptom row; no separate literal refusal code in §10) | Stop before member 1. Retry only after a named cause is removed and within the frozen count. |
+| `ABORT-CAL-BRACKET-MISSING` | `instrument_calibration_bracket_missing` | Mark the window non-claim-bearing. Never borrow another calibration. |
+| `ABORT-CAL-BRACKET-BOUND` | `calibration_bracket_exceeds_minted_bound` | Do not patch metadata. Use a governed prospective re-reduction path or recollect. |
+| `ABORT-BOUND-UNDERIVED` | `neg8_drift_bound_underived`; `neg8_idle_sub_drift_bound_underived` | Collect the complete settled-reference corpus and mint both families; never insert a constant. |
+| `ABORT-BOUND-STALE` | `neg8_drift_bound_stale` | Mint a fresh same-window corpus and bound. |
+| `ABORT-DRIFT-SCREEN` | `neg8_bracket_abs_delta_exceeded`; `neg8_bracket_idle_sub_abs_delta_exceeded` | Reject and preserve this basis; use a new, better-controlled window. |
+| `ABORT-ANCHOR-FALLBACK` | `anchor_fallback_member_unusable` | Preserve and quarantine the fragment; recollect the exact frozen member only through the governed supersession path. |
+| `ABORT-BUNDLE-IDENTITY` | `bundle_strict_invalid` from telemetry identity | Stop; repair custody or recollect. Do not choose a convenient label. |
+| `ABORT-MOCK` | `mock_telemetry_claim_ineligible` | Terminally refuse the member for claims. |
+| `ABORT-ALLOWANCE` | `whole_window_drift_allowance_unrecorded` | Refuse the affected floor or claim; rerun the governed verdict/extraction path or recollect. Never substitute zero. |
+| `ABORT-MEMBERSHIP` | `whole_window_campaign_membership_unresolved` | Repair custody or recollect. Never replace manifest evidence with a directory scan. |
+| `ABORT-VERDICT-CONFLICT` | `whole_window_verdict_conflict` | Stop and preserve every row. Latest-wins is forbidden. |
+| `ABORT-OCCUPIED-SLOT` | `incomplete_existing`; occupied run ID | Strict-validate and preserve the old occurrence, move it to quarantine, then use the exact governed supersession procedure. |
+| `ABORT-CAMPAIGN-LOCK` | `another campaign appears to be running` | Check the recorded process ID. Stop for a live owner; quarantine a proven dead lock; never delete an unreadable lock blindly. |
+| `ABORT-OPERATOR-TOUCH` | Operator touches display, input, lid, or power (symptom row; no literal refusal code) | Lose the active member. A power-identity change ends the entire window. |
+| `ABORT-BRACKET-DRIFT-NONCLAIM` | Bracket drift above `0.010818 s` **and** a failed pre-calibration level screen (symptom row; no single literal refusal code) | The window is non-claim-bearing. When the pre-calibration level screen passed, this is not an abort: carry the governed excess through extraction. Never hand-apply an allowance. |
+
+The packet also stops for failures that §10 does not assign a literal refusal
+code. Report these packet-level aliases with the exact observed text:
+
+| Operator ABORT code | Packet-level condition | Immediate disposition |
+|---|---|---|
+| `ABORT-INCOMPLETE-CHAIN` | No `measurement_complete`, or a frozen science stage does not finish exact membership | Preserve every root, log, lock, and partial bundle; mark the night not claim-bearing. |
+| `ABORT-POST-CALIBRATION` | Post calibration is missing or invalid without a more specific §10 code | Preserve all calibration attempts and end the window under the run-book’s standing abort rule. |
+| `ABORT-LEDGER` | Pending, malformed, abandoned-without-disposition, or conflicting receipt | Do not evaluate the claim. Preserve the ledger state for lead diagnosis. |
+| `ABORT-VERDICT` | Whole-window verdict is anything other than `passed`, with no more specific code above | Preserve the basis and the one ordinary verdict; never append a replacement verdict over it. |
+| `ABORT-BACKUP` | Either immutable-root backup fails | Leave both source roots unchanged and mark the night not claim-bearing. |
+| `ABORT-EXTRACTION` | Extraction refuses membership or not all frozen cells are extractable | Preserve the passing-or-lower evidence status; never top up, drop, or substitute members. |
