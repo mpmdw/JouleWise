@@ -1,5 +1,11 @@
 # D-117 pack-freeze plan (T2, 2026-08-09) — magistrate rulings + Ed taps
 
+## ⇒⇒ ED RULED BOTH TAPS (2026-08-09, in-thread) — GUIDING LIGHT: "decisions serve the BETTER PAPER"
+- **Q1 = FREEZE the recommended p256 prompt** (35× "The plan remains easy to audit." + 1 "…and simple to review."; dual-tokenizer-identical 256 IDs, token-ID sha 83099a66). 
+- **Q8 = FUND dedicated p256 prefill floor cells** for both stacks (makes the prefill energy contrast claim-capable = the better paper). No p128→p256 transport (Q2C).
+- STANDING DECISION PRINCIPLE (Ed): when a call is discretionary, the tiebreaker is whichever choice makes the better paper.
+
+
 Sol drafted a per-question decision packet (xhigh, read-only, custodied at
 session scratchpad `packfreeze-packet-out.md`). The magistrate has ruled the
 process/metrology/method questions; two remain genuine **Ed taps**. None of
