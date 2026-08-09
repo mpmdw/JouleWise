@@ -1,10 +1,28 @@
 {
-  "active_global_gates": [],
+  "active_global_gates": [
+    {
+      "allowed_task_ids": [],
+      "authority": [
+        "RUN_STATE.md T1 checkpoint (2026-08-08 night)"
+      ],
+      "clearance": "Recovery count-3 cold gate and trust proof verification must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate",
+      "id": "T1-2026-08-08-NIGHT",
+      "scope": {
+        "lanes": [
+          "agent",
+          "quiet_mac",
+          "ed_external"
+        ],
+        "operation": "select"
+      },
+      "summary": "T1 is the sole live checkpoint: recovery is FROZEN at unexecuted-proof count 3; U2 is FROZEN at attestation count 3; trust is unmerged with 2c proof verification in flight; Codex Fast Mode is the standing default"
+    }
+  ],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.",
-    "path": "docs/run_reports/2026-08-03-16h-runway.md"
+    "label": "T1 checkpoint 2026-08-08 night: recovery FROZEN at unexecuted-proof count 3; U2 FROZEN at attestation count 3; trust unmerged with 2c proof verification in flight; Codex Fast Mode standing default",
+    "path": "RUN_STATE.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -3099,5 +3117,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-05"
+  "updated": "2026-08-08"
 }

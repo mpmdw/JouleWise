@@ -14,7 +14,11 @@ Last updated: 2026-08-08 late morning — **THE 40-HOUR WINDOW IS LIVE
 (D-125); T0 SESSION RUNNING — three Phase A Sol streams IN FLIGHT (see
 T0 block below). A NEW SESSION STARTS HERE:**
 
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
+
 ## ▶▶ RESUME SCRIPT FOR THE 40-HOUR WINDOW (post-/clear; read FIRST)
+
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
 
 **THE PLAN OF RECORD IS `docs/strategy/2026-08-08-40h-plan.md` — read
 it in full and execute from the earliest incomplete item.** In one
@@ -27,8 +31,10 @@ mints put the FIRST MEASURED NUMBERS in the paper.
 
 Standing context that survives /clear: D-121 terminal magistrate
 review binds every merge; the same-signature escalation trigger is
-armed (three fired 2026-08-07/08 — consult, never round three); Sol
-fast tier on all read-only runs; codex-run-v3 for enforced-WRITE_SCOPE
+armed (three fired 2026-08-07/08 — consult, never round three); Codex
+Fast Mode is the standing DEFAULT on both `scripts/codex-bridge` and
+`codex-run-v3`; `CODEX_SERVICE_TIER=default` is the per-call opt-out;
+CODEX ONLY, never Anthropic fast. Use codex-run-v3 for enforced-WRITE_SCOPE
 implementations (prompt needs a literal `WRITE_SCOPE: [...]` line;
 CODEX_APP_BRIDGE=off for concurrent bridge runs); review agents get
 isolation:worktree and a no-checkout line; never gate on a piped test;
@@ -113,6 +119,8 @@ the cold gate + trust proof-verification are the two live threads;
 both are documented above and in the branch trace dirs.
 
 ## ▶▶ T0 SESSION FINAL CHECKPOINT (2026-08-08 ~13:40, Ed stop order) — /clear-SAFE; SUCCESSOR STARTS HERE
+
+**SUPERSEDED by the T1 checkpoint (2026-08-08 night).**
 
 **Nothing in flight. Zero live codex processes. All branches pushed.**
 Session scratchpad (prompts/reports/consult copies + checkpoint-notes.md):
@@ -1057,8 +1065,8 @@ re-audit accepts.
 1. **Sol effort cap LIFTED**: high/xhigh per complexity (rule 10
    restored); prior HIGH-only directive retired by its author.
 2. **Codex Fast Mode (service tier)**: 1.5x speed / 2.5x credits;
-   Ed specified the exact bridge implementation (per-call opt-in via
-   `CODEX_SERVICE_TIER=fast`, never a standing default) — being
+   Ed specified the then-authorized call-scoped setting via
+   `CODEX_SERVICE_TIER=fast`, without a standing default — being
    implemented on `impl/codex-fast-tier`. License: use fast on xhigh
    runs by default, fast-on-high when other streams block on the
    result.
@@ -2674,23 +2682,32 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-NONE — no global work-selection gate is active.
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `T1-2026-08-08-NIGHT`
+
+T1 is the sole live checkpoint: recovery is FROZEN at unexecuted-proof count 3; U2 is FROZEN at attestation count 3; trust is unmerged with 2c proof verification in flight; Codex Fast Mode is the standing default
+
+- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
+- Allowed kernel task IDs: NONE.
+- Authority: RUN_STATE.md T1 checkpoint (2026-08-08 night).
+- Clearance: Recovery count-3 cold gate and trust proof verification must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-05). Latest report: [16h runway checkpoint 2026-08-03: D-108..D-112 minted; kernel pins 60; CAL-BRACKET held at 2e61ff9 (rule-11 gate owed for B1 round 2); winB license exhausted as drawn (r06 disposition parked, WINB-R06-DISPOSITION-01); mint chain D-110-blocked; CLAIMS_STATUS §1 honestly NONE; checkpoint block at the top of RUN_STATE is the successor resume script.](docs/run_reports/2026-08-03-16h-runway.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-08). Latest report: [T1 checkpoint 2026-08-08 night: recovery FROZEN at unexecuted-proof count 3; U2 FROZEN at attestation count 3; trust unmerged with 2c proof verification in flight; Codex Fast Mode standing default](RUN_STATE.md).
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- GATED — E1 `P1-008` (excluded by: T1-2026-08-08-NIGHT): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- GATED — Q2 `P2-006` (excluded by: T1-2026-08-08-NIGHT): Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- GATED — A0 `P2-035` (excluded by: T1-2026-08-08-NIGHT): RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -3136,10 +3153,9 @@ the top of this file.
 
 ## Current Verification
 
-- **Current-main verification gap (2026-08-07): this document does not
-  assert a full-suite result on current main; verify directly before use.
-  The 2,689-test and 2,687-test results are branch results, not main
-  results, and are not promoted here.**
+- **Current main: full suite `Ran 2770 tests`. The `2785` count belongs
+  only to unmerged recovery commit `4495609` (15 added tests) and is
+  FROZEN branch-only evidence, not a current-main result.**
 - **Merged main at the PR #95 composed tree (2026-08-02, historical):
   full suite `Ran 2418 tests`, `OK (skipped=22)`, lead-run on the
   exact 94+95 integration tree merged as `200e6db`; verdict CI green
@@ -3383,7 +3399,9 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-08-02, CURRENT) `main` and `origin/main` at `bcbc10b`; working
+- (2026-08-08 night, CURRENT checkpoint) `main` and `origin/main` are
+  both at `4c6a8fb558d7b979672dd4244efc797689785548`; the worktree is clean.
+- (2026-08-02, historical) `main` and `origin/main` at `bcbc10b`; working
   tree clean except the untracked private `CLAUDE.local.md` (Ed's;
   never commit) and `.desk/` (adjudication custody; never commit).
   PR #93 merged (the c3 branch is closed). Branch

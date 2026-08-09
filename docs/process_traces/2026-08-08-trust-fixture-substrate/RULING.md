@@ -48,7 +48,7 @@ changes (git-ignored working data + release asset instead of
 git-tracked). No issued byte, receipt, digest, or refusal requirement
 changes. Ruling precedence: substrate ruling > round-2 prompt wording.
 
-**History rewrite (executed by the magistrate, this session):**
+**History rewrite (SUPERSEDED BY ADDENDUM BELOW — authorized, not executed):**
 `1cae2bc` is the only commit in branch history introducing the raw
 paths (parent `97fd4c1`). It is amended to exclude the 38 content
 directories (census manifest stays tracked; ignore rule added), then
