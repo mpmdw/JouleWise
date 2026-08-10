@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -765,16 +766,22 @@ def render_markdown(path: Path, no_marked: bool = False, text: str | None = None
     if MARKED_EXECUTABLE is None:
         MARKED_UNAVAILABLE = True
         return render_offline_fallback(text)
-    result = subprocess.run(
-        [str(MARKED_EXECUTABLE), "--gfm"],
-        input=text,
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=ROOT,
-        timeout=12,
-    )
-    return "<!-- rendered: marked@" + MARKED_VERSION + " -->\n" + wrap_tables(result.stdout)
+    # Render to a temporary FILE, not the stdout pipe: the marked CLI exits
+    # before its stdout pipe drains, silently truncating any rendered page
+    # larger than the 64 KiB pipe buffer while still returning exit code 0.
+    with tempfile.TemporaryDirectory() as marked_tmp:
+        rendered_path = Path(marked_tmp) / "rendered.html"
+        subprocess.run(
+            [str(MARKED_EXECUTABLE), "--gfm", "-o", str(rendered_path)],
+            input=text,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=ROOT,
+            timeout=30,
+        )
+        rendered = rendered_path.read_text(encoding="utf-8")
+    return "<!-- rendered: marked@" + MARKED_VERSION + " -->\n" + wrap_tables(rendered)
 
 
 def render_offline_fallback(text: str) -> str:
