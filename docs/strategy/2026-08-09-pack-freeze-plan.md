@@ -8,11 +8,12 @@
 
 Sol drafted a per-question decision packet (xhigh, read-only, custodied at
 session scratchpad `packfreeze-packet-out.md`). The magistrate has ruled the
-process/metrology/method questions; two remain genuine **Ed taps**. None of
-this lands measured numbers without a quiet night, so freeze is gated on the
-work orders below AND Ed's two taps — no urgency beyond keeping it ready.
+process/metrology/method questions. None of this lands measured numbers
+without a quiet night, so freeze is gated on the work orders below — the two
+Ed taps are RULED (banner above); the tap section below is retained as the
+decision record only.
 
-## ⇒ TWO ED TAPS (everything else is decided)
+## ⇒ TWO ED TAPS — **BOTH RULED 2026-08-09 (see banner); historical record only**
 
 - **Q1 — gamma p256 prompt text [ED-DECIDES].** Recommend FREEZE the
   constructed 256-token prompt (35× "The plan remains easy to audit." + one
@@ -73,15 +74,16 @@ work orders below AND Ed's two taps — no urgency beyond keeping it ready.
    authenticated live head; never hand-author receipt literals. Replaces the
    stale `impl/d117-ledger-recovery` TODO markers (surfaced by the T2
    post-merge integration review as CS1).
-4. **Prefill phase-recording proof (Q9)** — re-run the plan-factory amendment-5
-   desk proof on the custodied 1.5B+7B bundles; prove `phase_energy_j.prefill`
-   isolates the prompt phase (token identity alone does not prove phase
-   attribution).
+4. **Prefill phase-recording proof (Q9)** — **DISCHARGED 2026-08-09** (`2cd9bc3`,
+   `docs/process_traces/2026-08-09-prefill-phase-proof/PROOF.md`): 7B PROVEN,
+   1.5B PROVEN-WITH-CAVEATS (sampling-resolution label on 37/50 short windows,
+   not boundary mislabeling — expect the same label pressure on the Q8 p256
+   1.5B cells).
 
 ## Fastest path to a frozen, armable pack set
 
-Ed taps Q1+Q8 (one pass) → land FLOOR-COMMONMODE-01 (gauntlet) → the three
-engineering proofs (2–4) → regenerate all three packs from the resulting head
+Ed taps Q1+Q8 RULED → land FLOOR-COMMONMODE-01 (gauntlet) → the two remaining
+engineering proofs (2–3) → regenerate all three packs from the resulting head
 → generator `--check` + focused/canonical suites → issue readiness + identity
 projections → materialize the first arm against the authenticated ledger head.
 (Freeze also assumes the trust mint bar has landed.)

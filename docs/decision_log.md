@@ -150,6 +150,7 @@ be re-derived by a future agent gets an entry here.
 | D-126 | U2 second-convening synthesis TRANSCRIBED (record: docs/process_traces/2026-08-07-u2-coldgate/SYNTHESIS-V2.md): six first-round objections verified moot in code by both sealed judges; Q2/Q4/Q6/Q7/Q9/Q11 + the Q13 n>=19 floor RATIFIED with the cold judge's binding amendments; Q5 ratified WITH the judge's closure definition (decision-log disposition by content_id + successor prior_observation_set record; consuming code waits for the first disposing ruling); Q8 registry authority ratified and the migration shim DELETED by convergent ruling; the Q1+Q13 joint remand is RESOLVED by the D-125 lineage envelopes; Q12 stays OPEN pending full-register re-presentation (packet rule hardened: quotes run to end of document section); Q10 deferred to the recovery gate; rework round 2 + the landing gauntlet (required writer≠reviewer lens over the 965-line successor test surface) bind before any successor issuance; this decision ID replaces the COLD-GATE-U2-PENDING tuple member — an issued artifact may never embed a tuple member with no decision-log entry | adopted (magistrate transcription of the sealed convening, 2026-08-08) |
 | D-127 | AUTONOMOUS WINDOW LOOP authorized (Ed directive, in-thread 2026-08-08, during the 40h window): partially REVERSES D-114's descope — the scoped network-time toggle (QUIET-GUARD sudoers slice: exactly the two fixed systemsetup network-time commands, exact binary path + exact argv, no wildcards) plus an autonomous experiment-loop harness (post-window supervisor step relaunches a fresh headless claude session with launch-then-verify-then-retry liveness proof + an independent launchd fallback timer; agent fully EXITS during capture — zero-agent rule for the capture itself is UNCHANGED) are chartered for build. D-115's conditions bind the privileged install path (fresh sudo -k auth, authenticated staged content, interpreter isolation) and Ed personally executes the one sudo install command — the privileged step never passes through the agent. Security-critical: full D-118/D-121 gauntlet + pre-decision design consult; built OFF the night-critical path and INSTALLED only at a deliberate Ed-present moment | ratified by D-128 (build authorized; install gated; initially chartered by Ed, in-thread; transcribed by the magistrate) |
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
+| D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
 
 ---
 
@@ -8056,3 +8057,40 @@ RATIFIED. Also ratifies D-127 (chartered → ratified).
 4. **Morning surface.** Each cycle leaves Ed a one-page morning state
    (what ran, what minted or refused and why, what the next night
    does, anything parked awaiting him) — RUN_STATE stays the pointer.
+
+## D-129: Ed operating directives batch — fan-out standing, fast-tier cut, Fable economy with full coverage
+
+Transcribed from Ed's in-thread directives during the T3 session
+(2026-08-09 day). Three linked operating rules, all process-level; no
+measurement, claim, or trust-model semantics change.
+
+1. **Standing fan-out order.** Fan-out to the degree demonstrated in T3
+   (~8 concurrent streams: Sol implementation/diagnosis lanes in disjoint
+   worktrees, Opus grader+refuter Workflow fleets, an Opus-directed sweep,
+   local suite gates, CI) is the DEFAULT whenever it speeds work — not a
+   per-session grant. Queue only on genuine file/invariant collisions or
+   gate dependencies. Extends the 2026-08-02 Workflow standing permission
+   and the T1 harder-parallelism directive from prompted to standing. It
+   also covers H1/H2 preparation work when the H0 lanes are saturated (the
+   extension-axes roadmap draft is the first artifact of that license).
+2. **Codex service tier.** Fast-tier usage drops by roughly 60%. Default
+   tier is the norm; the wrappers' 2026-08-08 fast-standing-default is
+   superseded (their env default may lag — override per call with
+   `CODEX_SERVICE_TIER=default`). Fast is reserved for the single run whose
+   wall-clock directly gates the session's merge or milestone, and depth is
+   consolidated (one xhigh run) rather than multiplied (several fast highs).
+3. **Fable token economy, coverage unreduced.** Orchestration and
+   direction work (bridge ceremony, launch/poll/harvest, envelope
+   validation, packet assembly, lead-check replay) runs on Opus 5 high
+   subagents; Sol remains the execution workhorse. Fable's non-delegable
+   reserve: adjudication and rulings, security classifications, D-121
+   terminal reviews, final live verification (hard rule 1), escalation and
+   stop decisions, and Ed communication. Ed's explicit rider: **coverage is
+   not reduced** — Fable still personally full-audits anything important or
+   claim-bearing (claim artifacts, trust/security surfaces, merge diffs,
+   published numbers), reading the primary artifacts; the savings come from
+   delegating ceremony, never from thinning or skipping a Fable review.
+   This amends the operative "stream director is now the exception"
+   framing in `docs/orchestration.md` (the C-009/C-010 stamped council
+   consensus remains in place as the dated record it is); Opus-directed
+   Sol lanes are now the standing default shape.
