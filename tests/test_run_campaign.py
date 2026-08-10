@@ -39,6 +39,7 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.environment import evaluate_environment_policy
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.calibration_bracketing import discover_calibration_candidates
 from joulewise.whole_window import (
     MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_DRIFT_BOUND_MAX_AGE_S,
@@ -6857,6 +6858,28 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
         snapshot, _loader_arguments = self._load_through_campaign(self.store)
         self.assertTrue(snapshot.valid)
         self.assertEqual(snapshot.refusal_reasons, ())
+
+    def test_store_routes_candidate_rediscovery_without_locator_fallback(
+        self,
+    ) -> None:
+        snapshot, _loader_arguments = self._load_through_campaign(self.store)
+        self.assertEqual(
+            snapshot.receipts[-1]["custody_locator"],
+            str(self.legacy_custody),
+        )
+        self.assertEqual(
+            snapshot.observations[0].custody_locator,
+            str(self.store / self.content_id),
+        )
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_candidate",
+            return_value=None,
+        ) as candidate_loader:
+            self.assertEqual(discover_calibration_candidates(snapshot), ())
+        candidate_loader.assert_called_once_with(
+            self.store / self.content_id,
+            runs_root=self.root,
+        )
 
     def test_invalid_store_refuses_without_legacy_fallback(self) -> None:
         self.assertTrue(self._load_actual().valid)

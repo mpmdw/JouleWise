@@ -316,7 +316,11 @@ The minted production whole-window campaign evaluator accepts the same
 calibration-ledger snapshot. When supplied, evaluation is store-exclusive: a
 missing, incomplete, or mismatched store refuses with
 `calibration_ledger_custody_invalid` and never falls back to any receipt
-`custody_locator`; omitting the option preserves the historical locator mode.
+`custody_locator`. After the exact store census is authenticated, the runner's
+in-memory evaluation view resolves each content-bearing observation to
+`ROOT/<content_id>/` so later calibration-candidate reauthentication also reads
+the store; the authenticated receipt bytes retain their original locator.
+Omitting the option preserves the historical locator mode.
 
 `ROOT/manifest.json` has the canonical UTF-8 JSON wire below: sorted keys,
 compact separators, one trailing newline, no duplicate keys, and no non-finite

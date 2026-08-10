@@ -4111,6 +4111,11 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
     )
     legacy_locator_identities = sorted(
         {
+            # The store manifest is exact-equality checked against the frozen
+            # snapshot census.  It therefore serves every content-bearing
+            # observation below, including both mutable runs trees' four new
+            # pre/post captures (4 content IDs x 5 governed artifacts).  Keep
+            # those current-run locators in the forbidden legacy-read set.
             str((Path(observation.custody_locator) / relative).resolve())
             for observation in store_snapshot.observations
             if observation.custody_locator is not None

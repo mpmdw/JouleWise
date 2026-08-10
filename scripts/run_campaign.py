@@ -37,6 +37,7 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -4237,7 +4238,48 @@ def _load_calibration_snapshot_for_evaluation(
         loader_arguments["calibration_custody_store"] = Path(
             calibration_custody_store
         )
-    return load_calibration_ledger_snapshot(**loader_arguments)
+    snapshot = load_calibration_ledger_snapshot(**loader_arguments)
+    if calibration_custody_store is None or not snapshot.valid:
+        return snapshot
+
+    # Store authentication proves exact census equality and hashes all five
+    # governed members for every content ID.  Candidate discovery later
+    # re-authenticates those bytes through each observation's custody_locator;
+    # give that consumer an in-memory store-resolution view while preserving
+    # the original receipt locator bytes in snapshot.receipts.
+    store_root = Path(calibration_custody_store).absolute()
+    store_observations = tuple(
+        replace(
+            observation,
+            custody_locator=str(store_root / observation.content_id),
+        )
+        if observation.content_id is not None
+        else observation
+        for observation in snapshot.observations
+    )
+    observations_by_receipt = {
+        observation.receipt_digest: observation
+        for observation in store_observations
+    }
+    store_sessions = tuple(
+        replace(
+            session,
+            finalized_slots=MappingProxyType(
+                {
+                    slot: observations_by_receipt.get(
+                        observation.receipt_digest, observation
+                    )
+                    for slot, observation in session.finalized_slots.items()
+                }
+            ),
+        )
+        for session in snapshot.bracket_sessions
+    )
+    return replace(
+        snapshot,
+        observations=store_observations,
+        bracket_sessions=store_sessions,
+    )
 
 
 def _idle_admission_core_evaluation(
