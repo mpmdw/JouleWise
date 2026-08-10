@@ -26,14 +26,18 @@ from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
+from joulewise.bundle_read import TracePoint, Window
 from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    COMMON_MODE_ESTIMATOR_ID,
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     attribution_single_count_discipline,
     canonical_domain_sha256,
+    comparative_false_effect_floor,
+    two_shared_edge_common_mode_registration,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
 from joulewise.calibration_ledger import (
@@ -47,9 +51,11 @@ from joulewise.floor_extraction import (
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
     LEGACY_THROUGHPUT_FIELD,
+    MemberReport,
     READER_THROUGHPUT_FIELD,
     _evaluate_member,
     _ingested_consumption_semantics_id,
+    _registered_common_mode_block_inputs,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
@@ -2292,6 +2298,278 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
             "anchor_energy_envelope_unrecorded",
             culprit_member.reasons,
         )
+
+
+class RegisteredCommonModeExtractionTests(unittest.TestCase):
+    DELTAS = [1.0, -1.0, 2.0, -2.0, 0.0]
+    OPERATIVE_BOUND_S = 0.037818
+
+    @classmethod
+    def blocks(cls) -> list[dict]:
+        return [
+            {
+                "block_id": f"b{index}",
+                "members": {
+                    position: f"b{index}-{position.lower()}"
+                    for position in ("A1", "B1", "B2", "A2")
+                },
+            }
+            for index in range(len(cls.DELTAS))
+        ]
+
+    @classmethod
+    def bracket(cls) -> dict:
+        return {
+            "status": "passed",
+            "endpoint_max_b_fiducial_s": 0.027,
+            "calibration_drift_allowance_s": 0.010818,
+            "b_fiducial_s": cls.OPERATIVE_BOUND_S,
+            "acceptance": {
+                "allowance": {
+                    "rule": "max(observed_drift_s,bracket_screen_s)",
+                    "value_s": "0.010818",
+                    "embedding_count": 1,
+                    "embedded_in": "b_fiducial_s",
+                }
+            },
+        }
+
+    @staticmethod
+    def calibration_basis() -> dict:
+        return {
+            "acceptance_selection": "issued_d116_artifact_only",
+            "issued_acceptance": {
+                "acceptance_id": "d079_calibration_acceptance_v2_n19"
+            },
+            "allowance_embedding_count": 1,
+        }
+
+    @classmethod
+    def session(cls):
+        return SimpleNamespace(
+            ready=True,
+            refusal_reasons=(),
+            calibration_bracket=cls.bracket(),
+            operative_fiducial_bound_s=cls.OPERATIVE_BOUND_S,
+        )
+
+    @classmethod
+    def evaluated_member(cls, **kwargs) -> MemberReport:
+        block_index = int(kwargs["block_id"][1:])
+        delta = cls.DELTAS[block_index]
+        value = 10.0 + delta if kwargs["position"].startswith("B") else 10.0
+        return MemberReport(
+            slot=kwargs["slot"],
+            bundle_id=kwargs["bundle_id"],
+            block_id=kwargs["block_id"],
+            position=kwargs["position"],
+            value_j=value,
+            cooldown_result="recovered",
+            cooldown_verified=True,
+            cap_hit=False,
+            excluded=False,
+            reasons=(),
+            anchor_shift_bound_j=0.5,
+            operative_anchor_envelope={"half_width_j": 0.5},
+            consumption_provenance={},
+            summary_sha256="a" * 64,
+            bundle_sha256="b" * 64,
+            config_sha256="c" * 64,
+        )
+
+    @staticmethod
+    def common_inputs(members, **_kwargs):
+        values = {member.position: member.value_j for member in members}
+        delta = (
+            values["B1"]
+            + values["B2"]
+            - values["A1"]
+            - values["A2"]
+        ) / 2.0
+        return [delta, delta + 0.1], [delta, delta], [0.0] * 4
+
+    def extract(self, *, registration=None, session=None):
+        return extract_comparative_cell(
+            cell_id="D124-COMMON-MODE",
+            metric="phase_energy_j.decode",
+            window_class="phase",
+            blocks=self.blocks(),
+            runs_root=Path("unused"),
+            cooldowns={},
+            consumption_session=session or self.session(),
+            estimator=COMMON_MODE_ESTIMATOR_ID,
+            estimator_registration=(
+                two_shared_edge_common_mode_registration()
+                if registration is None
+                else registration
+            ),
+            calibration_basis=self.calibration_basis(),
+        )
+
+    def test_registered_cell_routes_only_to_common_mode_and_preserves_inputs(self):
+        blocks = self.blocks()
+        registration = two_shared_edge_common_mode_registration()
+        basis = self.calibration_basis()
+        session = self.session()
+        before = copy.deepcopy([blocks, registration, basis, session.calibration_bracket])
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=self.evaluated_member,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._registered_common_mode_block_inputs",
+                side_effect=self.common_inputs,
+            ) as registered_path,
+            mock.patch(
+                "joulewise.floor_extraction.comparative_false_effect_floor"
+            ) as default_path,
+        ):
+            report = extract_comparative_cell(
+                cell_id="D124-COMMON-MODE",
+                metric="phase_energy_j.decode",
+                window_class="phase",
+                blocks=blocks,
+                runs_root=Path("unused"),
+                cooldowns={},
+                consumption_session=session,
+                estimator=COMMON_MODE_ESTIMATOR_ID,
+                estimator_registration=registration,
+                calibration_basis=basis,
+            )
+        self.assertEqual(registered_path.call_count, 5)
+        default_path.assert_not_called()
+        self.assertTrue(report.extractable)
+        self.assertEqual(
+            report.floor.estimator_registration,
+            two_shared_edge_common_mode_registration(),
+        )
+        self.assertEqual(
+            report.as_row()["floor"]["estimator_registration"],
+            two_shared_edge_common_mode_registration(),
+        )
+        self.assertEqual(
+            [blocks, registration, basis, session.calibration_bracket], before
+        )
+
+    def test_invalid_registration_refuses_without_default_fallback(self):
+        registration = two_shared_edge_common_mode_registration()
+        registration["parameter_sha256"] = "0" * 64
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=self.evaluated_member,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._registered_common_mode_block_inputs"
+            ) as registered_path,
+            mock.patch(
+                "joulewise.floor_extraction.comparative_false_effect_floor"
+            ) as default_path,
+        ):
+            report = self.extract(registration=registration)
+        self.assertFalse(report.extractable)
+        self.assertEqual(
+            report.refusal_reasons, ("common_mode_registration_invalid",)
+        )
+        registered_path.assert_not_called()
+        default_path.assert_not_called()
+
+    def test_missing_authenticated_bracket_is_a_typed_refusal(self):
+        session = SimpleNamespace(
+            ready=False,
+            refusal_reasons=(),
+            calibration_bracket=None,
+            operative_fiducial_bound_s=None,
+        )
+        with mock.patch(
+            "joulewise.floor_extraction._evaluate_member",
+            side_effect=self.evaluated_member,
+        ):
+            report = self.extract(session=session)
+        self.assertFalse(report.extractable)
+        self.assertEqual(
+            report.refusal_reasons,
+            ("common_mode_authenticated_bracket_required",),
+        )
+
+    def test_nonregistered_cell_retains_worst_case_default(self):
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=self.evaluated_member,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._registered_common_mode_block_inputs"
+            ) as registered_path,
+            mock.patch(
+                "joulewise.floor_extraction.comparative_false_effect_floor",
+                wraps=comparative_false_effect_floor,
+            ) as default_path,
+        ):
+            report = extract_comparative_cell(
+                cell_id="DEFAULT-COMPARATIVE",
+                metric="phase_energy_j.decode",
+                window_class="phase",
+                blocks=self.blocks(),
+                runs_root=Path("unused"),
+                cooldowns={},
+            )
+        default_path.assert_called_once()
+        registered_path.assert_not_called()
+        self.assertTrue(report.extractable)
+        self.assertIsNone(report.floor.estimator_registration)
+        self.assertEqual(report.floor.admissible_half_widths_j, (1.0,) * 5)
+
+    def test_bundle_input_builder_sweeps_two_edges_and_local_residuals(self):
+        powers = {"a1": 1.0, "b1": 2.0, "b2": 2.0, "a2": 1.0}
+
+        class Reader:
+            def __init__(self, path):
+                self.power = powers[path.name.rsplit("-", 1)[1]]
+
+            def summed_curve(self):
+                return [
+                    TracePoint(0.5, self.power, 0.0, 1.0),
+                    TracePoint(1.5, self.power, 1.0, 2.0),
+                ]
+
+            @staticmethod
+            def phase_windows():
+                return {"decode": [Window(0.0, 2.0)]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [
+            self.evaluated_member(
+                slot=f"b0:{position}",
+                bundle_id=f"b0-{position.lower()}",
+                block_id="b0",
+                position=position,
+            )
+            for position in ("A1", "B1", "B2", "A2")
+        ]
+        with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+            onset, offset, residuals = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("unused"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=0.1,
+            )
+        self.assertIn(2.0, onset)
+        self.assertIn(2.0, offset)
+        self.assertGreater(max(onset) - min(onset), 0.0)
+        self.assertGreater(max(offset) - min(offset), 0.0)
+        self.assertEqual(residuals, [0.0] * 4)
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):

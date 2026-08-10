@@ -18,6 +18,9 @@ import joulewise.detection_floor as detection_floor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    COMMON_MODE_ESTIMATOR_ID,
+    COMMON_MODE_PARAMETER_SHA256,
+    CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     GUARD_MINIMUM_N,
@@ -37,9 +40,12 @@ from joulewise.detection_floor import (
     compose_transport_group,
     comparative_false_effect_floor,
     complete_bundle_sha256,
+    registered_common_mode_operative_bound,
     small_sample_guard_factor,
     attribution_single_count_discipline,
     transport_refusal_reasons,
+    two_shared_edge_common_mode_floor,
+    two_shared_edge_common_mode_registration,
     validate_floor_artifact,
 )
 from joulewise.floor_extraction import (
@@ -594,6 +600,211 @@ class TestComparativeFloor(unittest.TestCase):
         self.assertTrue(close(est.sample_stddev_j, FIXTURE_B_STDDEV))
         self.assertTrue(close(est.prediction_component_j, 1.0 + FIXTURE_B_PREDICTION))
         self.assertGreater(est.prediction_component_j, FIXTURE_B_PREDICTION)
+
+
+class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
+    # Exact a5 decode replay inputs/result promoted by D-124 (NON-CLAIM).
+    REPLAY_DELTAS = [
+        0.21462565134537215,
+        0.40725474817919505,
+        0.200636842871301,
+        0.1818229541742724,
+        -0.28350582988500506,
+        -0.322865812458879,
+        -0.12114331409931722,
+        0.03839204680550168,
+        0.17627096532869402,
+        -0.05977483946883666,
+    ]
+    REPLAY_SHARED_WIDTHS = [
+        0.26176933418208037,
+        0.6153099135270779,
+        0.5500344898387226,
+        0.3842344343774471,
+        0.24605527369687863,
+        0.6026698109174475,
+        0.18273227773791945,
+        0.12636064142994385,
+        0.1474527499846232,
+        0.3727437267655951,
+    ]
+    REPLAY_LOCAL_WIDTHS = [
+        0.048579253149348745,
+        0.13567764585702236,
+        0.08492622688504525,
+        0.13637666530562242,
+        0.042590466778161584,
+        0.11543017866479133,
+        0.13821068512976353,
+        0.16019344030436855,
+        0.031195747566393095,
+        0.11402070739890391,
+    ]
+    REPLAY_TOTAL_WIDTHS = [
+        0.3103485873314291,
+        0.7509875593841002,
+        0.6349607167237679,
+        0.5206110996830695,
+        0.2886457404750402,
+        0.7180999895822389,
+        0.320942962867683,
+        0.2865540817343124,
+        0.1786484975510163,
+        0.486764434164499,
+    ]
+    ENDPOINT_BOUND_S = 0.025964638697819786
+    ALLOWANCE_S = 0.010818
+    OPERATIVE_BOUND_S = 0.03678263869781979
+
+    @classmethod
+    def bracket(cls) -> dict:
+        return {
+            "status": "passed",
+            "endpoint_max_b_fiducial_s": cls.ENDPOINT_BOUND_S,
+            "calibration_drift_allowance_s": cls.ALLOWANCE_S,
+            "b_fiducial_s": cls.OPERATIVE_BOUND_S,
+            "acceptance": {
+                "allowance": {
+                    "rule": "max(observed_drift_s,bracket_screen_s)",
+                    "value_s": "0.010818",
+                    "embedding_count": 1,
+                    "embedded_in": "b_fiducial_s",
+                }
+            },
+        }
+
+    @classmethod
+    def replay_inputs(cls):
+        onset = [
+            [delta, delta + width]
+            for delta, width in zip(
+                cls.REPLAY_DELTAS, cls.REPLAY_SHARED_WIDTHS, strict=True
+            )
+        ]
+        offset = [[delta, delta] for delta in cls.REPLAY_DELTAS]
+        residuals = [
+            [2.0 * width, 0.0, 0.0, 0.0]
+            for width in cls.REPLAY_LOCAL_WIDTHS
+        ]
+        return onset, offset, residuals
+
+    def test_replay_arithmetic_pins_promoted_two_edge_floor(self):
+        onset, offset, residuals = self.replay_inputs()
+        estimate = two_shared_edge_common_mode_floor(
+            self.REPLAY_DELTAS,
+            onset_sweeps_j=onset,
+            offset_sweeps_j=offset,
+            bundle_residual_half_widths_j=residuals,
+            calibration_bracket=self.bracket(),
+            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+        )
+        self.assertEqual(
+            estimate.admissible_half_widths_j,
+            tuple(self.REPLAY_TOTAL_WIDTHS),
+        )
+        self.assertEqual(estimate.guarded_floor_j, 1.8695016260113408)
+        self.assertEqual(
+            estimate.estimator_registration,
+            two_shared_edge_common_mode_registration(),
+        )
+
+    def test_identity_version_parameter_hash_and_assumption_are_stable(self):
+        first = two_shared_edge_common_mode_registration()
+        second = two_shared_edge_common_mode_registration()
+        self.assertEqual(first, second)
+        self.assertIsNot(first, second)
+        self.assertEqual(first["estimator_id"], COMMON_MODE_ESTIMATOR_ID)
+        self.assertEqual(first["version"], "v1")
+        self.assertEqual(
+            COMMON_MODE_PARAMETER_SHA256,
+            "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480",
+        )
+        self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
+        assumption = first["stationarity_transfer_assumption"]
+        self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
+        self.assertIn(
+            "bounds, not realized member-level boundary errors",
+            assumption["evidentiary_limit"],
+        )
+
+    def test_double_allowance_application_refuses_with_typed_reason(self):
+        bracket = self.bracket()
+        bracket["b_fiducial_s"] = (
+            self.ENDPOINT_BOUND_S + 2.0 * self.ALLOWANCE_S
+        )
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            registered_common_mode_operative_bound(bracket)
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_allowance_application_invalid",
+        )
+
+    def test_calibration_and_consumer_use_one_identical_code_path(self):
+        onset, offset, residuals = self.replay_inputs()
+        inputs = {
+            "onset_sweeps_j": onset,
+            "offset_sweeps_j": offset,
+            "bundle_residual_half_widths_j": residuals,
+            "calibration_bracket": self.bracket(),
+            "shared_edge_bound_s": self.OPERATIVE_BOUND_S,
+        }
+        calibration = two_shared_edge_common_mode_floor(
+            self.REPLAY_DELTAS, **inputs
+        )
+        consumer = two_shared_edge_common_mode_floor(
+            self.REPLAY_DELTAS, **inputs
+        )
+        self.assertEqual(calibration, consumer)
+        registration = calibration.estimator_registration
+        self.assertEqual(
+            registration["calibration_treatment"],
+            registration["consuming_contrast_treatment"],
+        )
+
+    def test_inputs_are_immutable_and_registration_surfaces_in_record(self):
+        onset, offset, residuals = self.replay_inputs()
+        bracket = self.bracket()
+        before = json.loads(json.dumps([onset, offset, residuals, bracket]))
+        estimate = two_shared_edge_common_mode_floor(
+            self.REPLAY_DELTAS,
+            onset_sweeps_j=onset,
+            offset_sweeps_j=offset,
+            bundle_residual_half_widths_j=residuals,
+            calibration_bracket=bracket,
+            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+        )
+        self.assertEqual([onset, offset, residuals, bracket], before)
+        record = build_comparative_record(
+            estimate,
+            [{} for _ in self.REPLAY_DELTAS],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+        self.assertEqual(
+            record["estimator_registration"],
+            two_shared_edge_common_mode_registration(),
+        )
+
+    def test_registered_precondition_failure_does_not_fall_back(self):
+        onset, offset, residuals = self.replay_inputs()
+        onset[0] = [999.0, 1000.0]
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            two_shared_edge_common_mode_floor(
+                self.REPLAY_DELTAS,
+                onset_sweeps_j=onset,
+                offset_sweeps_j=offset,
+                bundle_residual_half_widths_j=residuals,
+                calibration_bracket=self.bracket(),
+                shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+            )
+        self.assertEqual(
+            caught.exception.reason, "common_mode_precondition_failed"
+        )
+        default = comparative_false_effect_floor(
+            self.REPLAY_DELTAS,
+            admissible_half_widths_j=self.REPLAY_TOTAL_WIDTHS,
+        )
+        self.assertIsNone(default.estimator_registration)
 
 
 class TestWidthClosure(unittest.TestCase):

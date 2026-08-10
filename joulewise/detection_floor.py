@@ -24,7 +24,7 @@ import hashlib
 import json
 import math
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -52,15 +52,24 @@ __all__ = [
     "ATTRIBUTION_LIMIT_CLASS",
     "ATTRIBUTION_FLOOR_SOURCE",
     "SINGLE_COUNT_DISCIPLINE_ID",
+    "COMMON_MODE_ESTIMATOR_ID",
+    "COMMON_MODE_ESTIMATOR_VERSION",
+    "COMMON_MODE_PARAMETER_SHA256",
+    "COMMON_MODE_REFUSAL_CODES",
     "TRANSPORT_REASON_CODES",
     "STACK_IDENTITY_DOMAIN",
     "CONDITION_FAMILY_DOMAIN",
     "FloorEstimate",
+    "CommonModeEstimatorRefusal",
     "small_sample_guard_factor",
     "admissible_set_uncertainty_dominates_point_floor",
     "attribution_single_count_discipline",
     "absolute_false_effect_floor",
     "comparative_false_effect_floor",
+    "two_shared_edge_common_mode_registration",
+    "validate_common_mode_estimator_registration",
+    "registered_common_mode_operative_bound",
+    "two_shared_edge_common_mode_floor",
     "abba_delta",
     "build_method_block",
     "build_absolute_record",
@@ -93,8 +102,49 @@ MAX_EXACT_ADMISSIBLE_CORNER_N = 16
 ATTRIBUTION_LIMIT_CLASS = "attribution_limited"
 ATTRIBUTION_FLOOR_SOURCE = "E_clock_anchor_shift_bound_j"
 SINGLE_COUNT_DISCIPLINE_ID = "attribution_floor_plus_claim_side_bound.v1"
+COMMON_MODE_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
+COMMON_MODE_ESTIMATOR_VERSION = "v1"
+COMMON_MODE_REFUSAL_CODES = (
+    "common_mode_allowance_application_invalid",
+    "common_mode_precondition_failed",
+)
 _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
+
+_COMMON_MODE_EVIDENCE_REFERENCE = (
+    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+)
+_COMMON_MODE_COVARIANCE_TREATMENT = (
+    "two_shared_edges_plus_bundle_specific_adversarial_terms"
+)
+_COMMON_MODE_PARAMETER_DOMAIN = "joulewise.d124_common_mode_parameters.v1"
+_COMMON_MODE_PARAMETERS = {
+    "estimator_id": COMMON_MODE_ESTIMATOR_ID,
+    "abba_positions": ["A1", "B1", "B2", "A2"],
+    "abba_coefficients": ["-0.5", "0.5", "0.5", "-0.5"],
+    "shared_parameters": ["onset_shift_s", "offset_shift_s"],
+    "shared_candidate_rule": (
+        "interval_support_edges_union_plus_zero_and_operative_bounds"
+    ),
+    "shared_extrema_rule": "separable_onset_offset_exact_sweep",
+    "bundle_residual_rule": (
+        "math.fsum(per_bundle_adversarial_half_width_j)/2"
+    ),
+    "allowance_rule": (
+        "endpoint_max_plus_one_never_zero_allowance_inside_shared_bound"
+    ),
+}
+COMMON_MODE_PARAMETER_SHA256 = hashlib.sha256(
+    _COMMON_MODE_PARAMETER_DOMAIN.encode("utf-8")
+    + b"\0"
+    + json.dumps(
+        _COMMON_MODE_PARAMETERS,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+).hexdigest()
 
 _CALIBRATION_SCOPES = (
     "window_a",
@@ -364,6 +414,17 @@ def complete_bundle_sha256(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+class CommonModeEstimatorRefusal(ValueError):
+    """Typed fail-closed refusal from the registered D-124 estimator."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        if reason not in COMMON_MODE_REFUSAL_CODES:
+            raise ValueError(f"unregistered common-mode refusal reason: {reason}")
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason}: {detail}")
+
+
 @dataclass(frozen=True)
 class FloorEstimate:
     """Full calculation record for one floor component."""
@@ -382,6 +443,142 @@ class FloorEstimate:
     admissible_half_widths_j: tuple[float, ...] = ()
     corner_widened_unguarded_floor_j: Optional[float] = None
     corner_widened_guarded_floor_j: Optional[float] = None
+    estimator_registration: Mapping[str, object] | None = None
+
+
+def two_shared_edge_common_mode_registration() -> dict[str, object]:
+    """Return the stable, pin-ready registration for the D-124 candidate."""
+
+    treatment = _COMMON_MODE_COVARIANCE_TREATMENT
+    return {
+        "estimator_id": COMMON_MODE_ESTIMATOR_ID,
+        "version": COMMON_MODE_ESTIMATOR_VERSION,
+        "parameter_sha256": COMMON_MODE_PARAMETER_SHA256,
+        "status": "registered_candidate",
+        "transfer_assumption": {
+            "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+            "statement": (
+                "Within one authenticated ABBA calibration bracket, onset and "
+                "offset fiducial terms are shared edges while bundle-specific "
+                "residual terms remain adversarial."
+            ),
+            "evidence_reference": _COMMON_MODE_EVIDENCE_REFERENCE,
+        },
+        "stationarity_transfer_assumption": {
+            "assumption_id": (
+                "d124_block_timescale_shared_edges_stationarity_transfer_v1"
+            ),
+            "statement": (
+                "The shared onset and offset edge treatment calibrated on floor "
+                "blocks transfers unchanged to the consuming contrast at the "
+                "same block timescale."
+            ),
+            "evidence_reference": _COMMON_MODE_EVIDENCE_REFERENCE,
+            "evidentiary_limit": (
+                "The historical corpus records bounds, not realized "
+                "member-level boundary errors."
+            ),
+        },
+        "covariance_treatment": treatment,
+        "calibration_treatment": treatment,
+        "consuming_contrast_treatment": treatment,
+        "identical_covariance_treatment_required": True,
+        "allowance": {
+            "rule": "max(observed_drift_s,bracket_screen_s)",
+            "embedding_count": 1,
+            "embedded_in": "shared_operative_bound_s",
+        },
+        "issued_acceptance_artifact_reopened": False,
+        "raw_calibration_corpus_voided": False,
+    }
+
+
+def validate_common_mode_estimator_registration(value: object) -> bool:
+    """Accept only the complete, parameter-hashed D-124 registration."""
+
+    return (
+        isinstance(value, Mapping)
+        and dict(value) == two_shared_edge_common_mode_registration()
+    )
+
+
+def _common_mode_refuse(reason: str, detail: str) -> None:
+    raise CommonModeEstimatorRefusal(reason, detail)
+
+
+def _common_mode_finite(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def registered_common_mode_operative_bound(
+    calibration_bracket: object,
+) -> float:
+    """Recover the shared bound only when D-102 was embedded exactly once.
+
+    The authenticated bracket is the arithmetic authority.  A missing,
+    zero, duplicated, or differently embedded allowance is a typed refusal;
+    callers may not silently substitute the independent-member estimator.
+    """
+
+    reason = "common_mode_allowance_application_invalid"
+    if not isinstance(calibration_bracket, Mapping):
+        _common_mode_refuse(reason, "an authenticated calibration bracket is required")
+    acceptance = calibration_bracket.get("acceptance")
+    allowance_record = (
+        acceptance.get("allowance") if isinstance(acceptance, Mapping) else None
+    )
+    endpoint = _common_mode_finite(
+        calibration_bracket.get("endpoint_max_b_fiducial_s")
+    )
+    allowance = _common_mode_finite(
+        calibration_bracket.get("calibration_drift_allowance_s")
+    )
+    operative = _common_mode_finite(
+        calibration_bracket.get("b_fiducial_s")
+    )
+    if operative is None:
+        operative = _common_mode_finite(
+            calibration_bracket.get("operative_b_fiducial_s")
+        )
+    raw_recorded_allowance = (
+        allowance_record.get("value_s")
+        if isinstance(allowance_record, Mapping)
+        else None
+    )
+    try:
+        recorded_allowance = float(raw_recorded_allowance)
+    except (TypeError, ValueError):
+        recorded_allowance = None
+    if recorded_allowance is not None and not math.isfinite(recorded_allowance):
+        recorded_allowance = None
+    if (
+        calibration_bracket.get("status") != "passed"
+        or endpoint is None
+        or endpoint < 0.0
+        or allowance is None
+        or allowance <= 0.0
+        or operative is None
+        or recorded_allowance is None
+        or not isinstance(allowance_record, Mapping)
+        or allowance_record.get("rule")
+        != "max(observed_drift_s,bracket_screen_s)"
+        or allowance_record.get("embedding_count") != 1
+        or allowance_record.get("embedded_in") != "b_fiducial_s"
+        or not math.isclose(
+            recorded_allowance, allowance, rel_tol=0.0, abs_tol=1e-12
+        )
+        or not math.isclose(
+            operative, endpoint + allowance, rel_tol=0.0, abs_tol=1e-12
+        )
+    ):
+        _common_mode_refuse(
+            reason,
+            "the never-zero allowance must appear exactly once in the shared operative bound",
+        )
+    return operative
 
 
 def small_sample_guard_factor(n: int) -> float:
@@ -680,7 +877,10 @@ def comparative_false_effect_floor(
     The prediction component includes ``abs(mean_delta)`` — deltas are never
     re-centered before the floor is computed.
     """
-    deltas = _clean_values(block_deltas_j, "block deltas")
+    try:
+        deltas = _clean_values(block_deltas_j, "block deltas")
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
     mean = sum(deltas) / len(deltas)
     estimate = _floor_estimate("comparative", deltas, mean, abs(mean))
     widths = _admissible_widths(
@@ -691,6 +891,113 @@ def comparative_false_effect_floor(
         _corner_maximized_unguarded_floor(deltas, widths, kind="comparative"),
     )
     return _apply_admissible_set_guard(estimate, uncertainty_floor, widths)
+
+
+def two_shared_edge_common_mode_floor(
+    block_deltas_j: Sequence[float],
+    *,
+    onset_sweeps_j: Sequence[Sequence[float]],
+    offset_sweeps_j: Sequence[Sequence[float]],
+    bundle_residual_half_widths_j: Sequence[Sequence[float]],
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """D-124 contrast floor with two shared edges and local residuals.
+
+    ``onset_sweeps_j`` and ``offset_sweeps_j`` are the exact contrast values
+    obtained by sweeping one shared edge while holding the other at zero.
+    Separability gives ``min(onset)+min(offset)-point`` and the analogous
+    maximum.  Four bundle-local adversarial residual half-widths are then
+    composed with the ABBA coefficients.  This one function is the registered
+    arithmetic path for both calibration blocks and consuming contrasts.
+    """
+
+    deltas = _clean_values(block_deltas_j, "block deltas")
+    n = len(deltas)
+    try:
+        input_lengths_match = (
+            len(onset_sweeps_j)
+            == len(offset_sweeps_j)
+            == len(bundle_residual_half_widths_j)
+            == n
+        )
+    except TypeError:
+        input_lengths_match = False
+    if not input_lengths_match:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "every block needs onset, offset, and four residual inputs",
+        )
+    bound = _common_mode_finite(shared_edge_bound_s)
+    operative = registered_common_mode_operative_bound(calibration_bracket)
+    if (
+        bound is None
+        or bound <= 0.0
+        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        _common_mode_refuse(
+            "common_mode_allowance_application_invalid",
+            "the sweep bound must equal the once-widened authenticated bound",
+        )
+
+    block_widths: list[float] = []
+    for index, (delta, raw_onset, raw_offset, raw_residuals) in enumerate(
+        zip(
+            deltas,
+            onset_sweeps_j,
+            offset_sweeps_j,
+            bundle_residual_half_widths_j,
+            strict=True,
+        )
+    ):
+        try:
+            onset = _clean_values(raw_onset, f"block {index} onset sweep")
+            offset = _clean_values(raw_offset, f"block {index} offset sweep")
+        except (TypeError, ValueError) as exc:
+            _common_mode_refuse("common_mode_precondition_failed", str(exc))
+        try:
+            residual_count = len(raw_residuals)
+        except TypeError:
+            residual_count = -1
+        if residual_count != 4:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} must have exactly four bundle residuals",
+            )
+        residuals: list[float] = []
+        for raw in raw_residuals:
+            residual = _common_mode_finite(raw)
+            if residual is None or residual < 0.0:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} residuals must be finite and nonnegative",
+                )
+            residuals.append(residual)
+        if not any(
+            math.isclose(value, delta, rel_tol=1e-9, abs_tol=1e-12)
+            for value in onset
+        ) or not any(
+            math.isclose(value, delta, rel_tol=1e-9, abs_tol=1e-12)
+            for value in offset
+        ):
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} sweeps must include the zero-edge point delta",
+            )
+        lower = math.fsum((min(onset), min(offset), -delta))
+        upper = math.fsum((max(onset), max(offset), -delta))
+        shared_width = max(delta - lower, upper - delta)
+        local_width = math.fsum(residuals) / 2.0
+        block_widths.append(math.fsum((shared_width, local_width)))
+
+    estimate = comparative_false_effect_floor(
+        deltas,
+        admissible_half_widths_j=block_widths,
+    )
+    return replace(
+        estimate,
+        estimator_registration=two_shared_edge_common_mode_registration(),
+    )
 
 
 def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:
@@ -936,6 +1243,14 @@ def build_comparative_record(
         "corner_widened_guarded_floor_j": widened_guarded,
         "blocks": [dict(block) for block in blocks],
     }
+    if estimate.estimator_registration is not None:
+        if not validate_common_mode_estimator_registration(
+            estimate.estimator_registration
+        ):
+            raise ValueError("comparative estimate has an invalid estimator registration")
+        record["estimator_registration"] = copy.deepcopy(
+            dict(estimate.estimator_registration)
+        )
     record = _add_attribution_limit_metadata(record, estimate)
     return _add_whole_window_drift_allowance(
         record,
@@ -1325,6 +1640,9 @@ _ATTRIBUTION_LIMIT_RECORD_KEYS = {
     "floor_limit_class",
     "point_floor_diagnostic",
     "single_count_discipline",
+}
+_CMP_OPTIONAL_KEYS = _ATTRIBUTION_LIMIT_RECORD_KEYS | {
+    "estimator_registration"
 }
 _ATTRIBUTION_LIMIT_CONTAINER_KEYS = {
     "floor_source",
@@ -2975,11 +3293,19 @@ def _validate_comparative(
     if not _check_keys_with_optional(
         record,
         _CMP_KEYS,
-        _ATTRIBUTION_LIMIT_RECORD_KEYS,
+        _CMP_OPTIONAL_KEYS,
         where,
         errors,
     ):
         return
+    if "estimator_registration" in record and not (
+        validate_common_mode_estimator_registration(
+            record["estimator_registration"]
+        )
+    ):
+        errors.append(
+            f"{where}.estimator_registration: invalid registered candidate identity"
+        )
     deltas = record["block_deltas_j"]
     blocks = record["blocks"]
     n = record["n_blocks"]
