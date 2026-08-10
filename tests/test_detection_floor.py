@@ -601,6 +601,14 @@ class TestComparativeFloor(unittest.TestCase):
         self.assertTrue(close(est.prediction_component_j, 1.0 + FIXTURE_B_PREDICTION))
         self.assertGreater(est.prediction_component_j, FIXTURE_B_PREDICTION)
 
+    def test_dirty_deltas_raise_plain_value_error(self):
+        with self.assertRaises(ValueError) as caught:
+            comparative_false_effect_floor(
+                [0.0, float("nan")],
+                admissible_half_widths_j=[0.0, 0.0],
+            )
+        self.assertNotIsInstance(caught.exception, CommonModeEstimatorRefusal)
+
 
 class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
     # Exact a5 decode replay inputs/result promoted by D-124 (NON-CLAIM).
@@ -739,6 +747,42 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "common_mode_allowance_application_invalid",
         )
 
+    def test_bool_embedding_count_refuses_with_typed_reason(self):
+        bracket = self.bracket()
+        bracket["acceptance"]["allowance"]["embedding_count"] = True
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            registered_common_mode_operative_bound(bracket)
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_allowance_application_invalid",
+        )
+
+    def test_conflicting_operative_aliases_refuse_with_typed_reason(self):
+        bracket = self.bracket()
+        bracket["operative_b_fiducial_s"] = self.OPERATIVE_BOUND_S + 1e-6
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            registered_common_mode_operative_bound(bracket)
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_allowance_application_invalid",
+        )
+
+    def test_agreeing_operative_aliases_return_the_bound(self):
+        bracket = self.bracket()
+        bracket["operative_b_fiducial_s"] = self.OPERATIVE_BOUND_S
+        self.assertEqual(
+            registered_common_mode_operative_bound(bracket),
+            self.OPERATIVE_BOUND_S,
+        )
+
+    def test_operative_alias_mismatch_within_tolerance_returns(self):
+        bracket = self.bracket()
+        bracket["operative_b_fiducial_s"] = self.OPERATIVE_BOUND_S + 1e-13
+        self.assertEqual(
+            registered_common_mode_operative_bound(bracket),
+            self.OPERATIVE_BOUND_S,
+        )
+
     def test_calibration_and_consumer_use_one_identical_code_path(self):
         onset, offset, residuals = self.replay_inputs()
         inputs = {
@@ -805,6 +849,20 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             admissible_half_widths_j=self.REPLAY_TOTAL_WIDTHS,
         )
         self.assertIsNone(default.estimator_registration)
+
+    def test_dirty_deltas_raise_registered_typed_refusal(self):
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            two_shared_edge_common_mode_floor(
+                [0.0, float("nan")],
+                onset_sweeps_j=[],
+                offset_sweeps_j=[],
+                bundle_residual_half_widths_j=[],
+                calibration_bracket=None,
+                shared_edge_bound_s=0.0,
+            )
+        self.assertEqual(
+            caught.exception.reason, "common_mode_precondition_failed"
+        )
 
 
 class TestWidthClosure(unittest.TestCase):

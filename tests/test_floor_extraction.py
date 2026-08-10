@@ -37,6 +37,7 @@ from joulewise.detection_floor import (
     attribution_single_count_discipline,
     canonical_domain_sha256,
     comparative_false_effect_floor,
+    two_shared_edge_common_mode_floor,
     two_shared_edge_common_mode_registration,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
@@ -80,6 +81,7 @@ from joulewise.whole_window import (
     source_manifest_descriptors,
     whole_window_refusal_reasons,
 )
+from joulewise.reduce import _integrate
 
 # Whole-window verdict re-derivation anchors NEG-8 tolerances to a
 # repo-REGISTERED campaign policy (the only trust anchor outside bundle
@@ -2303,6 +2305,8 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
 class RegisteredCommonModeExtractionTests(unittest.TestCase):
     DELTAS = [1.0, -1.0, 2.0, -2.0, 0.0]
     OPERATIVE_BOUND_S = 0.037818
+    SWEEP_BOUND_S = 0.3
+    SWEEP_GRID_POINTS = 6001
 
     @classmethod
     def blocks(cls) -> list[dict]:
@@ -2571,6 +2575,209 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         self.assertGreater(max(offset) - min(offset), 0.0)
         self.assertEqual(residuals, [0.0] * 4)
 
+    @staticmethod
+    def _curve(intervals) -> list[TracePoint]:
+        return [
+            TracePoint(
+                t=float(index),
+                power_w=float(power),
+                support_start_s=float(start),
+                support_end_s=float(end),
+            )
+            for index, (start, end, power) in enumerate(intervals)
+        ]
+
+    @staticmethod
+    def _sweep_member(position: str) -> MemberReport:
+        return MemberReport(
+            slot=f"b0:{position}",
+            bundle_id=position,
+            block_id="b0",
+            position=position,
+            value_j=0.0,
+            cooldown_result="recovered",
+            cooldown_verified=True,
+            cap_hit=False,
+            excluded=False,
+            reasons=(),
+            anchor_shift_bound_j=0.0,
+            operative_anchor_envelope={"half_width_j": 0.0},
+            consumption_provenance={},
+            summary_sha256="a" * 64,
+            bundle_sha256="b" * 64,
+            config_sha256="c" * 64,
+        )
+
+    @classmethod
+    def _sweep_bracket(cls) -> dict:
+        return {
+            "status": "passed",
+            "endpoint_max_b_fiducial_s": 0.2,
+            "calibration_drift_allowance_s": 0.1,
+            "b_fiducial_s": cls.SWEEP_BOUND_S,
+            "acceptance": {
+                "allowance": {
+                    "rule": "max(observed_drift_s,bracket_screen_s)",
+                    "value_s": "0.1",
+                    "embedding_count": 1,
+                    "embedded_in": "b_fiducial_s",
+                }
+            },
+        }
+
+    def _assert_candidate_sweep_matches_dense_grid(
+        self, curves: dict[str, list[TracePoint]]
+    ) -> None:
+        positions = ("A1", "B1", "B2", "A2")
+        coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
+
+        class Reader:
+            def __init__(self, path):
+                self.position = Path(path).name
+
+            def summed_curve(self):
+                return curves[self.position]
+
+            @staticmethod
+            def phase_windows():
+                return {"decode": [Window(0.0, 1.0)]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [self._sweep_member(position) for position in positions]
+        with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+            onset, offset, residuals = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("synthetic-reader"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=self.SWEEP_BOUND_S,
+            )
+
+        def contrast(onset_s: float, offset_s: float) -> float:
+            return math.fsum(
+                coefficients[position]
+                * _integrate(
+                    curves[position],
+                    onset_s,
+                    1.0 + offset_s,
+                )
+                for position in positions
+            )
+
+        delta = contrast(0.0, 0.0)
+        candidate_lower = math.fsum((min(onset), min(offset), -delta))
+        candidate_upper = math.fsum((max(onset), max(offset), -delta))
+        candidate_width = max(
+            delta - candidate_lower,
+            candidate_upper - delta,
+        )
+        floor = two_shared_edge_common_mode_floor(
+            [delta, delta],
+            onset_sweeps_j=[onset, onset],
+            offset_sweeps_j=[offset, offset],
+            bundle_residual_half_widths_j=[residuals, residuals],
+            calibration_bracket=self._sweep_bracket(),
+            shared_edge_bound_s=self.SWEEP_BOUND_S,
+        )
+
+        onset_min = onset_max = contrast(-self.SWEEP_BOUND_S, 0.0)
+        offset_min = offset_max = contrast(0.0, -self.SWEEP_BOUND_S)
+        for index in range(1, self.SWEEP_GRID_POINTS):
+            shift = -self.SWEEP_BOUND_S + (
+                2.0
+                * self.SWEEP_BOUND_S
+                * index
+                / (self.SWEEP_GRID_POINTS - 1)
+            )
+            onset_value = contrast(shift, 0.0)
+            offset_value = contrast(0.0, shift)
+            onset_min = min(onset_min, onset_value)
+            onset_max = max(onset_max, onset_value)
+            offset_min = min(offset_min, offset_value)
+            offset_max = max(offset_max, offset_value)
+        brute_lower = math.fsum((onset_min, offset_min, -delta))
+        brute_upper = math.fsum((onset_max, offset_max, -delta))
+        brute_width = max(delta - brute_lower, brute_upper - delta)
+
+        self.assertTrue(
+            math.isclose(candidate_width, brute_width, rel_tol=1e-9),
+            (candidate_width, brute_width),
+        )
+        self.assertTrue(
+            math.isclose(
+                floor.admissible_half_widths_j[0],
+                brute_width,
+                rel_tol=1e-9,
+            ),
+            (floor.admissible_half_widths_j[0], brute_width),
+        )
+
+    def test_candidate_sweep_closes_gap_inside_window_neighbourhood(self):
+        zero = self._curve([(-2.0, 2.0, 0.0)])
+        self._assert_candidate_sweep_matches_dense_grid(
+            {
+                "A1": self._curve([(0.0, 0.4, 5.0), (0.4, 1.3, 0.0)]),
+                "B1": self._curve([(0.0, 0.2, 10.0), (0.4, 1.3, 0.0)]),
+                "B2": zero,
+                "A2": zero,
+            }
+        )
+
+    def test_candidate_sweep_includes_support_end_near_window_start(self):
+        zero = self._curve([(-2.0, 2.0, 0.0)])
+        self._assert_candidate_sweep_matches_dense_grid(
+            {
+                "A1": self._curve([(-1.0, 0.4, 5.0), (-2.0, 2.0, 0.0)]),
+                "B1": self._curve([(-1.0, 0.2, 10.0), (-2.0, 2.0, 0.0)]),
+                "B2": zero,
+                "A2": self._curve([(-1.0, 0.0, 5.0), (-2.0, 2.0, 0.0)]),
+            }
+        )
+
+    def test_candidate_sweep_includes_support_start_near_window_end(self):
+        zero = self._curve([(-2.0, 2.0, 0.0)])
+        self._assert_candidate_sweep_matches_dense_grid(
+            {
+                "A1": self._curve([(0.6, 2.0, 5.0), (-2.0, 2.0, 0.0)]),
+                "B1": self._curve([(0.8, 2.0, 10.0), (-2.0, 2.0, 0.0)]),
+                "B2": zero,
+                "A2": self._curve([(1.0, 2.0, 5.0), (-2.0, 2.0, 0.0)]),
+            }
+        )
+
+    def test_candidate_sweep_preserves_contiguous_and_power_step_cases(self):
+        zero = self._curve([(-2.0, 2.0, 0.0)])
+        cases = (
+            {
+                "A1": self._curve([(-1.0, 0.2, 2.0), (0.2, 1.2, 5.0)]),
+                "B1": self._curve([(-1.0, 0.1, 4.0), (0.1, 1.2, 1.0)]),
+                "B2": zero,
+                "A2": zero,
+            },
+            {
+                "A1": self._curve(
+                    [(-0.5, 0.12, 1.0), (0.12, 0.88, 8.0), (0.88, 1.5, 2.0)]
+                ),
+                "B1": self._curve(
+                    [(-0.5, 0.18, 6.0), (0.18, 0.82, 1.0), (0.82, 1.5, 7.0)]
+                ),
+                "B2": zero,
+                "A2": zero,
+            },
+        )
+        for index, curves in enumerate(cases):
+            with self.subTest(case=index):
+                self._assert_candidate_sweep_matches_dense_grid(curves)
+
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
     def test_legacy_semantics_absence_normalizes_only_at_ingestion(self) -> None:
@@ -2742,6 +2949,108 @@ class FloorMintSpecValidationTests(unittest.TestCase):
                         binding["condition_family_sha256"],
                         expected_hash,
                     )
+
+    def test_registered_comparative_cell_validates_at_spec_time(self) -> None:
+        spec = self._load("window_c_extraction_spec.json")
+        cell = next(cell for cell in spec["cells"] if cell["kind"] == "comparative")
+        cell["estimator"] = COMMON_MODE_ESTIMATOR_ID
+        cell["estimator_registration"] = (
+            two_shared_edge_common_mode_registration()
+        )
+        cell["calibration_basis"] = {
+            "acceptance_selection": "issued_d116_artifact_only",
+            "issued_acceptance": {
+                "acceptance_id": "d079_calibration_acceptance_v2_n19"
+            },
+        }
+        self.assertEqual(validate_extraction_spec(spec), [])
+
+    def test_pending_candidate_comparative_cell_validates_at_spec_time(self) -> None:
+        spec = self._load("d117_qwen25_7b_extraction_spec.json")
+        self.assertEqual(validate_extraction_spec(spec), [])
+
+    def test_pending_candidate_validates_only_identity_and_status(self) -> None:
+        spec = self._load("window_c_extraction_spec.json")
+        cell = next(cell for cell in spec["cells"] if cell["kind"] == "comparative")
+        cell["estimator"] = COMMON_MODE_ESTIMATOR_ID
+        cell["estimator_registration"] = {
+            "estimator_id": COMMON_MODE_ESTIMATOR_ID,
+            "status": "candidate_pending_floor_commonmode_01",
+            "unfrozen_draft_field": {"deliberately": "not spec-validated"},
+        }
+        cell["calibration_basis"] = {
+            "acceptance_selection": "issued_d116_artifact_only",
+            "issued_acceptance": {},
+        }
+        self.assertEqual(validate_extraction_spec(spec), [])
+
+    def test_registered_comparative_spec_fields_refuse_independently(self) -> None:
+        cases = (
+            (
+                {"estimator": "unknown"},
+                ".estimator: must equal 'd054_false_effect_guard.v1' or "
+                "'d124_two_shared_edge_common_mode.v1'",
+            ),
+            (
+                {"estimator": COMMON_MODE_ESTIMATOR_ID},
+                ".estimator_registration: must be a complete "
+                "'d124_two_shared_edge_common_mode.v1' registration or its "
+                "pending candidate",
+            ),
+            (
+                {"estimator_registration": {}},
+                ".estimator_registration: must be a complete "
+                "'d124_two_shared_edge_common_mode.v1' registration or its "
+                "pending candidate",
+            ),
+            (
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": {
+                        "estimator_id": COMMON_MODE_ESTIMATOR_ID,
+                        "status": "candidate_wrong_status",
+                    },
+                },
+                ".estimator_registration: must be a complete "
+                "'d124_two_shared_edge_common_mode.v1' registration or its "
+                "pending candidate",
+            ),
+            (
+                {"calibration_basis": []},
+                ".calibration_basis: must be an object",
+            ),
+            (
+                {
+                    "calibration_basis": {
+                        "acceptance_selection": "successor_allowed",
+                        "issued_acceptance": {},
+                    }
+                },
+                ".calibration_basis.acceptance_selection: must equal "
+                "'issued_d116_artifact_only'",
+            ),
+            (
+                {
+                    "calibration_basis": {
+                        "acceptance_selection": "issued_d116_artifact_only",
+                        "issued_acceptance": [],
+                    }
+                },
+                ".calibration_basis.issued_acceptance: must be an object",
+            ),
+        )
+        for additions, expected in cases:
+            with self.subTest(expected=expected):
+                spec = self._load("window_c_extraction_spec.json")
+                cell = next(
+                    cell
+                    for cell in spec["cells"]
+                    if cell["kind"] == "comparative"
+                )
+                cell.update(additions)
+                errors = validate_extraction_spec(spec)
+                matching = [error for error in errors if expected in error]
+                self.assertEqual(len(matching), 1, errors)
 
     def test_definition_identity_and_target_must_match_cell_key(self) -> None:
         base = self._load("window_c_extraction_spec.json")

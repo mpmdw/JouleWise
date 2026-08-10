@@ -207,6 +207,9 @@ CELL_LABELLED_CONDITION_CODES = (
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
+_PENDING_COMMON_MODE_ESTIMATOR_STATUS = (
+    "candidate_pending_floor_commonmode_01"
+)
 
 
 class FloorExtractionError(ValueError):
@@ -650,6 +653,68 @@ def validate_extraction_spec(spec: object) -> list[str]:
                     errors.append(
                         f"{where}.blocks: bundle_ids must be unique"
                     )
+            if any(
+                key in cell
+                for key in (
+                    "estimator",
+                    "estimator_registration",
+                    "calibration_basis",
+                )
+            ):
+                estimator = cell.get("estimator", METHOD_ID)
+                if estimator not in (METHOD_ID, COMMON_MODE_ESTIMATOR_ID):
+                    errors.append(
+                        f"{where}.estimator: must equal "
+                        f"{METHOD_ID!r} or {COMMON_MODE_ESTIMATOR_ID!r}"
+                    )
+                registration = cell.get("estimator_registration")
+                registration_present = "estimator_registration" in cell
+                full_registration = (
+                    registration_present
+                    and validate_common_mode_estimator_registration(
+                        registration
+                    )
+                )
+                pending_registration = (
+                    registration_present
+                    and isinstance(registration, Mapping)
+                    and registration.get("estimator_id")
+                    == COMMON_MODE_ESTIMATOR_ID
+                    and registration.get("status")
+                    == _PENDING_COMMON_MODE_ESTIMATOR_STATUS
+                )
+                if (
+                    (estimator == COMMON_MODE_ESTIMATOR_ID or registration_present)
+                    and not (full_registration or pending_registration)
+                ):
+                    errors.append(
+                        f"{where}.estimator_registration: must be a complete "
+                        f"{COMMON_MODE_ESTIMATOR_ID!r} registration or its "
+                        "pending candidate"
+                    )
+                if "calibration_basis" in cell:
+                    basis = cell.get("calibration_basis")
+                    if not isinstance(basis, Mapping):
+                        errors.append(
+                            f"{where}.calibration_basis: must be an object"
+                        )
+                    else:
+                        if (
+                            basis.get("acceptance_selection")
+                            != "issued_d116_artifact_only"
+                        ):
+                            errors.append(
+                                f"{where}.calibration_basis."
+                                "acceptance_selection: must equal "
+                                "'issued_d116_artifact_only'"
+                            )
+                        if not isinstance(
+                            basis.get("issued_acceptance"), Mapping
+                        ):
+                            errors.append(
+                                f"{where}.calibration_basis."
+                                "issued_acceptance: must be an object"
+                            )
         else:
             errors.append(
                 f"{where}.kind: must be 'absolute' or 'comparative'"
@@ -1683,12 +1748,16 @@ def _registered_common_mode_block_inputs(
         for point in curve:
             assert point.support_start_s is not None
             assert point.support_end_s is not None
-            onset_delta = point.support_start_s - window.start_s
-            offset_delta = point.support_end_s - window.end_s
-            if -shared_edge_bound_s <= onset_delta <= shared_edge_bound_s:
-                onset_candidates.add(onset_delta)
-            if -shared_edge_bound_s <= offset_delta <= shared_edge_bound_s:
-                offset_candidates.add(offset_delta)
+            for support_edge_s in (
+                point.support_start_s,
+                point.support_end_s,
+            ):
+                onset_delta = support_edge_s - window.start_s
+                if -shared_edge_bound_s <= onset_delta <= shared_edge_bound_s:
+                    onset_candidates.add(onset_delta)
+                offset_delta = support_edge_s - window.end_s
+                if -shared_edge_bound_s <= offset_delta <= shared_edge_bound_s:
+                    offset_candidates.add(offset_delta)
 
     coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
 

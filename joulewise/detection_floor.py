@@ -536,13 +536,32 @@ def registered_common_mode_operative_bound(
     allowance = _common_mode_finite(
         calibration_bracket.get("calibration_drift_allowance_s")
     )
-    operative = _common_mode_finite(
+    b_fiducial = _common_mode_finite(
         calibration_bracket.get("b_fiducial_s")
     )
-    if operative is None:
-        operative = _common_mode_finite(
-            calibration_bracket.get("operative_b_fiducial_s")
+    operative_b_fiducial = _common_mode_finite(
+        calibration_bracket.get("operative_b_fiducial_s")
+    )
+    both_operative_aliases_present = (
+        "b_fiducial_s" in calibration_bracket
+        and "operative_b_fiducial_s" in calibration_bracket
+    )
+    operative_aliases_agree = (
+        not both_operative_aliases_present
+        or (
+            b_fiducial is not None
+            and operative_b_fiducial is not None
+            and math.isclose(
+                b_fiducial,
+                operative_b_fiducial,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
         )
+    )
+    operative = (
+        b_fiducial if b_fiducial is not None else operative_b_fiducial
+    )
     raw_recorded_allowance = (
         allowance_record.get("value_s")
         if isinstance(allowance_record, Mapping)
@@ -565,8 +584,10 @@ def registered_common_mode_operative_bound(
         or not isinstance(allowance_record, Mapping)
         or allowance_record.get("rule")
         != "max(observed_drift_s,bracket_screen_s)"
+        or isinstance(allowance_record.get("embedding_count"), bool)
         or allowance_record.get("embedding_count") != 1
         or allowance_record.get("embedded_in") != "b_fiducial_s"
+        or not operative_aliases_agree
         or not math.isclose(
             recorded_allowance, allowance, rel_tol=0.0, abs_tol=1e-12
         )
@@ -877,10 +898,7 @@ def comparative_false_effect_floor(
     The prediction component includes ``abs(mean_delta)`` — deltas are never
     re-centered before the floor is computed.
     """
-    try:
-        deltas = _clean_values(block_deltas_j, "block deltas")
-    except (TypeError, ValueError) as exc:
-        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    deltas = _clean_values(block_deltas_j, "block deltas")
     mean = sum(deltas) / len(deltas)
     estimate = _floor_estimate("comparative", deltas, mean, abs(mean))
     widths = _admissible_widths(
@@ -912,7 +930,10 @@ def two_shared_edge_common_mode_floor(
     arithmetic path for both calibration blocks and consuming contrasts.
     """
 
-    deltas = _clean_values(block_deltas_j, "block deltas")
+    try:
+        deltas = _clean_values(block_deltas_j, "block deltas")
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
     n = len(deltas)
     try:
         input_lengths_match = (
