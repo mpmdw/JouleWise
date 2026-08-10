@@ -65,10 +65,10 @@ EXPECTED_SHA256 = {
         "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
     ),
     "plan_tree.json": (
-        "4fe4a6bb747ca693c86d720e15f733caad690b0b9f7c98ae6a5b4d0d1ebec29b"
+        "af2ec2bdfb4919d4b3a37ab4bab526f41cd573b2563b4272117d59425c2eaeeb"
     ),
     "plan_tree.sha256": (
-        "9f8c21496528480f74369bc5b03edb26b8aeba80e77c0066c54453babf6626c8"
+        "858fbb7c1610a7041096ef84ac116efc69cc3dde30afd7da701ee3d07ab1c3eb"
     ),
     "producer_contract.json": (
         "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
@@ -698,7 +698,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".py"}
+            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
         )
         self.assertNotIn(stale_marker, generated_text)
 
@@ -742,7 +742,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md"}
+            if path.is_file() and path.suffix in {".json", ".md", ".sha256"}
         )
         for diagnostic in ("6." + "294380", "13." + "998036"):
             self.assertNotIn(diagnostic, generated_text)

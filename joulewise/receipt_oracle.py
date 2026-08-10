@@ -180,6 +180,16 @@ def derive_bracket_session_receipt_oracle() -> dict[str, Any]:
             "terminal_sequence_rule": {
                 "base": "authenticated_arm_head_sequence",
                 "delta": terminal_delta,
+                "applicability": "clean_path_no_recovery_control_rows",
+                "recovery_note": (
+                    "Authenticated recovery control rows (for example an "
+                    "abandon-tail repair between an intent and its "
+                    "reconstructed target) may lawfully extend the terminal "
+                    "sequence beyond base+delta. Arm-time verification must "
+                    "validate the business-receipt cadence separately from "
+                    "authenticated control rows rather than requiring "
+                    "base+delta exactly."
+                ),
             },
             "arm_time_receipts": [],
         }

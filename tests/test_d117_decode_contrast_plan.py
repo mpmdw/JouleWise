@@ -26,7 +26,7 @@ GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
     "calibration_plan.json": "951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
-    "plan_tree.json": "9bfe66e5d4267963db6bae8a806e23f671c8ccab83e1c647d62affdfd441d38c",
+    "plan_tree.json": "655486460d269a55b9715d17c0b0e452d8fffbdaba08f6ea402fca881f122a1f",
     "analysis_manifest_v3.json": "10defe290284b60c232168bc27c2ed1f39ba9424ea8cd7c4a7df1c374fd67f56",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
@@ -527,7 +527,7 @@ class D117GammaPlanTest(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".py"}
+            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
         )
         self.assertNotIn(stale_marker, generated_text)
 
