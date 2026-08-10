@@ -591,6 +591,15 @@ def direct_read_violations(
                 if isinstance(target.value, ast.Name) and target.value.id == "os":
                     if _readable_os_open(child):
                         name = "os.open"
+                elif isinstance(target.value, ast.Name) and target.value.id in {
+                    "io",
+                    "codecs",
+                }:
+                    # Module-level open functions take (path, mode); reading
+                    # args[0] as a bound-method mode would misparse the PATH
+                    # as the mode string.
+                    if _readable_open(child, method=False):
+                        name = f"{target.value.id}.open"
                 elif _readable_open(child, method=True):
                     name = "open"
             elif (

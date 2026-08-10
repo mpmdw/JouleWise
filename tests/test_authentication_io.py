@@ -422,6 +422,38 @@ def authenticate(fd):
             ),
         )
 
+    def test_guard_fails_closed_on_absent_or_dynamic_fdopen_mode(self) -> None:
+        source = """
+import os
+def authenticate(fd, mode):
+    os.fdopen(fd)
+    os.fdopen(fd, mode)
+"""
+        self.assertEqual(
+            direct_read_violations(source, marked_functions={"authenticate"}),
+            (
+                "authenticate:4:os.fdopen",
+                "authenticate:5:os.fdopen",
+            ),
+        )
+
+    def test_guard_reads_module_open_mode_positionally_not_as_path(self) -> None:
+        source = """
+import codecs
+import io
+def authenticate(path):
+    io.open("led.bin", "rb")
+    io.open(path, "wb")
+    codecs.open(path, "r", "utf-8")
+"""
+        self.assertEqual(
+            direct_read_violations(source, marked_functions={"authenticate"}),
+            (
+                "authenticate:5:io.open",
+                "authenticate:7:codecs.open",
+            ),
+        )
+
     def test_low_level_open_auditor_matches_registered_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
