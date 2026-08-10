@@ -47,7 +47,74 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T2 SESSION FINAL CHECKPOINT (2026-08-09 ~08:30, Ed checkpoint order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T3 SESSION FINAL CHECKPOINT (2026-08-09 evening, Ed wrap order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**Session shape:** first full session under D-129 (fan-out standing order,
+~60% fast-tier cut, Fable-economy-with-full-coverage — all three minted this
+session from Ed's in-thread directives). Peak ~9 concurrent streams. Durable
+custody of all session artifacts (reports, statuses, flake-loop log, the
+8038ccd full-suite log): `~/JouleWise-window-custody/t3-session-20260809/`.
+
+**LANDED/MERGED this session:** flake fix **PR #123 MERGED** (lead 8x loop
+8/8 + Sol 30-loop + D-121); T2 bookkeeping (run report + C-053, `7fde68b`) +
+council-index repair (`966dd39`); WO-4/Q9 prefill phase proof **DISCHARGED**
+(`2cd9bc3` — 7B PROVEN, 1.5B PROVEN-WITH-CAVEATS incl. the p256-cell
+resolution-pressure warning); extension-axes H1/H2 roadmap DRAFT (`e9c2433`,
+Ed review tap); site-renderer silent-64KiB-truncation bug FIXED (`955df9b`);
+consistency sweep applied + D-129 minted + state kernel → T3 gate
+(`50d1064`); 12 stale worktrees pruned; release
+`fixture-d117-v2-production-v1` PUBLISHED (sha re-verified by fresh
+download).
+
+**TRUST (PR #122) — one CI gate from the mint-bar merge.** Branch
+`impl/d117-postcollection-trust-clean` head `e871f5b`: clean resynthesis
+(zero custody blobs reachable, single-parent verified) + fsum
+cross-interpreter fix (`e376e8c`) + guard parcel (`99d0e9b`) + guard
+hardening (`f588f86`, io/codecs misparse + fail-closed pins) + custody-store
+plumbing rounds 1+2 (`e807d5f`, `e871f5b`). **16-question delta: 16/16 PASS**
+(initial 14 + Q10/Q3 fix-then-regrade, Opus graders + refuters). Decisive CI
+history: round-1 fail = latent plumbing gap (campaign never received the
+store; T2's green runs silently read Ed's machine-local/iCloud paths — NOT
+merge-introduced, present at a89f279); round-2 fail = the NEW hermeticity
+assertion correctly caught a second unplumbed read site (candidate
+rediscovery); both fixed, hermeticity kept strict (no narrowing).
+**SUCCESSOR: (1)** confirm `d117-production-proof` green on `e871f5b` (was
+in flight at wrap; on fail: full log + NEW-signature check — two rounds are
+spent, a third same-class failure ⇒ standing escalation = consult, never
+round 3); **(2)** lead full unpiped suite at the final head (8038ccd suite
+was green 2934/86-skip; the four parcels since are focused-verified only);
+**(3)** D-121 terminal review at final head; **(4)** merge = **MINT BAR
+LIFTS**; **(5)** then bench: kernel gate clear-back (test_gen_state pins →
+[], per their notes), remove Ed's temporary history-rewrite + `gh release`
+rules from `.claude/settings.local.json`, finalize the PR ledger
+(deferred-with-record: 16Q Q1 residuals — silent no-session fallback,
+missing session assertion in the mint body; `_locked_append` line-anchor
+uniformity).
+
+**FREEZE LANE:** WO-2/Q5 byte-identity **PR #124 OPEN** (lead-replayed both
+interpreters; CI + D-121 then merge). WO-3 receipt-oracle re-derivation:
+NOT STARTED (was queued behind WO-2; launch off post-#124 main).
+**FLOOR-COMMONMODE-01 BANKED UNGATED `425f75f`** (impl/floor-commonmode-01,
+pushed; all six D-124 registration conditions structurally enforced per the
+Sol report; based on trust head 8038ccd) — **successor's first big block:
+full magistrate audit + D-118 gauntlet, rebase onto post-trust main, land,
+then p256 floor cells (Ed-funded Q8) → regenerate packs → freeze.**
+
+**Process notes for the record:** three Sol rounds were burned by the
+F3-class read-only-sandbox launcher trap (always `-s workspace-write` +
+writable TMPDIR); the stale `.claude/worktrees/cs-pedagogy-ai-cf3aed`
+worktree BREAKS codex-run-v3 strict-scope launches (nested-repo refusal) —
+audit item stands, decision wanted; never pkill by pattern on a shared
+machine (killed a sibling's suite run); WO-4's resolution caveat feeds Q8
+planning (p256 1.5B prefill windows will carry the same
+not_resolvable_sample_count pressure).
+
+**Owed bookkeeping (successor desk block):** T3 run report + council C-054 +
+skill-usage rows; prune this session's worktrees after the trust merge
+(trustasm/flakeverify/fix1/guardfix/fcm/wo2/wo4/axes/bookkeep + diag1/diag2 —
+all branches/artifacts pushed or custodied).
+
+## ▶▶ T2 SESSION FINAL CHECKPOINT (2026-08-09 ~08:30) — SUPERSEDED by T3 above; kept for detail
 
 **Nothing in flight** (all Sol runs harvested; flake-verify loop stopped mid-run
 harmlessly). Durable custody of every load-bearing session artifact (trace
