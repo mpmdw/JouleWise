@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import shutil
@@ -8,6 +7,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from copy import deepcopy
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -17,6 +19,7 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
 )
 from joulewise.floor_extraction import validate_extraction_spec
+from scripts.extract_detection_floors import main as extract_main
 from scripts.run_campaign import load_order_entries
 
 
@@ -527,7 +530,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
 
     def test_reporting_section_does_not_change_floor_output(self) -> None:
         spec = load_json(SPEC)
-        floor_only = copy.deepcopy(spec)
+        floor_only = deepcopy(spec)
         del floor_only["reported_energy_cells"]
         del floor_only["reported_energy_registration"]
         self.assertEqual(validate_extraction_spec(spec), validate_extraction_spec(floor_only))
@@ -582,10 +585,55 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 floor_extraction, "extract_comparative_cell", side_effect=fake_report
             ),
         )
-        with patches[0], patches[1], patches[2], patches[3], patches[4]:
-            with_reported = floor_extraction.extract_cells(REPO_ROOT, spec)
-            floor_projection = floor_extraction.extract_cells(REPO_ROOT, floor_only)
-        self.assertEqual(with_reported, floor_projection)
+        with tempfile.TemporaryDirectory(prefix="d117-floor-output-identity-") as temp:
+            temp_root = Path(temp)
+            with_reported_spec = temp_root / "with-reported.json"
+            floor_only_spec = temp_root / "floor-only.json"
+            shutil.copy2(SPEC, with_reported_spec)
+            floor_only_spec.write_text(
+                json.dumps(floor_only, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with_reported_out = temp_root / "with-reported-output.json"
+            floor_only_out = temp_root / "floor-only-output.json"
+
+            with (
+                patches[0],
+                patches[1],
+                patches[2],
+                patches[3],
+                patches[4],
+                redirect_stderr(StringIO()),
+            ):
+                with_reported_status = extract_main(
+                    [
+                        "--runs-root",
+                        str(REPO_ROOT),
+                        "--spec",
+                        str(with_reported_spec),
+                        "--out",
+                        str(with_reported_out),
+                    ]
+                )
+                floor_only_status = extract_main(
+                    [
+                        "--runs-root",
+                        str(REPO_ROOT),
+                        "--spec",
+                        str(floor_only_spec),
+                        "--out",
+                        str(floor_only_out),
+                    ]
+                )
+
+            self.assertEqual(with_reported_status, floor_only_status)
+            with_reported_bytes = with_reported_out.read_bytes()
+            floor_only_bytes = floor_only_out.read_bytes()
+            self.assertEqual(with_reported_bytes, floor_only_bytes)
+            self.assertEqual(
+                hashlib.sha256(with_reported_bytes).hexdigest(),
+                hashlib.sha256(floor_only_bytes).hexdigest(),
+            )
 
     def test_typed_stage_launch_recipes(self) -> None:
         tree = load_json(PACK / "plan_tree.json")

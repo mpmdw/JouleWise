@@ -7,9 +7,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from copy import deepcopy
+from io import StringIO
 from pathlib import Path
 from typing import Any, Iterable
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,11 +32,13 @@ from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
 )
+import joulewise.floor_extraction as floor_extraction  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
 )
 from joulewise.schemas import BenchmarkConfig  # noqa: E402
+from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
@@ -447,6 +452,113 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             canonical_sha256(self.spec["cells"]),
             self.spec["reported_energy_registration"]["floor_projection_sha256"],
         )
+
+    def test_reporting_section_does_not_change_floor_output(self) -> None:
+        spec = load_json(SPEC_PATH)
+        floor_only = deepcopy(spec)
+        del floor_only["reported_energy_cells"]
+        del floor_only["reported_energy_registration"]
+        self.assertEqual(validate_extraction_spec(spec), validate_extraction_spec(floor_only))
+        self.assertEqual(
+            canonical_sha256(spec["cells"]),
+            spec["reported_energy_registration"]["floor_projection_sha256"],
+        )
+
+        class FakeSession:
+            ready = False
+            refusal_reasons = ()
+
+            def provenance_for(self, bundle_id: str) -> None:
+                return None
+
+        def fake_report(**kwargs: object) -> floor_extraction.CellReport:
+            return floor_extraction.CellReport(
+                cell_id=str(kwargs["cell_id"]),
+                kind=(
+                    "absolute" if "members" in kwargs else "comparative"
+                ),
+                metric=str(kwargs["metric"]),
+                window_class=str(kwargs["window_class"]),
+                cap_hit_policy=str(kwargs["cap_hit_policy"]),
+                members=(),
+                excluded_slots=(),
+                n_planned=10,
+                n_admitted=0,
+                refusal_reasons=("synthetic_plan_test",),
+                floor=None,
+                anchor_shift_bound_max_j=None,
+            )
+
+        patches = (
+            mock.patch.object(
+                floor_extraction, "campaign_cooldown_evidence", return_value={}
+            ),
+            mock.patch.object(
+                floor_extraction,
+                "AuthenticatedConsumptionSession",
+                return_value=FakeSession(),
+            ),
+            mock.patch.object(
+                floor_extraction,
+                "_whole_window_extraction_refusals",
+                return_value=("synthetic_plan_test",),
+            ),
+            mock.patch.object(
+                floor_extraction, "extract_absolute_cell", side_effect=fake_report
+            ),
+            mock.patch.object(
+                floor_extraction, "extract_comparative_cell", side_effect=fake_report
+            ),
+        )
+        with tempfile.TemporaryDirectory(prefix="d117-floor-output-identity-") as temp:
+            temp_root = Path(temp)
+            with_reported_spec = temp_root / "with-reported.json"
+            floor_only_spec = temp_root / "floor-only.json"
+            shutil.copy2(SPEC_PATH, with_reported_spec)
+            floor_only_spec.write_text(
+                json.dumps(floor_only, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with_reported_out = temp_root / "with-reported-output.json"
+            floor_only_out = temp_root / "floor-only-output.json"
+
+            with (
+                patches[0],
+                patches[1],
+                patches[2],
+                patches[3],
+                patches[4],
+                redirect_stderr(StringIO()),
+            ):
+                with_reported_status = extract_main(
+                    [
+                        "--runs-root",
+                        str(ROOT),
+                        "--spec",
+                        str(with_reported_spec),
+                        "--out",
+                        str(with_reported_out),
+                    ]
+                )
+                floor_only_status = extract_main(
+                    [
+                        "--runs-root",
+                        str(ROOT),
+                        "--spec",
+                        str(floor_only_spec),
+                        "--out",
+                        str(floor_only_out),
+                    ]
+                )
+
+            self.assertEqual(with_reported_status, floor_only_status)
+            with_reported_bytes = with_reported_out.read_bytes()
+            floor_only_bytes = floor_only_out.read_bytes()
+            self.assertEqual(with_reported_bytes, floor_only_bytes)
+            self.assertEqual(
+                hashlib.sha256(with_reported_bytes).hexdigest(),
+                hashlib.sha256(floor_only_bytes).hexdigest(),
+            )
 
     def test_issued_acceptance_and_d124_candidate_are_registered(self) -> None:
         self.assertEqual(
