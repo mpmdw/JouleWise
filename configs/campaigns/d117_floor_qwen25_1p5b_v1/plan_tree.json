@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py",
-    "sha256": "83a5d60ddd6a0dc4dc549842673258bb055634085f3b22d032bd512ee40ab509"
+    "sha256": "c7c7c10c61c882329649533d14e7625ccec3d898aaf209ea45a1e44ba5e15e00"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
@@ -55,10 +55,6 @@
       {
         "id": "FLOOR-COMMONMODE-01",
         "status": "implementation_identity_required_before_release"
-      },
-      {
-        "id": "impl/d117-ledger-recovery",
-        "status": "unmerged_arm_blocker"
       }
     ]
   },
@@ -2144,11 +2140,108 @@
       "projection_receipt": null
     },
     "receipt_oracle": {
-      "status": "blocked_on_unmerged_branch",
-      "branch": "impl/d117-ledger-recovery",
-      "todo": "TODO(impl/d117-ledger-recovery): re-derive cadence and populate only during lead-owned arm materialization after that branch lands.",
-      "receipt_count": null,
+      "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
+      "status": "derived_from_production_model",
+      "source": {
+        "module": "joulewise.calibration_ledger",
+        "operation_functions": [
+          "append_bracket_session_receipt",
+          "claim_bracket_session_slot",
+          "finalize_bracket_session_slot"
+        ],
+        "append_policy_revision": "d117-ledger-resident-v1",
+        "claim_policy_revision": "d117-stable-claim-v1"
+      },
+      "session_terminal_state": "finalized",
+      "logical_operation_count": 5,
+      "receipt_count": 10,
+      "physical_receipt_shape": [
+        {
+          "relative_sequence": 1,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-open",
+          "slot": null
+        },
+        {
+          "relative_sequence": 2,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-open",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": null
+        },
+        {
+          "relative_sequence": 3,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 4,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 5,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 6,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 7,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 8,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 9,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 10,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        }
+      ],
       "terminal_sequence": null,
+      "terminal_sequence_rule": {
+        "base": "authenticated_arm_head_sequence",
+        "delta": 10
+      },
       "arm_time_receipts": []
     }
   },
@@ -2159,7 +2252,7 @@
     "evaluation_basis_sha256": null,
     "extraction_report_sha256": null,
     "postcollection_receipt_digests": [],
-    "todo": "TODO(impl/d117-ledger-recovery): leave receipt-derived closeout fields empty until the landed recovery oracle and a completed claim window supply them.",
+    "todo": "TODO(postcollection): leave receipt-derived closeout fields empty until a completed claim window supplies authenticated evidence.",
     "backup_requirements": {
       "claim_root_verified": true,
       "bound_root_verified": true,

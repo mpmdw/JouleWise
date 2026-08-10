@@ -23,7 +23,6 @@ SPEC_PATH = ROOT / SPEC_REL
 GENERATOR = PACK_ROOT / "generate_configs.py"
 PLAN_ID = "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-1p5b-v1"
-RECOVERY_BRANCH = "impl/d117-ledger-recovery"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -38,18 +37,21 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_extraction_spec,
 )
 from joulewise.schemas import BenchmarkConfig  # noqa: E402
+from joulewise.receipt_oracle import (  # noqa: E402
+    derive_bracket_session_receipt_oracle,
+)
 from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "67198cde644517a356251dcc278263ea05de039c01d1fef608febc0f987aa74f"
+EXPECTED_PACK_SHA256 = "80585026cbdaa8c9be7b93147a82eee9a7201e16aaa0b918145a095fe1e4f4fc"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "83a5d60ddd6a0dc4dc549842673258bb055634085f3b22d032bd512ee40ab509",
+    "generate_configs.py": "c7c7c10c61c882329649533d14e7625ccec3d898aaf209ea45a1e44ba5e15e00",
     "calibration_plan.json": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
     "calibration_plan.sha256": "35586fedd9d56b1c1ea69cf58cdc5a69cfd26cea7c58ecb5789ea88da3f891d1",
     "order_manifest.json": "ce4a4e9a3197a28d1f5bcf218cae29a52a7b12d6fb99d9eb2dcece73d2af08e9",
-    "plan_tree.json": "3efee38b1458f55af591cb4a700bf74f4a92345b580bdafbd1b64c1b5abf9808",
-    "plan_tree.sha256": "a9136d8cf58dc795bd2659f8dc682a9933b712ff587d5ad72fd13aab8328b03c",
+    "plan_tree.json": "1b4a16da507695197c1da6e94079254aab76998f1dc9baa5b659f84d39da39ca",
+    "plan_tree.sha256": "5bd95f88006963ea1acefb9b4f52c92bc9c56f781d1b5a6fa287f7aee42eb8dd",
     "producer_contract.json": "4906106f4dfae0e74b25ce6ca3ff4b5fafc3adb50a75bf8a84b6353ebcf7ee95",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
@@ -698,8 +700,23 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
         self.assertEqual(set(projection["projected_pins"].values()), {None})
         self.assertIsNone(projection["projection_receipt"])
-        self.assertIn(RECOVERY_BRANCH, json.dumps(self.tree, sort_keys=True))
-        self.assertIn(f"TODO({RECOVERY_BRANCH})", json.dumps(self.tree, sort_keys=True))
+
+    def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
+        expected = derive_bracket_session_receipt_oracle()
+        actual = self.tree["arm_attachments"]["receipt_oracle"]
+        self.assertEqual(actual, expected)
+        self.assertIsNone(actual["terminal_sequence"])
+        self.assertEqual(actual["arm_time_receipts"], [])
+        closeout = self.tree["closeout_attachments"]
+        self.assertEqual(closeout["postcollection_receipt_digests"], [])
+        self.assertIsNone(closeout["terminal_ledger_head"])
+        stale_marker = "impl/d117-" + "ledger-recovery"
+        generated_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(PACK_ROOT.rglob("*"))
+            if path.is_file() and path.suffix in {".json", ".md", ".py"}
+        )
+        self.assertNotIn(stale_marker, generated_text)
 
     def test_no_historical_claim_bytes_or_generation_discovery(self) -> None:
         generated_text = "\n".join(

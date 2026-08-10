@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.schemas import BenchmarkConfig
+from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.run_campaign import load_order_entries
 
 
@@ -25,8 +26,8 @@ GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
     "calibration_plan.json": "951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
-    "plan_tree.json": "11a2cb8629e4d64df3a1f00f75993741d5f2c16aafb47fffd08dbf8329b4d9e1",
-    "analysis_manifest_v3.json": "e24e214e52b2dc958fb2b8704c943e80fa68495ac005d6e334c2b2afbf355da5",
+    "plan_tree.json": "9bfe66e5d4267963db6bae8a806e23f671c8ccab83e1c647d62affdfd441d38c",
+    "analysis_manifest_v3.json": "10defe290284b60c232168bc27c2ed1f39ba9424ea8cd7c4a7df1c374fd67f56",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
@@ -505,6 +506,30 @@ class D117GammaPlanTest(unittest.TestCase):
         for forbidden in (".glob(", "os.walk", "Path.walk"):
             self.assertNotIn(forbidden, generator_source)
         self.assertIn('.rglob("*")', generator_source)
+
+    def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
+        expected = derive_bracket_session_receipt_oracle()
+        actual = self.tree["arm_attachments"]["receipt_oracle"]
+        self.assertEqual(actual, expected)
+        self.assertIsNone(actual["terminal_sequence"])
+        self.assertEqual(actual["arm_time_receipts"], [])
+        for attachment in (
+            self.tree["closeout_attachments"]["bracket_binding_sha256"],
+            self.tree["closeout_attachments"]["terminal_committed_head"],
+            self.analysis["postcollection_attachments"]["bracket_binding_sha256"],
+            self.analysis["postcollection_attachments"][
+                "committed_terminal_ledger_head"
+            ],
+        ):
+            self.assertEqual(attachment["status"], "EMPTY")
+            self.assertEqual(attachment["value"], "")
+        stale_marker = "impl/d117-" + "ledger-recovery"
+        generated_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(PACK.rglob("*"))
+            if path.is_file() and path.suffix in {".json", ".md", ".py"}
+        )
+        self.assertNotIn(stale_marker, generated_text)
 
     def test_decode_multiplicity_is_explicitly_contingent(self) -> None:
         decode = next(
