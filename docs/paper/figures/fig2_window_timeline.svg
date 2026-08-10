@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="fig2title fig2desc">
+  <title id="fig2title">Structure of one measurement window, and how counterbalanced order cancels steady drift</title>
+  <desc id="fig2desc">Schematic session timeline. A calibration pulse train runs before and after the science work, forming a bracket. Inside the bracket, an admission gate is followed by reference runs, science stages built from A-B-B-A blocks, a midpoint reference run, more science stages, and closing reference runs. An inset expands one A-B-B-A block: four runs sit at slots one to four on a slanted drift line, and the two A runs and the two B runs share the same average position in time. No measured data is shown.</desc>
+
+  <defs>
+    <marker id="f2aEnd" markerWidth="9" markerHeight="9" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8.5,4 L0,8 z" fill="#333333"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="620" fill="#ffffff"/>
+
+  <text x="80" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure 2. One measurement window: calibration bracket, admission gate, reference runs, and counterbalanced science stages</text>
+  <text x="80" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic diagram. Stage widths are illustrative and not to scale; this figure contains no measured data.</text>
+
+  <!-- session time arrow -->
+  <line x1="150" y1="100" x2="1120" y2="100" stroke="#888888" stroke-width="1.8" marker-end="url(#f2aEnd)"/>
+  <text x="80" y="104" font-family="sans-serif" font-size="12.5" fill="#555555">session time</text>
+
+  <!-- pre-window calibration -->
+  <rect x="80" y="116" width="112" height="62" fill="#1b6ca8" fill-opacity="0.10" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="136" y="140" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">pre-window</text>
+  <text x="136" y="155" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">calibration</text>
+  <text x="136" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">pulse train</text>
+
+  <!-- admission gate -->
+  <rect x="200" y="116" width="92" height="62" fill="#ededed" stroke="#444444" stroke-width="2.2"/>
+  <text x="246" y="147" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">admission</text>
+  <text x="246" y="162" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">gate</text>
+
+  <!-- start reference runs -->
+  <rect x="300" y="116" width="98" height="62" fill="#f7f7f7" stroke="#777777" stroke-width="1.8"/>
+  <g fill="#d9d9d9" stroke="#777777" stroke-width="1.5">
+    <rect x="310" y="126" width="24" height="26"/>
+    <rect x="337" y="126" width="24" height="26"/>
+    <rect x="364" y="126" width="24" height="26"/>
+  </g>
+  <text x="349" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">reference runs</text>
+
+  <!-- science stages, first half -->
+  <rect x="406" y="116" width="190" height="62" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2"/>
+  <g fill="#c9c9c9" stroke="#666666" stroke-width="1.5">
+    <rect x="418" y="126" width="12" height="26"/>
+    <rect x="437" y="126" width="12" height="26"/>
+    <rect x="456" y="126" width="12" height="26"/>
+    <rect x="475" y="126" width="12" height="26"/>
+    <rect x="500" y="126" width="12" height="26"/>
+    <rect x="519" y="126" width="12" height="26"/>
+    <rect x="538" y="126" width="12" height="26"/>
+    <rect x="557" y="126" width="12" height="26"/>
+  </g>
+  <text x="501" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">science stages (ABBA blocks)</text>
+
+  <!-- midpoint reference -->
+  <rect x="604" y="116" width="92" height="62" fill="#f7f7f7" stroke="#777777" stroke-width="1.8"/>
+  <rect x="638" y="124" width="24" height="24" fill="#d9d9d9" stroke="#777777" stroke-width="1.5"/>
+  <text x="650" y="162" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">midpoint</text>
+  <text x="650" y="175" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">reference</text>
+
+  <!-- science stages, second half -->
+  <rect x="704" y="116" width="190" height="62" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.2"/>
+  <g fill="#c9c9c9" stroke="#666666" stroke-width="1.5">
+    <rect x="716" y="126" width="12" height="26"/>
+    <rect x="735" y="126" width="12" height="26"/>
+    <rect x="754" y="126" width="12" height="26"/>
+    <rect x="773" y="126" width="12" height="26"/>
+    <rect x="798" y="126" width="12" height="26"/>
+    <rect x="817" y="126" width="12" height="26"/>
+    <rect x="836" y="126" width="12" height="26"/>
+    <rect x="855" y="126" width="12" height="26"/>
+  </g>
+  <text x="799" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">science stages (ABBA blocks)</text>
+
+  <!-- end reference runs -->
+  <rect x="902" y="116" width="98" height="62" fill="#f7f7f7" stroke="#777777" stroke-width="1.8"/>
+  <g fill="#d9d9d9" stroke="#777777" stroke-width="1.5">
+    <rect x="912" y="126" width="24" height="26"/>
+    <rect x="939" y="126" width="24" height="26"/>
+    <rect x="966" y="126" width="24" height="26"/>
+  </g>
+  <text x="951" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">reference runs</text>
+
+  <!-- post-window calibration -->
+  <rect x="1008" y="116" width="112" height="62" fill="#1b6ca8" fill-opacity="0.10" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="1064" y="140" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">post-window</text>
+  <text x="1064" y="155" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">calibration</text>
+  <text x="1064" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">pulse train</text>
+
+  <!-- calibration bracket span -->
+  <path d="M136,178 L136,198 L1064,198 L1064,178" fill="none" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="600" y="218" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">calibration bracket &#8212; the timing bound is measured before and after the science stages</text>
+  <text x="600" y="236" font-family="sans-serif" font-size="13" fill="#333333" text-anchor="middle">the operative bound is the larger of the two, plus a measured, never-zero allowance for the drift between them</text>
+
+  <!-- notes -->
+  <g font-family="sans-serif" font-size="12.5" fill="#333333">
+    <text x="80" y="266">Reference runs are repeated fixed workloads used to measure drift across the window; their schedule is pre-registered per campaign.</text>
+    <text x="80" y="284">The admission gate re-checks quiet state, power policy, thermal pressure, clock anchoring, and calibration freshness immediately before</text>
+    <text x="80" y="302">measurement; a failed check refuses the stage rather than proceeding, and evidence from a refused stage cannot support a claim.</text>
+  </g>
+
+  <!-- inset panel -->
+  <rect x="80" y="330" width="580" height="250" fill="#fafafa" stroke="#cccccc" stroke-width="1.8"/>
+  <text x="100" y="356" font-family="sans-serif" font-size="13.5" font-weight="bold" fill="#1b1b1b">One ABBA block, expanded</text>
+
+  <!-- inset axes -->
+  <line x1="140" y1="376" x2="140" y2="490" stroke="#333333" stroke-width="1.8"/>
+  <line x1="140" y1="490" x2="600" y2="490" stroke="#333333" stroke-width="1.8"/>
+  <text x="122" y="433" font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle" transform="rotate(-90 122 433)">measured value</text>
+
+  <!-- drift line -->
+  <line x1="145" y1="482" x2="585" y2="398" stroke="#888888" stroke-width="2" stroke-dasharray="8 5"/>
+  <text x="152" y="400" font-family="sans-serif" font-size="12" fill="#555555">steady drift over the block</text>
+  <line x1="248" y1="406" x2="272" y2="454" stroke="#888888" stroke-width="1.5"/>
+
+  <!-- shared mean position -->
+  <line x1="365" y1="376" x2="365" y2="556" stroke="#1b6ca8" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <text x="375" y="370" font-family="sans-serif" font-size="12" fill="#1b6ca8" font-weight="bold">same average position in time</text>
+
+  <!-- run markers -->
+  <g stroke="#1b1b1b" stroke-width="2">
+    <circle cx="196" cy="452.3" r="12" fill="#ffffff"/>
+    <circle cx="309" cy="430.7" r="12" fill="#1b6ca8"/>
+    <circle cx="421" cy="409.3" r="12" fill="#1b6ca8"/>
+    <circle cx="534" cy="387.7" r="12" fill="#ffffff"/>
+  </g>
+  <g font-family="sans-serif" font-size="13" font-weight="bold" text-anchor="middle">
+    <text x="196" y="457" fill="#1b1b1b">A</text>
+    <text x="309" y="435" fill="#ffffff">B</text>
+    <text x="421" y="414" fill="#ffffff">B</text>
+    <text x="534" y="392" fill="#1b1b1b">A</text>
+  </g>
+
+  <!-- slot labels -->
+  <g font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle">
+    <text x="196" y="506">slot 1</text>
+    <text x="309" y="506">slot 2</text>
+    <text x="421" y="506">slot 3</text>
+    <text x="534" y="506">slot 4</text>
+  </g>
+
+  <!-- averaging brackets -->
+  <path d="M309,520 L309,528 L421,528 L421,520" fill="none" stroke="#1b6ca8" stroke-width="1.8"/>
+  <line x1="365" y1="528" x2="365" y2="534" stroke="#1b6ca8" stroke-width="1.8"/>
+  <text x="431" y="532" font-family="sans-serif" font-size="12" fill="#1b1b1b">average time of the two B runs</text>
+
+  <path d="M196,544 L196,552 L534,552 L534,544" fill="none" stroke="#1b6ca8" stroke-width="1.8"/>
+  <line x1="365" y1="552" x2="365" y2="558" stroke="#1b6ca8" stroke-width="1.8"/>
+  <text x="196" y="572" font-family="sans-serif" font-size="12" fill="#1b1b1b">average time of the two A runs</text>
+
+  <!-- inset explanation -->
+  <g font-family="sans-serif" font-size="13" fill="#1b1b1b">
+    <text x="700" y="356">A runs and B runs share the same average position in</text>
+    <text x="700" y="375">time, so a steady drift over the block subtracts out of</text>
+    <text x="700" y="394">the A-versus-B difference.</text>
+
+    <text x="700" y="424">Curvature &#8212; drift that speeds up or slows down &#8212; does</text>
+    <text x="700" y="443">not cancel this way. It is bounded by the whole-window</text>
+    <text x="700" y="462">drift allowance, tracked by the reference runs above.</text>
+
+    <text x="700" y="492">The block difference is (B1 + B2 &#8722; A1 &#8722; A2) / 2, so a</text>
+    <text x="700" y="511">positive value means condition B used more energy.</text>
+
+    <text x="700" y="541">Counterbalancing reduces common drift; it does not</text>
+    <text x="700" y="560">replace the measured whole-window drift allowance.</text>
+  </g>
+</svg>
