@@ -1033,14 +1033,12 @@
     "bracket_binding_sha256": {
       "status": "EMPTY",
       "value": "",
-      "todo": "TODO(impl/d117-ledger-recovery): populate after landed receipt oracle",
-      "branch": "impl/d117-ledger-recovery"
+      "todo": "TODO(postcollection): populate from the completed bracket session"
     },
     "committed_terminal_ledger_head": {
       "status": "EMPTY",
       "value": "",
-      "todo": "TODO(impl/d117-ledger-recovery): populate after landed receipt oracle",
-      "branch": "impl/d117-ledger-recovery"
+      "todo": "TODO(postcollection): populate from the committed terminal head"
     },
     "aggregate_floor_artifact_sha256": {
       "status": "EMPTY",

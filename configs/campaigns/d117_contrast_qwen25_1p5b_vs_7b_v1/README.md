@@ -25,11 +25,14 @@ alpha/beta decode cell IDs but contains no aggregate-artifact SHA and is not a
 pinset. A 256-token prefill floor or a ruled 128-to-256 transport rule remains
 an explicit EMPTY slot.
 
-Every receipt-count, arm-time receipt, and terminal-sequence slot remains
-EMPTY with a TODO naming `impl/d117-ledger-recovery`. Identity pins remain
-EMPTY pending U11. The D-124 estimator identity and stationarity-transfer
-assumption are registered as proposed implementation identities; the
-implementing unit must still land through D-118/D-121 before ratification.
+The receipt oracle is replay-derived from `joulewise.calibration_ledger` and
+records 10 physical receipts for
+5 logical operations per finalized pre/post
+bracket session. Actual receipt bytes and the absolute terminal sequence remain
+empty until arm and collection. Identity pins remain EMPTY pending U11. The
+D-124 estimator identity and stationarity-transfer assumption are registered as
+proposed implementation identities; the implementing unit must still land
+through D-118/D-121 before ratification.
 
 Regenerate or check:
 

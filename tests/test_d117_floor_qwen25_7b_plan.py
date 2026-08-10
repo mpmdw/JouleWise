@@ -19,6 +19,7 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
 )
 from joulewise.floor_extraction import validate_extraction_spec
+from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.extract_detection_floors import main as extract_main
 from scripts.run_campaign import load_order_entries
 
@@ -33,7 +34,6 @@ PLAN_ID = "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-7b-v1"
 DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
-TODO_BRANCH = "impl/d117-ledger-recovery"
 
 EXPECTED_SHA256 = {
     "calibration_plan.json": (
@@ -50,7 +50,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
     "generate_configs.py": (
-        "3c70cd799184ccf759341ebf5e72bc139a20dea228e119556c71edc81cab3dc0"
+        "33b31e144da878cbe3c908e14be1f25ad0bceda933eb39239753c32027e94b73"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
@@ -65,10 +65,10 @@ EXPECTED_SHA256 = {
         "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
     ),
     "plan_tree.json": (
-        "1ae3890e9750c012e2d3ee327755379f39d7e5a3645a36ee104379d33cf72ed3"
+        "af2ec2bdfb4919d4b3a37ab4bab526f41cd573b2563b4272117d59425c2eaeeb"
     ),
     "plan_tree.sha256": (
-        "f5b333a7592fd761aebf7958e7fb45e92d3d0f884712545f5131d5540d8da712"
+        "858fbb7c1610a7041096ef84ac116efc69cc3dde30afd7da701ee3d07ab1c3eb"
     ),
     "producer_contract.json": (
         "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
@@ -683,8 +683,24 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                     for forbidden in ("$", "~", "\n", ";", "&&", "|"):
                         self.assertNotIn(forbidden, rendered)
 
-        self.assertIn(TODO_BRANCH, (PACK / "README.md").read_text(encoding="utf-8"))
-        self.assertIn(TODO_BRANCH, json.dumps(tree, sort_keys=True))
+
+    def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
+        tree = load_json(PACK / "plan_tree.json")
+        expected = derive_bracket_session_receipt_oracle()
+        actual = tree["arm_attachments"]["receipt_oracle"]
+        self.assertEqual(actual, expected)
+        self.assertIsNone(actual["terminal_sequence"])
+        self.assertEqual(actual["arm_time_receipts"], [])
+        closeout = tree["closeout_attachments"]
+        self.assertEqual(closeout["postcollection_receipt_digests"], [])
+        self.assertIsNone(closeout["terminal_ledger_head"])
+        stale_marker = "impl/d117-" + "ledger-recovery"
+        generated_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(PACK.rglob("*"))
+            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
+        )
+        self.assertNotIn(stale_marker, generated_text)
 
     def test_producer_contract_is_beta_position_and_roles(self) -> None:
         producer = load_json(PACK / "producer_contract.json")
@@ -726,7 +742,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md"}
+            if path.is_file() and path.suffix in {".json", ".md", ".sha256"}
         )
         for diagnostic in ("6." + "294380", "13." + "998036"):
             self.assertNotIn(diagnostic, generated_text)

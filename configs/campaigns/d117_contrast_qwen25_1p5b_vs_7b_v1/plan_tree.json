@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py",
-    "sha256": "ae79085d5f20b8fbc2a9a80bd49d9c86d5544117e89a7e5cb09e7a25218e0d06"
+    "sha256": "197ca463a87335bc3cf75fc9b2c88470c92d551a16edebd566ad68f1bcda9916"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
@@ -39,7 +39,6 @@
     "issued_artifact_reopened": false,
     "arming_dependencies": [
       "impl/d117-postcollection-trust landed and mint bar lifted",
-      "impl/d117-ledger-recovery landed and arm blocker discharged",
       "U2 successor registry available",
       "reason-code unit resolved",
       "FLOOR-COMMONMODE-01 implementation landed through D-118/D-121",
@@ -2824,12 +2823,111 @@
       "todo": "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm"
     },
     "receipt_oracle": {
-      "status": "EMPTY",
-      "receipt_count": "",
-      "arm_time_receipts": [],
-      "terminal_sequence": "",
-      "todo": "TODO(impl/d117-ledger-recovery): receipt oracle is unmerged; keep empty until the branch lands and B1 re-derives the cadence",
-      "branch": "impl/d117-ledger-recovery"
+      "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
+      "status": "derived_from_production_model",
+      "source": {
+        "module": "joulewise.calibration_ledger",
+        "operation_functions": [
+          "append_bracket_session_receipt",
+          "claim_bracket_session_slot",
+          "finalize_bracket_session_slot"
+        ],
+        "append_policy_revision": "d117-ledger-resident-v1",
+        "claim_policy_revision": "d117-stable-claim-v1"
+      },
+      "session_terminal_state": "finalized",
+      "logical_operation_count": 5,
+      "receipt_count": 10,
+      "physical_receipt_shape": [
+        {
+          "relative_sequence": 1,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-open",
+          "slot": null
+        },
+        {
+          "relative_sequence": 2,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-open",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": null
+        },
+        {
+          "relative_sequence": 3,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 4,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 5,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 6,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "pre"
+        },
+        {
+          "relative_sequence": 7,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-claim",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 8,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-claim",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 9,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "event": "append-intent",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "target_event": "bracket-session-slot-finalization",
+          "slot": "post"
+        },
+        {
+          "relative_sequence": 10,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "event": "bracket-session-slot-finalization",
+          "target_schema_version": null,
+          "target_event": null,
+          "slot": "post"
+        }
+      ],
+      "terminal_sequence": null,
+      "terminal_sequence_rule": {
+        "base": "authenticated_arm_head_sequence",
+        "delta": 10,
+        "applicability": "clean_path_no_recovery_control_rows",
+        "recovery_note": "Authenticated recovery control rows (for example an abandon-tail repair between an intent and its reconstructed target) may lawfully extend the terminal sequence beyond base+delta. Arm-time verification must validate the business-receipt cadence separately from authenticated control rows rather than requiring base+delta exactly."
+      },
+      "arm_time_receipts": []
     },
     "prefill_phase_recording_proof": {
       "status": "EMPTY",
@@ -2846,14 +2944,12 @@
     "bracket_binding_sha256": {
       "status": "EMPTY",
       "value": "",
-      "todo": "TODO(impl/d117-ledger-recovery): receipt oracle is unmerged; keep empty until the branch lands and B1 re-derives the cadence",
-      "branch": "impl/d117-ledger-recovery"
+      "todo": "TODO(postcollection): populate from the completed bracket session"
     },
     "terminal_committed_head": {
       "status": "EMPTY",
       "value": "",
-      "todo": "TODO(impl/d117-ledger-recovery): receipt oracle is unmerged; keep empty until the branch lands and B1 re-derives the cadence",
-      "branch": "impl/d117-ledger-recovery"
+      "todo": "TODO(postcollection): populate from the committed terminal head"
     },
     "whole_window_verdict_sha256": {
       "status": "EMPTY",
@@ -2878,7 +2974,7 @@
   },
   "downstream_contract": {
     "analysis_manifest_path": "analysis_manifest_v3.json",
-    "analysis_manifest_sha256": "e24e214e52b2dc958fb2b8704c943e80fa68495ac005d6e334c2b2afbf355da5",
+    "analysis_manifest_sha256": "10defe290284b60c232168bc27c2ed1f39ba9424ea8cd7c4a7df1c374fd67f56",
     "consumer_family_declaration_path": "consumer_family_declaration.json",
     "consumer_family_declaration_sha256": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
     "binding_mode": "declaration_only"
