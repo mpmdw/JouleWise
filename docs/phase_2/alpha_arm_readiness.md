@@ -1,16 +1,19 @@
 # Window ALPHA arm readiness — GO / NO-GO
 
-**Checkpoint:** T4, 2026-08-11 (supersedes the T3 and T1 lines. Recovery
-merged — PR #118, 2026-08-09. Mint trust merged — PR #122, 2026-08-11.)
+**Checkpoint:** T4-late, 2026-08-11 (supersedes the earlier T4, T3 and T1
+lines. Recovery merged — PR #118, 2026-08-09. Mint trust merged — PR #122,
+2026-08-11. D-133 cold-gate disposition — 2026-08-11.)
 
 **Current verdict: NO-GO. Do not arm Window ALPHA.** Both merge-event
-blockers have cleared, but FLOOR-COMMONMODE-01 is in Ed-relicensed round 5
-under the D-124 relicense and its binding pre-committed stopping rule has not
-yet produced the estimator disposition, so pack-freeze plan ruling Q7 still
-bars any pack from freezing; the U11 arm-time identity-pin projection tool
-does not exist; the Ed-funded Q8 p256 prefill floor cells are unbuilt; and
-neither the packs nor the generated plan-specific arm-readiness records
-required by run-book §5C are frozen.
+blockers have cleared, and D-133 resolved the estimator question for this
+cycle: this fallback branch re-specs all packs to the worst-case default
+estimator and pack freezing is NO LONGER barred by the estimator (freeze-plan
+Q7 resolved by reversal; FCM-01 continues only as a non-freeze-gating desk
+thread per D-133). Remaining NO-GO grounds: the U11 identity-pin projection
+tool is implemented but not yet merged (PR #131 in gates); the Ed-funded Q8
+p256 prefill floor cells are unbuilt; and neither the packs nor the
+generated plan-specific arm-readiness records required by run-book §5C are
+frozen.
 
 Window **ALPHA** is the first prospective D-117 night: the 1.5B decode floor
 with prefill floor cells. **Lead** means the project lead. **Merge event**
