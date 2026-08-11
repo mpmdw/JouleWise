@@ -37,10 +37,10 @@ PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
 
 EXPECTED_SHA256 = {
     "calibration_plan.json": (
-        "56dbc9b6fa8f5c0bf5d28687f82ddc6f32bde1478836b1f15e8c5602de9595a7"
+        "c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40"
     ),
     "calibration_plan.sha256": (
-        "a6685b22b21dbf5c24755a9ee5254316ef4b9c100e6f6ef20dbac3d1ba827743"
+        "d281cd0ff762d4b3bbe1498d6eee9df2850f97ac390f212ca6eed81bfde959c7"
     ),
     "condition_families/condition_family_df_ph_decode_qwen25_7b.json": (
         "d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb"
@@ -50,32 +50,32 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
     "generate_configs.py": (
-        "33b31e144da878cbe3c908e14be1f25ad0bceda933eb39239753c32027e94b73"
+        "66c953215ae2894bd0dcf81f7da7a31b70926502fe98c7975fcc6da0917e9e3e"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
-        "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
+        "35126f0c6e6b268ec849f1115768579578b169d06d33cf77d907fe52bc51bc04"
     ),
     "02_phase_decode_abba_blocks_01_05/order_manifest.json": (
-        "a53f2e158cc8dcea94d48dde5e442007c9d893181bb6fbb2c05e57a5be4007c2"
+        "3d72b022e1e5e772e721810707f981fa4d4aa25ffb9167933ce66acd1c2994c1"
     ),
     "03_phase_decode_abba_blocks_06_10/order_manifest.json": (
-        "b38238eaac0376cfaa22c88b9b2e278650bd14fc322efd10ee803d8b05b03c65"
+        "8752dae5da470d63a24ce78d48a3b041d1ebddef64fe511fc16a02536858dcc6"
     ),
     "order_manifest.json": (
-        "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
+        "d6f65f92964aa748bf71eb3ca871eea291825a9e839320330bb1a629713c6a9c"
     ),
     "plan_tree.json": (
-        "af2ec2bdfb4919d4b3a37ab4bab526f41cd573b2563b4272117d59425c2eaeeb"
+        "3847f5dbf362ef8047df1a590147c0b4d130e2ee44692c51dc76a4d3cf7aff7f"
     ),
     "plan_tree.sha256": (
-        "858fbb7c1610a7041096ef84ac116efc69cc3dde30afd7da701ee3d07ab1c3eb"
+        "2173c904a1b1a0d9019620c9b30ae4b3ea865eeefafb3883c9be5cc0449b7cb4"
     ),
     "producer_contract.json": (
-        "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
+        "3dc26cdeb0eb49c5dc8f56f33d5cc4654a8f92515a15044b7dc7065688944eac"
     ),
 }
 EXPECTED_SPEC_SHA256 = (
-    "dc84ca037e59f47b587fe7deb1b610bf8bb91fd42541729bf92f357352537491"
+    "2690aac678b602868a42e2c1483eb548a28ea06ad5c6ffa8fb570b2b6a8b8f1f"
 )
 
 
@@ -444,36 +444,20 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 ["phase", "prefill"],
             ],
         )
+        for cell in (cells[0], cells[2]):
+            self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
         for cell in (cells[1], cells[3]):
-            self.assertEqual(
-                cell["estimator"],
-                "d124_two_shared_edge_common_mode.v1",
-            )
-            self.assertEqual(
-                cell["estimator_registration"]["transfer_assumption"][
-                    "assumption_id"
-                ],
-                "d124_block_bracket_edges_shared_within_abba.v1",
-            )
-            self.assertEqual(
-                cell["estimator_registration"]["status"],
-                "candidate_pending_floor_commonmode_01",
-            )
-            self.assertEqual(
-                cell["estimator_registration"]["sibling_assumption_cross_reference"],
-                {
-                    "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
-                    "shared_gate": "FLOOR-COMMONMODE-01",
-                    "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
-                },
-            )
-            self.assertEqual(
-                cell["estimator_registration"]["covariance_treatment"],
-                "two_shared_edges_plus_bundle_specific_adversarial_terms",
-            )
+            self.assertNotIn("estimator", cell)
+            self.assertNotIn("estimator_registration", cell)
             self.assertEqual(
                 cell["calibration_basis"]["allowance_embedding_count"], 1
             )
+        plan = load_json(PACK / "calibration_plan.json")
+        for cell in (plan["floor_cells"][0], plan["floor_cells"][2]):
+            self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
+        for cell in (plan["floor_cells"][1], plan["floor_cells"][3]):
+            self.assertNotIn("estimator", cell)
+            self.assertNotIn("estimator_registration", cell)
 
     def test_issued_acceptance_and_reported_mean_registration(self) -> None:
         tree = load_json(PACK / "plan_tree.json")

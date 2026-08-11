@@ -45,7 +45,7 @@
       "production-window",
       "floor-calibration",
       "df-condition=df-ph-decode",
-      "calibration-plan-sha256=05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
+      "calibration-plan-sha256=56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
       "rep3"
     ]
   }

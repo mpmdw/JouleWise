@@ -51,18 +51,16 @@ decision record only.
   artifact, sha `31611396…`); a successor issuing before arm ⇒ pack
   regeneration. D-125's lineage envelope stays available but is not required
   per-pack.
-- **Q7 D-124 estimator — RULED (a gate, not a choice):** packs may NOT freeze
-  while the estimator is `candidate_pending_floor_commonmode_01`; D-125
-  requires implementation first ⇒ **FLOOR-COMMONMODE-01 work order** (below)
-  must land through the full D-118/D-121 gauntlet before pack regeneration.
+- **Q7 D-124 estimator — RESOLVED-BY-REVERSAL (2026-08-11):** the estimator
+  gate is void because the candidate was withdrawn under its pre-committed
+  stopping rule. Contrasts use the worst-case default. The prefill contrast's
+  claim capability is reduced accordingly, and the arm proceeds under the
+  default floors.
 
 ## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed)
 
-1. **FLOOR-COMMONMODE-01** — implement the D-124 two-shared-edge common-mode
-   estimator (two shared edges + bundle-specific adversarial terms, once-only
-   allowance, transfer limitation, identical calibration/consumer covariance
-   treatment) → D-118/D-121 gauntlet → pin its implementation identity in all
-   affected packs. **The long pole for freeze.**
+1. ~~**FLOOR-COMMONMODE-01**~~ — **WITHDRAWN 2026-08-11** under the
+   pre-committed stopping rule; packs use the worst-case default.
 2. **D-123 byte-identity proof (Q5)** — strengthen both floor packs'
    `test_reporting_section_does_not_change_floor_output` to serialize extractor
    results through the production canonical output path and compare raw
@@ -82,8 +80,8 @@ decision record only.
 
 ## Fastest path to a frozen, armable pack set
 
-Ed taps Q1+Q8 RULED → land FLOOR-COMMONMODE-01 (gauntlet) → the two remaining
-engineering proofs (2–3) → regenerate all three packs from the resulting head
+Ed taps Q1+Q8 RULED → land the two remaining engineering proofs (2–3) →
+regenerate all three packs from the resulting head
 → generator `--check` + focused/canonical suites → issue readiness + identity
 projections → materialize the first arm against the authenticated ledger head.
 (Freeze also assumes the trust mint bar has landed.)
@@ -91,7 +89,7 @@ projections → materialize the first arm against the authenticated ledger head.
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
 
-## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — lineage-monotone allowance vs short prefill windows [ED-VISIBILITY]
+## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — SUPERSEDED 2026-08-11 BY Q7 REVERSAL
 
 Both floor packs' extraction specs select the D-124 common-mode estimator for
 the **prefill p128** comparative cells, not only decode. The estimator's
