@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+from contextlib import contextmanager
 import hmac
 import hashlib
 import json
@@ -112,6 +113,7 @@ PROTOCOL_V2_PATH = (
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
+SAMPLER_TERMINATE_TIMEOUT_S = 10.0
 TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
     "joulewise.test_writer_crash_authorization.v1"
 )
@@ -377,14 +379,65 @@ def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
 
 
 def _terminate_powermetrics(process: subprocess.Popen) -> None:
-    """Best-effort bounded termination for a calibration sampler."""
+    """Boundedly terminate, kill if needed, and reap a sampler process group."""
 
-    process.terminate()
-    try:
-        process.communicate(timeout=10.0)
-    except subprocess.TimeoutExpired:
-        process.kill()
+    pid = getattr(process, "pid", None)
+    poll = getattr(process, "poll", None)
+    if callable(poll) and poll() is not None:
         process.communicate()
+        if not isinstance(pid, int):
+            return
+    if isinstance(pid, int):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    else:  # Small unit-test fakes retain the direct-child compatibility seam.
+        process.terminate()
+    try:
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        if isinstance(pid, int):
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            process.kill()
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
+    if isinstance(pid, int):
+        deadline = time.monotonic() + max(2.0, SAMPLER_TERMINATE_TIMEOUT_S)
+        while True:
+            try:
+                os.killpg(pid, 0)
+            except ProcessLookupError:
+                break
+            if time.monotonic() >= deadline:
+                try:
+                    os.killpg(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    break
+                if time.monotonic() >= deadline + 2.0:
+                    raise RuntimeError(
+                        f"sampler process group {pid} survived bounded SIGKILL"
+                    )
+            time.sleep(0.01)
+
+
+@contextmanager
+def _sampler_lifetime(command: list[str]):
+    """Own one complete sampler lifetime, including exceptional exits."""
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        yield process
+    finally:
+        _terminate_powermetrics(process)
 
 
 def wait_for_preworkload_rollover(
@@ -1140,123 +1193,120 @@ def main(argv: list[str] | None = None) -> int:
         str(capture_path),
     ]
     pre_spawn = clock.stamp()
-    process = subprocess.Popen(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
-    first_parse = None
-    deadline = time.monotonic() + args.sampler_ready_timeout_s
-    while time.monotonic() < deadline:
-        if capture_path.exists() and capture_path.stat().st_size > 0:
-            first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
-            if first_frame.strip():
-                try:
-                    parse_powermetrics_records(first_frame)
-                except ValueError:
-                    pass
-                else:
-                    first_parse = clock.stamp()
-                    break
-        time.sleep(
-            min(
-                0.05 * args.time_scale_for_test,
-                args.sampler_ready_timeout_s / 4,
+    with _sampler_lifetime(command) as process:
+        _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
+        first_parse = None
+        deadline = time.monotonic() + args.sampler_ready_timeout_s
+        while time.monotonic() < deadline:
+            if capture_path.exists() and capture_path.stat().st_size > 0:
+                first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
+                if first_frame.strip():
+                    try:
+                        parse_powermetrics_records(first_frame)
+                    except ValueError:
+                        pass
+                    else:
+                        first_parse = clock.stamp()
+                        break
+            time.sleep(
+                min(
+                    0.05 * args.time_scale_for_test,
+                    args.sampler_ready_timeout_s / 4,
+                )
             )
-        )
-    if first_parse is None:
-        process.terminate()
-        finalize_abandoned("powermetrics_never_ready")
-        return emit_refusal(
-            RefusalCode.SAMPLER_NEVER_READY,
-            stream=sys.stderr,
-        )
-    _writer_stage(WriterStage.AFTER_SAMPLER_READY)
-    # D-078: wait for a native whole-second rollover before any workload.
-    try:
-        wait_for_preworkload_rollover(
-            capture_path,
-            process,
-            timeout_s=args.rollover_timeout_s,
-            poll_s=min(
-                0.05 * args.time_scale_for_test,
-                args.rollover_timeout_s / 4,
-            ),
-        )
-    except RuntimeError as exc:
-        events.close()
-        finalize_abandoned(str(exc))
-        return emit_refusal(
-            RefusalCode.ROLLOVER_GATE_TIMEOUT,
-            stream=sys.stderr,
-        )
-    _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
-    sampling_started = clock.stamp()
-    emit("sampling_started", {})
+        if first_parse is None:
+            finalize_abandoned("powermetrics_never_ready")
+            return emit_refusal(
+                RefusalCode.SAMPLER_NEVER_READY,
+                stream=sys.stderr,
+            )
+        _writer_stage(WriterStage.AFTER_SAMPLER_READY)
+        # D-078: wait for a native whole-second rollover before any workload.
+        try:
+            wait_for_preworkload_rollover(
+                capture_path,
+                process,
+                timeout_s=args.rollover_timeout_s,
+                poll_s=min(
+                    0.05 * args.time_scale_for_test,
+                    args.rollover_timeout_s / 4,
+                ),
+            )
+        except RuntimeError as exc:
+            events.close()
+            finalize_abandoned(str(exc))
+            return emit_refusal(
+                RefusalCode.ROLLOVER_GATE_TIMEOUT,
+                stream=sys.stderr,
+            )
+        _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
+        sampling_started = clock.stamp()
+        emit("sampling_started", {})
 
-    time.sleep(BASELINE_S * args.time_scale_for_test)
-    warmups: list[CommandedPulse] = []
-    for warmup_index in range(WARMUP_PULSE_COUNT):
-        on_stamp = clock.stamp()
-        emit(
-            "warmup_command_on",
-            {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
-        )
-        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
-        off_stamp = clock.stamp()
-        emit(
-            "warmup_command_off",
-            {"warmup_index": warmup_index, "clock_stamp": asdict(off_stamp)},
-        )
-        warmups.append(
-            CommandedPulse(
-                on_s=on_stamp.epoch_s,
-                off_s=off_stamp.epoch_s,
-                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
-                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+        time.sleep(BASELINE_S * args.time_scale_for_test)
+        warmups: list[CommandedPulse] = []
+        for warmup_index in range(WARMUP_PULSE_COUNT):
+            on_stamp = clock.stamp()
+            emit(
+                "warmup_command_on",
+                {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
             )
-        )
-        time.sleep(1.5 * args.time_scale_for_test)
-    time.sleep(BASELINE_S * args.time_scale_for_test)
+            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            off_stamp = clock.stamp()
+            emit(
+                "warmup_command_off",
+                {"warmup_index": warmup_index, "clock_stamp": asdict(off_stamp)},
+            )
+            warmups.append(
+                CommandedPulse(
+                    on_s=on_stamp.epoch_s,
+                    off_s=off_stamp.epoch_s,
+                    on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                    off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+                )
+            )
+            time.sleep(1.5 * args.time_scale_for_test)
+        time.sleep(BASELINE_S * args.time_scale_for_test)
 
-    # Van der Corput spacing is schedule-relative (offsets start at 0 for the
-    # first pulse), so the loop cursor MUST be measured from the pulse-loop
-    # start, not from sampling-start (which precedes it by the baseline +
-    # warmup + baseline preamble). Measuring elapsed against sampling_started
-    # made every gap negative and collapsed the pulses back-to-back.
-    pulse_loop_mono0 = time.monotonic()
-    pulses: list[CommandedPulse] = []
-    for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
-        on_offset_s = raw_on_offset_s * args.time_scale_for_test
-        off_offset_s = raw_off_offset_s * args.time_scale_for_test
-        _writer_stage(WriterStage.DURING_CAPTURE)
-        if pulses:
-            elapsed_s = time.monotonic() - pulse_loop_mono0
-            time.sleep(max(0.0, on_offset_s - elapsed_s))
-        on_stamp = clock.stamp()
-        emit(
-            "pulse_command_on",
-            {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
-        )
-        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
-        off_stamp = clock.stamp()
-        emit(
-            "pulse_command_off",
-            {"clock_stamp": asdict(off_stamp), "planned_off_offset_s": off_offset_s},
-        )
-        pulses.append(
-            CommandedPulse(
-                on_s=on_stamp.epoch_s,
-                off_s=off_stamp.epoch_s,
-                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
-                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+        # Van der Corput spacing is schedule-relative (offsets start at 0 for the
+        # first pulse), so the loop cursor MUST be measured from the pulse-loop
+        # start, not from sampling-start (which precedes it by the baseline +
+        # warmup + baseline preamble). Measuring elapsed against sampling_started
+        # made every gap negative and collapsed the pulses back-to-back.
+        pulse_loop_mono0 = time.monotonic()
+        pulses: list[CommandedPulse] = []
+        for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
+            on_offset_s = raw_on_offset_s * args.time_scale_for_test
+            off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            _writer_stage(WriterStage.DURING_CAPTURE)
+            if pulses:
+                elapsed_s = time.monotonic() - pulse_loop_mono0
+                time.sleep(max(0.0, on_offset_s - elapsed_s))
+            on_stamp = clock.stamp()
+            emit(
+                "pulse_command_on",
+                {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
             )
-        )
-    time.sleep(BASELINE_S * args.time_scale_for_test)
-    sampling_stopped = clock.stamp()
-    emit("sampling_stopped", {})
-    _terminate_powermetrics(process)
-    _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
-    post_parse = clock.stamp()
+            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            off_stamp = clock.stamp()
+            emit(
+                "pulse_command_off",
+                {"clock_stamp": asdict(off_stamp), "planned_off_offset_s": off_offset_s},
+            )
+            pulses.append(
+                CommandedPulse(
+                    on_s=on_stamp.epoch_s,
+                    off_s=off_stamp.epoch_s,
+                    on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                    off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+                )
+            )
+        time.sleep(BASELINE_S * args.time_scale_for_test)
+        sampling_stopped = clock.stamp()
+        emit("sampling_stopped", {})
+        _terminate_powermetrics(process)
+        _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
+        post_parse = clock.stamp()
 
     data = capture_path.read_bytes()
     _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
