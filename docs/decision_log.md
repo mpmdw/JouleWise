@@ -8196,3 +8196,23 @@ both floor packs' comparative cells re-specced to METHOD_ID) without
 another round.** The repair contract is the magistrate-adjudicated
 structural-threading draft (custodied with the T4 session record); the
 refuter-authored acceptance oracle may be amended only by its author.
+
+**STOPPING RULE EXECUTED (2026-08-11, same day).** The round-5 delta
+re-audit fired the rule: FCM-R5-01 — records fabricated outside the builder
+(direct construction, dataclasses.replace, object.__new__ + __setattr__,
+copy, pickle; the frozen dataclass's generated constructor plus a
+type()-only admission check) are admitted, stamped registered, pass
+registration validation, and understate by 4.999917146975008e-10 J in exact
+arithmetic — the residual risk the relicense contract disclosed in advance,
+realized. Per the rule, executed without deliberation: the D-124
+two-shared-edge candidate is WITHDRAWN under D-124's own fallback clause;
+freeze-plan Q7 REVERSED; both floor packs' comparative cells re-specced to
+the worst-case default estimator; no round 6 under any authority but a new
+explicit Ed decision. The six-round record (five understatement mechanisms
++ the provenance class; three cold-gate sittings; five delta audits; the
+adversary-authored oracle; exact-arithmetic proofs of the enumeration) is
+custodied on impl/floor-commonmode-01 at 0b5fce8 (STOPPED-FCM01.md) as
+permanent gauntlet evidence and paper material. Terminal lesson banked: a
+sound registered arithmetic surface in Python requires a process boundary
+or capability token, not conventional privacy (see the Rust-rewrite memory
+— now with an executed demonstration).
