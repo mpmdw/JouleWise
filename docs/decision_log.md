@@ -8176,3 +8176,23 @@ this ruling decoupled); a Python 3.11 local decisive replay owed post-merge
 (the decisive test has completed on no CI interpreter; refuter C3). The
 fence, expiry, and five-part future-substitution test in the index row bind
 future sessions.
+
+### D-124 relicense — 2026-08-11 (Ed, in-thread; transcribed by the magistrate)
+
+Ed RELICENSED one repair round for the frozen FLOOR-COMMONMODE-01 unit,
+adopting the magistrate's recommended disposition (i) after weighing the
+long-term-value question directly: the structural zero-threading repair buys
+(1) the end of the audit tax on the registered surface, (2) safe reuse for
+every future direct caller the extension-axes/P3 roadmap creates, and
+(3) the cleaner registered-instrument exhibit for the paper — at desk-thread
+cost off Ed's critical path. Ed's criteria as stated: dropping is acceptable
+if the repair buys nothing for the paper or future research; repairing is
+acceptable as a cheap non-blocking desk thread — both resolved in favor of
+repair. **Pre-committed stopping rule (binding, no further deliberation):
+if the repair round's delta re-audit finds ANY exact-arithmetic
+understatement at an admitted input — any mechanism, any magnitude — the
+unit drops to the worst-case default estimator (freeze-plan Q7 reversed,
+both floor packs' comparative cells re-specced to METHOD_ID) without
+another round.** The repair contract is the magistrate-adjudicated
+structural-threading draft (custodied with the T4 session record); the
+refuter-authored acceptance oracle may be amended only by its author.
