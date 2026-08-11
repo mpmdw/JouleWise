@@ -1,9 +1,10 @@
-"""Owned public-process execution for calibration witness tests.
+"""Owned writer execution for calibration witness tests.
 
-Every process started here owns a fresh session/process group.  The direct
-child's result is captured first, then all descendants in the group are
-reaped.  The module registry is deliberately observable so unittest module
-cleanup can turn any missed teardown into a suite failure.
+Every process started here owns a fresh session/process group, and every
+writer thread is paired with a stop event.  The direct child's result is
+captured first, then all descendants in the group are reaped; threads are
+stopped and joined.  The module registries are deliberately observable so
+unittest module cleanup can turn any missed teardown into a suite failure.
 """
 
 from __future__ import annotations
@@ -89,8 +90,17 @@ class _OwnedGroup:
     process: subprocess.Popen[str] | None = None
 
 
+@dataclass
+class _OwnedThread:
+    thread: threading.Thread
+    stop_event: threading.Event
+    label: str
+    error: BaseException | None = None
+
+
 _REGISTRY_LOCK = threading.Lock()
 _OWNED_PROCESS_GROUPS: dict[int, _OwnedGroup] = {}
+_OWNED_THREADS: dict[int, _OwnedThread] = {}
 _ORDER_LOCK = threading.Lock()
 _ORDER = 0
 
@@ -174,6 +184,22 @@ def owned_process_group_survivors() -> tuple[int, ...]:
     return tuple(pgid for pgid in candidates if not _forget_if_gone(pgid))
 
 
+def owned_thread_survivors() -> tuple[str, ...]:
+    """Return live registered threads, dropping joined registrations."""
+
+    with _REGISTRY_LOCK:
+        candidates = tuple(_OWNED_THREADS.items())
+    survivors: list[str] = []
+    for token, owned in candidates:
+        if owned.thread.is_alive():
+            survivors.append(owned.label)
+            continue
+        owned.thread.join()
+        with _REGISTRY_LOCK:
+            _OWNED_THREADS.pop(token, None)
+    return tuple(survivors)
+
+
 def assert_no_owned_process_group_survivors() -> None:
     """Fail on any registered live group, but reap all of them first."""
 
@@ -182,6 +208,27 @@ def assert_no_owned_process_group_survivors() -> None:
         _teardown_group(pgid)
     if survivors:
         raise AssertionError(f"owned process-group survivors: {list(survivors)}")
+
+
+def assert_no_owned_writer_survivors() -> None:
+    """Stop and reap every registered writer, then fail if any was leaked."""
+
+    with _REGISTRY_LOCK:
+        threads = tuple(_OWNED_THREADS.values())
+    for owned in threads:
+        owned.stop_event.set()
+    for owned in threads:
+        owned.thread.join(timeout=5.0)
+    thread_survivors = owned_thread_survivors()
+    process_survivors = owned_process_group_survivors()
+    for pgid in process_survivors:
+        _teardown_group(pgid)
+    if thread_survivors or process_survivors:
+        raise AssertionError(
+            "owned writer survivors: "
+            f"threads={list(thread_survivors)}, "
+            f"process_groups={list(process_survivors)}"
+        )
 
 
 def spawn_spinning_descendant_for_guard_test() -> subprocess.Popen[str]:
@@ -229,7 +276,7 @@ def _entry_point(argv: Sequence[str]) -> Path:
 
 
 class OwnedPublicProcessRunner:
-    """Start, wait for, and fully reap public subprocess process groups."""
+    """Start, wait for, and fully reap owned process groups and threads."""
 
     def __init__(self, temporary_root: Path) -> None:
         self.temporary_root = Path(temporary_root).resolve()
@@ -238,6 +285,7 @@ class OwnedPublicProcessRunner:
         self.capability_root.chmod(0o700)
         self.communicate_timeout_s = 600.0
         self._owned_pgids: set[int] = set()
+        self._owned_threads: set[int] = set()
         # The post-fix valid-writer p99 is expected to remain well below 30 s.
         # A bounded same-runner yield probe lets a badly oversubscribed worker
         # enlarge the idle allowance without making elapsed host time create
@@ -250,6 +298,71 @@ class OwnedPublicProcessRunner:
             480.0,
             max(120.0, 4.0 * 30.0, probe_s * 2400.0),
         )
+
+    def start_owned_thread(
+        self,
+        target: Callable[[threading.Event], None],
+        *,
+        label: str,
+    ) -> threading.Thread:
+        """Start a writer thread registered before it can mutate its root."""
+
+        stop_event = threading.Event()
+        owned: _OwnedThread
+
+        def run_target() -> None:
+            try:
+                target(stop_event)
+            except BaseException as exc:
+                owned.error = exc
+
+        thread = threading.Thread(
+            target=run_target,
+            name=f"joulewise-owned-{label}",
+            daemon=True,
+        )
+        token = id(thread)
+        owned = _OwnedThread(thread=thread, stop_event=stop_event, label=label)
+        with _REGISTRY_LOCK:
+            _OWNED_THREADS[token] = owned
+        self._owned_threads.add(token)
+        try:
+            thread.start()
+        except BaseException:
+            with _REGISTRY_LOCK:
+                _OWNED_THREADS.pop(token, None)
+            self._owned_threads.discard(token)
+            raise
+        return thread
+
+    def stop_owned_thread(
+        self,
+        thread: threading.Thread,
+        *,
+        timeout_s: float = 5.0,
+    ) -> None:
+        """Request stop, join, and surface failure for one owned thread."""
+
+        token = id(thread)
+        if token not in self._owned_threads:
+            if thread.is_alive():
+                raise AssertionError(
+                    f"thread {thread.name!r} is not owned by this runner"
+                )
+            return
+        with _REGISTRY_LOCK:
+            owned = _OWNED_THREADS.get(token)
+        if owned is None:
+            raise AssertionError(f"owned thread {thread.name!r} lost its registration")
+        owned.stop_event.set()
+        thread.join(timeout=timeout_s)
+        if thread.is_alive():
+            raise AssertionError(f"owned writer thread {owned.label!r} did not stop")
+        with _REGISTRY_LOCK:
+            _OWNED_THREADS.pop(token, None)
+        self._owned_threads.discard(token)
+        if owned.error is not None:
+            raise owned.error
 
     def start_owned(
         self,
@@ -313,9 +426,17 @@ class OwnedPublicProcessRunner:
         return stdout, stderr
 
     def close(self) -> None:
-        """Reap every group owned by this runner and require an empty registry."""
+        """Stop and reap every writer owned by this runner."""
 
         errors: list[BaseException] = []
+        with _REGISTRY_LOCK:
+            owned_threads = tuple(
+                _OWNED_THREADS[token]
+                for token in self._owned_threads
+                if token in _OWNED_THREADS
+            )
+        for owned in owned_threads:
+            owned.stop_event.set()
         for pgid in tuple(self._owned_pgids):
             with _REGISTRY_LOCK:
                 owned = _OWNED_PROCESS_GROUPS.get(pgid)
@@ -338,9 +459,25 @@ class OwnedPublicProcessRunner:
                 errors.append(exc)
             finally:
                 self._owned_pgids.discard(pgid)
+        for token in tuple(self._owned_threads):
+            with _REGISTRY_LOCK:
+                owned = _OWNED_THREADS.get(token)
+            if owned is None:
+                errors.append(AssertionError(f"owned thread token {token} was lost"))
+                self._owned_threads.discard(token)
+                continue
+            try:
+                self.stop_owned_thread(owned.thread)
+            except BaseException as exc:  # join all threads before surfacing one
+                errors.append(exc)
         if self._owned_pgids:
             raise AssertionError(
                 f"runner registry not empty after close: {sorted(self._owned_pgids)}"
+            )
+        if self._owned_threads:
+            raise AssertionError(
+                "runner thread registry not empty after close: "
+                f"{sorted(self._owned_threads)}"
             )
         if errors:
             raise errors[0]
@@ -550,7 +687,9 @@ __all__ = [
     "OwnedPublicProcessRunner",
     "PublicExecutionEvidence",
     "assert_no_owned_process_group_survivors",
+    "assert_no_owned_writer_survivors",
     "next_execution_order",
     "owned_process_group_survivors",
+    "owned_thread_survivors",
     "spawn_spinning_descendant_for_guard_test",
 ]

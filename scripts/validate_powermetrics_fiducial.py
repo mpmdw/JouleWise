@@ -19,10 +19,11 @@ byte-frozen validation identities.
 NEVER run this while another agent session is active on the machine
 ([QUIET-MAC] discipline); the run is refused without --allow-live.
 
-LEAD-OWNED LIVE CHECKLIST (required before merge): run the real macOS
-``sudo -n powermetrics`` process tree, verify the recorded sampler PID/PGID
-belongs to powermetrics rather than sudo, exercise the SIGTERM-ignore/SIGKILL
-fallback, and prove both the sampler and launcher groups reach ESRCH.
+Full lifecycle ownership of a privileged sampler is UNSUPPORTED pending
+WO-SAMPLER-SUPERVISOR: a privileged supervisor, kernel no-fork confinement,
+sudoers migration, and a live admission gate. The post-run process census in
+this module is detect-and-report only; it neither proves ownership nor changes
+run behavior.
 """
 
 from __future__ import annotations
@@ -35,14 +36,13 @@ import hashlib
 import json
 import math
 import os
-import select
 import signal
 import stat
 import subprocess
 import sys
 import time
 import uuid
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -120,8 +120,7 @@ PROTOCOL_V2_PATH = (
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
 SAMPLER_TERMINATE_TIMEOUT_S = 10.0
-SAMPLER_IDENTITY_TIMEOUT_S = 5.0
-SAMPLER_IDENTITY_PREAMBLE = "JOULEWISE_SAMPLER_IDENTITY_V1"
+SAMPLER_CENSUS_DIAGNOSTIC = "powermetrics_post_teardown_census"
 TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
     "joulewise.test_writer_crash_authorization.v1"
 )
@@ -386,213 +385,99 @@ def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
     return protocol_definition_matches(payload)
 
 
-@dataclass(frozen=True)
-class _SamplerIdentity:
-    pid: int
-    pgid: int
-    launcher_pgid: int
-    privileged: bool
+def _terminate_powermetrics(process: subprocess.Popen) -> None:
+    """Best-effort bounded termination and reaping of the direct child."""
 
-
-def _group_exists(pgid: int) -> bool:
-    try:
-        os.killpg(pgid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _wait_group_gone(pgid: int, timeout_s: float) -> bool:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not _group_exists(pgid):
-            return True
-        time.sleep(0.01)
-    return not _group_exists(pgid)
-
-
-def _signal_sampler_group(identity: _SamplerIdentity, signum: int) -> None:
-    if not identity.privileged:
-        try:
-            os.killpg(identity.pgid, signum)
-        except ProcessLookupError:
-            return
-        return
-    signal_name = signal.Signals(signum).name
-    completed = subprocess.run(
-        ["sudo", "-n", "/bin/kill", f"-{signal_name}", f"-{identity.pgid}"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0 and _group_exists(identity.pgid):
-        raise RuntimeError(
-            f"failed to signal actual sampler pid={identity.pid} "
-            f"pgid={identity.pgid} with {signal_name}: {completed.stderr.strip()}"
-        )
-
-
-def _kill_launcher_group(process: subprocess.Popen) -> None:
-    launcher_pgid = getattr(process, "pid", None)
-    if not isinstance(launcher_pgid, int):
-        process.kill()
+    if process.poll() is not None:
         process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
         return
-    for signum in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(launcher_pgid, signum)
-        except ProcessLookupError:
-            break
-        try:
-            process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
-        except subprocess.TimeoutExpired:
-            continue
-        if not _group_exists(launcher_pgid):
-            break
-    if not _wait_group_gone(launcher_pgid, max(2.0, SAMPLER_TERMINATE_TIMEOUT_S)):
-        raise RuntimeError(f"sampler launcher group {launcher_pgid} survived SIGKILL")
-
-
-def _terminate_powermetrics(process: subprocess.Popen) -> None:
-    """Signal the recorded sampler group, then boundedly reap its launcher."""
-
-    identity = getattr(process, "_joulewise_sampler_identity", None)
-    if not isinstance(identity, _SamplerIdentity):
-        _kill_launcher_group(process)
-        raise RuntimeError(
-            "actual sampler PID/PGID was unresolved; killed sudo launcher group "
-            f"{getattr(process, 'pid', '<unknown>')} as bounded fallback"
-        )
-    if getattr(process, "_joulewise_sampler_terminated", False):
-        if _group_exists(identity.pgid):
-            raise RuntimeError(
-                f"recorded sampler group {identity.pgid} revived after termination"
-            )
-        process.communicate()
-        return
-
-    if _group_exists(identity.pgid):
-        _signal_sampler_group(identity, signal.SIGTERM)
+    process.terminate()
     try:
         process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
     except subprocess.TimeoutExpired:
-        if _group_exists(identity.pgid):
-            _signal_sampler_group(identity, signal.SIGKILL)
-        try:
-            process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
-        except subprocess.TimeoutExpired:
-            _kill_launcher_group(process)
-    if not _wait_group_gone(identity.pgid, max(2.0, SAMPLER_TERMINATE_TIMEOUT_S)):
-        _signal_sampler_group(identity, signal.SIGKILL)
-        if not _wait_group_gone(identity.pgid, 2.0):
-            raise RuntimeError(
-                f"actual sampler pid={identity.pid} pgid={identity.pgid} "
-                "survived bounded SIGKILL"
-            )
-    if _group_exists(identity.launcher_pgid):
-        _kill_launcher_group(process)
-    setattr(process, "_joulewise_sampler_terminated", True)
+        process.kill()
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
 
 
-def _sudo_sampler_launcher() -> list[str]:
-    preamble = (
-        'sampler_pid=$$; '
-        'sampler_pgid=$(/bin/ps -o pgid= -p "$$") || exit 72; '
-        f'printf "{SAMPLER_IDENTITY_PREAMBLE} %s %s\\n" '
-        '"$sampler_pid" "$sampler_pgid"; '
-        'exec "$@" >/dev/null'
-    )
-    return ["sudo", "-n", "/bin/sh", "-c", preamble, "joulewise-sampler"]
+def _powermetrics_process_census() -> list[dict[str, object]]:
+    """Best-effort snapshot of processes whose command names powermetrics."""
 
-
-def _read_sampler_identity(
-    process: subprocess.Popen,
-    *,
-    launcher_pgid: int,
-    privileged: bool,
-) -> _SamplerIdentity:
-    stdout = process.stdout
-    if stdout is None:
-        raise RuntimeError("sampler identity preamble pipe is unavailable")
-    ready, _writable, _exceptional = select.select(
-        [stdout], [], [], SAMPLER_IDENTITY_TIMEOUT_S
-    )
-    if not ready:
-        raise RuntimeError("timed out resolving actual sampler PID/PGID")
-    line = stdout.readline().strip()
-    fields = line.split()
-    if len(fields) != 3 or fields[0] != SAMPLER_IDENTITY_PREAMBLE:
-        raise RuntimeError(f"malformed sampler identity preamble: {line!r}")
     try:
-        pid, pgid = (int(value) for value in fields[1:])
-    except ValueError as exc:
-        raise RuntimeError(f"malformed sampler identity preamble: {line!r}") from exc
-    if pid <= 0 or pgid <= 0 or pgid == os.getpgrp():
-        raise RuntimeError(f"unsafe sampler identity pid={pid} pgid={pgid}")
-    return _SamplerIdentity(
-        pid=pid,
-        pgid=pgid,
-        launcher_pgid=launcher_pgid,
-        privileged=privileged,
-    )
+        completed = subprocess.run(
+            ["ps", "-axo", "pid=,comm=,args="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+    findings: list[dict[str, object]] = []
+    for line in completed.stdout.splitlines():
+        fields = line.strip().split(maxsplit=2)
+        if len(fields) < 2 or not fields[0].isdigit():
+            continue
+        pid = int(fields[0])
+        command = " ".join(fields[1:])
+        if pid != os.getpid() and "powermetrics" in command.casefold():
+            findings.append({"pid": pid, "command": command})
+    return findings
+
+
+def _report_powermetrics_census(event_reporter=None) -> None:
+    """Loudly report census findings without asserting or changing behavior."""
+
+    try:
+        findings = _powermetrics_process_census()
+    except Exception:  # noqa: BLE001 - census is detect-and-report only
+        return
+    if not findings:
+        return
+    metadata = {
+        "findings": findings,
+        "scope": "detect_and_report_only",
+        "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR",
+    }
+    try:
+        print(
+            json.dumps(
+                {"event": SAMPLER_CENSUS_DIAGNOSTIC, **metadata}, sort_keys=True
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception:  # noqa: BLE001 - census reporting cannot alter run behavior
+        pass
+    if event_reporter is not None:
+        try:
+            event_reporter(SAMPLER_CENSUS_DIAGNOSTIC, metadata)
+        except Exception:  # noqa: BLE001 - census reporting cannot alter run behavior
+            pass
 
 
 @contextmanager
 def _sampler_lifetime(
     command: list[str],
     *,
-    launcher: list[str] | None = None,
-    privileged: bool = False,
+    event_reporter=None,
 ):
-    """Own one complete sampler lifetime, including exceptional exits."""
+    """Join the direct sampler child on every exit path, then census."""
 
-    launch_command = command if launcher is None else [*launcher, *command]
     process = subprocess.Popen(
-        launch_command,
-        stdout=subprocess.DEVNULL if launcher is None else subprocess.PIPE,
+        command,
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        text=launcher is not None,
-        start_new_session=True,
     )
     try:
-        launcher_pgid = os.getpgid(process.pid)
-        if launcher_pgid != process.pid:
-            raise RuntimeError(
-                f"sampler launcher pgid {launcher_pgid} != pid {process.pid}"
-            )
-        if launcher is None:
-            identity = _SamplerIdentity(
-                pid=process.pid,
-                pgid=launcher_pgid,
-                launcher_pgid=launcher_pgid,
-                privileged=False,
-            )
-        else:
-            identity = _read_sampler_identity(
-                process,
-                launcher_pgid=launcher_pgid,
-                privileged=privileged,
-            )
-        setattr(process, "_joulewise_sampler_identity", identity)
         yield process
-    except BaseException:
-        if not isinstance(
-            getattr(process, "_joulewise_sampler_identity", None), _SamplerIdentity
-        ):
-            _kill_launcher_group(process)
-            raise RuntimeError(
-                "actual sampler PID/PGID was unresolved; killed sudo launcher "
-                f"group {process.pid} as bounded fallback"
-            )
-        raise
     finally:
-        if isinstance(
-            getattr(process, "_joulewise_sampler_identity", None), _SamplerIdentity
-        ):
+        try:
             _terminate_powermetrics(process)
+        finally:
+            _report_powermetrics_census(event_reporter)
 
 
 def wait_for_preworkload_rollover(
@@ -1334,7 +1219,7 @@ def main(argv: list[str] | None = None) -> int:
         events.flush()
 
     buffers = allocate_matmul_buffers()
-    command = [
+    command = ([] if args.sampler_direct_for_test else ["sudo", "-n"]) + [
         str(args.sampler_binary),
         "-b",
         "0",
@@ -1350,8 +1235,7 @@ def main(argv: list[str] | None = None) -> int:
     pre_spawn = clock.stamp()
     with _sampler_lifetime(
         command,
-        launcher=(None if args.sampler_direct_for_test else _sudo_sampler_launcher()),
-        privileged=not args.sampler_direct_for_test,
+        event_reporter=emit,
     ) as process:
         _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
         first_parse = None
@@ -1392,7 +1276,6 @@ def main(argv: list[str] | None = None) -> int:
                 ),
             )
         except RuntimeError as exc:
-            events.close()
             finalize_abandoned(str(exc))
             return emit_refusal(
                 RefusalCode.ROLLOVER_GATE_TIMEOUT,

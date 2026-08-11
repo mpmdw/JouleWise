@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 import errno
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -45,8 +47,10 @@ from tests.owned_process_runner import (
     OwnedPublicProcessRunner,
     PublicExecutionEvidence,
     assert_no_owned_process_group_survivors,
+    assert_no_owned_writer_survivors,
     next_execution_order,
     owned_process_group_survivors,
+    owned_thread_survivors,
 )
 from tests.receipt_corpus import ReceiptCorpus
 
@@ -63,7 +67,7 @@ GIT_MAINTENANCE_CONTROLS = (
 
 
 def tearDownModule() -> None:
-    assert_no_owned_process_group_survivors()
+    assert_no_owned_writer_survivors()
 
 
 @dataclass(frozen=True)
@@ -107,7 +111,7 @@ class CleanupDiagnostic:
 
 
 class WitnessSandbox:
-    """Sole owner of one witness root and all process groups created in it."""
+    """Sole owner of one witness root and every writer created in it."""
 
     _CLEANUP_BACKOFF_S = (0.01, 0.05, 0.25, 1.0)
 
@@ -117,6 +121,16 @@ class WitnessSandbox:
         self.runner = OwnedPublicProcessRunner(self.root)
         self.cleanup_diagnostics: list[CleanupDiagnostic] = []
         self.closed = False
+
+    def start_owned_writer_thread(
+        self,
+        target: Callable[[threading.Event], None],
+        *,
+        label: str,
+    ) -> threading.Thread:
+        """Start a thread whose stop/join lifecycle precedes root cleanup."""
+
+        return self.runner.start_owned_thread(target, label=label)
 
     def _residual_snapshot(self) -> tuple[str, ...]:
         if not self.root.exists():
@@ -208,7 +222,7 @@ class WitnessSandbox:
     def close(self) -> None:
         if self.closed:
             return
-        # Process quiescence is proved before the only permitted retry class.
+        # Complete writer quiescence is proved before the only permitted retry class.
         self.runner.close()
         try:
             self._cleanup_root()
@@ -1195,12 +1209,19 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 leaf = objects / "aa"
                 leaf.mkdir(parents=True)
                 stopped = threading.Event()
+                stop_observed = threading.Event()
 
-                def inject_writer() -> None:
+                def inject_writer(stop_requested: threading.Event) -> None:
+                    # Deliberately finish the already-scheduled write even when
+                    # stop is requested.  The pre-fix sandbox entered rmtree
+                    # here and reproduced the loaded run-1 .git/objects race;
+                    # the ownership registry must join it first.
                     time.sleep(delay_ms / 1000.0)
                     deadline = time.monotonic() + 0.05
                     index = 0
                     while time.monotonic() < deadline:
+                        if stop_requested.is_set():
+                            stop_observed.set()
                         try:
                             leaf.mkdir(exist_ok=True)
                             (leaf / f"delayed-{index}").write_bytes(b"object")
@@ -1209,18 +1230,41 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                         index += 1
                     stopped.set()
 
-                writer = threading.Thread(target=inject_writer, daemon=True)
-                writer.start()
+                writer = sandbox.start_owned_writer_thread(
+                    inject_writer,
+                    label=f"delayed-git-object-writer-{delay_ms}ms",
+                )
+                if delay_ms == max(delays_ms):
+                    self.assertIn(
+                        f"delayed-git-object-writer-{delay_ms}ms",
+                        owned_thread_survivors(),
+                    )
+                real_rmtree = shutil.rmtree
+
+                def rmtree_after_quiescence(path):
+                    self.assertFalse(
+                        writer.is_alive(),
+                        "rmtree began before the owned delayed writer joined",
+                    )
+                    return real_rmtree(path)
+
                 started = time.monotonic()
-                sandbox.close()
-                writer.join(timeout=1.0)
+                with mock.patch.object(
+                    shutil,
+                    "rmtree",
+                    side_effect=rmtree_after_quiescence,
+                ):
+                    sandbox.close()
                 self.assertTrue(stopped.is_set())
+                self.assertTrue(stop_observed.is_set())
+                self.assertFalse(writer.is_alive())
+                self.assertEqual(owned_thread_survivors(), ())
                 self.assertFalse(sandbox.root.exists())
                 self.assertLess(time.monotonic() - started, 2.0)
                 total_retries += len(sandbox.cleanup_diagnostics)
         print(
             f"P1_DELAYED_WRITERS={len(delays_ms)} DELAYS_MS=0,10,100,500 "
-            f"BOUNDED_RETRIES={total_retries} ESCAPED=0",
+            f"BOUNDED_RETRIES={total_retries} THREAD_REGISTRY_EMPTY=1 ESCAPED=0",
             flush=True,
         )
 
@@ -1731,42 +1775,47 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
             flush=True,
         )
 
-    def test_stubborn_sampler_group_is_killed_and_reaped_on_every_exit_path(self) -> None:
+    def test_stubborn_direct_child_is_killed_and_reaped_on_every_exit_path(self) -> None:
         exit_paths = ("normal", "return", "exception")
         for exit_path in exit_paths:
             with self.subTest(exit_path=exit_path):
                 with tempfile.TemporaryDirectory() as tmp:
-                    child_pid_path = Path(tmp) / "child.pid"
+                    ready_path = Path(tmp) / "ready"
                     command = [
                         sys.executable,
                         "-c",
                         (
-                            "import os,signal,subprocess,sys,time; "
+                            "import signal,sys,time; "
                             "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
-                            "child=subprocess.Popen([sys.executable,'-c',"
-                            "'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)']); "
-                            f"open({str(child_pid_path)!r},'w').write(str(child.pid)); "
+                            "open(sys.argv[1],'w').write('ready'); "
                             "time.sleep(60)"
                         ),
+                        str(ready_path),
                     ]
                     process = None
                     raised = False
+
+                    def exercise_exit_path() -> subprocess.Popen:
+                        nonlocal process
+                        with validation_script._sampler_lifetime(command) as process:
+                            deadline = time.monotonic() + 2.0
+                            while not ready_path.exists():
+                                if time.monotonic() >= deadline:
+                                    self.fail("stubborn direct child did not start")
+                                time.sleep(0.001)
+                            if exit_path == "return":
+                                return process
+                            if exit_path == "exception":
+                                raise RuntimeError("injected after sampler Popen")
+                        return process
+
                     try:
                         with mock.patch.object(
                             validation_script,
                             "SAMPLER_TERMINATE_TIMEOUT_S",
                             0.05,
                         ):
-                            with validation_script._sampler_lifetime(command) as process:
-                                deadline = time.monotonic() + 2.0
-                                while not child_pid_path.exists():
-                                    if time.monotonic() >= deadline:
-                                        self.fail("stubborn sampler child did not start")
-                                    time.sleep(0.001)
-                                if exit_path == "return":
-                                    pass
-                                elif exit_path == "exception":
-                                    raise RuntimeError("injected after sampler Popen")
+                            process = exercise_exit_path()
                     except RuntimeError as exc:
                         if str(exc) != "injected after sampler Popen":
                             raise
@@ -1775,90 +1824,91 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     assert process is not None
                     self.assertEqual(process.returncode, -signal.SIGKILL)
                     with self.assertRaises(ProcessLookupError):
-                        os.killpg(process.pid, 0)
+                        os.kill(process.pid, 0)
         print(
-            "F4_STUBBORN_EXIT_PATHS=3 SIGKILL=3 REAPED=3 GROUP_ESRCH=3",
+            "F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3",
             flush=True,
         )
 
-    def test_detached_launcher_signals_recorded_actual_sampler_group(self) -> None:
+    def test_detached_grandchild_is_reported_by_post_teardown_census(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            sampler_pid_path = Path(tmp) / "sampler.pid"
-            launcher = [
-                sys.executable,
-                "-c",
-                (
-                    "import os,subprocess,sys; "
-                    "child=subprocess.Popen(sys.argv[1:],start_new_session=True); "
-                    f"open({str(sampler_pid_path)!r},'w').write(str(child.pid)); "
-                    f"print('{validation_script.SAMPLER_IDENTITY_PREAMBLE}',"
-                    "child.pid,os.getpgid(child.pid),flush=True); "
-                    "raise SystemExit(child.wait())"
-                ),
-            ]
+            root = Path(tmp)
+            sampler_pid_path = root / "sampler.pid"
+            detached_sampler = root / "powermetrics_detached_sampler.py"
+            detached_sampler.write_text(
+                "import signal,time\n"
+                "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
             command = [
                 sys.executable,
                 "-c",
                 (
-                    "import signal,time; "
-                    "signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)"
+                    "import signal,subprocess,sys,time; "
+                    "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                    "child=subprocess.Popen([sys.executable,sys.argv[1]],"
+                    "start_new_session=True); "
+                    "open(sys.argv[2],'w').write(str(child.pid)); "
+                    "time.sleep(60)"
                 ),
+                str(detached_sampler),
+                str(sampler_pid_path),
             ]
             process = None
-            with mock.patch.object(
-                validation_script,
-                "SAMPLER_TERMINATE_TIMEOUT_S",
-                0.05,
-            ):
-                with validation_script._sampler_lifetime(
-                    command,
-                    launcher=launcher,
-                ) as process:
-                    identity = process._joulewise_sampler_identity
-                    self.assertEqual(identity.pid, int(sampler_pid_path.read_text()))
-                    self.assertNotEqual(identity.pgid, identity.launcher_pgid)
-            assert process is not None
-            identity = process._joulewise_sampler_identity
-            with self.assertRaises(ProcessLookupError):
-                os.killpg(identity.pgid, 0)
-            with self.assertRaises(ProcessLookupError):
-                os.killpg(identity.launcher_pgid, 0)
+            detached_pid: int | None = None
+            reported_events: list[tuple[str, dict]] = []
+            stderr = io.StringIO()
+            try:
+                with mock.patch.object(
+                    validation_script,
+                    "SAMPLER_TERMINATE_TIMEOUT_S",
+                    0.05,
+                ), mock.patch.object(
+                    validation_script.subprocess,
+                    "run",
+                    side_effect=lambda args, **_kwargs: subprocess.CompletedProcess(
+                        args,
+                        0,
+                        stdout=(
+                            f"{detached_pid} Python {sys.executable} "
+                            f"{detached_sampler}\n"
+                        ),
+                    ),
+                ), mock.patch.object(validation_script.sys, "stderr", stderr):
+                    with validation_script._sampler_lifetime(
+                        command,
+                        event_reporter=lambda event, metadata: reported_events.append(
+                            (event, metadata)
+                        ),
+                    ) as process:
+                        deadline = time.monotonic() + 2.0
+                        while not sampler_pid_path.exists():
+                            if time.monotonic() >= deadline:
+                                self.fail("detached sampler did not start")
+                            time.sleep(0.001)
+                        detached_pid = int(sampler_pid_path.read_text())
+                assert process is not None
+                self.assertEqual(process.returncode, -signal.SIGKILL)
+                self.assertEqual(
+                    [event for event, _metadata in reported_events],
+                    [validation_script.SAMPLER_CENSUS_DIAGNOSTIC],
+                )
+                findings = reported_events[0][1]["findings"]
+                self.assertIn(detached_pid, [finding["pid"] for finding in findings])
+                self.assertIn(
+                    validation_script.SAMPLER_CENSUS_DIAGNOSTIC,
+                    stderr.getvalue(),
+                )
+            finally:
+                if detached_pid is not None:
+                    try:
+                        os.kill(detached_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
         print(
-            "F3_DETACHED_TOPOLOGY ACTUAL_PID_PGID=RECORDED "
-            "ACTUAL_GROUP_SIGNALED=1 SAMPLER_ESRCH=1 LAUNCHER_ESRCH=1",
-            flush=True,
-        )
-
-    def test_unresolved_sampler_identity_is_loud_bounded_fallback(self) -> None:
-        launcher = [
-            sys.executable,
-            "-c",
-            "import sys,time; print('not-an-identity',flush=True); time.sleep(60)",
-        ]
-        process_pid: int | None = None
-        with mock.patch.object(
-            validation_script,
-            "SAMPLER_TERMINATE_TIMEOUT_S",
-            0.05,
-        ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                r"actual sampler PID/PGID was unresolved; killed sudo launcher group",
-            ) as raised:
-                with validation_script._sampler_lifetime(
-                    [sys.executable, "-c", "pass"],
-                    launcher=launcher,
-                ) as process:
-                    process_pid = process.pid
-        match = re.search(r"group (\d+)", str(raised.exception))
-        self.assertIsNotNone(match)
-        assert match is not None
-        process_pid = int(match.group(1))
-        with self.assertRaises(ProcessLookupError):
-            os.killpg(process_pid, 0)
-        print(
-            "F3_UNRESOLVED_IDENTITY LOUD_FALLBACK=1 LAUNCHER_SIGKILL=1 "
-            "LAUNCHER_ESRCH=1",
+            "F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 "
+            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1",
             flush=True,
         )
 
