@@ -87,9 +87,6 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
     registered_common_mode_operative_bound,
-    _build_registered_common_mode_block_input,
-    _RegisteredCommonModeBlockInput,
-    two_shared_edge_common_mode_floor,
     two_shared_edge_common_mode_registration,
     validate_common_mode_estimator_registration,
     validate_floor_metric_window_class,
@@ -218,6 +215,442 @@ _PENDING_COMMON_MODE_ESTIMATOR_STATUS = (
 
 class FloorExtractionError(ValueError):
     """Invalid extraction process input: no report row is produced."""
+
+
+@dataclass(frozen=True)
+class _CommonModeBlockInputs:
+    """Extraction-owned arithmetic inputs derived from one evidence block."""
+
+    onset_values_j: tuple[float, ...]
+    offset_values_j: tuple[float, ...]
+    zero_point_contrast_j: float
+    bundle_residual_half_widths_j: tuple[float, ...]
+    member_window_bounds_s: tuple[tuple[float, float], ...]
+    member_envelope_integral_sum_j: float
+
+
+def _common_mode_refuse(reason: str, detail: str) -> None:
+    raise CommonModeEstimatorRefusal(reason, detail)
+
+
+def _common_mode_finite(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _common_mode_clean_values(
+    values: object,
+    *,
+    label: str,
+) -> tuple[float, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"{label} must be a sequence",
+        )
+    normalized: list[float] = []
+    for raw in values:
+        value = _common_mode_finite(raw)
+        if value is None:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"{label} must contain only finite numeric values",
+            )
+        normalized.append(value)
+    if not normalized:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"{label} must not be empty",
+        )
+    return tuple(normalized)
+
+
+def _common_mode_shift_grid(
+    values: object,
+    *,
+    label: str,
+) -> tuple[float, ...]:
+    normalized = _common_mode_clean_values(values, label=f"{label} shift grid")
+    if list(normalized) != sorted(normalized):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the {label} shift grid must be sorted ascending",
+        )
+    zero_values = [
+        value
+        for value in normalized
+        if value == 0.0 and math.copysign(1.0, value) == 1.0
+    ]
+    if len(zero_values) != 1 or sum(value == 0.0 for value in normalized) != 1:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the {label} shift grid must contain exactly one +0.0",
+        )
+    return normalized
+
+
+def _common_mode_block_input_from_contrast(
+    *,
+    contrast: Callable[[float, float], float],
+    onset_shifts_s: Sequence[float],
+    offset_shifts_s: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[float],
+    member_window_bounds_s: Sequence[tuple[float, float]],
+    member_envelope_integral_sum_j: float,
+) -> _CommonModeBlockInputs:
+    """Evaluate one block internally, including its true shift-zero value."""
+
+    onset_shifts = _common_mode_shift_grid(onset_shifts_s, label="onset")
+    offset_shifts = _common_mode_shift_grid(offset_shifts_s, label="offset")
+    if not callable(contrast):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "the extraction block builder requires a contrast callable",
+        )
+    try:
+        zero_point = contrast(0.0, 0.0)
+        onset_values = [
+            zero_point if shift_s == 0.0 else contrast(shift_s, 0.0)
+            for shift_s in onset_shifts
+        ]
+        offset_values = [
+            zero_point if shift_s == 0.0 else contrast(0.0, shift_s)
+            for shift_s in offset_shifts
+        ]
+        clean_onset = _common_mode_clean_values(
+            onset_values,
+            label="extracted onset sweep",
+        )
+        clean_offset = _common_mode_clean_values(
+            offset_values,
+            label="extracted offset sweep",
+        )
+        clean_zero = _common_mode_finite(zero_point)
+        residuals = tuple(bundle_residual_half_widths_j)
+        windows = tuple(tuple(window) for window in member_window_bounds_s)
+    except CommonModeEstimatorRefusal:
+        raise
+    except Exception as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    if clean_zero is None:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "the extracted shift-zero contrast must be finite",
+        )
+    return _CommonModeBlockInputs(
+        onset_values_j=clean_onset,
+        offset_values_j=clean_offset,
+        zero_point_contrast_j=clean_zero,
+        bundle_residual_half_widths_j=residuals,
+        member_window_bounds_s=windows,
+        member_envelope_integral_sum_j=member_envelope_integral_sum_j,
+    )
+
+
+def _common_mode_window_is_strictly_noncollapsed(
+    start_s: object,
+    end_s: object,
+    shared_edge_bound_s: object,
+) -> bool:
+    start = _common_mode_finite(start_s)
+    end = _common_mode_finite(end_s)
+    bound = _common_mode_finite(shared_edge_bound_s)
+    if start is None or end is None or bound is None or bound <= 0.0:
+        return False
+    return math.nextafter(start + bound, math.inf) < math.nextafter(
+        end - bound,
+        -math.inf,
+    )
+
+
+def _common_mode_member_windows(
+    member_window_bounds_s: object,
+    *,
+    expected_n: int,
+    bound: float,
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+    if (
+        isinstance(member_window_bounds_s, (str, bytes))
+        or not isinstance(member_window_bounds_s, Sequence)
+        or len(member_window_bounds_s) != expected_n
+    ):
+        _common_mode_refuse(
+            "common_mode_nonseparable_window_domain",
+            "every block needs aligned A1/B1/B2/A2 member-window bounds",
+        )
+    normalized: list[tuple[tuple[float, float], ...]] = []
+    for block_index, raw_block_windows in enumerate(member_window_bounds_s):
+        if (
+            isinstance(raw_block_windows, (str, bytes))
+            or not isinstance(raw_block_windows, Sequence)
+            or len(raw_block_windows) != 4
+        ):
+            _common_mode_refuse(
+                "common_mode_nonseparable_window_domain",
+                f"block {block_index} must have aligned A1/B1/B2/A2 windows",
+            )
+        block_windows: list[tuple[float, float]] = []
+        for position, raw_window in zip(
+            _ABBA_POSITIONS,
+            raw_block_windows,
+            strict=True,
+        ):
+            if (
+                isinstance(raw_window, (str, bytes))
+                or not isinstance(raw_window, Sequence)
+                or len(raw_window) != 2
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window must be "
+                    "(start_s, end_s)",
+                )
+            start = _common_mode_finite(raw_window[0])
+            end = _common_mode_finite(raw_window[1])
+            if (
+                start is None
+                or end is None
+                or not _common_mode_window_is_strictly_noncollapsed(
+                    start,
+                    end,
+                    bound,
+                )
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window is outside the "
+                    "strict noncollapse domain",
+                )
+            block_windows.append((start, end))
+        normalized.append(tuple(block_windows))
+    return tuple(normalized)
+
+
+def _common_mode_outward(value: float, direction: float) -> float:
+    for _ in range(4):
+        value = math.nextafter(value, direction)
+    return value
+
+
+def _common_mode_block_half_width(
+    delta: float,
+    onset: Sequence[float],
+    offset: Sequence[float],
+    zero_point: float,
+    member_envelope_sum: float,
+    residuals: Sequence[float],
+) -> float:
+    """Registered excursion composition, private to governed extraction."""
+
+    member_envelope_sum = max(
+        member_envelope_sum,
+        1.0,
+        abs(delta),
+        abs(zero_point),
+        *(abs(value) for value in onset),
+        *(abs(value) for value in offset),
+    )
+    extrema_pad = 64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
+    excursion_lower = math.fsum(
+        (min(onset), -zero_point, min(offset), -zero_point)
+    )
+    excursion_upper = math.fsum(
+        (max(onset), -zero_point, max(offset), -zero_point)
+    )
+    lower = _common_mode_outward(
+        math.fsum((excursion_lower, -extrema_pad)),
+        -math.inf,
+    )
+    upper = _common_mode_outward(
+        math.fsum((excursion_upper, extrema_pad)),
+        math.inf,
+    )
+    zero_centred_width = _common_mode_outward(
+        max(abs(lower), abs(upper)),
+        math.inf,
+    )
+    shared_width = _common_mode_outward(
+        math.fsum((zero_centred_width, abs(zero_point - delta))),
+        math.inf,
+    )
+    local_width = math.fsum(residuals) / 2.0
+    return _common_mode_outward(
+        math.fsum((shared_width, local_width)),
+        math.inf,
+    )
+
+
+def _common_mode_floor_from_extracted_inputs(
+    block_deltas_j: Sequence[float],
+    *,
+    onset_sweeps_j: Sequence[Sequence[float]],
+    offset_sweeps_j: Sequence[Sequence[float]],
+    zero_point_contrasts_j: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[Sequence[float]],
+    member_window_bounds_s: object,
+    member_envelope_integral_sums_j: Sequence[float],
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """Internal registered arithmetic seam fed by authenticated extraction."""
+
+    try:
+        deltas = _common_mode_clean_values(
+            block_deltas_j,
+            label="block deltas",
+        )
+        zero_points = _common_mode_clean_values(
+            zero_point_contrasts_j,
+            label="zero-point contrasts",
+        )
+        input_lengths_match = (
+            len(onset_sweeps_j)
+            == len(offset_sweeps_j)
+            == len(zero_points)
+            == len(bundle_residual_half_widths_j)
+            == len(member_envelope_integral_sums_j)
+            == len(deltas)
+        )
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    if not input_lengths_match:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "every extracted block needs onset, offset, a zero point, four "
+            "residuals, and a member envelope integral sum",
+        )
+
+    bound = _common_mode_finite(shared_edge_bound_s)
+    operative = registered_common_mode_operative_bound(calibration_bracket)
+    if (
+        bound is None
+        or bound <= 0.0
+        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        _common_mode_refuse(
+            "common_mode_allowance_application_invalid",
+            "the sweep bound must equal the once-widened authenticated bound",
+        )
+    _common_mode_member_windows(
+        member_window_bounds_s,
+        expected_n=len(deltas),
+        bound=bound,
+    )
+
+    block_widths: list[float] = []
+    for index, (
+        raw_onset,
+        raw_offset,
+        zero_point,
+        raw_residuals,
+        raw_envelope_sum,
+    ) in enumerate(
+        zip(
+            onset_sweeps_j,
+            offset_sweeps_j,
+            zero_points,
+            bundle_residual_half_widths_j,
+            member_envelope_integral_sums_j,
+            strict=True,
+        )
+    ):
+        onset = _common_mode_clean_values(
+            raw_onset,
+            label=f"block {index} onset sweep",
+        )
+        offset = _common_mode_clean_values(
+            raw_offset,
+            label=f"block {index} offset sweep",
+        )
+        if zero_point not in onset or zero_point not in offset:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} sweeps must include the extracted zero point "
+                "by exact equality",
+            )
+        try:
+            residual_count = len(raw_residuals)
+        except TypeError:
+            residual_count = -1
+        if residual_count != 4:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} must have exactly four bundle residuals",
+            )
+        residuals: list[float] = []
+        for raw in raw_residuals:
+            residual = _common_mode_finite(raw)
+            if residual is None or residual < 0.0:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} residuals must be finite and nonnegative",
+                )
+            residuals.append(residual)
+        if not math.isclose(
+            zero_point,
+            deltas[index],
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
+            )
+        envelope_sum = _common_mode_finite(raw_envelope_sum)
+        if envelope_sum is None or envelope_sum < 0.0:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} member envelope integral sum must be finite "
+                "and nonnegative",
+            )
+        block_widths.append(
+            _common_mode_block_half_width(
+                deltas[index],
+                onset,
+                offset,
+                zero_point,
+                envelope_sum,
+                residuals,
+            )
+        )
+
+    return comparative_false_effect_floor(
+        deltas,
+        admissible_half_widths_j=block_widths,
+    )
+
+
+def _common_mode_floor_from_block_inputs(
+    block_deltas_j: Sequence[float],
+    block_inputs: Sequence[_CommonModeBlockInputs],
+    *,
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """Adapt extraction-owned block records to the internal arithmetic seam."""
+
+    return _common_mode_floor_from_extracted_inputs(
+        block_deltas_j,
+        onset_sweeps_j=[item.onset_values_j for item in block_inputs],
+        offset_sweeps_j=[item.offset_values_j for item in block_inputs],
+        zero_point_contrasts_j=[
+            item.zero_point_contrast_j for item in block_inputs
+        ],
+        bundle_residual_half_widths_j=[
+            item.bundle_residual_half_widths_j for item in block_inputs
+        ],
+        member_window_bounds_s=[
+            item.member_window_bounds_s for item in block_inputs
+        ],
+        member_envelope_integral_sums_j=[
+            item.member_envelope_integral_sum_j for item in block_inputs
+        ],
+        calibration_bracket=calibration_bracket,
+        shared_edge_bound_s=shared_edge_bound_s,
+    )
 
 
 def _ingested_consumption_semantics_id(
@@ -849,6 +1282,12 @@ class CellReport:
     def extractable(self) -> bool:
         return not self.terminal_refusal_reasons and self.floor is not None
 
+    @property
+    def estimator_registration(self) -> Mapping[str, object] | None:
+        """Registration exists only on extraction-owned report instances."""
+
+        return None
+
     def as_row(self) -> dict[str, Any]:
         floor_row: dict[str, Any] | None = None
         if self.floor is not None:
@@ -887,9 +1326,9 @@ class CellReport:
                 ),
                 "smoke_only": self.floor.guarded_floor_j is None,
             }
-            if self.floor.estimator_registration is not None:
+            if self.estimator_registration is not None:
                 floor_row["estimator_registration"] = json.loads(
-                    json.dumps(self.floor.estimator_registration)
+                    json.dumps(self.estimator_registration)
                 )
             if allowance is not None:
                 floor_row.update(
@@ -959,6 +1398,17 @@ class CellReport:
                 }
             )
         return row
+
+
+@dataclass(frozen=True, kw_only=True)
+class _RegisteredCellReport(CellReport):
+    """Private report form emitted only after governed registration gates."""
+
+    _registration: Mapping[str, object]
+
+    @property
+    def estimator_registration(self) -> Mapping[str, object]:
+        return self._registration
 
 
 # D117-POSTCOLLECTION-TRUST-01: this is the closed subset of the extraction
@@ -1668,14 +2118,14 @@ def extract_absolute_cell(
     )
 
 
-def _registered_common_mode_block_inputs(
+def _common_mode_block_inputs_from_evidence(
     members: Sequence[MemberReport],
     *,
     runs_root: Path,
     metric: str,
     shared_edge_bound_s: float,
-) -> _RegisteredCommonModeBlockInput:
-    """Build one enumerated D-124 block input from immutable bundle evidence."""
+) -> _CommonModeBlockInputs:
+    """Derive one D-124 arithmetic block from authenticated bundle evidence."""
 
     prefix = "phase_energy_j."
     if not metric.startswith(prefix) or not metric[len(prefix) :]:
@@ -1847,7 +2297,7 @@ def _registered_common_mode_block_inputs(
             for position in _ABBA_POSITIONS
         )
 
-    return _build_registered_common_mode_block_input(
+    return _common_mode_block_input_from_contrast(
         contrast=contrast,
         onset_shifts_s=sorted(onset_candidates),
         offset_shifts_s=sorted(offset_candidates),
@@ -2056,22 +2506,20 @@ def extract_comparative_cell(
             elif use_common_mode:
                 assert common_mode_bound_s is not None
                 assert consumption_session is not None
-                registered_block_inputs: list[
-                    _RegisteredCommonModeBlockInput
-                ] = []
+                extracted_inputs: list[_CommonModeBlockInputs] = []
                 try:
                     for evaluated in admitted_blocks:
-                        registered_block_inputs.append(
-                            _registered_common_mode_block_inputs(
+                        extracted_inputs.append(
+                            _common_mode_block_inputs_from_evidence(
                                 evaluated,
                                 runs_root=runs_root,
                                 metric=metric,
                                 shared_edge_bound_s=common_mode_bound_s,
                             )
                         )
-                    floor = two_shared_edge_common_mode_floor(
+                    floor = _common_mode_floor_from_block_inputs(
                         block_deltas,
-                        registered_block_inputs=registered_block_inputs,
+                        extracted_inputs,
                         calibration_bracket=(
                             consumption_session.calibration_bracket
                         ),
@@ -2084,15 +2532,6 @@ def extract_comparative_cell(
                     block_deltas,
                     admissible_half_widths_j=block_half_widths,
                 )
-            if (
-                floor is not None
-                and use_common_mode
-                and not validate_common_mode_estimator_registration(
-                    floor.estimator_registration
-                )
-            ):
-                refusals.append("common_mode_registration_invalid")
-                floor = None
             if floor is not None and (
                 admissible_set_uncertainty_dominates_point_floor(floor)
             ):
@@ -2102,7 +2541,7 @@ def extract_comparative_cell(
                 )
 
     attribution_limited = _sole_attribution_limit(refusals, floor)
-    return CellReport(
+    report_fields = dict(
         cell_id=cell_id,
         kind="comparative",
         metric=metric,
@@ -2125,6 +2564,12 @@ def extract_comparative_cell(
         anchor_shift_bound_max_j=anchor_max,
         point_floor_diagnostic=point_floor if attribution_limited else None,
     )
+    if floor is not None and use_common_mode:
+        return _RegisteredCellReport(
+            **report_fields,
+            _registration=two_shared_edge_common_mode_registration(),
+        )
+    return CellReport(**report_fields)
 
 
 def extract_cells(

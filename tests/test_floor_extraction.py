@@ -38,7 +38,6 @@ from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     METHOD_ID,
-    _build_registered_common_mode_block_input,
     _common_mode_window_is_strictly_noncollapsed,
     abba_delta,
     attribution_single_count_discipline,
@@ -63,8 +62,11 @@ from joulewise.floor_extraction import (
     MemberReport,
     READER_THROUGHPUT_FIELD,
     _evaluate_member,
+    _common_mode_block_input_from_contrast,
+    _common_mode_block_inputs_from_evidence,
+    _common_mode_floor_from_block_inputs,
+    _common_mode_floor_from_extracted_inputs,
     _ingested_consumption_semantics_id,
-    _registered_common_mode_block_inputs,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
@@ -2404,7 +2406,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 return delta + 0.1
             return delta
 
-        return _build_registered_common_mode_block_input(
+        return _common_mode_block_input_from_contrast(
             contrast=contrast,
             onset_shifts_s=[0.0, 1.0],
             offset_shifts_s=[0.0, 1.0],
@@ -2443,12 +2445,13 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 side_effect=self.evaluated_member,
             ),
             mock.patch(
-                "joulewise.floor_extraction._registered_common_mode_block_inputs",
+                "joulewise.floor_extraction._common_mode_block_inputs_from_evidence",
                 side_effect=self.common_inputs,
             ) as registered_path,
             mock.patch(
-                "joulewise.floor_extraction.comparative_false_effect_floor"
-            ) as default_path,
+                "joulewise.floor_extraction._common_mode_floor_from_block_inputs",
+                wraps=_common_mode_floor_from_block_inputs,
+            ) as internal_path,
         ):
             report = extract_comparative_cell(
                 cell_id="D124-COMMON-MODE",
@@ -2461,12 +2464,12 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 estimator=COMMON_MODE_ESTIMATOR_ID,
                 estimator_registration=registration,
                 calibration_basis=basis,
-            )
+        )
         self.assertEqual(registered_path.call_count, 5)
-        default_path.assert_not_called()
+        internal_path.assert_called_once()
         self.assertTrue(report.extractable)
         self.assertEqual(
-            report.floor.estimator_registration,
+            report.estimator_registration,
             two_shared_edge_common_mode_registration(),
         )
         self.assertEqual(
@@ -2475,41 +2478,6 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         )
         self.assertEqual(
             [blocks, registration, basis, session.calibration_bracket], before
-        )
-
-    def test_registered_cell_refuses_an_unregistered_raw_estimate(self):
-        raw_floor = two_shared_edge_common_mode_floor(
-            self.DELTAS,
-            onset_sweeps_j=[[delta, delta + 0.1] for delta in self.DELTAS],
-            offset_sweeps_j=[[delta, delta] for delta in self.DELTAS],
-            zero_point_contrasts_j=self.DELTAS,
-            bundle_residual_half_widths_j=[[0.0] * 4] * len(self.DELTAS),
-            member_window_bounds_s=[[(-1.0, 1.0)] * 4] * len(self.DELTAS),
-            member_envelope_integral_sums_j=[100.0] * len(self.DELTAS),
-            calibration_bracket=self.bracket(),
-            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
-        )
-        self.assertIsNone(raw_floor.estimator_registration)
-        with (
-            mock.patch(
-                "joulewise.floor_extraction._evaluate_member",
-                side_effect=self.evaluated_member,
-            ),
-            mock.patch(
-                "joulewise.floor_extraction._registered_common_mode_block_inputs",
-                side_effect=self.common_inputs,
-            ),
-            mock.patch(
-                "joulewise.floor_extraction.two_shared_edge_common_mode_floor",
-                return_value=raw_floor,
-            ),
-        ):
-            report = self.extract()
-        self.assertFalse(report.extractable)
-        self.assertIsNone(report.floor)
-        self.assertEqual(
-            report.refusal_reasons,
-            ("common_mode_registration_invalid",),
         )
 
     def test_invalid_registration_refuses_without_default_fallback(self):
@@ -2521,7 +2489,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 side_effect=self.evaluated_member,
             ),
             mock.patch(
-                "joulewise.floor_extraction._registered_common_mode_block_inputs"
+                "joulewise.floor_extraction._common_mode_block_inputs_from_evidence"
             ) as registered_path,
             mock.patch(
                 "joulewise.floor_extraction.comparative_false_effect_floor"
@@ -2560,7 +2528,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 side_effect=self.evaluated_member,
             ),
             mock.patch(
-                "joulewise.floor_extraction._registered_common_mode_block_inputs"
+                "joulewise.floor_extraction._common_mode_block_inputs_from_evidence"
             ) as registered_path,
             mock.patch(
                 "joulewise.floor_extraction.comparative_false_effect_floor",
@@ -2578,7 +2546,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         default_path.assert_called_once()
         registered_path.assert_not_called()
         self.assertTrue(report.extractable)
-        self.assertIsNone(report.floor.estimator_registration)
+        self.assertIsNone(report.estimator_registration)
         self.assertEqual(report.floor.admissible_half_widths_j, (1.0,) * 5)
 
     def test_bundle_input_builder_sweeps_two_edges_and_local_residuals(self):
@@ -2619,7 +2587,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             for position in ("A1", "B1", "B2", "A2")
         ]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            record = _registered_common_mode_block_inputs(
+            record = _common_mode_block_inputs_from_evidence(
                 members,
                 runs_root=Path("unused"),
                 metric="phase_energy_j.decode",
@@ -2634,8 +2602,9 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         self.assertEqual(record.bundle_residual_half_widths_j, (0.0,) * 4)
         self.assertEqual(record.member_window_bounds_s, ((-0.5, 1.5),) * 4)
         self.assertEqual(record.member_envelope_integral_sum_j, 6.0)
-        self.assertEqual(onset[record.onset_zero_index], 2.0)
-        self.assertEqual(offset[record.offset_zero_index], 2.0)
+        self.assertEqual(record.zero_point_contrast_j, 2.0)
+        self.assertIn(record.zero_point_contrast_j, onset)
+        self.assertIn(record.zero_point_contrast_j, offset)
 
     def test_fcm_r4_01_130_support_structural_zero_has_no_understatement(self):
         positions = ("A1", "B1", "B2", "A2")
@@ -2690,7 +2659,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
 
         members = [self._sweep_member(position) for position in positions]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            record = _registered_common_mode_block_inputs(
+            record = _common_mode_block_inputs_from_evidence(
                 members,
                 runs_root=Path("130-support"),
                 metric="phase_energy_j.decode",
@@ -2698,7 +2667,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             )
         onset = record.onset_values_j
         offset = record.offset_values_j
-        true_zero = onset[record.onset_zero_index]
+        true_zero = record.zero_point_contrast_j
         intersections = sorted(
             (set(onset) & set(offset)) - {true_zero},
             key=lambda value: abs(value - true_zero),
@@ -2757,9 +2726,9 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         )
         self.assertIsNone(raw.estimator_registration)
 
-        registered = two_shared_edge_common_mode_floor(
+        registered = _common_mode_floor_from_block_inputs(
             [true_zero, true_zero],
-            registered_block_inputs=[record, record],
+            [record, record],
             calibration_bracket=bracket,
             shared_edge_bound_s=bound,
         )
@@ -2806,7 +2775,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         members = [self._sweep_member(position) for position in self._ABBA]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
             with self.assertRaises(CommonModeEstimatorRefusal) as caught:
-                _registered_common_mode_block_inputs(
+                _common_mode_block_inputs_from_evidence(
                     members,
                     runs_root=Path("delta-geometry"),
                     metric="phase_energy_j.decode",
@@ -2833,8 +2802,8 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 "joulewise.floor_extraction.comparative_false_effect_floor"
             ) as default_path,
             mock.patch(
-                "joulewise.floor_extraction.two_shared_edge_common_mode_floor",
-                wraps=two_shared_edge_common_mode_floor,
+                "joulewise.floor_extraction._common_mode_floor_from_extracted_inputs",
+                wraps=_common_mode_floor_from_extracted_inputs,
             ) as registered_estimator,
         ):
             report = extract_comparative_cell(
@@ -2909,7 +2878,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     end_s=end_s,
                 ), mock.patch("joulewise.floor_extraction.BundleReader", Reader):
                     with self.assertRaises(CommonModeEstimatorRefusal) as caught:
-                        _registered_common_mode_block_inputs(
+                        _common_mode_block_inputs_from_evidence(
                             members,
                             runs_root=Path("threshold-geometry"),
                             metric="phase_energy_j.decode",
@@ -2954,7 +2923,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         members = [self._sweep_member(position) for position in self._ABBA]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
             with self.assertRaises(CommonModeEstimatorRefusal) as caught:
-                _registered_common_mode_block_inputs(
+                _common_mode_block_inputs_from_evidence(
                     members,
                     runs_root=Path("nonfinite-envelope"),
                     metric="phase_energy_j.decode",
@@ -3187,7 +3156,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 return_value={"max_abs_delta_j": 0.0},
             ),
         ):
-            record = _registered_common_mode_block_inputs(
+            record = _common_mode_block_inputs_from_evidence(
                 members,
                 runs_root=Path("delta2-minimized"),
                 metric="phase_energy_j.decode",
@@ -3198,7 +3167,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         residuals = record.bundle_residual_half_widths_j
         returned_windows = record.member_window_bounds_s
         envelope_sum = record.member_envelope_integral_sum_j
-        _zero_point = onset[record.onset_zero_index]
+        _zero_point = record.zero_point_contrast_j
 
         def contrast(onset_s, offset_s):
             return math.fsum(
@@ -3247,7 +3216,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             joint_width - round2_emitted_width,
             5.5067062021406856e-14,
         )
-        floor = two_shared_edge_common_mode_floor(
+        floor = _common_mode_floor_from_extracted_inputs(
             [point, point],
             onset_sweeps_j=[onset, onset],
             offset_sweeps_j=[offset, offset],
@@ -3435,7 +3404,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     return_value={"max_abs_delta_j": 0.0},
                 ),
             ):
-                record = _registered_common_mode_block_inputs(
+                record = _common_mode_block_inputs_from_evidence(
                     members,
                     runs_root=Path("randomized-oracle"),
                     metric="phase_energy_j.decode",
@@ -3446,7 +3415,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             residuals = record.bundle_residual_half_widths_j
             returned_windows = record.member_window_bounds_s
             envelope_sum = record.member_envelope_integral_sum_j
-            _zero_point = onset[record.onset_zero_index]
+            _zero_point = record.zero_point_contrast_j
 
             def contrast(onset_s: float, offset_s: float) -> float:
                 return math.fsum(
@@ -3575,7 +3544,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     }
                 },
             }
-            floor = two_shared_edge_common_mode_floor(
+            floor = _common_mode_floor_from_extracted_inputs(
                 [point, point],
                 onset_sweeps_j=[onset, onset],
                 offset_sweeps_j=[offset, offset],
@@ -3790,7 +3759,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
 
         members = [self._sweep_member(position) for position in positions]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            record = _registered_common_mode_block_inputs(
+            record = _common_mode_block_inputs_from_evidence(
                 members,
                 runs_root=Path("synthetic-reader"),
                 metric="phase_energy_j.decode",
@@ -3801,7 +3770,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         residuals = record.bundle_residual_half_widths_j
         windows = record.member_window_bounds_s
         envelope_sum = record.member_envelope_integral_sum_j
-        zero_point = onset[record.onset_zero_index]
+        zero_point = record.zero_point_contrast_j
 
         def contrast(onset_s: float, offset_s: float) -> float:
             return math.fsum(
@@ -3822,7 +3791,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             delta - candidate_lower,
             candidate_upper - delta,
         )
-        floor = two_shared_edge_common_mode_floor(
+        floor = _common_mode_floor_from_extracted_inputs(
             [delta, delta],
             onset_sweeps_j=[onset, onset],
             offset_sweeps_j=[offset, offset],
@@ -3953,7 +3922,7 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
 
     @classmethod
     def _inputs(cls, block):
-        return _registered_common_mode_block_inputs(
+        return _common_mode_block_inputs_from_evidence(
             cls._members(block),
             runs_root=cls.FIXTURE_ROOT,
             metric=cls.METRIC,
@@ -3981,7 +3950,7 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
                 residuals = record.bundle_residual_half_widths_j
                 windows = record.member_window_bounds_s
                 envelope_sum = record.member_envelope_integral_sum_j
-                zero = onset[record.onset_zero_index]
+                zero = record.zero_point_contrast_j
                 self.assertTrue(onset)
                 self.assertTrue(offset)
                 self.assertEqual(len(residuals), 4)
@@ -4038,7 +4007,7 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
         for block in self.record["blocks"]:
             with self.subTest(block=block["block_id"]):
                 record = self._inputs(block)
-                zero = record.onset_values_j[record.onset_zero_index]
+                zero = record.zero_point_contrast_j
                 summary_values = [
                     BundleReader(
                         self.FIXTURE_ROOT / member["bundle_id"]
@@ -4113,9 +4082,9 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
                 }
             },
         }
-        estimate = two_shared_edge_common_mode_floor(
+        estimate = _common_mode_floor_from_block_inputs(
             [block["delta_j"] for block in self.record["blocks"]],
-            registered_block_inputs=inputs,
+            inputs,
             calibration_bracket=bracket,
             shared_edge_bound_s=self.bound_s,
         )
@@ -4127,7 +4096,7 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
         ):
             onset = helper.onset_values_j
             offset = helper.offset_values_j
-            zero = onset[helper.onset_zero_index]
+            zero = helper.zero_point_contrast_j
             with self.subTest(block=block["block_id"], bar="about zero"):
                 self.assertGreaterEqual(
                     Fraction.from_float(width),
@@ -4144,19 +4113,83 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
                     ),
                 )
 
-    def test_real_block_promoted_replay_value_is_reproduced(self):
+    def test_promoted_a5_fixture_replay_flows_through_extraction(self):
         from tests.test_detection_floor import (
             TestTwoSharedEdgeCommonModeFloor as Replay,
         )
 
-        estimate = two_shared_edge_common_mode_floor(
-            Replay.REPLAY_DELTAS,
-            registered_block_inputs=Replay.registered_replay_inputs(),
+        blocks = [
+            {
+                "block_id": f"b{index:02d}",
+                "members": {
+                    position: f"b{index:02d}-{position.lower()}"
+                    for position in ("A1", "B1", "B2", "A2")
+                },
+            }
+            for index in range(1, len(Replay.REPLAY_DELTAS) + 1)
+        ]
+        session = SimpleNamespace(
+            ready=True,
+            refusal_reasons=(),
             calibration_bracket=Replay.bracket(),
-            shared_edge_bound_s=Replay.OPERATIVE_BOUND_S,
+            operative_fiducial_bound_s=Replay.OPERATIVE_BOUND_S,
         )
-        self.assertEqual(estimate.guarded_floor_j, 1.8695016260131627)
-        self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
+
+        def evaluated_member(**kwargs):
+            block_index = int(kwargs["block_id"][1:]) - 1
+            delta = Replay.REPLAY_DELTAS[block_index]
+            value = 10.0 + delta if kwargs["position"].startswith("B") else 10.0
+            return MemberReport(
+                slot=kwargs["slot"],
+                bundle_id=kwargs["bundle_id"],
+                block_id=kwargs["block_id"],
+                position=kwargs["position"],
+                value_j=value,
+                cooldown_result="recovered",
+                cooldown_verified=True,
+                cap_hit=False,
+                excluded=False,
+                reasons=(),
+                anchor_shift_bound_j=0.0,
+                operative_anchor_envelope={"half_width_j": 0.0},
+                consumption_provenance={},
+                summary_sha256="a" * 64,
+                bundle_sha256="b" * 64,
+                config_sha256="c" * 64,
+            )
+
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=evaluated_member,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._common_mode_block_inputs_from_evidence",
+                side_effect=Replay.extracted_replay_inputs(),
+            ),
+        ):
+            report = extract_comparative_cell(
+                cell_id="A5-PH-DECODE-CMP",
+                metric="phase_energy_j.decode",
+                window_class="phase",
+                blocks=blocks,
+                runs_root=Path("a5-replay-fixtures"),
+                cooldowns={},
+                consumption_session=session,
+                estimator=COMMON_MODE_ESTIMATOR_ID,
+                estimator_registration=two_shared_edge_common_mode_registration(),
+                calibration_basis=(
+                    RegisteredCommonModeExtractionTests.calibration_basis()
+                ),
+            )
+        self.assertTrue(report.extractable)
+        self.assertEqual(report.floor.guarded_floor_j, 1.8695016260131627)
+        self.assertEqual(round(report.floor.guarded_floor_j, 6), 1.869502)
+        self.assertIsNone(report.floor.estimator_registration)
+        self.assertEqual(
+            report.estimator_registration,
+            two_shared_edge_common_mode_registration(),
+        )
 
 
 class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):

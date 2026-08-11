@@ -8339,3 +8339,39 @@ frozen dataclass do not cryptographically prevent deliberate fabrication, so a
 construction-site inventory test pins the intended one-builder/one-production-
 caller discipline. Evidence faithfulness upstream of the builder remains an
 assumption, not a result of this structural repair.
+
+### D-124 amendment — 2026-08-11: round-6 D-132 revival by surface deletion
+
+D-132 revives FLOOR-COMMONMODE-01 because the six-round record is a
+converging instrument, not a doom loop, and binds the closure design: the
+public registered arithmetic surface is deleted.  The public
+`two_shared_edge_common_mode_floor` retains only its legacy raw keyword path
+and every `FloorEstimate` it returns is unregistered.  The importable
+`_RegisteredCommonModeBlockInput` type, its builder, and the estimator's
+`registered_block_inputs` overload no longer exist.  Registered arithmetic is
+now private to `floor_extraction`; its inputs are derived inside
+`extract_comparative_cell` from authenticated bundle evidence, and a
+registration exists only on the resulting governed `CellReport` artifact.
+The default `comparative_false_effect_floor` path and the legacy raw common-mode
+path remain public and behaviorally unchanged.
+
+All `shared_extrema_*` parameter rules retain their round-5 semantics.  The
+parameter dictionary adds
+`registered_result_provenance_rule =
+registered_results_exist_only_as_governed_extraction_artifacts`; this is the
+round's single registration rotation.  The resulting parameter hash is
+`dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf`.
+The round-5 hash
+`973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7`
+joins the four earlier superseded registrations and is rejected with them.
+
+The claims-with-assumptions form narrows accordingly: **a registered result is
+a governed extraction artifact produced under a valid D-124 registration;
+there is no public callable that accepts constructed arithmetic inputs and
+returns a registered `FloorEstimate`.**  The refuter-authored round-4 oracle
+continues to exercise the same arithmetic bars through the extraction
+module's test-only internal seam; its case generation and assertions are
+unchanged.  The delta-4 counterexamples, 2,048-case adversarial-zero campaign,
+and real-fixture exact-width checks likewise exercise the internal extraction
+seam.  This construction eliminates FCM-R5-01's fabricated-record admission
+class instead of attempting to authenticate Python object provenance.

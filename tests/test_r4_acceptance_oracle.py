@@ -16,9 +16,9 @@ It asserts the registered semantics of `r4_oracle_spec.md`:
   * the candidate-(3) trap formula (shipped arithmetic + |z-d|) FAILS,
     committed as a named negative regression.
 
-DECLARED SIGNATURE the implementer conforms to (see r4_oracle_spec.md Sec 6):
+INTERNAL EXTRACTION SEAM the round-6 implementation conforms to:
 
-    two_shared_edge_common_mode_floor(
+    _common_mode_floor_from_extracted_inputs(
         block_deltas_j, *,
         onset_sweeps_j, offset_sweeps_j,
         zero_point_contrasts_j,               # NEW, REQUIRED
@@ -39,7 +39,7 @@ import random
 import unittest
 from fractions import Fraction
 
-from joulewise import detection_floor
+from joulewise import detection_floor, floor_extraction
 from joulewise.detection_floor import CommonModeEstimatorRefusal
 from joulewise.floor_extraction import CELL_REFUSAL_CODES
 
@@ -166,7 +166,7 @@ def emit(
     bound_s,
     residuals=None,
 ):
-    """Invoke the registered estimator under its declared signature."""
+    """Invoke the registered arithmetic through extraction's internal seam."""
     n = len(deltas)
     if residuals is None:
         residuals = [[0.0, 0.0, 0.0, 0.0] for _ in range(n)]
@@ -180,7 +180,9 @@ def emit(
         "shared_edge_bound_s": bound_s,
         ZERO_POINT_KWARG: zeros,
     }
-    return detection_floor.two_shared_edge_common_mode_floor(deltas, **kwargs)
+    return floor_extraction._common_mode_floor_from_extracted_inputs(
+        deltas, **kwargs
+    )
 
 
 def emit_one(delta, onset, offset, zero, envelope_sum, bound_s, residual=None):

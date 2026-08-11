@@ -24,10 +24,10 @@ import hashlib
 import json
 import math
 import stat
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -159,6 +159,9 @@ _COMMON_MODE_PARAMETERS = {
     ),
     "allowance_rule": (
         "endpoint_max_plus_one_never_zero_allowance_inside_shared_bound"
+    ),
+    "registered_result_provenance_rule": (
+        "registered_results_exist_only_as_governed_extraction_artifacts"
     ),
 }
 COMMON_MODE_PARAMETER_SHA256 = hashlib.sha256(
@@ -470,140 +473,12 @@ class FloorEstimate:
     admissible_half_widths_j: tuple[float, ...] = ()
     corner_widened_unguarded_floor_j: Optional[float] = None
     corner_widened_guarded_floor_j: Optional[float] = None
-    estimator_registration: Mapping[str, object] | None = None
-
-
-@dataclass(frozen=True)
-class _RegisteredCommonModeBlockInput:
-    """One builder-constructed block admitted to the registered surface."""
-
-    onset_values_j: tuple[float, ...]
-    offset_values_j: tuple[float, ...]
-    onset_zero_index: int
-    offset_zero_index: int
-    bundle_residual_half_widths_j: tuple[float, ...]
-    member_window_bounds_s: tuple[tuple[float, float], ...]
-    member_envelope_integral_sum_j: float
-
-
-def _common_mode_shift_grid(
-    values: Sequence[float],
-    *,
-    label: str,
-) -> tuple[tuple[float, ...], int]:
-    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            f"the registered {label} shift grid must be a sequence",
-        )
-    normalized: list[float] = []
-    for raw in values:
-        value = _common_mode_finite(raw)
-        if value is None:
-            _common_mode_refuse(
-                "common_mode_precondition_failed",
-                f"the registered {label} shift grid must be finite",
-            )
-        normalized.append(value)
-    if normalized != sorted(normalized):
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            f"the registered {label} shift grid must be sorted ascending",
-        )
-    zero_indices = [
-        index
-        for index, value in enumerate(normalized)
-        if value == 0.0
-    ]
-    if (
-        len(zero_indices) != 1
-        or math.copysign(1.0, normalized[zero_indices[0]]) != 1.0
-    ):
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            f"the registered {label} shift grid must contain exactly one +0.0",
-        )
-    return tuple(normalized), zero_indices[0]
-
-
-def _common_mode_evaluations(
-    values: Sequence[float],
-    *,
-    label: str,
-) -> tuple[float, ...]:
-    normalized: list[float] = []
-    for raw in values:
-        value = _common_mode_finite(raw)
-        if value is None:
-            _common_mode_refuse(
-                "common_mode_precondition_failed",
-                f"{label} must contain only finite numeric evaluations",
-            )
-        normalized.append(value)
-    if not normalized:
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            f"{label} must contain the shift-zero evaluation",
-        )
-    return tuple(normalized)
-
-
-def _build_registered_common_mode_block_input(
-    *,
-    contrast: Callable[[float, float], float],
-    onset_shifts_s: Sequence[float],
-    offset_shifts_s: Sequence[float],
-    bundle_residual_half_widths_j: Sequence[float],
-    member_window_bounds_s: Sequence[tuple[float, float]],
-    member_envelope_integral_sum_j: float,
-) -> _RegisteredCommonModeBlockInput:
-    """Evaluate and structurally record one registered common-mode block."""
-
-    onset_shifts, onset_zero_index = _common_mode_shift_grid(
-        onset_shifts_s,
-        label="onset",
-    )
-    offset_shifts, offset_zero_index = _common_mode_shift_grid(
-        offset_shifts_s,
-        label="offset",
-    )
-    if not callable(contrast):
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            "the registered block builder requires a contrast callable",
-        )
-    try:
-        zero_point_contrast = contrast(0.0, 0.0)
-        onset_values = [
-            zero_point_contrast if delta_s == 0.0 else contrast(delta_s, 0.0)
-            for delta_s in onset_shifts
-        ]
-        offset_values = [
-            zero_point_contrast if delta_s == 0.0 else contrast(0.0, delta_s)
-            for delta_s in offset_shifts
-        ]
-        clean_onset = _common_mode_evaluations(
-            onset_values,
-            label="registered onset sweep",
-        )
-        clean_offset = _common_mode_evaluations(
-            offset_values,
-            label="registered offset sweep",
-        )
-        residuals = tuple(bundle_residual_half_widths_j)
-        windows = tuple(tuple(window) for window in member_window_bounds_s)
-    except CommonModeEstimatorRefusal:
-        raise
-    except Exception as exc:
-        _common_mode_refuse("common_mode_precondition_failed", str(exc))
-    return _RegisteredCommonModeBlockInput(
-        onset_values_j=clean_onset,
-        offset_values_j=clean_offset,
-        onset_zero_index=onset_zero_index,
-        offset_zero_index=offset_zero_index,
-        bundle_residual_half_widths_j=residuals,
-        member_window_bounds_s=windows,
-        member_envelope_integral_sum_j=member_envelope_integral_sum_j,
+    # Registration is owned by the governed extraction artifact.  Keeping the
+    # always-None attribute preserves the legacy raw-result record shape while
+    # removing any public constructor path to a registered FloorEstimate.
+    estimator_registration: Mapping[str, object] | None = field(
+        default=None,
+        init=False,
     )
 
 
@@ -1216,8 +1091,6 @@ def _common_mode_block_half_width(
 def two_shared_edge_common_mode_floor(
     block_deltas_j: Sequence[float],
     *,
-    registered_block_inputs: Sequence[_RegisteredCommonModeBlockInput]
-    | None = None,
     onset_sweeps_j: Sequence[Sequence[float]] | None = None,
     offset_sweeps_j: Sequence[Sequence[float]] | None = None,
     zero_point_contrasts_j: Sequence[float] | None = None,
@@ -1227,13 +1100,11 @@ def two_shared_edge_common_mode_floor(
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> FloorEstimate:
-    """D-124 contrast floor over registered records or unregistered kwargs.
+    """Legacy unregistered D-124 arithmetic over the raw keyword surface.
 
-    Registered estimates accept only block records constructed by
-    :func:`_build_registered_common_mode_block_input`.  The retained raw
-    keyword surface preserves its exact-membership admission and arithmetic
-    for independent-oracle compatibility, but its results are unregistered.
-    Both surfaces execute :func:`_common_mode_block_half_width`.
+    This callable preserves the round-4 raw-input contract for exploratory
+    use.  It never emits registration.  Claim-bearing registered results are
+    produced only by :func:`joulewise.floor_extraction.extract_comparative_cell`.
     """
 
     try:
@@ -1241,25 +1112,22 @@ def two_shared_edge_common_mode_floor(
     except (TypeError, ValueError) as exc:
         _common_mode_refuse("common_mode_precondition_failed", str(exc))
     n = len(deltas)
-    required_raw_fields = (
+    required_fields = (
         onset_sweeps_j,
         offset_sweeps_j,
         zero_point_contrasts_j,
         bundle_residual_half_widths_j,
         member_envelope_integral_sums_j,
     )
-    registered_surface = registered_block_inputs is not None
-    raw_surface = (
-        any(value is not None for value in required_raw_fields)
-        or member_window_bounds_s is not None
-    )
-    if registered_surface == raw_surface or (
-        raw_surface and any(value is None for value in required_raw_fields)
-    ):
+    if (
+        not any(value is not None for value in required_fields)
+        and member_window_bounds_s is None
+    ) or any(value is None for value in required_fields):
         _common_mode_refuse(
             "common_mode_precondition_failed",
-            "supply exactly one complete input surface: registered block "
-            "records or the retained raw keyword group",
+            "the retained raw keyword surface requires onset and offset "
+            "sweeps, explicit zero points, four-residual groups, member "
+            "windows, and member envelope integral sums",
         )
 
     bound = _common_mode_finite(shared_edge_bound_s)
@@ -1274,133 +1142,66 @@ def two_shared_edge_common_mode_floor(
             "the sweep bound must equal the once-widened authenticated bound",
         )
 
+    assert onset_sweeps_j is not None
+    assert offset_sweeps_j is not None
+    assert zero_point_contrasts_j is not None
+    assert bundle_residual_half_widths_j is not None
+    assert member_envelope_integral_sums_j is not None
+    try:
+        zero_points = _clean_values(
+            zero_point_contrasts_j,
+            "zero-point contrasts",
+        )
+        input_lengths_match = (
+            len(onset_sweeps_j)
+            == len(offset_sweeps_j)
+            == len(zero_points)
+            == len(bundle_residual_half_widths_j)
+            == len(member_envelope_integral_sums_j)
+            == n
+        )
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    if not input_lengths_match:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "every raw block needs onset, offset, an explicit zero point, "
+            "four residuals, and a member envelope integral sum",
+        )
     prepared: list[
-        tuple[
-            list[float] | tuple[float, ...],
-            list[float] | tuple[float, ...],
-            float,
-            Sequence[float],
-            object,
-        ]
+        tuple[list[float], list[float], float, Sequence[float], object]
     ] = []
-    raw_windows: object
-    if registered_surface:
-        assert registered_block_inputs is not None
+    for index, (
+        raw_onset,
+        raw_offset,
+        zero_point,
+        residuals,
+        envelope_sum,
+    ) in enumerate(
+        zip(
+            onset_sweeps_j,
+            offset_sweeps_j,
+            zero_points,
+            bundle_residual_half_widths_j,
+            member_envelope_integral_sums_j,
+            strict=True,
+        )
+    ):
         try:
-            registered_count = len(registered_block_inputs)
-        except TypeError:
-            registered_count = -1
-        if registered_count != n:
-            _common_mode_refuse(
-                "common_mode_precondition_failed",
-                "every block delta needs one registered block input",
-            )
-        raw_windows = []
-        for index, record in enumerate(registered_block_inputs):
-            if type(record) is not _RegisteredCommonModeBlockInput:
-                _common_mode_refuse(
-                    "common_mode_precondition_failed",
-                    f"block {index} is not a registered builder input",
-                )
-            onset = _common_mode_evaluations(
-                record.onset_values_j,
-                label=f"block {index} registered onset sweep",
-            )
-            offset = _common_mode_evaluations(
-                record.offset_values_j,
-                label=f"block {index} registered offset sweep",
-            )
-            if (
-                isinstance(record.onset_zero_index, bool)
-                or not isinstance(record.onset_zero_index, int)
-                or record.onset_zero_index < 0
-                or record.onset_zero_index >= len(onset)
-                or isinstance(record.offset_zero_index, bool)
-                or not isinstance(record.offset_zero_index, int)
-                or record.offset_zero_index < 0
-                or record.offset_zero_index >= len(offset)
-            ):
-                _common_mode_refuse(
-                    "common_mode_precondition_failed",
-                    f"block {index} has an invalid structural zero index",
-                )
-            zero_point = onset[record.onset_zero_index]
-            if offset[record.offset_zero_index] != zero_point:
-                _common_mode_refuse(
-                    "common_mode_precondition_failed",
-                    f"block {index} structural zero evaluations disagree",
-                )
-            prepared.append(
-                (
-                    onset,
-                    offset,
-                    zero_point,
-                    record.bundle_residual_half_widths_j,
-                    record.member_envelope_integral_sum_j,
-                )
-            )
-            raw_windows.append(record.member_window_bounds_s)
-    else:
-        assert onset_sweeps_j is not None
-        assert offset_sweeps_j is not None
-        assert zero_point_contrasts_j is not None
-        assert bundle_residual_half_widths_j is not None
-        assert member_envelope_integral_sums_j is not None
-        try:
-            zero_points = _clean_values(
-                zero_point_contrasts_j,
-                "zero-point contrasts",
-            )
-            input_lengths_match = (
-                len(onset_sweeps_j)
-                == len(offset_sweeps_j)
-                == len(zero_points)
-                == len(bundle_residual_half_widths_j)
-                == len(member_envelope_integral_sums_j)
-                == n
-            )
+            onset = _clean_values(raw_onset, f"block {index} onset sweep")
+            offset = _clean_values(raw_offset, f"block {index} offset sweep")
         except (TypeError, ValueError) as exc:
             _common_mode_refuse("common_mode_precondition_failed", str(exc))
-        if not input_lengths_match:
+        if zero_point not in onset or zero_point not in offset:
             _common_mode_refuse(
                 "common_mode_precondition_failed",
-                "every raw block needs onset, offset, an explicit zero point, "
-                "four residuals, and a member envelope integral sum",
+                f"block {index} sweeps must include the explicit zero point "
+                "by exact equality",
             )
-        for index, (
-            raw_onset,
-            raw_offset,
-            zero_point,
-            residuals,
-            envelope_sum,
-        ) in enumerate(
-            zip(
-                onset_sweeps_j,
-                offset_sweeps_j,
-                zero_points,
-                bundle_residual_half_widths_j,
-                member_envelope_integral_sums_j,
-                strict=True,
-            )
-        ):
-            try:
-                onset = _clean_values(raw_onset, f"block {index} onset sweep")
-                offset = _clean_values(raw_offset, f"block {index} offset sweep")
-            except (TypeError, ValueError) as exc:
-                _common_mode_refuse("common_mode_precondition_failed", str(exc))
-            if zero_point not in onset or zero_point not in offset:
-                _common_mode_refuse(
-                    "common_mode_precondition_failed",
-                    f"block {index} sweeps must include the explicit zero point "
-                    "by exact equality",
-                )
-            prepared.append(
-                (onset, offset, zero_point, residuals, envelope_sum)
-            )
-        raw_windows = member_window_bounds_s
+        prepared.append((onset, offset, zero_point, residuals, envelope_sum))
 
     _common_mode_member_windows(
-        raw_windows,
+        member_window_bounds_s,
         expected_n=n,
         bound=bound,
     )
@@ -1459,17 +1260,9 @@ def two_shared_edge_common_mode_floor(
             )
         )
 
-    estimate = comparative_false_effect_floor(
+    return comparative_false_effect_floor(
         deltas,
         admissible_half_widths_j=block_widths,
-    )
-    return replace(
-        estimate,
-        estimator_registration=(
-            two_shared_edge_common_mode_registration()
-            if registered_surface
-            else None
-        ),
     )
 
 
@@ -1716,14 +1509,6 @@ def build_comparative_record(
         "corner_widened_guarded_floor_j": widened_guarded,
         "blocks": [dict(block) for block in blocks],
     }
-    if estimate.estimator_registration is not None:
-        if not validate_common_mode_estimator_registration(
-            estimate.estimator_registration
-        ):
-            raise ValueError("comparative estimate has an invalid estimator registration")
-        record["estimator_registration"] = copy.deepcopy(
-            dict(estimate.estimator_registration)
-        )
     record = _add_attribution_limit_metadata(record, estimate)
     return _add_whole_window_drift_allowance(
         record,

@@ -8,6 +8,7 @@ worked example.
 import ast
 import dataclasses
 import hashlib
+import inspect
 import json
 import math
 import random
@@ -20,6 +21,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import joulewise.detection_floor as detection_floor
+import joulewise.floor_extraction as floor_extraction
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -35,7 +37,6 @@ from joulewise.detection_floor import (
     STACK_IDENTITY_DOMAIN,
     TRANSPORT_REASON_CODES,
     TRANSPORT_RULE_ID,
-    _build_registered_common_mode_block_input,
     abba_delta,
     absolute_false_effect_floor,
     build_absolute_record,
@@ -61,6 +62,8 @@ from joulewise.floor_extraction import (
     CELL_REFUSAL_CODES,
     CellReport,
     EXTRACTION_SPEC_SCHEMA_VERSION,
+    _common_mode_block_input_from_contrast,
+    _common_mode_floor_from_block_inputs,
     extract_absolute_cell,
     extract_cells,
 )
@@ -724,7 +727,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         ]
 
     @classmethod
-    def registered_replay_inputs(cls):
+    def extracted_replay_inputs(cls):
         records = []
         for delta, shared_width, residuals, windows, envelope_sum in zip(
             cls.REPLAY_DELTAS,
@@ -746,7 +749,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 return delta
 
             records.append(
-                _build_registered_common_mode_block_input(
+                _common_mode_block_input_from_contrast(
                     contrast=contrast,
                     onset_shifts_s=[0.0, 1.0],
                     offset_shifts_s=[0.0, 1.0],
@@ -758,9 +761,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         return records
 
     def test_replay_arithmetic_pins_promoted_two_edge_floor(self):
-        estimate = two_shared_edge_common_mode_floor(
+        estimate = _common_mode_floor_from_block_inputs(
             self.REPLAY_DELTAS,
-            registered_block_inputs=self.registered_replay_inputs(),
+            self.extracted_replay_inputs(),
             calibration_bracket=self.bracket(),
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
@@ -805,10 +808,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             1.8695016260131627,
         )
         self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
-        self.assertEqual(
-            estimate.estimator_registration,
-            two_shared_edge_common_mode_registration(),
-        )
+        self.assertIsNone(estimate.estimator_registration)
 
     def test_default_estimator_serialized_output_sha_is_unchanged(self):
         cases = (
@@ -859,7 +859,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         )
 
     @staticmethod
-    def _r4_counterexample_record():
+    def _r4_counterexample_inputs():
         true_zero = 1.0
         adversarial_z = 1.0000000005
 
@@ -870,7 +870,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 return 1.125
             return true_zero
 
-        return _build_registered_common_mode_block_input(
+        return _common_mode_block_input_from_contrast(
             contrast=contrast,
             onset_shifts_s=[-1.0, 0.0, 1.0],
             offset_shifts_s=[-1.0, 0.0],
@@ -919,10 +919,10 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         )
         self.assertIsNone(raw.estimator_registration)
 
-        record = self._r4_counterexample_record()
-        registered = two_shared_edge_common_mode_floor(
+        record = self._r4_counterexample_inputs()
+        registered = _common_mode_floor_from_block_inputs(
             [true_zero, true_zero],
-            registered_block_inputs=[record, record],
+            [record, record],
             calibration_bracket={
                 "status": "passed",
                 "endpoint_max_b_fiducial_s": 0.0,
@@ -943,16 +943,11 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             Fraction.from_float(registered.admissible_half_widths_j[0]),
             exact_required,
         )
-        self.assertEqual(record.onset_zero_index, 1)
-        self.assertEqual(record.offset_zero_index, 1)
-        self.assertEqual(record.onset_values_j[record.onset_zero_index], true_zero)
-        self.assertEqual(
-            registered.estimator_registration,
-            two_shared_edge_common_mode_registration(),
-        )
+        self.assertEqual(record.zero_point_contrast_j, true_zero)
+        self.assertIsNone(registered.estimator_registration)
 
     def test_fcm_r4_01_five_block_composition_has_zero_understatement(self):
-        record = self._r4_counterexample_record()
+        record = self._r4_counterexample_inputs()
         exact_required = Fraction(70368744459139, 562949953421312)
         safe_width = float(exact_required)
         while Fraction.from_float(safe_width) < exact_required:
@@ -992,9 +987,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             Fraction(5963567, 2251799813685248),
         )
         self.assertIsNone(raw.estimator_registration)
-        registered = two_shared_edge_common_mode_floor(
+        registered = _common_mode_floor_from_block_inputs(
             [1.0] * 5,
-            registered_block_inputs=[record] * 5,
+            [record] * 5,
             calibration_bracket=bracket,
             shared_edge_bound_s=0.1,
         )
@@ -1003,178 +998,112 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             Fraction.from_float(reference.guarded_floor_j),
         )
 
-    def test_builder_records_positive_zero_and_preserves_evaluation_order(self):
-        calls = []
-
-        def contrast(onset_s, offset_s):
-            calls.append((onset_s, offset_s))
-            return onset_s + offset_s
-
-        record = _build_registered_common_mode_block_input(
-            contrast=contrast,
-            onset_shifts_s=[-1.0, 0.0, 1.0],
-            offset_shifts_s=[-2.0, 0.0, 2.0],
-            bundle_residual_half_widths_j=[0.0] * 4,
-            member_window_bounds_s=[(0.0, 1.0)] * 4,
-            member_envelope_integral_sum_j=1.0,
-        )
-        self.assertEqual(
-            calls,
-            [
-                (0.0, 0.0),
-                (-1.0, 0.0),
-                (1.0, 0.0),
-                (0.0, -2.0),
-                (0.0, 2.0),
-            ],
-        )
-        self.assertEqual(record.onset_zero_index, 1)
-        self.assertEqual(record.offset_zero_index, 1)
-        for invalid_grid in (
-            [0.0, -1.0],
-            [-1.0, 1.0],
-            [-1.0, 0.0, 0.0, 1.0],
-            [-1.0, -0.0, 1.0],
-            [-1.0, -0.0, 0.0, 1.0],
-            [-1.0, math.inf, 0.0],
+    def test_public_namespace_has_no_registered_floor_result_callable(self):
+        for deleted_name in (
+            "_RegisteredCommonModeBlockInput",
+            "_build_registered_common_mode_block_input",
         ):
-            with self.subTest(invalid_grid=invalid_grid):
-                with self.assertRaises(CommonModeEstimatorRefusal) as caught:
-                    _build_registered_common_mode_block_input(
-                        contrast=contrast,
-                        onset_shifts_s=invalid_grid,
-                        offset_shifts_s=[0.0, 1.0],
-                        bundle_residual_half_widths_j=[0.0] * 4,
-                        member_window_bounds_s=[(0.0, 1.0)] * 4,
-                        member_envelope_integral_sum_j=1.0,
-                    )
-                self.assertEqual(
-                    caught.exception.reason,
-                    "common_mode_precondition_failed",
-                )
+            self.assertFalse(hasattr(detection_floor, deleted_name))
+            self.assertNotIn(deleted_name, detection_floor.__all__)
 
-    def test_registered_surface_accepts_only_records_and_is_mutually_exclusive(self):
-        record = self._r4_counterexample_record()
-        bracket = {
-            "status": "passed",
-            "endpoint_max_b_fiducial_s": 0.0,
-            "calibration_drift_allowance_s": 0.1,
-            "b_fiducial_s": 0.1,
-            "acceptance": {
-                "allowance": {
-                    "rule": "max(observed_drift_s,bracket_screen_s)",
-                    "value_s": "0.1",
-                    "embedding_count": 1,
-                    "embedded_in": "b_fiducial_s",
-                }
-            },
-        }
-        raw_kwargs = {
-            "onset_sweeps_j": [[1.0, 1.125]] * 2,
-            "offset_sweeps_j": [[1.0, 1.0]] * 2,
-            "zero_point_contrasts_j": [1.0] * 2,
-            "bundle_residual_half_widths_j": [[0.0] * 4] * 2,
-            "member_window_bounds_s": [[(0.0, 1.0)] * 4] * 2,
-            "member_envelope_integral_sums_j": [1.125] * 2,
-        }
-        for kwargs in (
-            {},
-            {
-                "registered_block_inputs": [record, record],
-                **raw_kwargs,
-            },
-            {"registered_block_inputs": [object(), object()]},
-        ):
-            with self.subTest(kwargs=tuple(kwargs)):
-                with self.assertRaises(CommonModeEstimatorRefusal) as caught:
-                    two_shared_edge_common_mode_floor(
-                        [1.0, 1.0],
-                        **kwargs,
-                        calibration_bracket=bracket,
-                        shared_edge_bound_s=0.1,
-                    )
-                self.assertEqual(
-                    caught.exception.reason,
-                    "common_mode_precondition_failed",
-                )
+        self.assertNotIn(
+            "registered_block_inputs",
+            inspect.signature(two_shared_edge_common_mode_floor).parameters,
+        )
+        self.assertNotIn(
+            "estimator_registration",
+            inspect.signature(detection_floor.FloorEstimate).parameters,
+        )
+        self.assertNotIn("_RegisteredCellReport", floor_extraction.__all__)
+        self.assertNotIn(
+            "_common_mode_floor_from_extracted_inputs",
+            floor_extraction.__all__,
+        )
 
-    def test_one_core_serves_both_surfaces_and_construction_is_single_site(self):
-        record = self._r4_counterexample_record()
-        raw_kwargs = {
-            "onset_sweeps_j": [[1.0, 1.0000000005, 1.125]] * 2,
-            "offset_sweeps_j": [[1.0, 1.0000000005]] * 2,
-            "zero_point_contrasts_j": [1.0000000005] * 2,
-            "bundle_residual_half_widths_j": [[0.0] * 4] * 2,
-            "member_window_bounds_s": [[(0.0, 1.0)] * 4] * 2,
-            "member_envelope_integral_sums_j": [1.125] * 2,
-        }
-        bracket = {
-            "status": "passed",
-            "endpoint_max_b_fiducial_s": 0.0,
-            "calibration_drift_allowance_s": 0.1,
-            "b_fiducial_s": 0.1,
-            "acceptance": {
-                "allowance": {
-                    "rule": "max(observed_drift_s,bracket_screen_s)",
-                    "value_s": "0.1",
-                    "embedding_count": 1,
-                    "embedded_in": "b_fiducial_s",
-                }
+        raw = two_shared_edge_common_mode_floor(
+            [1.0, 1.0],
+            onset_sweeps_j=[[1.0, 1.125]] * 2,
+            offset_sweeps_j=[[1.0, 1.0]] * 2,
+            zero_point_contrasts_j=[1.0] * 2,
+            bundle_residual_half_widths_j=[[0.0] * 4] * 2,
+            member_window_bounds_s=[[(0.0, 1.0)] * 4] * 2,
+            member_envelope_integral_sums_j=[1.125] * 2,
+            calibration_bracket={
+                "status": "passed",
+                "endpoint_max_b_fiducial_s": 0.0,
+                "calibration_drift_allowance_s": 0.1,
+                "b_fiducial_s": 0.1,
+                "acceptance": {
+                    "allowance": {
+                        "rule": "max(observed_drift_s,bracket_screen_s)",
+                        "value_s": "0.1",
+                        "embedding_count": 1,
+                        "embedded_in": "b_fiducial_s",
+                    }
+                },
             },
-        }
-        with patch.object(
-            detection_floor,
-            "_common_mode_block_half_width",
-            wraps=detection_floor._common_mode_block_half_width,
-        ) as core:
-            raw = two_shared_edge_common_mode_floor(
-                [1.0, 1.0],
-                **raw_kwargs,
-                calibration_bracket=bracket,
-                shared_edge_bound_s=0.1,
-            )
-            registered = two_shared_edge_common_mode_floor(
-                [1.0, 1.0],
-                registered_block_inputs=[record, record],
-                calibration_bracket=bracket,
-                shared_edge_bound_s=0.1,
-            )
-        self.assertEqual(core.call_count, 4)
+            shared_edge_bound_s=0.1,
+        )
         self.assertIsNone(raw.estimator_registration)
-        self.assertIsNotNone(registered.estimator_registration)
+        object.__setattr__(
+            raw,
+            "estimator_registration",
+            two_shared_edge_common_mode_registration(),
+        )
+        record = build_comparative_record(
+            raw,
+            [{}, {}],
+            consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
+            whole_window_drift_allowance=whole_window_allowance(),
+        )
+        self.assertNotIn("estimator_registration", record)
 
+    def test_registered_arithmetic_is_extraction_only_in_production_inventory(self):
         repository_root = Path(__file__).resolve().parents[1]
         calls = {
-            "_RegisteredCommonModeBlockInput": [],
-            "_build_registered_common_mode_block_input": [],
-            "_common_mode_block_half_width": [],
+            "two_shared_edge_common_mode_floor": [],
+            "_common_mode_floor_from_block_inputs": [],
+            "_common_mode_floor_from_extracted_inputs": [],
+        }
+        deleted_names = {
+            "_RegisteredCommonModeBlockInput",
+            "_build_registered_common_mode_block_input",
         }
         for root_name in ("joulewise", "scripts"):
             for path in (repository_root / root_name).rglob("*.py"):
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Call):
-                        continue
-                    name = (
-                        node.func.id
-                        if isinstance(node.func, ast.Name)
-                        else node.func.attr
-                        if isinstance(node.func, ast.Attribute)
-                        else None
-                    )
-                    if name in calls:
-                        calls[name].append(path.relative_to(repository_root).as_posix())
+                source = path.read_text(encoding="utf-8")
+                self.assertTrue(deleted_names.isdisjoint(source.split()))
+                tree = ast.parse(source)
+                for owner in (
+                    node
+                    for node in tree.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                ):
+                    for node in ast.walk(owner):
+                        if not isinstance(node, ast.Call):
+                            continue
+                        name = (
+                            node.func.id
+                            if isinstance(node.func, ast.Name)
+                            else node.func.attr
+                            if isinstance(node.func, ast.Attribute)
+                            else None
+                        )
+                        if name in calls:
+                            calls[name].append(
+                                (
+                                    path.relative_to(repository_root).as_posix(),
+                                    owner.name,
+                                )
+                            )
+        self.assertEqual(calls["two_shared_edge_common_mode_floor"], [])
         self.assertEqual(
-            calls["_RegisteredCommonModeBlockInput"],
-            ["joulewise/detection_floor.py"],
+            calls["_common_mode_floor_from_block_inputs"],
+            [("joulewise/floor_extraction.py", "extract_comparative_cell")],
         )
         self.assertEqual(
-            calls["_build_registered_common_mode_block_input"],
-            ["joulewise/floor_extraction.py"],
-        )
-        self.assertEqual(
-            calls["_common_mode_block_half_width"],
-            ["joulewise/detection_floor.py"],
+            calls["_common_mode_floor_from_extracted_inputs"],
+            [("joulewise/floor_extraction.py", "_common_mode_floor_from_block_inputs")],
         )
 
     def test_identity_version_parameter_hash_and_assumption_are_stable(self):
@@ -1186,7 +1115,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(first["version"], "v1")
         self.assertEqual(
             COMMON_MODE_PARAMETER_SHA256,
-            "973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7",
+            "dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf",
         )
         self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
         self.assertEqual(
@@ -1234,6 +1163,12 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             ],
             "common_mode_zero_point_divergence_out_of_domain",
         )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "registered_result_provenance_rule"
+            ],
+            "registered_results_exist_only_as_governed_extraction_artifacts",
+        )
         assumption = first["stationarity_transfer_assumption"]
         self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
         self.assertIn(
@@ -1247,6 +1182,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3",
             "977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06",
             "4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981",
+            "973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7",
         ):
             with self.subTest(superseded_sha=superseded_sha):
                 old_registration = two_shared_edge_common_mode_registration()
@@ -1421,32 +1357,34 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         )
 
     def test_calibration_and_consumer_use_one_identical_code_path(self):
-        inputs = {
-            "registered_block_inputs": self.registered_replay_inputs(),
-            "calibration_bracket": self.bracket(),
-            "shared_edge_bound_s": self.OPERATIVE_BOUND_S,
-        }
-        calibration = two_shared_edge_common_mode_floor(
-            self.REPLAY_DELTAS, **inputs
+        records = self.extracted_replay_inputs()
+        calibration = _common_mode_floor_from_block_inputs(
+            self.REPLAY_DELTAS,
+            records,
+            calibration_bracket=self.bracket(),
+            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
-        consumer = two_shared_edge_common_mode_floor(
-            self.REPLAY_DELTAS, **inputs
+        consumer = _common_mode_floor_from_block_inputs(
+            self.REPLAY_DELTAS,
+            records,
+            calibration_bracket=self.bracket(),
+            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
         self.assertEqual(calibration, consumer)
-        registration = calibration.estimator_registration
+        registration = two_shared_edge_common_mode_registration()
         self.assertEqual(
             registration["calibration_treatment"],
             registration["consuming_contrast_treatment"],
         )
 
-    def test_inputs_are_immutable_and_registration_surfaces_in_record(self):
-        records = self.registered_replay_inputs()
+    def test_internal_arithmetic_preserves_inputs_and_emits_no_registration(self):
+        records = self.extracted_replay_inputs()
         bracket = self.bracket()
         before_records = tuple(records)
         before_bracket = json.loads(json.dumps(bracket))
-        estimate = two_shared_edge_common_mode_floor(
+        estimate = _common_mode_floor_from_block_inputs(
             self.REPLAY_DELTAS,
-            registered_block_inputs=records,
+            records,
             calibration_bracket=bracket,
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
@@ -1458,10 +1396,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             consumption_semantics_id=MINTED_CONSUMPTION_SEMANTICS_ID,
             whole_window_drift_allowance=whole_window_allowance(),
         )
-        self.assertEqual(
-            record["estimator_registration"],
-            two_shared_edge_common_mode_registration(),
-        )
+        self.assertNotIn("estimator_registration", record)
 
     def test_registered_precondition_failure_does_not_fall_back(self):
         onset, offset, residuals = self.replay_inputs()
@@ -1554,7 +1489,7 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
             },
         }
 
-    def test_registered_surface_has_zero_understatements_for_adversarial_z(self):
+    def test_internal_extraction_seam_has_zero_understatements_for_adversarial_z(self):
         rng = random.Random(self.SEED)
         support_counts_seen = set()
         value_signs_seen = set()
@@ -1635,7 +1570,7 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
                     return offset_map[offset_s]
                 return true_zero
 
-            record = _build_registered_common_mode_block_input(
+            record = _common_mode_block_input_from_contrast(
                 contrast=contrast,
                 onset_shifts_s=shifts,
                 offset_shifts_s=shifts,
@@ -1646,16 +1581,15 @@ class AdversarialZeroDesignationProbes(unittest.TestCase):
                     abs(true_zero) + span,
                 ),
             )
-            self.assertEqual(record.onset_zero_index, zero_index)
-            self.assertEqual(record.offset_zero_index, zero_index)
+            self.assertEqual(record.zero_point_contrast_j, true_zero)
             self.assertEqual(record.onset_values_j[zero_index], true_zero)
             self.assertEqual(record.offset_values_j[zero_index], true_zero)
             self.assertIn(adversarial_z, record.onset_values_j)
             self.assertIn(adversarial_z, record.offset_values_j)
 
-            registered = two_shared_edge_common_mode_floor(
+            registered = _common_mode_floor_from_block_inputs(
                 [delta, delta],
-                registered_block_inputs=[record, record],
+                [record, record],
                 calibration_bracket=self._bracket(),
                 shared_edge_bound_s=0.1,
             )
