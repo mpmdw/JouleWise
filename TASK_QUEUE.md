@@ -198,6 +198,25 @@ owed under D-130 (refuter C3): one Python 3.11 local decisive replay via
 carry: bound every decisive job's runtime against its venue's hard cap at
 design time.
 
+## Deferred-with-record — trust PR #122 ledger residuals (registered 2026-08-11, T4)
+
+Non-blocking residuals carried out of the #122 merge gate, per the T3
+checkpoint's successor list: (a) 16Q Q1 residuals — the silent no-session
+fallback and the missing session assertion in the mint body; (b)
+`_locked_append` line-anchor uniformity follow-up (the guard's function-name
+exemption pending per-site line anchors). Also: the FCM-01 freeze banner's
+candidate closures reference these surfaces — coordinate if Ed relicenses.
+Trigger: next trust-surface work order or WO-CI-RESTRUCTURE, whichever first.
+
+## Deferred-with-record — test_calibration_exits reliability class (registered 2026-08-11, T4; CONSULT LAUNCHED)
+
+Count 2 on the post-#123 teardown-race signature (trust CI 3.14 2026-08-10 +
+main CI 3.11 2026-08-11) plus the distinct 120s subprocess-timeout mode and
+three local stall sightings. Standing trigger fired: design consult in
+flight (T4); its adopted design becomes the implementation work order. Until
+landed, shard-4 CI failures in this module are re-run-once-then-investigate,
+never waved through silently.
+
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast
