@@ -96,12 +96,26 @@ verified lineage subsection w/ 4 new refs incl. two of the advisor's own,
 five S1 advisor-visible defects fixed, full renumbering to 23 refs
 mechanically verified); train D structure (13→11 sections, plain abstract,
 figures integrated w/ the interval-conservation sensitivity caption).
-Train E (custody wording to post-trust reality + deferred term renames) was
-IN FLIGHT at this checkpoint. **Successor: harvest E → magistrate FULL
-LINEAR READ of the assembled draft → paper PR** (no renderer/test exists —
-quote-verify). Then remaining: L6's R1/R2/R5-adjacent items already done via
-figures; report_src drift decision pending; LITREAD candidates (Benazir&Lin
-added; UNVERIFIED list must stay out).
+Train E landed; magistrate full linear read done (caught duplicate table
+numbers + figure ordering); **PAPER MERGED as PR #126** (`0cf5f84`,
+2026-08-11T10:19Z — GitHub scheduled no CI for the docs-only PR; the
+docs-adjacent suites were run locally as equivalent evidence, recorded in
+the D-121 comment; the trust-vs-train-E custody conflict resolved with the
+branch's superset text). Draft now waits on measured numbers via the fill
+registry; pre-submission owes: L5's UNVERIFIED re-checks (HotCarbon/IISWC
+programs), report_src drift decision.
+
+**T4 late additions:** D-130 condition C3 discharged (3.11 decisive replay
+green, 4h18m — evidence committed); the site-lane anchor break (D-130
+heading `#`) found by the T4 bookkeeping director, fixed `4888cb8`; T4 run
+report + council C-055 landed (`42b7a7b`); the `test_calibration_exits`
+reliability class hit count 2 (main CI teardown-race recurrence) → the
+standing-trigger CONSULT ran (root causes: detached git auto-maintenance
+writer; CPU-amplifying fake fixtures; silent 68-case monolith; plus a REAL
+production sampler-reaping gap in validate_powermetrics_fiducial.py) → the
+adopted composite design's implementation is on branch
+impl/calexits-reliability (in flight at this update; two-commit contract,
+P1-P6 proof obligations, full gauntlet owed before PR).
 
 **MERGED THIS SESSION: #122 (trust/mint bar), #124 (WO-2), #125 (WO-3 —
 replay-derived receipt oracles all three packs), T3 bookkeeping `e74cc4c`,
