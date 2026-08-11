@@ -41,6 +41,7 @@ IDENTITY_PIN_PROJECTION_REASON_CODES = frozenset(
         "readiness_identity_environment_dirty",
         "readiness_identity_projection_mint_divergence",
         "readiness_identity_pinset_frozen_mismatch",
+        "readiness_identity_receipt_namespace_anomalous",
     }
 )
 
@@ -956,6 +957,29 @@ def _committed_successor(
     receipt_pattern = re.compile(
         r"(?:^|/)identity_pin_projection\.receipts/projection-[0-9]{4,}\.json$"
     )
+    namespace_pattern = re.compile(
+        r"(?:^|/)identity_pin_projection\.receipts/(?!$)"
+    )
+    conforming_pattern = re.compile(
+        r"(?:^|/)identity_pin_projection\.receipts/"
+        r"projection-[0-9]{4,}\.(?:json|sha256)$"
+    )
+    # The receipts directory is a governed namespace: a committed entry
+    # there that does not conform to the freeze grammar cannot be proven
+    # NOT to be a successor, so verification refuses rather than skips.
+    anomalous = sorted(
+        path
+        for path in paths
+        if path
+        and namespace_pattern.search(path)
+        and not conforming_pattern.search(path)
+    )
+    if anomalous:
+        raise IdentityPinProjectionError(
+            "readiness_identity_receipt_namespace_anomalous",
+            "committed non-conforming entries in the receipts namespace: "
+            + ", ".join(anomalous[:5]),
+        )
     receipt_paths = sorted(path for path in paths if receipt_pattern.search(path))
     commit_order = {
         commit: index

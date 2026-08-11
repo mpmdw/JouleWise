@@ -808,6 +808,48 @@ class ProjectionLifecycleTests(unittest.TestCase):
             "synthetic-pack-r5d/projection-10000",
         )
 
+    def test_nonconforming_committed_receipt_name_refuses_never_passes(self) -> None:
+        freeze_projection(self.pack)
+        old_projection = read_json(self.pack / "plan_tree.json")["arm_attachments"][
+            "identity_pin_projection"
+        ]
+        successor, _ = make_pack(
+            self.root / "nonconforming-successor",
+            pack_name="synthetic-pack-nc",
+            supersedes=[
+                {
+                    "pack_id": self.pack.name,
+                    "pack_sha256": "a" * 64,
+                    "projection_receipt_sha256": old_projection[
+                        "projection_receipt"
+                    ]["sha256"],
+                    "readiness_sha256": "b" * 64,
+                }
+            ],
+        )
+        freeze_projection(successor)
+        receipt_dir = successor / "identity_pin_projection.receipts"
+        emitted = receipt_dir / "projection-0001.json"
+        smuggled = receipt_dir / "projection-000a.json"
+        smuggled.write_text(emitted.read_text())
+        emitted.unlink()
+        commit_paths(
+            self.root,
+            [self.pack, successor],
+            "freeze predecessor and nonconforming-named successor",
+        )
+
+        result = verify_frozen_projection(
+            self.pack, self.root / "custody", "bracket-nonconforming-receipt"
+        )
+
+        self.assertNotEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["reason_codes"],
+            ["readiness_identity_receipt_namespace_anomalous"],
+        )
+
     def test_sibling_commit_successor_semantically_supersedes_after_merge(
         self,
     ) -> None:
@@ -1044,6 +1086,7 @@ class DerivationOnlyArmPathTests(unittest.TestCase):
                 "readiness_identity_environment_dirty",
                 "readiness_identity_projection_mint_divergence",
                 "readiness_identity_pinset_frozen_mismatch",
+                "readiness_identity_receipt_namespace_anomalous",
             },
         )
         with self.assertRaises(ValueError):

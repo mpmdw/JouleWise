@@ -8367,7 +8367,13 @@ implementation before push.
 The closed readiness-refusal vocabulary gains
 `readiness_identity_artifact_unreadable`,
 `readiness_identity_environment_dirty`,
-`readiness_identity_projection_mint_divergence`, and
-`readiness_identity_pinset_frozen_mismatch`. These spellings belong to the
+`readiness_identity_projection_mint_divergence`,
+`readiness_identity_pinset_frozen_mismatch`, and
+`readiness_identity_receipt_namespace_anomalous` (fix round 4: a committed
+entry in the governed identity_pin_projection.receipts namespace that does
+not conform to the freeze grammar — projection-<4+ digits>.json plus its
+.sha256 sidecar — refuses verification fail-closed rather than being
+silently skipped, so an authenticated successor can never be hidden behind
+a non-conforming filename). These spellings belong to the
 U8 readiness registry, not transport or member-verdict vocabularies. They
 only refuse; none can license a run or claim.
