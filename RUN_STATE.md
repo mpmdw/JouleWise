@@ -113,9 +113,15 @@ reliability class hit count 2 (main CI teardown-race recurrence) → the
 standing-trigger CONSULT ran (root causes: detached git auto-maintenance
 writer; CPU-amplifying fake fixtures; silent 68-case monolith; plus a REAL
 production sampler-reaping gap in validate_powermetrics_fiducial.py) → the
-adopted composite design's implementation is on branch
-impl/calexits-reliability (in flight at this update; two-commit contract,
-P1-P6 proof obligations, full gauntlet owed before PR).
+adopted composite design ran its FULL gauntlet in-session (refuter 3
+blockers → fix → delta 2 blockers → a SECOND count-2 consult on the
+sampler-ownership class, whose ruling REMOVED the identity machinery in
+favor of the narrow honest fix + detect-only census, with the supervisor
+design registered as WO-SAMPLER-SUPERVISOR incl. its sudoers-migration
+prerequisite) — **PR #127 OPEN**; its CI begins the ten-hosted-greens
+closure count. LEAD-OWED before relying on the production commit: the live
+sudo/powermetrics checklist (module docstring). Successor: #127 CI → D-121
+→ merge.
 
 **MERGED THIS SESSION: #122 (trust/mint bar), #124 (WO-2), #125 (WO-3 —
 replay-derived receipt oracles all three packs), T3 bookkeeping `e74cc4c`,
