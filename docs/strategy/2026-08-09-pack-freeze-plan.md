@@ -89,7 +89,24 @@ projections → materialize the first arm against the authenticated ledger head.
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
 
-## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — SUPERSEDED 2026-08-11 BY Q7 REVERSAL
+## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — DISPOSITION SPLIT 2026-08-11 (D-133/Q7 reversal)
+
+**Item-level disposition (the earlier blanket SUPERSEDED marker was wrong —
+items (1) and (3) are measurement-regime obligations independent of the
+estimator and remain LIVE):**
+- Item (2) — DEAD with the Q7 reversal: there is no registered estimator
+  selection to re-evaluate; every comparative cell takes the worst-case
+  default this cycle.
+- Item (1) — LIVE, RE-HOMED: the silent estimated-to-refused conversion
+  mechanism specific to the D-124 estimator dies with its withdrawal, but
+  recording each comparative cell's minimum window-duration margin at
+  collection remains a freeze-gate checklist item — short windows against
+  the sampler cadence are a measurement-regime risk regardless of
+  estimator (see the WO-4/Q9 not_resolvable_sample_count record).
+- Item (3) — LIVE: the margin math MUST be run for the Q8 p256 cells when
+  their windows are first measured; WO-4/Q9 recorded 37/50
+  not_resolvable_sample_count on 1.5B p128 windows and the same pressure
+  is expected on 1.5B p256 (expected is not evidence).
 
 Both floor packs' extraction specs select the D-124 common-mode estimator for
 the **prefill p128** comparative cells, not only decode. The estimator's
