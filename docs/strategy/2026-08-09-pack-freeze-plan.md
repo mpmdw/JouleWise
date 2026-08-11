@@ -90,3 +90,23 @@ projections → materialize the first arm against the authenticated ledger head.
 
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
+
+## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — lineage-monotone allowance vs short prefill windows [ED-VISIBILITY]
+
+Both floor packs' extraction specs select the D-124 common-mode estimator for
+the **prefill p128** comparative cells, not only decode. The estimator's
+admitted domain is `window duration > 2×B_op`, and B_op is lineage-monotone
+non-decreasing (D-125 cl.2): a successor calibration acceptance can only
+strengthen (grow) the allowance. Measured 1.5B p128 prefill windows are
+0.121–0.147 s against today's 0.0736 s collapse threshold — a 1.64–2.0×
+margin. **If a successor bracket's allowance grows past ~64%, frozen prefill
+comparative cells silently convert from estimated to refused after the packs
+have frozen the estimator identity into their bytes.** Freeze-gate additions:
+(1) record each registered comparative cell's minimum window-duration margin
+at collection as a checklist item (the FCM-01 committed inventory test
+supplies the mechanism); (2) at pack regeneration, evaluate whether the
+p128 prefill cells should select the worst-case default estimator instead of
+D-124 given the margin (a magistrate/Ed call at freeze, not now); (3) the
+same margin math must be run for the Q8 p256 cells when their windows are
+first measured (p256 windows are expected longer, but expected is not
+evidence). Compounds the recorded zero-power-short-window over-refusal note.
