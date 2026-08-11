@@ -74,3 +74,13 @@ store: /private/tmp/claude-501/-Users-edr-code-JouleWise/626c524c-1d57-4bd5-89f7
 store manifest sha256: dc90e366235343abeca97f7fc16b6cb5d257cb4a9c9a17d6042b12a4dec49370
 archive sha256: f1286bc814c9b392667a82443a2aa73df087ca126056d5046da597a310db9553
 ```
+
+## D-130 condition C3 — Python 3.11 replay (discharged 2026-08-11)
+
+The identical decisive test, same worktree (e871f5b, clean) and same hydrated
+store, on CPython 3.11 (Homebrew /opt/homebrew/bin/python3.11 — the CI-pinned
+interpreter): START 2026-08-11T03:47Z -> END 2026-08-11T08:05:52Z,
+`Ran 1 test in 15485.553s` / `OK` / rc=0 (raw log:
+decisive-local-py311.log). The decisive proof has now completed on both the
+primary local interpreter (3.13.1, 12939s) and the CI interpreter (3.11,
+15486s), against the same digest-pinned store.

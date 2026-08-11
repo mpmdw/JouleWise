@@ -1,0 +1,8 @@
+START 2026-08-11T03:47:46Z py311
+test_coordinated_report_and_pin_change_refuses_against_floor_evidence (tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_coordinated_report_and_pin_change_refuses_against_floor_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 15485.553s
+
+OK
+END 2026-08-11T08:05:52Z rc=0
