@@ -2165,23 +2165,54 @@ class TestArtifactEmitValidate(unittest.TestCase):
             "df-ph-decode-floor-mint1.json"
         )
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-        artifact["cells"][0]["comparative"]["estimator_registration"] = (
-            two_shared_edge_common_mode_registration()
-        )
+        artifact["cells"][0]["comparative"]["blocks"][0]["members"][0][
+            "estimator_registration"
+        ] = two_shared_edge_common_mode_registration()
         raw = (
             json.dumps(artifact, sort_keys=True, allow_nan=False) + "\n"
         ).encode("utf-8")
 
         expected_error = (
-            "cells[0].comparative: unrecognized key "
-            "'estimator_registration'"
+            "artifact: forbidden key 'estimator_registration' at "
+            "artifact.cells[0].comparative.blocks[0].members[0]."
+            "estimator_registration"
         )
         self.assertIn(expected_error, validate_floor_artifact(artifact))
         with self.assertRaisesRegex(
             AnalysisInputError,
-            "unrecognized key 'estimator_registration'",
+            "forbidden key 'estimator_registration'",
         ):
             authenticate_floor_artifact_bytes(raw)
+
+    def test_duplicate_artifact_key_is_typed_refusal_before_validation(self):
+        artifact = make_artifact()
+        compact = json.dumps(
+            artifact,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        genuine_comparative = json.dumps(
+            artifact["cells"][0]["comparative"],
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        genuine_entry = '"comparative":' + genuine_comparative
+        attacked_entry = (
+            '"comparative":{"guarded_floor_j":-1},' + genuine_entry
+        )
+        self.assertEqual(compact.count(genuine_entry), 1)
+        raw = compact.replace(genuine_entry, attacked_entry, 1).encode("utf-8")
+
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "duplicate key 'comparative'",
+        ):
+            authenticate_floor_artifact_bytes(
+                raw,
+                expected_sha256=hashlib.sha256(raw).hexdigest(),
+            )
 
     def test_mint1_pinset_preserves_byte_stable_empty_finding_set(self):
         self.assertEqual(

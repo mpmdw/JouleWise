@@ -476,7 +476,10 @@ def authenticate_floor_artifact_bytes(
             "floor artifact bytes sha256 does not match bound file_sha256"
         )
     try:
-        value = json.loads(raw.decode("utf-8"))
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_floor_artifact_keys,
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AnalysisInputError(
             f"floor artifact is not valid UTF-8 JSON: {exc}"
@@ -509,6 +512,21 @@ def authenticate_floor_artifact_bytes(
         file_sha256=digest,
         root_ids=root_ids,
     )
+
+
+def _reject_duplicate_floor_artifact_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    """Build a JSON object while refusing key shadowing at every depth."""
+
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise AnalysisInputError(
+                f"floor artifact contains duplicate key {key!r}"
+            )
+        value[key] = child
+    return value
 
 
 def _load_authenticated_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:

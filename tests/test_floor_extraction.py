@@ -512,10 +512,65 @@ class D117MintConsumptionProfileTests(
         self.assertEqual(
             validate_d117_mint_consumption_report(report),
             [
-                "extraction report.cells[0].floor: unknown keys "
-                "['estimator_registration']"
+                "extraction report: forbidden key 'estimator_registration' "
+                "at extraction report.cells[0].floor.estimator_registration"
             ],
         )
+
+    def test_registration_vocabulary_is_forbidden_at_every_nested_depth(
+        self,
+    ) -> None:
+        registration = two_shared_edge_common_mode_registration()
+        paths = (
+            ("governance",),
+            ("whole_window_drift_allowances", "gross_energy"),
+            ("cells", 0, "members", 0, "operative_anchor_envelope"),
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                report = json.loads(
+                    self.FIXTURE_PATH.read_text(encoding="utf-8")
+                )
+                target = report
+                for component in path:
+                    target = target[component]
+                target["estimator_registration"] = copy.deepcopy(registration)
+
+                errors = validate_d117_mint_consumption_report(report)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn("forbidden key 'estimator_registration'", errors[0])
+
+    def test_pending_spec_registration_is_forbidden_in_admitted_report(
+        self,
+    ) -> None:
+        report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        spec = json.loads(
+            (
+                Path("configs/floor_mint")
+                / "d117_qwen25_7b_extraction_spec.json"
+            ).read_text(encoding="utf-8")
+        )
+        comparative = next(
+            cell for cell in spec["cells"] if cell["kind"] == "comparative"
+        )
+        report["governance"]["estimator_registration"] = copy.deepcopy(
+            comparative["estimator_registration"]
+        )
+
+        errors = validate_d117_mint_consumption_report(report)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("forbidden key 'estimator_registration'", errors[0])
+
+    def test_unicode_escaped_nested_registration_key_is_forbidden(self) -> None:
+        report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        escaped = json.loads(
+            r'{"estimator_registr\u0061tion":{"status":"forged"}}'
+        )
+        report["whole_window_drift_allowances"]["gross_energy"].update(escaped)
+
+        errors = validate_d117_mint_consumption_report(report)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("forbidden key 'estimator_registration'", errors[0])
 
 
 class RealCapHitJoinTests(unittest.TestCase):

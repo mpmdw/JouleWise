@@ -4060,6 +4060,31 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
             _validate_condition_family(family, family_where, errors)
 
 
+def _forbidden_admitted_vocabulary_paths(
+    value: object,
+    *,
+    key: str,
+    where: str,
+) -> list[str]:
+    """Return every recursively nested occurrence of a forbidden JSON key."""
+
+    paths: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        if isinstance(node, Mapping):
+            for child_key, child in node.items():
+                child_path = f"{path}.{child_key}"
+                if child_key == key:
+                    paths.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value, where)
+    return paths
+
+
 def validate_floor_artifact(
     value: Mapping,
     *,
@@ -4078,6 +4103,16 @@ def validate_floor_artifact(
     the file, rejects symlinks/non-regular files, authenticates the exact bytes,
     and only then parses the closed pinset schema.
     """
+    forbidden_paths = _forbidden_admitted_vocabulary_paths(
+        value,
+        key="estimator_registration",
+        where="artifact",
+    )
+    if forbidden_paths:
+        return [
+            f"artifact: forbidden key 'estimator_registration' at {path}"
+            for path in forbidden_paths
+        ]
     errors: list = []
     if not _check_keys(value, _TOP_KEYS, "artifact", errors):
         return errors

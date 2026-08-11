@@ -8404,3 +8404,28 @@ This is the sixth and only round-7 registration rotation, producing
 The round-6 hash
 `dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf`
 joins the five earlier superseded registrations and is rejected with them.
+
+### D-124 amendment — 2026-08-11: round-8 total vocabulary refusal and duplicate-key JSON closure
+
+The O3 full-delta review closed the arithmetic terminally: 4,096
+exact-rational cases produced zero understatements, the differential campaign
+was identical, and the promoted result did not drift.  Its FCM7-01 finding
+identified two remaining admission gaps in the round-7 ALT-D120 claim.
+
+First, the admitted report and artifact profiles now walk the entire parsed
+JSON value recursively through both objects and arrays and refuse the literal
+key `estimator_registration` at every depth before profile-specific checks.
+This prohibition includes the current registration dictionary, the pending
+registration dictionary shipped in the 7B extraction spec, and a key whose
+spelling is Unicode-escaped in the source bytes.  Governed extraction specs
+remain outside admitted report/artifact vocabulary and retain their
+registration declarations and existing validation.
+
+Second, floor-artifact byte authentication now parses with a duplicate-key
+refusing object-pairs hook at every object depth.  Key shadowing therefore
+raises the typed fail-closed analysis-input error before semantic validation;
+the digest continues to bind the exact admitted bytes, but last-key-wins JSON
+can no longer hide a forged value inside those bytes.  Value-level validators
+continue to validate already parsed values.  Together these closures make the
+round-7 parameter rule total over every admitted report or artifact value and
+byte entry point in the implementing unit.

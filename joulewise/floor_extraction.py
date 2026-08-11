@@ -1511,9 +1511,45 @@ def _d117_closed_keys(
     return errors
 
 
+def _forbidden_admitted_vocabulary_paths(
+    value: object,
+    *,
+    key: str,
+    where: str,
+) -> list[str]:
+    """Return every recursively nested occurrence of a forbidden JSON key."""
+
+    paths: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        if isinstance(node, Mapping):
+            for child_key, child in node.items():
+                child_path = f"{path}.{child_key}"
+                if child_key == key:
+                    paths.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value, where)
+    return paths
+
+
 def validate_d117_mint_consumption_report(value: object) -> list[str]:
     """Validate the recursively closed report profile used only by v2 minting."""
 
+    forbidden_paths = _forbidden_admitted_vocabulary_paths(
+        value,
+        key="estimator_registration",
+        where="extraction report",
+    )
+    if forbidden_paths:
+        return [
+            "extraction report: forbidden key 'estimator_registration' at "
+            f"{path}"
+            for path in forbidden_paths
+        ]
     errors = _d117_closed_keys(
         value,
         _D117_MINT_REPORT_KEYS,
