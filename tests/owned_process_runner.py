@@ -72,6 +72,15 @@ class OwnedProcessResult:
     public_evidence: PublicExecutionEvidence | None = None
 
 
+@dataclass(frozen=True)
+class AuthenticatedProgress:
+    """One monotonic progress token derived from owned writer artifacts."""
+
+    ordinal: int
+    stage: str
+    authenticator: str = "owned-writer-filesystem-v1"
+
+
 @dataclass
 class _OwnedGroup:
     pgid: int
@@ -227,7 +236,114 @@ class OwnedPublicProcessRunner:
         self.capability_root = self.temporary_root / "owned-process-capabilities"
         self.capability_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.capability_root.chmod(0o700)
-        self.communicate_timeout_s = 120.0
+        self.communicate_timeout_s = 600.0
+        self._owned_pgids: set[int] = set()
+        # The post-fix valid-writer p99 is expected to remain well below 30 s.
+        # A bounded same-runner yield probe lets a badly oversubscribed worker
+        # enlarge the idle allowance without making elapsed host time create
+        # more fixture work.  The consult clamps this range to 120..480 s.
+        probe_started = time.monotonic()
+        for _ in range(64):
+            time.sleep(0)
+        probe_s = time.monotonic() - probe_started
+        self.writer_stage_idle_timeout_s = min(
+            480.0,
+            max(120.0, 4.0 * 30.0, probe_s * 2400.0),
+        )
+
+    def start_owned(
+        self,
+        argv: Sequence[str | os.PathLike[str]],
+        *,
+        cwd: Path,
+        env: Mapping[str, str],
+        label: str,
+    ) -> subprocess.Popen[str]:
+        """Start an auxiliary process in the same ownership registry."""
+
+        process = subprocess.Popen(
+            [os.fspath(value) for value in argv],
+            cwd=Path(cwd),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=dict(env),
+            start_new_session=True,
+        )
+        pgid = os.getpgid(process.pid)
+        if pgid != process.pid:
+            process.kill()
+            process.communicate()
+            raise AssertionError(f"owned auxiliary pgid {pgid} != pid {process.pid}")
+        with _REGISTRY_LOCK:
+            _OWNED_PROCESS_GROUPS[pgid] = _OwnedGroup(
+                pgid=pgid,
+                child_pid=process.pid,
+                label=label,
+                process=process,
+            )
+        self._owned_pgids.add(pgid)
+        return process
+
+    def terminate_owned(
+        self,
+        process: subprocess.Popen[str],
+        *,
+        timeout_s: float = 10.0,
+    ) -> tuple[str, str]:
+        """Kill, wait, prove ESRCH, and close pipes for one auxiliary group."""
+
+        pgid = process.pid
+        if pgid not in self._owned_pgids:
+            if process.poll() is None:
+                raise AssertionError(f"process {process.pid} is not owned by this runner")
+            return "", ""
+        _teardown_group(pgid, grace_s=min(0.5, timeout_s))
+        try:
+            stdout, stderr = process.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired as exc:  # pragma: no cover - SIGKILL must reap
+            raise AssertionError(f"owned process group {pgid} did not reap") from exc
+        if not _forget_if_gone(pgid):
+            raise AssertionError(f"owned process group {pgid} did not reach ESRCH")
+        self._owned_pgids.discard(pgid)
+        if process.stdout is not None:
+            process.stdout.close()
+        if process.stderr is not None:
+            process.stderr.close()
+        return stdout, stderr
+
+    def close(self) -> None:
+        """Reap every group owned by this runner and require an empty registry."""
+
+        errors: list[BaseException] = []
+        for pgid in tuple(self._owned_pgids):
+            with _REGISTRY_LOCK:
+                owned = _OWNED_PROCESS_GROUPS.get(pgid)
+            try:
+                _teardown_group(pgid)
+                if owned is not None and owned.process is not None:
+                    try:
+                        owned.process.communicate(timeout=2.0)
+                    except (subprocess.TimeoutExpired, OSError):
+                        pass
+                    if owned.process.stdout is not None:
+                        owned.process.stdout.close()
+                    if owned.process.stderr is not None:
+                        owned.process.stderr.close()
+                if not _forget_if_gone(pgid):
+                    raise AssertionError(
+                        f"owned process group {pgid} survived runner close"
+                    )
+            except BaseException as exc:  # close all groups before surfacing one
+                errors.append(exc)
+            finally:
+                self._owned_pgids.discard(pgid)
+        if self._owned_pgids:
+            raise AssertionError(
+                f"runner registry not empty after close: {sorted(self._owned_pgids)}"
+            )
+        if errors:
+            raise errors[0]
 
     def _crash_capability(self, *, stage: str, entry_point: Path) -> tuple[Path, str]:
         nonce = secrets.token_hex(32)
@@ -269,6 +385,9 @@ class OwnedPublicProcessRunner:
         durable_postcondition: Callable[[], Mapping[str, Any]] | None = None,
         readiness_path: Path | None = None,
         readiness_timeout_s: float = 5.0,
+        progress_probe: Callable[[], AuthenticatedProgress | None] | None = None,
+        progress_reporter: Callable[[AuthenticatedProgress], None] | None = None,
+        stage_idle_timeout_s: float | None = None,
     ) -> OwnedProcessResult:
         exact_argv = [os.fspath(value) for value in argv]
         execution_env = dict(env)
@@ -312,6 +431,7 @@ class OwnedPublicProcessRunner:
                 label=entry_point.name,
                 process=process,
             )
+        self._owned_pgids.add(pgid)
         start_order = next_execution_order()
         try:
             if readiness_path is not None:
@@ -327,9 +447,48 @@ class OwnedPublicProcessRunner:
                             exact_argv, readiness_timeout_s
                         )
                     time.sleep(0.01)
-            stdout, stderr = process.communicate(
-                timeout=self.communicate_timeout_s if timeout is None else timeout
+            hard_ceiling_s = self.communicate_timeout_s if timeout is None else timeout
+            hard_deadline = time.monotonic() + hard_ceiling_s
+            idle_limit_s = (
+                self.writer_stage_idle_timeout_s
+                if stage_idle_timeout_s is None
+                else min(480.0, max(120.0, stage_idle_timeout_s))
             )
+            idle_deadline = time.monotonic() + idle_limit_s
+            last_progress = -1
+            while True:
+                if progress_probe is not None:
+                    update = progress_probe()
+                    if update is not None:
+                        if update.authenticator != "owned-writer-filesystem-v1":
+                            raise AssertionError(
+                                f"unauthenticated writer progress: {update.authenticator}"
+                            )
+                        if update.ordinal < last_progress:
+                            raise AssertionError(
+                                "writer progress regressed from "
+                                f"{last_progress} to {update.ordinal}"
+                            )
+                        if update.ordinal > last_progress:
+                            last_progress = update.ordinal
+                            idle_deadline = time.monotonic() + idle_limit_s
+                            if progress_reporter is not None:
+                                progress_reporter(update)
+                now = time.monotonic()
+                if progress_probe is not None and now >= idle_deadline:
+                    raise subprocess.TimeoutExpired(
+                        exact_argv,
+                        idle_limit_s,
+                        output=f"writer stage stalled after ordinal {last_progress}",
+                    )
+                remaining = hard_deadline - now
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(exact_argv, hard_ceiling_s)
+                try:
+                    stdout, stderr = process.communicate(timeout=min(0.1, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
             returncode = process.returncode
             if returncode is None:  # pragma: no cover - communicate guarantees this
                 raise AssertionError("direct child has no return code after communicate")
@@ -343,6 +502,8 @@ class OwnedPublicProcessRunner:
         finally:
             if process.returncode is not None:
                 _teardown_group(pgid)
+            if _forget_if_gone(pgid):
+                self._owned_pgids.discard(pgid)
         end_order = next_execution_order()
         if capability is not None and capability.exists():
             raise AssertionError("writer did not consume one-use crash capability")
@@ -384,6 +545,7 @@ class OwnedPublicProcessRunner:
 
 
 __all__ = [
+    "AuthenticatedProgress",
     "OwnedProcessResult",
     "OwnedPublicProcessRunner",
     "PublicExecutionEvidence",
