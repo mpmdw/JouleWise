@@ -1,4 +1,10 @@
-"""Shared identity derivation and D-117 identity-pin projection lifecycle."""
+"""Shared identity derivation and D-117 identity-pin projection lifecycle.
+
+Arm verification authenticates a frozen receipt against the reviewed checkout's
+committed ``HEAD`` tree.  This detects post-hoc pack substitution relative to
+that committed tree; it is an honest single-operator consistency boundary, not
+third-party attestation or proof that the committing operator was independent.
+"""
 
 from __future__ import annotations
 
@@ -761,6 +767,310 @@ def _repo_git_commit() -> str:
             "readiness_identity_artifact_unreadable", "reviewed Git commit is malformed"
         )
     return commit
+
+
+def _run_pack_git(
+    pack_root: Path, *args: str, text: bool = False
+) -> subprocess.CompletedProcess[Any]:
+    try:
+        return subprocess.run(
+            ("git", "-C", str(pack_root), *args),
+            check=False,
+            capture_output=True,
+            text=text,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"cannot inspect committed pack state: {exc}",
+        ) from exc
+
+
+def _committed_pack_anchor(
+    pack_root: Path,
+    projection: Mapping[str, Any],
+    frozen_receipt_raw: bytes,
+) -> tuple[Path, str, str, str]:
+    """Authenticate the on-disk freeze chain against this checkout's HEAD tree."""
+
+    root_result = _run_pack_git(pack_root, "rev-parse", "--show-toplevel", text=True)
+    head_result = _run_pack_git(pack_root, "rev-parse", "--verify", "HEAD", text=True)
+    repository_text = root_result.stdout.strip()
+    head = head_result.stdout.strip()
+    if (
+        root_result.returncode != 0
+        or not repository_text
+        or head_result.returncode != 0
+        or re.fullmatch(r"[0-9a-f]{40}", head) is None
+    ):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "cannot resolve the committed Git HEAD containing the frozen pack",
+        )
+    try:
+        repository = Path(repository_text).resolve(strict=True)
+        relative_root = pack_root.resolve(strict=True).relative_to(repository)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "frozen pack is outside its resolved Git checkout",
+        ) from exc
+    if relative_root == Path("."):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "repository root cannot itself be an identity-pin pack",
+        )
+
+    pack_prefix = relative_root.as_posix()
+    committed_tree_path = f"{pack_prefix}/plan_tree.json"
+    committed_tree_result = _run_pack_git(
+        pack_root, "show", f"HEAD:{committed_tree_path}"
+    )
+    if committed_tree_result.returncode != 0:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "frozen plan tree is not resolvable from committed HEAD",
+        )
+    try:
+        committed_tree_value = json.loads(committed_tree_result.stdout)
+        if not isinstance(committed_tree_value, Mapping):
+            raise ValueError("committed plan tree is not an object")
+        committed_attachments = committed_tree_value.get("arm_attachments")
+        if not isinstance(committed_attachments, Mapping):
+            raise ValueError("committed plan tree has no arm attachments")
+        committed_projection = validate_identity_pin_projection(
+            committed_attachments.get("identity_pin_projection")
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"committed frozen plan tree is invalid: {exc}",
+        ) from exc
+    if committed_projection["state"] != "frozen":
+        raise IdentityPinProjectionError(
+            "readiness_identity_pinset_frozen_mismatch",
+            "committed pack anchor is not a frozen projection",
+        )
+    committed_reference = committed_projection["projection_receipt"]
+    committed_receipt_path = f"{pack_prefix}/{committed_reference['path']}"
+    committed_receipt_result = _run_pack_git(
+        pack_root, "show", f"HEAD:{committed_receipt_path}"
+    )
+    if committed_receipt_result.returncode != 0:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "frozen receipt is not resolvable from committed HEAD",
+        )
+    committed_digest = _sha256_bytes(committed_receipt_result.stdout)
+    if committed_digest != committed_reference["sha256"]:
+        raise IdentityPinProjectionError(
+            "readiness_identity_pinset_frozen_mismatch",
+            "committed plan tree does not authenticate its frozen receipt",
+        )
+    on_disk_reference = projection["projection_receipt"]
+    if (
+        on_disk_reference["path"] != committed_reference["path"]
+        or on_disk_reference["sha256"] != committed_digest
+        or _sha256_bytes(frozen_receipt_raw) != committed_digest
+    ):
+        raise IdentityPinProjectionError(
+            "readiness_identity_pinset_frozen_mismatch",
+            "on-disk frozen receipt chain differs from the committed Git anchor",
+            observed={
+                "committed_receipt_sha256": committed_digest,
+                "on_disk_receipt_sha256": _sha256_bytes(frozen_receipt_raw),
+            },
+        )
+
+    dirty_result = _run_pack_git(
+        pack_root,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+        "--",
+        f":(top,literal){pack_prefix}",
+        text=True,
+    )
+    if dirty_result.returncode != 0:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "cannot resolve the frozen pack's Git worktree state",
+        )
+    if dirty_result.stdout:
+        dirty = [line.rstrip() for line in dirty_result.stdout.splitlines()[:8]]
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            "frozen pack path differs from committed HEAD",
+            observed={"dirty_pack_paths": dirty},
+        )
+    return repository, head, committed_receipt_path, committed_digest
+
+
+def _committed_successor(
+    pack_root: Path,
+    repository: Path,
+    head: str,
+    committed_receipt_path: str,
+    committed_receipt_sha256: str,
+) -> Mapping[str, str] | None:
+    """Return the newest committed receipt that supersedes this freeze."""
+
+    listing = _run_pack_git(
+        repository, "ls-tree", "-r", "-z", "--name-only", head
+    )
+    history = _run_pack_git(repository, "rev-list", "--topo-order", head, text=True)
+    if listing.returncode != 0 or history.returncode != 0:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "cannot walk committed identity-pin receipt history",
+        )
+    try:
+        paths = listing.stdout.decode("utf-8").split("\0")
+    except UnicodeDecodeError as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "committed receipt paths are not valid UTF-8",
+        ) from exc
+    receipt_pattern = re.compile(
+        r"(?:^|/)identity_pin_projection\.receipts/projection-[0-9]{4}\.json$"
+    )
+    receipt_paths = sorted(path for path in paths if receipt_pattern.search(path))
+    commit_order = {
+        commit: index
+        for index, commit in enumerate(history.stdout.splitlines())
+        if re.fullmatch(r"[0-9a-f]{40}", commit)
+    }
+    current_commit_result = _run_pack_git(
+        repository,
+        "log",
+        "-1",
+        "--format=%H",
+        head,
+        "--",
+        f":(top,literal){committed_receipt_path}",
+        text=True,
+    )
+    current_commit = current_commit_result.stdout.strip()
+    if (
+        current_commit_result.returncode != 0
+        or current_commit not in commit_order
+    ):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            "cannot resolve the committed freeze receipt's history",
+        )
+
+    candidates: list[dict[str, str | int]] = []
+    for path in receipt_paths:
+        if path == committed_receipt_path:
+            continue
+        receipt_result = _run_pack_git(repository, "show", f"{head}:{path}")
+        if receipt_result.returncode != 0:
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"cannot read committed identity-pin receipt {path}",
+            )
+        try:
+            candidate_value = json.loads(receipt_result.stdout)
+            candidate = validate_projection_receipt(candidate_value)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"committed identity-pin receipt {path} is invalid: {exc}",
+            ) from exc
+        if (
+            candidate["receipt_kind"] != "freeze_projection"
+            or candidate["status"] != "PASS"
+        ):
+            continue
+        candidate_pack_prefix, candidate_receipt_relative = path.split(
+            "/identity_pin_projection.receipts/", 1
+        )
+        candidate_tree_result = _run_pack_git(
+            repository, "show", f"{head}:{candidate_pack_prefix}/plan_tree.json"
+        )
+        try:
+            if candidate_tree_result.returncode != 0:
+                raise ValueError("plan tree is unavailable")
+            candidate_tree = json.loads(candidate_tree_result.stdout)
+            if not isinstance(candidate_tree, Mapping):
+                raise ValueError("plan tree is not an object")
+            candidate_attachments = candidate_tree.get("arm_attachments")
+            if not isinstance(candidate_attachments, Mapping):
+                raise ValueError("plan tree has no arm attachments")
+            candidate_projection = validate_identity_pin_projection(
+                candidate_attachments.get("identity_pin_projection")
+            )
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"committed successor pack {candidate_pack_prefix} is invalid: {exc}",
+            ) from exc
+        candidate_reference = candidate_projection["projection_receipt"]
+        expected_relative = (
+            "identity_pin_projection.receipts/" + candidate_receipt_relative
+        )
+        if (
+            candidate_projection["state"] != "frozen"
+            or candidate_reference["path"] != expected_relative
+            or candidate_reference["sha256"]
+            != _sha256_bytes(receipt_result.stdout)
+            or candidate["pack"]["pack_id"]
+            != PurePosixPath(candidate_pack_prefix).name
+        ):
+            raise IdentityPinProjectionError(
+                "readiness_identity_pinset_frozen_mismatch",
+                f"committed successor receipt {path} is not its pack's active freeze",
+            )
+        supersedes_current = any(
+            row["pack_id"] == pack_root.name
+            and row["projection_receipt_sha256"] == committed_receipt_sha256
+            for row in candidate["supersedes"]
+        )
+        if not supersedes_current:
+            continue
+        candidate_commit_result = _run_pack_git(
+            repository,
+            "log",
+            "-1",
+            "--format=%H",
+            head,
+            "--",
+            f":(top,literal){path}",
+            text=True,
+        )
+        candidate_commit = candidate_commit_result.stdout.strip()
+        ancestry = _run_pack_git(
+            repository,
+            "merge-base",
+            "--is-ancestor",
+            current_commit,
+            candidate_commit,
+        )
+        if (
+            candidate_commit_result.returncode != 0
+            or candidate_commit not in commit_order
+            or ancestry.returncode not in (0, 1)
+        ):
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"cannot order committed identity-pin receipt {path}",
+            )
+        if candidate_commit != current_commit and ancestry.returncode == 0:
+            candidates.append(
+                {
+                    "rank": commit_order[candidate_commit],
+                    "receipt_id": candidate["receipt_id"],
+                    "receipt_path": path,
+                    "receipt_sha256": _sha256_bytes(receipt_result.stdout),
+                    "git_commit": candidate_commit,
+                }
+            )
+    if not candidates:
+        return None
+    newest = min(candidates, key=lambda row: (row["rank"], row["receipt_path"]))
+    return {key: str(value) for key, value in newest.items() if key != "rank"}
 
 
 def _derivation_record() -> dict[str, Any]:
@@ -1576,9 +1886,10 @@ def verify_frozen_projection(
         raise IdentityPinProjectionError(
             "readiness_identity_pinset_frozen_mismatch", "only a frozen projection may verify"
         )
-    frozen_receipt, _ = _load_frozen_receipt(root, projection)
+    frozen_receipt, frozen_receipt_raw = _load_frozen_receipt(root, projection)
     reasons: list[str] = []
     checks: list[dict[str, Any]] = []
+    refusal_observed: dict[str, Any] = {}
     current_units: list[dict[str, Any]] = copy.deepcopy(frozen_receipt["identity_units"])
     projection_input_sha = frozen_receipt["pack"]["projection_input_sha256"]
     try:
@@ -1587,6 +1898,23 @@ def verify_frozen_projection(
         ) or not _frozen_pack_identity_matches_receipt(root, tree, frozen_receipt):
             raise IdentityPinProjectionError(
                 "readiness_identity_pinset_frozen_mismatch", "frozen pack pins differ from receipt"
+            )
+        repository, head, committed_receipt_path, committed_receipt_sha = (
+            _committed_pack_anchor(root, projection, frozen_receipt_raw)
+        )
+        successor = _committed_successor(
+            root,
+            repository,
+            head,
+            committed_receipt_path,
+            committed_receipt_sha,
+        )
+        if successor is not None:
+            raise IdentityPinProjectionError(
+                "readiness_identity_pinset_frozen_mismatch",
+                "frozen projection was superseded by committed receipt "
+                f"{successor['receipt_id']}",
+                observed={"superseded_by": successor},
             )
         derivation = _derivation_record()
         if not _same_derivation_identity(frozen_receipt["derivation"], derivation):
@@ -1610,6 +1938,7 @@ def verify_frozen_projection(
             )
     except IdentityPinProjectionError as exc:
         reasons.append(exc.reason_code)
+        refusal_observed = copy.deepcopy(exc.observed)
         checks.append(
             {
                 "check_id": "frozen_projection_reverification",
@@ -1658,4 +1987,5 @@ def verify_frozen_projection(
         "receipt_path": str(receipt_path),
         "receipt_sha256": receipt_sha,
         "identity_units": [unit["model_runtime_config"] for unit in current_units],
+        **({"observed": refusal_observed} if reasons else {}),
     }

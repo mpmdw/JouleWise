@@ -6,12 +6,14 @@ import hashlib
 import inspect
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
 from unittest import mock
 
+from joulewise import identity_pins
 from joulewise.identity_pins import (
     IDENTITY_PIN_DERIVATION_CONTRACT,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
@@ -43,6 +45,28 @@ def read_json(path: Path) -> dict:
     if not isinstance(value, dict):
         raise AssertionError(f"expected JSON object: {path}")
     return value
+
+
+def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ("git", "-C", str(root), *args),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def init_git(root: Path) -> None:
+    git(root, "init", "-q")
+    git(root, "config", "user.name", "Identity Pin Test")
+    git(root, "config", "user.email", "identity-pin-test@example.invalid")
+
+
+def commit_pack(repository: Path, pack: Path, message: str) -> str:
+    relative = pack.relative_to(repository).as_posix()
+    git(repository, "add", "--", relative)
+    git(repository, "commit", "-q", "-m", message)
+    return git(repository, "rev-parse", "HEAD").stdout.strip()
 
 
 def synthetic_config(model_root: Path, run_id: str) -> dict:
@@ -231,6 +255,47 @@ def pack_bytes(pack: Path) -> dict[str, bytes]:
     }
 
 
+def rebind_frozen_chain(
+    pack: Path,
+    *,
+    receipt_units: list[dict] | None = None,
+    projection_input_sha256: str | None = None,
+    receipt_id: str | None = None,
+) -> None:
+    """Simulate an operator rebuilding every mutable local SHA binding."""
+
+    tree_path = pack / "plan_tree.json"
+    tree = read_json(tree_path)
+    projection = tree["arm_attachments"]["identity_pin_projection"]
+    reference = projection["projection_receipt"]
+    receipt_path = pack / reference["path"]
+    receipt = read_json(receipt_path)
+    if receipt_units is not None:
+        receipt["identity_units"] = copy.deepcopy(receipt_units)
+        by_id = {
+            unit["identity_unit_id"]: unit["model_runtime_config"]
+            for unit in receipt_units
+        }
+        for unit in projection["identity_units"]:
+            unit["model_runtime_config"] = copy.deepcopy(by_id[unit["identity_unit_id"]])
+    if projection_input_sha256 is not None:
+        receipt["pack"]["projection_input_sha256"] = projection_input_sha256
+    if receipt_id is not None:
+        receipt["receipt_id"] = receipt_id
+    receipt_raw = render_json(receipt)
+    receipt_sha = sha256_bytes(receipt_raw)
+    receipt_path.write_bytes(receipt_raw)
+    receipt_path.with_suffix(".sha256").write_text(
+        f"{receipt_sha}  {receipt_path.name}\n", encoding="ascii"
+    )
+    projection["projection_receipt"]["sha256"] = receipt_sha
+    tree_raw = render_json(tree)
+    tree_path.write_bytes(tree_raw)
+    (pack / "plan_tree.sha256").write_text(
+        f"{sha256_bytes(tree_raw)}  plan_tree.json\n", encoding="ascii"
+    )
+
+
 class SharedDerivationTests(unittest.TestCase):
     def test_synthetic_pack_triple_equals_generalized_mint_rederivation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -288,6 +353,7 @@ class ProjectionLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        init_git(self.root)
         self.pack, self.weight = make_pack(self.root)
         self.probe = mock.patch(
             "joulewise.identity_pins._runtime_probe_metadata",
@@ -325,6 +391,7 @@ class ProjectionLifecycleTests(unittest.TestCase):
 
     def test_verify_is_pack_read_only_and_writes_custody_receipt(self) -> None:
         freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
         before = pack_bytes(self.pack)
         custody = self.root / "custody"
 
@@ -350,11 +417,28 @@ class ProjectionLifecycleTests(unittest.TestCase):
         self.assertEqual(receipt["receipt_kind"], "arm_reverification")
         self.assertEqual(receipt["status"], "PASS")
 
+    def test_verify_refuses_when_pack_git_state_is_unresolvable(self) -> None:
+        isolated_root = self.root / "isolated"
+        (isolated_root / ".git").mkdir(parents=True)
+        isolated_pack, _ = make_pack(isolated_root)
+        freeze_projection(isolated_pack)
+
+        result = verify_frozen_projection(
+            isolated_pack, self.root / "custody", "bracket-no-git-anchor"
+        )
+
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["reason_codes"],
+            ["readiness_identity_artifact_unreadable"],
+        )
+
     def test_pack_freeze_commit_does_not_change_derivation_identity(self) -> None:
         with mock.patch(
             "joulewise.identity_pins._repo_git_commit", return_value="a" * 40
         ):
             freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
         frozen_bytes = pack_bytes(self.pack)
 
         with mock.patch(
@@ -378,9 +462,7 @@ class ProjectionLifecycleTests(unittest.TestCase):
 
     def test_one_byte_model_perturbation_changes_hash_and_refuses_dirty(self) -> None:
         freeze_projection(self.pack)
-        frozen = read_json(self.pack / "plan_tree.json")["arm_attachments"][
-            "identity_pin_projection"
-        ]["identity_units"][0]["model_runtime_config"]
+        commit_pack(self.root, self.pack, "freeze A")
         before = pack_bytes(self.pack)
         self.weight.write_bytes(self.weight.read_bytes() + b"!")
         expected_after_weight_edit = pack_bytes(self.pack)
@@ -393,15 +475,60 @@ class ProjectionLifecycleTests(unittest.TestCase):
         self.assertEqual(
             result["reason_codes"], ["readiness_identity_environment_dirty"]
         )
-        observed = result["identity_units"][0]
-        self.assertNotEqual(
-            observed["model_artifact_sha256"], frozen["model_artifact_sha256"]
-        )
+        self.assertIn("model/weights.safetensors", str(result["observed"]))
         self.assertNotEqual(before, expected_after_weight_edit)
         self.assertEqual(pack_bytes(self.pack), expected_after_weight_edit)
 
+        tree = read_json(self.pack / "plan_tree.json")
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        current_units, projection_input_sha, _ = identity_pins._derive_projection_units(
+            self.pack, projection
+        )
+        rebind_frozen_chain(
+            self.pack,
+            receipt_units=current_units,
+            projection_input_sha256=projection_input_sha,
+        )
+
+        rebound = verify_frozen_projection(
+            self.pack, self.root / "custody", "bracket-fully-rebound"
+        )
+
+        self.assertEqual(rebound["status"], "REFUSE")
+        self.assertEqual(
+            rebound["reason_codes"],
+            ["readiness_identity_pinset_frozen_mismatch"],
+        )
+        self.assertNotEqual(
+            rebound["observed"]["committed_receipt_sha256"],
+            rebound["observed"]["on_disk_receipt_sha256"],
+        )
+
+    def test_receipt_id_only_rebind_refuses_committed_anchor_mismatch(self) -> None:
+        freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
+        rebind_frozen_chain(
+            self.pack,
+            receipt_id="synthetic-pack/operator-rebound-receipt-id",
+        )
+
+        result = verify_frozen_projection(
+            self.pack, self.root / "custody", "bracket-receipt-id-rebound"
+        )
+
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["reason_codes"],
+            ["readiness_identity_pinset_frozen_mismatch"],
+        )
+        self.assertNotEqual(
+            result["observed"]["committed_receipt_sha256"],
+            result["observed"]["on_disk_receipt_sha256"],
+        )
+
     def test_frozen_pin_mutation_refuses_with_frozen_mismatch(self) -> None:
         freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
         tree = read_json(self.pack / "plan_tree.json")
         tree["arm_attachments"]["identity_pin_projection"]["identity_units"][0][
             "model_runtime_config"
@@ -425,6 +552,7 @@ class ProjectionLifecycleTests(unittest.TestCase):
 
     def test_successor_reissue_appends_supersession_without_reusing_receipt(self) -> None:
         freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
         old_projection = read_json(self.pack / "plan_tree.json")["arm_attachments"][
             "identity_pin_projection"
         ]
@@ -444,6 +572,7 @@ class ProjectionLifecycleTests(unittest.TestCase):
             ],
         )
         freeze_projection(successor)
+        commit_pack(self.root, successor, "freeze successor B")
 
         projection = read_json(successor / "plan_tree.json")["arm_attachments"][
             "identity_pin_projection"
@@ -452,9 +581,29 @@ class ProjectionLifecycleTests(unittest.TestCase):
         self.assertEqual(receipt["supersedes"], projection["supersedes"])
         self.assertEqual(projection["state"], "frozen")
         self.assertTrue((self.pack / old_projection["projection_receipt"]["path"]).exists())
+        old_result = verify_frozen_projection(
+            self.pack, self.root / "custody", "bracket-old-after-successor"
+        )
+        successor_result = verify_frozen_projection(
+            successor, self.root / "custody", "bracket-successor"
+        )
+        self.assertEqual(old_result["status"], "REFUSE")
+        self.assertEqual(
+            old_result["observed"]["superseded_by"]["receipt_id"],
+            "synthetic-pack-r2/projection-0001",
+        )
+        old_arm_receipt = read_json(Path(old_result["receipt_path"]))
+        self.assertEqual(
+            old_arm_receipt["checks"][-1]["observed"]["superseded_by"][
+                "receipt_id"
+            ],
+            "synthetic-pack-r2/projection-0001",
+        )
+        self.assertEqual(successor_result["status"], "PASS")
 
     def test_u8_consumption_seam_can_fail_closed_on_u11_result(self) -> None:
         freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
         self.weight.write_bytes(self.weight.read_bytes() + b"!")
 
         result = verify_frozen_projection(

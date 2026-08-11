@@ -22,6 +22,7 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
     # [AGENT]
+    "D117-U11-IDPIN-PROJECTION",
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "P2-050", "TOOL-01",
@@ -259,14 +260,14 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_66(self):
+    def test_exact_live_id_set_67(self):
         # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
         # merged f75d12b). 65 -> 64: T3-AMEND-01 retired the same day
         # (PR #101 merged 906ddf9). Registration batch: 64 -> 62 by retiring
         # COLDGATE-VALIDATOR-01 and WINB-R06-DISPOSITION-01, then 62 -> 66
         # by registering four follow-ons. Completed table owns all retirements.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 66)
+        self.assertEqual(len(self.tasks), 67)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
