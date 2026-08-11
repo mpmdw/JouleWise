@@ -388,7 +388,8 @@ def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
 def _terminate_powermetrics(process: subprocess.Popen) -> None:
     """Best-effort bounded termination and reaping of the direct child."""
 
-    if process.poll() is not None:
+    poll = getattr(process, "poll", None)  # small unit-test fakes lack poll
+    if callable(poll) and poll() is not None:
         process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
         return
     process.terminate()
