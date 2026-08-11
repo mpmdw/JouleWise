@@ -24,6 +24,11 @@ from joulewise.detection_floor import (  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
 )
+from joulewise.identity_pins import (  # noqa: E402
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    validate_identity_pin_projection,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -1217,6 +1222,85 @@ def build_tree(
     analysis_sha: str,
     declaration_sha: str,
 ) -> dict[str, Any]:
+    identity_units = []
+    producer_plans = {
+        "A": {
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_1p5b_v1/calibration_plan.json",
+        },
+        "B": {
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_7b_v1/calibration_plan.json",
+        },
+    }
+    for arm, measurement_arm in (
+        ("A", "decode"),
+        ("A", "prefill_p256"),
+        ("B", "decode"),
+        ("B", "prefill_p256"),
+    ):
+        family = (
+            DECODE_FAMILIES[arm]["condition_family_id"]
+            if measurement_arm == "decode"
+            else PREFILL_FAMILY_IDS[arm]
+        )
+        identity_units.append(
+            {
+                "identity_unit_id": f"{arm}/{measurement_arm}",
+                "producer_plan_reference": producer_plans[arm],
+                "consumer_bindings": [
+                    {
+                        "arm": arm,
+                        "family": family,
+                        "measurement_arm": measurement_arm,
+                    }
+                ],
+                "declared_identity": {
+                    "hardware_target": HARDWARE["id"],
+                    "runtime_backend": HARDWARE["runtime_backend"],
+                    "telemetry_backend": HARDWARE["telemetry_backend"],
+                    "model_name": MODELS[arm]["name"],
+                    "model_source": MODELS[arm]["source"],
+                    "model_revision": MODELS[arm]["revision"],
+                    "quantization": {**QUANTIZATION, "group_size": None},
+                    "workload_profile": {
+                        **workload_for(measurement_arm),
+                        "prompt_tokens": (
+                            workload_for(measurement_arm).get("prompt_tokens")
+                        ),
+                        "prompt_text": (
+                            workload_for(measurement_arm).get("prompt_text")
+                        ),
+                        "dataset_ref": None,
+                    },
+                },
+                "config_inventory": [
+                    {
+                        "path": Path(row["config_path"]).as_posix(),
+                        "sha256": row["config_sha256"],
+                    }
+                    for row in science_rows
+                    if row["arm"] == arm and row["measurement_arm"] == measurement_arm
+                ],
+                "model_runtime_config": {
+                    "model_artifact_sha256": None,
+                    "runtime_identity_sha256": None,
+                    "config_set_sha256": None,
+                },
+            }
+        )
+    identity_pin_projection = validate_identity_pin_projection(
+        {
+            "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER,
+            "mode": "derive_never_operator_enter",
+            "state": "unprojected",
+            "required_before_arm": True,
+            "derivation_contract": IDENTITY_PIN_DERIVATION_CONTRACT,
+            "identity_units": identity_units,
+            "projection_receipt": None,
+            "supersedes": [],
+        }
+    )
     return {
         "schema_version": TREE_SCHEMA,
         "draft_status": DRAFT_STATUS,
@@ -1303,13 +1387,7 @@ def build_tree(
             },
             "absolute_roots": empty_slot("TODO(U8): materialize fresh absolute roots at arm"),
             "selected_acceptance": empty_slot("TODO(U2/U8): select authenticated acceptance at arm"),
-            "identity_pin_projection": {
-                "status": EMPTY_STATUS,
-                "runtime_identity_sha256": "",
-                "model_artifact_sha256": {"A": "", "B": ""},
-                "config_set_sha256": "",
-                "todo": "TODO(U11): derive all values and issue projection receipt at arm",
-            },
+            "identity_pin_projection": identity_pin_projection,
             "aggregate_floor_artifact_sha256": empty_slot(
                 "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm"
             ),

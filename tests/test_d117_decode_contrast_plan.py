@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.schemas import BenchmarkConfig
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    scientific_config_identity_sha256,
+)
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.run_campaign import load_order_entries
 
@@ -26,7 +30,7 @@ GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
     "calibration_plan.json": "951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
-    "plan_tree.json": "655486460d269a55b9715d17c0b0e452d8fffbdaba08f6ea402fca881f122a1f",
+    "plan_tree.json": "9b89cb610132a23477749984612b1c7031822e996d28a8bd99639c459f108dc4",
     "analysis_manifest_v3.json": "10defe290284b60c232168bc27c2ed1f39ba9424ea8cd7c4a7df1c374fd67f56",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
@@ -506,6 +510,39 @@ class D117GammaPlanTest(unittest.TestCase):
         for forbidden in (".glob(", "os.walk", "Path.walk"):
             self.assertNotIn(forbidden, generator_source)
         self.assertIn('.rglob("*")', generator_source)
+
+    def test_identity_projection_has_four_canonical_units(self) -> None:
+        projection = self.tree["arm_attachments"]["identity_pin_projection"]
+        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
+        self.assertEqual(projection["mode"], "derive_never_operator_enter")
+        self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
+        self.assertIsNone(projection["projection_receipt"])
+        units = projection["identity_units"]
+        self.assertEqual(
+            [unit["identity_unit_id"] for unit in units],
+            ["A/decode", "A/prefill_p256", "B/decode", "B/prefill_p256"],
+        )
+        producer_by_arm = {
+            "A": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+            "B": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+        }
+        for unit in units:
+            arm = unit["identity_unit_id"].split("/", 1)[0]
+            self.assertEqual(
+                unit["producer_plan_reference"]["plan_id"], producer_by_arm[arm]
+            )
+            self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+            config_hashes = {
+                scientific_config_identity_sha256(read_json(PACK / row["path"]))
+                for row in unit["config_inventory"]
+            }
+            self.assertEqual(len(config_hashes), 1)
+            for row in unit["config_inventory"]:
+                self.assertEqual(row["sha256"], sha256(PACK / row["path"]))
+        serialized = json.dumps(projection, sort_keys=True)
+        self.assertNotIn('"model_artifact_sha256": {', serialized)
+        self.assertNotIn('"runtime_identity_sha256": ""', serialized)
 
     def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
         expected = derive_bracket_session_receipt_oracle()

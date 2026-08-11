@@ -26,6 +26,11 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
 )
+from joulewise.identity_pins import (  # noqa: E402
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    validate_identity_pin_projection,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -56,7 +61,6 @@ D124_EVIDENCE_RECORD_PATH = (
 D124_COVARIANCE_TREATMENT = (
     "two_shared_edges_plus_bundle_specific_adversarial_terms"
 )
-IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
@@ -646,6 +650,7 @@ def producer_contract(
     prefill_domain: str,
     absolute_rows: Sequence[Mapping[str, Any]],
     comparative_rows: Sequence[Mapping[str, Any]],
+    identity_config_inventory: list[dict[str, str]],
 ) -> dict[str, Any]:
     config_rows = [
         {"bundle_id": row["run_id"], "config_sha256": row["config_sha256"]}
@@ -721,23 +726,61 @@ def producer_contract(
                 "members": config_rows,
             },
         ],
-        "identity_pin_projection": {
-            "work_order": IDENTITY_PROJECTION_WORK_ORDER,
+        "identity_pin_projection": validate_identity_pin_projection({
+            "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER,
             "mode": "derive_never_operator_enter",
+            "state": "unprojected",
             "required_before_arm": True,
-            "expected_config_set_sha256": config_set_sha256,
-            "projected_pins": {
-                "model_artifact_sha256": None,
-                "runtime_identity_sha256": None,
-                "config_set_sha256": None,
-            },
+            "derivation_contract": IDENTITY_PIN_DERIVATION_CONTRACT,
+            "identity_units": [
+                {
+                    "identity_unit_id": "beta",
+                    "producer_plan_reference": {
+                        "plan_id": PLAN_ID,
+                        "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+                    },
+                    "consumer_bindings": [
+                        {
+                            "arm": "B",
+                            "family": "sw-decode-b-qwen25-7b",
+                            "measurement_arm": "decode",
+                        },
+                        {
+                            "arm": "B",
+                            "family": PREFILL_FAMILY_ID,
+                            "measurement_arm": "prefill_p128",
+                        },
+                    ],
+                    "declared_identity": {
+                        "hardware_target": HARDWARE["id"],
+                        "runtime_backend": HARDWARE["runtime_backend"],
+                        "telemetry_backend": HARDWARE["telemetry_backend"],
+                        "model_name": MODEL["name"],
+                        "model_source": MODEL["source"],
+                        "model_revision": MODEL["revision"],
+                        "quantization": {**QUANTIZATION, "group_size": None},
+                        "workload_profile": {
+                            **WORKLOAD,
+                            "prompt_text": None,
+                            "dataset_ref": None,
+                        },
+                    },
+                    "config_inventory": identity_config_inventory,
+                    "model_runtime_config": {
+                        "model_artifact_sha256": None,
+                        "runtime_identity_sha256": None,
+                        "config_set_sha256": None,
+                    },
+                }
+            ],
             "projection_receipt": None,
-        },
+            "supersedes": [],
+        }),
         "postcollection": {"status": "unresolved"},
         "dependencies": [
             "D117-POSTCOLLECTION-TRUST-01 before mint",
             "D117-U2 successor engine before arm",
-            f"{IDENTITY_PROJECTION_WORK_ORDER} before arm",
+            f"{IDENTITY_PIN_PROJECTION_WORK_ORDER} before arm",
             "shared-bundle unique-physical-union mint order repair before mint",
         ],
     }
@@ -1182,6 +1225,7 @@ def plan_tree(
     spec_sha256: str,
     producer_sha256: str,
     config_set_sha256: str,
+    identity_pin_projection: Mapping[str, Any],
     stage_manifest_refs: Mapping[str, Mapping[str, Any]],
     external_manifest_refs: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -1232,7 +1276,7 @@ def plan_tree(
                     "status": "required_before_mint",
                 },
                 {
-                    "id": IDENTITY_PROJECTION_WORK_ORDER,
+                    "id": IDENTITY_PIN_PROJECTION_WORK_ORDER,
                     "status": "required_before_arm",
                 },
                 {
@@ -1307,18 +1351,7 @@ def plan_tree(
                     ),
                 ],
             },
-            "identity_pin_projection": {
-                "work_order": IDENTITY_PROJECTION_WORK_ORDER,
-                "mode": "derive_never_operator_enter",
-                "required_before_arm": True,
-                "expected_config_set_sha256": config_set_sha256,
-                "projected_pins": {
-                    "model_artifact_sha256": None,
-                    "runtime_identity_sha256": None,
-                    "config_set_sha256": None,
-                },
-                "projection_receipt": None,
-            },
+            "identity_pin_projection": identity_pin_projection,
             "receipt_oracle": derive_bracket_session_receipt_oracle(),
         },
         "closeout_attachments": {
@@ -1694,6 +1727,18 @@ def build_artifacts() -> dict[Path, bytes]:
         prefill_domain=prefill_domain,
         absolute_rows=absolute_rows,
         comparative_rows=comparative_rows,
+        identity_config_inventory=sorted(
+            [
+                {
+                    "path": Path(row["config_path"])
+                    .relative_to(PACK_REL)
+                    .as_posix(),
+                    "sha256": row["config_sha256"],
+                }
+                for row in root_science
+            ],
+            key=lambda row: row["path"],
+        ),
     )
     producer_bytes = render_json(producer)
     producer_sha = sha256_bytes(producer_bytes)
@@ -1740,6 +1785,7 @@ def build_artifacts() -> dict[Path, bytes]:
         spec_sha256=spec_sha,
         producer_sha256=producer_sha,
         config_set_sha256=config_set_sha,
+        identity_pin_projection=producer["identity_pin_projection"],
         stage_manifest_refs=stage_manifest_refs,
         external_manifest_refs=external_manifest_refs,
     )

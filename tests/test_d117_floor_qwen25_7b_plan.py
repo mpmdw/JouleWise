@@ -19,6 +19,10 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
 )
 from joulewise.floor_extraction import validate_extraction_spec
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    scientific_config_identity_sha256,
+)
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.extract_detection_floors import main as extract_main
 from scripts.run_campaign import load_order_entries
@@ -50,7 +54,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
     "generate_configs.py": (
-        "33b31e144da878cbe3c908e14be1f25ad0bceda933eb39239753c32027e94b73"
+        "ad970f31d41caf5ab3818c4923292699e8b596a83e711ed148230f9f8a5d32d7"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "bd9efc9342804eed007c4c41c31bdd1b0fd7e829207f5f9f0c3445e49109f9e8"
@@ -65,13 +69,13 @@ EXPECTED_SHA256 = {
         "eb9ceb297404fffa465d96339bae731e540f4ed7afc865f8209519f2b0980ba9"
     ),
     "plan_tree.json": (
-        "af2ec2bdfb4919d4b3a37ab4bab526f41cd573b2563b4272117d59425c2eaeeb"
+        "0f7fcc2e8f2c4f374f0fc67252ba816fadd7006eb8566e8720b965c09a81b115"
     ),
     "plan_tree.sha256": (
-        "858fbb7c1610a7041096ef84ac116efc69cc3dde30afd7da701ee3d07ab1c3eb"
+        "b9f4d0d030996bdc313e9d121f689e9b411772a6f92b182152ce538348f2f999"
     ),
     "producer_contract.json": (
-        "6ec1424465d4acce53cc97be3319563a17ffd72b58499d03624b0f96dadfbde5"
+        "37b32da8763508c041b21f1e8b9266c9b80abdc0cc12c11603a47ef9f2342792"
     ),
 }
 EXPECTED_SPEC_SHA256 = (
@@ -731,8 +735,27 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         projection = producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
-        self.assertEqual(set(projection["projected_pins"].values()), {None})
+        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
+        self.assertEqual(projection["supersedes"], [])
+        self.assertEqual(len(projection["identity_units"]), 1)
+        unit = projection["identity_units"][0]
+        self.assertEqual(unit["identity_unit_id"], "beta")
+        self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+        computed_config_hashes = {
+            scientific_config_identity_sha256(load_json(PACK / row["path"]))
+            for row in unit["config_inventory"]
+        }
+        self.assertEqual(len(computed_config_hashes), 1)
+        for row in unit["config_inventory"]:
+            self.assertEqual(row["sha256"], file_sha256(PACK / row["path"]))
         self.assertIsNone(projection["projection_receipt"])
+        self.assertEqual(
+            load_json(PACK / "plan_tree.json")["arm_attachments"][
+                "identity_pin_projection"
+            ],
+            projection,
+        )
 
     def test_generator_has_only_inventory_directory_discovery(self) -> None:
         source = GENERATOR.read_text(encoding="utf-8")

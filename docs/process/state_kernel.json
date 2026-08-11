@@ -842,6 +842,48 @@
       "status_note": "2026-08-03: minted from the two-week soundness sweep's finding that D-080 has never fired, plus Ed's validated concurrent-audit pattern (memory: concurrent-fable-audit-pattern). Non-blocking hardening.",
       "stop_card": null
     },
+    "D117-U11-IDPIN-PROJECTION": {
+      "acceptance": {
+        "evidence": [
+          "Synthetic-pack model/runtime/config triple and authenticated projection receipt equal the generalized mint's shared rederivation",
+          "A one-byte recognized model-file perturbation changes the model hash and refuses arm with readiness_identity_environment_dirty",
+          "No arm-path CLI, JSON input field, launch recipe, or public verifier callable accepts operator-supplied identity pins",
+          "Freeze, read-only verify, frozen-mismatch, idempotent freeze, and successor-reissue lifecycle tests pass",
+          "Alpha and beta one-unit shapes plus gamma's ordered A/decode, A/prefill_p256, B/decode, and B/prefill_p256 units validate",
+          "U8 consumes verify_frozen_projection and makes every U11 reason code a readiness REFUSE before any readiness GO"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D117-U11-IDPIN-PROJECTION/acceptance",
+          "label": "D117-U11-IDPIN-PROJECTION acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "D-117 pack identities are derived once from authenticated configs, model bytes, and live adapters, frozen in an append-only receipt, and re-verified read-only before arm."
+      },
+      "authority": {
+        "label": "D-131 identity-pin projection contract",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-131 freeze and readiness ordering",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Every D-117 pack-freeze or arm row remains downstream of this phase gate; real-model freeze and U8 readiness GO remain lead-owned follow-ons"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement canonical per-unit identity projection, freeze receipts, and read-only arm re-verification for the alpha, beta, and four-unit gamma D-117 packs.",
+      "id": "D117-U11-IDPIN-PROJECTION",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 54,
+      "status": "queued",
+      "status_note": "Enrolled 2026-08-11 from the consult-adopted D-131 contract. Checked-in packs remain unprojected; real-model freeze occurs only after the reviewed integration head, and U8 owns readiness-record consumption.",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
