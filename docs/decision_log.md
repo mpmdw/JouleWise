@@ -8220,6 +8220,65 @@ sound registered arithmetic surface in Python requires a process boundary
 or capability token, not conventional privacy (see the Rust-rewrite memory
 — now with an executed demonstration).
 
+## D-131: Identity-pin projection contract — adopt as proposed
+
+**Date:** 2026-08-11. **Status:** PROPOSED — adopt as proposed from the
+binding U11 design consult; the magistrate reviews this transcription and
+implementation before push.
+
+1. **Receipt and custody.** Identity projection uses the exact-key
+   `joulewise.identity_pin_projection_receipt.v1` schema with no self-hash.
+   Freeze receipts append under the pack's
+   `identity_pin_projection.receipts/` directory and are authenticated by
+   GNU-style SHA-256 sidecars plus the final plan tree. Arm re-verification
+   is pack-read-only and writes its receipt under the bracket session in the
+   window custody root. `projection_input_sha256` binds the closed
+   declaration, config, model-file, and live-probe inventory rather than the
+   final tree.
+2. **Canonical identity units.** Alpha and beta each carry one ordered
+   identity unit. Gamma carries exactly four ordered units: `A/decode`,
+   `A/prefill_p256`, `B/decode`, and `B/prefill_p256`; A references the 1.5B
+   producer and B references the 7B producer. Every unit carries the same
+   model/runtime/config triple used by the shared floor mint. The former
+   gamma A/B model map and pack-wide runtime/config pins are invalid.
+3. **Derive; never enter.** No operator, CLI option, launch recipe, or public
+   verifier callable may supply or override an identity pin. Model
+   enumeration, scientific-config identity, the governed eleven-field stack
+   identity, and triple derivation have one shared implementation consumed by
+   runtime collection, both mint paths, analysis, detection-floor
+   validation, freeze, and arm verification. Any pack-versus-config or
+   frozen-versus-live mismatch fails closed.
+4. **Lifecycle and successor.** Active packs are `unprojected` or `frozen`;
+   `superseded` is inactive. Null pins and a null receipt are legal only
+   before projection. Freeze is the sole `unprojected` to `frozen`
+   transition and is byte-idempotent on the identical frozen projection;
+   verify cannot mutate the pack. Reissue creates a new pack/custody root and
+   appends a new receipt whose `supersedes` record binds the old pack,
+   receipt, and readiness hashes; old receipts are never edited or deleted,
+   and an opened session or attempt ID is never reused.
+5. **Readiness boundary.** U11 exposes `verify_frozen_projection()` and its
+   CLI receipt only. U8 owns the readiness-record
+   `identity_pin_projection` section binding frozen and arm receipt
+   path/SHA pairs, derivation contract, ordered unit IDs, and PASS status.
+   Every U11 reason makes readiness REFUSE. No D-117 pack may arm before that
+   U8 consumer lands and passes.
+
+### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
+
+The closed readiness-refusal vocabulary gains
+`readiness_identity_artifact_unreadable`,
+`readiness_identity_environment_dirty`,
+`readiness_identity_projection_mint_divergence`,
+`readiness_identity_pinset_frozen_mismatch`, and
+`readiness_identity_receipt_namespace_anomalous` (fix round 4: a committed
+entry in the governed identity_pin_projection.receipts namespace that does
+not conform to the freeze grammar — projection-<4+ digits>.json plus its
+.sha256 sidecar — refuses verification fail-closed rather than being
+silently skipped, so an authenticated successor can never be hidden behind
+a non-conforming filename). These spellings belong to the
+U8 readiness registry, not transport or member-verdict vocabularies. They
+only refuse; none can license a run or claim.
+
 ## D-132: Stopping rules target doom loops, not converging instruments
 
 **Date:** 2026-08-11 (Ed, in-thread; transcribed by the magistrate).
@@ -8318,62 +8377,3 @@ D-132 is satisfied, not overridden: work continues; consumption is
 deferred. The same-signature escalation trigger is satisfied by
 resolution through this consult with a structurally different remedy
 (deletion, not a third validator).
-
-## D-131: Identity-pin projection contract — adopt as proposed
-
-**Date:** 2026-08-11. **Status:** PROPOSED — adopt as proposed from the
-binding U11 design consult; the magistrate reviews this transcription and
-implementation before push.
-
-1. **Receipt and custody.** Identity projection uses the exact-key
-   `joulewise.identity_pin_projection_receipt.v1` schema with no self-hash.
-   Freeze receipts append under the pack's
-   `identity_pin_projection.receipts/` directory and are authenticated by
-   GNU-style SHA-256 sidecars plus the final plan tree. Arm re-verification
-   is pack-read-only and writes its receipt under the bracket session in the
-   window custody root. `projection_input_sha256` binds the closed
-   declaration, config, model-file, and live-probe inventory rather than the
-   final tree.
-2. **Canonical identity units.** Alpha and beta each carry one ordered
-   identity unit. Gamma carries exactly four ordered units: `A/decode`,
-   `A/prefill_p256`, `B/decode`, and `B/prefill_p256`; A references the 1.5B
-   producer and B references the 7B producer. Every unit carries the same
-   model/runtime/config triple used by the shared floor mint. The former
-   gamma A/B model map and pack-wide runtime/config pins are invalid.
-3. **Derive; never enter.** No operator, CLI option, launch recipe, or public
-   verifier callable may supply or override an identity pin. Model
-   enumeration, scientific-config identity, the governed eleven-field stack
-   identity, and triple derivation have one shared implementation consumed by
-   runtime collection, both mint paths, analysis, detection-floor
-   validation, freeze, and arm verification. Any pack-versus-config or
-   frozen-versus-live mismatch fails closed.
-4. **Lifecycle and successor.** Active packs are `unprojected` or `frozen`;
-   `superseded` is inactive. Null pins and a null receipt are legal only
-   before projection. Freeze is the sole `unprojected` to `frozen`
-   transition and is byte-idempotent on the identical frozen projection;
-   verify cannot mutate the pack. Reissue creates a new pack/custody root and
-   appends a new receipt whose `supersedes` record binds the old pack,
-   receipt, and readiness hashes; old receipts are never edited or deleted,
-   and an opened session or attempt ID is never reused.
-5. **Readiness boundary.** U11 exposes `verify_frozen_projection()` and its
-   CLI receipt only. U8 owns the readiness-record
-   `identity_pin_projection` section binding frozen and arm receipt
-   path/SHA pairs, derivation contract, ordered unit IDs, and PASS status.
-   Every U11 reason makes readiness REFUSE. No D-117 pack may arm before that
-   U8 consumer lands and passes.
-
-### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
-
-The closed readiness-refusal vocabulary gains
-`readiness_identity_artifact_unreadable`,
-`readiness_identity_environment_dirty`,
-`readiness_identity_projection_mint_divergence`,
-`readiness_identity_pinset_frozen_mismatch`, and
-`readiness_identity_receipt_namespace_anomalous` (fix round 4: a committed
-entry in the governed identity_pin_projection.receipts namespace that does
-not conform to the freeze grammar — projection-<4+ digits>.json plus its
-.sha256 sidecar — refuses verification fail-closed rather than being
-silently skipped, so an authenticated successor can never be hidden behind
-a non-conforming filename). These spellings belong to the
-U8 readiness registry, not transport or member-verdict vocabularies. They
-only refuse; none can license a run or claim.
