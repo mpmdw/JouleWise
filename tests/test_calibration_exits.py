@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, replace
+from datetime import datetime
 import errno
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import stat
@@ -95,6 +97,15 @@ class WitnessResult:
 _WITNESS_RESULTS: dict[RefusalCode, WitnessResult] = {}
 
 
+@dataclass(frozen=True)
+class CleanupDiagnostic:
+    """One post-quiescence cleanup race, retained even after removal."""
+
+    residual_path: str
+    residual_snapshot: tuple[str, ...]
+    writers: tuple[str, ...]
+
+
 class WitnessSandbox:
     """Sole owner of one witness root and all process groups created in it."""
 
@@ -104,7 +115,7 @@ class WitnessSandbox:
         self.root = Path(tempfile.mkdtemp(prefix="joulewise-exit-witness-")).resolve()
         self.repo = self.root / "repo"
         self.runner = OwnedPublicProcessRunner(self.root)
-        self.cleanup_diagnostics: list[tuple[str, ...]] = []
+        self.cleanup_diagnostics: list[CleanupDiagnostic] = []
         self.closed = False
 
     def _residual_snapshot(self) -> tuple[str, ...]:
@@ -124,13 +135,40 @@ class WitnessSandbox:
             residual.append(f"<snapshot-error:{type(exc).__name__}:{exc}>")
         return tuple(sorted(residual))
 
+    def _residual_writers(self, failed_path: Path) -> tuple[str, ...]:
+        """Best-effort PID/command attribution for a residual path."""
+
+        lsof = shutil.which("lsof")
+        if lsof is None:
+            return ()
+        try:
+            completed = subprocess.run(
+                [lsof, "-F", "pc", "+D", str(failed_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=1.0,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ()
+        writers: list[str] = []
+        pid: str | None = None
+        for line in completed.stdout.splitlines():
+            if line.startswith("p") and line[1:].isdigit():
+                pid = line[1:]
+            elif line.startswith("c") and pid is not None:
+                writers.append(f"pid={pid} command={line[1:] or '<unknown>'}")
+        return tuple(writers)
+
     def _cleanup_root(self) -> None:
+        first_error: OSError | None = None
         for attempt in range(len(self._CLEANUP_BACKOFF_S) + 1):
             try:
                 shutil.rmtree(self.root)
-                return
+                break
             except FileNotFoundError:
-                return
+                break
             except OSError as exc:
                 if exc.errno != errno.ENOTEMPTY or exc.filename is None:
                     raise
@@ -144,21 +182,38 @@ class WitnessSandbox:
                     failed_path.relative_to(self.root)
                 except ValueError:
                     raise exc
-                self.cleanup_diagnostics.append(self._residual_snapshot())
+                if first_error is None:
+                    first_error = exc
+                self.cleanup_diagnostics.append(
+                    CleanupDiagnostic(
+                        residual_path=str(failed_path),
+                        residual_snapshot=self._residual_snapshot(),
+                        writers=self._residual_writers(failed_path),
+                    )
+                )
                 if attempt >= len(self._CLEANUP_BACKOFF_S):
-                    raise AssertionError(
-                        "owned witness cleanup exhausted ENOTEMPTY retries; "
-                        f"snapshots={self.cleanup_diagnostics!r}"
-                    ) from exc
+                    break
                 time.sleep(self._CLEANUP_BACKOFF_S[attempt])
+        if self.cleanup_diagnostics:
+            diagnostic = self.cleanup_diagnostics[0]
+            writer = ", ".join(diagnostic.writers) or "undetermined"
+            removed = not self.root.exists()
+            raise AssertionError(
+                "diagnostic-fatal post-quiescence ENOTEMPTY; "
+                f"residual_path={diagnostic.residual_path}; writer={writer}; "
+                f"best_effort_removed={removed}; snapshots="
+                f"{[item.residual_snapshot for item in self.cleanup_diagnostics]!r}"
+            ) from first_error
 
     def close(self) -> None:
         if self.closed:
             return
         # Process quiescence is proved before the only permitted retry class.
         self.runner.close()
-        self._cleanup_root()
-        self.closed = True
+        try:
+            self._cleanup_root()
+        finally:
+            self.closed = not self.root.exists()
 
 
 class PreservationGuard:
@@ -1169,7 +1224,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             flush=True,
         )
 
-    def test_cleanup_retries_only_diagnosed_owned_enotempty(self) -> None:
+    def test_cleanup_retry_is_diagnostic_fatal_after_best_effort_removal(self) -> None:
         sandbox = WitnessSandbox()
         sandbox.repo.mkdir()
         residual = sandbox.repo / ".git" / "objects" / "aa"
@@ -1186,14 +1241,31 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             return real_rmtree(path)
 
         started = time.monotonic()
-        with mock.patch.object(shutil, "rmtree", side_effect=injected_rmtree):
+        with (
+            mock.patch.object(shutil, "rmtree", side_effect=injected_rmtree),
+            mock.patch.object(
+                sandbox,
+                "_residual_writers",
+                return_value=("pid=4242 command=git",),
+            ),
+            self.assertRaisesRegex(
+                AssertionError,
+                r"diagnostic-fatal.*residual_path=.*objects/aa; "
+                r"writer=pid=4242 command=git; best_effort_removed=True",
+            ),
+        ):
             sandbox.close()
         elapsed = time.monotonic() - started
         self.assertEqual(attempts, 5)
         self.assertEqual(len(sandbox.cleanup_diagnostics), 4)
         self.assertTrue(
-            all("repo/.git/objects/aa/object" in snapshot for snapshot in sandbox.cleanup_diagnostics)
+            all(
+                "repo/.git/objects/aa/object" in diagnostic.residual_snapshot
+                for diagnostic in sandbox.cleanup_diagnostics
+            )
         )
+        self.assertFalse(sandbox.root.exists())
+        self.assertTrue(sandbox.closed)
         self.assertLess(elapsed, 2.0)
 
         outside = WitnessSandbox()
@@ -1208,9 +1280,12 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         refused_retry.assert_called_once()
         real_rmtree(outside.root)
 
-    def test_forced_auto_maintenance_mutation_captures_detached_pid(self) -> None:
+    def test_forced_auto_maintenance_mutation_reproduces_cleanup_race(self) -> None:
         sandbox = WitnessSandbox()
         maintenance_pid: int | None = None
+        raw_enotempty: OSError | None = None
+        cleanup_diagnostic: AssertionError | None = None
+        live_object_writer_pid: int | None = None
         try:
             self._configure_fixture_repo(sandbox)
             global_config = sandbox.root / "aggressive-global.gitconfig"
@@ -1218,6 +1293,9 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 ("maintenance.auto", "true"),
                 ("maintenance.autoDetach", "true"),
                 ("maintenance.strategy", "incremental"),
+                ("maintenance.gc.enabled", "false"),
+                ("maintenance.loose-objects.enabled", "true"),
+                ("maintenance.incremental-repack.enabled", "true"),
                 ("maintenance.loose-objects.auto", "1"),
                 ("gc.auto", "1"),
                 ("gc.autoDetach", "true"),
@@ -1229,7 +1307,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             execution_env = dict(os.environ)
             execution_env["GIT_CONFIG_GLOBAL"] = str(global_config)
 
-            for index in range(150):
+            for index in range(1500):
                 (sandbox.repo / f"controlled-{index}").write_text(
                     str(index), encoding="utf-8"
                 )
@@ -1260,20 +1338,36 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             for key, _value in GIT_MAINTENANCE_CONTROLS:
                 self._git(sandbox.repo, "config", "--local", "--unset-all", key)
             (sandbox.repo / "mutation").write_text("race", encoding="utf-8")
-            mutation_trace = sandbox.root / "mutation-trace.jsonl"
-            mutation_env = execution_env | {"GIT_TRACE2_EVENT": str(mutation_trace)}
-            self._git(sandbox.repo, "add", ".", env=mutation_env)
-            self._git(
-                sandbox.repo,
-                "commit",
-                "-qm",
-                "maintenance-control-removal-mutation",
-                env=mutation_env,
-            )
-            mutation_events = [
-                json.loads(line)
-                for line in mutation_trace.read_text(encoding="utf-8").splitlines()
-            ]
+            with tempfile.TemporaryDirectory(
+                prefix="joulewise-maintenance-trace-"
+            ) as trace_tmp:
+                mutation_trace = Path(trace_tmp) / "mutation-trace.jsonl"
+                mutation_env = execution_env | {
+                    "GIT_TRACE2_EVENT": str(mutation_trace)
+                }
+                self._git(sandbox.repo, "add", ".", env=mutation_env)
+                self._git(
+                    sandbox.repo,
+                    "commit",
+                    "-qm",
+                    "maintenance-control-removal-mutation",
+                    env=mutation_env,
+                )
+                # The target mutation is the immediate raw teardown attempted
+                # as soon as the commit returns, before trace parsing adds
+                # enough delay for the detached object writer to disappear.
+                cleanup_started_s = time.time()
+                try:
+                    shutil.rmtree(sandbox.root)
+                except OSError as exc:
+                    raw_enotempty = exc
+                cleanup_finished_s = time.time()
+                mutation_events = [
+                    json.loads(line)
+                    for line in mutation_trace.read_text(
+                        encoding="utf-8"
+                    ).splitlines()
+                ]
             detached_starts = [
                 event
                 for event in mutation_events
@@ -1293,11 +1387,74 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             self.assertTrue(exits, mutation_events[-20:])
             maintenance_pid = exits[-1]["pid"]
             self.assertGreater(maintenance_pid, 0)
+
+            # A raw ENOTEMPTY is sufficient.  On a faster filesystem, accept
+            # only stronger alternative evidence: the exact pack-objects
+            # writer's traced lifetime overlapped the synchronous rmtree call,
+            # followed by a child_exit PID that is explicitly proved dead.
+            object_writer_starts = [
+                event
+                for event in mutation_events
+                if event.get("event") == "child_start"
+                and event.get("argv", ())[:2] == ["git", "pack-objects"]
+                and any(
+                    ".git/objects/pack/" in str(argument)
+                    for argument in event.get("argv", ())
+                )
+                and cleanup_started_s
+                <= datetime.fromisoformat(
+                    str(event["time"]).replace("Z", "+00:00")
+                ).timestamp()
+                <= cleanup_finished_s
+            ]
+            if object_writer_starts:
+                writer_start = object_writer_starts[-1]
+                writer_exits = [
+                    event
+                    for event in mutation_events
+                    if event.get("event") == "child_exit"
+                    and event.get("sid") == writer_start.get("sid")
+                    and event.get("child_id") == writer_start.get("child_id")
+                    and isinstance(event.get("pid"), int)
+                ]
+                self.assertTrue(writer_exits, mutation_events[-20:])
+                live_object_writer_pid = writer_exits[-1]["pid"]
+                deadline = time.monotonic() + 1.0
+                while True:
+                    try:
+                        os.kill(live_object_writer_pid, 0)
+                    except ProcessLookupError:
+                        break
+                    if time.monotonic() >= deadline:
+                        os.kill(live_object_writer_pid, signal.SIGKILL)
+                        self.fail(
+                            "detached object-store writer required explicit SIGKILL"
+                        )
+                    time.sleep(0.01)
         finally:
-            sandbox.close()
+            if sandbox.root.exists():
+                try:
+                    sandbox.close()
+                except AssertionError as exc:
+                    cleanup_diagnostic = exc
+                    if sandbox.root.exists():
+                        raise
+            else:
+                sandbox.closed = True
+        self.assertTrue(
+            raw_enotempty is not None or live_object_writer_pid is not None,
+            "controls-removal mutation reproduced neither raw ENOTEMPTY nor "
+            "a live detached pack-objects writer overlapping cleanup",
+        )
+        if raw_enotempty is not None:
+            self.assertEqual(raw_enotempty.errno, errno.ENOTEMPTY)
+        self.assertFalse(sandbox.root.exists())
         print(
             f"FORCED_MAINTENANCE_DETACHED_PID={maintenance_pid} "
-            "CONTROLS_MUTATION=REPRODUCED",
+            f"RAW_ENOTEMPTY={getattr(raw_enotempty, 'errno', 0)} "
+            f"LIVE_OBJECT_WRITER_PID={live_object_writer_pid or 0} "
+            f"FATAL_RETRY_DIAGNOSTIC={int(cleanup_diagnostic is not None)} "
+            "CONTROLS_MUTATION=TARGET_REPRODUCED",
             flush=True,
         )
 
@@ -1621,6 +1778,87 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                         os.killpg(process.pid, 0)
         print(
             "F4_STUBBORN_EXIT_PATHS=3 SIGKILL=3 REAPED=3 GROUP_ESRCH=3",
+            flush=True,
+        )
+
+    def test_detached_launcher_signals_recorded_actual_sampler_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sampler_pid_path = Path(tmp) / "sampler.pid"
+            launcher = [
+                sys.executable,
+                "-c",
+                (
+                    "import os,subprocess,sys; "
+                    "child=subprocess.Popen(sys.argv[1:],start_new_session=True); "
+                    f"open({str(sampler_pid_path)!r},'w').write(str(child.pid)); "
+                    f"print('{validation_script.SAMPLER_IDENTITY_PREAMBLE}',"
+                    "child.pid,os.getpgid(child.pid),flush=True); "
+                    "raise SystemExit(child.wait())"
+                ),
+            ]
+            command = [
+                sys.executable,
+                "-c",
+                (
+                    "import signal,time; "
+                    "signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)"
+                ),
+            ]
+            process = None
+            with mock.patch.object(
+                validation_script,
+                "SAMPLER_TERMINATE_TIMEOUT_S",
+                0.05,
+            ):
+                with validation_script._sampler_lifetime(
+                    command,
+                    launcher=launcher,
+                ) as process:
+                    identity = process._joulewise_sampler_identity
+                    self.assertEqual(identity.pid, int(sampler_pid_path.read_text()))
+                    self.assertNotEqual(identity.pgid, identity.launcher_pgid)
+            assert process is not None
+            identity = process._joulewise_sampler_identity
+            with self.assertRaises(ProcessLookupError):
+                os.killpg(identity.pgid, 0)
+            with self.assertRaises(ProcessLookupError):
+                os.killpg(identity.launcher_pgid, 0)
+        print(
+            "F3_DETACHED_TOPOLOGY ACTUAL_PID_PGID=RECORDED "
+            "ACTUAL_GROUP_SIGNALED=1 SAMPLER_ESRCH=1 LAUNCHER_ESRCH=1",
+            flush=True,
+        )
+
+    def test_unresolved_sampler_identity_is_loud_bounded_fallback(self) -> None:
+        launcher = [
+            sys.executable,
+            "-c",
+            "import sys,time; print('not-an-identity',flush=True); time.sleep(60)",
+        ]
+        process_pid: int | None = None
+        with mock.patch.object(
+            validation_script,
+            "SAMPLER_TERMINATE_TIMEOUT_S",
+            0.05,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"actual sampler PID/PGID was unresolved; killed sudo launcher group",
+            ) as raised:
+                with validation_script._sampler_lifetime(
+                    [sys.executable, "-c", "pass"],
+                    launcher=launcher,
+                ) as process:
+                    process_pid = process.pid
+        match = re.search(r"group (\d+)", str(raised.exception))
+        self.assertIsNotNone(match)
+        assert match is not None
+        process_pid = int(match.group(1))
+        with self.assertRaises(ProcessLookupError):
+            os.killpg(process_pid, 0)
+        print(
+            "F3_UNRESOLVED_IDENTITY LOUD_FALLBACK=1 LAUNCHER_SIGKILL=1 "
+            "LAUNCHER_ESRCH=1",
             flush=True,
         )
 
