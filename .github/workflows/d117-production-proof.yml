@@ -1,9 +1,11 @@
 name: d117-production-proof
 
+# ADVISORY pending WO-CI-RESTRUCTURE (cold-gate ruling 2026-08-11, PR #122):
+# the decisive step cannot finish under the 360-min hosted-runner cap; manual
+# dispatch only until the matrix-split restructure lands. First hosted green
+# of the restructured job = the required second independent decisive execution.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

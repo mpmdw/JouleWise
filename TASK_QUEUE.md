@@ -181,6 +181,23 @@ Current Queue region is the sole live work-selection view.
 | DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md`; contracts moved to `docs/contracts/`; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
 | DOC-002 | P4 Polish | 2026-06-09 | Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed) | Root `PROJECT_STATUS.md`; run report `docs/run_reports/2026-06-09-advisor-status-doc.md` |
 
+## WO-CI-RESTRUCTURE (D-130 condition; registered 2026-08-11)
+
+Restructure `.github/workflows/d117-production-proof.yml` so the decisive
+proof completes on GitHub-hosted runners: split the attack matrix into
+per-leg jobs (each hydrating from the digest-exact archive cache) and/or
+staged artifacts, preserving the no-substitution/no-skip contract. This is
+PROOF-SEMANTICS work: full D-118/D-121 trust gauntlet; the split's
+proof-equivalence must be certified, not assumed. Closure: the FIRST hosted
+green of the restructured workflow = the required second independent
+decisive execution (D-130); if it ever contradicts the custodied local
+result, that is an automatic stop signal + mandatory cold gate. Deadline:
+before any claim publication and before the pack-freeze merge wave. Also
+owed under D-130 (refuter C3): one Python 3.11 local decisive replay via
+`scripts/replay_d117_decisive.sh` (PYTHON=python3.11). Design lesson to
+carry: bound every decisive job's runtime against its venue's hard cap at
+design time.
+
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast

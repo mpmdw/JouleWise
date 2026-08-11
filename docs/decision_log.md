@@ -152,6 +152,7 @@ be re-derived by a future agent gets an entry here.
 | D-127 | AUTONOMOUS WINDOW LOOP authorized (Ed directive, in-thread 2026-08-08, during the 40h window): partially REVERSES D-114's descope — the scoped network-time toggle (QUIET-GUARD sudoers slice: exactly the two fixed systemsetup network-time commands, exact binary path + exact argv, no wildcards) plus an autonomous experiment-loop harness (post-window supervisor step relaunches a fresh headless claude session with launch-then-verify-then-retry liveness proof + an independent launchd fallback timer; agent fully EXITS during capture — zero-agent rule for the capture itself is UNCHANGED) are chartered for build. D-115's conditions bind the privileged install path (fresh sudo -k auth, authenticated staged content, interpreter isolation) and Ed personally executes the one sudo install command — the privileged step never passes through the agent. Security-critical: full D-118/D-121 gauntlet + pre-decision design consult; built OFF the night-critical path and INSTALLED only at a deliberate Ed-present moment | ratified by D-128 (build authorized; install gated; initially chartered by Ed, in-thread; transcribed by the magistrate) |
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 | D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
+| D-130 | DECISIVE-RUN VENUE RULING (cold gate + paired refuter, 2026-08-11; PR #122): decisive designation follows EVIDENTIARY SUBSTANCE, not venue. For PR #122 ONLY, the authoritative decisive run for the D-117 v2 production proof is the custodied lead local execution at e871f5b (hermetic-by-construction: byte-pinned store from the published release; unset-store can only skip or fail; the legacy-locator assertion executed against 190 LIVE machine-local decoy paths), taken together with the CI-proven transport/authentication chain (workflow steps 1-7 hosted-green). The hosted d117-production-proof job is ADVISORY (dispatch-only) pending WO-CI-RESTRUCTURE; its first hosted green is the required second independent execution; contradiction of the local result = automatic stop signal + cold gate. NO general local-decisive lane: any future substitution requires a cold-gate ruling on THAT merge, a digest-pinned fixture with an equivalent store-content lock, a live-decoy hermeticity assertion, a committed one-command replay recipe (scripts/replay_d117_decisive.sh is the template), and a recorded restructure order; the admission EXPIRES at WO-CI-RESTRUCTURE closure. Citation discipline until closure: "lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/) + CI-verified transport/authentication chain", never "CI-proven decisive run". Lesson bound for future proofs: a decisive job whose runtime was never bounded against its venue's hard cap is a design defect | adopted (cold-gate ruling + refuter concurrence; magistrate-applied 2026-08-11) |
 
 ---
 
@@ -8133,3 +8134,45 @@ measurement, claim, or trust-model semantics change.
    framing in `docs/orchestration.md` (the C-009/C-010 stamped council
    consensus remains in place as the dated record it is); Opus-directed
    Sol lanes are now the standing default shape.
+
+## D-130: Decisive-run venue — substance over venue, fenced to PR #122
+
+**Date:** 2026-08-11. **Trigger:** the `d117-production-proof` workflow's
+decisive step was cancelled at the exact 360-minute GitHub-hosted platform
+cap twice at head e871f5b (count 2 of the timeout signature); the standing
+escalation trigger routed the question to a cold gate, mandatory in any case
+as a verdict-authority reinterpretation.
+
+**Ruling (cold gate, disposition (a); paired contract-lens refuter CONCURS):**
+decisive authority for the PR #122 merge is re-seated to the lead local
+decisive execution at e871f5b (2026-08-10T21:16:58Z → 2026-08-11T00:52:37Z,
+rc=0, 12938.543 s, the workflow's exact decisive test), hydrated the CI way
+(anonymous release download; archive sha256 `f1286bc8…9553` equal to the
+committed transport descriptor and independently re-hashed by the cold gate;
+governed hydrator; census byte-compare), taken together with the CI-proven
+steps 1-7 transport/authentication chain (hosted-green at earlier heads).
+The refuter's hermeticity finding: the local green is hermetic BY
+CONSTRUCTION — store-content lock (census + 190-member hash equality against
+the authenticated ledger), skip lock (an unset store variable can only skip
+or hard-fail, never pass), and the legacy-locator assertion executed against
+190 LIVE machine-local decoy paths (the actual T2 leakage paths), giving the
+local run MORE teeth on the operator-leakage axis than a hosted run where
+those paths do not exist.
+
+**Binding conditions applied:** evidence bundle posted to the PR pre-merge
+and committed at `docs/evidence/d117-v2-decisive-20260811/` (contemporaneous
+worktree/interpreter/store attestations; durable copy in the window-custody
+store); merge executed at e871f5b exactly; the workflow de-triggered to
+`workflow_dispatch` in the first post-merge commit (the refuter's Route-A
+substance without moving the merged head; the one auto-fired main run
+cancelled); the two tracked "required"-wording contract sentences amended in
+the same commit; WO-CI-RESTRUCTURE registered in TASK_QUEUE (matrix-split
+the attack legs to fit hosted limits; full trust gauntlet — proof-semantics
+work; deadline: before any claim publication and before the pack-freeze
+merge wave — a recorded deviation from the refuter's tighter before-FCM-01
+ordering, reasoning: FCM-01 touches the estimator surface, not the auth
+core, and holding it on this work order would re-couple the critical path
+this ruling decoupled); a Python 3.11 local decisive replay owed post-merge
+(the decisive test has completed on no CI interpreter; refuter C3). The
+fence, expiry, and five-part future-substitution test in the index row bind
+future sessions.
