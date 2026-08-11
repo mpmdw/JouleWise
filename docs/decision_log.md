@@ -8135,7 +8135,7 @@ measurement, claim, or trust-model semantics change.
    consensus remains in place as the dated record it is); Opus-directed
    Sol lanes are now the standing default shape.
 
-## D-130: Decisive-run venue — substance over venue, fenced to PR #122
+## D-130: Decisive-run venue — substance over venue, fenced to PR 122
 
 **Date:** 2026-08-11. **Trigger:** the `d117-production-proof` workflow's
 decisive step was cancelled at the exact 360-minute GitHub-hosted platform
