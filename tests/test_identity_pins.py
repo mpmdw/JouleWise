@@ -765,6 +765,49 @@ class ProjectionLifecycleTests(unittest.TestCase):
             "synthetic-pack-r2/projection-0001",
         )
 
+    def test_five_digit_successor_receipt_number_still_supersedes(self) -> None:
+        freeze_projection(self.pack)
+        old_projection = read_json(self.pack / "plan_tree.json")["arm_attachments"][
+            "identity_pin_projection"
+        ]
+        successor, _ = make_pack(
+            self.root / "five-digit-successor",
+            pack_name="synthetic-pack-r5d",
+            supersedes=[
+                {
+                    "pack_id": self.pack.name,
+                    "pack_sha256": "a" * 64,
+                    "projection_receipt_sha256": old_projection[
+                        "projection_receipt"
+                    ]["sha256"],
+                    "readiness_sha256": "b" * 64,
+                }
+            ],
+        )
+        receipt_dir = successor / "identity_pin_projection.receipts"
+        receipt_dir.mkdir(parents=True, exist_ok=True)
+        seed = receipt_dir / "projection-9999.json"
+        seed.write_text("{}")
+        freeze_projection(successor)
+        seed.unlink()
+        emitted = sorted(path.name for path in receipt_dir.glob("projection-*.json"))
+        self.assertEqual(emitted, ["projection-10000.json"])
+        commit_paths(
+            self.root,
+            [self.pack, successor],
+            "freeze predecessor and five-digit successor",
+        )
+
+        result = verify_frozen_projection(
+            self.pack, self.root / "custody", "bracket-five-digit-successor"
+        )
+
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["observed"]["superseded_by"]["receipt_id"],
+            "synthetic-pack-r5d/projection-10000",
+        )
+
     def test_sibling_commit_successor_semantically_supersedes_after_merge(
         self,
     ) -> None:

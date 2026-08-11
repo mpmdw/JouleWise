@@ -954,7 +954,7 @@ def _committed_successor(
             "committed receipt paths are not valid UTF-8",
         ) from exc
     receipt_pattern = re.compile(
-        r"(?:^|/)identity_pin_projection\.receipts/projection-[0-9]{4}\.json$"
+        r"(?:^|/)identity_pin_projection\.receipts/projection-[0-9]{4,}\.json$"
     )
     receipt_paths = sorted(path for path in paths if receipt_pattern.search(path))
     commit_order = {
