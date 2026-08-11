@@ -1,3 +1,5 @@
+**SUPERSEDED — This standalone draft is retained for history; the current related-work section is [draft-v1.md §9](draft-v1.md#9-related-work).**
+
 # Related Work
 
 JouleWise lies at the intersection of inference-energy benchmarking, software power measurement, experimental metrology, and split inference. Its central difference is one of emphasis: the measurement instrument is the product, while model and deployment comparisons are demonstration studies. The instrument reports an energy verdict for a complete, declared measurement window; records the raw observations and their chain of custody; freezes the comparison and acceptance rules before seeing the result; and declines to make a claim when an effect falls below its detection floor, the smallest effect it can distinguish under the stated conditions. This framing makes uncertainty, timing attribution, drift, and evidence integrity part of the result rather than implementation details behind a leaderboard value.

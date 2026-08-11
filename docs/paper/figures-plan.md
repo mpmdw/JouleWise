@@ -228,3 +228,39 @@ outcomes, presence flags, and numeric fields are all unresolved suppliers.
 - If a stronger caption sentence is proposed, D-119 requires the supporting
   evidence to be named in the same sentence. Otherwise use the weaker wording
   already specified here.
+
+## Schematic figures (no measured data)
+
+A separate class of figure explains mechanism rather than reporting evidence.
+These are drawings, not renderings of artifacts. They live in
+`docs/paper/figures/` and are described one paragraph each in
+`docs/paper/figures/README.md`:
+
+- `docs/paper/figures/fig1_boundary_attribution.svg` — phase-boundary timing
+  uncertainty and the energy that migrates between prompt processing and token
+  generation (belongs to Section 4).
+- `docs/paper/figures/fig2_window_timeline.svg` — measurement-window structure,
+  the calibration bracket, and how ABBA order cancels steady drift (belongs to
+  Sections 3 and 5).
+- `docs/paper/figures/fig3_decision_gates.svg` — the floor gate and the
+  interval-direction gate as separate checks, with the four outcomes (belongs
+  to Section 4).
+
+Rules for this class:
+
+- They consume no registry row and have no data supplier, so they are exempt
+  from the `STOP_FILL` registry and from the render gates above. Nothing in
+  them may be presented as, or later replaced by, a measured value; a figure
+  that acquires a measured quantity leaves this class and becomes a results
+  figure governed by the sections above.
+- Every numeric annotation in them is illustrative and is labelled as such on
+  the figure itself, alongside a statement that the figure contains no measured
+  data. Axis scales, interval widths, timing bounds, and power steps are chosen
+  for legibility, not measured.
+- Captions in the paper must not use internal decision-log identifiers,
+  registry row keys, campaign codenames, or window labels. They stay in plain
+  language, name the figure as schematic, and repeat that its values are
+  illustrative.
+- The D-119 disclosure lines above are not required for these figures, because
+  they make no empirical claim; a schematic figure must not be used to imply
+  one.
