@@ -142,6 +142,7 @@ be re-derived by a future agent gets an entry here.
 | D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
 | D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
 | D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
+| D-120 | D117-POSTCOLLECTION-TRUST-01 executed: `floor_mint_postcollection` DELETED with no producer assigned (unknown-key refusal under a closed D-117 report profile); the v2 mint calculates the verification projection from each pin's DOMAIN OWNER (ledger+binding custody, issued acceptance allowance, verdict-basis membership/drift, floors recomputed from authenticated members) and never generates pins; git-derived provenance (mint runs git, refuses dirty tree; origin/main containment recorded, unknown tolerated); assurance qualifier single_authority_hash_bound_replay.v1 REQUIRED in v2 artifacts; paper §5/§11 updated in step; v2 mint bar lifts only when this lands through the full D-118 gate | adopted (escalation consult ESCALATION-CONSULT-RESPONSE.md; magistrate transcription, 2026-08-07) |
 | D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
 | D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
 | D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
@@ -7780,6 +7781,44 @@ territory.
 
 **Termination:** this delegation ends when Ed begins reviewing drafts
 directly. He may reverse any ruling at any time; none of them bind him.
+
+
+## D-120: D117-POSTCOLLECTION-TRUST-01 — the postcollection trust closure (adopted consult design, executed)
+
+**Date:** 2026-08-07. **Status:** ADOPTED (design), EXECUTED on
+`impl/d117-postcollection-trust` (merge gated by D-118).
+
+**The defect class (three prior relocations):** the v2 generalized mint
+authenticated postcollection custody pins against
+`component.report["floor_mint_postcollection"]` — a block nothing in
+production emits, so in production both the pins and their "authority"
+would be authored by the same operator hand. Rounds 1-3 each moved the
+trust boundary down a level without terminating it (fabricated-hash
+mint; presence-only check; per-field equality against the same
+operator-authored block).
+
+**The adopted shape (binding design memo: final block of
+`docs/process_traces/2026-08-07-d117-u-units/ESCALATION-CONSULT-RESPONSE.md`):**
+1. `floor_mint_postcollection` is DELETED from production and fixture
+   vocabulary; no producer is assigned; a report containing it (or any
+   unknown key) REFUSES under a closed D-117 mint-consumption profile.
+2. The mint verifies every pin against its DOMAIN OWNER and treats the
+   extraction report as a cache requiring reauthentication, never an
+   oracle. Verifier calculation is mandatory; pin generation is
+   forbidden (missing pins refuse).
+3. The mint derives project commit/tree state by running git itself and
+   refuses a dirty tree; origin/main containment of the mint commit is
+   recorded evidence (unknown tolerated, never a gate).
+4. Every v2 artifact carries the REQUIRED assurance qualifier
+   (`single_authority_hash_bound_replay.v1`, independent_attestation
+   false) stating what the system establishes and does not establish.
+5. The honest trust claim is single-authority, hash-bound, fail-closed
+   consistency — never operator independence (ADJUDICATION-TRUST-MODEL.md
+   controls; the paper's §5/§11 language updated in the same change).
+
+**Consequence:** the v2 mint remains BARRED from issuing until the
+executing branch passes the full D-118 gate and merges; U10 depends on
+this entry.
 
 
 ## D-121: The magistrate's contextual final review is the terminal merge-gate item (Ed directive; amends D-118)

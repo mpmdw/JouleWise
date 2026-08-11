@@ -27,6 +27,7 @@ from joulewise.calibration_bracketing import (
     calibration_bracket_for_bundles,
     discover_calibration_candidates,
     evaluate_calibration_bracket as _evaluate_calibration_bracket,
+    issued_calibration_allowance_projection,
     load_calibration_acceptance_bound,
     load_calibration_candidate,
     validate_calibration_bracket_binding,
@@ -457,6 +458,37 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             pin["head_digest"],
             "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+        )
+
+    def test_issued_allowance_projection_uses_exact_decimal_authority(self) -> None:
+        artifact = load_calibration_acceptance_bound()
+        self.assertIsNotNone(artifact)
+        projection = issued_calibration_allowance_projection(
+            artifact,
+            pre_exact_bound_lexeme_s="0.020000",
+            post_exact_bound_lexeme_s="0.021000",
+        )
+        self.assertEqual(
+            projection,
+            {
+                "observed_drift_s": "0.001000",
+                "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+                "bracket_screen_s": "0.010818",
+                "applied_allowance_s": "0.010818",
+                "allowance_embedding_count": 1,
+            },
+        )
+
+        tampered = json.loads(json.dumps(artifact))
+        tampered["decimal_derivation"]["ratified_operatives"][
+            "bracket_screen_s"
+        ] = "0.010819"
+        self.assertIsNone(
+            issued_calibration_allowance_projection(
+                tampered,
+                pre_exact_bound_lexeme_s="0.020000",
+                post_exact_bound_lexeme_s="0.021000",
+            )
         )
 
     def test_issued_artifact_authenticates_and_becomes_claim_eligible(self) -> None:

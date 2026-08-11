@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.calibration_ledger import (
     IDENTITY_EPOCH_FIELDS,
@@ -166,7 +167,13 @@ def _candidate_decimal(candidate: CalibrationCandidate) -> Decimal | None:
 def _current_estimator_code_sha256() -> dict[str, str] | None:
     try:
         return {
-            relative: hashlib.sha256((_REPO_ROOT / relative).read_bytes()).hexdigest()
+            relative: hashlib.sha256(
+                read_authentication_input(
+                    _REPO_ROOT / relative,
+                    grammar="raw",
+                    label=f"calibration estimator code {relative}",
+                )
+            ).hexdigest()
             for relative in ESTIMATOR_CODE_PATHS
         }
     except OSError:
@@ -449,7 +456,9 @@ def load_calibration_acceptance_bound(
     """Load the file-pinned D-102 acceptance artifact fail-closed."""
 
     try:
-        raw = Path(path).read_bytes()
+        raw = read_authentication_input(
+            path, grammar="json", label="calibration acceptance artifact"
+        )
     except OSError:
         return None
     return _acceptance_bound_from_authenticated_bytes(raw)
@@ -460,9 +469,24 @@ def _acceptance_bound_from_authenticated_bytes(
 ) -> dict[str, Any] | None:
     """Parse acceptance bytes only when their role-indexed pin authenticates."""
 
+    def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            result[key] = item
+        return result
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite JSON number {value!r}")
+
     try:
-        value = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        value = json.loads(
+            raw,
+            object_pairs_hook=reject_duplicate_pairs,
+            parse_constant=reject_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return None
     # Any file route is authenticated by one of the two reviewed exact-byte
     # states: the genesis fixture retained for pre-issuance tests, or the
@@ -477,6 +501,57 @@ def _acceptance_bound_from_authenticated_bytes(
     if not _valid_acceptance_bound(value):
         return None
     return dict(value)
+
+
+def issued_calibration_allowance_projection(
+    acceptance: Mapping[str, Any],
+    *,
+    pre_exact_bound_lexeme_s: str,
+    post_exact_bound_lexeme_s: str,
+) -> dict[str, Any] | None:
+    """Derive the mint-facing exact-Decimal allowance from issued authority.
+
+    The returned values are a verification projection, not generated pins.
+    The artifact must be the exact code-pinned issued acceptance bytes and the
+    arithmetic is the same ratified rule used by ``evaluate_calibration_bracket``.
+    """
+
+    authenticated = _authenticated_explicit_acceptance_bound(acceptance)
+    if authenticated is None or authenticated.get("artifact_role") != "issued":
+        return None
+    derivation = authenticated.get("decimal_derivation")
+    operatives = (
+        derivation.get("ratified_operatives")
+        if isinstance(derivation, Mapping)
+        else None
+    )
+    if not isinstance(operatives, Mapping):
+        return None
+    if (
+        operatives.get("allowance_rule")
+        != "max(observed_drift_s,bracket_screen_s)"
+        or operatives.get("embedding_count") != 1
+    ):
+        return None
+    try:
+        pre = Decimal(pre_exact_bound_lexeme_s)
+        post = Decimal(post_exact_bound_lexeme_s)
+        screen = Decimal(str(operatives["bracket_screen_s"]))
+        maximum = Decimal(str(operatives["maximum_budgetable_drift_s"]))
+    except (InvalidOperation, KeyError, TypeError, ValueError):
+        return None
+    if any(not value.is_finite() or value < 0 for value in (pre, post, screen, maximum)):
+        return None
+    observed = abs(pre - post)
+    if observed > maximum:
+        return None
+    return {
+        "observed_drift_s": str(observed),
+        "allowance_rule": operatives["allowance_rule"],
+        "bracket_screen_s": str(screen),
+        "applied_allowance_s": str(max(observed, screen)),
+        "allowance_embedding_count": operatives["embedding_count"],
+    }
 
 
 def _authenticated_explicit_acceptance_bound(
@@ -577,10 +652,16 @@ def build_calibration_bracket_binding(
         or post.disposition != "valid"
         or pre.content_id is None
         or post.content_id is None
-        or post.sequence != ledger_snapshot.head_sequence
-        or post.receipt_digest != ledger_snapshot.head_digest
+        or post.sequence > ledger_snapshot.head_sequence
+        or post.sequence > len(ledger_snapshot.receipts)
+        or ledger_snapshot.receipts[post.sequence - 1].get(
+            "receipt_digest"
+        )
+        != post.receipt_digest
     ):
-        raise ValueError("bracket session endpoints are not valid at the terminal head")
+        raise ValueError(
+            "bracket session endpoints are not valid in the authenticated ledger"
+        )
     binding: dict[str, Any] = {
         "schema_version": BRACKET_BINDING_SCHEMA,
         "ledger_schema": LEDGER_SCHEMA,
@@ -752,7 +833,11 @@ def load_calibration_candidate(
     try:
         directory = Path(directory).resolve(strict=True)
         relative = directory.relative_to(root).as_posix()
-        manifest_raw = (directory / "manifest.json").read_bytes()
+        manifest_raw = read_authentication_input(
+            directory / "manifest.json",
+            grammar="json",
+            label=f"calibration candidate {directory.name} manifest",
+        )
         manifest = json.loads(manifest_raw)
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
         return None
@@ -771,7 +856,11 @@ def load_calibration_candidate(
         try:
             member = (directory / name).resolve(strict=True)
             member.relative_to(directory)
-            raw = member.read_bytes()
+            raw = read_authentication_input(
+                member,
+                grammar="raw",
+                label=f"calibration candidate {directory.name} artifact {name}",
+            )
         except (OSError, ValueError):
             return None
         if not _valid_sha256(expected) or hashlib.sha256(raw).hexdigest() != expected:

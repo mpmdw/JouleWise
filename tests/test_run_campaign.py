@@ -24,7 +24,22 @@ from scripts.run_campaign import (
     execute_production_uncertainty_gate,
     failed_shakedown_record,
 )
+from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.calibration_ledger import (
+    CUSTODY_STORE_MANIFEST_NAME,
+    GENESIS_DIGEST,
+    GOVERNED_ARTIFACTS,
+    LEDGER_SCHEMA,
+    append_pending_receipt,
+    artifact_hashes,
+    calibration_custody_store_manifest_bytes,
+    finalize_attempt_receipt,
+    head_pin_for_receipt,
+    load_calibration_ledger_snapshot,
+)
 from joulewise.environment import evaluate_environment_policy
+from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.calibration_bracketing import discover_calibration_candidates
 from joulewise.whole_window import (
     MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_DRIFT_BOUND_MAX_AGE_S,
@@ -6666,6 +6681,238 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
         self.assertIn("trace pre/post margins", raised.exception.detail)
 
 
+class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
+    """Production snapshot dispatch preserves exclusive custody modes."""
+
+    _OMITTED = object()
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.ledger = self.root / "ledger.jsonl"
+        self.head = self.root / "head.json"
+        self.head.write_text(
+            json.dumps(
+                {
+                    "sequence": 0,
+                    "head_digest": GENESIS_DIGEST,
+                    "ledger_schema": LEDGER_SCHEMA,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.identity_epoch = {
+            "os_build": "25F84",
+            "hardware_model": "Mac15,9",
+            "power_policy": "ac_high_power",
+            "sampling_interval_ms": 100,
+            "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+            "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        }
+        self.t1_bindings = {
+            field: f"value-{field}" for field in V2_BINDING_FIELDS
+        }
+        self.t1_bindings.update(self.identity_epoch)
+        self.legacy_custody = self._write_custody("attempt-a")
+        append_pending_receipt(
+            self.ledger,
+            attempt_id="attempt-a",
+            custody_locator=str(self.legacy_custody),
+            identity_epoch=self.identity_epoch,
+            t1_bindings=self.t1_bindings,
+            head_pin_path=self.head,
+            require_committed_pin=False,
+        )
+        receipt = finalize_attempt_receipt(
+            self.ledger,
+            attempt_id="attempt-a",
+            disposition="valid",
+            custody_locator=str(self.legacy_custody),
+            artifact_sha256=artifact_hashes(self.legacy_custody),
+            identity_epoch=self.identity_epoch,
+            t1_bindings=self.t1_bindings,
+            capture_wall_time_s="99.0",
+            exact_bound_lexeme_s="0.025",
+        )
+        self.head.write_text(
+            json.dumps(head_pin_for_receipt(receipt)) + "\n",
+            encoding="utf-8",
+        )
+        legacy_snapshot = self._load_actual()
+        self.assertTrue(legacy_snapshot.valid)
+        content_id = legacy_snapshot.observations[0].content_id
+        assert content_id is not None
+        self.store = self.root / "custody-store"
+        self.store.mkdir()
+        shutil.copytree(self.legacy_custody, self.store / content_id)
+        (self.store / CUSTODY_STORE_MANIFEST_NAME).write_bytes(
+            calibration_custody_store_manifest_bytes(legacy_snapshot)
+        )
+        self.content_id = content_id
+
+    def _write_custody(self, attempt_id: str) -> Path:
+        custody = self.root / "legacy" / attempt_id
+        (custody / "raw").mkdir(parents=True)
+        payloads = {
+            "raw/powermetrics.plist": b"raw-attempt-a\n",
+            "events.jsonl": b'{"timestamp_s":99.0}\n',
+            "power_trace.csv": b"timestamp_s,power_w\n1,2\n",
+            "instrument_evidence.json": b'{"attempt":"attempt-a"}\n',
+            "manifest.json": b'{"attempt":"attempt-a"}\n',
+        }
+        for relative, raw in payloads.items():
+            path = custody / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+        return custody
+
+    def _load_actual(self, store: Path | None = None):
+        return load_calibration_ledger_snapshot(
+            self.ledger,
+            self.head,
+            baseline_sequence=0,
+            baseline_digest=GENESIS_DIGEST,
+            require_committed_pin=False,
+            repo_root=self.root,
+            calibration_custody_store=store,
+        )
+
+    def _load_through_campaign(self, store=_OMITTED):
+        calls = []
+
+        def load_fixture_snapshot(**kwargs):
+            calls.append(dict(kwargs))
+            return load_calibration_ledger_snapshot(
+                self.ledger,
+                self.head,
+                require_committed_pin=False,
+                repo_root=self.root,
+                **kwargs,
+            )
+
+        with (
+            patch.object(
+                run_campaign_module,
+                "load_calibration_acceptance_bound",
+                return_value={
+                    "ledger_cutoff": {
+                        "sequence": 0,
+                        "head_digest": GENESIS_DIGEST,
+                    }
+                },
+            ),
+            patch.object(
+                run_campaign_module,
+                "load_calibration_ledger_snapshot",
+                side_effect=load_fixture_snapshot,
+            ),
+        ):
+            snapshot = (
+                run_campaign_module._load_calibration_snapshot_for_evaluation()
+                if store is self._OMITTED
+                else run_campaign_module._load_calibration_snapshot_for_evaluation(
+                    store
+                )
+            )
+        self.assertEqual(len(calls), 1)
+        return snapshot, calls[0]
+
+    def _legacy_identities(self) -> set[str]:
+        return {
+            str((self.legacy_custody / relative).resolve())
+            for relative in GOVERNED_ARTIFACTS
+        }
+
+    def _store_identities(self) -> set[str]:
+        return {
+            str((self.store / CUSTODY_STORE_MANIFEST_NAME).resolve()),
+            *(
+                str((self.store / self.content_id / relative).resolve())
+                for relative in GOVERNED_ARTIFACTS
+            ),
+        }
+
+    def test_store_dispatch_loads_store_without_locator_reads(self) -> None:
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--calibration-custody-store",
+                str(self.store),
+            ]
+        )
+        with V2AuthenticationReadSession() as session:
+            snapshot, loader_arguments = self._load_through_campaign(
+                args.calibration_custody_store
+            )
+        self.assertTrue(snapshot.valid)
+        self.assertEqual(
+            loader_arguments["calibration_custody_store"], self.store
+        )
+        self.assertLessEqual(self._store_identities(), set(session.records))
+        self.assertTrue(self._legacy_identities().isdisjoint(session.records))
+
+    def test_missing_legacy_locators_with_valid_store_passes(self) -> None:
+        shutil.rmtree(self.legacy_custody)
+        snapshot, _loader_arguments = self._load_through_campaign(self.store)
+        self.assertTrue(snapshot.valid)
+        self.assertEqual(snapshot.refusal_reasons, ())
+
+    def test_store_routes_candidate_rediscovery_without_locator_fallback(
+        self,
+    ) -> None:
+        snapshot, _loader_arguments = self._load_through_campaign(self.store)
+        self.assertEqual(
+            snapshot.receipts[-1]["custody_locator"],
+            str(self.legacy_custody),
+        )
+        self.assertEqual(
+            snapshot.observations[0].custody_locator,
+            str(self.store / self.content_id),
+        )
+        with patch(
+            "joulewise.calibration_bracketing.load_calibration_candidate",
+            return_value=None,
+        ) as candidate_loader:
+            self.assertEqual(discover_calibration_candidates(snapshot), ())
+        candidate_loader.assert_called_once_with(
+            self.store / self.content_id,
+            runs_root=self.root,
+        )
+
+    def test_invalid_store_refuses_without_legacy_fallback(self) -> None:
+        self.assertTrue(self._load_actual().valid)
+        (self.store / self.content_id / "power_trace.csv").unlink()
+        with V2AuthenticationReadSession() as session:
+            snapshot, _loader_arguments = self._load_through_campaign(self.store)
+        self.assertEqual(
+            snapshot.refusal_reasons,
+            ("calibration_ledger_custody_invalid",),
+        )
+        self.assertTrue(self._legacy_identities().isdisjoint(session.records))
+
+    def test_omitted_store_preserves_legacy_locator_dispatch(self) -> None:
+        with V2AuthenticationReadSession() as session:
+            snapshot, loader_arguments = self._load_through_campaign()
+        self.assertTrue(snapshot.valid)
+        self.assertNotIn("calibration_custody_store", loader_arguments)
+        self.assertLessEqual(self._legacy_identities(), set(session.records))
+        self.assertTrue(self._store_identities().isdisjoint(session.records))
+
+    def test_store_option_refuses_semantics_that_would_ignore_it(self) -> None:
+        with self.assertRaises(SystemExit):
+            run_campaign_module.parse_args(
+                [
+                    "--whole-window-verdict",
+                    "--calibration-custody-store",
+                    str(self.store),
+                    "--consumption-semantics-id",
+                    run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+                ]
+            )
+
+
 class IdleAdmissionCoreVerdictTests(unittest.TestCase):
     """T0.5 idle-admission core: sidecar binding + campaign-verdict surface."""
 
@@ -8556,6 +8803,36 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertNotIn(
             "neg8_bracket_not_evaluated", whole_window["conditions"]
         )
+
+    def test_whole_window_runner_threads_calibration_custody_store(self) -> None:
+        binding = self._binding()
+        custody_store = self.root / "portable-calibration-custody"
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+                "--calibration-custody-store",
+                str(custody_store),
+            ]
+        )
+        with (
+            patch.object(
+                run_campaign_module,
+                "_load_calibration_snapshot_for_evaluation",
+                return_value=object(),
+            ) as snapshot_loader,
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(None, ("instrument_calibration_bracket_missing",)),
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
+        snapshot_loader.assert_called_once_with(str(custody_store))
 
     def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
         binding = self._binding()
