@@ -46,6 +46,7 @@ from tests.owned_process_runner import (
     OwnedProcessResult,
     OwnedPublicProcessRunner,
     PublicExecutionEvidence,
+    assert_no_owned_fake_sampler_survivors,
     assert_no_owned_process_group_survivors,
     assert_no_owned_writer_survivors,
     next_execution_order,
@@ -224,6 +225,7 @@ class WitnessSandbox:
             return
         # Complete writer quiescence is proved before the only permitted retry class.
         self.runner.close()
+        assert_no_owned_fake_sampler_survivors()
         try:
             self._cleanup_root()
         finally:
@@ -565,6 +567,10 @@ def _install_fake_writer_dependencies(repo: Path) -> Path:
 
 
 class RefusalInventoryTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        assert_no_owned_fake_sampler_survivors()
+
     def test_generated_contract_projection_and_runbook_anchors_are_fresh(self) -> None:
         contract = (
             REPO_ROOT / "docs" / "contracts" / "calibration_ledger_append.md"
@@ -1914,6 +1920,10 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
 
 
 class PublicGovernedExitWitnessTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        assert_no_owned_fake_sampler_survivors()
+
     def setUp(self) -> None:
         self.sandbox = WitnessSandbox()
         self.addCleanup(self.sandbox.close)
@@ -1921,6 +1931,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.public_runner = self.sandbox.runner
         self.preservation_evidence: PreservationEvidence | None = None
         self.public_execution_evidence: list[PublicExecutionEvidence] = []
+        self.writer_env_overrides: dict[str, str] = {}
         shutil.copytree(REPO_ROOT / "joulewise", self.repo / "joulewise")
         (self.repo / "scripts").mkdir()
         for name in (
@@ -2248,13 +2259,23 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def _json_payload(
         self, completed: subprocess.CompletedProcess[str] | OwnedProcessResult
     ) -> dict:
-        lines = [
-            line
+        objects = [
+            json.loads(line)
             for line in (completed.stdout + "\n" + completed.stderr).splitlines()
             if line.strip().startswith("{")
         ]
-        self.assertTrue(lines, completed.stdout + completed.stderr)
-        return json.loads(lines[-1])
+        payloads = [
+            value
+            for value in objects
+            if isinstance(value, dict) and ("status" in value or "code" in value)
+        ]
+        self.assertEqual(
+            len(payloads),
+            1,
+            "expected one refusal/authorization payload; "
+            f"found {len(payloads)} in {objects!r}",
+        )
+        return payloads[0]
 
     def _ensure_preservation_lock(self) -> Path:
         lock = ledger_module._ledger_lock_path(self.ledger)
@@ -2330,6 +2351,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "JW_FAKE_OS_BUILD": state["epoch"]["os_build"],
             "JW_FAKE_TIME_SCALE": "0.025",
             "JW_FAKE_TIME_ORIGIN": str(time.time()),
+            **self.writer_env_overrides,
         }
 
     def _write_valid_rederive_source(self, source: Path) -> None:
@@ -3299,7 +3321,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
         return root
 
-    def _execute_case(self, case: WitnessCase) -> None:
+    def _execute_case(self, case: WitnessCase) -> OwnedProcessResult:
         state = getattr(self, case.constructor)()
         holder = state.get("holder")
         record = REFUSAL_BY_CODE[case.code]
@@ -3973,6 +3995,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 restore()
             if holder is not None:
                 self._terminate_and_reap_holder(holder)
+        return refused
 
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         expected = {case.code for case in WITNESS_CASES}
@@ -3982,6 +4005,65 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertTrue(
             all(result.code is code for code, result in _WITNESS_RESULTS.items())
         )
+
+    def test_abort_witness_payload_survives_nonowned_sampler_census_decoy(self) -> None:
+        decoy_capture = self.repo / "powermetrics-decoy.plist"
+        decoy = subprocess.Popen(
+            [sys.executable, str(self.fake_sampler), "-o", str(decoy_capture)],
+            cwd=self.repo,
+            env=_fresh_cli_env() | {"JW_FAKE_SAMPLER_MODE": "never"},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        fake_bin = self.repo / "fake-bin"
+        fake_bin.mkdir()
+        fake_ps = fake_bin / "ps"
+        fake_ps.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "print(os.environ['JW_FAKE_PS_OUTPUT'])\n",
+            encoding="utf-8",
+        )
+        fake_ps.chmod(0o755)
+        self.writer_env_overrides = {
+            "PATH": os.pathsep.join((str(fake_bin), _fresh_cli_env()["PATH"])),
+            "JW_FAKE_PS_OUTPUT": (
+                f"{decoy.pid} Python {sys.executable} {self.fake_sampler} "
+                f"-o {decoy_capture}"
+            ),
+        }
+        try:
+            case = next(
+                item
+                for item in WITNESS_CASES
+                if item.code is RefusalCode.SAMPLER_NEVER_READY
+            )
+            refused = self._execute_case(case)
+            payload = self._json_payload(refused)
+            self.assertEqual(payload["code"], RefusalCode.SAMPLER_NEVER_READY.value)
+            self.assertTrue(self.public_runner.observed_fake_sampler_pids)
+            self.assertNotIn(decoy.pid, self.public_runner.observed_fake_sampler_pids)
+            assert_no_owned_fake_sampler_survivors()
+            census_events = [
+                json.loads(line)
+                for line in refused.stderr.splitlines()
+                if line.startswith("{")
+                and json.loads(line).get("event")
+                == validation_script.SAMPLER_CENSUS_DIAGNOSTIC
+            ]
+            self.assertEqual(len(census_events), 1, refused.stderr)
+            self.assertIn(
+                decoy.pid,
+                [finding["pid"] for finding in census_events[0]["findings"]],
+            )
+        finally:
+            decoy.terminate()
+            try:
+                decoy.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                decoy.kill()
+                decoy.wait(timeout=2.0)
 
     def test_diagnostic_routes_never_emit_ready_to_arm_under_live_lease(self) -> None:
         holder_code = (

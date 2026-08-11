@@ -14,9 +14,38 @@ import time
 from xml.sax.saxutils import escape
 
 
+OWNED_REGISTRY_ENV = "JOULEWISE_TEST_OWNED_DESCENDANT_REGISTRY"
+OWNED_REGISTRY_SCHEMA = "joulewise.test_owned_fake_sampler.v1"
+
+
+def register_owned_sampler() -> None:
+    registry_value = os.environ.get(OWNED_REGISTRY_ENV)
+    if not registry_value:
+        return
+    registry = Path(registry_value)
+    pid = os.getpid()
+    record = registry / f"fake-sampler-{pid}.json"
+    temporary = registry / f".fake-sampler-{pid}.tmp"
+    temporary.write_text(
+        json.dumps(
+            {
+                "schema": OWNED_REGISTRY_SCHEMA,
+                "pid": pid,
+                "pgid": os.getpgid(0),
+                "sampler_path": str(Path(__file__).resolve()),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, record)
+
+
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("-o", required=True)
 args, _unknown = parser.parse_known_args()
+register_owned_sampler()
 
 mode = os.environ.get("JW_FAKE_SAMPLER_MODE", "normal")
 stubborn = mode.endswith("-stubborn")

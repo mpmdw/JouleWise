@@ -32,6 +32,8 @@ _CRASH_STAGE_KEY = "JOULEWISE_TEST_WRITER_CRASH_STAGE"
 _CRASH_TOKEN_KEY = "JOULEWISE_TEST_WRITER_CRASH_TOKEN"
 _CRASH_CAPABILITY_ROOT_KEY = "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
 _CRASH_AUTHORIZATION_ARGUMENT = "--test-writer-crash-authorization"
+_OWNED_DESCENDANT_REGISTRY_KEY = "JOULEWISE_TEST_OWNED_DESCENDANT_REGISTRY"
+_OWNED_FAKE_SAMPLER_SCHEMA = "joulewise.test_owned_fake_sampler.v1"
 _PUBLIC_WRITER_NAMES = frozenset(
     {
         "reserve_calibration_window_bracket.py",
@@ -98,9 +100,18 @@ class _OwnedThread:
     error: BaseException | None = None
 
 
+@dataclass(frozen=True)
+class _OwnedFakeSampler:
+    pid: int
+    pgid: int
+    sampler_path: str
+    record_path: str
+
+
 _REGISTRY_LOCK = threading.Lock()
 _OWNED_PROCESS_GROUPS: dict[int, _OwnedGroup] = {}
 _OWNED_THREADS: dict[int, _OwnedThread] = {}
+_OWNED_FAKE_SAMPLERS: dict[int, _OwnedFakeSampler] = {}
 _ORDER_LOCK = threading.Lock()
 _ORDER = 0
 
@@ -139,6 +150,96 @@ def _poll_group_gone(pgid: int, timeout_s: float) -> bool:
             return True
         time.sleep(0.01)
     return _forget_if_gone(pgid)
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _owned_fake_sampler_exists(sampler: _OwnedFakeSampler) -> bool:
+    try:
+        return os.getpgid(sampler.pid) == sampler.pgid
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _poll_pid_gone(pid: int, timeout_s: float) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not _pid_exists(pid):
+            return True
+        time.sleep(0.01)
+    return not _pid_exists(pid)
+
+
+def _terminate_owned_fake_sampler(
+    sampler: _OwnedFakeSampler,
+    *,
+    grace_s: float = 0.5,
+) -> None:
+    """Boundedly terminate one fixture-registered sampler by exact PID."""
+
+    if not _owned_fake_sampler_exists(sampler):
+        return
+    try:
+        os.kill(sampler.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    if _poll_pid_gone(sampler.pid, grace_s):
+        return
+    try:
+        os.kill(sampler.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    if not _poll_pid_gone(sampler.pid, max(2.0, grace_s)):
+        raise RuntimeError(
+            "owned fake sampler survived SIGKILL: "
+            f"pid={sampler.pid} pgid={sampler.pgid} "
+            f"path={sampler.sampler_path} record={sampler.record_path}"
+        )
+
+
+def owned_fake_sampler_survivors() -> tuple[_OwnedFakeSampler, ...]:
+    """Return live fixture-registered samplers known to this test module."""
+
+    with _REGISTRY_LOCK:
+        candidates = tuple(_OWNED_FAKE_SAMPLERS.values())
+    survivors = tuple(
+        sampler for sampler in candidates if _owned_fake_sampler_exists(sampler)
+    )
+    dead = {sampler.pid for sampler in candidates} - {
+        sampler.pid for sampler in survivors
+    }
+    if dead:
+        with _REGISTRY_LOCK:
+            for pid in dead:
+                _OWNED_FAKE_SAMPLERS.pop(pid, None)
+    return survivors
+
+
+def assert_no_owned_fake_sampler_survivors() -> None:
+    """Suite guard: fail loudly if any witness-owned fake sampler is alive."""
+
+    survivors = owned_fake_sampler_survivors()
+    if survivors:
+        details = [
+            {
+                "pid": sampler.pid,
+                "pgid": sampler.pgid,
+                "sampler_path": sampler.sampler_path,
+                "record_path": sampler.record_path,
+            }
+            for sampler in survivors
+        ]
+        raise AssertionError(f"owned fake-sampler survivors: {details!r}")
 
 
 def _teardown_group(pgid: int, *, grace_s: float = 0.5) -> None:
@@ -283,9 +384,13 @@ class OwnedPublicProcessRunner:
         self.capability_root = self.temporary_root / "owned-process-capabilities"
         self.capability_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.capability_root.chmod(0o700)
+        self.descendant_registry = self.temporary_root / "owned-descendants"
+        self.descendant_registry.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.descendant_registry.chmod(0o700)
         self.communicate_timeout_s = 600.0
         self._owned_pgids: set[int] = set()
         self._owned_threads: set[int] = set()
+        self.observed_fake_sampler_pids: set[int] = set()
         # The post-fix valid-writer p99 is expected to remain well below 30 s.
         # A bounded same-runner yield probe lets a badly oversubscribed worker
         # enlarge the idle allowance without making elapsed host time create
@@ -374,13 +479,17 @@ class OwnedPublicProcessRunner:
     ) -> subprocess.Popen[str]:
         """Start an auxiliary process in the same ownership registry."""
 
+        execution_env = dict(env)
+        execution_env[_OWNED_DESCENDANT_REGISTRY_KEY] = str(
+            self.descendant_registry
+        )
         process = subprocess.Popen(
             [os.fspath(value) for value in argv],
             cwd=Path(cwd),
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=dict(env),
+            env=execution_env,
             start_new_session=True,
         )
         pgid = os.getpgid(process.pid)
@@ -397,6 +506,59 @@ class OwnedPublicProcessRunner:
             )
         self._owned_pgids.add(pgid)
         return process
+
+    def _registered_fake_samplers(self) -> tuple[_OwnedFakeSampler, ...]:
+        samplers: list[_OwnedFakeSampler] = []
+        for record in sorted(self.descendant_registry.glob("fake-sampler-*.json")):
+            try:
+                payload = json.loads(record.read_text(encoding="utf-8"))
+                if payload.get("schema") != _OWNED_FAKE_SAMPLER_SCHEMA:
+                    raise ValueError("unexpected schema")
+                sampler = _OwnedFakeSampler(
+                    pid=int(payload["pid"]),
+                    pgid=int(payload["pgid"]),
+                    sampler_path=str(Path(payload["sampler_path"]).resolve()),
+                    record_path=str(record),
+                )
+                if sampler.pid <= 1 or sampler.pgid <= 1:
+                    raise ValueError("unsafe pid or pgid")
+                if Path(sampler.sampler_path).name != "fake_sampler.py":
+                    raise ValueError("unexpected sampler fixture")
+            except (
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                raise AssertionError(
+                    f"invalid owned fake-sampler record {record}: {exc}"
+                ) from exc
+            samplers.append(sampler)
+            self.observed_fake_sampler_pids.add(sampler.pid)
+            with _REGISTRY_LOCK:
+                _OWNED_FAKE_SAMPLERS[sampler.pid] = sampler
+        return tuple(samplers)
+
+    def reap_owned_fake_samplers(self) -> None:
+        """Terminate every sampler explicitly registered to this runner."""
+
+        samplers = self._registered_fake_samplers()
+        for sampler in samplers:
+            _terminate_owned_fake_sampler(sampler)
+        survivors = tuple(
+            sampler for sampler in samplers if _owned_fake_sampler_exists(sampler)
+        )
+        if survivors:
+            raise AssertionError(
+                "runner-owned fake samplers survived teardown: "
+                f"{[(item.pid, item.pgid, item.sampler_path) for item in survivors]!r}"
+            )
+        for sampler in samplers:
+            Path(sampler.record_path).unlink(missing_ok=True)
+            with _REGISTRY_LOCK:
+                _OWNED_FAKE_SAMPLERS.pop(sampler.pid, None)
 
     def terminate_owned(
         self,
@@ -470,6 +632,10 @@ class OwnedPublicProcessRunner:
                 self.stop_owned_thread(owned.thread)
             except BaseException as exc:  # join all threads before surfacing one
                 errors.append(exc)
+        try:
+            self.reap_owned_fake_samplers()
+        except BaseException as exc:
+            errors.append(exc)
         if self._owned_pgids:
             raise AssertionError(
                 f"runner registry not empty after close: {sorted(self._owned_pgids)}"
@@ -530,6 +696,9 @@ class OwnedPublicProcessRunner:
         execution_env = dict(env)
         execution_env.pop(_CRASH_TOKEN_KEY, None)
         execution_env.pop(_CRASH_CAPABILITY_ROOT_KEY, None)
+        execution_env[_OWNED_DESCENDANT_REGISTRY_KEY] = str(
+            self.descendant_registry
+        )
         entry_point = _entry_point(exact_argv)
         capability: Path | None = None
         if crash_stage is not None:
@@ -637,10 +806,13 @@ class OwnedPublicProcessRunner:
                 pass
             raise
         finally:
-            if process.returncode is not None:
-                _teardown_group(pgid)
-            if _forget_if_gone(pgid):
-                self._owned_pgids.discard(pgid)
+            try:
+                if process.returncode is not None:
+                    _teardown_group(pgid)
+                if _forget_if_gone(pgid):
+                    self._owned_pgids.discard(pgid)
+            finally:
+                self.reap_owned_fake_samplers()
         end_order = next_execution_order()
         if capability is not None and capability.exists():
             raise AssertionError("writer did not consume one-use crash capability")
