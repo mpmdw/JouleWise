@@ -200,6 +200,7 @@ CELL_REFUSAL_CODES = (
     "common_mode_allowance_application_invalid",
     "common_mode_nonseparable_window_domain",
     "common_mode_precondition_failed",
+    "common_mode_zero_point_divergence_out_of_domain",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
 )
 CELL_LABELLED_CONDITION_CODES = (
@@ -1677,6 +1678,7 @@ def _registered_common_mode_block_inputs(
     list[float],
     list[tuple[float, float]],
     float,
+    float,
 ]:
     """Build one enumerated D-124 block input from immutable bundle evidence."""
 
@@ -1850,9 +1852,16 @@ def _registered_common_mode_block_inputs(
             for position in _ABBA_POSITIONS
         )
 
+    zero_point_contrast = contrast(0.0, 0.0)
     return (
-        [contrast(delta_s, 0.0) for delta_s in sorted(onset_candidates)],
-        [contrast(0.0, delta_s) for delta_s in sorted(offset_candidates)],
+        [
+            zero_point_contrast if delta_s == 0.0 else contrast(delta_s, 0.0)
+            for delta_s in sorted(onset_candidates)
+        ],
+        [
+            zero_point_contrast if delta_s == 0.0 else contrast(0.0, delta_s)
+            for delta_s in sorted(offset_candidates)
+        ],
         residuals,
         [
             (
@@ -1862,6 +1871,7 @@ def _registered_common_mode_block_inputs(
             for position in _ABBA_POSITIONS
         ],
         member_envelope_integral_sum,
+        zero_point_contrast,
     )
 
 
@@ -2063,9 +2073,17 @@ def extract_comparative_cell(
                 residual_widths: list[list[float]] = []
                 member_window_bounds: list[list[tuple[float, float]]] = []
                 member_envelope_integral_sums: list[float] = []
+                zero_point_contrasts: list[float] = []
                 try:
                     for evaluated in admitted_blocks:
-                        onset, offset, residuals, windows, envelope_sum = (
+                        (
+                            onset,
+                            offset,
+                            residuals,
+                            windows,
+                            envelope_sum,
+                            zero_point,
+                        ) = (
                             _registered_common_mode_block_inputs(
                                 evaluated,
                                 runs_root=runs_root,
@@ -2078,10 +2096,12 @@ def extract_comparative_cell(
                         residual_widths.append(residuals)
                         member_window_bounds.append(windows)
                         member_envelope_integral_sums.append(envelope_sum)
+                        zero_point_contrasts.append(zero_point)
                     floor = two_shared_edge_common_mode_floor(
                         block_deltas,
                         onset_sweeps_j=onset_sweeps,
                         offset_sweeps_j=offset_sweeps,
+                        zero_point_contrasts_j=zero_point_contrasts,
                         bundle_residual_half_widths_j=residual_widths,
                         member_window_bounds_s=member_window_bounds,
                         member_envelope_integral_sums_j=(

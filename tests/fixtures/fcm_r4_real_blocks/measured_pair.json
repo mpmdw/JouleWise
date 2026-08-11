@@ -1,0 +1,553 @@
+{
+  "blocks": [
+    {
+      "absolute_divergence_j": 0.0,
+      "block_id": "b01",
+      "bundle_residual_half_widths_j": [
+        0.001558920510859707,
+        0.03371986443238484,
+        0.04913580826288211,
+        0.012743913092677417
+      ],
+      "delta_j": 0.21462565134537215,
+      "divergence_over_u_s_env": 0.0,
+      "member_envelope_integral_sum_j": 103.06152807459057,
+      "member_window_bounds_s": [
+        [
+          -0.05405879020690918,
+          1.8785629272460938
+        ],
+        [
+          -0.003432035446166992,
+          1.932464838027954
+        ],
+        [
+          -0.06056857109069824,
+          1.8713765144348145
+        ],
+        [
+          -0.03416633605957031,
+          1.8985936641693115
+        ]
+      ],
+      "members": [
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a1",
+          "decode_window_s": [
+            1784801456.3224251,
+            1784801458.2550468
+          ],
+          "duration_minus_2b_s": 1.8590564400573633,
+          "position": "A1",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73132,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "bc4637b199d823cc23beb2f49deee44859f9bfbc1549f93235ccd1447c2f57a0"
+            },
+            "metadata.json": {
+            "byte_length": 39489,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "715a6c21c26d07845736077e0f3c4417d1e16d10b72dc7993b95d0e4b48d7510"
+            },
+            "power_trace.csv": {
+              "byte_length": 105034,
+              "retained_lines": [
+                1,
+                1103,
+                1156
+              ],
+              "sha256": "1df483d43aa79662ee6ab0d486c381dcb313578578d238ea38c1045fe989d5d6"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11317,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "800b64af460aab4113263edf1bee5fb952f94ba0659f71e65e285edafc250227"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.32755207568884
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b1",
+          "decode_window_s": [
+            1784801604.2140422,
+            1784801606.149939
+          ],
+          "duration_minus_2b_s": 1.8623315960784814,
+          "position": "B1",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73143,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "f18c2f163246c6b4ccdde5ca8673cdc3c68b89b4961fbfd952588d88d84152b2"
+            },
+            "metadata.json": {
+            "byte_length": 39567,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "768cc5e8a2a03b9ba9409c203c4555e08bf13c7e0cbd9645ba449b8e229d1300"
+            },
+            "power_trace.csv": {
+              "byte_length": 105179,
+              "retained_lines": [
+                1,
+                1100,
+                1156
+              ],
+              "sha256": "9f609ebc9ed2bb573a2b285d72ab9b2e3fd630d2cf60baad5614a05eba1a7dfc"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11378,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "73f8b4a0ff604daec2c7df4d6152a7a84a111e199f4646a7fdadfb801e72828e"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.77427557124877
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b2",
+          "decode_window_s": [
+            1784801752.315223,
+            1784801754.247168
+          ],
+          "duration_minus_2b_s": 1.858379808129873,
+          "position": "B2",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73134,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "88ea3a7cba9a8480d07cd808ce397105d097815db4f537a607e7ee812d198d64"
+            },
+            "metadata.json": {
+            "byte_length": 39493,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "85c966afe6fbc5f056637f9da018e196b226ebb8c2a8f574d8cb6b564666cfd0"
+            },
+            "power_trace.csv": {
+              "byte_length": 105065,
+              "retained_lines": [
+                1,
+                1103,
+                1156
+              ],
+              "sha256": "ec4b0c5629c4ac11cee0e6d8acde400092652ebec6637e4a2df3368e602d1ba4"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11326,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "daf6892234180444241a8c40231a6db5762120e2ed58ac76db9b2bb6b78a1e25"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.10146712824106
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a2",
+          "decode_window_s": [
+            1784801900.3641338,
+            1784801902.2968938
+          ],
+          "duration_minus_2b_s": 1.8591947228332422,
+          "position": "A2",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73127,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "b24c52cb6dc0751189bc7e1416c7d2a8c9e34bdc765ff07a5fe9abe683bfa5b1"
+            },
+            "metadata.json": {
+            "byte_length": 39578,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "e5232602072ce6cda58c8b3ce3e6f538dbb2f467de154e93cc0cb5fe74751e52"
+            },
+            "power_trace.csv": {
+              "byte_length": 104698,
+              "retained_lines": [
+                1,
+                1094,
+                1150
+              ],
+              "sha256": "f56fe4f6d79618546e1233b384b8857b1aa5446d4c8e95d10addf25f262703ee"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11372,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "dfd3b758b434bbfd8b2ed87ee2a1c912bf63039fe1c0b93f16c12b608de68174"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.11893932111025
+        }
+      ],
+      "offset_sweep_j": [
+        0.26555292679821463,
+        0.3349382543158512,
+        0.21462565134537215,
+        0.05760554782056815,
+        0.07461911392762488
+      ],
+      "onset_sweep_j": [
+        0.10987642068810644,
+        0.21462565134537215,
+        0.224399367568612,
+        0.1413090620733506,
+        0.14131141017329796,
+        0.13766980469414136
+      ],
+      "registered_s_env_j": 103.06152807459057,
+      "reintegrated_member_energies_j": [
+        50.32755207568884,
+        50.77427557124877,
+        50.10146712824106,
+        50.11893932111025
+      ],
+      "s_env_j": 100.66111704814446,
+      "summary_member_energies_j": [
+        50.32755207568884,
+        50.77427557124877,
+        50.10146712824106,
+        50.11893932111025
+      ],
+      "zero_point_contrast_j": 0.21462565134537215
+    },
+    {
+      "absolute_divergence_j": 3.552713678800501e-15,
+      "block_id": "b02",
+      "bundle_residual_half_widths_j": [
+        0.07963368765032186,
+        0.088288231943217,
+        0.050041128057195294,
+        0.05339224406345977
+      ],
+      "delta_j": 0.40725474817919505,
+      "divergence_over_u_s_env": 0.3177487320895556,
+      "member_envelope_integral_sum_j": 102.95961680584864,
+      "member_window_bounds_s": [
+        [
+          -0.047199249267578125,
+          1.8785858154296875
+        ],
+        [
+          0.020653963088989258,
+          1.9527101516723633
+        ],
+        [
+          0.0006852149963378906,
+          1.9347481727600098
+        ],
+        [
+          -0.04953408241271973,
+          1.8807411193847656
+        ]
+      ],
+      "members": [
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a1",
+          "decode_window_s": [
+            1784802048.4548569,
+            1784802050.380642
+          ],
+          "duration_minus_2b_s": 1.852219787301626,
+          "position": "A1",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73149,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "dee308408334271f0cb6736d8aa08c80cb040916a3c59c34ba646f01d2758eeb"
+            },
+            "metadata.json": {
+            "byte_length": 39475,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "045178ab10e3615e7f0b7e7cc594a06dc00cbae7fb6056a7e83b709ddf30c4f9"
+            },
+            "power_trace.csv": {
+              "byte_length": 104357,
+              "retained_lines": [
+                1,
+                1097,
+                1150
+              ],
+              "sha256": "c3017b62f6f4b6ed66547daa1c552095a2ca7acdd7d76bbcb67b0542ad2194f8"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11326,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "74e6b76a082e3b21fdb90bae9c83082995f9196b8d8444e7009b5a5065953daf"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.00775615301609
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b1",
+          "decode_window_s": [
+            1784802196.281268,
+            1784802198.213324
+          ],
+          "duration_minus_2b_s": 1.8584909111877344,
+          "position": "B1",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73124,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "e1082222f96904d91aa1c184f6c6d06c8fe0c63dbb8aedeb646fa258dbfedac8"
+            },
+            "metadata.json": {
+            "byte_length": 39524,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "be526a578e69ea6d52fb664f4d8d456af7e2471ef43def1d7a3c444eff1f4be1"
+            },
+            "power_trace.csv": {
+              "byte_length": 105088,
+              "retained_lines": [
+                1,
+                1097,
+                1153
+              ],
+              "sha256": "0d34249f1a0cb47f261f16abacc0e2e28e59d8f75a68f7eeb70ca260ee625cbe"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11330,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "d30f3d419ea49d3ed05b51d31670e4117ca5576f8e9f20731c3cd96f706f17dd"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.39639302354956
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b2",
+          "decode_window_s": [
+            1784802365.1927521,
+            1784802367.126815
+          ],
+          "duration_minus_2b_s": 1.8604976803680322,
+          "position": "B2",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73130,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "89c0d3bafc4f9b8091a7f861a8c88bf16d227b874e9d524f60a9434f4b6eeca2"
+            },
+            "metadata.json": {
+            "byte_length": 39472,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "4326f88654b9dbca269250193da446492df26044b3ca29f81106c91cdebf64af"
+            },
+            "power_trace.csv": {
+              "byte_length": 103500,
+              "retained_lines": [
+                1,
+                1082,
+                1138
+              ],
+              "sha256": "d2787a80a8dea97f6874cfba208ac40a959e11a559faa17a1b303734c60cc3c7"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11260,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "7753db9b160abb058a8d5bb2833e04c90e1a6a5fa80e50e407ee8efefb7b8af2"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.71936743467283
+        },
+        {
+          "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a2",
+          "decode_window_s": [
+            1784802513.3351638,
+            1784802515.265439
+          ],
+          "duration_minus_2b_s": 1.8567099244018457,
+          "position": "A2",
+          "source_files": {
+            "events.jsonl": {
+              "byte_length": 73115,
+              "retained_lines": [
+                18,
+                531
+              ],
+              "sha256": "6aa7713dc732df9fbfc9d372e25d362475bd497c3679fecb6053d5a233c2afdb"
+            },
+            "metadata.json": {
+            "byte_length": 39566,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/device/rail_manifest",
+                "/uncertainty_evidence/clock_anchor/effective_clock_anchor_bound_s",
+                "/uncertainty_evidence/clock_anchor/wall_minus_monotonic_span_s"
+              ],
+              "sha256": "2b643ad499c01cf40b8240f39f913e9a69238d906cc89de6296706653e61d994"
+            },
+            "power_trace.csv": {
+              "byte_length": 105653,
+              "retained_lines": [
+                1,
+                1103,
+                1156
+              ],
+              "sha256": "29f3f1d1f8cf1fb5e342511887b8ff554c3a9fba07c78d1e16e1bbf09b95cee0"
+            },
+            "summary_metrics.json": {
+            "byte_length": 11355,
+            "retained_lines": [
+              1
+            ],
+            "retained_json_paths": [
+                "/phase_energy_j/decode",
+                "/energy_anchor_shift_envelopes/~1phase_energy_j~1decode"
+              ],
+              "sha256": "492f6d790ea6afc4cb8abda165aa1713daf26948e38c53307ba61c36c42d3d18"
+            }
+          },
+          "summary_phase_energy_j_decode": 50.2934948088479
+        }
+      ],
+      "offset_sweep_j": [
+        0.4901389744650544,
+        0.5135920425677298,
+        0.5328227054837953,
+        0.4072547481791986,
+        0.01179637861918792
+      ],
+      "onset_sweep_j": [
+        0.1874032042121918,
+        0.36399467264104146,
+        0.3639940071265677,
+        0.4087521587889178,
+        0.4072547481791986,
+        0.3268730960932693
+      ],
+      "registered_s_env_j": 102.95961680584864,
+      "reintegrated_member_energies_j": [
+        50.00775615301609,
+        50.39639302354956,
+        50.71936743467283,
+        50.2934948088479
+      ],
+      "s_env_j": 100.7085057100432,
+      "summary_member_energies_j": [
+        50.00775615301609,
+        50.39639302354956,
+        50.71936743467283,
+        50.2934948088479
+      ],
+      "zero_point_contrast_j": 0.4072547481791986
+    }
+  ],
+  "companion_block_id": "b01",
+  "extraction_script_path": "tests/test_floor_extraction.py",
+  "operative_bound_s": 0.03678263869781979,
+  "primary_block_id": "b02",
+  "producing_commit": "ed8715bde45e2cb5f469b644ca969216b2fe2235",
+  "schema_version": "joulewise.fcm_r4_real_blocks.v1",
+  "source_corpus": "runs_window_a5_20260723"
+}

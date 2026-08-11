@@ -108,6 +108,7 @@ COMMON_MODE_REFUSAL_CODES = (
     "common_mode_allowance_application_invalid",
     "common_mode_nonseparable_window_domain",
     "common_mode_precondition_failed",
+    "common_mode_zero_point_divergence_out_of_domain",
 )
 _MAX_FLOOR_J = 1e6
 _MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
@@ -128,7 +129,16 @@ _COMMON_MODE_PARAMETERS = {
         "interval_support_edges_union_plus_zero_and_operative_bounds"
     ),
     "shared_extrema_rule": (
-        "separable_onset_offset_exact_sweep_on_strict_noncollapse_domain"
+        "separable_onset_offset_excursion_composition_about_swept_zero_point_"
+        "on_strict_noncollapse_domain"
+    ),
+    "shared_extrema_zero_point_rule": (
+        "zero_point_contrast_is_an_explicit_registered_input_present_by_exact_"
+        "equality_in_both_sweeps_never_recovered_by_tolerance"
+    ),
+    "shared_extrema_centre_offset_rule": (
+        "abs_zero_point_minus_block_delta_added_outward_exactly_once_"
+        "separate_from_the_numerical_enclosure"
     ),
     "shared_extrema_domain_precondition": (
         "all_admitted_abba_member_windows_outward_rounding_prove_"
@@ -138,8 +148,10 @@ _COMMON_MODE_PARAMETERS = {
         "common_mode_nonseparable_window_domain"
     ),
     "shared_extrema_numerical_enclosure_rule": (
-        "outward_64u_times_abs_coefficient_weighted_member_"
-        "envelope_integral_sum"
+        "outward_enclosure_64u_times_floored_member_envelope_integral_sum"
+    ),
+    "shared_extrema_zero_point_divergence_refusal_reason": (
+        "common_mode_zero_point_divergence_out_of_domain"
     ),
     "bundle_residual_rule": (
         "math.fsum(per_bundle_adversarial_half_width_j)/2"
@@ -955,6 +967,7 @@ def two_shared_edge_common_mode_floor(
     *,
     onset_sweeps_j: Sequence[Sequence[float]],
     offset_sweeps_j: Sequence[Sequence[float]],
+    zero_point_contrasts_j: Sequence[float],
     bundle_residual_half_widths_j: Sequence[Sequence[float]],
     member_window_bounds_s: object = None,
     member_envelope_integral_sums_j: object = None,
@@ -964,12 +977,16 @@ def two_shared_edge_common_mode_floor(
     """D-124 contrast floor with two shared edges and local residuals.
 
     ``onset_sweeps_j`` and ``offset_sweeps_j`` are float evaluations at the
-    exactly enumerated shared-edge candidates; the emitted width encloses the
-    exact width outward at member-energy scale.
+    exactly enumerated shared-edge candidates.  Each explicit
+    ``zero_point_contrasts_j`` entry is the sweeps' exact zero-shift
+    evaluation and must occur by exact equality in both sweeps.  The shared
+    extrema are composed as excursions about that zero point, then the
+    centre discrepancy from the block delta is added once and outward.
     ``member_window_bounds_s`` supplies each block's aligned A1/B1/B2/A2
-    normalized ``(start_s, end_s)`` bounds.  Separability gives
-    ``min(onset)+min(offset)-point`` and the analogous maximum only after every
-    member is proven to remain strictly noncollapsed over the shared domain.
+    normalized ``(start_s, end_s)`` bounds.  Separability gives the signed
+    excursion extrema ``(min(onset)-z) + (min(offset)-z)`` and the analogous
+    maximum only after every member is proven to remain strictly noncollapsed
+    over the shared domain.
     Four bundle-local adversarial residual half-widths are then composed with
     the ABBA coefficients.  This one function is the registered arithmetic
     path for both calibration blocks and consuming contrasts.
@@ -977,6 +994,10 @@ def two_shared_edge_common_mode_floor(
 
     try:
         deltas = _clean_values(block_deltas_j, "block deltas")
+        zero_points = _clean_values(
+            zero_point_contrasts_j,
+            "zero-point contrasts",
+        )
     except (TypeError, ValueError) as exc:
         _common_mode_refuse("common_mode_precondition_failed", str(exc))
     n = len(deltas)
@@ -984,6 +1005,7 @@ def two_shared_edge_common_mode_floor(
         input_lengths_match = (
             len(onset_sweeps_j)
             == len(offset_sweeps_j)
+            == len(zero_points)
             == len(bundle_residual_half_widths_j)
             == len(member_envelope_integral_sums_j)
             == n
@@ -993,8 +1015,8 @@ def two_shared_edge_common_mode_floor(
     if not input_lengths_match:
         _common_mode_refuse(
             "common_mode_precondition_failed",
-            "every block needs onset, offset, four residuals, and a member "
-            "envelope integral sum",
+            "every block needs onset, offset, an explicit zero point, four "
+            "residuals, and a member envelope integral sum",
         )
     bound = _common_mode_finite(shared_edge_bound_s)
     operative = registered_common_mode_operative_bound(calibration_bracket)
@@ -1068,6 +1090,7 @@ def two_shared_edge_common_mode_floor(
         deltas,
         onset_sweeps_j,
         offset_sweeps_j,
+        zero_points,
         bundle_residual_half_widths_j,
         member_envelope_integral_sums_j,
         normalized_member_windows,
@@ -1077,6 +1100,7 @@ def two_shared_edge_common_mode_floor(
         delta,
         raw_onset,
         raw_offset,
+        zero_point,
         raw_residuals,
         raw_member_envelope_sum,
         _member_windows,
@@ -1106,16 +1130,22 @@ def two_shared_edge_common_mode_floor(
                     f"block {index} residuals must be finite and nonnegative",
                 )
             residuals.append(residual)
-        if not any(
-            math.isclose(value, delta, rel_tol=1e-9, abs_tol=1e-12)
-            for value in onset
-        ) or not any(
-            math.isclose(value, delta, rel_tol=1e-9, abs_tol=1e-12)
-            for value in offset
-        ):
+        if zero_point not in onset or zero_point not in offset:
             _common_mode_refuse(
                 "common_mode_precondition_failed",
-                f"block {index} sweeps must include the zero-edge point delta",
+                f"block {index} sweeps must include the explicit zero point "
+                "by exact equality",
+            )
+        if not math.isclose(
+            zero_point,
+            delta,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
             )
         member_envelope_sum = _common_mode_finite(raw_member_envelope_sum)
         if member_envelope_sum is None or member_envelope_sum < 0.0:
@@ -1128,6 +1158,7 @@ def two_shared_edge_common_mode_floor(
             member_envelope_sum,
             1.0,
             abs(delta),
+            abs(zero_point),
             *(abs(value) for value in onset),
             *(abs(value) for value in offset),
         )
@@ -1139,16 +1170,28 @@ def two_shared_edge_common_mode_floor(
         extrema_pad = (
             64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
         )
+        excursion_lower = math.fsum(
+            (min(onset), -zero_point, min(offset), -zero_point)
+        )
+        excursion_upper = math.fsum(
+            (max(onset), -zero_point, max(offset), -zero_point)
+        )
         lower = _common_mode_outward(
-            math.fsum((min(onset), min(offset), -delta, -extrema_pad)),
+            math.fsum((excursion_lower, -extrema_pad)),
             -math.inf,
         )
         upper = _common_mode_outward(
-            math.fsum((max(onset), max(offset), -delta, extrema_pad)),
+            math.fsum((excursion_upper, extrema_pad)),
+            math.inf,
+        )
+        zero_centred_width = _common_mode_outward(
+            max(abs(lower), abs(upper)),
             math.inf,
         )
         shared_width = _common_mode_outward(
-            max(delta - lower, upper - delta),
+            math.fsum(
+                (zero_centred_width, abs(zero_point - delta))
+            ),
             math.inf,
         )
         local_width = math.fsum(residuals) / 2.0

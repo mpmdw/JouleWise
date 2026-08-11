@@ -4176,8 +4176,9 @@ claim/refusal spelling never becomes a pass.
   additive 2026-08-10): `common_mode_registration_invalid`,
   `common_mode_authenticated_bracket_required`,
   `common_mode_allowance_application_invalid`,
-  `common_mode_precondition_failed`, and
-  `common_mode_nonseparable_window_domain`.
+  `common_mode_precondition_failed`,
+  `common_mode_nonseparable_window_domain`, and
+  `common_mode_zero_point_divergence_out_of_domain`.
 - Idle-admission/campaign conditions: `cpu_baseline_telemetry_missing`,
   `cpu_baseline_telemetry_malformed`,
   `cpu_baseline_sample_count_insufficient`, `cpu_busy_ratio_p95_exceeded`,
@@ -7998,15 +7999,14 @@ enclosure-prevents-understatement claim were incorrect as written —
 falsified by the round-2 audit (emitted width below the exact admissible
 width by up to 2.3e-13 J at ~1000 J member scale; structural component of
 the shortfall proven EXACTLY ZERO by rational-arithmetic probes on both
-adjudication sides). Corrected statement: the extremum ENUMERATION is exact
-in exact arithmetic on the registered strict-noncollapse domain; the
-EMITTED width additionally carries the registered outward numerical
-enclosure (64u times the coefficient-weighted member envelope-integral
-sum), making it a proven upper bound of the exact admissible width. The
-total overstatement against the exact oracle is capped at 128u times the
-floored envelope scale (64u pad plus at most 16u analytic float error, with
-slack) — overstatement-only, ≤~1e-9 J-class for realistic geometries, orders
-below the 1e-6 J reportable precision and the ~1 J attribution limit. As first
+adjudication sides). Corrected statement, as further qualified by the FCM-R4
+input-surface tolerance audit below: on admitted inputs the emitted width
+bounds the exact admissible width outward, up to the disclosed member-envelope
+pad and the disclosed zero-point discrepancy term, under the documented
+single-sourcing assumptions for the bracket bounds. Under those assumptions,
+the total overstatement against the exact about-zero bar is capped by the
+member-envelope pad, the zero-point discrepancy term, and directed-rounding
+slack. As first
 implemented (bbf7bdd) the enclosure was scaled to the contrast magnitude
 and did not dominate member-scale float error; it is now scaled to the
 member-integrand envelope and registered in the parameter dict (sha
@@ -8016,6 +8016,56 @@ collected evidence (committed inventory records its margin); the remaining
 referenced roots including Q8 p256 have none yet and are asserted
 absent-by-name in the committed inventory; margins are a freeze-gate
 checklist item at collection.
+
+### D-124 amendment — 2026-08-10: FCM-R4 explicit zero point, third erratum, and input-surface tolerance audit (cold-gate FINAL)
+
+FCM-R3-01 falsified the prior errata's unconditional upper-bound sentences:
+an input admitted by every coded precondition emitted
+`0.09999999950000743 J` against an exact required
+`0.10000000050000024 J`, an understatement of approximately
+`9.9999e-10 J`. The defect had been present since the original implementation:
+the sweeps' structural zero-shift contrast was recovered by `isclose` against
+the separately reduced ABBA delta, conflating tolerance with identity. Those
+unconditional sentences are superseded.
+
+Round 4 makes the zero-shift contrast `z` an explicit registered input. It must
+be present by exact equality in both onset and offset sweeps. Extrema are
+composed as signed excursions about `z`; the emitted shared half-width adds
+`|z - delta|` outward exactly once, separately from the unchanged
+`64u * S_env` member-envelope pad, whose floored scale set now includes
+`|z|`. A mismatch outside the existing `isclose(rel_tol=1e-9,
+abs_tol=1e-12)` band refuses with
+`common_mode_zero_point_divergence_out_of_domain`; this is a pure provenance
+guard and is not load-bearing for soundness. The intuitive round-3 arithmetic
+plus `|z-delta|` candidate was tried and refuted: it fails the independent
+about-zero exact bar on FCM-R3-01 and remains a named negative regression.
+Real trimmed recompute fixtures for a5 decode blocks b02 (nonzero measured
+divergence) and b01 (zero divergence) are committed under
+`tests/fixtures/fcm_r4_real_blocks/` within the 256 KB cap.
+
+The registered parameter hash is
+`4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981`.
+All superseded hashes (`ea4aa669...`, `9d964cfb...`, and `977189cd...`) are
+rejected by regression.
+
+**FCM-R4 input-surface tolerance audit.** These are the complete tolerance
+acceptances on the registered arithmetic path. The production caller
+single-sourcing statements are assumptions of the upper-bound claim; direct
+callers must preserve them.
+
+| Accepted comparison | Coded tolerance | Production single source / caller assumption | Disposition |
+|---|---:|---|---|
+| Sweep bound vs authenticated operative bracket bound | `rel=0`, `abs=1e-12 s` | `extract_comparative_cell` obtains `common_mode_bound_s` once from `registered_common_mode_operative_bound` and passes that exact float unchanged to the sweep builder and estimator; the authenticated session alias is checked against the same value. | No discrepancy term: production is exactly single-sourced. Direct callers assume the same identity. |
+| `b_fiducial_s` vs optional `operative_b_fiducial_s` alias | `rel=0`, `abs=1e-12 s` | When both exist, arithmetic selects `b_fiducial_s`; the optional alias is redundant provenance and never supplies sweep arithmetic. | No discrepancy term: the tolerated alias is non-operative. |
+| Recorded allowance string vs passed `calibration_drift_allowance_s` | `rel=0`, `abs=1e-12 s` | Production bracket construction computes one Decimal allowance, then emits its exact decimal string and binary64 projection together; arithmetic uses the binary64 field. | No discrepancy term under the single-producing-value assumption. |
+| Operative bound vs endpoint plus allowance | `rel=0`, `abs=1e-12 s` | Production bracket construction computes `operative_bound = endpoint_max_decimal + allowance` once in Decimal and emits its binary64 projection as `b_fiducial_s`; the separate endpoint/allowance fields are audit projections of the same derivation. | No discrepancy term under the production-constructor assumption; externally assembled brackets assume the same derivation. |
+
+Claims-with-assumptions correction: **on admitted inputs the emitted width
+bounds the exact admissible width outward, up to the disclosed member-envelope
+pad and the disclosed zero-point discrepancy term, under the documented
+single-sourcing assumptions for the bracket bounds in the audit table above.**
+No published replay number changes; the six-decimal value remains
+`1.869502 J`.
 
 
 ## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window

@@ -723,6 +723,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             self.REPLAY_DELTAS,
             onset_sweeps_j=onset,
             offset_sweeps_j=offset,
+            zero_point_contrasts_j=self.REPLAY_DELTAS,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=self.replay_window_bounds(),
             member_envelope_integral_sums_j=(
@@ -755,21 +756,21 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(
             estimate.admissible_half_widths_j,
             (
-                0.3103485873321621,
-                0.7509875593848336,
-                0.6349607167245025,
+                0.3103485873321623,
+                0.7509875593848335,
+                0.6349607167245029,
                 0.5206110996838027,
-                0.2886457404757723,
-                0.718099989582972,
-                0.3209429628684113,
-                0.28655408173504426,
+                0.2886457404757725,
+                0.7180999895829727,
+                0.3209429628684115,
+                0.2865540817350444,
                 0.1786484975517491,
-                0.4867644341652326,
+                0.4867644341652328,
             ),
         )
-        self.assertIn(
+        self.assertEqual(
             estimate.guarded_floor_j,
-            (1.869501626013162, 1.8695016260131623),
+            1.8695016260131627,
         )
         self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
         self.assertEqual(
@@ -786,12 +787,27 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(first["version"], "v1")
         self.assertEqual(
             COMMON_MODE_PARAMETER_SHA256,
-            "977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06",
+            "4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981",
         )
         self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
         self.assertEqual(
             detection_floor._COMMON_MODE_PARAMETERS["shared_extrema_rule"],
-            "separable_onset_offset_exact_sweep_on_strict_noncollapse_domain",
+            "separable_onset_offset_excursion_composition_about_swept_zero_"
+            "point_on_strict_noncollapse_domain",
+        )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_zero_point_rule"
+            ],
+            "zero_point_contrast_is_an_explicit_registered_input_present_by_"
+            "exact_equality_in_both_sweeps_never_recovered_by_tolerance",
+        )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_centre_offset_rule"
+            ],
+            "abs_zero_point_minus_block_delta_added_outward_exactly_once_"
+            "separate_from_the_numerical_enclosure",
         )
         self.assertEqual(
             detection_floor._COMMON_MODE_PARAMETERS[
@@ -810,8 +826,13 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             detection_floor._COMMON_MODE_PARAMETERS[
                 "shared_extrema_numerical_enclosure_rule"
             ],
-            "outward_64u_times_abs_coefficient_weighted_member_"
-            "envelope_integral_sum",
+            "outward_enclosure_64u_times_floored_member_envelope_integral_sum",
+        )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_zero_point_divergence_refusal_reason"
+            ],
+            "common_mode_zero_point_divergence_out_of_domain",
         )
         assumption = first["stationarity_transfer_assumption"]
         self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
@@ -824,6 +845,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         for superseded_sha in (
             "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480",
             "9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3",
+            "977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06",
         ):
             with self.subTest(superseded_sha=superseded_sha):
                 old_registration = two_shared_edge_common_mode_registration()
@@ -865,6 +887,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             self.REPLAY_DELTAS,
             onset_sweeps_j=onset,
             offset_sweeps_j=offset,
+            zero_point_contrasts_j=self.REPLAY_DELTAS,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=safe_windows,
             member_envelope_integral_sums_j=(
@@ -890,6 +913,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                             self.REPLAY_DELTAS,
                             onset_sweeps_j=onset,
                             offset_sweeps_j=offset,
+                            zero_point_contrasts_j=self.REPLAY_DELTAS,
                             bundle_residual_half_widths_j=residuals,
                             member_window_bounds_s=windows,
                             member_envelope_integral_sums_j=(
@@ -910,6 +934,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 self.REPLAY_DELTAS,
                 onset_sweeps_j=onset,
                 offset_sweeps_j=offset,
+                zero_point_contrasts_j=self.REPLAY_DELTAS,
                 bundle_residual_half_widths_j=residuals,
                 member_window_bounds_s=later_windows,
                 member_envelope_integral_sums_j=(
@@ -932,6 +957,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                         self.REPLAY_DELTAS,
                         onset_sweeps_j=onset,
                         offset_sweeps_j=offset,
+                        zero_point_contrasts_j=self.REPLAY_DELTAS,
                         bundle_residual_half_widths_j=residuals,
                         member_window_bounds_s=geometry,
                         member_envelope_integral_sums_j=(
@@ -998,6 +1024,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         inputs = {
             "onset_sweeps_j": onset,
             "offset_sweeps_j": offset,
+            "zero_point_contrasts_j": self.REPLAY_DELTAS,
             "bundle_residual_half_widths_j": residuals,
             "member_window_bounds_s": self.replay_window_bounds(),
             "member_envelope_integral_sums_j": (
@@ -1027,6 +1054,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             self.REPLAY_DELTAS,
             onset_sweeps_j=onset,
             offset_sweeps_j=offset,
+            zero_point_contrasts_j=self.REPLAY_DELTAS,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=self.replay_window_bounds(),
             member_envelope_integral_sums_j=(
@@ -1055,6 +1083,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 self.REPLAY_DELTAS,
                 onset_sweeps_j=onset,
                 offset_sweeps_j=offset,
+                zero_point_contrasts_j=self.REPLAY_DELTAS,
                 bundle_residual_half_widths_j=residuals,
                 member_window_bounds_s=self.replay_window_bounds(),
                 member_envelope_integral_sums_j=(
@@ -1078,6 +1107,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 [0.0, float("nan")],
                 onset_sweeps_j=[],
                 offset_sweeps_j=[],
+                zero_point_contrasts_j=[0.0, 0.0],
                 bundle_residual_half_widths_j=[],
                 member_window_bounds_s=None,
                 member_envelope_integral_sums_j=None,
@@ -1102,6 +1132,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                         self.REPLAY_DELTAS,
                         onset_sweeps_j=onset,
                         offset_sweeps_j=offset,
+                        zero_point_contrasts_j=self.REPLAY_DELTAS,
                         bundle_residual_half_widths_j=residuals,
                         member_window_bounds_s=self.replay_window_bounds(),
                         member_envelope_integral_sums_j=envelope_sums,

@@ -1,19 +1,16 @@
-> **ERRATUM (2026-08-10, magistrate):** the two-shared-edge form recorded
-> below was implemented and gauntleted as FLOOR-COMMONMODE-01; the gauntlet
-> proved the separable extremum ENUMERATION is exact in exact arithmetic ONLY
-> on a strict-noncollapse domain (every member window strictly longer than
-> twice the shared bound, outward-rounded). Its realized contrast values are
-> float evaluations, so the emitted width additionally carries the registered
-> outward numerical enclosure at member-energy scale (64u times the
-> coefficient-weighted member envelope-integral sum); total overstatement
-> against the exact oracle is capped at 128u times the floored envelope scale
-> (64u pad plus at most 16u analytic float error, with slack). The registered
-> estimator enforces the domain and refuses outside it — see the D-124
-> amendment of 2026-08-10 in the decision log. The historical numbers below are unchanged
-> and remain NON-CLAIM; the promoted 1.869502 J replay value is reproduced by
-> the domain-restricted implementation (trailing ulps move upward under its
-> outward enclosure). No published number changes: the round-2 float
-> shortfalls are below the six-decimal reportable precision.
+> **ERRATUM, third correction (2026-08-10, cold-gate FINAL):** FCM-R3-01
+> falsified the prior unconditional upper-bound wording with an admitted-input
+> understatement of approximately `9.9999e-10 J`; the defect had been present
+> since the original implementation because zero-point tolerance was treated
+> as structural identity. Round 4 takes the sweeps' zero-shift contrast as an
+> explicit input, requires its exact presence in both sweeps, composes
+> excursions about it, and adds the disclosed `|z-delta|` term outward exactly
+> once. On admitted inputs the emitted width bounds the exact admissible width
+> outward, up to the disclosed member-envelope pad and the disclosed zero-point
+> discrepancy term, under the documented single-sourcing assumptions for the
+> bracket bounds in the D-124 FCM-R4 input-surface tolerance audit table. The
+> previous errata's unconditional sentences are superseded. No published
+> replay number changes: the promoted value remains NON-CLAIM `1.869502 J`.
 
 # Common-mode estimator replay — NON-CLAIM record (2026-08-08)
 
