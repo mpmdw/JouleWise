@@ -1536,20 +1536,27 @@ def _forbidden_admitted_vocabulary_paths(
     return paths
 
 
-def validate_d117_mint_consumption_report(value: object) -> list[str]:
-    """Validate the recursively closed report profile used only by v2 minting."""
+def validate_admitted_report_vocabulary(value: object) -> list[str]:
+    """Refuse vocabulary that no admitted extraction report may represent."""
 
     forbidden_paths = _forbidden_admitted_vocabulary_paths(
         value,
         key="estimator_registration",
         where="extraction report",
     )
-    if forbidden_paths:
-        return [
-            "extraction report: forbidden key 'estimator_registration' at "
-            f"{path}"
-            for path in forbidden_paths
-        ]
+    return [
+        "extraction report: forbidden key 'estimator_registration' at "
+        f"{path}"
+        for path in forbidden_paths
+    ]
+
+
+def validate_d117_mint_consumption_report(value: object) -> list[str]:
+    """Validate the recursively closed report profile used only by v2 minting."""
+
+    vocabulary_errors = validate_admitted_report_vocabulary(value)
+    if vocabulary_errors:
+        return vocabulary_errors
     errors = _d117_closed_keys(
         value,
         _D117_MINT_REPORT_KEYS,
@@ -1647,8 +1654,8 @@ def _read_summary(
     try:
         # Strict UTF-8 only: json.loads on bytes auto-detects BOM/UTF-16/32,
         # which would admit encodings the committed reader refused.
-        parsed = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        parsed = _strict_admission_json_value(raw, "summary_metrics.json")
+    except FloorExtractionError:
         return None, digest, "summary_unreadable"
     if not isinstance(parsed, Mapping):
         return None, digest, "summary_unreadable"
@@ -1660,6 +1667,50 @@ def _finite(value: object) -> float | None:
         return None
     converted = float(value)
     return converted if math.isfinite(converted) else None
+
+
+def _reject_duplicate_admission_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise FloorExtractionError(
+                f"admission JSON contains duplicate key {key!r}"
+            )
+        value[key] = child
+    return value
+
+
+def _reject_nonfinite_admission_number(value: str) -> None:
+    raise FloorExtractionError(
+        f"admission JSON contains non-finite number {value!r}"
+    )
+
+
+def _strict_admission_json_value(raw: bytes, label: str) -> Any:
+    """Parse exact admission bytes without duplicate or non-finite values."""
+
+    try:
+        return json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_admission_keys,
+            parse_constant=_reject_nonfinite_admission_number,
+        )
+    except FloorExtractionError as exc:
+        raise FloorExtractionError(f"{label}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FloorExtractionError(
+            f"{label} is not valid UTF-8 JSON: {exc}"
+        ) from exc
+
+
+def _strict_admission_json_file(path: Path, label: str) -> Any:
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise FloorExtractionError(f"{label} cannot be read: {exc}") from exc
+    return _strict_admission_json_value(raw, label)
 
 
 def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | None:
@@ -1675,8 +1726,10 @@ def _cpu_admission_bundle_reasons(
     path: Path, summary: Mapping[str, Any]
 ) -> tuple[str, ...]:
     try:
-        metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata = _strict_admission_json_file(
+            path / "metadata.json", "metadata.json"
+        )
+    except FloorExtractionError:
         metadata = None
     telemetry_identity = custody_telemetry_identity(
         path,
@@ -1744,15 +1797,15 @@ def _evaluate_member(
     else:
         assert summary is not None
         try:
-            parsed_metadata = json.loads(
-                (path / "metadata.json").read_text(encoding="utf-8")
+            parsed_metadata = _strict_admission_json_file(
+                path / "metadata.json", "metadata.json"
             )
             metadata = (
                 parsed_metadata
                 if isinstance(parsed_metadata, Mapping)
                 else None
             )
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        except FloorExtractionError:
             metadata = None
         telemetry_identity = custody_telemetry_identity(
             path,

@@ -157,6 +157,62 @@ class AnalysisManifestError(ValueError):
         super().__init__(f"{code}: {detail}")
 
 
+def _reject_duplicate_admission_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        value[key] = child
+    return value
+
+
+def _reject_nonfinite_admission_number(value: str) -> None:
+    raise ValueError(f"non-finite JSON number {value!r}")
+
+
+def _registration_vocabulary_path(value: object, where: str) -> str | None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            child_path = f"{where}.{key}"
+            if key == "estimator_registration":
+                return child_path
+            nested = _registration_vocabulary_path(child, child_path)
+            if nested is not None:
+                return nested
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            nested = _registration_vocabulary_path(child, f"{where}[{index}]")
+            if nested is not None:
+                return nested
+    return None
+
+
+def _strict_json_admission_bytes(raw: bytes, label: str) -> Any:
+    """Strict-parse one AP-SPEC admission and refuse deleted vocabulary."""
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_admission_keys,
+            parse_constant=_reject_nonfinite_admission_number,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise AnalysisManifestError(
+            "analysis_manifest_identity_mismatch",
+            f"{label} is not strict UTF-8 JSON: {exc}",
+        ) from exc
+    forbidden = _registration_vocabulary_path(value, label)
+    if forbidden is not None:
+        raise AnalysisManifestError(
+            "analysis_manifest_identity_mismatch",
+            f"{label} contains forbidden key 'estimator_registration' at "
+            f"{forbidden}",
+        )
+    return value
+
+
 def canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -461,12 +517,13 @@ def validate_manifest_target_evidence(
         _expect(bool(paths), "referenced target bundle evidence is required")
         for path in paths:
             _expect(path.is_dir(), f"referenced target bundle does not exist: {path}")
-            metadata = json.loads(
+            metadata = _strict_json_admission_bytes(
                 read_authentication_input(
                     path / "metadata.json",
                     grammar="json",
                     label=f"analysis target bundle {path.name} metadata",
-                )
+                ),
+                f"analysis target bundle {path.name} metadata",
             )
             _expect(isinstance(metadata, Mapping), f"bundle metadata is not an object: {path}")
             runtime = metadata.get("runtime")
@@ -614,7 +671,9 @@ def validate_analysis_manifest_v2(
                 raw = configs[entry["config"]]
                 if isinstance(raw, bytes):
                     config_bytes = raw
-                    config = json.loads(raw)
+                    config = _strict_json_admission_bytes(
+                        raw, f"analysis config {entry['config']}"
+                    )
                 else:
                     config = raw
                     config_bytes = normalized_json_bytes(raw)
@@ -645,12 +704,15 @@ def load_and_validate_analysis_manifest_v2(manifest_path: Path, registry_path: P
     manifest_bytes = read_authentication_input(
         manifest_path, grammar="json", label="analysis manifest v2"
     )
-    registry = json.loads(
+    registry = _strict_json_admission_bytes(
         read_authentication_input(
             registry_path, grammar="json", label="analysis registry v2"
-        )
+        ),
+        "analysis registry v2",
     )
-    manifest = json.loads(manifest_bytes)
+    manifest = _strict_json_admission_bytes(
+        manifest_bytes, "analysis manifest v2"
+    )
     base = manifest_path.parent
     def resolve(reference: str) -> Path:
         path = Path(reference)
@@ -785,7 +847,9 @@ def validate_attempt_ledger(
             used_receipts.add(row["dispatch_receipt_sha256"])
             receipt_bytes = receipt_raw if isinstance(receipt_raw, bytes) else render_dispatch_receipt(receipt_raw)
             _expect(sha256_bytes(receipt_bytes) == row["dispatch_receipt_sha256"], "dispatch receipt hash mismatch")
-            receipt = json.loads(receipt_bytes)
+            receipt = _strict_json_admission_bytes(
+                receipt_bytes, "dispatch receipt"
+            )
             _validate_dispatch_receipt(receipt)
             _expect(_identity_tuple(receipt) == _identity_tuple(row), "dispatch receipt identity mismatch")
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -808,7 +872,9 @@ def validate_attempt_ledger(
                 used_strict_evidence.add(str(row["reason_evidence_sha256"]))
                 evidence_bytes = evidence_raw if isinstance(evidence_raw, bytes) else render_strict_validation_evidence(evidence_raw)
                 try:
-                    evidence = json.loads(evidence_bytes)
+                    evidence = _strict_json_admission_bytes(
+                        evidence_bytes, "strict validation evidence"
+                    )
                     _validate_strict_evidence(evidence)
                     predicate = (
                         sha256_bytes(evidence_bytes) == row["reason_evidence_sha256"]
@@ -864,7 +930,7 @@ def validate_attempt_ledger(
                 (path / "summary_metrics.json").is_file(),
                 f"finalized bundle has no completion marker: {path}",
             )
-            metadata = json.loads(
+            metadata = _strict_json_admission_bytes(
                 read_authentication_input(
                     path / "metadata.json",
                     grammar="json",
@@ -872,7 +938,9 @@ def validate_attempt_ledger(
                         f"attempt ledger finalized bundle {entry_id} "
                         f"attempt {attempt_ordinal} metadata"
                     ),
-                )
+                ),
+                f"attempt ledger finalized bundle {entry_id} "
+                f"attempt {attempt_ordinal} metadata",
             )
             _expect(isinstance(metadata, Mapping), f"bundle metadata is not an object: {path}")
             _expect(

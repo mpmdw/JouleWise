@@ -27,7 +27,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    _strict_jsonl_admission_bytes,
+    campaign_cooldown_evidence,
+    load_manifest as load_analysis_manifest,
+)
+from joulewise.analysis_engine.registry import (
+    AnalysisManifestError,
+    load_and_validate_analysis_manifest_v2,
+)
 from joulewise.bundle_read import BundleReader, TracePoint, Window
 from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
@@ -67,6 +76,8 @@ from joulewise.floor_extraction import (
     _common_mode_floor_from_block_inputs,
     _common_mode_floor_from_extracted_inputs,
     _ingested_consumption_semantics_id,
+    _read_summary,
+    _strict_admission_json_value,
     extract_absolute_cell,
     extract_cells,
     extract_comparative_cell,
@@ -571,6 +582,97 @@ class D117MintConsumptionProfileTests(
         errors = validate_d117_mint_consumption_report(report)
         self.assertEqual(len(errors), 1, errors)
         self.assertIn("forbidden key 'estimator_registration'", errors[0])
+
+    def test_bundle_json_admission_refuses_duplicate_keys_at_every_depth(
+        self,
+    ) -> None:
+        for label, raw in (
+            ("top", b'{"status":"forged","status":"succeeded"}'),
+            ("nested", b'{"floor":{"value":1,"value":2}}'),
+            ("nonfinite", b'{"floor":NaN}'),
+        ):
+            with self.subTest(label=label), self.assertRaises(
+                FloorExtractionError
+            ):
+                _strict_admission_json_value(raw, "bundle evidence")
+
+    def test_duplicate_summary_bytes_fail_closed_as_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            bundle.mkdir()
+            raw = b'{"gross_energy_j":999,"gross_energy_j":1}\n'
+            (bundle / "summary_metrics.json").write_bytes(raw)
+
+            value, digest, refusal = _read_summary(bundle)
+
+        self.assertIsNone(value)
+        self.assertEqual(digest, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(refusal, "summary_unreadable")
+
+
+class AnalysisAdmissionStrictParsingTests(unittest.TestCase):
+    def test_analysis_manifest_entry_refuses_duplicate_and_deleted_vocabulary(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "duplicate",
+                b'{"schema_version":"forged","schema_version":"valid"}\n',
+                "duplicate JSON key",
+            ),
+            (
+                "registration",
+                b'{"nested":[{"estimator_registration":{}}]}\n',
+                "forbidden key 'estimator_registration'",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "analysis-manifest.json"
+            for label, raw, message in cases:
+                with self.subTest(label=label):
+                    path.write_bytes(raw)
+                    with self.assertRaisesRegex(AnalysisInputError, message):
+                        load_analysis_manifest(path)
+
+    def test_analysis_jsonl_entry_refuses_duplicate_and_deleted_vocabulary(
+        self,
+    ) -> None:
+        for label, raw, message in (
+            ("duplicate", b'{"x":1,"x":2}\n', "duplicate JSON key"),
+            (
+                "registration",
+                b'{"rows":[{"estimator_registration":{}}]}\n',
+                "forbidden key 'estimator_registration'",
+            ),
+        ):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                AnalysisInputError, message
+            ):
+                _strict_jsonl_admission_bytes(raw, "analysis JSONL evidence")
+
+    def test_registry_entry_refuses_duplicate_and_deleted_vocabulary(
+        self,
+    ) -> None:
+        cases = (
+            ("duplicate", b'{"safe":1,"safe":2}\n', "duplicate JSON key"),
+            (
+                "registration",
+                b'{"nested":{"estimator_registration":{}}}\n',
+                "forbidden key 'estimator_registration'",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text("{}\n", encoding="utf-8")
+            registry_path = root / "registry.json"
+            for label, raw, message in cases:
+                with self.subTest(label=label):
+                    registry_path.write_bytes(raw)
+                    with self.assertRaisesRegex(AnalysisManifestError, message):
+                        load_and_validate_analysis_manifest_v2(
+                            manifest_path, registry_path
+                        )
 
 
 class RealCapHitJoinTests(unittest.TestCase):

@@ -49,6 +49,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     validate_calibration_bracket_binding,
 )
 from joulewise.floor_extraction import (  # noqa: E402
+    validate_admitted_report_vocabulary,
     validate_d117_mint_consumption_report,
 )
 
@@ -1185,6 +1186,17 @@ def _strict_json_file(path: Path, label: str) -> tuple[Any, bytes]:
     return _strict_json_value(raw, label), raw
 
 
+def _pre_admit_legacy_report(path: Path, label: str) -> None:
+    """Guard exact report bytes before the pinned core's permissive loader."""
+
+    value, _raw = _strict_json_file(path, label)
+    if not isinstance(value, Mapping):
+        raise MintError(f"{label} must contain a JSON object")
+    errors = validate_admitted_report_vocabulary(value)
+    if errors:
+        raise MintError(f"{label} refused admitted vocabulary: {errors[0]}")
+
+
 def _strict_json_lines_file(path: Path, label: str) -> bytes:
     try:
         raw = read_authentication_input(path, grammar="jsonl", label=label)
@@ -1645,7 +1657,34 @@ def mint_floor_artifact(
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, bind, validate, and write one artifact."""
 
+    if active_v2_authentication_session() is None:
+        try:
+            with V2AuthenticationReadSession():
+                return mint_floor_artifact(
+                    pinset_path=pinset_path,
+                    pinset_sha256=pinset_sha256,
+                    artifact_id=artifact_id,
+                    floor_path=floor_path,
+                    statement_path=statement_path,
+                    calibration_plan_path=calibration_plan_path,
+                    calibration_plan_relative_path=calibration_plan_relative_path,
+                    absolute_inputs=absolute_inputs,
+                    comparative_inputs=comparative_inputs,
+                    project_commit=project_commit,
+                    project_tree_state=project_tree_state,
+                    strict_validator=strict_validator,
+                    consumption_semantics_id=consumption_semantics_id,
+                )
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
+
     pinset = _load_v1_pinset(pinset_path, pinset_sha256)
+    _pre_admit_legacy_report(
+        absolute_inputs.report_path, "absolute extraction report"
+    )
+    _pre_admit_legacy_report(
+        comparative_inputs.report_path, "comparative extraction report"
+    )
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -3203,6 +3242,22 @@ def _authenticate_v2_inputs(
     Mapping[str, Path],
     Any,
 ]:
+    if active_v2_authentication_session() is None:
+        try:
+            with V2AuthenticationReadSession():
+                return _authenticate_v2_inputs(
+                    pinset=pinset,
+                    pinset_path=pinset_path,
+                    pinset_sha256=pinset_sha256,
+                    input_manifest_path=input_manifest_path,
+                    strict_validator=strict_validator,
+                    consumption_semantics_id=consumption_semantics_id,
+                    input_manifest=input_manifest,
+                    calibration_custody_store=calibration_custody_store,
+                )
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
+
     manifest = (
         input_manifest
         if input_manifest is not None
@@ -3448,6 +3503,10 @@ def _authenticate_v2_inputs(
             ):
                 paths = component_paths[(role, component_name)]
                 root_id = cell_pins[component_name]["evidence_root_id"]
+                _pre_admit_legacy_report(
+                    paths.report_path,
+                    f"producer {plan_id}.{role}.{component_name} extraction report",
+                )
                 try:
                     component = core._authenticate_component(
                         core.ComponentPaths(

@@ -4908,6 +4908,170 @@ class PinsetTests(unittest.TestCase):
 
 
 class V2PinsetAndMintTests(unittest.TestCase):
+    def test_legacy_report_loader_is_preceded_by_strict_byte_admission(
+        self,
+    ) -> None:
+        attacks = {
+            "shadowed-governance": (
+                '"governance": {',
+                '"governance":{"estimator_registration":{"forged":true}},'
+                '"governance": {',
+            ),
+            "shadowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":'
+                '{"estimator_registration":{"forged":true}},'
+                '"operative_anchor_envelope": null',
+            ),
+        }
+        for label, (needle, replacement) in attacks.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                    install_v2_cli_fixture(root)
+                )
+                manifest = load_json(manifest_path)
+                report_path = Path(
+                    manifest["producer_plans"][0]["cells"][0]["absolute"][
+                        "report"
+                    ]
+                )
+                source = report_path.read_text(encoding="utf-8")
+                self.assertIn(needle, source)
+                report_path.write_text(
+                    source.replace(needle, replacement, 1),
+                    encoding="utf-8",
+                )
+                authenticate_calls = 0
+
+                def counting_core():
+                    nonlocal authenticate_calls
+                    core = load_test_core()
+                    authenticate = core._authenticate_component
+
+                    def counted(*args, **kwargs):
+                        nonlocal authenticate_calls
+                        authenticate_calls += 1
+                        return authenticate(*args, **kwargs)
+
+                    core._authenticate_component = counted
+                    return core
+
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        generalized,
+                        "_actual_v2_git_state",
+                        return_value=("0" * 40, True),
+                    ),
+                    mock.patch.object(
+                        generalized,
+                        "_fresh_original_core",
+                        side_effect=counting_core,
+                    ),
+                    mock.patch("sys.stderr", stderr),
+                ):
+                    exit_code = generalized.main(
+                        [
+                            "--pinset",
+                            str(pinset_path),
+                            "--pinset-sha256",
+                            pinset_sha256,
+                            "--v2-input-manifest",
+                            str(manifest_path),
+                            "--out",
+                            str(root / "floor.json"),
+                            "--single-count-out",
+                            str(root / "single-count.txt"),
+                            "--project-commit",
+                            "0" * 40,
+                            "--project-tree-state",
+                            "clean",
+                        ]
+                    )
+                self.assertEqual(exit_code, 2)
+                self.assertIn("duplicate JSON key", stderr.getvalue())
+                self.assertEqual(authenticate_calls, 0)
+                self.assertFalse((root / "floor.json").exists())
+
+    def test_legitimate_report_reaches_legacy_authentication_after_preparse(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_v2_cli_fixture(root)
+            )
+            calls = 0
+
+            def counting_core():
+                nonlocal calls
+                core = load_test_core()
+                authenticate = core._authenticate_component
+
+                def counted(*args, **kwargs):
+                    nonlocal calls
+                    calls += 1
+                    return authenticate(*args, **kwargs)
+
+                core._authenticate_component = counted
+                return core
+
+            def validate_binding(binding, snapshot, **_kwargs):
+                return tuple(
+                    next(
+                        observation
+                        for observation in snapshot.observations
+                        if observation.receipt_digest
+                        == binding["endpoints"][role]["receipt_digest"]
+                    )
+                    for role in ("pre", "post")
+                )
+
+            with (
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "validate_calibration_bracket_binding",
+                    side_effect=validate_binding,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=counting_core,
+                ),
+            ):
+                exit_code = generalized.main(
+                    [
+                        "--pinset",
+                        str(pinset_path),
+                        "--pinset-sha256",
+                        pinset_sha256,
+                        "--v2-input-manifest",
+                        str(manifest_path),
+                        "--out",
+                        str(root / "floor.json"),
+                        "--single-count-out",
+                        str(root / "single-count.txt"),
+                        "--project-commit",
+                        "0" * 40,
+                        "--project-tree-state",
+                        "clean",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(calls, 8)
+            self.assertTrue((root / "floor.json").is_file())
+
     def test_configured_core_rederives_the_pinned_phase_metric(self) -> None:
         summary = {
             "phase_energy_j": {"decode": 2.0, "prefill": 3.0},

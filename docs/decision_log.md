@@ -8429,3 +8429,33 @@ can no longer hide a forged value inside those bytes.  Value-level validators
 continue to validate already parsed values.  Together these closures make the
 round-7 parameter rule total over every admitted report or artifact value and
 byte entry point in the implementing unit.
+
+### D-124 amendment — 2026-08-11: round-9 strict pre-admission at the generalized mint
+
+The round-8 delta found that its duplicate-key closure did not yet cover the
+generalized D-117 mint's report-byte entry: the generalized layer delegated to
+the pinned legacy core, whose `_load_json_object` used ordinary last-key-wins
+JSON before `validate_d117_mint_consumption_report` saw the value.  Executed
+shadowing attacks at top-level `governance` and member-level
+`operative_anchor_envelope` therefore retained the forged raw bytes while the
+collapsed values were admitted.
+
+Round 9 places an exact-byte, duplicate-key- and non-finite-refusing parse in
+the generalized layer before every delegated report authentication.  The same
+pre-admission rejects `estimator_registration` recursively before the legacy
+loader runs.  Both generalized v1 and v2 file-backed entry points execute
+inside one digest-stable authentication-read session, so a successful preparse
+and the legacy re-read cannot observe different bytes.  The scoped extraction
+bundle readers likewise use strict JSON for summary and metadata admission.
+The two shadowing attacks now refuse before `_authenticate_component`, while a
+legitimate eight-component report fixture still reaches legacy authentication.
+
+The mandated load census also found ordinary JSON admission reads in
+`joulewise/analysis_engine/inputs.py` and `joulewise/analysis_engine/registry.py`.
+The lead expanded round-9 scope to those two files.  Their manifest, config,
+plan, order/campaign evidence, cooldown, receipt, strict-evidence, and metadata
+byte routes now use duplicate-key- and non-finite-refusing parsing plus the
+same recursive `estimator_registration` vocabulary refusal.  The existing
+floor-artifact byte route retains its round-8 duplicate hook and recursive
+artifact-profile refusal.  Every censused admission parse is therefore strict
+at the parse site or guarded by an executed exact-byte preparse.
