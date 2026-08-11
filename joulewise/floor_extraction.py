@@ -1326,10 +1326,6 @@ class CellReport:
                 ),
                 "smoke_only": self.floor.guarded_floor_j is None,
             }
-            if self.estimator_registration is not None:
-                floor_row["estimator_registration"] = json.loads(
-                    json.dumps(self.estimator_registration)
-                )
             if allowance is not None:
                 floor_row.update(
                     {
@@ -1477,7 +1473,6 @@ _D117_MINT_FLOOR_OPTIONAL_KEYS = {
     "whole_window_drift_allowance_provenance",
     "drift_widened_unguarded_floor_j",
     "drift_widened_guarded_floor_j",
-    "estimator_registration",
 }
 _D117_MINT_MEMBER_KEYS = {
     "slot",

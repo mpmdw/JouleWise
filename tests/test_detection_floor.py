@@ -22,6 +22,10 @@ from unittest.mock import patch
 
 import joulewise.detection_floor as detection_floor
 import joulewise.floor_extraction as floor_extraction
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    authenticate_floor_artifact_bytes,
+)
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -1115,7 +1119,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(first["version"], "v1")
         self.assertEqual(
             COMMON_MODE_PARAMETER_SHA256,
-            "dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf",
+            "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
         )
         self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
         self.assertEqual(
@@ -1167,7 +1171,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             detection_floor._COMMON_MODE_PARAMETERS[
                 "registered_result_provenance_rule"
             ],
-            "registered_results_exist_only_as_governed_extraction_artifacts",
+            "registration_is_declared_only_in_the_committed_preregistered_"
+            "extraction_spec_no_admitted_report_or_artifact_vocabulary_"
+            "represents_a_registered_result",
         )
         assumption = first["stationarity_transfer_assumption"]
         self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
@@ -1183,6 +1189,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06",
             "4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981",
             "973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7",
+            "dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf",
         ):
             with self.subTest(superseded_sha=superseded_sha):
                 old_registration = two_shared_edge_common_mode_registration()
@@ -2152,6 +2159,29 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_injected_estimator_registration_is_not_artifact_vocabulary(self):
+        artifact_path = Path(__file__).resolve().parents[1] / (
+            "df-ph-decode-floor-mint1.json"
+        )
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        artifact["cells"][0]["comparative"]["estimator_registration"] = (
+            two_shared_edge_common_mode_registration()
+        )
+        raw = (
+            json.dumps(artifact, sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+
+        expected_error = (
+            "cells[0].comparative: unrecognized key "
+            "'estimator_registration'"
+        )
+        self.assertIn(expected_error, validate_floor_artifact(artifact))
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "unrecognized key 'estimator_registration'",
+        ):
+            authenticate_floor_artifact_bytes(raw)
 
     def test_mint1_pinset_preserves_byte_stable_empty_finding_set(self):
         self.assertEqual(

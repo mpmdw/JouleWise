@@ -8351,27 +8351,56 @@ and every `FloorEstimate` it returns is unregistered.  The importable
 `registered_block_inputs` overload no longer exist.  Registered arithmetic is
 now private to `floor_extraction`; its inputs are derived inside
 `extract_comparative_cell` from authenticated bundle evidence, and a
-registration exists only on the resulting governed `CellReport` artifact.
+registration remains an in-process attribute on the resulting governed
+`CellReport`.  The committed preregistered extraction spec remains the
+declarative registration authority; report and artifact serialization do not
+carry that authority.
 The default `comparative_false_effect_floor` path and the legacy raw common-mode
 path remain public and behaviorally unchanged.
 
 All `shared_extrema_*` parameter rules retain their round-5 semantics.  The
-parameter dictionary adds
-`registered_result_provenance_rule =
-registered_results_exist_only_as_governed_extraction_artifacts`; this is the
-round's single registration rotation.  The resulting parameter hash is
+round's parameter dictionary added a provenance rule that incorrectly treated
+the extraction-produced `CellReport` as sufficient custody closure; round 7
+below corrects that claim and deletes the serialized vocabulary.  The
+resulting round-6 parameter hash is
 `dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf`.
 The round-5 hash
 `973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7`
 joins the four earlier superseded registrations and is rejected with them.
 
-The claims-with-assumptions form narrows accordingly: **a registered result is
-a governed extraction artifact produced under a valid D-124 registration;
-there is no public callable that accepts constructed arithmetic inputs and
-returns a registered `FloorEstimate`.**  The refuter-authored round-4 oracle
+The claims-with-assumptions form narrows accordingly: **registration is
+declared in the committed preregistered extraction spec, while extraction
+re-derives provenance from authenticated evidence and emits no serialized
+registration field; there is no public callable that accepts constructed
+arithmetic inputs and returns a registered `FloorEstimate`.**  The
+refuter-authored round-4 oracle
 continues to exercise the same arithmetic bars through the extraction
 module's test-only internal seam; its case generation and assertions are
 unchanged.  The delta-4 counterexamples, 2,048-case adversarial-zero campaign,
 and real-fixture exact-width checks likewise exercise the internal extraction
 seam.  This construction eliminates FCM-R5-01's fabricated-record admission
 class instead of attempting to authenticate Python object provenance.
+
+### D-124 amendment — 2026-08-11: round-7 cold-gate ALT-D120 vocabulary deletion
+
+The revised cold-gate sitting (Fable adjudicator plus Opus contract-lens
+refuter) REJECTS the round-6 custody-closure claim and RULES the hybrid plus
+ALT-D120 remedy: deletion-by-vocabulary.  The committed preregistered
+extraction specs remain the one declarative home for estimator registration,
+and extraction continues to retain registration only as an in-process
+`CellReport` attribute.  `CellReport.as_row()` no longer serializes
+`estimator_registration`; the recursively closed D-117 mint-consumption
+profile and the detection-floor artifact profile no longer admit that key.
+Consequently an injected registration dictionary is an unknown key in either
+JSON profile, and floor-artifact authentication raises during validation
+before returning an authenticated value.  Provenance is re-derived from the
+governed spec and authenticated evidence; it is not read from report or
+artifact JSON.
+
+The parameter rule is corrected verbatim to
+`registration_is_declared_only_in_the_committed_preregistered_extraction_spec_no_admitted_report_or_artifact_vocabulary_represents_a_registered_result`.
+This is the sixth and only round-7 registration rotation, producing
+`dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38`.
+The round-6 hash
+`dea20dc0d43760ebfd17cb6a130ab2c2e85fb7a9a06c224cbf584804ee2f9bdf`
+joins the five earlier superseded registrations and is rejected with them.

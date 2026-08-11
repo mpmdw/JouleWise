@@ -503,6 +503,20 @@ class D117MintConsumptionProfileTests(
                 errors = validate_d117_mint_consumption_report(attacked)
                 self.assertTrue(any(key in error for error in errors), errors)
 
+    def test_closed_profile_rejects_injected_estimator_registration(self) -> None:
+        report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        report["cells"][0]["floor"]["estimator_registration"] = (
+            two_shared_edge_common_mode_registration()
+        )
+
+        self.assertEqual(
+            validate_d117_mint_consumption_report(report),
+            [
+                "extraction report.cells[0].floor: unknown keys "
+                "['estimator_registration']"
+            ],
+        )
+
 
 class RealCapHitJoinTests(unittest.TestCase):
     def test_embedded_fixtures_are_the_four_audited_records(self) -> None:
@@ -2472,10 +2486,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             report.estimator_registration,
             two_shared_edge_common_mode_registration(),
         )
-        self.assertEqual(
-            report.as_row()["floor"]["estimator_registration"],
-            two_shared_edge_common_mode_registration(),
-        )
+        self.assertNotIn("estimator_registration", report.as_row()["floor"])
         self.assertEqual(
             [blocks, registration, basis, session.calibration_bracket], before
         )

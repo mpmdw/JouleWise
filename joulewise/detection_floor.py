@@ -161,7 +161,9 @@ _COMMON_MODE_PARAMETERS = {
         "endpoint_max_plus_one_never_zero_allowance_inside_shared_bound"
     ),
     "registered_result_provenance_rule": (
-        "registered_results_exist_only_as_governed_extraction_artifacts"
+        "registration_is_declared_only_in_the_committed_preregistered_"
+        "extraction_spec_no_admitted_report_or_artifact_vocabulary_"
+        "represents_a_registered_result"
     ),
 }
 COMMON_MODE_PARAMETER_SHA256 = hashlib.sha256(
@@ -1899,9 +1901,7 @@ _ATTRIBUTION_LIMIT_RECORD_KEYS = {
     "point_floor_diagnostic",
     "single_count_discipline",
 }
-_CMP_OPTIONAL_KEYS = _ATTRIBUTION_LIMIT_RECORD_KEYS | {
-    "estimator_registration"
-}
+_CMP_OPTIONAL_KEYS = _ATTRIBUTION_LIMIT_RECORD_KEYS
 _ATTRIBUTION_LIMIT_CONTAINER_KEYS = {
     "floor_source",
     "floor_limit_class",
@@ -3556,14 +3556,6 @@ def _validate_comparative(
         errors,
     ):
         return
-    if "estimator_registration" in record and not (
-        validate_common_mode_estimator_registration(
-            record["estimator_registration"]
-        )
-    ):
-        errors.append(
-            f"{where}.estimator_registration: invalid registered candidate identity"
-        )
     deltas = record["block_deltas_j"]
     blocks = record["blocks"]
     n = record["n_blocks"]
