@@ -137,6 +137,10 @@ _COMMON_MODE_PARAMETERS = {
     "shared_extrema_domain_refusal_reason": (
         "common_mode_nonseparable_window_domain"
     ),
+    "shared_extrema_numerical_enclosure_rule": (
+        "outward_64u_times_abs_coefficient_weighted_member_"
+        "envelope_integral_sum"
+    ),
     "bundle_residual_rule": (
         "math.fsum(per_bundle_adversarial_half_width_j)/2"
     ),
@@ -953,13 +957,15 @@ def two_shared_edge_common_mode_floor(
     offset_sweeps_j: Sequence[Sequence[float]],
     bundle_residual_half_widths_j: Sequence[Sequence[float]],
     member_window_bounds_s: object = None,
+    member_envelope_integral_sums_j: object = None,
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> FloorEstimate:
     """D-124 contrast floor with two shared edges and local residuals.
 
-    ``onset_sweeps_j`` and ``offset_sweeps_j`` are the exact contrast values
-    obtained by sweeping one shared edge while holding the other at zero.
+    ``onset_sweeps_j`` and ``offset_sweeps_j`` are float evaluations at the
+    exactly enumerated shared-edge candidates; the emitted width encloses the
+    exact width outward at member-energy scale.
     ``member_window_bounds_s`` supplies each block's aligned A1/B1/B2/A2
     normalized ``(start_s, end_s)`` bounds.  Separability gives
     ``min(onset)+min(offset)-point`` and the analogous maximum only after every
@@ -979,6 +985,7 @@ def two_shared_edge_common_mode_floor(
             len(onset_sweeps_j)
             == len(offset_sweeps_j)
             == len(bundle_residual_half_widths_j)
+            == len(member_envelope_integral_sums_j)
             == n
         )
     except TypeError:
@@ -986,7 +993,8 @@ def two_shared_edge_common_mode_floor(
     if not input_lengths_match:
         _common_mode_refuse(
             "common_mode_precondition_failed",
-            "every block needs onset, offset, and four residual inputs",
+            "every block needs onset, offset, four residuals, and a member "
+            "envelope integral sum",
         )
     bound = _common_mode_finite(shared_edge_bound_s)
     operative = registered_common_mode_operative_bound(calibration_bracket)
@@ -1061,6 +1069,7 @@ def two_shared_edge_common_mode_floor(
         onset_sweeps_j,
         offset_sweeps_j,
         bundle_residual_half_widths_j,
+        member_envelope_integral_sums_j,
         normalized_member_windows,
         strict=True,
     )
@@ -1069,6 +1078,7 @@ def two_shared_edge_common_mode_floor(
         raw_onset,
         raw_offset,
         raw_residuals,
+        raw_member_envelope_sum,
         _member_windows,
     ) in enumerate(
         block_inputs
@@ -1107,13 +1117,28 @@ def two_shared_edge_common_mode_floor(
                 "common_mode_precondition_failed",
                 f"block {index} sweeps must include the zero-edge point delta",
             )
-        extrema_scale = max(
+        member_envelope_sum = _common_mode_finite(raw_member_envelope_sum)
+        if member_envelope_sum is None or member_envelope_sum < 0.0:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} member envelope integral sum must be finite "
+                "and nonnegative",
+            )
+        member_envelope_sum = max(
+            member_envelope_sum,
             1.0,
             abs(delta),
             *(abs(value) for value in onset),
             *(abs(value) for value in offset),
         )
-        extrema_pad = 8.0 * math.ulp(extrema_scale)
+        # Each correctly-rounded contrast evaluation has error <=4u*S (fsum
+        # exactness; cancellation shrinks the result, never the error), the
+        # width composes <=3 evaluations plus one reference for <=16u*S, and
+        # 64u*S gives 4x analytic headroom independent of member count and
+        # magnitude ratio.
+        extrema_pad = (
+            64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
+        )
         lower = _common_mode_outward(
             math.fsum((min(onset), min(offset), -delta, -extrema_pad)),
             -math.inf,

@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_engine.inputs import campaign_cooldown_evidence
-from joulewise.bundle_read import TracePoint, Window
+from joulewise.bundle_read import BundleReader, TracePoint, Window
 from joulewise.detection_floor import small_sample_guard_factor
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
@@ -38,6 +38,7 @@ from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     METHOD_ID,
+    _common_mode_window_is_strictly_noncollapsed,
     attribution_single_count_discipline,
     canonical_domain_sha256,
     comparative_false_effect_floor,
@@ -55,6 +56,7 @@ from joulewise.floor_extraction import (
     CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION,
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
+    CellReport,
     LEGACY_THROUGHPUT_FIELD,
     MemberReport,
     READER_THROUGHPUT_FIELD,
@@ -2400,6 +2402,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             [delta, delta],
             [0.0] * 4,
             [(-1.0, 1.0)] * 4,
+            100.0,
         )
 
     def extract(self, *, registration=None, session=None):
@@ -2573,7 +2576,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             for position in ("A1", "B1", "B2", "A2")
         ]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals, windows = (
+            onset, offset, residuals, windows, envelope_sum = (
                 _registered_common_mode_block_inputs(
                     members,
                     runs_root=Path("unused"),
@@ -2587,6 +2590,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         self.assertGreater(max(offset) - min(offset), 0.0)
         self.assertEqual(residuals, [0.0] * 4)
         self.assertEqual(windows, [(-0.5, 1.5)] * 4)
+        self.assertEqual(envelope_sum, 6.0)
 
     @staticmethod
     def _first_safely_admitted_end(start_s: float, bound_s: float) -> float:
@@ -2740,95 +2744,485 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                         "common_mode_nonseparable_window_domain",
                     )
 
+    def test_helper_refuses_nonfinite_member_envelope_power(self):
+        windows = {
+            position: Window(0.0, 2.0) for position in self._ABBA
+        }
+        curves = {
+            position: [TracePoint(0.0, 1.0, -1.0, 3.0)]
+            for position in self._ABBA
+        }
+        curves["B2"] = [TracePoint(0.0, math.inf, -1.0, 3.0)]
+
+        class Reader:
+            def __init__(self, path):
+                self.position = Path(path).name
+
+            def summed_curve(self):
+                return curves[self.position]
+
+            def phase_windows(self):
+                return {"decode": [windows[self.position]]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [self._sweep_member(position) for position in self._ABBA]
+        with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+            with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("nonfinite-envelope"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=self.SWEEP_BOUND_S,
+                )
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_precondition_failed",
+        )
+
+    def test_campaign_candidate_common_mode_domain_inventory(self):
+        """Pin today's one collected root and seven named absences."""
+
+        repository_root = Path(__file__).resolve().parents[1]
+        evidence_parent = Path("/Users/edr/code/JouleWise")
+        operative_bound_s = 0.03678263869781979
+
+        a5_spec = json.loads(
+            (
+                repository_root
+                / "docs/process_traces/2026-07-24-diagnostic-extraction/"
+                "specs/a5_complete_supported_cells.json"
+            ).read_text(encoding="utf-8")
+        )
+        a5_cell = next(
+            cell
+            for cell in a5_spec["cells"]
+            if cell["cell_id"] == "A5-PH-DECODE-CMP"
+        )
+
+        candidates: dict[str, tuple[Path, str, list[str]]] = {
+            "a5 decode root": (
+                evidence_parent / "runs_window_a5_20260723",
+                a5_cell["metric"],
+                [
+                    block["members"][position]
+                    for block in a5_cell["blocks"]
+                    for position in self._ABBA
+                ],
+            )
+        }
+        floor_specs: list[tuple[dict, Path]] = []
+        for model in ("1p5b", "7b"):
+            spec = json.loads(
+                (
+                    repository_root
+                    / f"configs/floor_mint/d117_qwen25_{model}_extraction_spec.json"
+                ).read_text(encoding="utf-8")
+            )
+            runs_root = evidence_parent / f"runs_d117_floor_qwen25_{model}_v1"
+            floor_specs.append((spec, runs_root))
+            for cell in spec["cells"]:
+                if cell["kind"] != "comparative":
+                    continue
+                candidates[cell["cell_id"]] = (
+                    runs_root,
+                    cell["metric"],
+                    [
+                        block["members"][position]
+                        for block in cell["blocks"]
+                        for position in self._ABBA
+                    ],
+                )
+
+        contrast_manifest = json.loads(
+            (
+                repository_root
+                / "configs/campaigns/"
+                "d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json"
+            ).read_text(encoding="utf-8")
+        )
+        contrast_root = (
+            evidence_parent / "runs_d117_contrast_qwen25_1p5b_vs_7b_v1"
+        )
+        for contrast in contrast_manifest["contrasts"]:
+            candidates[contrast["contrast_id"]] = (
+                contrast_root,
+                contrast["metric"],
+                [member["run_id"] for member in contrast["members"]],
+            )
+
+        q8_cells = [
+            (cell, runs_root)
+            for spec, runs_root in floor_specs
+            for cell in spec["cells"]
+            if cell["kind"] == "comparative"
+            and "p256" in cell["cell_id"]
+        ]
+        if q8_cells:
+            q8_cell, q8_root = q8_cells[0]
+            candidates["Q8 p256 dedicated floor cells"] = (
+                q8_root,
+                q8_cell["metric"],
+                [
+                    block["members"][position]
+                    for block in q8_cell["blocks"]
+                    for position in self._ABBA
+                ],
+            )
+
+        absent = set()
+        admitted_margins: dict[str, float] = {}
+        for name, (runs_root, metric, bundle_ids) in candidates.items():
+            if not runs_root.is_dir():
+                absent.add(name)
+                continue
+            phase = metric.rsplit(".", 1)[-1]
+            windows_by_member = []
+            for bundle_id in bundle_ids:
+                phase_windows = BundleReader(
+                    runs_root / bundle_id
+                ).phase_windows().get(phase)
+                self.assertIsInstance(
+                    phase_windows,
+                    list,
+                    f"{name}: {bundle_id} has no {phase} phase windows",
+                )
+                self.assertEqual(
+                    len(phase_windows),
+                    1,
+                    f"{name}: {bundle_id} must have exactly one {phase} window",
+                )
+                windows_by_member.append((bundle_id, phase_windows[0]))
+            minimum_margin = min(
+                window.end_s - window.start_s - 2.0 * operative_bound_s
+                for _, window in windows_by_member
+            )
+            admitted_margins[name] = minimum_margin
+            for bundle_id, window in windows_by_member:
+                self.assertTrue(
+                    _common_mode_window_is_strictly_noncollapsed(
+                        window.start_s,
+                        window.end_s,
+                        operative_bound_s,
+                    ),
+                    f"{name}: {bundle_id} is outside the production domain; "
+                    f"minimum duration-2B margin={minimum_margin!r} s",
+                )
+
+        if "Q8 p256 dedicated floor cells" not in candidates:
+            absent.add("Q8 p256 dedicated floor cells")
+
+        expected_absent = {
+            "d117-df-cmp-abba-ph-decode-qwen25-1p5b",
+            "d117-df-cmp-abba-ph-prefill-p128-qwen25-1p5b",
+            "d117-df-cmp-abba-ph-decode-qwen25-7b",
+            "d117-df-cmp-abba-ph-prefill-p128-qwen25-7b",
+            "ctr-d117-decode-qwen25-1p5b-vs-7b",
+            "ctr-d117-prefill-p256-qwen25-1p5b-vs-7b",
+            "Q8 p256 dedicated floor cells",
+        }
+        self.assertEqual(
+            absent,
+            expected_absent,
+            "candidate evidence inventory changed; re-inventory every named "
+            f"root/cell before proceeding (admitted margins={admitted_margins!r})",
+        )
+        self.assertEqual(set(admitted_margins), {"a5 decode root"})
+        self.assertGreater(
+            admitted_margins["a5 decode root"],
+            0.0,
+            f"minimum duration-2B margin={admitted_margins!r}",
+        )
+
+    @staticmethod
+    def _delta2_minimized_geometry():
+        bound = 0.9
+        windows = {
+            "A1": Window(0.0, 1.800000000000001),
+            "B1": Window(-0.8445496064319995, 0.9554503935680011),
+            "B2": Window(0.9615697972382862, 2.7615697972382875),
+            "A2": Window(0.41860932194040545, 2.218609321940408),
+        }
+        raw_curves = {
+            "A1": [
+                (1000.0, -0.9, 0.900000000000001),
+                (1000.0, 0.9, 2.700000000000001),
+            ],
+            "B1": [(1000.0, 0.055450393568000515, 1.855450393568001)],
+            "B2": [
+                (1000.0, 0.06156979723828616, 1.8615697972382863),
+                (1e-6, 0.06156979723828615, 3.661569797238287),
+                (1000.0, 1.8615697972382863, 2.7615697972382875),
+            ],
+            "A2": [
+                (1000.0, 1.3186093219404083, 2.218609321940408),
+                (1e-6, -0.48139067805959457, 3.1186093219404074),
+            ],
+        }
+        curves = {
+            position: [
+                TracePoint(float(index), power, start, end)
+                for index, (power, start, end) in enumerate(rows)
+            ]
+            for position, rows in raw_curves.items()
+        }
+        return bound, windows, curves
+
+    def test_delta2_minimized_member_scale_cancellation_regression(self):
+        bound, windows, curves = self._delta2_minimized_geometry()
+        coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
+
+        class Reader:
+            def __init__(self, path):
+                self.position = Path(path).name
+
+            def summed_curve(self):
+                return curves[self.position]
+
+            def phase_windows(self):
+                return {"decode": [windows[self.position]]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [self._sweep_member(position) for position in self._ABBA]
+        with (
+            mock.patch("joulewise.floor_extraction.BundleReader", Reader),
+            mock.patch(
+                "joulewise.floor_extraction."
+                "_corner_composed_anchor_shift_envelope",
+                return_value={"max_abs_delta_j": 0.0},
+            ),
+        ):
+            onset, offset, residuals, returned_windows, envelope_sum = (
+                _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("delta2-minimized"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=bound,
+                )
+            )
+
+        def contrast(onset_s, offset_s):
+            return math.fsum(
+                coefficients[position]
+                * _integrate(
+                    curves[position],
+                    windows[position].start_s + onset_s,
+                    windows[position].end_s + offset_s,
+                )
+                for position in self._ABBA
+            )
+
+        point = contrast(0.0, 0.0)
+        joint_width = max(
+            abs(contrast(onset_shift, offset_shift) - point)
+            for onset_shift in {
+                -bound,
+                0.0,
+                bound,
+                *(
+                    edge - windows[position].start_s
+                    for position in self._ABBA
+                    for row in curves[position]
+                    for edge in (row.support_start_s, row.support_end_s)
+                    if -bound
+                    <= edge - windows[position].start_s
+                    <= bound
+                ),
+            }
+            for offset_shift in {
+                -bound,
+                0.0,
+                bound,
+                *(
+                    edge - windows[position].end_s
+                    for position in self._ABBA
+                    for row in curves[position]
+                    for edge in (row.support_start_s, row.support_end_s)
+                    if -bound <= edge - windows[position].end_s <= bound
+                ),
+            }
+        )
+        round2_emitted_width = 4.565237077258653e-13
+        self.assertEqual(joint_width, 5.115907697472721e-13)
+        self.assertEqual(
+            joint_width - round2_emitted_width,
+            5.5067062021406856e-14,
+        )
+        floor = two_shared_edge_common_mode_floor(
+            [point, point],
+            onset_sweeps_j=[onset, onset],
+            offset_sweeps_j=[offset, offset],
+            bundle_residual_half_widths_j=[residuals, residuals],
+            member_window_bounds_s=[returned_windows, returned_windows],
+            member_envelope_integral_sums_j=[envelope_sum, envelope_sum],
+            calibration_bracket={
+                "status": "passed",
+                "endpoint_max_b_fiducial_s": 0.0,
+                "calibration_drift_allowance_s": bound,
+                "b_fiducial_s": bound,
+                "acceptance": {
+                    "allowance": {
+                        "rule": "max(observed_drift_s,bracket_screen_s)",
+                        "value_s": repr(bound),
+                        "embedding_count": 1,
+                        "embedded_in": "b_fiducial_s",
+                    }
+                },
+            },
+            shared_edge_bound_s=bound,
+        )
+        self.assertGreaterEqual(
+            floor.admissible_half_widths_j[0],
+            joint_width,
+        )
+
     def test_randomized_strict_domain_matches_cartesian_breakpoint_oracle(self):
         rng = random.Random(0xD1245EED)
         positions = self._ABBA
         coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
+        case_count = 512
+        adversarial_case_count = 16
+        exact_case_budget = 64
         support_kinds_seen = set()
         interval_counts_seen = set()
-        saw_zero_power = False
-        saw_nonzero_power = False
+        positive_powers = []
         close_duration_count = 0
+        exact_cases_checked = 0
+        adversarial_exact_cases_checked = 0
 
-        for case_index in range(512):
-            bound = rng.uniform(0.01, 1.0)
-            windows: dict[str, Window] = {}
-            curves: dict[str, list[TracePoint]] = {}
-            for position_index, position in enumerate(positions):
-                start = rng.uniform(-2.0, 2.0)
-                if case_index < 256:
-                    end = self._first_safely_admitted_end(start, bound)
-                    for _ in range(rng.randrange(9)):
-                        end = math.nextafter(end, math.inf)
-                    close_duration_count += 1
-                else:
-                    end = start + rng.uniform(2.1, 32.0) * bound
-                windows[position] = Window(start, end)
-                neighbourhood_lo = start - bound
-                neighbourhood_hi = end + bound
-                span = neighbourhood_hi - neighbourhood_lo
-                count = 1 + rng.randrange(8)
-                interval_counts_seen.add(count)
-                kind = (case_index + position_index) % 5
-                support_kinds_seen.add(kind)
-                intervals = []
-                for interval_index in range(count):
-                    if kind == 0:  # contiguous
-                        width = span / count
-                        support_start = neighbourhood_lo + interval_index * width
-                        support_end = support_start + width
-                    elif kind == 1:  # gapped
-                        width = span / (2.0 * count + 1.0)
-                        support_start = neighbourhood_lo + (2 * interval_index) * width
-                        support_end = support_start + width
-                    elif kind == 2:  # overlapping
-                        width = span / max(1.5, count / 2.0)
-                        support_start = neighbourhood_lo + interval_index * span / (
-                            count + 1.0
-                        )
-                        support_end = support_start + width
-                    elif kind == 3:  # includes fully outside supports
-                        width = span / (count + 1.0)
-                        if interval_index == 0:
-                            support_start = start
-                            support_end = end
-                        else:
-                            support_end = (
-                                neighbourhood_lo - interval_index * width
-                            )
-                            support_start = support_end - 0.5 * width
-                    else:  # exact and one-ULP neighbourhood boundaries
-                        edge = (
-                            neighbourhood_lo
-                            if interval_index % 2 == 0
-                            else neighbourhood_hi
-                        )
-                        if interval_index % 3 == 1:
-                            edge = math.nextafter(edge, -math.inf)
-                        elif interval_index % 3 == 2:
-                            edge = math.nextafter(edge, math.inf)
-                        width = max(span / (count + 2.0), math.ulp(edge))
-                        support_start = edge
-                        support_end = edge + width
-                    power = (
-                        0.0
-                        if (
-                            (case_index + position_index + interval_index) % 4 == 0
-                            or (kind == 3 and interval_index == 0)
-                        )
-                        else rng.uniform(0.01, 20.0)
-                    )
-                    saw_zero_power = saw_zero_power or power == 0.0
-                    saw_nonzero_power = saw_nonzero_power or power > 0.0
-                    intervals.append(
+        for case_index in range(case_count):
+            adversarial = case_index < adversarial_case_count
+            if adversarial:
+                bound = rng.choice((0.03, 0.3, 0.9))
+                duration = rng.uniform(2.5, 8.0) * bound
+                relative_supports = [
+                    (-bound, duration * 0.58),
+                    (duration * 0.17, duration + bound),
+                    (duration * 0.49, duration * 0.91),
+                ]
+                base_powers = [1e5, 1e-2, rng.uniform(1e3, 5e4)]
+                windows = {}
+                curves = {}
+                for position_index, position in enumerate(positions):
+                    start = rng.uniform(-2.0, 2.0)
+                    windows[position] = Window(start, start + duration)
+                    powers = list(base_powers)
+                    if position == "B2":
+                        powers[0] = math.nextafter(powers[0], math.inf)
+                    curves[position] = [
                         TracePoint(
                             float(interval_index),
                             power,
-                            support_start,
-                            support_end,
+                            start + support_start,
+                            start + support_end,
                         )
-                    )
-                curves[position] = intervals
+                        for interval_index, (
+                            (support_start, support_end),
+                            power,
+                        ) in enumerate(zip(relative_supports, powers, strict=True))
+                    ]
+            else:
+                bound = rng.uniform(0.01, 1.0)
+                windows = {}
+                curves = {}
+                for position_index, position in enumerate(positions):
+                    start = rng.uniform(-2.0, 2.0)
+                    if case_index < 256:
+                        end = self._first_safely_admitted_end(start, bound)
+                        for _ in range(rng.randrange(9)):
+                            end = math.nextafter(end, math.inf)
+                        close_duration_count += 1
+                    else:
+                        end = start + rng.uniform(2.1, 32.0) * bound
+                    windows[position] = Window(start, end)
+                    neighbourhood_lo = start - bound
+                    neighbourhood_hi = end + bound
+                    span = neighbourhood_hi - neighbourhood_lo
+                    count = 1 + rng.randrange(8)
+                    interval_counts_seen.add(count)
+                    kind = (case_index + position_index) % 5
+                    support_kinds_seen.add(kind)
+                    intervals = []
+                    for interval_index in range(count):
+                        if kind == 0:
+                            width = span / count
+                            support_start = neighbourhood_lo + interval_index * width
+                            support_end = support_start + width
+                        elif kind == 1:
+                            width = span / (2.0 * count + 1.0)
+                            support_start = neighbourhood_lo + 2 * interval_index * width
+                            support_end = support_start + width
+                        elif kind == 2:
+                            width = span / max(1.5, count / 2.0)
+                            support_start = neighbourhood_lo + interval_index * span / (
+                                count + 1.0
+                            )
+                            support_end = support_start + width
+                        elif kind == 3:
+                            width = span / (count + 1.0)
+                            if interval_index == 0:
+                                support_start = start
+                                support_end = end
+                            else:
+                                support_end = neighbourhood_lo - interval_index * width
+                                support_start = support_end - 0.5 * width
+                        else:
+                            edge = (
+                                neighbourhood_lo
+                                if interval_index % 2 == 0
+                                else neighbourhood_hi
+                            )
+                            if interval_index % 3 == 1:
+                                edge = math.nextafter(edge, -math.inf)
+                            elif interval_index % 3 == 2:
+                                edge = math.nextafter(edge, math.inf)
+                            width = max(span / (count + 2.0), math.ulp(edge))
+                            support_start = edge
+                            support_end = edge + width
+                        power = (
+                            0.0
+                            if (
+                                (case_index + position_index + interval_index) % 4
+                                == 0
+                                or (kind == 3 and interval_index == 0)
+                            )
+                            else rng.uniform(0.01, 20.0)
+                        )
+                        intervals.append(
+                            TracePoint(
+                                float(interval_index),
+                                power,
+                                support_start,
+                                support_end,
+                            )
+                        )
+                    curves[position] = intervals
+
+            positive_powers.extend(
+                point.power_w
+                for curve in curves.values()
+                for point in curve
+                if point.power_w > 0.0
+            )
 
             class Reader:
                 def __init__(self, path):
@@ -2860,7 +3254,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     return_value={"max_abs_delta_j": 0.0},
                 ),
             ):
-                onset, offset, residuals, returned_windows = (
+                onset, offset, residuals, returned_windows, envelope_sum = (
                     _registered_common_mode_block_inputs(
                         members,
                         runs_root=Path("randomized-oracle"),
@@ -2887,9 +3281,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             ) -> Fraction:
                 total = Fraction(0)
                 for point_row in curve:
-                    support_start = Fraction.from_float(
-                        point_row.support_start_s
-                    )
+                    support_start = Fraction.from_float(point_row.support_start_s)
                     support_end = Fraction.from_float(point_row.support_end_s)
                     overlap = max(
                         Fraction(0),
@@ -2898,23 +3290,18 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     total += Fraction.from_float(point_row.power_w) * overlap
                 return total
 
-            def exact_contrast(
-                onset_s: float,
-                offset_s: float,
-            ) -> Fraction:
-                onset = Fraction.from_float(onset_s)
-                offset = Fraction.from_float(offset_s)
-                total = Fraction(0)
-                for position in positions:
-                    window = windows[position]
-                    total += Fraction.from_float(coefficients[position]) * (
-                        exact_integral(
-                            curves[position],
-                            Fraction.from_float(window.start_s) + onset,
-                            Fraction.from_float(window.end_s) + offset,
-                        )
+            def exact_contrast(onset_s: float, offset_s: float) -> Fraction:
+                onset_f = Fraction.from_float(onset_s)
+                offset_f = Fraction.from_float(offset_s)
+                return sum(
+                    Fraction.from_float(coefficients[position])
+                    * exact_integral(
+                        curves[position],
+                        Fraction.from_float(windows[position].start_s) + onset_f,
+                        Fraction.from_float(windows[position].end_s) + offset_f,
                     )
-                return total
+                    for position in positions
+                )
 
             oracle_onsets = {-bound, 0.0, bound}
             oracle_offsets = {-bound, 0.0, bound}
@@ -2930,45 +3317,54 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                             oracle_offsets.add(offset_shift)
 
             point = contrast(0.0, 0.0)
-            exact_point = exact_contrast(0.0, 0.0)
-            oracle_values = []
-            for onset_shift in oracle_onsets:
-                onset_value = contrast(onset_shift, 0.0)
-                exact_onset_value = exact_contrast(onset_shift, 0.0)
-                for offset_shift in oracle_offsets:
-                    joint_value = contrast(onset_shift, offset_shift)
-                    separable_value = math.fsum(
-                        (
-                            onset_value,
-                            contrast(0.0, offset_shift),
-                            -point,
-                        )
-                    )
-                    self.assertTrue(
-                        math.isclose(
-                            joint_value,
-                            separable_value,
-                            rel_tol=1e-11,
-                            abs_tol=1e-11,
-                        ),
-                        (case_index, joint_value, separable_value),
-                    )
-                    exact_joint_value = exact_contrast(
-                        onset_shift,
-                        offset_shift,
-                    )
-                    exact_separable_value = (
-                        exact_onset_value
-                        + exact_contrast(0.0, offset_shift)
-                        - exact_point
-                    )
-                    self.assertEqual(
-                        exact_joint_value,
-                        exact_separable_value,
-                        case_index,
-                    )
-                    oracle_values.append(joint_value)
+            oracle_values = [
+                contrast(onset_shift, offset_shift)
+                for onset_shift in oracle_onsets
+                for offset_shift in oracle_offsets
+            ]
+            float_oracle_width = max(abs(value - point) for value in oracle_values)
+            independent_envelope_sum = math.fsum(
+                abs(coefficients[position])
+                * _integrate(
+                    curves[position],
+                    windows[position].start_s - bound,
+                    windows[position].end_s + bound,
+                )
+                for position in positions
+            )
+            self.assertEqual(envelope_sum, independent_envelope_sum)
+            extrema_scale = max(
+                independent_envelope_sum,
+                1.0,
+                abs(point),
+                *(abs(value) for value in onset),
+                *(abs(value) for value in offset),
+            )
+            independent_pad = (
+                64.0 * (math.ulp(1.0) / 2.0) * extrema_scale
+            )
 
+            def outward(value: float, direction: float) -> float:
+                for _ in range(4):
+                    value = math.nextafter(value, direction)
+                return value
+
+            unpadded_lower = outward(
+                math.fsum((min(onset), min(offset), -point)),
+                -math.inf,
+            )
+            unpadded_upper = outward(
+                math.fsum((max(onset), max(offset), -point)),
+                math.inf,
+            )
+            unpadded_shared_width = outward(
+                max(point - unpadded_lower, unpadded_upper - point),
+                math.inf,
+            )
+            unpadded_float_realization = outward(
+                math.fsum((unpadded_shared_width, 0.0)),
+                math.inf,
+            )
             bracket = {
                 "status": "passed",
                 "endpoint_max_b_fiducial_s": 0.0,
@@ -2989,22 +3385,133 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 offset_sweeps_j=[offset, offset],
                 bundle_residual_half_widths_j=[residuals, residuals],
                 member_window_bounds_s=[returned_windows, returned_windows],
+                member_envelope_integral_sums_j=[envelope_sum, envelope_sum],
                 calibration_bracket=bracket,
                 shared_edge_bound_s=bound,
             )
             emitted_width = floor.admissible_half_widths_j[0]
-            for oracle_value in oracle_values:
+            float_gap = float_oracle_width - emitted_width
+            self.assertGreaterEqual(
+                emitted_width,
+                float_oracle_width,
+                {
+                    "case": case_index,
+                    "understatement_j": float_gap,
+                    "understatement_ulp_s_env": (
+                        float_gap / math.ulp(extrema_scale)
+                    ),
+                    "emitted_j": emitted_width,
+                    "float_oracle_j": float_oracle_width,
+                },
+            )
+
+            if adversarial:
+                member_energies = [
+                    _integrate(
+                        curves[position],
+                        windows[position].start_s - bound,
+                        windows[position].end_s + bound,
+                    )
+                    for position in positions
+                ]
+                self.assertGreaterEqual(max(member_energies), 1e3, case_index)
+                self.assertLessEqual(abs(point), 1e-6, (case_index, point))
+
+            if case_index < exact_case_budget:
+                exact_cases_checked += 1
+                if adversarial:
+                    adversarial_exact_cases_checked += 1
+                exact_point = exact_contrast(0.0, 0.0)
+                exact_onsets = {
+                    shift: exact_contrast(shift, 0.0)
+                    for shift in oracle_onsets
+                }
+                exact_offsets = {
+                    shift: exact_contrast(0.0, shift)
+                    for shift in oracle_offsets
+                }
+                exact_values = []
+                for onset_shift in oracle_onsets:
+                    for offset_shift in oracle_offsets:
+                        exact_joint = exact_contrast(onset_shift, offset_shift)
+                        self.assertEqual(
+                            exact_joint,
+                            exact_onsets[onset_shift]
+                            + exact_offsets[offset_shift]
+                            - exact_point,
+                            case_index,
+                        )
+                        exact_values.append(exact_joint)
+                exact_width = max(
+                    abs(value - exact_point) for value in exact_values
+                )
+                emitted_fraction = Fraction.from_float(emitted_width)
+                exact_gap = exact_width - emitted_fraction
                 self.assertGreaterEqual(
-                    emitted_width,
-                    abs(oracle_value - point),
-                    (case_index, emitted_width, oracle_value, point),
+                    emitted_fraction,
+                    exact_width,
+                    {
+                        "case": case_index,
+                        "understatement_j": float(exact_gap),
+                        "understatement_ulp_s_env": (
+                            float(exact_gap) / math.ulp(extrema_scale)
+                        ),
+                        "emitted_j": emitted_width,
+                        "exact_oracle_j": float(exact_width),
+                    },
+                )
+                overstatement = emitted_fraction - exact_width
+                pad_increment = (
+                    emitted_fraction
+                    - Fraction.from_float(unpadded_float_realization)
+                )
+                pad_increment_error = abs(
+                    pad_increment - Fraction.from_float(independent_pad)
+                )
+                directed_rounding_allowance = Fraction.from_float(
+                    4.0 * math.ulp(extrema_scale)
+                )
+                self.assertLessEqual(
+                    pad_increment_error,
+                    directed_rounding_allowance,
+                    {
+                        "case": case_index,
+                        "pad_increment_j": float(pad_increment),
+                        "unpadded_float_j": unpadded_float_realization,
+                        "pad_j": independent_pad,
+                        "increment_error_j": float(pad_increment_error),
+                        "four_ulp_allowance_j": float(
+                            directed_rounding_allowance
+                        ),
+                    },
+                )
+                total_overstatement_cap = Fraction.from_float(
+                    128.0
+                    * (math.ulp(1.0) / 2.0)
+                    * extrema_scale
+                )
+                self.assertLessEqual(
+                    overstatement,
+                    total_overstatement_cap,
+                    {
+                        "case": case_index,
+                        "overstatement_j": float(overstatement),
+                        "cap_j": float(total_overstatement_cap),
+                        "exact_oracle_j": float(exact_width),
+                        "emitted_j": emitted_width,
+                    },
                 )
 
-        self.assertEqual(close_duration_count, 256 * 4)
+        self.assertEqual(close_duration_count, (256 - adversarial_case_count) * 4)
         self.assertEqual(support_kinds_seen, set(range(5)))
         self.assertEqual(interval_counts_seen, set(range(1, 9)))
-        self.assertTrue(saw_zero_power)
-        self.assertTrue(saw_nonzero_power)
+        self.assertLessEqual(min(positive_powers), 1e-2)
+        self.assertGreaterEqual(max(positive_powers), 1e5)
+        self.assertEqual(exact_cases_checked, exact_case_budget)
+        self.assertEqual(
+            adversarial_exact_cases_checked,
+            adversarial_case_count,
+        )
 
     @staticmethod
     def _curve(intervals) -> list[TracePoint]:
@@ -3086,7 +3593,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
 
         members = [self._sweep_member(position) for position in positions]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals, windows = (
+            onset, offset, residuals, windows, envelope_sum = (
                 _registered_common_mode_block_inputs(
                     members,
                     runs_root=Path("synthetic-reader"),
@@ -3119,6 +3626,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             offset_sweeps_j=[offset, offset],
             bundle_residual_half_widths_j=[residuals, residuals],
             member_window_bounds_s=[windows, windows],
+            member_envelope_integral_sums_j=[envelope_sum, envelope_sum],
             calibration_bracket=self._sweep_bracket(),
             shared_edge_bound_s=self.SWEEP_BOUND_S,
         )
@@ -3402,6 +3910,87 @@ class FloorMintSpecValidationTests(unittest.TestCase):
     def test_pending_candidate_comparative_cell_validates_at_spec_time(self) -> None:
         spec = self._load("d117_qwen25_7b_extraction_spec.json")
         self.assertEqual(validate_extraction_spec(spec), [])
+
+    def test_common_mode_domain_admission_cannot_be_predeclared_in_spec(self) -> None:
+        """The hypothetical cell key is ignored; evidence decides at extraction."""
+
+        spec = {
+            "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+            "cells": [
+                {
+                    "cell_id": "domain-is-not-a-spec-assertion",
+                    "kind": "comparative",
+                    "metric": "phase_energy_j.decode",
+                    "window_class": "phase",
+                    "blocks": [
+                        {
+                            "block_id": "b01",
+                            "members": {
+                                position: position.lower()
+                                for position in ("A1", "B1", "B2", "A2")
+                            },
+                        }
+                    ],
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": (
+                        two_shared_edge_common_mode_registration()
+                    ),
+                    "calibration_basis": {
+                        "acceptance_selection": "issued_d116_artifact_only",
+                        "issued_acceptance": {},
+                    },
+                    "common_mode_strict_noncollapse_admitted": True,
+                }
+            ],
+        }
+        # Extraction specs are intentionally open to unrelated extension keys;
+        # this hypothetical assertion validates but must not be forwarded.
+        self.assertEqual(validate_extraction_spec(spec), [])
+        dummy = CellReport(
+            cell_id="domain-is-not-a-spec-assertion",
+            kind="comparative",
+            metric="phase_energy_j.decode",
+            window_class="phase",
+            cap_hit_policy=CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
+            members=(),
+            excluded_slots=(),
+            n_planned=4,
+            n_admitted=0,
+            refusal_reasons=("common_mode_nonseparable_window_domain",),
+            floor=None,
+            anchor_shift_bound_max_j=None,
+        )
+        session = SimpleNamespace(
+            ready=False,
+            refusal_reasons=("common_mode_nonseparable_window_domain",),
+        )
+        with (
+            mock.patch(
+                "joulewise.floor_extraction.campaign_cooldown_evidence",
+                return_value={},
+            ),
+            mock.patch(
+                "joulewise.floor_extraction.AuthenticatedConsumptionSession",
+                return_value=session,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._whole_window_extraction_refusals",
+                return_value=("common_mode_nonseparable_window_domain",),
+            ),
+            mock.patch(
+                "joulewise.floor_extraction.extract_comparative_cell",
+                return_value=dummy,
+            ) as extraction,
+        ):
+            extract_cells(Path("uncollected-domain-evidence"), spec)
+        self.assertNotIn(
+            "common_mode_strict_noncollapse_admitted",
+            extraction.call_args.kwargs,
+        )
+        self.assertEqual(
+            extraction.call_args.kwargs["estimator"],
+            COMMON_MODE_ESTIMATOR_ID,
+        )
 
     def test_pending_candidate_validates_only_identity_and_status(self) -> None:
         spec = self._load("window_c_extraction_spec.json")

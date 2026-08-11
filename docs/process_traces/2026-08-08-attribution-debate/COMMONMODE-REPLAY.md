@@ -1,12 +1,19 @@
 > **ERRATUM (2026-08-10, magistrate):** the two-shared-edge form recorded
 > below was implemented and gauntleted as FLOOR-COMMONMODE-01; the gauntlet
-> proved the separable extremum sweep is exact ONLY on a strict-noncollapse
-> domain (every member window strictly longer than twice the shared bound,
-> outward-rounded). The registered estimator now enforces that domain and
-> refuses outside it — see the D-124 amendment of 2026-08-10 in the decision
-> log. The historical numbers below are unchanged and remain NON-CLAIM; the
-> promoted 1.869502 J replay value is reproduced by the domain-restricted
-> implementation (trailing ulps move upward under its outward enclosure).
+> proved the separable extremum ENUMERATION is exact in exact arithmetic ONLY
+> on a strict-noncollapse domain (every member window strictly longer than
+> twice the shared bound, outward-rounded). Its realized contrast values are
+> float evaluations, so the emitted width additionally carries the registered
+> outward numerical enclosure at member-energy scale (64u times the
+> coefficient-weighted member envelope-integral sum); total overstatement
+> against the exact oracle is capped at 128u times the floored envelope scale
+> (64u pad plus at most 16u analytic float error, with slack). The registered
+> estimator enforces the domain and refuses outside it — see the D-124
+> amendment of 2026-08-10 in the decision log. The historical numbers below are unchanged
+> and remain NON-CLAIM; the promoted 1.869502 J replay value is reproduced by
+> the domain-restricted implementation (trailing ulps move upward under its
+> outward enclosure). No published number changes: the round-2 float
+> shortfalls are below the six-decimal reportable precision.
 
 # Common-mode estimator replay — NON-CLAIM record (2026-08-08)
 

@@ -1676,8 +1676,9 @@ def _registered_common_mode_block_inputs(
     list[float],
     list[float],
     list[tuple[float, float]],
+    float,
 ]:
-    """Build one exact D-124 block input from immutable bundle evidence."""
+    """Build one enumerated D-124 block input from immutable bundle evidence."""
 
     prefix = "phase_energy_j."
     if not metric.startswith(prefix) or not metric[len(prefix) :]:
@@ -1727,6 +1728,7 @@ def _registered_common_mode_block_inputs(
             or any(
                 point.support_start_s is None
                 or point.support_end_s is None
+                or not math.isfinite(point.power_w)
                 or point.power_w < 0.0
                 for point in curve
             )
@@ -1818,6 +1820,25 @@ def _registered_common_mode_block_inputs(
 
     coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
 
+    member_envelope_integral_sum = math.fsum(
+        abs(coefficients[position])
+        * _integrate(
+            by_position[position][0],
+            by_position[position][1].start_s - bound,
+            by_position[position][1].end_s + bound,
+        )
+        for position in _ABBA_POSITIONS
+    )
+    if (
+        not math.isfinite(member_envelope_integral_sum)
+        or member_envelope_integral_sum < 0.0
+    ):
+        raise CommonModeEstimatorRefusal(
+            "common_mode_precondition_failed",
+            "the coefficient-weighted member envelope integral sum must be "
+            "finite and nonnegative",
+        )
+
     def contrast(onset_s: float, offset_s: float) -> float:
         return math.fsum(
             coefficients[position]
@@ -1840,6 +1861,7 @@ def _registered_common_mode_block_inputs(
             )
             for position in _ABBA_POSITIONS
         ],
+        member_envelope_integral_sum,
     )
 
 
@@ -2040,9 +2062,10 @@ def extract_comparative_cell(
                 offset_sweeps: list[list[float]] = []
                 residual_widths: list[list[float]] = []
                 member_window_bounds: list[list[tuple[float, float]]] = []
+                member_envelope_integral_sums: list[float] = []
                 try:
                     for evaluated in admitted_blocks:
-                        onset, offset, residuals, windows = (
+                        onset, offset, residuals, windows, envelope_sum = (
                             _registered_common_mode_block_inputs(
                                 evaluated,
                                 runs_root=runs_root,
@@ -2054,12 +2077,16 @@ def extract_comparative_cell(
                         offset_sweeps.append(offset)
                         residual_widths.append(residuals)
                         member_window_bounds.append(windows)
+                        member_envelope_integral_sums.append(envelope_sum)
                     floor = two_shared_edge_common_mode_floor(
                         block_deltas,
                         onset_sweeps_j=onset_sweeps,
                         offset_sweeps_j=offset_sweeps,
                         bundle_residual_half_widths_j=residual_widths,
                         member_window_bounds_s=member_window_bounds,
+                        member_envelope_integral_sums_j=(
+                            member_envelope_integral_sums
+                        ),
                         calibration_bracket=(
                             consumption_session.calibration_bracket
                         ),

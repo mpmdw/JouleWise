@@ -662,6 +662,18 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         0.1786484975510163,
         0.486764434164499,
     ]
+    REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS = [
+        103.06152807459073,
+        102.95961680584878,
+        103.19934975521781,
+        103.02620909942345,
+        102.98495048998288,
+        103.03267231836827,
+        102.44854823584956,
+        102.9387569074354,
+        103.07062763486387,
+        103.14487597903077,
+    ]
     ENDPOINT_BOUND_S = 0.025964638697819786
     ALLOWANCE_S = 0.010818
     OPERATIVE_BOUND_S = 0.03678263869781979
@@ -713,6 +725,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             offset_sweeps_j=offset,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=self.replay_window_bounds(),
+            member_envelope_integral_sums_j=(
+                self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+            ),
             calibration_bracket=self.bracket(),
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
@@ -722,26 +737,40 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             strict=True,
         ):
             self.assertGreaterEqual(outward_width, prior_width)
+        for outward_width, prior_width, envelope_sum in zip(
+            estimate.admissible_half_widths_j,
+            self.REPLAY_TOTAL_WIDTHS,
+            self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS,
+            strict=True,
+        ):
+            independent_pad = (
+                64.0
+                * (math.ulp(1.0) / 2.0)
+                * max(1.0, envelope_sum)
+            )
             self.assertLessEqual(
                 outward_width - prior_width,
-                128 * math.ulp(prior_width),
+                independent_pad + 32.0 * math.ulp(prior_width),
             )
         self.assertEqual(
             estimate.admissible_half_widths_j,
             (
-                0.31034858733143156,
-                0.7509875593841038,
-                0.634960716723771,
-                0.5206110996830724,
-                0.2886457404750423,
-                0.7180999895822417,
-                0.3209429628676851,
-                0.2865540817343146,
-                0.17864849755101853,
-                0.48676443416450144,
+                0.3103485873321621,
+                0.7509875593848336,
+                0.6349607167245025,
+                0.5206110996838027,
+                0.2886457404757723,
+                0.718099989582972,
+                0.3209429628684113,
+                0.28655408173504426,
+                0.1786484975517491,
+                0.4867644341652326,
             ),
         )
-        self.assertEqual(estimate.guarded_floor_j, 1.869501626011348)
+        self.assertIn(
+            estimate.guarded_floor_j,
+            (1.869501626013162, 1.8695016260131623),
+        )
         self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
         self.assertEqual(
             estimate.estimator_registration,
@@ -757,7 +786,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(first["version"], "v1")
         self.assertEqual(
             COMMON_MODE_PARAMETER_SHA256,
-            "9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3",
+            "977189cd79c5a1668130af4335656928e51cfb3b7e632b32bf73711e97795b06",
         )
         self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
         self.assertEqual(
@@ -777,6 +806,13 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             ],
             "common_mode_nonseparable_window_domain",
         )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_numerical_enclosure_rule"
+            ],
+            "outward_64u_times_abs_coefficient_weighted_member_"
+            "envelope_integral_sum",
+        )
         assumption = first["stationarity_transfer_assumption"]
         self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
         self.assertIn(
@@ -784,14 +820,17 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             assumption["evidentiary_limit"],
         )
 
-    def test_old_full_registration_is_rejected_after_domain_amendment(self):
-        old_registration = two_shared_edge_common_mode_registration()
-        old_registration["parameter_sha256"] = (
-            "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480"
-        )
-        self.assertFalse(
-            validate_common_mode_estimator_registration(old_registration)
-        )
+    def test_superseded_full_registrations_are_rejected(self):
+        for superseded_sha in (
+            "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480",
+            "9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3",
+        ):
+            with self.subTest(superseded_sha=superseded_sha):
+                old_registration = two_shared_edge_common_mode_registration()
+                old_registration["parameter_sha256"] = superseded_sha
+                self.assertFalse(
+                    validate_common_mode_estimator_registration(old_registration)
+                )
 
     def test_noncollapse_refusal_is_registered_for_estimator_and_cells(self):
         reason = "common_mode_nonseparable_window_domain"
@@ -828,6 +867,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             offset_sweeps_j=offset,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=safe_windows,
+            member_envelope_integral_sums_j=(
+                self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+            ),
             calibration_bracket=self.bracket(),
             shared_edge_bound_s=bound,
         )
@@ -850,6 +892,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                             offset_sweeps_j=offset,
                             bundle_residual_half_widths_j=residuals,
                             member_window_bounds_s=windows,
+                            member_envelope_integral_sums_j=(
+                                self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+                            ),
                             calibration_bracket=self.bracket(),
                             shared_edge_bound_s=bound,
                         )
@@ -867,6 +912,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 offset_sweeps_j=offset,
                 bundle_residual_half_widths_j=residuals,
                 member_window_bounds_s=later_windows,
+                member_envelope_integral_sums_j=(
+                    self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+                ),
                 calibration_bracket=self.bracket(),
                 shared_edge_bound_s=bound,
             )
@@ -886,6 +934,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                         offset_sweeps_j=offset,
                         bundle_residual_half_widths_j=residuals,
                         member_window_bounds_s=geometry,
+                        member_envelope_integral_sums_j=(
+                            self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+                        ),
                         calibration_bracket=self.bracket(),
                         shared_edge_bound_s=self.OPERATIVE_BOUND_S,
                     )
@@ -949,6 +1000,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "offset_sweeps_j": offset,
             "bundle_residual_half_widths_j": residuals,
             "member_window_bounds_s": self.replay_window_bounds(),
+            "member_envelope_integral_sums_j": (
+                self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+            ),
             "calibration_bracket": self.bracket(),
             "shared_edge_bound_s": self.OPERATIVE_BOUND_S,
         }
@@ -975,6 +1029,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             offset_sweeps_j=offset,
             bundle_residual_half_widths_j=residuals,
             member_window_bounds_s=self.replay_window_bounds(),
+            member_envelope_integral_sums_j=(
+                self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+            ),
             calibration_bracket=bracket,
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
@@ -1000,6 +1057,9 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 offset_sweeps_j=offset,
                 bundle_residual_half_widths_j=residuals,
                 member_window_bounds_s=self.replay_window_bounds(),
+                member_envelope_integral_sums_j=(
+                    self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
+                ),
                 calibration_bracket=self.bracket(),
                 shared_edge_bound_s=self.OPERATIVE_BOUND_S,
             )
@@ -1020,12 +1080,38 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 offset_sweeps_j=[],
                 bundle_residual_half_widths_j=[],
                 member_window_bounds_s=None,
+                member_envelope_integral_sums_j=None,
                 calibration_bracket=None,
                 shared_edge_bound_s=0.0,
             )
         self.assertEqual(
             caught.exception.reason, "common_mode_precondition_failed"
         )
+
+    def test_member_envelope_sum_is_required_finite_and_nonnegative(self):
+        onset, offset, residuals = self.replay_inputs()
+        for envelope_sums in (
+            None,
+            self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS[:-1],
+            [float("nan"), *self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS[1:]],
+            [-1.0, *self.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS[1:]],
+        ):
+            with self.subTest(envelope_sums=envelope_sums):
+                with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                    two_shared_edge_common_mode_floor(
+                        self.REPLAY_DELTAS,
+                        onset_sweeps_j=onset,
+                        offset_sweeps_j=offset,
+                        bundle_residual_half_widths_j=residuals,
+                        member_window_bounds_s=self.replay_window_bounds(),
+                        member_envelope_integral_sums_j=envelope_sums,
+                        calibration_bracket=self.bracket(),
+                        shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+                    )
+                self.assertEqual(
+                    caught.exception.reason,
+                    "common_mode_precondition_failed",
+                )
 
 
 class TestWidthClosure(unittest.TestCase):

@@ -7992,6 +7992,31 @@ record: the FCM-01 escalation consult (T4 session, custodied with the run
 artifacts); refuter evidence: executed 0.25 J (breakpoints) and 1.06 J
 (collapse geometry) understatements on synthetic corpora.
 
+**Erratum (2026-08-10, cold-gate ruling + paired refuter):** the sentences
+"exact on the registered strict-noncollapse domain" and the
+enclosure-prevents-understatement claim were incorrect as written —
+falsified by the round-2 audit (emitted width below the exact admissible
+width by up to 2.3e-13 J at ~1000 J member scale; structural component of
+the shortfall proven EXACTLY ZERO by rational-arithmetic probes on both
+adjudication sides). Corrected statement: the extremum ENUMERATION is exact
+in exact arithmetic on the registered strict-noncollapse domain; the
+EMITTED width additionally carries the registered outward numerical
+enclosure (64u times the coefficient-weighted member envelope-integral
+sum), making it a proven upper bound of the exact admissible width. The
+total overstatement against the exact oracle is capped at 128u times the
+floored envelope scale (64u pad plus at most 16u analytic float error, with
+slack) — overstatement-only, ≤~1e-9 J-class for realistic geometries, orders
+below the 1e-6 J reportable precision and the ~1 J attribution limit. As first
+implemented (bbf7bdd) the enclosure was scaled to the contrast magnitude
+and did not dominate member-scale float error; it is now scaled to the
+member-integrand envelope and registered in the parameter dict (sha
+rotates once). The earlier "current claim-path geometries sit safely inside
+the domain" sentence overstated the evidence: only the a5 decode root has
+collected evidence (committed inventory records its margin); the remaining
+referenced roots including Q8 p256 have none yet and are asserted
+absent-by-name in the committed inventory; margins are a freeze-gate
+checklist item at collection.
+
 
 ## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window
 
