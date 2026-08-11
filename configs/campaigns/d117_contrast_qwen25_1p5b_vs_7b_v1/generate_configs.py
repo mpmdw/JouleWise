@@ -24,6 +24,9 @@ from joulewise.detection_floor import (  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
 )
+from joulewise.receipt_oracle import (  # noqa: E402
+    derive_bracket_session_receipt_oracle,
+)
 
 
 DRAFT_STATUS = "unfrozen_draft"
@@ -1192,12 +1195,10 @@ def build_analysis_manifest(
                 "TODO(postcollection): derive exact 80-member basis after collection"
             ),
             "bracket_binding_sha256": empty_slot(
-                "TODO(impl/d117-ledger-recovery): populate after landed receipt oracle",
-                branch="impl/d117-ledger-recovery",
+                "TODO(postcollection): populate from the completed bracket session",
             ),
             "committed_terminal_ledger_head": empty_slot(
-                "TODO(impl/d117-ledger-recovery): populate after landed receipt oracle",
-                branch="impl/d117-ledger-recovery",
+                "TODO(postcollection): populate from the committed terminal head",
             ),
             "aggregate_floor_artifact_sha256": empty_slot(
                 "TODO(U10): declaration-only pack cannot bind postcollection artifact bytes"
@@ -1216,10 +1217,6 @@ def build_tree(
     analysis_sha: str,
     declaration_sha: str,
 ) -> dict[str, Any]:
-    recovery_todo = (
-        "TODO(impl/d117-ledger-recovery): receipt oracle is unmerged; keep empty "
-        "until the branch lands and B1 re-derives the cadence"
-    )
     return {
         "schema_version": TREE_SCHEMA,
         "draft_status": DRAFT_STATUS,
@@ -1261,7 +1258,6 @@ def build_tree(
             "issued_artifact_reopened": False,
             "arming_dependencies": [
                 "impl/d117-postcollection-trust landed and mint bar lifted",
-                "impl/d117-ledger-recovery landed and arm blocker discharged",
                 "U2 successor registry available",
                 "reason-code unit resolved",
                 "FLOOR-COMMONMODE-01 implementation landed through D-118/D-121",
@@ -1317,14 +1313,7 @@ def build_tree(
             "aggregate_floor_artifact_sha256": empty_slot(
                 "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm"
             ),
-            "receipt_oracle": {
-                "status": EMPTY_STATUS,
-                "receipt_count": "",
-                "arm_time_receipts": [],
-                "terminal_sequence": "",
-                "todo": recovery_todo,
-                "branch": "impl/d117-ledger-recovery",
-            },
+            "receipt_oracle": derive_bracket_session_receipt_oracle(),
             "prefill_phase_recording_proof": empty_slot(
                 "TODO(lead): re-run the plan-factory amendment-5 desk proof from custodied "
                 "1.5B and 7B bundles before ratification"
@@ -1332,8 +1321,12 @@ def build_tree(
             "readiness_record": empty_slot("TODO(U8): validate the exact draft after all gates land"),
         },
         "closeout_attachments": {
-            "bracket_binding_sha256": empty_slot(recovery_todo, branch="impl/d117-ledger-recovery"),
-            "terminal_committed_head": empty_slot(recovery_todo, branch="impl/d117-ledger-recovery"),
+            "bracket_binding_sha256": empty_slot(
+                "TODO(postcollection): populate from the completed bracket session"
+            ),
+            "terminal_committed_head": empty_slot(
+                "TODO(postcollection): populate from the committed terminal head"
+            ),
             "whole_window_verdict_sha256": empty_slot("TODO(postcollection): issue only after collection"),
             "evaluation_basis_sha256": empty_slot("TODO(postcollection): derive exact 80-member basis"),
             "claim_backup_receipt": empty_slot("TODO(postcollection): verified backup receipt"),
@@ -1377,7 +1370,9 @@ def build_tree(
     }
 
 
-README_TEXT = """# D-117 gamma contrast pack v1 — unfrozen draft
+def readme_bytes() -> bytes:
+    oracle = derive_bracket_session_receipt_oracle()
+    return f"""# D-117 gamma contrast pack v1 — unfrozen draft
 
 This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
@@ -1404,11 +1399,14 @@ alpha/beta decode cell IDs but contains no aggregate-artifact SHA and is not a
 pinset. A 256-token prefill floor or a ruled 128-to-256 transport rule remains
 an explicit EMPTY slot.
 
-Every receipt-count, arm-time receipt, and terminal-sequence slot remains
-EMPTY with a TODO naming `impl/d117-ledger-recovery`. Identity pins remain
-EMPTY pending U11. The D-124 estimator identity and stationarity-transfer
-assumption are registered as proposed implementation identities; the
-implementing unit must still land through D-118/D-121 before ratification.
+The receipt oracle is replay-derived from `{oracle['source']['module']}` and
+records {oracle['receipt_count']} physical receipts for
+{oracle['logical_operation_count']} logical operations per finalized pre/post
+bracket session. Actual receipt bytes and the absolute terminal sequence remain
+empty until arm and collection. Identity pins remain EMPTY pending U11. The
+D-124 estimator identity and stationarity-transfer assumption are registered as
+proposed implementation identities; the implementing unit must still land
+through D-118/D-121 before ratification.
 
 Regenerate or check:
 
@@ -1417,7 +1415,7 @@ python3 configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py
 python3 configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py --check
 python3 -m unittest tests.test_d117_decode_contrast_plan
 ```
-"""
+""".encode("utf-8")
 
 
 def generate(output_repo_root: Path) -> dict[str, str]:
@@ -1598,7 +1596,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
     tree_sha = sha256_bytes(tree_bytes)
     write_bytes(out / "plan_tree.json", tree_bytes)
     write_bytes(out / "plan_tree.sha256", sidecar_bytes(tree_sha, "plan_tree.json"))
-    write_bytes(out / "README.md", README_TEXT.encode("utf-8"))
+    write_bytes(out / "README.md", readme_bytes())
 
     return {
         "plan_sha256": plan_sha,

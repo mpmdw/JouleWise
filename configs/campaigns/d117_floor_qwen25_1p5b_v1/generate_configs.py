@@ -27,6 +27,9 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
 )
+from joulewise.receipt_oracle import (  # noqa: E402
+    derive_bracket_session_receipt_oracle,
+)
 
 
 N = 10
@@ -109,7 +112,6 @@ D124_COVARIANCE_TREATMENT = (
     "two_shared_edges_plus_bundle_specific_adversarial_terms"
 )
 IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
-RECOVERY_BRANCH = "impl/d117-ledger-recovery"
 SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
@@ -1060,14 +1062,19 @@ def build_producer_contract(
 
 
 def readme_bytes() -> bytes:
+    oracle = derive_bracket_session_receipt_oracle()
     return (
         "# D-117 Qwen2.5-1.5B floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the alpha window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
         "rider over the same 50 physical bundles. It also registers two D-123 "
         "reported phase-energy means without adding collection.\n\n"
-        "The pack is not armable. The receipt oracle is intentionally empty "
-        f"pending `{RECOVERY_BRANCH}`, arm-time identities require U11 projection, "
+        "The pack is not armable. Its receipt oracle is replay-derived from "
+        f"`{oracle['source']['module']}`: {oracle['receipt_count']} physical "
+        f"receipts for {oracle['logical_operation_count']} logical operations per "
+        "finalized pre/post bracket session. Actual receipt bytes and the absolute "
+        "terminal sequence remain arm-time evidence. Arm-time identities require "
+        "U11 projection, "
         "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
         f"{SUCCESSOR_REGENERATION_RULE}\n\n"
@@ -1370,7 +1377,6 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 {"id": "D117-POSTCOLLECTION-TRUST-01", "status": "required_before_mint"},
                 {"id": IDENTITY_PROJECTION_WORK_ORDER, "status": "required_before_arm"},
                 {"id": "FLOOR-COMMONMODE-01", "status": "implementation_identity_required_before_release"},
-                {"id": RECOVERY_BRANCH, "status": "unmerged_arm_blocker"},
             ],
         },
         "condition_families": [
@@ -1428,17 +1434,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 ],
             },
             "identity_pin_projection": producer["identity_pin_projection"],
-            "receipt_oracle": {
-                "status": "blocked_on_unmerged_branch",
-                "branch": RECOVERY_BRANCH,
-                "todo": (
-                    f"TODO({RECOVERY_BRANCH}): re-derive cadence and populate only "
-                    "during lead-owned arm materialization after that branch lands."
-                ),
-                "receipt_count": None,
-                "terminal_sequence": None,
-                "arm_time_receipts": [],
-            },
+            "receipt_oracle": derive_bracket_session_receipt_oracle(),
         },
         "closeout_attachments": {
             "bracket_binding_sha256": None,
@@ -1448,8 +1444,8 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "extraction_report_sha256": None,
             "postcollection_receipt_digests": [],
             "todo": (
-                f"TODO({RECOVERY_BRANCH}): leave receipt-derived closeout fields empty "
-                "until the landed recovery oracle and a completed claim window supply them."
+                "TODO(postcollection): leave receipt-derived closeout fields empty "
+                "until a completed claim window supplies authenticated evidence."
             ),
             "backup_requirements": {
                 "claim_root_verified": True,

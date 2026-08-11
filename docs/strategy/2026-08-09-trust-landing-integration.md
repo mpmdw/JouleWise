@@ -1,5 +1,14 @@
 # Trust landing — integration plan (T2, 2026-08-09) — durable, /clear-safe
 
+> **EXECUTED (T3, 2026-08-09 day).** The method below ran to completion:
+> clean branch `impl/d117-postcollection-trust-clean` assembled (ancestry
+> severed, zero custody blobs reachable), R1 resolutions applied from custody,
+> release `fixture-d117-v2-production-v1` PUBLISHED (sha re-verified by fresh
+> download), PR #122 open; subsequent parcels on the branch: fsum
+> cross-interpreter fix, guard vocabulary/classification fix + hardening
+> (16-question delta 16/16 PASS), custody-store plumbing for the decisive CI
+> proof. This document is retained as the method/decision record.
+
 The trust mint bar is PROVEN (decisive corrected + isolated-proven; attack
 matrix ran end-to-end all-15-refused in the 3.5h run). Landing it revealed a
 real **trust×recovery integration seam** on `calibration_ledger.py`. This doc

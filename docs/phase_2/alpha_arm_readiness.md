@@ -1,10 +1,12 @@
 # Window ALPHA arm readiness — GO / NO-GO
 
-**Checkpoint:** T1, 2026-08-08 night.
+**Checkpoint:** T3, 2026-08-09 day (supersedes the T1 line; recovery HAS
+merged — PR #118).
 
-**Current verdict: NO-GO. Do not arm Window ALPHA.** Recovery has not
-merged, the mint trust change has not merged, the receipt counts used by the
-packs are stale, and the packs and readiness record are not frozen.
+**Current verdict: NO-GO. Do not arm Window ALPHA.** The mint trust change
+has not merged (PR #122 open, decisive CI gate in progress), the receipt
+counts used by the packs are stale pending re-derivation from merged main,
+and the packs and readiness record are not frozen.
 
 Window **ALPHA** is the first prospective D-117 night: the 1.5B decode floor
 with prefill floor cells. **Lead** means the project lead. **Merge event**

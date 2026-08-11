@@ -55,8 +55,11 @@ Apply contract §4's t3 applicability and preferred-presentation-plane rule.
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
    and hop headers in developer instructions or the bridge prompt.
-   Fast Mode is the standing DEFAULT on both `scripts/codex-bridge` and
-   `codex-run-v3`; `CODEX_SERVICE_TIER=default` is the per-call opt-out;
+   Service tier (Ed 2026-08-09, supersedes the T1 fast-default): DEFAULT tier
+   is the norm — launch with `CODEX_SERVICE_TIER=default` (the wrappers may
+   still carry the old fast default; override it per call). Fast is reserved
+   for the single run whose wall-clock directly gates the session's
+   merge/milestone; consolidate (one xhigh) rather than multiply fast runs.
    CODEX ONLY, never Anthropic fast.
 5. Validate the return under contract §2. Handle early returns and routing
    changes under §§3-4 on the thread required by §5.

@@ -8,11 +8,12 @@
 
 Sol drafted a per-question decision packet (xhigh, read-only, custodied at
 session scratchpad `packfreeze-packet-out.md`). The magistrate has ruled the
-process/metrology/method questions; two remain genuine **Ed taps**. None of
-this lands measured numbers without a quiet night, so freeze is gated on the
-work orders below AND Ed's two taps — no urgency beyond keeping it ready.
+process/metrology/method questions. None of this lands measured numbers
+without a quiet night, so freeze is gated on the work orders below — the two
+Ed taps are RULED (banner above); the tap section below is retained as the
+decision record only.
 
-## ⇒ TWO ED TAPS (everything else is decided)
+## ⇒ TWO ED TAPS — **BOTH RULED 2026-08-09 (see banner); historical record only**
 
 - **Q1 — gamma p256 prompt text [ED-DECIDES].** Recommend FREEZE the
   constructed 256-token prompt (35× "The plan remains easy to audit." + one
@@ -73,18 +74,39 @@ work orders below AND Ed's two taps — no urgency beyond keeping it ready.
    authenticated live head; never hand-author receipt literals. Replaces the
    stale `impl/d117-ledger-recovery` TODO markers (surfaced by the T2
    post-merge integration review as CS1).
-4. **Prefill phase-recording proof (Q9)** — re-run the plan-factory amendment-5
-   desk proof on the custodied 1.5B+7B bundles; prove `phase_energy_j.prefill`
-   isolates the prompt phase (token identity alone does not prove phase
-   attribution).
+4. **Prefill phase-recording proof (Q9)** — **DISCHARGED 2026-08-09** (`2cd9bc3`,
+   `docs/process_traces/2026-08-09-prefill-phase-proof/PROOF.md`): 7B PROVEN,
+   1.5B PROVEN-WITH-CAVEATS (sampling-resolution label on 37/50 short windows,
+   not boundary mislabeling — expect the same label pressure on the Q8 p256
+   1.5B cells).
 
 ## Fastest path to a frozen, armable pack set
 
-Ed taps Q1+Q8 (one pass) → land FLOOR-COMMONMODE-01 (gauntlet) → the three
-engineering proofs (2–4) → regenerate all three packs from the resulting head
+Ed taps Q1+Q8 RULED → land FLOOR-COMMONMODE-01 (gauntlet) → the two remaining
+engineering proofs (2–3) → regenerate all three packs from the resulting head
 → generator `--check` + focused/canonical suites → issue readiness + identity
 projections → materialize the first arm against the authenticated ledger head.
 (Freeze also assumes the trust mint bar has landed.)
 
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
+
+## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — lineage-monotone allowance vs short prefill windows [ED-VISIBILITY]
+
+Both floor packs' extraction specs select the D-124 common-mode estimator for
+the **prefill p128** comparative cells, not only decode. The estimator's
+admitted domain is `window duration > 2×B_op`, and B_op is lineage-monotone
+non-decreasing (D-125 cl.2): a successor calibration acceptance can only
+strengthen (grow) the allowance. Measured 1.5B p128 prefill windows are
+0.121–0.147 s against today's 0.0736 s collapse threshold — a 1.64–2.0×
+margin. **If a successor bracket's allowance grows past ~64%, frozen prefill
+comparative cells silently convert from estimated to refused after the packs
+have frozen the estimator identity into their bytes.** Freeze-gate additions:
+(1) record each registered comparative cell's minimum window-duration margin
+at collection as a checklist item (the FCM-01 committed inventory test
+supplies the mechanism); (2) at pack regeneration, evaluate whether the
+p128 prefill cells should select the worst-case default estimator instead of
+D-124 given the margin (a magistrate/Ed call at freeze, not now); (3) the
+same margin math must be run for the Q8 p256 cells when their windows are
+first measured (p256 windows are expected longer, but expected is not
+evidence). Compounds the recorded zero-power-short-window over-refusal note.

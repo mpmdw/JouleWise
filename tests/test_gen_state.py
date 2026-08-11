@@ -296,16 +296,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        # 2026-08-08 night: the T1-2026-08-08-NIGHT gate went live (T1
-        # checkpoint under Ed's stop order; consistency sweep 2ba514a
-        # refreshed the kernel). Its clearance — recovery cold-gate fix
-        # round landed + trust proof verification closed — remains open,
-        # so exactly this gate must be active; clear this assertion back
-        # to [] when the gate's clearance conditions close.
+        # 2026-08-11 (T4): trust merged (PR #122, mint bar lifted; D-130
+        # decisive-venue ruling) — the T3-2026-08-09-DAY gate's clearance
+        # closed and the assertion cleared back to [] per its own
+        # clear-back note. Normal kernel lane selection resumes.
         gates = self.kernel["active_global_gates"]
-        self.assertEqual([g["id"] for g in gates], ["T1-2026-08-08-NIGHT"])
-        self.assertEqual(gates[0]["scope"]["operation"], "select")
-        self.assertEqual(gates[0]["allowed_task_ids"], [])
+        self.assertEqual(gates, [])
         for tid in ("T3-CHAR-PAIR-01", "WO-T3-VIS-01", "SEC5A-REMOTE-01"):
             self.assertEqual(self.tasks[tid]["status"], "shelved")
 
@@ -778,14 +774,12 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         kernel = load_kernel()
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
-        # 2026-08-08 night: the live kernel is GATED again
-        # (T1-2026-08-08-NIGHT, all three lanes) — the direction of the
-        # live-side assertion inverts once more, as it did on 2026-08-05;
-        # the synthetic-gate half below still pins the mechanism both ways.
+        # 2026-08-11 (T4): trust merged — the kernel is UNGATED again and
+        # the live-side assertion inverts back (as on 2026-08-05); the
+        # synthetic-gate half below still pins the mechanism both ways.
         for rendered in (run_state, queue):
-            self.assertIn("T1-2026-08-08-NIGHT", rendered)
-            self.assertIn("GATED —", rendered)
-            self.assertNotIn("NONE — no global work-selection gate is active", rendered)
+            self.assertNotIn("T3-2026-08-09-DAY", rendered)
+            self.assertIn("NONE — no global work-selection gate is active", rendered)
 
         gated = copy.deepcopy(kernel)
         gated["active_global_gates"] = [

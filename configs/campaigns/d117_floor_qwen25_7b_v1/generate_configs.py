@@ -26,6 +26,9 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
 )
+from joulewise.receipt_oracle import (  # noqa: E402
+    derive_bracket_session_receipt_oracle,
+)
 
 
 N = 10
@@ -42,7 +45,6 @@ DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
 CAMPAIGN_TAG = "d117-floor-qwen25-7b-v1"
 DRAFT_STATUS = "unfrozen_draft"
-TODO_BRANCH = "impl/d117-ledger-recovery"
 D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
 D124_SIBLING_ASSUMPTION_ID = (
@@ -1237,7 +1239,6 @@ def plan_tree(
                     "id": "FLOOR-COMMONMODE-01",
                     "status": "implementation_identity_required_before_release",
                 },
-                {"id": TODO_BRANCH, "status": "unmerged_arm_blocker"},
             ],
         },
         "condition_families": family_rows,
@@ -1318,17 +1319,7 @@ def plan_tree(
                 },
                 "projection_receipt": None,
             },
-            "receipt_oracle": {
-                "status": "blocked_on_unmerged_branch",
-                "branch": TODO_BRANCH,
-                "todo": (
-                    f"TODO({TODO_BRANCH}): re-derive cadence and populate only "
-                    "during lead-owned arm materialization after that branch lands."
-                ),
-                "receipt_count": None,
-                "terminal_sequence": None,
-                "arm_time_receipts": [],
-            },
+            "receipt_oracle": derive_bracket_session_receipt_oracle(),
         },
         "closeout_attachments": {
             "bracket_binding_sha256": None,
@@ -1338,9 +1329,8 @@ def plan_tree(
             "extraction_report_sha256": None,
             "postcollection_receipt_digests": [],
             "todo": (
-                f"TODO({TODO_BRANCH}): leave receipt-derived closeout fields empty "
-                "until the landed recovery oracle and a completed claim window "
-                "supply them."
+                "TODO(postcollection): leave receipt-derived closeout fields empty "
+                "until a completed claim window supplies authenticated evidence."
             ),
             "backup_requirements": {
                 "claim_root_verified": True,
@@ -1374,6 +1364,7 @@ def plan_tree(
 
 
 def readme() -> bytes:
+    oracle = derive_bracket_session_receipt_oracle()
     return (
         "# D-117 Qwen2.5-7B phase-floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the beta window's 10 absolute decode members, "
@@ -1381,8 +1372,12 @@ def readme() -> bytes:
         "rider over the same 50 physical bundles. It retains the D-085 7B stack "
         "and condition-family identity and registers the two D-123 reported "
         "phase-energy means without adding collection.\n\n"
-        "The pack is not armable. The receipt oracle is intentionally empty "
-        f"pending `{TODO_BRANCH}`, arm-time identities require U11 projection, "
+        "The pack is not armable. Its receipt oracle is replay-derived from "
+        f"`{oracle['source']['module']}`: {oracle['receipt_count']} physical "
+        f"receipts for {oracle['logical_operation_count']} logical operations per "
+        "finalized pre/post bracket session. Actual receipt bytes and the absolute "
+        "terminal sequence remain arm-time evidence. Arm-time identities require "
+        "U11 projection, "
         "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
         f"{SUCCESSOR_REGENERATION_RULE}\n\n"

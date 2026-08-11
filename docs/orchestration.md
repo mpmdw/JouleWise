@@ -34,8 +34,12 @@ lands in this repo.) Binding role and process changes live in
   roles consistently catching different classes of defect.
 - **Specialist agents** handle bounded sweeps (for example, docs
   consistency) and, when a stream genuinely needs
-  mid-stream judgment, as a stream director — a role that is now the
-  exception rather than the default (see Topology).
+  mid-stream judgment, as a stream director. AMENDED by D-129
+  (Ed, 2026-08-09): lieutenant-directed executor lanes are the standing
+  default shape under the lead-token economy (current model assignments
+  live in D-129 and the memory index, not here) — the "exception rather
+  than the default" framing below reflects the C-009/C-010 record of
+  its day and is superseded for current operation (see the decision log).
 - **Image-heavy analysis uses the designated image-capable review route** per
   C-012, after the site-observatory stream's image-critique rounds.
 - **Invited-peer validation is allowed to overturn lead designs**; C-014

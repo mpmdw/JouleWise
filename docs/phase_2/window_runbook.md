@@ -841,8 +841,11 @@ After `measurement_complete`, wake the display once.
   `0.010818 s` (10.817749309 ms), not the old underived `0.010 s`
   constant (D-079 clause 1). Drift within the screen passes clean.
 - [ ] If drift is slightly above the screen, the window is **not**
-  discarded: the excess becomes an added uncertainty term carried into
-  every floor and claim the window produces, so the floor publishes wider.
+  discarded: the FULL allowance `max(|B_pre − B_post|, 0.010818 s)` — not
+  merely the excess above the screen — is added once to the larger endpoint
+  bound and carried into every floor and claim the window produces, so the
+  floor publishes wider. Drift above `0.012093166090593858 s` refuses the
+  window outright.
   Do not compute or apply that allowance by hand — the governed verdict and
   extraction own it, exactly as they own the NEG-8 drift allowances.
 - [ ] Confirm the excess being budgeted is ordinary repeatability scatter and

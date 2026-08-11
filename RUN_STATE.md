@@ -32,9 +32,10 @@ mints put the FIRST MEASURED NUMBERS in the paper.
 Standing context that survives /clear: D-121 terminal magistrate
 review binds every merge; the same-signature escalation trigger is
 armed (three fired 2026-08-07/08 — consult, never round three); Codex
-Fast Mode is the standing DEFAULT on both `scripts/codex-bridge` and
-`codex-run-v3`; `CODEX_SERVICE_TIER=default` is the per-call opt-out;
-CODEX ONLY, never Anthropic fast. Use codex-run-v3 for enforced-WRITE_SCOPE
+service tier: DEFAULT is the norm (Ed 2026-08-09 cut fast ~60%; override
+the wrappers' old fast default with `CODEX_SERVICE_TIER=default` per call;
+fast only for the single milestone-gating run); CODEX ONLY, never
+Anthropic fast. Use codex-run-v3 for enforced-WRITE_SCOPE
 implementations (prompt needs a literal `WRITE_SCOPE: [...]` line;
 CODEX_APP_BRIDGE=off for concurrent bridge runs); review agents get
 isolation:worktree and a no-checkout line; never gate on a piped test;
@@ -46,7 +47,174 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T2 SESSION FINAL CHECKPOINT (2026-08-09 ~08:30, Ed checkpoint order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T4 SESSION CHECKPOINT (2026-08-10/11, Ed 24h+ grind order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**THE MINT BAR IS LIFTED.** Trust PR #122 MERGED at `ae6af48`
+(2026-08-11T03:40Z) under the full gate: 16Q delta 16/16 (T3), ci+site green,
+lead full unpiped suite 2945 OK at the head, the decisive proof PROVEN by the
+lead local run (OK, 3h35m, CI-identical hydration), and **D-130** — the
+cold-gate decisive-venue ruling (packet + paired refuter; refuter's
+hermeticity finding: the local run's legacy-locator assertion executed
+against 190 LIVE machine-local decoy paths). CI proof job is ADVISORY
+(dispatch-only) pending **WO-CI-RESTRUCTURE** (TASK_QUEUE; deadline: before
+any claim publication and before the pack-freeze merge wave; first hosted
+green = required second execution). Citation discipline until closure:
+"lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/)
++ CI-verified transport/authentication chain". Post-merge batch on main
+`654c53d`; kernel UNGATED + fidelity pins cleared `b04c5bf`; Ed's temporary
+settings.local.json rules removed; 3.11 decisive replay (D-130/C3) was IN
+FLIGHT at this checkpoint (log scratchpad decisive-local-py311.log; harvest
+result, then note it in the evidence dir).
+
+**FLOOR-COMMONMODE-01 IS FROZEN — ED DECISION PACKET.** Frozen at `123e8a5`
+(FREEZE-FCM01.md on impl/floor-commonmode-01) after the terminal cold-gate
+condition executed: FIVE distinct understatement mechanisms across four fix
+rounds, three cold-gate sittings, two paired-refuter reports, four delta
+audits (ledger in the freeze banner; final: FCM-R4-01, zero-point value not
+authenticated as the true zero evaluation, 5.0e-10 J admitted-input exact).
+The PRODUCTION path is unaffected (it computes z itself); the failures live
+on the direct-call any-admitted-input contract. **Ed's options** (freeze-plan
+Q7 bars pack freeze while the estimator is candidate-pending): (i) relicense
+with a structural zero-threading contract (candidates in the freeze banner);
+(ii) reverse Q7 + re-spec both floor packs' comparative cells to the
+worst-case default (COSTS the funded p256 prefill contrast's claim
+capability — the gamma arm likely publishes as unresolvable); (iii) hold.
+The frozen gauntlet record is itself paper material (the refuter's argument).
+Also banked for Ed: the two cold gates' process recommendations (registered
+text may claim only what its committed oracle exercises; delta audits report
+in ulp-of-largest-intermediate units; class-keyed same-signature counting).
+
+**PAPER — full Rivoire-bar program executed on branch paper/edit-train-t4**
+(trains A-D + three schematic figures, all magistrate-reviewed): D-122
+currency fixed at 7 sites; the two REQUIRED missing limitations added
+(D-124 stationarity/applicability, sampling resolution); all three metrology
+blockers corrected (95/95 conditionality, ABBA honest scoping, the false
+floor-guarantee); L23's seven currency/provenance residuals; the terms/
+physics program (glossary, physical explanations, coherence fix); train C
+related-work overhaul (JouleSort triad restored to Rivoire's actual list,
+verified lineage subsection w/ 4 new refs incl. two of the advisor's own,
+five S1 advisor-visible defects fixed, full renumbering to 23 refs
+mechanically verified); train D structure (13→11 sections, plain abstract,
+figures integrated w/ the interval-conservation sensitivity caption).
+Train E landed; magistrate full linear read done (caught duplicate table
+numbers + figure ordering); **PAPER MERGED as PR #126** (`0cf5f84`,
+2026-08-11T10:19Z — GitHub scheduled no CI for the docs-only PR; the
+docs-adjacent suites were run locally as equivalent evidence, recorded in
+the D-121 comment; the trust-vs-train-E custody conflict resolved with the
+branch's superset text). Draft now waits on measured numbers via the fill
+registry; pre-submission owes: L5's UNVERIFIED re-checks (HotCarbon/IISWC
+programs), report_src drift decision.
+
+**T4 late additions:** D-130 condition C3 discharged (3.11 decisive replay
+green, 4h18m — evidence committed); the site-lane anchor break (D-130
+heading `#`) found by the T4 bookkeeping director, fixed `4888cb8`; T4 run
+report + council C-055 landed (`42b7a7b`); the `test_calibration_exits`
+reliability class hit count 2 (main CI teardown-race recurrence) → the
+standing-trigger CONSULT ran (root causes: detached git auto-maintenance
+writer; CPU-amplifying fake fixtures; silent 68-case monolith; plus a REAL
+production sampler-reaping gap in validate_powermetrics_fiducial.py) → the
+adopted composite design ran its FULL gauntlet in-session (refuter 3
+blockers → fix → delta 2 blockers → a SECOND count-2 consult on the
+sampler-ownership class, whose ruling REMOVED the identity machinery in
+favor of the narrow honest fix + detect-only census, with the supervisor
+design registered as WO-SAMPLER-SUPERVISOR incl. its sudoers-migration
+prerequisite) — **PR #127 OPEN**; its CI begins the ten-hosted-greens
+closure count. LEAD-OWED before relying on the production commit: the live
+sudo/powermetrics checklist (module docstring). Successor: #127 CI → D-121
+→ merge.
+
+**MERGED THIS SESSION: #122 (trust/mint bar), #124 (WO-2), #125 (WO-3 —
+replay-derived receipt oracles all three packs), T3 bookkeeping `e74cc4c`,
+runbook drift-allowance correction `4d3e3ad`, freeze-plan addendum `51bcf77`
+(lineage-monotone margin risk), D-130 batch `654c53d`, kernel clear-back
+`b04c5bf`.** Arm-packet skeleton drafted (custody:
+~/JouleWise-window-custody/t4-session-20260810/ + scratchpad
+arm-packet-alpha-SKELETON.md) with 12 RECORDED arming-surface discrepancies
+(dual final-readiness commands; caffeinate contradiction; settle ownership;
+U11 tool DOES NOT EXIST — freeze-lane critical path) — resolution pass rides
+the freeze lane.
+
+**Owed (successor desk block):** T4 run report + council entry (the FCM
+adjudication chain + D-130 + the paper program; dictated-fills via Opus
+director worked for T3 — reuse); skill-usage rows for T4; harvest the 3.11
+replay + train E; prune trustverify/papered/fcm worktrees when their lanes
+close (fcm worktree holds the FROZEN branch — keep until Ed rules);
+cs-pedagogy worktree audit item still stands (Ed decision wanted).
+Process notes: two-writers-one-worktree caused a scope-violation misfire
+(figures committed mid-run) — never again; inline codex-run-v3 prompts
+without the literal WRITE_SCOPE line = rc 64 (5th recurrence, prompt-file
+rule now logged); delta-audit prompts must REQUIRE exact-arithmetic verdicts
+printed (delta-2 computed and dropped one — highest-value process finding of
+the FCM episode).
+
+## ▶▶ T3 SESSION FINAL CHECKPOINT (2026-08-09 evening, Ed wrap order) — SUPERSEDED by T4 above; kept for detail
+
+**Session shape:** first full session under D-129 (fan-out standing order,
+~60% fast-tier cut, Fable-economy-with-full-coverage — all three minted this
+session from Ed's in-thread directives). Peak ~9 concurrent streams. Durable
+custody of all session artifacts (reports, statuses, flake-loop log, the
+8038ccd full-suite log): `~/JouleWise-window-custody/t3-session-20260809/`.
+
+**LANDED/MERGED this session:** flake fix **PR #123 MERGED** (lead 8x loop
+8/8 + Sol 30-loop + D-121); T2 bookkeeping (run report + C-053, `7fde68b`) +
+council-index repair (`966dd39`); WO-4/Q9 prefill phase proof **DISCHARGED**
+(`2cd9bc3` — 7B PROVEN, 1.5B PROVEN-WITH-CAVEATS incl. the p256-cell
+resolution-pressure warning); extension-axes H1/H2 roadmap DRAFT (`e9c2433`,
+Ed review tap); site-renderer silent-64KiB-truncation bug FIXED (`955df9b`);
+consistency sweep applied + D-129 minted + state kernel → T3 gate
+(`50d1064`); 12 stale worktrees pruned; release
+`fixture-d117-v2-production-v1` PUBLISHED (sha re-verified by fresh
+download).
+
+**TRUST (PR #122) — one CI gate from the mint-bar merge.** Branch
+`impl/d117-postcollection-trust-clean` head `e871f5b`: clean resynthesis
+(zero custody blobs reachable, single-parent verified) + fsum
+cross-interpreter fix (`e376e8c`) + guard parcel (`99d0e9b`) + guard
+hardening (`f588f86`, io/codecs misparse + fail-closed pins) + custody-store
+plumbing rounds 1+2 (`e807d5f`, `e871f5b`). **16-question delta: 16/16 PASS**
+(initial 14 + Q10/Q3 fix-then-regrade, Opus graders + refuters). Decisive CI
+history: round-1 fail = latent plumbing gap (campaign never received the
+store; T2's green runs silently read Ed's machine-local/iCloud paths — NOT
+merge-introduced, present at a89f279); round-2 fail = the NEW hermeticity
+assertion correctly caught a second unplumbed read site (candidate
+rediscovery); both fixed, hermeticity kept strict (no narrowing).
+**SUCCESSOR: (1)** confirm `d117-production-proof` green on `e871f5b` (was
+in flight at wrap; on fail: full log + NEW-signature check — two rounds are
+spent, a third same-class failure ⇒ standing escalation = consult, never
+round 3); **(2)** lead full unpiped suite at the final head (8038ccd suite
+was green 2934/86-skip; the four parcels since are focused-verified only);
+**(3)** D-121 terminal review at final head; **(4)** merge = **MINT BAR
+LIFTS**; **(5)** then bench: kernel gate clear-back (test_gen_state pins →
+[], per their notes), remove Ed's temporary history-rewrite + `gh release`
+rules from `.claude/settings.local.json`, finalize the PR ledger
+(deferred-with-record: 16Q Q1 residuals — silent no-session fallback,
+missing session assertion in the mint body; `_locked_append` line-anchor
+uniformity).
+
+**FREEZE LANE:** WO-2/Q5 byte-identity **PR #124 OPEN** (lead-replayed both
+interpreters; CI + D-121 then merge). WO-3 receipt-oracle re-derivation:
+NOT STARTED (was queued behind WO-2; launch off post-#124 main).
+**FLOOR-COMMONMODE-01 BANKED UNGATED `425f75f`** (impl/floor-commonmode-01,
+pushed; all six D-124 registration conditions structurally enforced per the
+Sol report; based on trust head 8038ccd) — **successor's first big block:
+full magistrate audit + D-118 gauntlet, rebase onto post-trust main, land,
+then p256 floor cells (Ed-funded Q8) → regenerate packs → freeze.**
+
+**Process notes for the record:** three Sol rounds were burned by the
+F3-class read-only-sandbox launcher trap (always `-s workspace-write` +
+writable TMPDIR); the stale `.claude/worktrees/cs-pedagogy-ai-cf3aed`
+worktree BREAKS codex-run-v3 strict-scope launches (nested-repo refusal) —
+audit item stands, decision wanted; never pkill by pattern on a shared
+machine (killed a sibling's suite run); WO-4's resolution caveat feeds Q8
+planning (p256 1.5B prefill windows will carry the same
+not_resolvable_sample_count pressure).
+
+**Owed bookkeeping (successor desk block):** T3 run report + council C-054 +
+skill-usage rows; prune this session's worktrees after the trust merge
+(trustasm/flakeverify/fix1/guardfix/fcm/wo2/wo4/axes/bookkeep + diag1/diag2 —
+all branches/artifacts pushed or custodied).
+
+## ▶▶ T2 SESSION FINAL CHECKPOINT (2026-08-09 ~08:30) — SUPERSEDED by T3 above; kept for detail
 
 **Nothing in flight** (all Sol runs harvested; flake-verify loop stopped mid-run
 harmlessly). Durable custody of every load-bearing session artifact (trace
@@ -2920,32 +3088,23 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `T1-2026-08-08-NIGHT`
-
-T1 is the sole live checkpoint: recovery is FROZEN at unexecuted-proof count 3; U2 is FROZEN at attestation count 3; trust is unmerged with 2c proof verification in flight; Codex Fast Mode is the standing default
-
-- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
-- Allowed kernel task IDs: NONE.
-- Authority: RUN_STATE.md T1 checkpoint (2026-08-08 night).
-- Clearance: Recovery count-3 cold gate and trust proof verification must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-08). Latest report: [T1 checkpoint 2026-08-08 night: recovery FROZEN at unexecuted-proof count 3; U2 FROZEN at attestation count 3; trust unmerged with 2c proof verification in flight; Codex Fast Mode standing default](RUN_STATE.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-08). Latest report: [T3 session 2026-08-09 day: flake fix merged (#123); trust assembled, PR #122 open (16-question delta 16/16, decisive CI gate in progress); U2 frozen; default Codex tier](RUN_STATE.md).
 
 ### [ED-EXTERNAL]
 
-- GATED — E1 `P1-008` (excluded by: T1-2026-08-08-NIGHT): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `P2-006` (excluded by: T1-2026-08-08-NIGHT): Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- GATED — A0 `P2-035` (excluded by: T1-2026-08-08-NIGHT): RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
