@@ -153,6 +153,7 @@ be re-derived by a future agent gets an entry here.
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 | D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
 | D-130 | DECISIVE-RUN VENUE RULING (cold gate + paired refuter, 2026-08-11; PR #122): decisive designation follows EVIDENTIARY SUBSTANCE, not venue. For PR #122 ONLY, the authoritative decisive run for the D-117 v2 production proof is the custodied lead local execution at e871f5b (hermetic-by-construction: byte-pinned store from the published release; unset-store can only skip or fail; the legacy-locator assertion executed against 190 LIVE machine-local decoy paths), taken together with the CI-proven transport/authentication chain (workflow steps 1-7 hosted-green). The hosted d117-production-proof job is ADVISORY (dispatch-only) pending WO-CI-RESTRUCTURE; its first hosted green is the required second independent execution; contradiction of the local result = automatic stop signal + cold gate. NO general local-decisive lane: any future substitution requires a cold-gate ruling on THAT merge, a digest-pinned fixture with an equivalent store-content lock, a live-decoy hermeticity assertion, a committed one-command replay recipe (scripts/replay_d117_decisive.sh is the template), and a recorded restructure order; the admission EXPIRES at WO-CI-RESTRUCTURE closure. Citation discipline until closure: "lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/) + CI-verified transport/authentication chain", never "CI-proven decisive run". Lesson bound for future proofs: a decisive job whose runtime was never bounded against its venue's hard cap is a design defect | adopted (cold-gate ruling + refuter concurrence; magistrate-applied 2026-08-11) |
+| D-132 | STOPPING RULES TARGET DOOM LOOPS, NOT CONVERGING INSTRUMENTS (Ed, in-thread 2026-08-11): meta-process stop rules exist to kill non-converging loops — same defect recurring, no durable progress. They must NEVER terminate work on an instrument or component that is demonstrably converging (each round permanently closing its defect against a rising audit bar) when that work serves the paper: PROGRESS TOWARD A PUBLISHABLE PAPER IS THE HIGHEST-ORDER GOAL and all process rules rank below it (composing with D-119 soundness-above-all: soundness bounds WHAT may be claimed; this principle bounds when work may be STOPPED). Applied same-day: the FCM-01 stopping-rule execution is REVISED — the six-round record shows convergence, not doom-looping (arithmetic proven exact; production path sound from round 2; successive defects 0.25 J → 5e-10 J in ever-more-exotic classes) — and the estimator is REVIVED under the class-closing-by-construction design: the public registered surface is DELETED; the estimator becomes internal to the governed extraction path (the only path that may mint claims per the custody model), so no admitted-input class exists. The re-spec-to-default branch stays unmerged as the ready fallback until the revival round's delta verdict. Rust is affirmed as the H2/H3 next-generation core answer (unforgeable capability tokens), now justified by executed demonstration rather than conjecture | adopted (Ed, in-thread; transcribed by the magistrate) |
 
 ---
 
@@ -8216,3 +8217,42 @@ permanent gauntlet evidence and paper material. Terminal lesson banked: a
 sound registered arithmetic surface in Python requires a process boundary
 or capability token, not conventional privacy (see the Rust-rewrite memory
 — now with an executed demonstration).
+
+## D-132: Stopping rules target doom loops, not converging instruments
+
+**Date:** 2026-08-11 (Ed, in-thread; transcribed by the magistrate).
+**Trigger:** the same-day execution of the D-124 relicense stopping rule,
+which terminated FLOOR-COMMONMODE-01 after its round-5 delta audit.
+
+**The principle (Ed's words, in substance):** a process limit like "stop
+after N rounds of arbitration" exists to stop doom looping — it is never to
+prevent continuous work on material that keeps getting better. Never stop
+work on an instrument or component making progress because of a meta
+process rule. Progress toward a publishable paper is the highest-order
+goal; all other prerogatives fall below it. (This composes with D-119
+rather than conflicting: soundness governs what may be CLAIMED; D-132
+governs when work may be STOPPED.)
+
+**Application to FCM-01:** the six-round record is convergence, not
+looping — the extremum enumeration proven exact in rational arithmetic
+three ways, the production path sound from round 2 onward, each round's
+defect permanently closed, successive findings shrinking from 0.25 J to
+5e-10 J while the audit bar rose (adversary-authored oracle, exact
+arithmetic, fabrication attacks). The terminal insight: every post-round-2
+kill was against the PUBLIC contract — a promise the custody model's own
+rules say no claim path consumes (claim-bearing floors must come from the
+governed extraction path). REVIVAL DESIGN (round 6): delete the public
+registered surface entirely; the estimator becomes internal to the
+governed extraction pipeline and a registered result exists only as an
+artifact of that path — the admitted-input class closes by construction.
+All banked assets carry over (oracle, real b01/b02 fixtures, enclosure,
+proofs). The re-spec-to-default branch remains unmerged as the immediate
+fallback should the revival round's fresh delta find any exact
+understatement on the extraction path.
+
+**Rust disposition (Ed's question answered):** a Rust core would hold the
+unforgeable-token property Python cannot (executed demonstration:
+FCM-R5-01's five construction escape hatches) but adds nothing to
+measurement capability and does not close language-independent classes
+(test authorship, repo trust). It is affirmed as the H2/H3 answer for the
+next-generation instrument core, not a P1 dependency.
