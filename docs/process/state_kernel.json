@@ -1,23 +1,5 @@
 {
-  "active_global_gates": [
-    {
-      "allowed_task_ids": [],
-      "authority": [
-        "RUN_STATE.md T2 final checkpoint (2026-08-09) + T3 session (2026-08-09 day)"
-      ],
-      "clearance": "Trust merge (PR #122: decisive CI proof green + D-121 terminal review) must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate",
-      "id": "T3-2026-08-09-DAY",
-      "scope": {
-        "lanes": [
-          "agent",
-          "quiet_mac",
-          "ed_external"
-        ],
-        "operation": "select"
-      },
-      "summary": "T3 is the sole live checkpoint: recovery clearance CLOSED (PR #118 merged; flake fix PR #123 merged); trust branch assembled with PR #122 open awaiting the decisive CI proof and terminal review — the mint bar is still up; U2 remains FROZEN at attestation count 3; Codex service tier defaults to standard (Ed 2026-08-09 fast cut)"
-    }
-  ],
+  "active_global_gates": [],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {

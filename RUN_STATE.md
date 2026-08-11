@@ -2988,16 +2988,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `T3-2026-08-09-DAY`
-
-T3 is the sole live checkpoint: recovery clearance CLOSED (PR #118 merged; flake fix PR #123 merged); trust branch assembled with PR #122 open awaiting the decisive CI proof and terminal review — the mint bar is still up; U2 remains FROZEN at attestation count 3; Codex service tier defaults to standard (Ed 2026-08-09 fast cut)
-
-- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
-- Allowed kernel task IDs: NONE.
-- Authority: RUN_STATE.md T2 final checkpoint (2026-08-09) + T3 session (2026-08-09 day).
-- Clearance: Trust merge (PR #122: decisive CI proof green + D-121 terminal review) must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
@@ -3005,15 +2996,15 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [ED-EXTERNAL]
 
-- GATED — E1 `P1-008` (excluded by: T3-2026-08-09-DAY): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `P2-006` (excluded by: T3-2026-08-09-DAY): Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- GATED — A0 `P2-035` (excluded by: T3-2026-08-09-DAY): RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
