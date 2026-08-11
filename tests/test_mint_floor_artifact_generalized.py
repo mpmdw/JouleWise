@@ -4980,6 +4980,13 @@ class V2PinsetAndMintTests(unittest.TestCase):
             self.assertTupleEqual(partition, (partition_name,))
         self.assertTupleEqual(flattened, D117_PRODUCTION_PROOF_LEGS)
         self.assertEqual(len(flattened), len(set(flattened)))
+        # The expected core set is pinned LITERALLY here, never derived from
+        # the registry, so a deleted or phantom core leg fails certification
+        # (refuter F1: a self-referential certificate certifies any registry).
+        self.assertTupleEqual(
+            D117_PRODUCTION_PROOF_CORE_LEGS,
+            ("core-authentic-success", "core-bidirectional-equality-audit"),
+        )
         for core_leg in D117_PRODUCTION_PROOF_CORE_LEGS:
             self.assertEqual(flattened.count(core_leg), 1)
         self.assertEqual(
