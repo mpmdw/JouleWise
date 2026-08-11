@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.authentication_io import read_authentication_input
 
 CAMPAIGN_PROVENANCE_SCHEMA_V1 = "joulewise.campaign_provenance.v1"
 CAMPAIGN_PROVENANCE_SCHEMA_V2 = "joulewise.campaign_provenance.v2"
@@ -456,7 +457,11 @@ def load_campaign_log_rows(
 
     if raw_bytes is None:
         try:
-            raw_bytes = Path(log_path).read_bytes()
+            raw_bytes = read_authentication_input(
+                log_path,
+                grammar="jsonl",
+                label="campaign provenance log",
+            )
         except FileNotFoundError:
             return []
         except OSError:
@@ -598,7 +603,11 @@ def load_campaign_provenance_manifest(
     """Load and shape-check one manifest without authenticating v2 bytes."""
 
     try:
-        raw_bytes = Path(path).read_bytes()
+        raw_bytes = read_authentication_input(
+            path,
+            grammar="json",
+            label="campaign provenance manifest",
+        )
         raw = json.loads(raw_bytes.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None

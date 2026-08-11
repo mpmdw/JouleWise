@@ -19,6 +19,11 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+from joulewise.authentication_io import (
+    active_v2_authentication_session,
+    read_authentication_input,
+    read_authentication_text,
+)
 from joulewise.adapters.nvidia_smi import (
     RAW_SAMPLES_NAME as NVIDIA_SMI_RAW_SAMPLES_NAME,
     samples_from_raw_nvidia_smi,
@@ -113,7 +118,11 @@ def _load_config(path: Path) -> dict[str, Any]:
     if path.suffix.lower() != ".json":
         raise SchemaError("Phase 1 CLI supports JSON configs; YAML parsing is planned for Phase 2")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(
+            read_authentication_text(
+                path, grammar="json", label="CLI config", encoding="utf-8"
+            )
+        )
     except UnicodeDecodeError as exc:
         raise SchemaError(f"config is not valid UTF-8: {path}") from exc
 
@@ -187,7 +196,11 @@ def _cmd_kv_size(args: argparse.Namespace) -> int:
             raise KVSizeError("explicit params require --layers, --kv-heads, and --head-dim")
         params = KVSizeParams(args.layers, args.kv_heads, args.head_dim)
     elif args.config:
-        config = json.loads(Path(args.config).read_text())
+        config = json.loads(
+            read_authentication_text(
+                Path(args.config), grammar="json", label="KV-size config"
+            )
+        )
         if not isinstance(config, dict):
             raise KVSizeError("config JSON must be an object")
         params = extract_kv_params(config)
@@ -401,6 +414,12 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     raw_config = reader.raw_config()
     metadata = reader.raw_metadata()
     summary = reader.raw_summary()
+    authentication_session = active_v2_authentication_session()
+    physics_cache = (
+        authentication_session.instrument_calibration_physics_cache
+        if authentication_session is not None
+        else None
+    )
     axi_selected = (
         isinstance(raw_config, dict)
         and raw_config.get("schema_extensions")
@@ -441,6 +460,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             fresh = reduce_bundle(
                 reader.path,
                 reducer_version=comparison_axi_version,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
         except (ValueError, SchemaError) as exc:
             return [
@@ -525,11 +545,13 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             reduce_bundle(
                 reader.path,
                 reducer_version=SUMMARY_REDUCER_VERSION,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
             if comparison_reducer_version is None
             else reduce_bundle(
                 reader.path,
                 reducer_version=comparison_reducer_version,
+                _instrument_calibration_physics_cache=physics_cache,
             ).to_dict()
         )
         # The fresh current derivation is the raw/metadata authority. Inspect it
@@ -875,7 +897,11 @@ def _strict_suite_prompt_rollup(
     if not path.is_file():
         return None, ["strict: outputs/suite_items.jsonl is missing for suite rollup"]
     try:
-        text = path.read_text()
+        text = read_authentication_text(
+            path,
+            grammar="jsonl",
+            label=f"strict bundle {reader.path.name} suite prompt rollup",
+        )
     except OSError as exc:
         return None, [f"strict: outputs/suite_items.jsonl cannot be read: {exc}"]
     prompt_hashes: list[str] = []
@@ -1078,7 +1104,9 @@ def _strict_realized_output_problems(reader: BundleReader) -> list[str]:
 
 def _strict_jsonl_object_count(path: Path, label: str) -> tuple[int, list[str]]:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = read_authentication_text(
+            path, grammar="jsonl", label=f"strict {label}", encoding="utf-8"
+        )
     except (OSError, UnicodeDecodeError) as exc:
         return 0, [f"strict: {label} cannot be read: {exc}"]
     count = 0
@@ -1224,7 +1252,13 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
             for name, value in stamp_rows.items()
             if isinstance(value, dict)
         }
-        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+        raw_records = parse_powermetrics_records(
+            read_authentication_input(
+                raw_path,
+                grammar="raw",
+                label=f"strict bundle {reader.path.name} powermetrics evidence",
+            )
+        )
         if schema_version == P2038_SCHEMA_VERSION_V2:
             expected, _point = derive_powermetrics_clock_evidence_v2(
                 stamps=stamps,
@@ -1321,8 +1355,16 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
     post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
     if post_path.is_file() and pre_path.is_file():
         try:
-            pre_data = pre_path.read_bytes()
-            post_data = post_path.read_bytes()
+            pre_data = read_authentication_input(
+                pre_path,
+                grammar="raw",
+                label=f"strict bundle {reader.path.name} pre-idle evidence",
+            )
+            post_data = read_authentication_input(
+                post_path,
+                grammar="raw",
+                label=f"strict bundle {reader.path.name} post-idle evidence",
+            )
             pre_records = parse_powermetrics_records(pre_data)
             post_records = parse_powermetrics_records(post_data)
             idle_baseline = metadata.get("idle_baseline")
@@ -1400,7 +1442,12 @@ def _tolerant_jsonl_object_records(path: Path) -> list[tuple[int, dict[str, Any]
     """Collect numbered JSON-object rows without hiding adjacent diagnostics."""
 
     try:
-        text = path.read_text(encoding="utf-8")
+        text = read_authentication_text(
+            path,
+            grammar="jsonl",
+            label=f"tolerant JSONL {path.name}",
+            encoding="utf-8",
+        )
     except (OSError, UnicodeDecodeError):
         return []
     records: list[tuple[int, dict[str, Any]]] = []
@@ -1448,7 +1495,11 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 "metadata.device.plist_anchor_offset_s",
             )
             expected = samples_from_raw_powermetrics(
-                raw_path.read_bytes(),
+                read_authentication_input(
+                    raw_path,
+                    grammar="raw",
+                    label=f"strict bundle {reader.path.name} raw powermetrics",
+                ),
                 plist_anchor_offset_s=anchor_offset_s,
             )
             require_interval_support = False
@@ -1463,7 +1514,11 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 ]
             point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
             expected = samples_from_raw_powermetrics(
-                raw_path.read_bytes(),
+                read_authentication_input(
+                    raw_path,
+                    grammar="raw",
+                    label=f"strict bundle {reader.path.name} raw powermetrics",
+                ),
                 first_record_endpoint_s=point_s,
             )
             require_interval_support = True
@@ -1532,12 +1587,22 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
     try:
         point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
         expected = rich_telemetry_jsonl(
-            raw_path.read_bytes(), first_record_endpoint_s=point_s
+            read_authentication_input(
+                raw_path,
+                grammar="raw",
+                label=f"strict bundle {reader.path.name} rich-telemetry source",
+            ),
+            first_record_endpoint_s=point_s,
         )
     except (OSError, ValueError) as exc:
         return [f"strict: rich-telemetry: cannot re-derive {RICH_TELEMETRY_NAME}: {exc}"]
     try:
-        stored = rich_path.read_text(encoding="utf-8")
+        stored = read_authentication_text(
+            rich_path,
+            grammar="jsonl",
+            label=f"strict bundle {reader.path.name} rich telemetry",
+            encoding="utf-8",
+        )
     except (OSError, UnicodeDecodeError) as exc:
         return [f"strict: rich-telemetry: cannot read {RICH_TELEMETRY_NAME}: {exc}"]
     if stored != expected:
@@ -1608,7 +1673,11 @@ def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
             "metadata.adapters.telemetry.clock_alignments.stop_sampling.offset_estimate_s",
         )
         expected = samples_from_raw_nvidia_smi(
-            raw_path.read_bytes(),
+            read_authentication_input(
+                raw_path,
+                grammar="raw",
+                label=f"strict bundle {reader.path.name} raw nvidia-smi",
+            ),
             node_utc_offset_s=node_utc_offset_s,
             offset_estimate_s=offset_estimate_s,
         )
@@ -1762,7 +1831,14 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     recorded_version: str | None = None
     if stored_path.is_file():
         try:
-            stored = json.loads(stored_path.read_text(encoding="utf-8"))
+            stored = json.loads(
+                read_authentication_text(
+                    stored_path,
+                    grammar="json",
+                    label=f"bundle {bundle_path.name} stored summary",
+                    encoding="utf-8",
+                )
+            )
         except (OSError, json.JSONDecodeError):
             stored = None
         provenance = stored.get("summary_provenance") if isinstance(stored, dict) else None
@@ -1828,7 +1904,13 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
 
 def _cmd_output_identity_report(args: argparse.Namespace) -> int:
     manifest_path = Path(args.manifest)
-    manifest = json.loads(manifest_path.read_bytes())
+    manifest = json.loads(
+        read_authentication_input(
+            manifest_path,
+            grammar="json",
+            label="output-identity analysis manifest",
+        )
+    )
     if not isinstance(manifest, dict):
         raise OutputIdentityError("analysis manifest top level must be an object")
     pairs = manifest.get("pairs")

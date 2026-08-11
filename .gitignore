@@ -23,6 +23,9 @@ report/
 .codex-bridge/
 .DS_Store
 
+# Hydrated working data; see the 2026-08-08 fixture-substrate ruling.
+tests/fixtures/d117_v2_production/custody_store/*/
+
 # RPT-001 assembled report output (regenerable)
 /build/
 site_capsule/node_modules/

@@ -15,6 +15,7 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
+from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import AXI_VALIDATOR_REASON_CODES
 
 
@@ -460,7 +461,13 @@ def validate_manifest_target_evidence(
         _expect(bool(paths), "referenced target bundle evidence is required")
         for path in paths:
             _expect(path.is_dir(), f"referenced target bundle does not exist: {path}")
-            metadata = json.loads((path / "metadata.json").read_bytes())
+            metadata = json.loads(
+                read_authentication_input(
+                    path / "metadata.json",
+                    grammar="json",
+                    label=f"analysis target bundle {path.name} metadata",
+                )
+            )
             _expect(isinstance(metadata, Mapping), f"bundle metadata is not an object: {path}")
             runtime = metadata.get("runtime")
             _expect(isinstance(runtime, Mapping), f"bundle runtime evidence is unavailable: {path}")
@@ -635,8 +642,14 @@ def validate_analysis_manifest_v2(
 
 
 def load_and_validate_analysis_manifest_v2(manifest_path: Path, registry_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    manifest_bytes = manifest_path.read_bytes()
-    registry = json.loads(registry_path.read_bytes())
+    manifest_bytes = read_authentication_input(
+        manifest_path, grammar="json", label="analysis manifest v2"
+    )
+    registry = json.loads(
+        read_authentication_input(
+            registry_path, grammar="json", label="analysis registry v2"
+        )
+    )
     manifest = json.loads(manifest_bytes)
     base = manifest_path.parent
     def resolve(reference: str) -> Path:
@@ -645,12 +658,19 @@ def load_and_validate_analysis_manifest_v2(manifest_path: Path, registry_path: P
 
     roster_path = resolve(manifest["request_roster"]["path"])
     configs = {
-        entry["config"]: resolve(entry["config"]).read_bytes()
+        entry["config"]: read_authentication_input(
+            resolve(entry["config"]),
+            grammar="json",
+            label=f"analysis config {entry['config']}",
+        )
         for entry in manifest["entries"]
     }
     validate_analysis_manifest_v2(
         manifest, registry, manifest_bytes=manifest_bytes,
-        configs=configs, roster_bytes=roster_path.read_bytes(),
+        configs=configs,
+        roster_bytes=read_authentication_input(
+            roster_path, grammar="json", label="analysis request roster"
+        ),
     )
     return manifest, registry
 
@@ -844,7 +864,16 @@ def validate_attempt_ledger(
                 (path / "summary_metrics.json").is_file(),
                 f"finalized bundle has no completion marker: {path}",
             )
-            metadata = json.loads((path / "metadata.json").read_bytes())
+            metadata = json.loads(
+                read_authentication_input(
+                    path / "metadata.json",
+                    grammar="json",
+                    label=(
+                        f"attempt ledger finalized bundle {entry_id} "
+                        f"attempt {attempt_ordinal} metadata"
+                    ),
+                )
+            )
             _expect(isinstance(metadata, Mapping), f"bundle metadata is not an object: {path}")
             _expect(
                 metadata.get("run_id") == run_id,

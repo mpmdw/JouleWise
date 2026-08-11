@@ -56,6 +56,7 @@ from joulewise.floor_extraction import (
     governed_cell_metric,
     reader_throughput_tokens_s,
     validate_condition_family_definition,
+    validate_d117_mint_consumption_report,
     validate_extraction_spec,
 )
 from joulewise.analysis_engine.inputs import MOCK_TELEMETRY_CLAIM_REFUSAL
@@ -393,6 +394,96 @@ class _PermissiveStrictValidatorMixin:
         )
         allowance_patcher.start()
         self.addCleanup(allowance_patcher.stop)
+
+
+class D117MintConsumptionProfileTests(
+    _PermissiveStrictValidatorMixin, unittest.TestCase
+):
+    FIXTURE_PATH = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "d117_postcollection_trust"
+        / "extraction_report.json"
+    )
+
+    @staticmethod
+    def _allowance() -> dict:
+        return {
+            "claim_family": "gross_energy",
+            "allowance_j": 0.05,
+            "observed_trajectory_excursion_j": 0.05,
+            "derived_repeatability_bound_j": 0.04,
+            "provenance": {
+                "bound_derivation_sha256": "a" * 64,
+                "observed_component": "trajectory_excursion_max_j",
+                "derived_component": "derived_repeatability_bound_j",
+            },
+            "whole_window_evaluation_basis_sha256": "b" * 64,
+        }
+
+    def _production_path_report(self, runs_root: Path) -> dict:
+        bundle_ids = [f"golden-r{index:02d}" for index in range(1, 6)]
+        install_synthetic_recovered_manifest(runs_root, bundle_ids)
+        for index, bundle_id in enumerate(bundle_ids):
+            write_bundle(
+                runs_root,
+                bundle_id,
+                make_summary(40.0 + 0.1 * index, anchor_bound=0.01),
+            )
+        allowance = self._allowance()
+        spec = {
+            "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+            "cells": [
+                {
+                    "cell_id": "D117-GOLDEN-ABS",
+                    "kind": "absolute",
+                    "metric": "gross_energy_j",
+                    "window_class": "request",
+                    "members": [
+                        {"slot": bundle_id, "bundle_id": bundle_id}
+                        for bundle_id in bundle_ids
+                    ],
+                }
+            ],
+        }
+        with mock.patch(
+            "joulewise.floor_extraction.whole_window_drift_allowances",
+            return_value=WholeWindowDriftAllowanceResult(
+                "allowances", {"gross_energy": allowance}
+            ),
+        ):
+            report = extract_cells(runs_root, spec)
+        report["runs_root"] = "<RUNS_ROOT>"
+        return report
+
+    def test_production_extractor_path_matches_checked_in_golden(self) -> None:
+        expected = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            actual = self._production_path_report(Path(tmp))
+        self.assertEqual(validate_d117_mint_consumption_report(actual), [])
+        self.assertEqual(actual, expected)
+
+    def test_closed_profile_rejects_unknown_keys_at_every_level(self) -> None:
+        fixture = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        mutations = (
+            (fixture, "floor_mint_postcollection"),
+            (fixture["cells"][0], "unknown_cell_field"),
+            (fixture["cells"][0]["floor"], "unknown_floor_field"),
+            (fixture["cells"][0]["members"][0], "unknown_member_field"),
+        )
+        for target, key in mutations:
+            with self.subTest(key=key):
+                attacked = json.loads(json.dumps(fixture))
+                if target is fixture:
+                    attacked[key] = {}
+                elif target is fixture["cells"][0]:
+                    attacked["cells"][0][key] = True
+                elif target is fixture["cells"][0]["floor"]:
+                    attacked["cells"][0]["floor"][key] = True
+                else:
+                    attacked["cells"][0]["members"][0][key] = True
+                errors = validate_d117_mint_consumption_report(attacked)
+                self.assertTrue(any(key in error for error in errors), errors)
 
 
 class RealCapHitJoinTests(unittest.TestCase):

@@ -142,6 +142,7 @@ be re-derived by a future agent gets an entry here.
 | D-117 | D-110's historical re-mint order SUPERSEDED (structurally unsatisfiable at main: issued ledger holds only import-marked receipts, candidate discovery excludes imports); replacement = THREE prospective claim windows (fresh 1.5B decode floor, fresh 7B decode floor, fresh decode contrast) live-bracketed under the issued regime; prefill floor cells ride the floor windows; contrast decode-only by default (≥256-token prefill arm stays Ed's open option); D-113 readiness rewired (three-window P1 closure precedes MET-WINDOW-C-01); Option 1 preserved as cold-gated contingency only | adopted (Ed directive, in-thread 2026-08-07; transcribed by the Fable magistrate) |
 | D-118 | NOTHING approaches merge without the full council: the merge gate is ENUMERATED (independent audit; paired distinct lenses; lead FIX contract; delta re-audit of every fix round; same-signature statement; Opus counter-review; apex Fable diff gate — delegable to Fable subagents, magistrate adjudicates; overbuild/prune; lead unpiped integration-tree replay; final-head rule; CI + post-merge cross-unit review) and MECHANICALLY CHECKED via a per-PR gate ledger; D-072 self-merge is conditioned on that ledger being complete; a burn license never reduces the gate | ratified (Ed directive, 2026-08-07; trigger: PRs #111/#112/#113 merged with an incomplete gate, self-reported and closed retroactively) |
 | D-119 | Claim-LANGUAGE rulings (wording strength of provenance/custody statements, demonstrated-vs-designed framing, limitation phrasing) delegated to the magistrate, CONSERVATIVE BY DEFAULT — take the weaker honest phrasing unless evidence for the stronger is named in the same breath; what to measure/fund/scope/publish remains Ed's; ends when Ed joins the draft review loop | ratified (Ed directive, 2026-08-07; prompted by the operator-attested custody wording, which affected no measurement or datum) |
+| D-120 | D117-POSTCOLLECTION-TRUST-01 executed: `floor_mint_postcollection` DELETED with no producer assigned (unknown-key refusal under a closed D-117 report profile); the v2 mint calculates the verification projection from each pin's DOMAIN OWNER (ledger+binding custody, issued acceptance allowance, verdict-basis membership/drift, floors recomputed from authenticated members) and never generates pins; git-derived provenance (mint runs git, refuses dirty tree; origin/main containment recorded, unknown tolerated); assurance qualifier single_authority_hash_bound_replay.v1 REQUIRED in v2 artifacts; paper §5/§11 updated in step; v2 mint bar lifts only when this lands through the full D-118 gate | adopted (escalation consult ESCALATION-CONSULT-RESPONSE.md; magistrate transcription, 2026-08-07) |
 | D-121 | The MAGISTRATE'S OWN final review is the TERMINAL merge-gate item: after EVERY other pass (audits, lenses, deltas, counter-reviews, subagent final-head passes, CI) completes, the magistrate itself — WITH full session context — reviews the exact merge candidate last; no delegation of this terminal slot (subagent Fable passes remain valid as EARLIER items); only then D-072 merge. Amends D-118 (adds item 12; the ledger records it explicitly) | ratified (Ed directive, in-thread 2026-08-08; transcribed by the magistrate) |
 | D-122 | Ruling 4 RULED BY ED (reverses the standing recommendation): the paper is NOT decode-only — the contrast window (gamma) grows a prospectively frozen 256-token prefill ABBA arm (scout evidence: 128-tok historical delta 5.809930 J vs ~5 J practical bar = MARGINAL, interval dips below; 256-tok projection ~11.619860 J clears with >2x margin — sizing projection, not demonstrated; the claim machinery refuses honestly if the night lands below bar and the marginality analysis publishes); prefill floor cells still ride alpha/beta; pack/night budgets grow accordingly | ratified (Ed directive, in-thread 2026-08-08: "size up the workloads to get more data — I don't want a decode-only paper/scope if at all possible"; transcribed by the magistrate) |
 | D-123 | Ruling 2 RULED BY ED: YES — reported phase-energy mean cells pre-register in the alpha/beta packs (same 50 members, no added collection), conditional on the scheduled no-semantics-change check proving floor outputs byte-identical; PLUS Ed's standing design preference: workload SIZE is the free lever against the fixed attribution blur — size signals up wherever it costs the instrument nothing and does not destabilize proven designs; PLUS an ordered Sol debate on whether attribution itself can be improved within instrument scope; PLUS the overnight license (~12h autonomous, goal = a defensible paper, Sol liberal on fast tier, magistrate oversight with D-121 terminal reviews, Opus extra eyes) | ratified (Ed directive, in-thread 2026-08-08, on leaving for the night; transcribed by the magistrate) |
@@ -151,6 +152,7 @@ be re-derived by a future agent gets an entry here.
 | D-127 | AUTONOMOUS WINDOW LOOP authorized (Ed directive, in-thread 2026-08-08, during the 40h window): partially REVERSES D-114's descope — the scoped network-time toggle (QUIET-GUARD sudoers slice: exactly the two fixed systemsetup network-time commands, exact binary path + exact argv, no wildcards) plus an autonomous experiment-loop harness (post-window supervisor step relaunches a fresh headless claude session with launch-then-verify-then-retry liveness proof + an independent launchd fallback timer; agent fully EXITS during capture — zero-agent rule for the capture itself is UNCHANGED) are chartered for build. D-115's conditions bind the privileged install path (fresh sudo -k auth, authenticated staged content, interpreter isolation) and Ed personally executes the one sudo install command — the privileged step never passes through the agent. Security-critical: full D-118/D-121 gauntlet + pre-decision design consult; built OFF the night-critical path and INSTALLED only at a deliberate Ed-present moment | ratified by D-128 (build authorized; install gated; initially chartered by Ed, in-thread; transcribed by the magistrate) |
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 | D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
+| D-130 | DECISIVE-RUN VENUE RULING (cold gate + paired refuter, 2026-08-11; PR #122): decisive designation follows EVIDENTIARY SUBSTANCE, not venue. For PR #122 ONLY, the authoritative decisive run for the D-117 v2 production proof is the custodied lead local execution at e871f5b (hermetic-by-construction: byte-pinned store from the published release; unset-store can only skip or fail; the legacy-locator assertion executed against 190 LIVE machine-local decoy paths), taken together with the CI-proven transport/authentication chain (workflow steps 1-7 hosted-green). The hosted d117-production-proof job is ADVISORY (dispatch-only) pending WO-CI-RESTRUCTURE; its first hosted green is the required second independent execution; contradiction of the local result = automatic stop signal + cold gate. NO general local-decisive lane: any future substitution requires a cold-gate ruling on THAT merge, a digest-pinned fixture with an equivalent store-content lock, a live-decoy hermeticity assertion, a committed one-command replay recipe (scripts/replay_d117_decisive.sh is the template), and a recorded restructure order; the admission EXPIRES at WO-CI-RESTRUCTURE closure. Citation discipline until closure: "lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/) + CI-verified transport/authentication chain", never "CI-proven decisive run". Lesson bound for future proofs: a decisive job whose runtime was never bounded against its venue's hard cap is a design defect | adopted (cold-gate ruling + refuter concurrence; magistrate-applied 2026-08-11) |
 
 ---
 
@@ -7782,6 +7784,44 @@ territory.
 directly. He may reverse any ruling at any time; none of them bind him.
 
 
+## D-120: D117-POSTCOLLECTION-TRUST-01 — the postcollection trust closure (adopted consult design, executed)
+
+**Date:** 2026-08-07. **Status:** ADOPTED (design), EXECUTED on
+`impl/d117-postcollection-trust` (merge gated by D-118).
+
+**The defect class (three prior relocations):** the v2 generalized mint
+authenticated postcollection custody pins against
+`component.report["floor_mint_postcollection"]` — a block nothing in
+production emits, so in production both the pins and their "authority"
+would be authored by the same operator hand. Rounds 1-3 each moved the
+trust boundary down a level without terminating it (fabricated-hash
+mint; presence-only check; per-field equality against the same
+operator-authored block).
+
+**The adopted shape (binding design memo: final block of
+`docs/process_traces/2026-08-07-d117-u-units/ESCALATION-CONSULT-RESPONSE.md`):**
+1. `floor_mint_postcollection` is DELETED from production and fixture
+   vocabulary; no producer is assigned; a report containing it (or any
+   unknown key) REFUSES under a closed D-117 mint-consumption profile.
+2. The mint verifies every pin against its DOMAIN OWNER and treats the
+   extraction report as a cache requiring reauthentication, never an
+   oracle. Verifier calculation is mandatory; pin generation is
+   forbidden (missing pins refuse).
+3. The mint derives project commit/tree state by running git itself and
+   refuses a dirty tree; origin/main containment of the mint commit is
+   recorded evidence (unknown tolerated, never a gate).
+4. Every v2 artifact carries the REQUIRED assurance qualifier
+   (`single_authority_hash_bound_replay.v1`, independent_attestation
+   false) stating what the system establishes and does not establish.
+5. The honest trust claim is single-authority, hash-bound, fail-closed
+   consistency — never operator independence (ADJUDICATION-TRUST-MODEL.md
+   controls; the paper's §5/§11 language updated in the same change).
+
+**Consequence:** the v2 mint remains BARRED from issuing until the
+executing branch passes the full D-118 gate and merges; U10 depends on
+this entry.
+
+
 ## D-121: The magistrate's contextual final review is the terminal merge-gate item (Ed directive; amends D-118)
 
 **Date:** 2026-08-08 (Ed, in-thread: "fable should do a final review of
@@ -8094,3 +8134,45 @@ measurement, claim, or trust-model semantics change.
    framing in `docs/orchestration.md` (the C-009/C-010 stamped council
    consensus remains in place as the dated record it is); Opus-directed
    Sol lanes are now the standing default shape.
+
+## D-130: Decisive-run venue — substance over venue, fenced to PR 122
+
+**Date:** 2026-08-11. **Trigger:** the `d117-production-proof` workflow's
+decisive step was cancelled at the exact 360-minute GitHub-hosted platform
+cap twice at head e871f5b (count 2 of the timeout signature); the standing
+escalation trigger routed the question to a cold gate, mandatory in any case
+as a verdict-authority reinterpretation.
+
+**Ruling (cold gate, disposition (a); paired contract-lens refuter CONCURS):**
+decisive authority for the PR #122 merge is re-seated to the lead local
+decisive execution at e871f5b (2026-08-10T21:16:58Z → 2026-08-11T00:52:37Z,
+rc=0, 12938.543 s, the workflow's exact decisive test), hydrated the CI way
+(anonymous release download; archive sha256 `f1286bc8…9553` equal to the
+committed transport descriptor and independently re-hashed by the cold gate;
+governed hydrator; census byte-compare), taken together with the CI-proven
+steps 1-7 transport/authentication chain (hosted-green at earlier heads).
+The refuter's hermeticity finding: the local green is hermetic BY
+CONSTRUCTION — store-content lock (census + 190-member hash equality against
+the authenticated ledger), skip lock (an unset store variable can only skip
+or hard-fail, never pass), and the legacy-locator assertion executed against
+190 LIVE machine-local decoy paths (the actual T2 leakage paths), giving the
+local run MORE teeth on the operator-leakage axis than a hosted run where
+those paths do not exist.
+
+**Binding conditions applied:** evidence bundle posted to the PR pre-merge
+and committed at `docs/evidence/d117-v2-decisive-20260811/` (contemporaneous
+worktree/interpreter/store attestations; durable copy in the window-custody
+store); merge executed at e871f5b exactly; the workflow de-triggered to
+`workflow_dispatch` in the first post-merge commit (the refuter's Route-A
+substance without moving the merged head; the one auto-fired main run
+cancelled); the two tracked "required"-wording contract sentences amended in
+the same commit; WO-CI-RESTRUCTURE registered in TASK_QUEUE (matrix-split
+the attack legs to fit hosted limits; full trust gauntlet — proof-semantics
+work; deadline: before any claim publication and before the pack-freeze
+merge wave — a recorded deviation from the refuter's tighter before-FCM-01
+ordering, reasoning: FCM-01 touches the estimator surface, not the auth
+core, and holding it on this work order would re-couple the critical path
+this ruling decoupled); a Python 3.11 local decisive replay owed post-merge
+(the decisive test has completed on no CI interpreter; refuter C3). The
+fence, expiry, and five-part future-substitution test in the index row bind
+future sessions.

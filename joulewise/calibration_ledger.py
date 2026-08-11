@@ -43,6 +43,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO
 
+from joulewise.authentication_io import (
+    V2AuthenticationInputError,
+    ingest_git_authentication_input,
+    read_authentication_input,
+    read_authentication_input_nofollow,
+)
 from joulewise.calibration_exits import (
     REFUSAL_BY_CODE,
     RefusalCode,
@@ -73,6 +79,10 @@ HISTORICAL_IMPORT_TABLE_SCHEMA = (
 HISTORICAL_IMPORT_CUSTODY_MANIFEST_SCHEMA = (
     "joulewise.calibration_historical_import_custody_manifest.v1"
 )
+CUSTODY_STORE_MANIFEST_SCHEMA = (
+    "joulewise.calibration_custody_store_manifest.v1"
+)
+CUSTODY_STORE_MANIFEST_NAME = "manifest.json"
 HISTORICAL_IMPORT_EVENT_PREFIX = "historical-import-v1"
 HISTORICAL_IMPORT_RESERVATION_EVENT = (
     f"{HISTORICAL_IMPORT_EVENT_PREFIX}-reservation"
@@ -268,7 +278,13 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     for relative in GOVERNED_ARTIFACTS:
         path = root / relative
         if path.is_file():
-            result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+            result[relative] = hashlib.sha256(
+                read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=f"calibration custody artifact {relative}",
+                )
+            ).hexdigest()
     return result
 
 
@@ -347,6 +363,8 @@ class CalibrationLedgerSnapshot:
     baseline_digest: str | None = None
     committed_head_sequence: int | None = None
     committed_head_digest: str | None = None
+    custody_store_manifest_schema: str | None = None
+    custody_store_manifest_sha256: str | None = None
 
     @property
     def valid(self) -> bool:
@@ -1146,7 +1164,12 @@ def _committed_pin_bytes(path: Path, repo_root: Path) -> bytes | None:
         )
     except (OSError, subprocess.CalledProcessError):
         return None
-    return completed.stdout
+    return ingest_git_authentication_input(
+        relative,
+        completed.stdout,
+        grammar="json",
+        label="Git-committed calibration ledger head pin",
+    )
 
 
 def _legacy_append_journal_path(ledger_path: Path) -> Path:
@@ -1761,12 +1784,190 @@ def _custody_reasons(
         for relative, expected in observation.artifact_sha256.items():
             path = root / relative
             try:
-                actual = hashlib.sha256(path.read_bytes()).hexdigest()
+                actual = hashlib.sha256(
+                    read_authentication_input(
+                        path,
+                        grammar="raw",
+                        label=(
+                            f"calibration ledger custody {observation.attempt_id} "
+                            f"artifact {relative}"
+                        ),
+                    )
+                ).hexdigest()
             except OSError:
                 return {"calibration_ledger_custody_invalid"}
             if actual != expected:
                 return {"calibration_ledger_custody_invalid"}
     return set()
+
+
+def _custody_observations(
+    observations: Sequence[LedgerObservation],
+    bracket_sessions: Sequence[CalibrationBracketSession],
+) -> list[LedgerObservation]:
+    result = list(observations)
+    seen_attempt_ids = {observation.attempt_id for observation in result}
+    for session in bracket_sessions:
+        result.extend(
+            observation
+            for observation in session.finalized_slots.values()
+            if observation.attempt_id not in seen_attempt_ids
+        )
+        seen_attempt_ids.update(
+            observation.attempt_id for observation in session.finalized_slots.values()
+        )
+    return result
+
+
+def _custody_store_manifest_projection(
+    *,
+    ledger_schema: str,
+    head_sequence: int,
+    head_digest: str,
+    observations: Sequence[LedgerObservation],
+) -> Mapping[str, Any] | None:
+    """Derive the store declaration solely from authenticated ledger rows."""
+
+    contents: list[dict[str, Any]] = []
+    seen_content_ids: set[str] = set()
+    for observation in observations:
+        artifacts = dict(observation.artifact_sha256)
+        if not artifacts and observation.disposition == "abandoned":
+            continue
+        content_id = observation.content_id
+        if (
+            not _is_sha256(content_id)
+            or content_id in seen_content_ids
+            or set(artifacts) != set(GOVERNED_ARTIFACTS)
+            or any(not _is_sha256(value) for value in artifacts.values())
+        ):
+            return None
+        seen_content_ids.add(content_id)
+        contents.append(
+            {
+                "content_id": content_id,
+                "artifact_sha256": {
+                    name: artifacts[name] for name in sorted(GOVERNED_ARTIFACTS)
+                },
+            }
+        )
+    contents.sort(key=lambda row: row["content_id"])
+    return {
+        "schema_version": CUSTODY_STORE_MANIFEST_SCHEMA,
+        "ledger": {
+            "schema_version": ledger_schema,
+            "head_sequence": head_sequence,
+            "head_digest": head_digest,
+        },
+        "contents": contents,
+    }
+
+
+def calibration_custody_store_manifest(
+    snapshot: CalibrationLedgerSnapshot,
+) -> Mapping[str, Any]:
+    """Return the canonical ledger-derived declaration for one snapshot."""
+
+    projection = _custody_store_manifest_projection(
+        ledger_schema=snapshot.ledger_schema,
+        head_sequence=snapshot.head_sequence,
+        head_digest=snapshot.head_digest,
+        observations=_custody_observations(
+            snapshot.observations, snapshot.bracket_sessions
+        ),
+    )
+    if projection is None:
+        raise CalibrationLedgerError(
+            "calibration snapshot cannot define a unique complete custody store"
+        )
+    return projection
+
+
+def calibration_custody_store_manifest_bytes(
+    snapshot: CalibrationLedgerSnapshot,
+) -> bytes:
+    """Serialize the one canonical store manifest wire format."""
+
+    return canonical_json_bytes(calibration_custody_store_manifest(snapshot)) + b"\n"
+
+
+def _strict_custody_store_manifest(raw: bytes) -> Mapping[str, Any] | None:
+    def reject_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate JSON key")
+            value[key] = item
+        return value
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite JSON number {value!r}")
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=reject_duplicate,
+            parse_constant=reject_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(value, Mapping):
+        return None
+    if raw != canonical_json_bytes(value) + b"\n":
+        return None
+    return value
+
+
+def _custody_store_reasons(
+    observations: Sequence[LedgerObservation],
+    *,
+    store_root: Path,
+    ledger_schema: str,
+    head_sequence: int,
+    head_digest: str,
+) -> tuple[set[str], str | None]:
+    expected_manifest = _custody_store_manifest_projection(
+        ledger_schema=ledger_schema,
+        head_sequence=head_sequence,
+        head_digest=head_digest,
+        observations=observations,
+    )
+    if expected_manifest is None:
+        return {"calibration_ledger_custody_invalid"}, None
+    try:
+        manifest_raw = read_authentication_input_nofollow(
+            store_root,
+            CUSTODY_STORE_MANIFEST_NAME,
+            grammar="json",
+            label="calibration custody store manifest",
+        )
+    except (OSError, ValueError, V2AuthenticationInputError):
+        return {"calibration_ledger_custody_invalid"}, None
+    manifest = _strict_custody_store_manifest(manifest_raw)
+    if manifest is None or dict(manifest) != dict(expected_manifest):
+        return {"calibration_ledger_custody_invalid"}, None
+    manifest_sha256 = hashlib.sha256(manifest_raw).hexdigest()
+    for observation in observations:
+        artifacts = dict(observation.artifact_sha256)
+        if not artifacts and observation.disposition == "abandoned":
+            continue
+        assert observation.content_id is not None
+        for relative in GOVERNED_ARTIFACTS:
+            try:
+                raw = read_authentication_input_nofollow(
+                    store_root,
+                    f"{observation.content_id}/{relative}",
+                    grammar="raw",
+                    label=(
+                        f"calibration custody store {observation.content_id} "
+                        f"artifact {relative}"
+                    ),
+                )
+            except (OSError, ValueError, V2AuthenticationInputError):
+                return {"calibration_ledger_custody_invalid"}, manifest_sha256
+            if hashlib.sha256(raw).hexdigest() != artifacts[relative]:
+                return {"calibration_ledger_custody_invalid"}, manifest_sha256
+    return set(), manifest_sha256
 
 
 def load_calibration_ledger_snapshot(
@@ -1778,6 +1979,7 @@ def load_calibration_ledger_snapshot(
     require_committed_pin: bool = True,
     verify_custody: bool = True,
     repo_root: Path = REPO_ROOT,
+    calibration_custody_store: Path | None = None,
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -1793,7 +1995,11 @@ def load_calibration_ledger_snapshot(
     head_pin_path = Path(head_pin_path)
     reasons: set[str] = set()
     try:
-        pin_raw = head_pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            head_pin_path,
+            grammar="json",
+            label="physical calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         pin_raw = b""
@@ -1805,7 +2011,11 @@ def load_calibration_ledger_snapshot(
     else:
         pinned_sequence, pinned_digest = pin
     try:
-        raw = ledger_path.read_bytes()
+        raw = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label="physical calibration observation ledger",
+        )
     except OSError:
         raw = b""
         if pinned_sequence > 0:
@@ -1860,16 +2070,21 @@ def load_calibration_ledger_snapshot(
         receipts
     )
     reasons.update(state_reasons)
-    if verify_custody:
-        custody_observations = list(observations)
-        custody_attempt_ids = {observation.attempt_id for observation in observations}
-        for session in bracket_sessions:
-            custody_observations.extend(
-                observation
-                for observation in session.finalized_slots.values()
-                if observation.attempt_id not in custody_attempt_ids
-            )
+    custody_store_manifest_sha256: str | None = None
+    custody_observations = _custody_observations(observations, bracket_sessions)
+    if calibration_custody_store is not None and not verify_custody:
+        reasons.add("calibration_ledger_custody_invalid")
+    elif verify_custody and calibration_custody_store is None:
         reasons.update(_custody_reasons(custody_observations, repo_root))
+    elif verify_custody:
+        store_reasons, custody_store_manifest_sha256 = _custody_store_reasons(
+            custody_observations,
+            store_root=Path(calibration_custody_store),
+            ledger_schema=LEDGER_SCHEMA,
+            head_sequence=physical_sequence,
+            head_digest=physical_digest,
+        )
+        reasons.update(store_reasons)
     return CalibrationLedgerSnapshot(
         ledger_schema=LEDGER_SCHEMA,
         ledger_path=ledger_path,
@@ -1883,6 +2098,12 @@ def load_calibration_ledger_snapshot(
         baseline_digest=baseline_digest,
         committed_head_sequence=pinned_sequence,
         committed_head_digest=pinned_digest,
+        custody_store_manifest_schema=(
+            CUSTODY_STORE_MANIFEST_SCHEMA
+            if calibration_custody_store is not None
+            else None
+        ),
+        custody_store_manifest_sha256=custody_store_manifest_sha256,
     )
 
 
@@ -2134,49 +2355,17 @@ def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
 
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
     root = _assert_absolute_nonsymlink_directory(directory)
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    directory_flags = flags | getattr(os, "O_DIRECTORY", 0) | nofollow
-    descriptor = os.open(root, directory_flags)
     try:
-        components = Path(relative).parts
-        if not components or any(item in {"", ".", ".."} for item in components):
-            raise CalibrationLedgerError("governed artifact path is not contained")
-        parent = descriptor
-        owned_parent = False
-        try:
-            for component in components[:-1]:
-                child = os.open(component, directory_flags, dir_fd=parent)
-                if owned_parent:
-                    os.close(parent)
-                parent = child
-                owned_parent = True
-            artifact = os.open(components[-1], flags | nofollow, dir_fd=parent)
-            try:
-                if not stat.S_ISREG(os.fstat(artifact).st_mode):
-                    raise CalibrationLedgerError(
-                        f"governed artifact is not a regular file: {root / relative}"
-                    )
-                chunks: list[bytes] = []
-                while True:
-                    chunk = os.read(artifact, 1024 * 1024)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                return b"".join(chunks)
-            finally:
-                os.close(artifact)
-        finally:
-            if owned_parent:
-                os.close(parent)
-    except CalibrationLedgerError:
-        raise
-    except OSError as exc:
+        return read_authentication_input_nofollow(
+            root,
+            relative,
+            grammar="raw",
+            label=f"governed calibration artifact {root / relative}",
+        )
+    except (OSError, ValueError) as exc:
         raise CalibrationLedgerError(
             f"governed artifact is unreadable without symlink traversal: {root / relative}"
         ) from exc
-    finally:
-        os.close(descriptor)
 
 
 def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
@@ -2545,7 +2734,11 @@ def _require_genesis_bootstrap_state(
     allow_nonempty_pending_plan: bool = False,
 ) -> bool:
     try:
-        pin_raw = Path(head_pin_path).read_bytes()
+        pin_raw = read_authentication_input(
+            head_pin_path,
+            grammar="json",
+            label="genesis calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError("head pin is unreadable") from exc
@@ -2558,7 +2751,15 @@ def _require_genesis_bootstrap_state(
         raise CalibrationLedgerError("head pin is not committed at Git HEAD")
     path = Path(ledger_path)
     try:
-        raw = path.read_bytes() if path.exists() else b""
+        raw = (
+            read_authentication_input(
+                path,
+                grammar="jsonl",
+                label="genesis calibration observation ledger",
+            )
+            if path.exists()
+            else b""
+        )
     except OSError as exc:
         raise CalibrationLedgerError("physical ledger is unreadable") from exc
     if raw:
@@ -3363,8 +3564,12 @@ def _new_append_intent(
 
 def _legacy_journal_metadata(path: Path) -> Mapping[str, Any]:
     try:
-        raw = path.read_bytes()
-    except OSError as exc:
+        raw = read_authentication_input(
+            path,
+            grammar="raw",
+            label="legacy calibration append journal",
+        )
+    except (OSError, V2AuthenticationInputError) as exc:
         raise CalibrationLedgerError(RefusalCode.LEGACY_JOURNAL_UNREADABLE) from exc
     tail = raw[-64:]
     return {
@@ -3666,8 +3871,16 @@ def inspect_calibration_ledger(
 
     ledger = Path(ledger_path)
     try:
-        raw = ledger.read_bytes() if ledger.exists() else b""
-    except OSError as exc:
+        raw = (
+            read_authentication_input(
+                ledger,
+                grammar="jsonl",
+                label="physical calibration ledger recovery inspection",
+            )
+            if ledger.exists()
+            else b""
+        )
+    except (OSError, V2AuthenticationInputError) as exc:
         raise CalibrationLedgerError(RefusalCode.PHYSICAL_LEDGER_UNREADABLE) from exc
     return _inspection_from_physical(
         _scan_physical_ledger(raw),
@@ -3876,7 +4089,11 @@ def _authenticated_head_pin(
 ) -> tuple[int, str]:
     pin_path = Path(head_pin_path)
     try:
-        pin_raw = pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            pin_path,
+            grammar="json",
+            label="authenticated calibration ledger head pin",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError(RefusalCode.HEAD_PIN_UNREADABLE) from exc
@@ -4333,7 +4550,11 @@ def terminal_head_pin_for_session(
     """Return the sole terminal pin candidate after post or governed abort."""
 
     try:
-        raw = Path(ledger_path).read_bytes()
+        raw = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label=f"calibration ledger for bracket session {session_id}",
+        )
     except OSError as exc:
         raise CalibrationLedgerError(RefusalCode.PHYSICAL_LEDGER_UNREADABLE) from exc
     receipts, parse_reasons = _parse_ledger(raw)
@@ -4406,9 +4627,18 @@ def validate_frozen_reservation_plan(
     plan_path: Path, *, expected_sha256: str, expected_plan_id: str
 ) -> Mapping[str, Any]:
     try:
-        raw = Path(plan_path).read_bytes()
+        raw = read_authentication_input(
+            Path(plan_path),
+            grammar="json",
+            label="frozen calibration reservation plan",
+        )
         value = json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        V2AuthenticationInputError,
+    ) as exc:
         raise CalibrationLedgerError(RefusalCode.PLAN_UNREADABLE) from exc
     if hashlib.sha256(raw).hexdigest() != expected_sha256:
         raise CalibrationLedgerError(RefusalCode.PLAN_HASH_MISMATCH)
@@ -5068,7 +5298,11 @@ def append_pending_receipt(
         )
     pin_path = Path(head_pin_path)
     try:
-        pin_raw = pin_path.read_bytes()
+        pin_raw = read_authentication_input(
+            pin_path,
+            grammar="json",
+            label="calibration ledger head pin for receipt reservation",
+        )
         pin_value = json.loads(pin_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CalibrationLedgerError(RefusalCode.HEAD_PIN_UNREADABLE) from exc
@@ -5259,6 +5493,8 @@ def head_pin_for_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "ABANDONMENT_EVENT",
+    "CUSTODY_STORE_MANIFEST_NAME",
+    "CUSTODY_STORE_MANIFEST_SCHEMA",
     "ALL_DISPOSITIONS",
     "APPEND_INTENT_EVENT",
     "APPEND_POLICY_REVISION",
@@ -5307,6 +5543,8 @@ __all__ = [
     "claim_bracket_session_slot",
     "abort_bracket_session",
     "artifact_hashes",
+    "calibration_custody_store_manifest",
+    "calibration_custody_store_manifest_bytes",
     "bootstrap_historical_import",
     "custody_manifest_bytes",
     "canonical_sha256",

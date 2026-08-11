@@ -47,7 +47,87 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T3 SESSION FINAL CHECKPOINT (2026-08-09 evening, Ed wrap order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T4 SESSION CHECKPOINT (2026-08-10/11, Ed 24h+ grind order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**THE MINT BAR IS LIFTED.** Trust PR #122 MERGED at `ae6af48`
+(2026-08-11T03:40Z) under the full gate: 16Q delta 16/16 (T3), ci+site green,
+lead full unpiped suite 2945 OK at the head, the decisive proof PROVEN by the
+lead local run (OK, 3h35m, CI-identical hydration), and **D-130** — the
+cold-gate decisive-venue ruling (packet + paired refuter; refuter's
+hermeticity finding: the local run's legacy-locator assertion executed
+against 190 LIVE machine-local decoy paths). CI proof job is ADVISORY
+(dispatch-only) pending **WO-CI-RESTRUCTURE** (TASK_QUEUE; deadline: before
+any claim publication and before the pack-freeze merge wave; first hosted
+green = required second execution). Citation discipline until closure:
+"lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/)
++ CI-verified transport/authentication chain". Post-merge batch on main
+`654c53d`; kernel UNGATED + fidelity pins cleared `b04c5bf`; Ed's temporary
+settings.local.json rules removed; 3.11 decisive replay (D-130/C3) was IN
+FLIGHT at this checkpoint (log scratchpad decisive-local-py311.log; harvest
+result, then note it in the evidence dir).
+
+**FLOOR-COMMONMODE-01 IS FROZEN — ED DECISION PACKET.** Frozen at `123e8a5`
+(FREEZE-FCM01.md on impl/floor-commonmode-01) after the terminal cold-gate
+condition executed: FIVE distinct understatement mechanisms across four fix
+rounds, three cold-gate sittings, two paired-refuter reports, four delta
+audits (ledger in the freeze banner; final: FCM-R4-01, zero-point value not
+authenticated as the true zero evaluation, 5.0e-10 J admitted-input exact).
+The PRODUCTION path is unaffected (it computes z itself); the failures live
+on the direct-call any-admitted-input contract. **Ed's options** (freeze-plan
+Q7 bars pack freeze while the estimator is candidate-pending): (i) relicense
+with a structural zero-threading contract (candidates in the freeze banner);
+(ii) reverse Q7 + re-spec both floor packs' comparative cells to the
+worst-case default (COSTS the funded p256 prefill contrast's claim
+capability — the gamma arm likely publishes as unresolvable); (iii) hold.
+The frozen gauntlet record is itself paper material (the refuter's argument).
+Also banked for Ed: the two cold gates' process recommendations (registered
+text may claim only what its committed oracle exercises; delta audits report
+in ulp-of-largest-intermediate units; class-keyed same-signature counting).
+
+**PAPER — full Rivoire-bar program executed on branch paper/edit-train-t4**
+(trains A-D + three schematic figures, all magistrate-reviewed): D-122
+currency fixed at 7 sites; the two REQUIRED missing limitations added
+(D-124 stationarity/applicability, sampling resolution); all three metrology
+blockers corrected (95/95 conditionality, ABBA honest scoping, the false
+floor-guarantee); L23's seven currency/provenance residuals; the terms/
+physics program (glossary, physical explanations, coherence fix); train C
+related-work overhaul (JouleSort triad restored to Rivoire's actual list,
+verified lineage subsection w/ 4 new refs incl. two of the advisor's own,
+five S1 advisor-visible defects fixed, full renumbering to 23 refs
+mechanically verified); train D structure (13→11 sections, plain abstract,
+figures integrated w/ the interval-conservation sensitivity caption).
+Train E (custody wording to post-trust reality + deferred term renames) was
+IN FLIGHT at this checkpoint. **Successor: harvest E → magistrate FULL
+LINEAR READ of the assembled draft → paper PR** (no renderer/test exists —
+quote-verify). Then remaining: L6's R1/R2/R5-adjacent items already done via
+figures; report_src drift decision pending; LITREAD candidates (Benazir&Lin
+added; UNVERIFIED list must stay out).
+
+**MERGED THIS SESSION: #122 (trust/mint bar), #124 (WO-2), #125 (WO-3 —
+replay-derived receipt oracles all three packs), T3 bookkeeping `e74cc4c`,
+runbook drift-allowance correction `4d3e3ad`, freeze-plan addendum `51bcf77`
+(lineage-monotone margin risk), D-130 batch `654c53d`, kernel clear-back
+`b04c5bf`.** Arm-packet skeleton drafted (custody:
+~/JouleWise-window-custody/t4-session-20260810/ + scratchpad
+arm-packet-alpha-SKELETON.md) with 12 RECORDED arming-surface discrepancies
+(dual final-readiness commands; caffeinate contradiction; settle ownership;
+U11 tool DOES NOT EXIST — freeze-lane critical path) — resolution pass rides
+the freeze lane.
+
+**Owed (successor desk block):** T4 run report + council entry (the FCM
+adjudication chain + D-130 + the paper program; dictated-fills via Opus
+director worked for T3 — reuse); skill-usage rows for T4; harvest the 3.11
+replay + train E; prune trustverify/papered/fcm worktrees when their lanes
+close (fcm worktree holds the FROZEN branch — keep until Ed rules);
+cs-pedagogy worktree audit item still stands (Ed decision wanted).
+Process notes: two-writers-one-worktree caused a scope-violation misfire
+(figures committed mid-run) — never again; inline codex-run-v3 prompts
+without the literal WRITE_SCOPE line = rc 64 (5th recurrence, prompt-file
+rule now logged); delta-audit prompts must REQUIRE exact-arithmetic verdicts
+printed (delta-2 computed and dropped one — highest-value process finding of
+the FCM episode).
+
+## ▶▶ T3 SESSION FINAL CHECKPOINT (2026-08-09 evening, Ed wrap order) — SUPERSEDED by T4 above; kept for detail
 
 **Session shape:** first full session under D-129 (fan-out standing order,
 ~60% fast-tier cut, Fable-economy-with-full-coverage — all three minted this
@@ -2988,16 +3068,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `T3-2026-08-09-DAY`
-
-T3 is the sole live checkpoint: recovery clearance CLOSED (PR #118 merged; flake fix PR #123 merged); trust branch assembled with PR #122 open awaiting the decisive CI proof and terminal review — the mint bar is still up; U2 remains FROZEN at attestation count 3; Codex service tier defaults to standard (Ed 2026-08-09 fast cut)
-
-- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
-- Allowed kernel task IDs: NONE.
-- Authority: RUN_STATE.md T2 final checkpoint (2026-08-09) + T3 session (2026-08-09 day).
-- Clearance: Trust merge (PR #122: decisive CI proof green + D-121 terminal review) must close before normal kernel lane selection resumes; U2 remains frozen for its post-window cold gate
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
@@ -3005,15 +3076,15 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [ED-EXTERNAL]
 
-- GATED — E1 `P1-008` (excluded by: T3-2026-08-09-DAY): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `P2-006` (excluded by: T3-2026-08-09-DAY): Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
 
 ### [AGENT]
 
-- GATED — A0 `P2-035` (excluded by: T3-2026-08-09-DAY): RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

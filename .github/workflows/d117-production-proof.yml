@@ -1,0 +1,174 @@
+name: d117-production-proof
+
+# ADVISORY pending WO-CI-RESTRUCTURE (cold-gate ruling 2026-08-11, PR #122):
+# the decisive step cannot finish under the 360-min hosted-runner cap; manual
+# dispatch only until the matrix-split restructure lands. First hosted green
+# of the restructured job = the required second independent decisive execution.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  d117-production-proof:
+    name: d117-production-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      # 1. Source-only checkout; the content directories are release payload.
+      - name: 1 - Check out source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Read governed transport descriptor
+        id: transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from scripts.hydrate_d117_fixture import load_descriptor
+
+          descriptor = load_descriptor(
+              Path("tests/fixtures/d117_v2_production/transport_descriptor.json")
+          )
+          for key in ("archive_sha256", "asset_name", "release_tag"):
+              print(f"{key}={descriptor[key]}")
+          PY
+
+      # 2. The cache key is exactly the governed archive digest. There is no
+      # restore prefix and the expanded fixture is never cached.
+      - name: 2 - Restore digest-exact compressed archive cache
+        id: archive-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/${{ steps.transport.outputs.asset_name }}
+          key: ${{ steps.transport.outputs.archive_sha256 }}
+
+      # 3. The repository is public, so this download is deliberately
+      # unauthenticated. A miss or network failure is a hard curl failure.
+      - name: 3 - Download release asset on cache miss
+        if: steps.archive-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          ASSET_NAME: ${{ steps.transport.outputs.asset_name }}
+          RELEASE_TAG: ${{ steps.transport.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET_NAME}" \
+            --output "$RUNNER_TEMP/$ASSET_NAME"
+
+      # 4. A corrupt cache is not replaced opportunistically: it fails here.
+      - name: 4 - Verify archive SHA before extraction
+        shell: bash
+        env:
+          ARCHIVE_SHA256: ${{ steps.transport.outputs.archive_sha256 }}
+          ASSET_NAME: ${{ steps.transport.outputs.asset_name }}
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/$ASSET_NAME"
+          python - "$RUNNER_TEMP/$ASSET_NAME" "$ARCHIVE_SHA256" <<'PY'
+          import hashlib
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          digest = hashlib.sha256()
+          with path.open("rb") as handle:
+              while chunk := handle.read(1024 * 1024):
+                  digest.update(chunk)
+          observed = digest.hexdigest()
+          if observed != sys.argv[2]:
+              raise SystemExit(
+                  f"archive SHA mismatch: expected {sys.argv[2]}, observed {observed}"
+              )
+          print(f"archive_sha256={observed}")
+          PY
+
+      - name: Save verified compressed archive cache
+        if: steps.archive-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/${{ steps.transport.outputs.asset_name }}
+          key: ${{ steps.transport.outputs.archive_sha256 }}
+
+      # 5. The governed hydrator rejects every unsafe type/path and extracts
+      # only beneath RUNNER_TEMP.
+      - name: 5 - Safely hydrate fixture under runner temp
+        shell: bash
+        env:
+          ASSET_NAME: ${{ steps.transport.outputs.asset_name }}
+        run: |
+          set -euo pipefail
+          command -v zstd
+          python scripts/hydrate_d117_fixture.py \
+            --archive "$RUNNER_TEMP/$ASSET_NAME" \
+            --descriptor tests/fixtures/d117_v2_production/transport_descriptor.json \
+            --census tests/fixtures/d117_v2_production/custody_store/manifest.json \
+            --destination "$RUNNER_TEMP/d117-v2-custody-store"
+
+      # 6. Repeat the byte comparison explicitly at the workflow boundary.
+      - name: 6 - Verify hydrated census byte equality
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp \
+            tests/fixtures/d117_v2_production/custody_store/manifest.json \
+            "$RUNNER_TEMP/d117-v2-custody-store/manifest.json"
+
+      # 7. The issued ledger, not the census or descriptor, supplies the
+      # identities. The production loader must authenticate all 190 members.
+      - name: 7 - Authenticate issued ledger and full custody census
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/d117-v2-custody-store" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          from joulewise.authentication_io import V2AuthenticationReadSession
+          from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+
+          fixture = Path("tests/fixtures/d117_v2_production")
+          store = Path(sys.argv[1])
+          with V2AuthenticationReadSession():
+              snapshot = load_calibration_ledger_snapshot(
+                  fixture / "issued" / "calibration_observation_ledger.jsonl",
+                  fixture / "issued" / "calibration_ledger_head.json",
+                  require_committed_pin=False,
+                  calibration_custody_store=store,
+              )
+          if not snapshot.valid:
+              raise SystemExit(f"issued ledger/store refused: {snapshot.refusal_reasons}")
+          if len(snapshot.receipts) != 76 or len(snapshot.observations) != 38:
+              raise SystemExit("issued ledger census is not 76 receipts / 38 observations")
+          census = json.loads((store / "manifest.json").read_bytes())
+          governed = sum(len(row["artifact_sha256"]) for row in census["contents"])
+          if governed != 190:
+              raise SystemExit(f"governed member count is {governed}, expected 190")
+          print("issued_ledger=76 receipts; observations=38; custody_census=190/190")
+          PY
+
+      # 8. One no-mock regression executes the authentic CLI success, the
+      # bidirectional open/registry equality audit, coordinated attack and
+      # masking-removal legs, domain mutation matrix, and no-output/stage checks.
+      # 9. REQUIRE_D117 turns an unavailable fixture or attempted skip into a
+      # hard assertion failure rather than portable-proof evidence.
+      - name: 8-9 - Run unpatched full-fixture production proof without skips
+        shell: bash
+        env:
+          JOULEWISE_D117_CUSTODY_STORE: ${{ runner.temp }}/d117-v2-custody-store
+          JOULEWISE_REQUIRE_D117_FULL_FIXTURE: "1"
+        run: |
+          set -euo pipefail
+          python -m unittest -v \
+            tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_coordinated_report_and_pin_change_refuses_against_floor_evidence
