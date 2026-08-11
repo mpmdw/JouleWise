@@ -217,6 +217,20 @@ flight (T4); its adopted design becomes the implementation work order. Until
 landed, shard-4 CI failures in this module are re-run-once-then-investigate,
 never waved through silently.
 
+## WO-SAMPLER-SUPERVISOR (registered 2026-08-11, T4; consult-adopted design)
+
+Privileged-sampler lifecycle ownership for validate_powermetrics_fiducial:
+a root-owned supervisor helper (single sudoers entry, no-argument invocation;
+the current passwordless /usr/bin/powermetrics authorization MUST be removed
+in the same migration or it bypasses the boundary) that owns spawn + signal +
+reap of the actual sampler and applies kernel no-fork confinement before
+exec. ADMISSION GATE (lead-owed, live Mac): real powermetrics must run with
+process creation denied — if not, the design fails its gate and the honest
+fallback is detect-and-refuse, never another identity-tracking formulation
+(two failed: group-kill r0, identity preamble r1 — consult record custodied
+T4). Until landed, the production script's census is detect-and-report only
+and full ownership is documented UNSUPPORTED. Not on any critical path.
+
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast
