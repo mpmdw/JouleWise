@@ -214,6 +214,18 @@ mandatory. Prerequisites: FCM-01 ALT-D120 round + full fresh delta land
 clean. Consumption: packs re-spec back to the tighter estimator only if
 this WO + both FCM items land before the freeze wave (D-133 cl.4).
 
+DESIGN ADOPTED (2026-08-11 Sol xhigh consult, magistrate-adjudicated):
+one spec-authoritative per-cell estimator dispatch (new shared
+joulewise/floor_mint_estimator.py) consumed at ALL THREE mint sites —
+postcollection equality, artifact construction, final evidence binding —
+because patching steps 8-9 alone leaves a second default-core
+recomputation and a default-only binder (the consult's named likely
+failure mode). Pinned core, v2 pinset schema, report/artifact schemas,
+and production specs all UNCHANGED this WO. Cost estimate 360-540
+production LOC + 550-850 test LOC; three audit waves + D-121. Full
+consult: session scratchpad mintvocab-consult-out.md (T4-late).
+Implementation stacks on impl/floor-commonmode-01 after round 9 lands.
+
 ## D-133 O5 debts (surfaced, not discharged; registered 2026-08-11)
 
 - FLOOR-COMMONMODE-01 BANKED UNGATED 425f75f: full magistrate audit +
