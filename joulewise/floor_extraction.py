@@ -87,6 +87,8 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
     complete_bundle_sha256,
     registered_common_mode_operative_bound,
+    _build_registered_common_mode_block_input,
+    _RegisteredCommonModeBlockInput,
     two_shared_edge_common_mode_floor,
     two_shared_edge_common_mode_registration,
     validate_common_mode_estimator_registration,
@@ -1672,14 +1674,7 @@ def _registered_common_mode_block_inputs(
     runs_root: Path,
     metric: str,
     shared_edge_bound_s: float,
-) -> tuple[
-    list[float],
-    list[float],
-    list[float],
-    list[tuple[float, float]],
-    float,
-    float,
-]:
+) -> _RegisteredCommonModeBlockInput:
     """Build one enumerated D-124 block input from immutable bundle evidence."""
 
     prefix = "phase_energy_j."
@@ -1852,26 +1847,19 @@ def _registered_common_mode_block_inputs(
             for position in _ABBA_POSITIONS
         )
 
-    zero_point_contrast = contrast(0.0, 0.0)
-    return (
-        [
-            zero_point_contrast if delta_s == 0.0 else contrast(delta_s, 0.0)
-            for delta_s in sorted(onset_candidates)
-        ],
-        [
-            zero_point_contrast if delta_s == 0.0 else contrast(0.0, delta_s)
-            for delta_s in sorted(offset_candidates)
-        ],
-        residuals,
-        [
+    return _build_registered_common_mode_block_input(
+        contrast=contrast,
+        onset_shifts_s=sorted(onset_candidates),
+        offset_shifts_s=sorted(offset_candidates),
+        bundle_residual_half_widths_j=residuals,
+        member_window_bounds_s=[
             (
                 by_position[position][1].start_s,
                 by_position[position][1].end_s,
             )
             for position in _ABBA_POSITIONS
         ],
-        member_envelope_integral_sum,
-        zero_point_contrast,
+        member_envelope_integral_sum_j=member_envelope_integral_sum,
     )
 
 
@@ -2068,22 +2056,12 @@ def extract_comparative_cell(
             elif use_common_mode:
                 assert common_mode_bound_s is not None
                 assert consumption_session is not None
-                onset_sweeps: list[list[float]] = []
-                offset_sweeps: list[list[float]] = []
-                residual_widths: list[list[float]] = []
-                member_window_bounds: list[list[tuple[float, float]]] = []
-                member_envelope_integral_sums: list[float] = []
-                zero_point_contrasts: list[float] = []
+                registered_block_inputs: list[
+                    _RegisteredCommonModeBlockInput
+                ] = []
                 try:
                     for evaluated in admitted_blocks:
-                        (
-                            onset,
-                            offset,
-                            residuals,
-                            windows,
-                            envelope_sum,
-                            zero_point,
-                        ) = (
+                        registered_block_inputs.append(
                             _registered_common_mode_block_inputs(
                                 evaluated,
                                 runs_root=runs_root,
@@ -2091,22 +2069,9 @@ def extract_comparative_cell(
                                 shared_edge_bound_s=common_mode_bound_s,
                             )
                         )
-                        onset_sweeps.append(onset)
-                        offset_sweeps.append(offset)
-                        residual_widths.append(residuals)
-                        member_window_bounds.append(windows)
-                        member_envelope_integral_sums.append(envelope_sum)
-                        zero_point_contrasts.append(zero_point)
                     floor = two_shared_edge_common_mode_floor(
                         block_deltas,
-                        onset_sweeps_j=onset_sweeps,
-                        offset_sweeps_j=offset_sweeps,
-                        zero_point_contrasts_j=zero_point_contrasts,
-                        bundle_residual_half_widths_j=residual_widths,
-                        member_window_bounds_s=member_window_bounds,
-                        member_envelope_integral_sums_j=(
-                            member_envelope_integral_sums
-                        ),
+                        registered_block_inputs=registered_block_inputs,
                         calibration_bracket=(
                             consumption_session.calibration_bracket
                         ),
@@ -2119,6 +2084,15 @@ def extract_comparative_cell(
                     block_deltas,
                     admissible_half_widths_j=block_half_widths,
                 )
+            if (
+                floor is not None
+                and use_common_mode
+                and not validate_common_mode_estimator_registration(
+                    floor.estimator_registration
+                )
+            ):
+                refusals.append("common_mode_registration_invalid")
+                floor = None
             if floor is not None and (
                 admissible_set_uncertainty_dominates_point_floor(floor)
             ):

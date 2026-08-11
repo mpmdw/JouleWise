@@ -38,6 +38,7 @@ from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     METHOD_ID,
+    _build_registered_common_mode_block_input,
     _common_mode_window_is_strictly_noncollapsed,
     abba_delta,
     attribution_single_count_discipline,
@@ -2398,13 +2399,18 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             - values["A1"]
             - values["A2"]
         ) / 2.0
-        return (
-            [delta, delta + 0.1],
-            [delta, delta],
-            [0.0] * 4,
-            [(-1.0, 1.0)] * 4,
-            100.0,
-            delta,
+        def contrast(onset_s, offset_s):
+            if onset_s != 0.0:
+                return delta + 0.1
+            return delta
+
+        return _build_registered_common_mode_block_input(
+            contrast=contrast,
+            onset_shifts_s=[0.0, 1.0],
+            offset_shifts_s=[0.0, 1.0],
+            bundle_residual_half_widths_j=[0.0] * 4,
+            member_window_bounds_s=[(-1.0, 1.0)] * 4,
+            member_envelope_integral_sum_j=100.0,
         )
 
     def extract(self, *, registration=None, session=None):
@@ -2469,6 +2475,41 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         )
         self.assertEqual(
             [blocks, registration, basis, session.calibration_bracket], before
+        )
+
+    def test_registered_cell_refuses_an_unregistered_raw_estimate(self):
+        raw_floor = two_shared_edge_common_mode_floor(
+            self.DELTAS,
+            onset_sweeps_j=[[delta, delta + 0.1] for delta in self.DELTAS],
+            offset_sweeps_j=[[delta, delta] for delta in self.DELTAS],
+            zero_point_contrasts_j=self.DELTAS,
+            bundle_residual_half_widths_j=[[0.0] * 4] * len(self.DELTAS),
+            member_window_bounds_s=[[(-1.0, 1.0)] * 4] * len(self.DELTAS),
+            member_envelope_integral_sums_j=[100.0] * len(self.DELTAS),
+            calibration_bracket=self.bracket(),
+            shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+        )
+        self.assertIsNone(raw_floor.estimator_registration)
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=self.evaluated_member,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction._registered_common_mode_block_inputs",
+                side_effect=self.common_inputs,
+            ),
+            mock.patch(
+                "joulewise.floor_extraction.two_shared_edge_common_mode_floor",
+                return_value=raw_floor,
+            ),
+        ):
+            report = self.extract()
+        self.assertFalse(report.extractable)
+        self.assertIsNone(report.floor)
+        self.assertEqual(
+            report.refusal_reasons,
+            ("common_mode_registration_invalid",),
         )
 
     def test_invalid_registration_refuses_without_default_fallback(self):
@@ -2578,22 +2619,154 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             for position in ("A1", "B1", "B2", "A2")
         ]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals, windows, envelope_sum, zero_point = (
-                _registered_common_mode_block_inputs(
-                    members,
-                    runs_root=Path("unused"),
-                    metric="phase_energy_j.decode",
-                    shared_edge_bound_s=0.1,
-                )
+            record = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("unused"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=0.1,
             )
+        onset = record.onset_values_j
+        offset = record.offset_values_j
         self.assertIn(2.0, onset)
         self.assertIn(2.0, offset)
         self.assertGreater(max(onset) - min(onset), 0.0)
         self.assertGreater(max(offset) - min(offset), 0.0)
-        self.assertEqual(residuals, [0.0] * 4)
-        self.assertEqual(windows, [(-0.5, 1.5)] * 4)
-        self.assertEqual(envelope_sum, 6.0)
-        self.assertEqual(zero_point, 2.0)
+        self.assertEqual(record.bundle_residual_half_widths_j, (0.0,) * 4)
+        self.assertEqual(record.member_window_bounds_s, ((-0.5, 1.5),) * 4)
+        self.assertEqual(record.member_envelope_integral_sum_j, 6.0)
+        self.assertEqual(onset[record.onset_zero_index], 2.0)
+        self.assertEqual(offset[record.offset_zero_index], 2.0)
+
+    def test_fcm_r4_01_130_support_structural_zero_has_no_understatement(self):
+        positions = ("A1", "B1", "B2", "A2")
+        bound = 0.1
+        epsilon = 2.0 ** -30
+        edges = [0.0, epsilon]
+        edges.extend(index / 128.0 for index in range(1, 128))
+        edges.extend([1.0 - epsilon, 1.0])
+        intervals = list(zip(sorted(set(edges)), sorted(set(edges))[1:]))
+        self.assertEqual(len(intervals), 130)
+        curves = {}
+        for position in positions:
+            points = []
+            for index, (start, end) in enumerate(intervals):
+                mirror = min(index, len(intervals) - 1 - index)
+                base = (
+                    8.0
+                    + 2.0 * math.sin((mirror + 1) / 23.0) ** 2
+                    + (mirror % 7) / 32.0
+                )
+                points.append(
+                    TracePoint(
+                        float(index),
+                        base if position == "B1" else 0.0,
+                        start,
+                        end,
+                    )
+                )
+            curves[position] = points
+
+        class Reader:
+            def __init__(self, path):
+                self.position = Path(path).name
+
+            def summed_curve(self):
+                return curves[self.position]
+
+            @staticmethod
+            def phase_windows():
+                return {"decode": [Window(0.0, 1.0)]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [self._sweep_member(position) for position in positions]
+        with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+            record = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("130-support"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=bound,
+            )
+        onset = record.onset_values_j
+        offset = record.offset_values_j
+        true_zero = onset[record.onset_zero_index]
+        intersections = sorted(
+            (set(onset) & set(offset)) - {true_zero},
+            key=lambda value: abs(value - true_zero),
+        )
+        self.assertEqual(len(intersections), 14)
+        adversarial_z = intersections[0]
+        bracket = {
+            "status": "passed",
+            "endpoint_max_b_fiducial_s": 0.0,
+            "calibration_drift_allowance_s": bound,
+            "b_fiducial_s": bound,
+            "acceptance": {
+                "allowance": {
+                    "rule": "max(observed_drift_s,bracket_screen_s)",
+                    "value_s": repr(bound),
+                    "embedding_count": 1,
+                    "embedded_in": "b_fiducial_s",
+                }
+            },
+        }
+        raw = two_shared_edge_common_mode_floor(
+            [true_zero, true_zero],
+            onset_sweeps_j=[onset, onset],
+            offset_sweeps_j=[offset, offset],
+            zero_point_contrasts_j=[adversarial_z, adversarial_z],
+            bundle_residual_half_widths_j=[
+                record.bundle_residual_half_widths_j
+            ]
+            * 2,
+            member_window_bounds_s=[record.member_window_bounds_s] * 2,
+            member_envelope_integral_sums_j=[
+                record.member_envelope_integral_sum_j
+            ]
+            * 2,
+            calibration_bracket=bracket,
+            shared_edge_bound_s=bound,
+        )
+        f = Fraction.from_float
+        exact_required = max(
+            abs(
+                f(min(onset))
+                + f(min(offset))
+                - f(true_zero)
+                - f(true_zero)
+            ),
+            abs(
+                f(max(onset))
+                + f(max(offset))
+                - f(true_zero)
+                - f(true_zero)
+            ),
+        ) + sum(map(f, record.bundle_residual_half_widths_j), Fraction(0)) / 2
+        self.assertEqual(
+            exact_required - f(raw.admissible_half_widths_j[0]),
+            Fraction(33569969, 9007199254740992),
+        )
+        self.assertIsNone(raw.estimator_registration)
+
+        registered = two_shared_edge_common_mode_floor(
+            [true_zero, true_zero],
+            registered_block_inputs=[record, record],
+            calibration_bracket=bracket,
+            shared_edge_bound_s=bound,
+        )
+        self.assertGreaterEqual(
+            f(registered.admissible_half_widths_j[0]),
+            exact_required,
+        )
 
     @staticmethod
     def _first_safely_admitted_end(start_s: float, bound_s: float) -> float:
@@ -3014,21 +3187,18 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                 return_value={"max_abs_delta_j": 0.0},
             ),
         ):
-            (
-                onset,
-                offset,
-                residuals,
-                returned_windows,
-                envelope_sum,
-                _zero_point,
-            ) = (
-                _registered_common_mode_block_inputs(
-                    members,
-                    runs_root=Path("delta2-minimized"),
-                    metric="phase_energy_j.decode",
-                    shared_edge_bound_s=bound,
-                )
+            record = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("delta2-minimized"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=bound,
             )
+        onset = record.onset_values_j
+        offset = record.offset_values_j
+        residuals = record.bundle_residual_half_widths_j
+        returned_windows = record.member_window_bounds_s
+        envelope_sum = record.member_envelope_integral_sum_j
+        _zero_point = onset[record.onset_zero_index]
 
         def contrast(onset_s, offset_s):
             return math.fsum(
@@ -3265,21 +3435,18 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
                     return_value={"max_abs_delta_j": 0.0},
                 ),
             ):
-                (
-                    onset,
-                    offset,
-                    residuals,
-                    returned_windows,
-                    envelope_sum,
-                    _zero_point,
-                ) = (
-                    _registered_common_mode_block_inputs(
-                        members,
-                        runs_root=Path("randomized-oracle"),
-                        metric="phase_energy_j.decode",
-                        shared_edge_bound_s=bound,
-                    )
+                record = _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("randomized-oracle"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=bound,
                 )
+            onset = record.onset_values_j
+            offset = record.offset_values_j
+            residuals = record.bundle_residual_half_widths_j
+            returned_windows = record.member_window_bounds_s
+            envelope_sum = record.member_envelope_integral_sum_j
+            _zero_point = onset[record.onset_zero_index]
 
             def contrast(onset_s: float, offset_s: float) -> float:
                 return math.fsum(
@@ -3623,14 +3790,18 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
 
         members = [self._sweep_member(position) for position in positions]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals, windows, envelope_sum, zero_point = (
-                _registered_common_mode_block_inputs(
-                    members,
-                    runs_root=Path("synthetic-reader"),
-                    metric="phase_energy_j.decode",
-                    shared_edge_bound_s=self.SWEEP_BOUND_S,
-                )
+            record = _registered_common_mode_block_inputs(
+                members,
+                runs_root=Path("synthetic-reader"),
+                metric="phase_energy_j.decode",
+                shared_edge_bound_s=self.SWEEP_BOUND_S,
             )
+        onset = record.onset_values_j
+        offset = record.offset_values_j
+        residuals = record.bundle_residual_half_widths_j
+        windows = record.member_window_bounds_s
+        envelope_sum = record.member_envelope_integral_sum_j
+        zero_point = onset[record.onset_zero_index]
 
         def contrast(onset_s: float, offset_s: float) -> float:
             return math.fsum(
@@ -3804,9 +3975,13 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
         )
         for block in self.record["blocks"]:
             with self.subTest(block=block["block_id"]):
-                onset, offset, residuals, windows, envelope_sum, zero = (
-                    self._inputs(block)
-                )
+                record = self._inputs(block)
+                onset = record.onset_values_j
+                offset = record.offset_values_j
+                residuals = record.bundle_residual_half_widths_j
+                windows = record.member_window_bounds_s
+                envelope_sum = record.member_envelope_integral_sum_j
+                zero = onset[record.onset_zero_index]
                 self.assertTrue(onset)
                 self.assertTrue(offset)
                 self.assertEqual(len(residuals), 4)
@@ -3834,10 +4009,36 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
                         )
                     )
 
+    def test_real_fixture_provenance_pins_match_available_source(self):
+        fixture_bytes = sum(
+            path.stat().st_size
+            for path in self.FIXTURE_ROOT.rglob("*")
+            if path.is_file()
+        )
+        self.assertEqual(fixture_bytes, 73_496)
+        source_root = (
+            Path("/Users/edr/code/JouleWise") / self.record["source_corpus"]
+        )
+        if not source_root.is_dir():
+            self.skipTest(f"source corpus unavailable: {source_root}")
+        checked = 0
+        for block in self.record["blocks"]:
+            for member in block["members"]:
+                for name, pin in member["source_files"].items():
+                    raw = (source_root / member["bundle_id"] / name).read_bytes()
+                    self.assertEqual(len(raw), pin["byte_length"])
+                    self.assertEqual(
+                        hashlib.sha256(raw).hexdigest(),
+                        pin["sha256"],
+                    )
+                    checked += 1
+        self.assertEqual(checked, 32)
+
     def test_real_block_zero_point_matches_the_recorded_measurement(self):
         for block in self.record["blocks"]:
             with self.subTest(block=block["block_id"]):
-                *_, zero = self._inputs(block)
+                record = self._inputs(block)
+                zero = record.onset_values_j[record.onset_zero_index]
                 summary_values = [
                     BundleReader(
                         self.FIXTURE_ROOT / member["bundle_id"]
@@ -3914,12 +4115,7 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
         }
         estimate = two_shared_edge_common_mode_floor(
             [block["delta_j"] for block in self.record["blocks"]],
-            onset_sweeps_j=[item[0] for item in inputs],
-            offset_sweeps_j=[item[1] for item in inputs],
-            zero_point_contrasts_j=[item[5] for item in inputs],
-            bundle_residual_half_widths_j=[item[2] for item in inputs],
-            member_window_bounds_s=[item[3] for item in inputs],
-            member_envelope_integral_sums_j=[item[4] for item in inputs],
+            registered_block_inputs=inputs,
             calibration_bracket=bracket,
             shared_edge_bound_s=self.bound_s,
         )
@@ -3929,7 +4125,9 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
             estimate.admissible_half_widths_j,
             strict=True,
         ):
-            onset, offset, _residuals, _windows, _envelope, zero = helper
+            onset = helper.onset_values_j
+            offset = helper.offset_values_j
+            zero = onset[helper.onset_zero_index]
             with self.subTest(block=block["block_id"], bar="about zero"):
                 self.assertGreaterEqual(
                     Fraction.from_float(width),
@@ -3951,20 +4149,13 @@ class RegisteredCommonModeRealBlockTests(unittest.TestCase):
             TestTwoSharedEdgeCommonModeFloor as Replay,
         )
 
-        onset, offset, residuals = Replay.replay_inputs()
         estimate = two_shared_edge_common_mode_floor(
             Replay.REPLAY_DELTAS,
-            onset_sweeps_j=onset,
-            offset_sweeps_j=offset,
-            zero_point_contrasts_j=Replay.REPLAY_DELTAS,
-            bundle_residual_half_widths_j=residuals,
-            member_window_bounds_s=Replay.replay_window_bounds(),
-            member_envelope_integral_sums_j=(
-                Replay.REPLAY_MEMBER_ENVELOPE_INTEGRAL_SUMS
-            ),
+            registered_block_inputs=Replay.registered_replay_inputs(),
             calibration_bracket=Replay.bracket(),
             shared_edge_bound_s=Replay.OPERATIVE_BOUND_S,
         )
+        self.assertEqual(estimate.guarded_floor_j, 1.8695016260131627)
         self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
 
 

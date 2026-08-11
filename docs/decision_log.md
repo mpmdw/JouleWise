@@ -8002,13 +8002,13 @@ falsified by the round-2 audit (emitted width below the exact admissible
 width by up to 2.3e-13 J at ~1000 J member scale; structural component of
 the shortfall proven EXACTLY ZERO by rational-arithmetic probes on both
 adjudication sides). Corrected statement, as further qualified by the FCM-R4
-input-surface tolerance audit below: on admitted inputs the emitted width
-bounds the exact admissible width outward, up to the disclosed member-envelope
-pad and the disclosed zero-point discrepancy term, under the documented
-single-sourcing assumptions for the bracket bounds. Under those assumptions,
-the total overstatement against the exact about-zero bar is capped by the
-member-envelope pad, the zero-point discrepancy term, and directed-rounding
-slack. As first
+input-surface tolerance audit below: over inputs constructed by the registered
+builder from authenticated bundle evidence, the emitted width bounds the exact
+admissible width outward, up to the disclosed member-envelope pad and the
+disclosed zero-point discrepancy term, under the documented single-sourcing
+assumptions for the bracket bounds. Under those assumptions, the total
+overstatement against the exact about-zero bar is capped by the member-envelope
+pad, the zero-point discrepancy term, and directed-rounding slack. As first
 implemented (bbf7bdd) the enclosure was scaled to the contrast magnitude
 and did not dominate member-scale float error; it is now scaled to the
 member-integrand envelope and registered in the parameter dict (sha
@@ -8062,10 +8062,11 @@ callers must preserve them.
 | Recorded allowance string vs passed `calibration_drift_allowance_s` | `rel=0`, `abs=1e-12 s` | Production bracket construction computes one Decimal allowance, then emits its exact decimal string and binary64 projection together; arithmetic uses the binary64 field. | No discrepancy term under the single-producing-value assumption. |
 | Operative bound vs endpoint plus allowance | `rel=0`, `abs=1e-12 s` | Production bracket construction computes `operative_bound = endpoint_max_decimal + allowance` once in Decimal and emits its binary64 projection as `b_fiducial_s`; the separate endpoint/allowance fields are audit projections of the same derivation. | No discrepancy term under the production-constructor assumption; externally assembled brackets assume the same derivation. |
 
-Claims-with-assumptions correction: **on admitted inputs the emitted width
-bounds the exact admissible width outward, up to the disclosed member-envelope
-pad and the disclosed zero-point discrepancy term, under the documented
-single-sourcing assumptions for the bracket bounds in the audit table above.**
+Claims-with-assumptions correction: **over inputs constructed by the registered
+builder from authenticated bundle evidence, the emitted width bounds the exact
+admissible width outward, up to the disclosed member-envelope pad and the
+disclosed zero-point discrepancy term, under the documented single-sourcing
+assumptions for the bracket bounds in the audit table above.**
 No published replay number changes; the six-decimal value remains
 `1.869502 J`.
 
@@ -8308,3 +8309,33 @@ both floor packs' comparative cells re-specced to METHOD_ID) without
 another round.** The repair contract is the magistrate-adjudicated
 structural-threading draft (custodied with the T4 session record); the
 refuter-authored acceptance oracle may be amended only by its author.
+
+### D-124 amendment — 2026-08-11: round-5 structural registered input
+
+Round 5 narrows the registered surface to a frozen block-input record produced
+by the module-private registered builder. The builder receives authenticated
+bundle-derived contrast evidence, evaluates the `(0.0, 0.0)` contrast itself
+once, evaluates both enumerated shift grids, and records each positive
+shift-`0.0` position; the registered estimator takes the zero point only from
+those recorded positions and accepts no caller-supplied zero designator. The
+legacy keyword surface remains available for the byte-frozen independent
+oracle, with its admission and arithmetic unchanged, but every result from that
+surface is unregistered and the extraction gate refuses it for a registered
+cell. Both surfaces route through one arithmetic core, so the oracle continues
+to bar the arithmetic used by registered estimates. The registered zero-point
+rule is now
+`zero_point_is_carried_structurally_by_the_registered_builder_as_the_shift_zero_index_never_supplied_or_matched_by_value_and_direct_keyword_inputs_are_unregistered`;
+the resulting parameter hash is
+`973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7`,
+and the outgoing round-4 hash joins the three earlier superseded registrations.
+
+The claims-with-assumptions form remains: **over inputs constructed by the
+registered builder from authenticated bundle evidence, the emitted width
+bounds the exact admissible width outward, up to the disclosed member-envelope
+pad and the disclosed zero-point discrepancy term, under the documented
+single-sourcing assumptions for the bracket bounds in the audit table above.**
+Python privacy is conventional rather than enforced: underscore names and the
+frozen dataclass do not cryptographically prevent deliberate fabrication, so a
+construction-site inventory test pins the intended one-builder/one-production-
+caller discipline. Evidence faithfulness upstream of the builder remains an
+assumption, not a result of this structural repair.

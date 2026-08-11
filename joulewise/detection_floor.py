@@ -27,7 +27,7 @@ import stat
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -133,8 +133,9 @@ _COMMON_MODE_PARAMETERS = {
         "on_strict_noncollapse_domain"
     ),
     "shared_extrema_zero_point_rule": (
-        "zero_point_contrast_is_an_explicit_registered_input_present_by_exact_"
-        "equality_in_both_sweeps_never_recovered_by_tolerance"
+        "zero_point_is_carried_structurally_by_the_registered_builder_as_the_"
+        "shift_zero_index_never_supplied_or_matched_by_value_and_direct_keyword_"
+        "inputs_are_unregistered"
     ),
     "shared_extrema_centre_offset_rule": (
         "abs_zero_point_minus_block_delta_added_outward_exactly_once_"
@@ -470,6 +471,140 @@ class FloorEstimate:
     corner_widened_unguarded_floor_j: Optional[float] = None
     corner_widened_guarded_floor_j: Optional[float] = None
     estimator_registration: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class _RegisteredCommonModeBlockInput:
+    """One builder-constructed block admitted to the registered surface."""
+
+    onset_values_j: tuple[float, ...]
+    offset_values_j: tuple[float, ...]
+    onset_zero_index: int
+    offset_zero_index: int
+    bundle_residual_half_widths_j: tuple[float, ...]
+    member_window_bounds_s: tuple[tuple[float, float], ...]
+    member_envelope_integral_sum_j: float
+
+
+def _common_mode_shift_grid(
+    values: Sequence[float],
+    *,
+    label: str,
+) -> tuple[tuple[float, ...], int]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the registered {label} shift grid must be a sequence",
+        )
+    normalized: list[float] = []
+    for raw in values:
+        value = _common_mode_finite(raw)
+        if value is None:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"the registered {label} shift grid must be finite",
+            )
+        normalized.append(value)
+    if normalized != sorted(normalized):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the registered {label} shift grid must be sorted ascending",
+        )
+    zero_indices = [
+        index
+        for index, value in enumerate(normalized)
+        if value == 0.0
+    ]
+    if (
+        len(zero_indices) != 1
+        or math.copysign(1.0, normalized[zero_indices[0]]) != 1.0
+    ):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the registered {label} shift grid must contain exactly one +0.0",
+        )
+    return tuple(normalized), zero_indices[0]
+
+
+def _common_mode_evaluations(
+    values: Sequence[float],
+    *,
+    label: str,
+) -> tuple[float, ...]:
+    normalized: list[float] = []
+    for raw in values:
+        value = _common_mode_finite(raw)
+        if value is None:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"{label} must contain only finite numeric evaluations",
+            )
+        normalized.append(value)
+    if not normalized:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"{label} must contain the shift-zero evaluation",
+        )
+    return tuple(normalized)
+
+
+def _build_registered_common_mode_block_input(
+    *,
+    contrast: Callable[[float, float], float],
+    onset_shifts_s: Sequence[float],
+    offset_shifts_s: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[float],
+    member_window_bounds_s: Sequence[tuple[float, float]],
+    member_envelope_integral_sum_j: float,
+) -> _RegisteredCommonModeBlockInput:
+    """Evaluate and structurally record one registered common-mode block."""
+
+    onset_shifts, onset_zero_index = _common_mode_shift_grid(
+        onset_shifts_s,
+        label="onset",
+    )
+    offset_shifts, offset_zero_index = _common_mode_shift_grid(
+        offset_shifts_s,
+        label="offset",
+    )
+    if not callable(contrast):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "the registered block builder requires a contrast callable",
+        )
+    try:
+        zero_point_contrast = contrast(0.0, 0.0)
+        onset_values = [
+            zero_point_contrast if delta_s == 0.0 else contrast(delta_s, 0.0)
+            for delta_s in onset_shifts
+        ]
+        offset_values = [
+            zero_point_contrast if delta_s == 0.0 else contrast(0.0, delta_s)
+            for delta_s in offset_shifts
+        ]
+        clean_onset = _common_mode_evaluations(
+            onset_values,
+            label="registered onset sweep",
+        )
+        clean_offset = _common_mode_evaluations(
+            offset_values,
+            label="registered offset sweep",
+        )
+        residuals = tuple(bundle_residual_half_widths_j)
+        windows = tuple(tuple(window) for window in member_window_bounds_s)
+    except CommonModeEstimatorRefusal:
+        raise
+    except Exception as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    return _RegisteredCommonModeBlockInput(
+        onset_values_j=clean_onset,
+        offset_values_j=clean_offset,
+        onset_zero_index=onset_zero_index,
+        offset_zero_index=offset_zero_index,
+        bundle_residual_half_widths_j=residuals,
+        member_window_bounds_s=windows,
+        member_envelope_integral_sum_j=member_envelope_integral_sum_j,
+    )
 
 
 def two_shared_edge_common_mode_registration() -> dict[str, object]:
@@ -962,84 +1097,22 @@ def comparative_false_effect_floor(
     return _apply_admissible_set_guard(estimate, uncertainty_floor, widths)
 
 
-def two_shared_edge_common_mode_floor(
-    block_deltas_j: Sequence[float],
+def _common_mode_member_windows(
+    member_window_bounds_s: object,
     *,
-    onset_sweeps_j: Sequence[Sequence[float]],
-    offset_sweeps_j: Sequence[Sequence[float]],
-    zero_point_contrasts_j: Sequence[float],
-    bundle_residual_half_widths_j: Sequence[Sequence[float]],
-    member_window_bounds_s: object = None,
-    member_envelope_integral_sums_j: object = None,
-    calibration_bracket: object,
-    shared_edge_bound_s: float,
-) -> FloorEstimate:
-    """D-124 contrast floor with two shared edges and local residuals.
-
-    ``onset_sweeps_j`` and ``offset_sweeps_j`` are float evaluations at the
-    exactly enumerated shared-edge candidates.  Each explicit
-    ``zero_point_contrasts_j`` entry is the sweeps' exact zero-shift
-    evaluation and must occur by exact equality in both sweeps.  The shared
-    extrema are composed as excursions about that zero point, then the
-    centre discrepancy from the block delta is added once and outward.
-    ``member_window_bounds_s`` supplies each block's aligned A1/B1/B2/A2
-    normalized ``(start_s, end_s)`` bounds.  Separability gives the signed
-    excursion extrema ``(min(onset)-z) + (min(offset)-z)`` and the analogous
-    maximum only after every member is proven to remain strictly noncollapsed
-    over the shared domain.
-    Four bundle-local adversarial residual half-widths are then composed with
-    the ABBA coefficients.  This one function is the registered arithmetic
-    path for both calibration blocks and consuming contrasts.
-    """
-
-    try:
-        deltas = _clean_values(block_deltas_j, "block deltas")
-        zero_points = _clean_values(
-            zero_point_contrasts_j,
-            "zero-point contrasts",
-        )
-    except (TypeError, ValueError) as exc:
-        _common_mode_refuse("common_mode_precondition_failed", str(exc))
-    n = len(deltas)
-    try:
-        input_lengths_match = (
-            len(onset_sweeps_j)
-            == len(offset_sweeps_j)
-            == len(zero_points)
-            == len(bundle_residual_half_widths_j)
-            == len(member_envelope_integral_sums_j)
-            == n
-        )
-    except TypeError:
-        input_lengths_match = False
-    if not input_lengths_match:
-        _common_mode_refuse(
-            "common_mode_precondition_failed",
-            "every block needs onset, offset, an explicit zero point, four "
-            "residuals, and a member envelope integral sum",
-        )
-    bound = _common_mode_finite(shared_edge_bound_s)
-    operative = registered_common_mode_operative_bound(calibration_bracket)
-    if (
-        bound is None
-        or bound <= 0.0
-        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
-    ):
-        _common_mode_refuse(
-            "common_mode_allowance_application_invalid",
-            "the sweep bound must equal the once-widened authenticated bound",
-        )
-
+    expected_n: int,
+    bound: float,
+) -> list[tuple[tuple[float, float], ...]]:
     if (
         isinstance(member_window_bounds_s, (str, bytes))
         or not isinstance(member_window_bounds_s, Sequence)
-        or len(member_window_bounds_s) != n
+        or len(member_window_bounds_s) != expected_n
     ):
         _common_mode_refuse(
             "common_mode_nonseparable_window_domain",
             "every block needs aligned A1/B1/B2/A2 member-window bounds",
         )
-    normalized_member_windows: list[tuple[tuple[float, float], ...]] = []
+    normalized: list[tuple[tuple[float, float], ...]] = []
     for block_index, raw_block_windows in enumerate(member_window_bounds_s):
         if (
             isinstance(raw_block_windows, (str, bytes))
@@ -1083,35 +1156,262 @@ def two_shared_edge_common_mode_floor(
                     "strict noncollapse domain",
                 )
             block_windows.append((start, end))
-        normalized_member_windows.append(tuple(block_windows))
+        normalized.append(tuple(block_windows))
+    return normalized
 
-    block_widths: list[float] = []
-    block_inputs = zip(
-        deltas,
+
+def _common_mode_block_half_width(
+    delta: float,
+    onset: Sequence[float],
+    offset: Sequence[float],
+    zero_point: float,
+    member_envelope_sum: float,
+    residuals: Sequence[float],
+) -> float:
+    """The single arithmetic core shared by registered and raw surfaces."""
+
+    member_envelope_sum = max(
+        member_envelope_sum,
+        1.0,
+        abs(delta),
+        abs(zero_point),
+        *(abs(value) for value in onset),
+        *(abs(value) for value in offset),
+    )
+    # Each correctly-rounded contrast evaluation has error <=4u*S (fsum
+    # exactness; cancellation shrinks the result, never the error), the
+    # width composes <=3 evaluations plus one reference for <=16u*S, and
+    # 64u*S gives 4x analytic headroom independent of member count and
+    # magnitude ratio.
+    extrema_pad = 64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
+    excursion_lower = math.fsum(
+        (min(onset), -zero_point, min(offset), -zero_point)
+    )
+    excursion_upper = math.fsum(
+        (max(onset), -zero_point, max(offset), -zero_point)
+    )
+    lower = _common_mode_outward(
+        math.fsum((excursion_lower, -extrema_pad)),
+        -math.inf,
+    )
+    upper = _common_mode_outward(
+        math.fsum((excursion_upper, extrema_pad)),
+        math.inf,
+    )
+    zero_centred_width = _common_mode_outward(
+        max(abs(lower), abs(upper)),
+        math.inf,
+    )
+    shared_width = _common_mode_outward(
+        math.fsum((zero_centred_width, abs(zero_point - delta))),
+        math.inf,
+    )
+    local_width = math.fsum(residuals) / 2.0
+    return _common_mode_outward(
+        math.fsum((shared_width, local_width)),
+        math.inf,
+    )
+
+
+def two_shared_edge_common_mode_floor(
+    block_deltas_j: Sequence[float],
+    *,
+    registered_block_inputs: Sequence[_RegisteredCommonModeBlockInput]
+    | None = None,
+    onset_sweeps_j: Sequence[Sequence[float]] | None = None,
+    offset_sweeps_j: Sequence[Sequence[float]] | None = None,
+    zero_point_contrasts_j: Sequence[float] | None = None,
+    bundle_residual_half_widths_j: Sequence[Sequence[float]] | None = None,
+    member_window_bounds_s: object = None,
+    member_envelope_integral_sums_j: object = None,
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """D-124 contrast floor over registered records or unregistered kwargs.
+
+    Registered estimates accept only block records constructed by
+    :func:`_build_registered_common_mode_block_input`.  The retained raw
+    keyword surface preserves its exact-membership admission and arithmetic
+    for independent-oracle compatibility, but its results are unregistered.
+    Both surfaces execute :func:`_common_mode_block_half_width`.
+    """
+
+    try:
+        deltas = _clean_values(block_deltas_j, "block deltas")
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    n = len(deltas)
+    required_raw_fields = (
         onset_sweeps_j,
         offset_sweeps_j,
-        zero_points,
+        zero_point_contrasts_j,
         bundle_residual_half_widths_j,
         member_envelope_integral_sums_j,
-        normalized_member_windows,
-        strict=True,
     )
+    registered_surface = registered_block_inputs is not None
+    raw_surface = (
+        any(value is not None for value in required_raw_fields)
+        or member_window_bounds_s is not None
+    )
+    if registered_surface == raw_surface or (
+        raw_surface and any(value is None for value in required_raw_fields)
+    ):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "supply exactly one complete input surface: registered block "
+            "records or the retained raw keyword group",
+        )
+
+    bound = _common_mode_finite(shared_edge_bound_s)
+    operative = registered_common_mode_operative_bound(calibration_bracket)
+    if (
+        bound is None
+        or bound <= 0.0
+        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        _common_mode_refuse(
+            "common_mode_allowance_application_invalid",
+            "the sweep bound must equal the once-widened authenticated bound",
+        )
+
+    prepared: list[
+        tuple[
+            list[float] | tuple[float, ...],
+            list[float] | tuple[float, ...],
+            float,
+            Sequence[float],
+            object,
+        ]
+    ] = []
+    raw_windows: object
+    if registered_surface:
+        assert registered_block_inputs is not None
+        try:
+            registered_count = len(registered_block_inputs)
+        except TypeError:
+            registered_count = -1
+        if registered_count != n:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                "every block delta needs one registered block input",
+            )
+        raw_windows = []
+        for index, record in enumerate(registered_block_inputs):
+            if type(record) is not _RegisteredCommonModeBlockInput:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} is not a registered builder input",
+                )
+            onset = _common_mode_evaluations(
+                record.onset_values_j,
+                label=f"block {index} registered onset sweep",
+            )
+            offset = _common_mode_evaluations(
+                record.offset_values_j,
+                label=f"block {index} registered offset sweep",
+            )
+            if (
+                isinstance(record.onset_zero_index, bool)
+                or not isinstance(record.onset_zero_index, int)
+                or record.onset_zero_index < 0
+                or record.onset_zero_index >= len(onset)
+                or isinstance(record.offset_zero_index, bool)
+                or not isinstance(record.offset_zero_index, int)
+                or record.offset_zero_index < 0
+                or record.offset_zero_index >= len(offset)
+            ):
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} has an invalid structural zero index",
+                )
+            zero_point = onset[record.onset_zero_index]
+            if offset[record.offset_zero_index] != zero_point:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} structural zero evaluations disagree",
+                )
+            prepared.append(
+                (
+                    onset,
+                    offset,
+                    zero_point,
+                    record.bundle_residual_half_widths_j,
+                    record.member_envelope_integral_sum_j,
+                )
+            )
+            raw_windows.append(record.member_window_bounds_s)
+    else:
+        assert onset_sweeps_j is not None
+        assert offset_sweeps_j is not None
+        assert zero_point_contrasts_j is not None
+        assert bundle_residual_half_widths_j is not None
+        assert member_envelope_integral_sums_j is not None
+        try:
+            zero_points = _clean_values(
+                zero_point_contrasts_j,
+                "zero-point contrasts",
+            )
+            input_lengths_match = (
+                len(onset_sweeps_j)
+                == len(offset_sweeps_j)
+                == len(zero_points)
+                == len(bundle_residual_half_widths_j)
+                == len(member_envelope_integral_sums_j)
+                == n
+            )
+        except (TypeError, ValueError) as exc:
+            _common_mode_refuse("common_mode_precondition_failed", str(exc))
+        if not input_lengths_match:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                "every raw block needs onset, offset, an explicit zero point, "
+                "four residuals, and a member envelope integral sum",
+            )
+        for index, (
+            raw_onset,
+            raw_offset,
+            zero_point,
+            residuals,
+            envelope_sum,
+        ) in enumerate(
+            zip(
+                onset_sweeps_j,
+                offset_sweeps_j,
+                zero_points,
+                bundle_residual_half_widths_j,
+                member_envelope_integral_sums_j,
+                strict=True,
+            )
+        ):
+            try:
+                onset = _clean_values(raw_onset, f"block {index} onset sweep")
+                offset = _clean_values(raw_offset, f"block {index} offset sweep")
+            except (TypeError, ValueError) as exc:
+                _common_mode_refuse("common_mode_precondition_failed", str(exc))
+            if zero_point not in onset or zero_point not in offset:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} sweeps must include the explicit zero point "
+                    "by exact equality",
+                )
+            prepared.append(
+                (onset, offset, zero_point, residuals, envelope_sum)
+            )
+        raw_windows = member_window_bounds_s
+
+    _common_mode_member_windows(
+        raw_windows,
+        expected_n=n,
+        bound=bound,
+    )
+    block_widths: list[float] = []
     for index, (
-        delta,
-        raw_onset,
-        raw_offset,
+        onset,
+        offset,
         zero_point,
         raw_residuals,
         raw_member_envelope_sum,
-        _member_windows,
-    ) in enumerate(
-        block_inputs
-    ):
-        try:
-            onset = _clean_values(raw_onset, f"block {index} onset sweep")
-            offset = _clean_values(raw_offset, f"block {index} offset sweep")
-        except (TypeError, ValueError) as exc:
-            _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    ) in enumerate(prepared):
         try:
             residual_count = len(raw_residuals)
         except TypeError:
@@ -1130,15 +1430,9 @@ def two_shared_edge_common_mode_floor(
                     f"block {index} residuals must be finite and nonnegative",
                 )
             residuals.append(residual)
-        if zero_point not in onset or zero_point not in offset:
-            _common_mode_refuse(
-                "common_mode_precondition_failed",
-                f"block {index} sweeps must include the explicit zero point "
-                "by exact equality",
-            )
         if not math.isclose(
             zero_point,
-            delta,
+            deltas[index],
             rel_tol=1e-9,
             abs_tol=1e-12,
         ):
@@ -1154,51 +1448,14 @@ def two_shared_edge_common_mode_floor(
                 f"block {index} member envelope integral sum must be finite "
                 "and nonnegative",
             )
-        member_envelope_sum = max(
-            member_envelope_sum,
-            1.0,
-            abs(delta),
-            abs(zero_point),
-            *(abs(value) for value in onset),
-            *(abs(value) for value in offset),
-        )
-        # Each correctly-rounded contrast evaluation has error <=4u*S (fsum
-        # exactness; cancellation shrinks the result, never the error), the
-        # width composes <=3 evaluations plus one reference for <=16u*S, and
-        # 64u*S gives 4x analytic headroom independent of member count and
-        # magnitude ratio.
-        extrema_pad = (
-            64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
-        )
-        excursion_lower = math.fsum(
-            (min(onset), -zero_point, min(offset), -zero_point)
-        )
-        excursion_upper = math.fsum(
-            (max(onset), -zero_point, max(offset), -zero_point)
-        )
-        lower = _common_mode_outward(
-            math.fsum((excursion_lower, -extrema_pad)),
-            -math.inf,
-        )
-        upper = _common_mode_outward(
-            math.fsum((excursion_upper, extrema_pad)),
-            math.inf,
-        )
-        zero_centred_width = _common_mode_outward(
-            max(abs(lower), abs(upper)),
-            math.inf,
-        )
-        shared_width = _common_mode_outward(
-            math.fsum(
-                (zero_centred_width, abs(zero_point - delta))
-            ),
-            math.inf,
-        )
-        local_width = math.fsum(residuals) / 2.0
         block_widths.append(
-            _common_mode_outward(
-                math.fsum((shared_width, local_width)),
-                math.inf,
+            _common_mode_block_half_width(
+                deltas[index],
+                onset,
+                offset,
+                zero_point,
+                member_envelope_sum,
+                residuals,
             )
         )
 
@@ -1208,7 +1465,11 @@ def two_shared_edge_common_mode_floor(
     )
     return replace(
         estimate,
-        estimator_registration=two_shared_edge_common_mode_registration(),
+        estimator_registration=(
+            two_shared_edge_common_mode_registration()
+            if registered_surface
+            else None
+        ),
     )
 
 
