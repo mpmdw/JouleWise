@@ -1,3 +1,13 @@
+> **ERRATUM (2026-08-10, magistrate):** the two-shared-edge form recorded
+> below was implemented and gauntleted as FLOOR-COMMONMODE-01; the gauntlet
+> proved the separable extremum sweep is exact ONLY on a strict-noncollapse
+> domain (every member window strictly longer than twice the shared bound,
+> outward-rounded). The registered estimator now enforces that domain and
+> refuses outside it — see the D-124 amendment of 2026-08-10 in the decision
+> log. The historical numbers below are unchanged and remain NON-CLAIM; the
+> promoted 1.869502 J replay value is reproduced by the domain-restricted
+> implementation (trailing ulps move upward under its outward enclosure).
+
 # Common-mode estimator replay — NON-CLAIM record (2026-08-08)
 
 Sol xhigh (fast tier), read-only desk replay ordered by the adopted

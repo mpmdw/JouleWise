@@ -17,10 +17,12 @@ import hashlib
 import io
 import json
 import math
+import random
 import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -32,8 +34,10 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     COMMON_MODE_ESTIMATOR_ID,
+    CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
+    METHOD_ID,
     attribution_single_count_discipline,
     canonical_domain_sha256,
     comparative_false_effect_floor,
@@ -2303,6 +2307,7 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
 
 
 class RegisteredCommonModeExtractionTests(unittest.TestCase):
+    _ABBA = ("A1", "B1", "B2", "A2")
     DELTAS = [1.0, -1.0, 2.0, -2.0, 0.0]
     OPERATIVE_BOUND_S = 0.037818
     SWEEP_BOUND_S = 0.3
@@ -2390,7 +2395,12 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             - values["A1"]
             - values["A2"]
         ) / 2.0
-        return [delta, delta + 0.1], [delta, delta], [0.0] * 4
+        return (
+            [delta, delta + 0.1],
+            [delta, delta],
+            [0.0] * 4,
+            [(-1.0, 1.0)] * 4,
+        )
 
     def extract(self, *, registration=None, session=None):
         return extract_comparative_cell(
@@ -2563,17 +2573,438 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             for position in ("A1", "B1", "B2", "A2")
         ]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals = _registered_common_mode_block_inputs(
-                members,
-                runs_root=Path("unused"),
-                metric="phase_energy_j.decode",
-                shared_edge_bound_s=0.1,
+            onset, offset, residuals, windows = (
+                _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("unused"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=0.1,
+                )
             )
         self.assertIn(2.0, onset)
         self.assertIn(2.0, offset)
         self.assertGreater(max(onset) - min(onset), 0.0)
         self.assertGreater(max(offset) - min(offset), 0.0)
         self.assertEqual(residuals, [0.0] * 4)
+        self.assertEqual(windows, [(-0.5, 1.5)] * 4)
+
+    @staticmethod
+    def _first_safely_admitted_end(start_s: float, bound_s: float) -> float:
+        end_s = start_s + 2.0 * bound_s
+        while not (
+            math.nextafter(start_s + bound_s, math.inf)
+            < math.nextafter(end_s - bound_s, -math.inf)
+        ):
+            end_s = math.nextafter(end_s, math.inf)
+        return end_s
+
+    def test_delta_geometry_refuses_in_helper_and_extraction_without_fallback(self):
+        durations = {"A1": 0.1, "B1": 0.1, "B2": 0.1, "A2": 0.5}
+        powers = {"A1": 4.0, "B1": 8.0, "B2": 8.0, "A2": 8.0}
+
+        class Reader:
+            def __init__(self, path):
+                self.position = Path(path).name.rsplit("-", 1)[-1].upper()
+
+            def summed_curve(self):
+                return [TracePoint(0.0, powers[self.position], -1.0, 1.0)]
+
+            def phase_windows(self):
+                return {"decode": [Window(0.0, durations[self.position])]}
+
+            @staticmethod
+            def metadata():
+                return {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {
+                            "effective_clock_anchor_bound_s": 0.0,
+                            "wall_minus_monotonic_span_s": 0.0,
+                        }
+                    }
+                }
+
+        members = [self._sweep_member(position) for position in self._ABBA]
+        with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+            with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("delta-geometry"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=self.SWEEP_BOUND_S,
+                )
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_nonseparable_window_domain",
+        )
+
+        session = SimpleNamespace(
+            ready=True,
+            refusal_reasons=(),
+            calibration_bracket=self._sweep_bracket(),
+            operative_fiducial_bound_s=self.SWEEP_BOUND_S,
+        )
+        with (
+            mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=self.evaluated_member,
+            ),
+            mock.patch("joulewise.floor_extraction.BundleReader", Reader),
+            mock.patch(
+                "joulewise.floor_extraction.comparative_false_effect_floor"
+            ) as default_path,
+            mock.patch(
+                "joulewise.floor_extraction.two_shared_edge_common_mode_floor",
+                wraps=two_shared_edge_common_mode_floor,
+            ) as registered_estimator,
+        ):
+            report = extract_comparative_cell(
+                cell_id="DELTA-GEOMETRY",
+                metric="phase_energy_j.decode",
+                window_class="phase",
+                blocks=self.blocks(),
+                runs_root=Path("delta-geometry"),
+                cooldowns={},
+                consumption_session=session,
+                estimator=COMMON_MODE_ESTIMATOR_ID,
+                estimator_registration=two_shared_edge_common_mode_registration(),
+                calibration_basis=self.calibration_basis(),
+            )
+        self.assertFalse(report.extractable)
+        self.assertIsNone(report.floor)
+        self.assertEqual(
+            report.refusal_reasons,
+            ("common_mode_nonseparable_window_domain",),
+        )
+        default_path.assert_not_called()
+        registered_estimator.assert_not_called()
+
+    def test_helper_uses_outward_threshold_at_each_abba_position(self):
+        bound = self.SWEEP_BOUND_S
+        exact_end = 2.0 * bound
+        ambiguous_end = math.nextafter(exact_end, math.inf)
+        first_safe_end = self._first_safely_admitted_end(0.0, bound)
+        self.assertGreater(first_safe_end, ambiguous_end)
+
+        powers = {position: 1.0 for position in self._ABBA}
+        members = [self._sweep_member(position) for position in self._ABBA]
+        refused_ends = (
+            math.nextafter(exact_end, -math.inf),
+            exact_end,
+            ambiguous_end,
+        )
+        for violating_position in self._ABBA:
+            for end_s in refused_ends:
+                durations = {
+                    position: first_safe_end for position in self._ABBA
+                }
+                durations[violating_position] = end_s
+
+                class Reader:
+                    def __init__(self, path):
+                        self.position = Path(path).name.upper()
+
+                    def summed_curve(self):
+                        return [
+                            TracePoint(0.0, powers[self.position], -1.0, 1.0)
+                        ]
+
+                    def phase_windows(self):
+                        return {
+                            "decode": [Window(0.0, durations[self.position])]
+                        }
+
+                    @staticmethod
+                    def metadata():
+                        return {
+                            "uncertainty_evidence": {
+                                "clock_anchor": {
+                                    "effective_clock_anchor_bound_s": 0.0,
+                                    "wall_minus_monotonic_span_s": 0.0,
+                                }
+                            }
+                        }
+
+                with self.subTest(
+                    position=violating_position,
+                    end_s=end_s,
+                ), mock.patch("joulewise.floor_extraction.BundleReader", Reader):
+                    with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                        _registered_common_mode_block_inputs(
+                            members,
+                            runs_root=Path("threshold-geometry"),
+                            metric="phase_energy_j.decode",
+                            shared_edge_bound_s=bound,
+                        )
+                    self.assertEqual(
+                        caught.exception.reason,
+                        "common_mode_nonseparable_window_domain",
+                    )
+
+    def test_randomized_strict_domain_matches_cartesian_breakpoint_oracle(self):
+        rng = random.Random(0xD1245EED)
+        positions = self._ABBA
+        coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
+        support_kinds_seen = set()
+        interval_counts_seen = set()
+        saw_zero_power = False
+        saw_nonzero_power = False
+        close_duration_count = 0
+
+        for case_index in range(512):
+            bound = rng.uniform(0.01, 1.0)
+            windows: dict[str, Window] = {}
+            curves: dict[str, list[TracePoint]] = {}
+            for position_index, position in enumerate(positions):
+                start = rng.uniform(-2.0, 2.0)
+                if case_index < 256:
+                    end = self._first_safely_admitted_end(start, bound)
+                    for _ in range(rng.randrange(9)):
+                        end = math.nextafter(end, math.inf)
+                    close_duration_count += 1
+                else:
+                    end = start + rng.uniform(2.1, 32.0) * bound
+                windows[position] = Window(start, end)
+                neighbourhood_lo = start - bound
+                neighbourhood_hi = end + bound
+                span = neighbourhood_hi - neighbourhood_lo
+                count = 1 + rng.randrange(8)
+                interval_counts_seen.add(count)
+                kind = (case_index + position_index) % 5
+                support_kinds_seen.add(kind)
+                intervals = []
+                for interval_index in range(count):
+                    if kind == 0:  # contiguous
+                        width = span / count
+                        support_start = neighbourhood_lo + interval_index * width
+                        support_end = support_start + width
+                    elif kind == 1:  # gapped
+                        width = span / (2.0 * count + 1.0)
+                        support_start = neighbourhood_lo + (2 * interval_index) * width
+                        support_end = support_start + width
+                    elif kind == 2:  # overlapping
+                        width = span / max(1.5, count / 2.0)
+                        support_start = neighbourhood_lo + interval_index * span / (
+                            count + 1.0
+                        )
+                        support_end = support_start + width
+                    elif kind == 3:  # includes fully outside supports
+                        width = span / (count + 1.0)
+                        if interval_index == 0:
+                            support_start = start
+                            support_end = end
+                        else:
+                            support_end = (
+                                neighbourhood_lo - interval_index * width
+                            )
+                            support_start = support_end - 0.5 * width
+                    else:  # exact and one-ULP neighbourhood boundaries
+                        edge = (
+                            neighbourhood_lo
+                            if interval_index % 2 == 0
+                            else neighbourhood_hi
+                        )
+                        if interval_index % 3 == 1:
+                            edge = math.nextafter(edge, -math.inf)
+                        elif interval_index % 3 == 2:
+                            edge = math.nextafter(edge, math.inf)
+                        width = max(span / (count + 2.0), math.ulp(edge))
+                        support_start = edge
+                        support_end = edge + width
+                    power = (
+                        0.0
+                        if (
+                            (case_index + position_index + interval_index) % 4 == 0
+                            or (kind == 3 and interval_index == 0)
+                        )
+                        else rng.uniform(0.01, 20.0)
+                    )
+                    saw_zero_power = saw_zero_power or power == 0.0
+                    saw_nonzero_power = saw_nonzero_power or power > 0.0
+                    intervals.append(
+                        TracePoint(
+                            float(interval_index),
+                            power,
+                            support_start,
+                            support_end,
+                        )
+                    )
+                curves[position] = intervals
+
+            class Reader:
+                def __init__(self, path):
+                    self.position = Path(path).name
+
+                def summed_curve(self):
+                    return curves[self.position]
+
+                def phase_windows(self):
+                    return {"decode": [windows[self.position]]}
+
+                @staticmethod
+                def metadata():
+                    return {
+                        "uncertainty_evidence": {
+                            "clock_anchor": {
+                                "effective_clock_anchor_bound_s": 0.0,
+                                "wall_minus_monotonic_span_s": 0.0,
+                            }
+                        }
+                    }
+
+            members = [self._sweep_member(position) for position in positions]
+            with (
+                mock.patch("joulewise.floor_extraction.BundleReader", Reader),
+                mock.patch(
+                    "joulewise.floor_extraction."
+                    "_corner_composed_anchor_shift_envelope",
+                    return_value={"max_abs_delta_j": 0.0},
+                ),
+            ):
+                onset, offset, residuals, returned_windows = (
+                    _registered_common_mode_block_inputs(
+                        members,
+                        runs_root=Path("randomized-oracle"),
+                        metric="phase_energy_j.decode",
+                        shared_edge_bound_s=bound,
+                    )
+                )
+
+            def contrast(onset_s: float, offset_s: float) -> float:
+                return math.fsum(
+                    coefficients[position]
+                    * _integrate(
+                        curves[position],
+                        windows[position].start_s + onset_s,
+                        windows[position].end_s + offset_s,
+                    )
+                    for position in positions
+                )
+
+            def exact_integral(
+                curve: list[TracePoint],
+                start_s: Fraction,
+                end_s: Fraction,
+            ) -> Fraction:
+                total = Fraction(0)
+                for point_row in curve:
+                    support_start = Fraction.from_float(
+                        point_row.support_start_s
+                    )
+                    support_end = Fraction.from_float(point_row.support_end_s)
+                    overlap = max(
+                        Fraction(0),
+                        min(end_s, support_end) - max(start_s, support_start),
+                    )
+                    total += Fraction.from_float(point_row.power_w) * overlap
+                return total
+
+            def exact_contrast(
+                onset_s: float,
+                offset_s: float,
+            ) -> Fraction:
+                onset = Fraction.from_float(onset_s)
+                offset = Fraction.from_float(offset_s)
+                total = Fraction(0)
+                for position in positions:
+                    window = windows[position]
+                    total += Fraction.from_float(coefficients[position]) * (
+                        exact_integral(
+                            curves[position],
+                            Fraction.from_float(window.start_s) + onset,
+                            Fraction.from_float(window.end_s) + offset,
+                        )
+                    )
+                return total
+
+            oracle_onsets = {-bound, 0.0, bound}
+            oracle_offsets = {-bound, 0.0, bound}
+            for position in positions:
+                window = windows[position]
+                for point in curves[position]:
+                    for edge in (point.support_start_s, point.support_end_s):
+                        onset_shift = edge - window.start_s
+                        offset_shift = edge - window.end_s
+                        if -bound <= onset_shift <= bound:
+                            oracle_onsets.add(onset_shift)
+                        if -bound <= offset_shift <= bound:
+                            oracle_offsets.add(offset_shift)
+
+            point = contrast(0.0, 0.0)
+            exact_point = exact_contrast(0.0, 0.0)
+            oracle_values = []
+            for onset_shift in oracle_onsets:
+                onset_value = contrast(onset_shift, 0.0)
+                exact_onset_value = exact_contrast(onset_shift, 0.0)
+                for offset_shift in oracle_offsets:
+                    joint_value = contrast(onset_shift, offset_shift)
+                    separable_value = math.fsum(
+                        (
+                            onset_value,
+                            contrast(0.0, offset_shift),
+                            -point,
+                        )
+                    )
+                    self.assertTrue(
+                        math.isclose(
+                            joint_value,
+                            separable_value,
+                            rel_tol=1e-11,
+                            abs_tol=1e-11,
+                        ),
+                        (case_index, joint_value, separable_value),
+                    )
+                    exact_joint_value = exact_contrast(
+                        onset_shift,
+                        offset_shift,
+                    )
+                    exact_separable_value = (
+                        exact_onset_value
+                        + exact_contrast(0.0, offset_shift)
+                        - exact_point
+                    )
+                    self.assertEqual(
+                        exact_joint_value,
+                        exact_separable_value,
+                        case_index,
+                    )
+                    oracle_values.append(joint_value)
+
+            bracket = {
+                "status": "passed",
+                "endpoint_max_b_fiducial_s": 0.0,
+                "calibration_drift_allowance_s": bound,
+                "b_fiducial_s": bound,
+                "acceptance": {
+                    "allowance": {
+                        "rule": "max(observed_drift_s,bracket_screen_s)",
+                        "value_s": repr(bound),
+                        "embedding_count": 1,
+                        "embedded_in": "b_fiducial_s",
+                    }
+                },
+            }
+            floor = two_shared_edge_common_mode_floor(
+                [point, point],
+                onset_sweeps_j=[onset, onset],
+                offset_sweeps_j=[offset, offset],
+                bundle_residual_half_widths_j=[residuals, residuals],
+                member_window_bounds_s=[returned_windows, returned_windows],
+                calibration_bracket=bracket,
+                shared_edge_bound_s=bound,
+            )
+            emitted_width = floor.admissible_half_widths_j[0]
+            for oracle_value in oracle_values:
+                self.assertGreaterEqual(
+                    emitted_width,
+                    abs(oracle_value - point),
+                    (case_index, emitted_width, oracle_value, point),
+                )
+
+        self.assertEqual(close_duration_count, 256 * 4)
+        self.assertEqual(support_kinds_seen, set(range(5)))
+        self.assertEqual(interval_counts_seen, set(range(1, 9)))
+        self.assertTrue(saw_zero_power)
+        self.assertTrue(saw_nonzero_power)
 
     @staticmethod
     def _curve(intervals) -> list[TracePoint]:
@@ -2655,11 +3086,13 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
 
         members = [self._sweep_member(position) for position in positions]
         with mock.patch("joulewise.floor_extraction.BundleReader", Reader):
-            onset, offset, residuals = _registered_common_mode_block_inputs(
-                members,
-                runs_root=Path("synthetic-reader"),
-                metric="phase_energy_j.decode",
-                shared_edge_bound_s=self.SWEEP_BOUND_S,
+            onset, offset, residuals, windows = (
+                _registered_common_mode_block_inputs(
+                    members,
+                    runs_root=Path("synthetic-reader"),
+                    metric="phase_energy_j.decode",
+                    shared_edge_bound_s=self.SWEEP_BOUND_S,
+                )
             )
 
         def contrast(onset_s: float, offset_s: float) -> float:
@@ -2685,6 +3118,7 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             onset_sweeps_j=[onset, onset],
             offset_sweeps_j=[offset, offset],
             bundle_residual_half_widths_j=[residuals, residuals],
+            member_window_bounds_s=[windows, windows],
             calibration_bracket=self._sweep_bracket(),
             shared_edge_bound_s=self.SWEEP_BOUND_S,
         )
@@ -2984,62 +3418,142 @@ class FloorMintSpecValidationTests(unittest.TestCase):
         }
         self.assertEqual(validate_extraction_spec(spec), [])
 
-    def test_registered_comparative_spec_fields_refuse_independently(self) -> None:
+    def test_estimator_selection_is_atomic_truth_table(self) -> None:
+        full_registration = two_shared_edge_common_mode_registration()
+        pending_registration = {
+            "estimator_id": COMMON_MODE_ESTIMATOR_ID,
+            "status": "candidate_pending_floor_commonmode_01",
+        }
+        basis = {
+            "acceptance_selection": "issued_d116_artifact_only",
+            "issued_acceptance": {},
+        }
         cases = (
+            ("no estimator fields", {}, True),
+            ("explicit default", {"estimator": METHOD_ID}, True),
             (
-                {"estimator": "unknown"},
-                ".estimator: must equal 'd054_false_effect_guard.v1' or "
-                "'d124_two_shared_edge_common_mode.v1'",
+                "D-124 full",
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": full_registration,
+                    "calibration_basis": basis,
+                },
+                True,
             ),
             (
+                "D-124 pending",
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": pending_registration,
+                    "calibration_basis": basis,
+                },
+                True,
+            ),
+            (
+                "registration without estimator",
+                {"estimator_registration": full_registration},
+                False,
+            ),
+            (
+                "basis without estimator",
+                {"calibration_basis": basis},
+                False,
+            ),
+            (
+                "registration with default",
+                {
+                    "estimator": METHOD_ID,
+                    "estimator_registration": full_registration,
+                },
+                False,
+            ),
+            (
+                "basis with default",
+                {"estimator": METHOD_ID, "calibration_basis": basis},
+                False,
+            ),
+            (
+                "D-124 without registration and basis",
                 {"estimator": COMMON_MODE_ESTIMATOR_ID},
-                ".estimator_registration: must be a complete "
-                "'d124_two_shared_edge_common_mode.v1' registration or its "
-                "pending candidate",
+                False,
             ),
             (
-                {"estimator_registration": {}},
-                ".estimator_registration: must be a complete "
-                "'d124_two_shared_edge_common_mode.v1' registration or its "
-                "pending candidate",
+                "D-124 without basis",
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": full_registration,
+                },
+                False,
             ),
             (
+                "D-124 without registration",
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "calibration_basis": basis,
+                },
+                False,
+            ),
+            ("unknown estimator", {"estimator": "unknown"}, False),
+            (
+                "mismatched pending identity",
+                {
+                    "estimator": COMMON_MODE_ESTIMATOR_ID,
+                    "estimator_registration": {
+                        "estimator_id": METHOD_ID,
+                        "status": "candidate_pending_floor_commonmode_01",
+                    },
+                    "calibration_basis": basis,
+                },
+                False,
+            ),
+            (
+                "mismatched pending status",
                 {
                     "estimator": COMMON_MODE_ESTIMATOR_ID,
                     "estimator_registration": {
                         "estimator_id": COMMON_MODE_ESTIMATOR_ID,
                         "status": "candidate_wrong_status",
                     },
+                    "calibration_basis": basis,
                 },
-                ".estimator_registration: must be a complete "
-                "'d124_two_shared_edge_common_mode.v1' registration or its "
-                "pending candidate",
+                False,
             ),
+        )
+        for name, additions, valid in cases:
+            with self.subTest(name=name):
+                spec = self._load("window_c_extraction_spec.json")
+                cell = next(
+                    cell
+                    for cell in spec["cells"]
+                    if cell["kind"] == "comparative"
+                )
+                cell.update(copy.deepcopy(additions))
+                errors = validate_extraction_spec(spec)
+                self.assertEqual(not errors, valid, errors)
+
+    def test_d124_basis_fields_remain_structurally_validated(self) -> None:
+        cases = (
             (
-                {"calibration_basis": []},
+                [],
                 ".calibration_basis: must be an object",
             ),
             (
                 {
-                    "calibration_basis": {
-                        "acceptance_selection": "successor_allowed",
-                        "issued_acceptance": {},
-                    }
+                    "acceptance_selection": "successor_allowed",
+                    "issued_acceptance": {},
                 },
                 ".calibration_basis.acceptance_selection: must equal "
                 "'issued_d116_artifact_only'",
             ),
             (
                 {
-                    "calibration_basis": {
-                        "acceptance_selection": "issued_d116_artifact_only",
-                        "issued_acceptance": [],
-                    }
+                    "acceptance_selection": "issued_d116_artifact_only",
+                    "issued_acceptance": [],
                 },
                 ".calibration_basis.issued_acceptance: must be an object",
             ),
         )
-        for additions, expected in cases:
+        for basis, expected in cases:
             with self.subTest(expected=expected):
                 spec = self._load("window_c_extraction_spec.json")
                 cell = next(
@@ -3047,10 +3561,21 @@ class FloorMintSpecValidationTests(unittest.TestCase):
                     for cell in spec["cells"]
                     if cell["kind"] == "comparative"
                 )
-                cell.update(additions)
+                cell.update(
+                    {
+                        "estimator": COMMON_MODE_ESTIMATOR_ID,
+                        "estimator_registration": (
+                            two_shared_edge_common_mode_registration()
+                        ),
+                        "calibration_basis": basis,
+                    }
+                )
                 errors = validate_extraction_spec(spec)
-                matching = [error for error in errors if expected in error]
-                self.assertEqual(len(matching), 1, errors)
+                self.assertEqual(
+                    sum(expected in error for error in errors),
+                    1,
+                    errors,
+                )
 
     def test_definition_identity_and_target_must_match_cell_key(self) -> None:
         base = self._load("window_c_extraction_spec.json")

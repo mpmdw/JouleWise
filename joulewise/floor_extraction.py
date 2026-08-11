@@ -198,6 +198,7 @@ CELL_REFUSAL_CODES = (
     "common_mode_registration_invalid",
     "common_mode_authenticated_bracket_required",
     "common_mode_allowance_application_invalid",
+    "common_mode_nonseparable_window_domain",
     "common_mode_precondition_failed",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
 )
@@ -661,8 +662,12 @@ def validate_extraction_spec(spec: object) -> list[str]:
                     "calibration_basis",
                 )
             ):
-                estimator = cell.get("estimator", METHOD_ID)
-                if estimator not in (METHOD_ID, COMMON_MODE_ESTIMATOR_ID):
+                estimator_present = "estimator" in cell
+                estimator = cell.get("estimator")
+                if estimator_present and estimator not in (
+                    METHOD_ID,
+                    COMMON_MODE_ESTIMATOR_ID,
+                ):
                     errors.append(
                         f"{where}.estimator: must equal "
                         f"{METHOD_ID!r} or {COMMON_MODE_ESTIMATOR_ID!r}"
@@ -683,16 +688,31 @@ def validate_extraction_spec(spec: object) -> list[str]:
                     and registration.get("status")
                     == _PENDING_COMMON_MODE_ESTIMATOR_STATUS
                 )
-                if (
-                    (estimator == COMMON_MODE_ESTIMATOR_ID or registration_present)
-                    and not (full_registration or pending_registration)
-                ):
-                    errors.append(
-                        f"{where}.estimator_registration: must be a complete "
-                        f"{COMMON_MODE_ESTIMATOR_ID!r} registration or its "
-                        "pending candidate"
-                    )
-                if "calibration_basis" in cell:
+                basis_present = "calibration_basis" in cell
+                if estimator == COMMON_MODE_ESTIMATOR_ID:
+                    if not (full_registration or pending_registration):
+                        errors.append(
+                            f"{where}.estimator_registration: must be a complete "
+                            f"{COMMON_MODE_ESTIMATOR_ID!r} registration or its "
+                            "pending candidate"
+                        )
+                    if not basis_present:
+                        errors.append(
+                            f"{where}.calibration_basis: is required with "
+                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
+                        )
+                else:
+                    if registration_present:
+                        errors.append(
+                            f"{where}.estimator_registration: requires explicit "
+                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
+                        )
+                    if basis_present:
+                        errors.append(
+                            f"{where}.calibration_basis: requires explicit "
+                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
+                        )
+                if basis_present and estimator == COMMON_MODE_ESTIMATOR_ID:
                     basis = cell.get("calibration_basis")
                     if not isinstance(basis, Mapping):
                         errors.append(
@@ -1651,7 +1671,12 @@ def _registered_common_mode_block_inputs(
     runs_root: Path,
     metric: str,
     shared_edge_bound_s: float,
-) -> tuple[list[float], list[float], list[float]]:
+) -> tuple[
+    list[float],
+    list[float],
+    list[float],
+    list[tuple[float, float]],
+]:
     """Build one exact D-124 block input from immutable bundle evidence."""
 
     prefix = "phase_energy_j."
@@ -1662,7 +1687,19 @@ def _registered_common_mode_block_inputs(
         )
     phase = metric[len(prefix) :]
     by_position: dict[str, tuple[list[TracePoint], Window]] = {}
-    residuals: list[float] = []
+    clock_evidence: dict[str, tuple[object, object, str]] = {}
+    if (
+        isinstance(shared_edge_bound_s, bool)
+        or not isinstance(shared_edge_bound_s, (int, float))
+        or not math.isfinite(float(shared_edge_bound_s))
+        or float(shared_edge_bound_s) <= 0.0
+    ):
+        raise CommonModeEstimatorRefusal(
+            "common_mode_nonseparable_window_domain",
+            "the strict noncollapse domain requires a finite positive "
+            "shared bound",
+        )
+    bound = float(shared_edge_bound_s)
     for position in _ABBA_POSITIONS:
         member = next(
             (candidate for candidate in members if candidate.position == position),
@@ -1712,6 +1749,20 @@ def _registered_common_mode_block_inputs(
             start_s=windows[0].start_s - origin_s,
             end_s=windows[0].end_s - origin_s,
         )
+        start = float(window.start_s)
+        end = float(window.end_s)
+        latest_start = math.nextafter(start + bound, math.inf)
+        earliest_end = math.nextafter(end - bound, -math.inf)
+        if (
+            not math.isfinite(start)
+            or not math.isfinite(end)
+            or not latest_start < earliest_end
+        ):
+            raise CommonModeEstimatorRefusal(
+                "common_mode_nonseparable_window_domain",
+                f"{member.bundle_id}: {position} phase window is outside "
+                "the strict noncollapse domain",
+            )
         uncertainty = metadata.get("uncertainty_evidence")
         clock_anchor = (
             uncertainty.get("clock_anchor")
@@ -1728,6 +1779,13 @@ def _registered_common_mode_block_inputs(
             if isinstance(clock_anchor, Mapping)
             else None
         )
+        by_position[position] = (relative_curve, window)
+        clock_evidence[position] = (bundle_bound, wall_span, member.bundle_id)
+
+    residuals: list[float] = []
+    for position in _ABBA_POSITIONS:
+        relative_curve, window = by_position[position]
+        bundle_bound, wall_span, bundle_id = clock_evidence[position]
         residual = _corner_composed_anchor_shift_envelope(
             [(relative_curve, [window])],
             bundle_bound,
@@ -1737,10 +1795,9 @@ def _registered_common_mode_block_inputs(
         if residual is None:
             raise CommonModeEstimatorRefusal(
                 "common_mode_precondition_failed",
-                f"{member.bundle_id}: bundle-local adversarial bound is unavailable",
+                f"{bundle_id}: bundle-local adversarial bound is unavailable",
             )
         residuals.append(float(residual["max_abs_delta_j"]))
-        by_position[position] = (relative_curve, window)
 
     onset_candidates = {-shared_edge_bound_s, 0.0, shared_edge_bound_s}
     offset_candidates = {-shared_edge_bound_s, 0.0, shared_edge_bound_s}
@@ -1776,6 +1833,13 @@ def _registered_common_mode_block_inputs(
         [contrast(delta_s, 0.0) for delta_s in sorted(onset_candidates)],
         [contrast(0.0, delta_s) for delta_s in sorted(offset_candidates)],
         residuals,
+        [
+            (
+                by_position[position][1].start_s,
+                by_position[position][1].end_s,
+            )
+            for position in _ABBA_POSITIONS
+        ],
     )
 
 
@@ -1975,9 +2039,10 @@ def extract_comparative_cell(
                 onset_sweeps: list[list[float]] = []
                 offset_sweeps: list[list[float]] = []
                 residual_widths: list[list[float]] = []
+                member_window_bounds: list[list[tuple[float, float]]] = []
                 try:
                     for evaluated in admitted_blocks:
-                        onset, offset, residuals = (
+                        onset, offset, residuals, windows = (
                             _registered_common_mode_block_inputs(
                                 evaluated,
                                 runs_root=runs_root,
@@ -1988,11 +2053,13 @@ def extract_comparative_cell(
                         onset_sweeps.append(onset)
                         offset_sweeps.append(offset)
                         residual_widths.append(residuals)
+                        member_window_bounds.append(windows)
                     floor = two_shared_edge_common_mode_floor(
                         block_deltas,
                         onset_sweeps_j=onset_sweeps,
                         offset_sweeps_j=offset_sweeps,
                         bundle_residual_half_widths_j=residual_widths,
+                        member_window_bounds_s=member_window_bounds,
                         calibration_bracket=(
                             consumption_session.calibration_bracket
                         ),

@@ -4172,6 +4172,12 @@ claim/refusal spelling never becomes a pass.
   `whole_window_neg8_verdict_failed`,
   `adapter_continuity_evidence_missing`, `adapter_continuity_failed`,
   `cpu_admission_core_missing`, and `cpu_admission_core_failed`.
+- Registered common-mode estimator refusals (D-124 implementing unit,
+  additive 2026-08-10): `common_mode_registration_invalid`,
+  `common_mode_authenticated_bracket_required`,
+  `common_mode_allowance_application_invalid`,
+  `common_mode_precondition_failed`, and
+  `common_mode_nonseparable_window_domain`.
 - Idle-admission/campaign conditions: `cpu_baseline_telemetry_missing`,
   `cpu_baseline_telemetry_malformed`,
   `cpu_baseline_sample_count_insufficient`, `cpu_busy_ratio_p95_exceeded`,
@@ -7954,6 +7960,37 @@ artifact is not reopened and no raw calibration corpus is voided.
 merges (shared floor_extraction/estimator surface) and BEFORE pack
 freeze (the packs name the estimator identity). FLOOR-COMMONMODE-01's
 kernel row sharpens to this form.
+
+### D-124 amendment — 2026-08-10: strict-noncollapse domain (magistrate, post-escalation consult; flagged for Ed's review)
+
+The implementing unit's D-118 gauntlet found the two-shared-edge sweep
+UNDERSTATING the floor in two successive formulations (missing per-edge
+breakpoints; then separable composition failing when a joint edge shift can
+collapse a member window shorter than twice the shared bound). Per the
+standing escalation trigger the second recurrence went to a design consult,
+whose terminating design is ADOPTED: the estimator is **exact on a registered
+strict-noncollapse domain and refuses outside it**. Every admitted A1/B1/B2/A2
+member window must prove, with outward float rounding
+(`nextafter(start+B) < nextafter(end-B)`), that no joint shift within the
+authenticated bound B can collapse it; geometry outside the domain refuses
+with the typed reason `common_mode_nonseparable_window_domain` and is never
+estimated (no silent fallback — a cell not registered for this estimator uses
+the worst-case composition and says so). Composed extrema carry an outward
+numerical enclosure so float summation direction cannot reopen an
+understatement route; the reportable floor value is unchanged at 1.869502 J
+while its trailing ulps move upward. The registered parameter dict now pins
+`shared_extrema_rule =
+separable_onset_offset_exact_sweep_on_strict_noncollapse_domain`, the domain
+precondition, and the refusal reason, so `COMMON_MODE_PARAMETER_SHA256`
+CHANGES and the previous registration object fails validation (permitted: the
+registration was still a pending candidate; packs are unfrozen). Current
+claim-path geometries sit safely inside the domain (decode windows
+seconds-scale; measured 1.5B p128 prefill windows 0.121-0.147 s vs the
+0.0736 s collapse threshold); Q8 p256 evidence will be checked at collection,
+not inferred. The paper's limitations carry the applicability limit. Consult
+record: the FCM-01 escalation consult (T4 session, custodied with the run
+artifacts); refuter evidence: executed 0.25 J (breakpoints) and 1.06 J
+(collapse geometry) understatements on synthetic corpora.
 
 
 ## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window

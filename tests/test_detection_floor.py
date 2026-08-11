@@ -20,6 +20,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_LIMIT_CLASS,
     COMMON_MODE_ESTIMATOR_ID,
     COMMON_MODE_PARAMETER_SHA256,
+    COMMON_MODE_REFUSAL_CODES,
     CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
@@ -46,6 +47,7 @@ from joulewise.detection_floor import (
     transport_refusal_reasons,
     two_shared_edge_common_mode_floor,
     two_shared_edge_common_mode_registration,
+    validate_common_mode_estimator_registration,
     validate_floor_artifact,
 )
 from joulewise.floor_extraction import (
@@ -696,6 +698,13 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         ]
         return onset, offset, residuals
 
+    @classmethod
+    def replay_window_bounds(cls):
+        return [
+            [(0.0, 1.0)] * 4
+            for _ in cls.REPLAY_DELTAS
+        ]
+
     def test_replay_arithmetic_pins_promoted_two_edge_floor(self):
         onset, offset, residuals = self.replay_inputs()
         estimate = two_shared_edge_common_mode_floor(
@@ -703,14 +712,37 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             onset_sweeps_j=onset,
             offset_sweeps_j=offset,
             bundle_residual_half_widths_j=residuals,
+            member_window_bounds_s=self.replay_window_bounds(),
             calibration_bracket=self.bracket(),
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
+        for outward_width, prior_width in zip(
+            estimate.admissible_half_widths_j,
+            self.REPLAY_TOTAL_WIDTHS,
+            strict=True,
+        ):
+            self.assertGreaterEqual(outward_width, prior_width)
+            self.assertLessEqual(
+                outward_width - prior_width,
+                128 * math.ulp(prior_width),
+            )
         self.assertEqual(
             estimate.admissible_half_widths_j,
-            tuple(self.REPLAY_TOTAL_WIDTHS),
+            (
+                0.31034858733143156,
+                0.7509875593841038,
+                0.634960716723771,
+                0.5206110996830724,
+                0.2886457404750423,
+                0.7180999895822417,
+                0.3209429628676851,
+                0.2865540817343146,
+                0.17864849755101853,
+                0.48676443416450144,
+            ),
         )
-        self.assertEqual(estimate.guarded_floor_j, 1.8695016260113408)
+        self.assertEqual(estimate.guarded_floor_j, 1.869501626011348)
+        self.assertEqual(round(estimate.guarded_floor_j, 6), 1.869502)
         self.assertEqual(
             estimate.estimator_registration,
             two_shared_edge_common_mode_registration(),
@@ -725,15 +757,142 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(first["version"], "v1")
         self.assertEqual(
             COMMON_MODE_PARAMETER_SHA256,
-            "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480",
+            "9d964cfb8e73149d7ebfa1bc23f79a48632478bdb33d2c4bc7f181dbd1e13df3",
         )
         self.assertEqual(first["parameter_sha256"], COMMON_MODE_PARAMETER_SHA256)
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS["shared_extrema_rule"],
+            "separable_onset_offset_exact_sweep_on_strict_noncollapse_domain",
+        )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_domain_precondition"
+            ],
+            "all_admitted_abba_member_windows_outward_rounding_prove_"
+            "start_plus_bound_lt_end_minus_bound",
+        )
+        self.assertEqual(
+            detection_floor._COMMON_MODE_PARAMETERS[
+                "shared_extrema_domain_refusal_reason"
+            ],
+            "common_mode_nonseparable_window_domain",
+        )
         assumption = first["stationarity_transfer_assumption"]
         self.assertIn("COMMONMODE-REPLAY.md", assumption["evidence_reference"])
         self.assertIn(
             "bounds, not realized member-level boundary errors",
             assumption["evidentiary_limit"],
         )
+
+    def test_old_full_registration_is_rejected_after_domain_amendment(self):
+        old_registration = two_shared_edge_common_mode_registration()
+        old_registration["parameter_sha256"] = (
+            "ea4aa669b8814ec6a267f924f02fe0c862edd14c33b2ecfd4ae5b4bf1e8c7480"
+        )
+        self.assertFalse(
+            validate_common_mode_estimator_registration(old_registration)
+        )
+
+    def test_noncollapse_refusal_is_registered_for_estimator_and_cells(self):
+        reason = "common_mode_nonseparable_window_domain"
+        self.assertIn(reason, COMMON_MODE_REFUSAL_CODES)
+        self.assertIn(reason, CELL_REFUSAL_CODES)
+
+    def test_window_domain_thresholds_and_all_abba_positions(self):
+        onset, offset, residuals = self.replay_inputs()
+        bound = self.OPERATIVE_BOUND_S
+        exact_end = 2.0 * bound
+        ambiguous_end = math.nextafter(exact_end, math.inf)
+
+        def admitted(end_s):
+            return math.nextafter(bound, math.inf) < math.nextafter(
+                end_s - bound,
+                -math.inf,
+            )
+
+        self.assertGreater(ambiguous_end, exact_end)
+        self.assertFalse(admitted(ambiguous_end))
+        first_safe_end = ambiguous_end
+        while not admitted(first_safe_end):
+            first_safe_end = math.nextafter(first_safe_end, math.inf)
+        self.assertTrue(admitted(first_safe_end))
+        self.assertFalse(admitted(math.nextafter(first_safe_end, -math.inf)))
+
+        safe_windows = [
+            [(0.0, first_safe_end)] * 4
+            for _ in self.REPLAY_DELTAS
+        ]
+        estimate = two_shared_edge_common_mode_floor(
+            self.REPLAY_DELTAS,
+            onset_sweeps_j=onset,
+            offset_sweeps_j=offset,
+            bundle_residual_half_widths_j=residuals,
+            member_window_bounds_s=safe_windows,
+            calibration_bracket=self.bracket(),
+            shared_edge_bound_s=bound,
+        )
+        self.assertIsNotNone(estimate.guarded_floor_j)
+
+        refused_ends = (
+            math.nextafter(exact_end, -math.inf),
+            exact_end,
+            ambiguous_end,
+        )
+        for position in range(4):
+            for end_s in refused_ends:
+                with self.subTest(position=position, end_s=end_s):
+                    windows = [list(block) for block in safe_windows]
+                    windows[0][position] = (0.0, end_s)
+                    with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                        two_shared_edge_common_mode_floor(
+                            self.REPLAY_DELTAS,
+                            onset_sweeps_j=onset,
+                            offset_sweeps_j=offset,
+                            bundle_residual_half_widths_j=residuals,
+                            member_window_bounds_s=windows,
+                            calibration_bracket=self.bracket(),
+                            shared_edge_bound_s=bound,
+                        )
+                    self.assertEqual(
+                        caught.exception.reason,
+                        "common_mode_nonseparable_window_domain",
+                    )
+
+        later_windows = [list(block) for block in safe_windows]
+        later_windows[-1][2] = (0.0, ambiguous_end)
+        with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+            two_shared_edge_common_mode_floor(
+                self.REPLAY_DELTAS,
+                onset_sweeps_j=onset,
+                offset_sweeps_j=offset,
+                bundle_residual_half_widths_j=residuals,
+                member_window_bounds_s=later_windows,
+                calibration_bracket=self.bracket(),
+                shared_edge_bound_s=bound,
+            )
+        self.assertEqual(
+            caught.exception.reason,
+            "common_mode_nonseparable_window_domain",
+        )
+
+    def test_missing_or_malformed_window_geometry_refuses(self):
+        onset, offset, residuals = self.replay_inputs()
+        for geometry in (None, [], [[(0.0, 1.0)] * 3] * len(self.REPLAY_DELTAS)):
+            with self.subTest(geometry=geometry):
+                with self.assertRaises(CommonModeEstimatorRefusal) as caught:
+                    two_shared_edge_common_mode_floor(
+                        self.REPLAY_DELTAS,
+                        onset_sweeps_j=onset,
+                        offset_sweeps_j=offset,
+                        bundle_residual_half_widths_j=residuals,
+                        member_window_bounds_s=geometry,
+                        calibration_bracket=self.bracket(),
+                        shared_edge_bound_s=self.OPERATIVE_BOUND_S,
+                    )
+                self.assertEqual(
+                    caught.exception.reason,
+                    "common_mode_nonseparable_window_domain",
+                )
 
     def test_double_allowance_application_refuses_with_typed_reason(self):
         bracket = self.bracket()
@@ -789,6 +948,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "onset_sweeps_j": onset,
             "offset_sweeps_j": offset,
             "bundle_residual_half_widths_j": residuals,
+            "member_window_bounds_s": self.replay_window_bounds(),
             "calibration_bracket": self.bracket(),
             "shared_edge_bound_s": self.OPERATIVE_BOUND_S,
         }
@@ -814,6 +974,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             onset_sweeps_j=onset,
             offset_sweeps_j=offset,
             bundle_residual_half_widths_j=residuals,
+            member_window_bounds_s=self.replay_window_bounds(),
             calibration_bracket=bracket,
             shared_edge_bound_s=self.OPERATIVE_BOUND_S,
         )
@@ -838,6 +999,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 onset_sweeps_j=onset,
                 offset_sweeps_j=offset,
                 bundle_residual_half_widths_j=residuals,
+                member_window_bounds_s=self.replay_window_bounds(),
                 calibration_bracket=self.bracket(),
                 shared_edge_bound_s=self.OPERATIVE_BOUND_S,
             )
@@ -857,6 +1019,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                 onset_sweeps_j=[],
                 offset_sweeps_j=[],
                 bundle_residual_half_widths_j=[],
+                member_window_bounds_s=None,
                 calibration_bracket=None,
                 shared_edge_bound_s=0.0,
             )

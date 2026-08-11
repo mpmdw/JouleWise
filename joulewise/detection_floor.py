@@ -106,6 +106,7 @@ COMMON_MODE_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 COMMON_MODE_ESTIMATOR_VERSION = "v1"
 COMMON_MODE_REFUSAL_CODES = (
     "common_mode_allowance_application_invalid",
+    "common_mode_nonseparable_window_domain",
     "common_mode_precondition_failed",
 )
 _MAX_FLOOR_J = 1e6
@@ -126,7 +127,16 @@ _COMMON_MODE_PARAMETERS = {
     "shared_candidate_rule": (
         "interval_support_edges_union_plus_zero_and_operative_bounds"
     ),
-    "shared_extrema_rule": "separable_onset_offset_exact_sweep",
+    "shared_extrema_rule": (
+        "separable_onset_offset_exact_sweep_on_strict_noncollapse_domain"
+    ),
+    "shared_extrema_domain_precondition": (
+        "all_admitted_abba_member_windows_outward_rounding_prove_"
+        "start_plus_bound_lt_end_minus_bound"
+    ),
+    "shared_extrema_domain_refusal_reason": (
+        "common_mode_nonseparable_window_domain"
+    ),
     "bundle_residual_rule": (
         "math.fsum(per_bundle_adversarial_half_width_j)/2"
     ),
@@ -511,6 +521,31 @@ def _common_mode_finite(value: object) -> float | None:
         return None
     converted = float(value)
     return converted if math.isfinite(converted) else None
+
+
+def _common_mode_window_is_strictly_noncollapsed(
+    start_s: object,
+    end_s: object,
+    shared_edge_bound_s: object,
+) -> bool:
+    """Prove a member window remains noncollapsed over both shared edges."""
+
+    start = _common_mode_finite(start_s)
+    end = _common_mode_finite(end_s)
+    bound = _common_mode_finite(shared_edge_bound_s)
+    if start is None or end is None or bound is None or bound <= 0.0:
+        return False
+    latest_start = math.nextafter(start + bound, math.inf)
+    earliest_end = math.nextafter(end - bound, -math.inf)
+    return latest_start < earliest_end
+
+
+def _common_mode_outward(value: float, direction: float) -> float:
+    """Add a negligible four-ULP enclosure for composed float extrema."""
+
+    for _ in range(4):
+        value = math.nextafter(value, direction)
+    return value
 
 
 def registered_common_mode_operative_bound(
@@ -917,6 +952,7 @@ def two_shared_edge_common_mode_floor(
     onset_sweeps_j: Sequence[Sequence[float]],
     offset_sweeps_j: Sequence[Sequence[float]],
     bundle_residual_half_widths_j: Sequence[Sequence[float]],
+    member_window_bounds_s: object = None,
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> FloorEstimate:
@@ -924,10 +960,13 @@ def two_shared_edge_common_mode_floor(
 
     ``onset_sweeps_j`` and ``offset_sweeps_j`` are the exact contrast values
     obtained by sweeping one shared edge while holding the other at zero.
-    Separability gives ``min(onset)+min(offset)-point`` and the analogous
-    maximum.  Four bundle-local adversarial residual half-widths are then
-    composed with the ABBA coefficients.  This one function is the registered
-    arithmetic path for both calibration blocks and consuming contrasts.
+    ``member_window_bounds_s`` supplies each block's aligned A1/B1/B2/A2
+    normalized ``(start_s, end_s)`` bounds.  Separability gives
+    ``min(onset)+min(offset)-point`` and the analogous maximum only after every
+    member is proven to remain strictly noncollapsed over the shared domain.
+    Four bundle-local adversarial residual half-widths are then composed with
+    the ABBA coefficients.  This one function is the registered arithmetic
+    path for both calibration blocks and consuming contrasts.
     """
 
     try:
@@ -961,15 +1000,78 @@ def two_shared_edge_common_mode_floor(
             "the sweep bound must equal the once-widened authenticated bound",
         )
 
-    block_widths: list[float] = []
-    for index, (delta, raw_onset, raw_offset, raw_residuals) in enumerate(
-        zip(
-            deltas,
-            onset_sweeps_j,
-            offset_sweeps_j,
-            bundle_residual_half_widths_j,
-            strict=True,
+    if (
+        isinstance(member_window_bounds_s, (str, bytes))
+        or not isinstance(member_window_bounds_s, Sequence)
+        or len(member_window_bounds_s) != n
+    ):
+        _common_mode_refuse(
+            "common_mode_nonseparable_window_domain",
+            "every block needs aligned A1/B1/B2/A2 member-window bounds",
         )
+    normalized_member_windows: list[tuple[tuple[float, float], ...]] = []
+    for block_index, raw_block_windows in enumerate(member_window_bounds_s):
+        if (
+            isinstance(raw_block_windows, (str, bytes))
+            or not isinstance(raw_block_windows, Sequence)
+            or len(raw_block_windows) != 4
+        ):
+            _common_mode_refuse(
+                "common_mode_nonseparable_window_domain",
+                f"block {block_index} must have aligned A1/B1/B2/A2 windows",
+            )
+        block_windows: list[tuple[float, float]] = []
+        for position, raw_window in zip(
+            ("A1", "B1", "B2", "A2"),
+            raw_block_windows,
+            strict=True,
+        ):
+            if (
+                isinstance(raw_window, (str, bytes))
+                or not isinstance(raw_window, Sequence)
+                or len(raw_window) != 2
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window must be "
+                    "(start_s, end_s)",
+                )
+            start = _common_mode_finite(raw_window[0])
+            end = _common_mode_finite(raw_window[1])
+            if (
+                start is None
+                or end is None
+                or not _common_mode_window_is_strictly_noncollapsed(
+                    start,
+                    end,
+                    bound,
+                )
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window is outside the "
+                    "strict noncollapse domain",
+                )
+            block_windows.append((start, end))
+        normalized_member_windows.append(tuple(block_windows))
+
+    block_widths: list[float] = []
+    block_inputs = zip(
+        deltas,
+        onset_sweeps_j,
+        offset_sweeps_j,
+        bundle_residual_half_widths_j,
+        normalized_member_windows,
+        strict=True,
+    )
+    for index, (
+        delta,
+        raw_onset,
+        raw_offset,
+        raw_residuals,
+        _member_windows,
+    ) in enumerate(
+        block_inputs
     ):
         try:
             onset = _clean_values(raw_onset, f"block {index} onset sweep")
@@ -1005,11 +1107,32 @@ def two_shared_edge_common_mode_floor(
                 "common_mode_precondition_failed",
                 f"block {index} sweeps must include the zero-edge point delta",
             )
-        lower = math.fsum((min(onset), min(offset), -delta))
-        upper = math.fsum((max(onset), max(offset), -delta))
-        shared_width = max(delta - lower, upper - delta)
+        extrema_scale = max(
+            1.0,
+            abs(delta),
+            *(abs(value) for value in onset),
+            *(abs(value) for value in offset),
+        )
+        extrema_pad = 8.0 * math.ulp(extrema_scale)
+        lower = _common_mode_outward(
+            math.fsum((min(onset), min(offset), -delta, -extrema_pad)),
+            -math.inf,
+        )
+        upper = _common_mode_outward(
+            math.fsum((max(onset), max(offset), -delta, extrema_pad)),
+            math.inf,
+        )
+        shared_width = _common_mode_outward(
+            max(delta - lower, upper - delta),
+            math.inf,
+        )
         local_width = math.fsum(residuals) / 2.0
-        block_widths.append(math.fsum((shared_width, local_width)))
+        block_widths.append(
+            _common_mode_outward(
+                math.fsum((shared_width, local_width)),
+                math.inf,
+            )
+        )
 
     estimate = comparative_false_effect_floor(
         deltas,
