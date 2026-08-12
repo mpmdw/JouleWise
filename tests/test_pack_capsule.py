@@ -324,8 +324,8 @@ class PackCapsuleTests(unittest.TestCase):
         self.assertEqual(reconstructed, pack_capsule.inject_freshness(original, "process-fetch.html"))
         self.assertEqual(stats["base64"], expected_stats["base64"])
         self.assertEqual(stats["shards"], 1)
-        self.assertLessEqual(stats["max_shard"], pack_capsule.MAX_SHARD_BASE64_BYTES)
-        self.assertLessEqual(stats["first_request_decode"], pack_capsule.MAX_FIRST_REQUEST_DECODE_BYTES)
+        self.assertGreater(stats["max_shard"], 0)
+        self.assertGreater(stats["first_request_decode"], 0)
         self.assertEqual(sink.text.count("\n  shared:"), 1)
         self.assertEqual(sink.text.count("/api/freshness"), 0)
         self.assertIn("export const PACKED_SITE", sink.text)
@@ -503,7 +503,7 @@ console.log(JSON.stringify({
             ):
                 self.require_pinned_esbuild()
 
-    def test_page_shard_refuses_an_individually_oversized_page(self):
+    def test_page_shard_warns_and_packs_an_individually_oversized_page(self):
         pages = {
             "/large": {
                 "html": "".join(chr(33 + (index * 37) % 90) for index in range(80_000)),
@@ -511,11 +511,17 @@ console.log(JSON.stringify({
                 "aliases": [],
             }
         }
-        with mock.patch.object(pack_capsule, "MAX_SHARD_BASE64_BYTES", 100):
-            with self.assertRaisesRegex(pack_capsule.CapsulePackError, "split the page"):
-                pack_capsule.page_shards(pages)
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(pack_capsule, "MAX_SHARD_BASE64_BYTES", 100),
+            contextlib.redirect_stderr(stderr),
+        ):
+            shards = pack_capsule.page_shards(pages)
+        self.assertEqual(shards, [["/large"]])
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn("page exceeds 100-byte runtime shard budget", stderr.getvalue())
 
-    def test_decision_log_page_shard_enforces_pagination_margin(self):
+    def test_decision_log_page_shard_warns_on_pagination_margin(self):
         pages = {
             "/decision_log_archive_1.html": {
                 "html": "".join(
@@ -526,6 +532,7 @@ console.log(JSON.stringify({
                 "aliases": [],
             }
         }
+        stderr = io.StringIO()
         with (
             mock.patch.object(pack_capsule, "MAX_SHARD_BASE64_BYTES", 1_000_000),
             mock.patch.object(
@@ -533,21 +540,27 @@ console.log(JSON.stringify({
                 "DECISION_LOG_SHARD_BASE64_TARGET_BYTES",
                 100,
             ),
-            self.assertRaisesRegex(
-                pack_capsule.CapsulePackError,
-                "decision-log page exceeds 100-byte pagination target",
-            ),
+            contextlib.redirect_stderr(stderr),
         ):
-            pack_capsule.page_shards(pages)
+            shards = pack_capsule.page_shards(pages)
+        self.assertEqual(shards, [["/decision_log_archive_1.html"]])
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn(
+            "decision-log page exceeds 100-byte pagination target",
+            stderr.getvalue(),
+        )
 
-    def test_runtime_decode_budget_fails_closed(self):
+    def test_runtime_decode_budget_warns_and_succeeds(self):
         pack_capsule.enforce_runtime_decode_budget(
             {"first_request_decode": pack_capsule.MAX_FIRST_REQUEST_DECODE_BYTES}
         )
-        with self.assertRaisesRegex(pack_capsule.CapsulePackError, "byte-loop iterations"):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
             pack_capsule.enforce_runtime_decode_budget(
                 {"first_request_decode": pack_capsule.MAX_FIRST_REQUEST_DECODE_BYTES + 1}
             )
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn("byte-loop iterations", stderr.getvalue())
 
     def test_shared_sources_deduplicates_and_rejects_conflicting_commits(self):
         pages = {
@@ -559,9 +572,8 @@ console.log(JSON.stringify({
         with self.assertRaises(pack_capsule.CapsulePackError):
             pack_capsule.shared_sources(pages)
 
-    def test_lakebed_estimate_enforces_exact_conservative_boundary(self):
-        # AUD-WO-039 / D-076-pending: this conservative guard is exclusively
-        # the fallback when an exact-version measured build is unavailable.
+    def test_lakebed_estimate_warns_beyond_conservative_boundary(self):
+        # D-135: the conservative estimator remains reported but cannot gate.
         self.assertLessEqual(
             pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES,
             int(pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES * 0.9),
@@ -590,8 +602,12 @@ console.log(JSON.stringify({
         self.assertLessEqual(
             estimate, pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES
         )
-        with self.assertRaisesRegex(pack_capsule.CapsulePackError, "at least 10% margin"):
-            pack_capsule.enforce_lakebed_budget(maximum_content + 1)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            overrun = pack_capsule.enforce_lakebed_budget(maximum_content + 1)
+        self.assertGreater(overrun, pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES)
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn("at least 10% margin", stderr.getvalue())
 
     def test_measured_mode_accepts_identical_input_that_estimator_overshoots(self):
         # Ed's AUD-WO-039 right-sizing ruling (D-076-pending) makes the exact
@@ -621,26 +637,31 @@ console.log(JSON.stringify({
         self.assertIn("postcondition mode: measured", stdout.getvalue())
         self.assertNotIn("estimator-only advisory", stdout.getvalue())
 
-    def test_measured_budget_and_hard_cap_are_loud_postconditions(self):
+    def test_measured_budget_warns_but_hard_cap_fails(self):
         executable = Path("/fixture/lakebed")
         with mock.patch.object(
             pack_capsule, "discover_lakebed_executable", return_value=executable
         ):
+            stderr = io.StringIO()
+            advisory_measurement = (
+                pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES + 1
+            )
             with (
                 mock.patch.object(
                     pack_capsule,
                     "measure_lakebed_artifact",
                     return_value=(
-                        pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES + 1,
+                        advisory_measurement,
                         pack_capsule.LAKEBED_VERSION,
                     ),
                 ),
                 contextlib.redirect_stdout(io.StringIO()),
-                self.assertRaisesRegex(
-                    pack_capsule.CapsulePackError, "exceeds measured-artifact"
-                ),
+                contextlib.redirect_stderr(stderr),
             ):
-                pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
+                observed = pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
+            self.assertEqual(observed, advisory_measurement)
+            self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+            self.assertIn("exceeds measured-artifact", stderr.getvalue())
             with (
                 mock.patch.object(
                     pack_capsule,
@@ -654,6 +675,52 @@ console.log(JSON.stringify({
                 self.assertRaisesRegex(pack_capsule.CapsulePackError, "over the 1 MiB cap"),
             ):
                 pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
+
+    def test_build_succeeds_over_advisory_budget_below_physical_cap(self):
+        measured = pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES + 1
+        self.assertLess(measured, pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES)
+        pages = {
+            "/known.html": {
+                "html": "<!doctype html><html><body>known</body></html>",
+                "sources": [],
+                "aliases": [],
+            }
+        }
+        with TemporaryDirectory() as temp_dir:
+            capsule = Path(temp_dir) / "capsule"
+            stderr = io.StringIO()
+            with (
+                mock.patch.object(pack_capsule, "CAPSULE", capsule),
+                mock.patch.object(
+                    pack_capsule,
+                    "CAPSULE_CONTENT",
+                    capsule / "server" / "content",
+                ),
+                mock.patch.object(pack_capsule, "pack_pages", return_value=pages),
+                mock.patch.object(pack_capsule, "stylesheet", return_value="body{}"),
+                mock.patch.object(
+                    pack_capsule,
+                    "build_info",
+                    return_value={"commit": "abc1234", "branch": "test"},
+                ),
+                mock.patch.object(
+                    pack_capsule,
+                    "discover_lakebed_executable",
+                    return_value=Path("/fixture/lakebed"),
+                ),
+                mock.patch.object(
+                    pack_capsule,
+                    "measure_lakebed_artifact",
+                    return_value=(measured, pack_capsule.LAKEBED_VERSION),
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(stderr),
+            ):
+                total = pack_capsule.build(no_fonts=True)
+
+        self.assertGreater(total, 0)
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn(f"{measured} bytes exceeds measured-artifact", stderr.getvalue())
 
     def test_estimator_only_postcondition_is_clearly_advisory(self):
         stdout = io.StringIO()
@@ -989,9 +1056,7 @@ console.log(JSON.stringify({
             measured, version = pack_capsule.measure_lakebed_artifact(executable, capsule)
 
         self.assertEqual(version, pack_capsule.LAKEBED_VERSION)
-        self.assertLessEqual(
-            measured, pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES
-        )
+        self.assertLessEqual(measured, pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES)
 
     def test_build_info_records_identity_and_explicit_reproducibility_inputs(self):
         with TemporaryDirectory() as temp_dir:

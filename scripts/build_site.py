@@ -34,9 +34,11 @@ DECISION_LOG_OUTPUT = "decision_log.html"
 DECISION_LOG_ARCHIVE_PREFIX = "decision_log_archive_"
 # Pagination is based on source bytes rather than zlib output so identical
 # markdown produces identical page assignments across Python/zlib versions.
-# A packer-side 24,000-byte gzip+Base64 target independently verifies the
-# resulting HTML and retains 20% headroom below the runtime's 30,000-byte cap.
+# D-135 makes this sizing target advisory; it still guides deterministic page
+# boundaries, while only an indivisible unit above Lakebed's physical cap may
+# make pagination fail.
 DECISION_LOG_PART_MARKDOWN_BYTES = 12_000
+LAKEBED_PLATFORM_CAP_BYTES = 1_048_576
 DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
 DECISION_LOG_SUBSECTION_RE = re.compile(r"(?m)^### ")
 MARKED_VERSION = "18.0.6"
@@ -196,6 +198,10 @@ MARKED_EXECUTABLE: Path | None = None
 
 def fail(component: str, source: str, expected: str) -> None:
     raise SiteBuildError(f"{component}: {source}: expected {expected}")
+
+
+def warn_advisory_budget(message: str) -> None:
+    print(f"ADVISORY BUDGET EXCEEDED (D-135): {message}", file=sys.stderr)
 
 
 def read_source(source: str) -> str:
@@ -404,11 +410,11 @@ def split_decision_log_markdown(
 
     Complete decisions remain the primary boundary. Oversized decisions use
     ``###`` subsections as secondary boundaries, and an oversized index uses
-    table rows. The byte ceiling is deliberately source-based, not
+    table rows. The byte target is deliberately source-based, not
     compression-based, so page assignments do not vary with the host zlib
-    version. A single subsection or index row remains indivisible and may
-    exceed this source ceiling; the packer remains the fail-closed authority
-    on emitted shards.
+    version. D-135 makes target overruns advisory. A structurally indivisible
+    subsection, entry, or index unit may exceed the target with a warning, but
+    may not exceed Lakebed's physical 1 MiB platform cap.
     """
     if max_part_markdown_bytes < 1:
         fail("decision log pagination", DECISION_LOG_SOURCE, "positive byte ceiling")
@@ -435,7 +441,8 @@ def split_decision_log_markdown(
         for index, match in enumerate(matches)
     ]
 
-    if len(md.encode("utf-8")) <= max_part_markdown_bytes:
+    page_ceiling = min(max_part_markdown_bytes, LAKEBED_PLATFORM_CAP_BYTES)
+    if len(md.encode("utf-8")) <= page_ceiling:
         return [
             DecisionLogPart(
                 out_name=DECISION_LOG_OUTPUT,
@@ -454,16 +461,38 @@ def split_decision_log_markdown(
         "# Decision Log — Continued\n\n"
         "This page continues the generated decision-log site view.\n\n"
     )
-    entry_payload_ceiling = max_part_markdown_bytes - max(
+    entry_prefix_bytes = max(
         len(recent_prefix.encode("utf-8")),
         len(archive_prefix.encode("utf-8")),
     )
+    entry_payload_ceiling = page_ceiling - entry_prefix_bytes
     if entry_payload_ceiling < 1:
-        fail(
-            "decision log pagination",
-            DECISION_LOG_SOURCE,
-            "byte ceiling large enough for a decision-log page heading",
+        if page_ceiling == LAKEBED_PLATFORM_CAP_BYTES:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                f"generated page heading below the {LAKEBED_PLATFORM_CAP_BYTES}-byte physical cap",
+            )
+        warn_advisory_budget(
+            f"decision-log page heading exceeds {max_part_markdown_bytes}-byte pagination target"
         )
+        entry_payload_ceiling = 1
+
+    def check_indivisible(value: str, label: str, prefix: str = "") -> None:
+        physical_bytes = len((prefix + value).encode("utf-8"))
+        if physical_bytes > LAKEBED_PLATFORM_CAP_BYTES:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                f"indivisible {label} at or below the {LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed physical cap",
+            )
+
+    def warn_if_over_target(value: str, label: str) -> None:
+        size = len(value.encode("utf-8"))
+        if size > max_part_markdown_bytes:
+            warn_advisory_budget(
+                f"{label} is {size} bytes, above the {max_part_markdown_bytes}-byte decision-log pagination target"
+            )
 
     def split_oversized_entry(
         decision_id: str,
@@ -475,11 +504,12 @@ def split_decision_log_markdown(
             match.start() for match in DECISION_LOG_SUBSECTION_RE.finditer(entry)
         ]
         if not subsection_starts:
-            fail(
-                "decision log pagination",
-                DECISION_LOG_SOURCE,
-                f"a ^### subsection boundary inside oversized {decision_id}",
+            check_indivisible(entry, f"{decision_id} entry", recent_prefix)
+            warn_if_over_target(
+                recent_prefix + entry,
+                f"indivisible {decision_id} entry page",
             )
+            return [((decision_id,), entry)]
         atoms = [entry[:subsection_starts[0]]] + [
             entry[
                 start:
@@ -490,6 +520,9 @@ def split_decision_log_markdown(
             for index, start in enumerate(subsection_starts)
         ]
         continuation = f"## ({decision_id} continued)\n\n"
+        for index, atom in enumerate(atoms):
+            prefix = recent_prefix if index == 0 else archive_prefix + continuation
+            check_indivisible(atom, f"{decision_id} subsection", prefix)
         chunks: list[tuple[tuple[str, ...], str]] = []
         chunk = atoms[0]
         for atom in atoms[1:]:
@@ -535,7 +568,7 @@ def split_decision_log_markdown(
     flush_group()
 
     def split_oversized_preamble(value: str) -> list[str]:
-        if len(value.encode("utf-8")) <= max_part_markdown_bytes:
+        if len(value.encode("utf-8")) <= page_ceiling:
             return [value]
         lines = value.splitlines(keepends=True)
         try:
@@ -548,11 +581,12 @@ def split_decision_log_markdown(
                 if lines[index].lstrip().startswith("|")
             )
         except StopIteration:
-            fail(
-                "decision log pagination",
-                DECISION_LOG_SOURCE,
-                "an index table for oversized preamble pagination",
+            check_indivisible(value, "decision-log preamble")
+            warn_if_over_target(
+                value,
+                "indivisible decision-log preamble page",
             )
+            return [value]
         if table_start + 2 > len(lines):
             fail(
                 "decision log pagination",
@@ -582,7 +616,7 @@ def split_decision_log_markdown(
         chunk_rows: list[str] = []
         for row in rows:
             candidate = prefix + "".join(chunk_rows) + row + after_table
-            if chunk_rows and len(candidate.encode("utf-8")) > max_part_markdown_bytes:
+            if chunk_rows and len(candidate.encode("utf-8")) > page_ceiling:
                 chunks.append(prefix + "".join(chunk_rows))
                 prefix = continuation_prefix
                 chunk_rows = []
@@ -605,6 +639,14 @@ def split_decision_log_markdown(
             markdown = prefix + payload
         else:
             markdown = payload
+        size = len(markdown.encode("utf-8"))
+        if size > LAKEBED_PLATFORM_CAP_BYTES:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                f"indivisible page unit at or below the {LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed physical cap",
+            )
+        warn_if_over_target(markdown, f"{out_name} page")
         parts.append(
             DecisionLogPart(
                 out_name=out_name,
@@ -1845,47 +1887,12 @@ def inject_heading_ids(body: str, toc: list[tuple[str, str]]) -> str:
     return body
 
 
-LOG_TRIM_DOCS = {
-    # Advisor-site size control (capsule 1 MiB cap): log pages keep the full
-    # index tables (in the preamble) plus the most recent entries; the repo
-    # remains the complete record (D-051 source-of-truth policy).
-    "docs/council_log.md": (re.compile(r"(?m)^## C-\d"), 6),
-}
-
-DECISION_LOG_SITE_ENTRY_COUNT = 6
-
-
-def trim_log_markdown(md: str, heading_re: re.Pattern[str], keep: int, source: str) -> str:
-    starts = [m.start() for m in heading_re.finditer(md)]
-    if len(starts) <= keep:
-        return md
-    omitted = len(starts) - keep
-    note = (
-        f"\n> **Site view:** the complete entry index appears above; the "
-        f"{omitted} older full entries are omitted from this page for capsule "
-        f"size. The complete log is the repository file "
-        f"[`{source}`](https://github.com/mpmdw/JouleWise/blob/main/{source}).\n\n"
-    )
-    return md[: starts[0]] + note + md[starts[-keep] :]
-
-
-def decision_log_site_markdown(md: str) -> str:
-    """Keep the existing bounded site view before lossless page splitting."""
-    return trim_log_markdown(
-        md,
-        DECISION_LOG_ENTRY_RE,
-        DECISION_LOG_SITE_ENTRY_COUNT,
-        DECISION_LOG_SOURCE,
-    )
-
-
 def decision_anchor_slugs(markdown: str) -> dict[str, str]:
     anchors: dict[str, str] = {}
     for text, slug in markdown_h2_toc(markdown):
         # Entry headings only ("D-NNN:"): an addendum heading such as
-        # "D-100 addendum (...)" rides inside a NEWER entry's body and must
-        # not mint the short anchor for a decision whose own entry may have
-        # aged out of the bounded site view.
+        # "D-100 addendum (...)" rides inside a newer entry's body and must
+        # not mint the short anchor for another decision.
         match = re.match(r"^(D-\d{3}):", text)
         if match:
             anchors[match.group(1)] = slug
@@ -1986,9 +1993,6 @@ def render_doc_page(
 ) -> str:
     path = ROOT / doc.source
     md = path.read_text(encoding="utf-8") if markdown is None else markdown
-    if doc.source in LOG_TRIM_DOCS:
-        heading_re, keep = LOG_TRIM_DOCS[doc.source]
-        md = trim_log_markdown(md, heading_re, keep, doc.source)
     body = render_markdown(path, no_marked=no_marked, text=md)
     toc = markdown_h2_toc(md)
     if not no_marked:
@@ -2020,7 +2024,7 @@ def render_decision_log_pages(
     no_marked: bool,
     stamp: SourceStamp,
 ) -> dict[str, str]:
-    parts = split_decision_log_markdown(decision_log_site_markdown(md))
+    parts = split_decision_log_markdown(md)
     docs = {
         doc.out_name: doc
         for doc in doc_pages("docs/run_reports/unused.md", len(parts))
@@ -2184,9 +2188,7 @@ def build(no_marked: bool = False) -> None:
     report_source = latest_report_source_from_sessions(sessions)
     report_md = read_source(report_source)
     floor_summary = parse_verified_floor_summary(read_json_source(FLOOR_EXTRACTION_SOURCE))
-    decision_parts = split_decision_log_markdown(
-        decision_log_site_markdown(decision_md)
-    )
+    decision_parts = split_decision_log_markdown(decision_md)
     docs = doc_pages(report_source, len(decision_parts))
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
     for source in [
