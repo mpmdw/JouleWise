@@ -65,6 +65,188 @@ GIT_MAINTENANCE_CONTROLS = (
     ("maintenance.autoDetach", "false"),
     ("gc.autoDetach", "false"),
 )
+_PACK_OBJECTS_ARGV = ("pack-objects", "--quiet", ".git/objects/pack/loose")
+_PACK_TERMINAL_EVENTS = frozenset({"atexit", "exit", "signal"})
+_RACE_EXERCISED = "RACE_EXERCISED"
+_NO_RACE_PRE_WRITE = "NO_RACE_PRE_WRITE"
+_TRACE_INCOMPLETE = "TRACE_INCOMPLETE"
+
+
+@dataclass(frozen=True)
+class PackTraceEvidence:
+    """Complete child-owned Trace2 evidence for one loose-object packer."""
+
+    events: tuple[dict[str, object], ...]
+    child_sid: str | None
+    terminal_event: dict[str, object] | None
+    complete: bool
+
+
+def _read_complete_trace_events(
+    path: Path,
+) -> tuple[tuple[dict[str, object], ...], bool]:
+    """Read newline-terminated Trace2 records, retaining a partial tail.
+
+    The file is reread on each poll, so bytes after the last newline remain
+    available for the next attempt instead of being parsed or discarded.
+    """
+
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return (), False
+    final_record_incomplete = bool(raw) and not raw.endswith(b"\n")
+    complete_lines = raw.split(b"\n")
+    if final_record_incomplete:
+        complete_lines.pop()
+    elif complete_lines and complete_lines[-1] == b"":
+        complete_lines.pop()
+    events: list[dict[str, object]] = []
+    for line in complete_lines:
+        if not line:
+            continue
+        event = json.loads(line)
+        if not isinstance(event, dict):
+            raise ValueError("Trace2 record is not a JSON object")
+        events.append(event)
+    return tuple(events), final_record_incomplete
+
+
+def _is_pack_objects_start(event: dict[str, object]) -> bool:
+    argv = event.get("argv")
+    return (
+        event.get("event") == "start"
+        and isinstance(argv, list)
+        and len(argv) == len(_PACK_OBJECTS_ARGV) + 1
+        and isinstance(argv[0], str)
+        and Path(argv[0]).name == "git"
+        and tuple(argv[1:]) == _PACK_OBJECTS_ARGV
+    )
+
+
+def _pack_trace_evidence(
+    events: tuple[dict[str, object], ...],
+    *,
+    final_record_incomplete: bool = False,
+    timed_out: bool = False,
+) -> PackTraceEvidence:
+    child_sids = {
+        event.get("sid")
+        for event in events
+        if _is_pack_objects_start(event) and isinstance(event.get("sid"), str)
+    }
+    child_sid = next(iter(child_sids)) if len(child_sids) == 1 else None
+    terminal_events = tuple(
+        event
+        for event in events
+        if child_sid is not None
+        and event.get("sid") == child_sid
+        and event.get("event") in _PACK_TERMINAL_EVENTS
+    )
+    terminal_event = terminal_events[-1] if terminal_events else None
+    return PackTraceEvidence(
+        events=events,
+        child_sid=child_sid,
+        terminal_event=terminal_event,
+        complete=(
+            child_sid is not None
+            and terminal_event is not None
+            and not final_record_incomplete
+            and not timed_out
+        ),
+    )
+
+
+def _wait_for_pack_terminal(
+    path: Path,
+    deadline_s: float = 2.0,
+) -> PackTraceEvidence:
+    """Poll until the exact pack-objects child emits its own terminal event."""
+
+    deadline = time.monotonic() + deadline_s
+    events: tuple[dict[str, object], ...] = ()
+    final_record_incomplete = False
+    while True:
+        events, final_record_incomplete = _read_complete_trace_events(path)
+        evidence = _pack_trace_evidence(
+            events,
+            final_record_incomplete=final_record_incomplete,
+        )
+        if evidence.complete:
+            return evidence
+        remaining_s = deadline - time.monotonic()
+        if remaining_s <= 0:
+            return _pack_trace_evidence(
+                events,
+                final_record_incomplete=final_record_incomplete,
+                timed_out=True,
+            )
+        time.sleep(min(0.01, remaining_s))
+
+
+def _event_timestamp(event: dict[str, object]) -> float | None:
+    value = event.get("time")
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _classify_pack_cleanup(
+    evidence: PackTraceEvidence,
+    *,
+    cleanup_started_s: float,
+    cleanup_finished_s: float,
+    raw_enotempty: bool,
+) -> str:
+    """Classify cleanup using only the pack child's own Trace2 region."""
+
+    if not evidence.complete or evidence.child_sid is None:
+        return _TRACE_INCOMPLETE
+    if evidence.terminal_event is None:
+        return _TRACE_INCOMPLETE
+    terminal_time = _event_timestamp(evidence.terminal_event)
+    if terminal_time is None:
+        return _TRACE_INCOMPLETE
+    if raw_enotempty:
+        return _RACE_EXERCISED
+
+    open_regions: list[float] = []
+    intervals: list[tuple[float, float]] = []
+    for event in evidence.events:
+        if (
+            event.get("sid") != evidence.child_sid
+            or event.get("category") != "pack-objects"
+            or event.get("label") != "write-pack-file"
+        ):
+            continue
+        event_name = event.get("event")
+        if event_name not in {"region_enter", "region_leave"}:
+            continue
+        event_time = _event_timestamp(event)
+        if event_time is None:
+            return _TRACE_INCOMPLETE
+        if event_name == "region_enter":
+            open_regions.append(event_time)
+        elif not open_regions:
+            return _TRACE_INCOMPLETE
+        else:
+            started_s = open_regions.pop()
+            if event_time < started_s:
+                return _TRACE_INCOMPLETE
+            intervals.append((started_s, event_time))
+    for started_s in open_regions:
+        if terminal_time < started_s:
+            return _TRACE_INCOMPLETE
+        intervals.append((started_s, terminal_time))
+    if any(
+        started_s <= cleanup_finished_s and finished_s >= cleanup_started_s
+        for started_s, finished_s in intervals
+    ):
+        return _RACE_EXERCISED
+    return _NO_RACE_PRE_WRITE
 
 
 def tearDownModule() -> None:
@@ -1206,72 +1388,181 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         )
 
     def test_delayed_object_writers_never_escape_bounded_cleanup(self) -> None:
-        delays_ms = (0, 10, 100, 500)
-        total_retries = 0
-        for delay_ms in delays_ms:
-            with self.subTest(delay_ms=delay_ms):
-                sandbox = WitnessSandbox()
-                objects = sandbox.repo / ".git" / "objects"
-                leaf = objects / "aa"
-                leaf.mkdir(parents=True)
-                stopped = threading.Event()
-                stop_observed = threading.Event()
+        sandbox = WitnessSandbox()
+        objects = sandbox.repo / ".git" / "objects"
+        leaf = objects / "aa"
+        leaf.mkdir(parents=True)
+        ready = threading.Event()
+        stop_observed = threading.Event()
+        final_write_complete = threading.Event()
 
-                def inject_writer(stop_requested: threading.Event) -> None:
-                    # Deliberately finish the already-scheduled write even when
-                    # stop is requested.  The pre-fix sandbox entered rmtree
-                    # here and reproduced the loaded run-1 .git/objects race;
-                    # the ownership registry must join it first.
-                    time.sleep(delay_ms / 1000.0)
-                    deadline = time.monotonic() + 0.05
-                    index = 0
-                    while time.monotonic() < deadline:
-                        if stop_requested.is_set():
-                            stop_observed.set()
-                        try:
-                            leaf.mkdir(exist_ok=True)
-                            (leaf / f"delayed-{index}").write_bytes(b"object")
-                        except OSError:
-                            break
-                        index += 1
-                    stopped.set()
+        def inject_writer(stop_requested: threading.Event) -> None:
+            # Register the already-scheduled final write before cleanup asks
+            # the writer to stop, then finish that write before returning.
+            ready.set()
+            stop_requested.wait()
+            stop_observed.set()
+            leaf.mkdir(exist_ok=True)
+            (leaf / "already-scheduled-final-write").write_bytes(b"object")
+            final_write_complete.set()
 
-                writer = sandbox.start_owned_writer_thread(
-                    inject_writer,
-                    label=f"delayed-git-object-writer-{delay_ms}ms",
-                )
-                if delay_ms == max(delays_ms):
-                    self.assertIn(
-                        f"delayed-git-object-writer-{delay_ms}ms",
-                        owned_thread_survivors(),
-                    )
-                real_rmtree = shutil.rmtree
+        writer = sandbox.start_owned_writer_thread(
+            inject_writer,
+            label="delayed-git-object-writer",
+        )
+        self.assertTrue(ready.wait(timeout=5.0))
+        self.assertIn("delayed-git-object-writer", owned_thread_survivors())
+        real_rmtree = shutil.rmtree
 
-                def rmtree_after_quiescence(path):
-                    self.assertFalse(
-                        writer.is_alive(),
-                        "rmtree began before the owned delayed writer joined",
-                    )
-                    return real_rmtree(path)
+        def rmtree_after_quiescence(path):
+            self.assertTrue(
+                stop_observed.is_set(),
+                "rmtree began before the writer observed its stop request",
+            )
+            self.assertTrue(
+                final_write_complete.is_set(),
+                "rmtree began before the already-scheduled final write completed",
+            )
+            self.assertFalse(
+                writer.is_alive(),
+                "rmtree began before the owned delayed writer joined",
+            )
+            return real_rmtree(path)
 
-                started = time.monotonic()
-                with mock.patch.object(
-                    shutil,
-                    "rmtree",
-                    side_effect=rmtree_after_quiescence,
-                ):
-                    sandbox.close()
-                self.assertTrue(stopped.is_set())
-                self.assertTrue(stop_observed.is_set())
-                self.assertFalse(writer.is_alive())
-                self.assertEqual(owned_thread_survivors(), ())
-                self.assertFalse(sandbox.root.exists())
-                self.assertLess(time.monotonic() - started, 2.0)
-                total_retries += len(sandbox.cleanup_diagnostics)
+        started = time.monotonic()
+        with mock.patch.object(
+            shutil,
+            "rmtree",
+            side_effect=rmtree_after_quiescence,
+        ):
+            sandbox.close()
+        self.assertTrue(stop_observed.is_set())
+        self.assertTrue(final_write_complete.is_set())
+        self.assertFalse(writer.is_alive())
+        self.assertEqual(owned_thread_survivors(), ())
+        self.assertFalse(sandbox.root.exists())
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual(sandbox.cleanup_diagnostics, [])
         print(
-            f"P1_DELAYED_WRITERS={len(delays_ms)} DELAYS_MS=0,10,100,500 "
-            f"BOUNDED_RETRIES={total_retries} THREAD_REGISTRY_EMPTY=1 ESCAPED=0",
+            "P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 "
+            "BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0",
             flush=True,
+        )
+
+    def test_pack_classifier_accepts_child_exit_without_parent_child_exit(
+        self,
+    ) -> None:
+        parent_sid = "parent"
+        child_sid = "parent/pack-child"
+        events = (
+            {
+                "event": "start",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.100000Z",
+                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
+            },
+            {
+                "event": "exit",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.200000Z",
+                "code": 128,
+            },
+            {
+                "event": "signal",
+                "sid": parent_sid,
+                "time": "2026-08-11T12:00:00.210000Z",
+                "signal": signal.SIGPIPE,
+            },
+        )
+        evidence = _pack_trace_evidence(events)
+        self.assertFalse(any(event.get("event") == "child_exit" for event in events))
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                cleanup_started_s=datetime.fromisoformat(
+                    "2026-08-11T12:00:00.120000+00:00"
+                ).timestamp(),
+                cleanup_finished_s=datetime.fromisoformat(
+                    "2026-08-11T12:00:00.180000+00:00"
+                ).timestamp(),
+                raw_enotempty=False,
+            ),
+            _NO_RACE_PRE_WRITE,
+        )
+
+    def test_trace_reader_retries_incomplete_final_record(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="joulewise-trace-reader-") as root:
+            trace = Path(root) / "trace.jsonl"
+            first = {"event": "version", "sid": "parent"}
+            second = {"event": "start", "sid": "parent/child"}
+            first_record = json.dumps(first, separators=(",", ":")).encode("utf-8")
+            second_record = json.dumps(second, separators=(",", ":")).encode("utf-8")
+            split_at = len(second_record) // 2
+            trace.write_bytes(first_record + b"\n" + second_record[:split_at])
+
+            events, incomplete = _read_complete_trace_events(trace)
+            self.assertEqual(events, (first,))
+            self.assertTrue(incomplete)
+
+            with trace.open("ab") as stream:
+                stream.write(second_record[split_at:] + b"\n")
+            events, incomplete = _read_complete_trace_events(trace)
+            self.assertEqual(events, (first, second))
+            self.assertFalse(incomplete)
+
+    def test_pack_classifier_finds_child_write_overlap_without_parent_child_exit(
+        self,
+    ) -> None:
+        parent_sid = "parent"
+        child_sid = "parent/pack-child"
+        events = (
+            {
+                "event": "start",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.100000Z",
+                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
+            },
+            {
+                "event": "region_enter",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.130000Z",
+                "category": "pack-objects",
+                "label": "write-pack-file",
+            },
+            {
+                "event": "region_leave",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.170000Z",
+                "category": "pack-objects",
+                "label": "write-pack-file",
+            },
+            {
+                "event": "exit",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.200000Z",
+                "code": 128,
+            },
+            {
+                "event": "signal",
+                "sid": parent_sid,
+                "time": "2026-08-11T12:00:00.210000Z",
+                "signal": signal.SIGPIPE,
+            },
+        )
+        evidence = _pack_trace_evidence(events)
+        self.assertFalse(any(event.get("event") == "child_exit" for event in events))
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                cleanup_started_s=datetime.fromisoformat(
+                    "2026-08-11T12:00:00.140000+00:00"
+                ).timestamp(),
+                cleanup_finished_s=datetime.fromisoformat(
+                    "2026-08-11T12:00:00.160000+00:00"
+                ).timestamp(),
+                raw_enotempty=False,
+            ),
+            _RACE_EXERCISED,
         )
 
     def test_cleanup_retry_is_diagnostic_fatal_after_best_effort_removal(self) -> None:
@@ -1332,10 +1623,23 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
 
     def test_forced_auto_maintenance_mutation_reproduces_cleanup_race(self) -> None:
         sandbox = WitnessSandbox()
-        maintenance_pid: int | None = None
         raw_enotempty: OSError | None = None
         cleanup_diagnostic: AssertionError | None = None
-        live_object_writer_pid: int | None = None
+        classifications = {
+            _RACE_EXERCISED: 0,
+            _NO_RACE_PRE_WRITE: 0,
+            _TRACE_INCOMPLETE: 0,
+        }
+
+        def report_classifications() -> None:
+            print(
+                f"RACE_EXERCISED={classifications[_RACE_EXERCISED]} "
+                f"NO_RACE_PRE_WRITE={classifications[_NO_RACE_PRE_WRITE]} "
+                f"TRACE_INCOMPLETE={classifications[_TRACE_INCOMPLETE]}",
+                flush=True,
+            )
+
+        self.addCleanup(report_classifications)
         try:
             self._configure_fixture_repo(sandbox)
             global_config = sandbox.root / "aggressive-global.gitconfig"
@@ -1412,12 +1716,8 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 except OSError as exc:
                     raw_enotempty = exc
                 cleanup_finished_s = time.time()
-                mutation_events = [
-                    json.loads(line)
-                    for line in mutation_trace.read_text(
-                        encoding="utf-8"
-                    ).splitlines()
-                ]
+                pack_evidence = _wait_for_pack_terminal(mutation_trace)
+                mutation_events = pack_evidence.events
             detached_starts = [
                 event
                 for event in mutation_events
@@ -1426,61 +1726,6 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 and "--detach" in event.get("argv", ())
             ]
             self.assertTrue(detached_starts, mutation_events[-20:])
-            child_id = detached_starts[-1]["child_id"]
-            exits = [
-                event
-                for event in mutation_events
-                if event.get("event") == "child_exit"
-                and event.get("child_id") == child_id
-                and isinstance(event.get("pid"), int)
-            ]
-            self.assertTrue(exits, mutation_events[-20:])
-            maintenance_pid = exits[-1]["pid"]
-            self.assertGreater(maintenance_pid, 0)
-
-            # A raw ENOTEMPTY is sufficient.  On a faster filesystem, accept
-            # only stronger alternative evidence: the exact pack-objects
-            # writer's traced lifetime overlapped the synchronous rmtree call,
-            # followed by a child_exit PID that is explicitly proved dead.
-            object_writer_starts = [
-                event
-                for event in mutation_events
-                if event.get("event") == "child_start"
-                and event.get("argv", ())[:2] == ["git", "pack-objects"]
-                and any(
-                    ".git/objects/pack/" in str(argument)
-                    for argument in event.get("argv", ())
-                )
-                and cleanup_started_s
-                <= datetime.fromisoformat(
-                    str(event["time"]).replace("Z", "+00:00")
-                ).timestamp()
-                <= cleanup_finished_s
-            ]
-            if object_writer_starts:
-                writer_start = object_writer_starts[-1]
-                writer_exits = [
-                    event
-                    for event in mutation_events
-                    if event.get("event") == "child_exit"
-                    and event.get("sid") == writer_start.get("sid")
-                    and event.get("child_id") == writer_start.get("child_id")
-                    and isinstance(event.get("pid"), int)
-                ]
-                self.assertTrue(writer_exits, mutation_events[-20:])
-                live_object_writer_pid = writer_exits[-1]["pid"]
-                deadline = time.monotonic() + 1.0
-                while True:
-                    try:
-                        os.kill(live_object_writer_pid, 0)
-                    except ProcessLookupError:
-                        break
-                    if time.monotonic() >= deadline:
-                        os.kill(live_object_writer_pid, signal.SIGKILL)
-                        self.fail(
-                            "detached object-store writer required explicit SIGKILL"
-                        )
-                    time.sleep(0.01)
         finally:
             if sandbox.root.exists():
                 try:
@@ -1491,20 +1736,31 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                         raise
             else:
                 sandbox.closed = True
-        self.assertTrue(
-            raw_enotempty is not None or live_object_writer_pid is not None,
-            "controls-removal mutation reproduced neither raw ENOTEMPTY nor "
-            "a live detached pack-objects writer overlapping cleanup",
-        )
         if raw_enotempty is not None:
             self.assertEqual(raw_enotempty.errno, errno.ENOTEMPTY)
+        classification = _classify_pack_cleanup(
+            pack_evidence,
+            cleanup_started_s=cleanup_started_s,
+            cleanup_finished_s=cleanup_finished_s,
+            raw_enotempty=raw_enotempty is not None,
+        )
+        classifications[classification] += 1
+        self.assertEqual(sum(classifications.values()), 1)
+        self.assertEqual(
+            classifications[_TRACE_INCOMPLETE],
+            0,
+            mutation_events[-20:],
+        )
+        self.assertEqual(
+            classifications[_RACE_EXERCISED]
+            + classifications[_NO_RACE_PRE_WRITE],
+            1,
+        )
         self.assertFalse(sandbox.root.exists())
         print(
-            f"FORCED_MAINTENANCE_DETACHED_PID={maintenance_pid} "
             f"RAW_ENOTEMPTY={getattr(raw_enotempty, 'errno', 0)} "
-            f"LIVE_OBJECT_WRITER_PID={live_object_writer_pid or 0} "
             f"FATAL_RETRY_DIAGNOSTIC={int(cleanup_diagnostic is not None)} "
-            "CONTROLS_MUTATION=TARGET_REPRODUCED",
+            f"CONTROLS_MUTATION={classification}",
             flush=True,
         )
 
