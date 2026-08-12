@@ -161,13 +161,47 @@ def _finite_float(value: str) -> float:
     return parsed
 
 
-def _strict_json(raw: bytes, label: str) -> None:
+def _finite_int(value: str) -> int:
+    parsed = int(value)
     try:
-        json.loads(
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _nonfinite_number(value)
+    return parsed
+
+
+def _reserved_vocabulary_path(value: object, where: str) -> str | None:
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            child_path = f"{where}.{key}"
+            if key == "estimator_registration":
+                return child_path
+            nested = _reserved_vocabulary_path(child, child_path)
+            if nested is not None:
+                return nested
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            nested = _reserved_vocabulary_path(child, f"{where}[{index}]")
+            if nested is not None:
+                return nested
+    return None
+
+
+def _strict_json(
+    raw: bytes,
+    label: str,
+    *,
+    allow_governed_spec_vocabulary: bool = False,
+) -> None:
+    try:
+        value = json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_duplicate_key,
             parse_constant=_nonfinite_number,
             parse_float=_finite_float,
+            parse_int=_finite_int,
         )
     except V2AuthenticationInputError as exc:
         raise V2AuthenticationInputError(exc.reason, f"{label}: {exc.detail}") from exc
@@ -176,9 +210,20 @@ def _strict_json(raw: bytes, label: str) -> None:
             "v2_authentication_invalid_json",
             f"{label} is not valid UTF-8 JSON: {exc}",
         ) from exc
+    forbidden = _reserved_vocabulary_path(value, label)
+    if forbidden is not None and not allow_governed_spec_vocabulary:
+        raise V2AuthenticationInputError(
+            "v2_authentication_forbidden_json_key",
+            "forbidden key 'estimator_registration' at " + forbidden,
+        )
 
 
-def _strict_jsonl(raw: bytes, label: str) -> None:
+def _strict_jsonl(
+    raw: bytes,
+    label: str,
+    *,
+    allow_governed_spec_vocabulary: bool = False,
+) -> None:
     try:
         lines = raw.decode("utf-8").splitlines()
     except UnicodeDecodeError as exc:
@@ -188,7 +233,13 @@ def _strict_jsonl(raw: bytes, label: str) -> None:
         ) from exc
     for index, line in enumerate(lines, start=1):
         if line.strip():
-            _strict_json(line.encode("utf-8"), f"{label} line {index}")
+            _strict_json(
+                line.encode("utf-8"),
+                f"{label} line {index}",
+                allow_governed_spec_vocabulary=(
+                    allow_governed_spec_vocabulary
+                ),
+            )
 
 
 def _forced_grammar(identity: str, grammar: AuthenticationGrammar) -> AuthenticationGrammar:
@@ -203,11 +254,25 @@ def _forced_grammar(identity: str, grammar: AuthenticationGrammar) -> Authentica
     return grammar
 
 
-def _parse_strict(raw: bytes, grammar: AuthenticationGrammar, label: str) -> None:
+def _parse_strict(
+    raw: bytes,
+    grammar: AuthenticationGrammar,
+    label: str,
+    *,
+    allow_governed_spec_vocabulary: bool = False,
+) -> None:
     if grammar == "json":
-        _strict_json(raw, label)
+        _strict_json(
+            raw,
+            label,
+            allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
+        )
     elif grammar == "jsonl":
-        _strict_jsonl(raw, label)
+        _strict_jsonl(
+            raw,
+            label,
+            allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
+        )
 
 
 def _read_nofollow_bytes(directory: Path | str, relative: str) -> bytes:
@@ -256,6 +321,7 @@ class V2AuthenticationReadSession:
 
     def __init__(self) -> None:
         self._records: dict[str, AuthenticationInputRecord] = {}
+        self._governed_spec_vocabulary_identities: set[str] = set()
         self._lock = threading.RLock()
         self._token: Token[V2AuthenticationReadSession | None] | None = None
         self.instrument_calibration_physics_cache: dict[str, float] = {}
@@ -279,6 +345,22 @@ class V2AuthenticationReadSession:
     def records(self) -> Mapping[str, AuthenticationInputRecord]:
         with self._lock:
             return MappingProxyType(dict(self._records))
+
+    def allow_governed_extraction_spec(self, path: Path | str) -> None:
+        """Allow registration declarations only for one named governed spec."""
+
+        identity = str(Path(path).resolve(strict=False))
+        if Path(identity).suffix.lower() != ".json":
+            raise ValueError("governed extraction spec must be a JSON file")
+        with self._lock:
+            if identity in self._records:
+                if identity in self._governed_spec_vocabulary_identities:
+                    return
+                raise RuntimeError(
+                    "governed extraction spec vocabulary must be authorized "
+                    "before the first authentication read"
+                )
+            self._governed_spec_vocabulary_identities.add(identity)
 
     def _register(
         self,
@@ -328,7 +410,14 @@ class V2AuthenticationReadSession:
         with self._lock:
             with builtins.open(path, "rb") as handle:
                 raw = handle.read()
-            _parse_strict(raw, effective, label)
+            _parse_strict(
+                raw,
+                effective,
+                label,
+                allow_governed_spec_vocabulary=(
+                    normalized in self._governed_spec_vocabulary_identities
+                ),
+            )
             self._register(
                 normalized, hashlib.sha256(raw).hexdigest(), effective, label
             )
@@ -349,7 +438,14 @@ class V2AuthenticationReadSession:
         effective = _forced_grammar(identity, grammar)
         with self._lock:
             raw = _read_nofollow_bytes(root, relative)
-            _parse_strict(raw, effective, label)
+            _parse_strict(
+                raw,
+                effective,
+                label,
+                allow_governed_spec_vocabulary=(
+                    identity in self._governed_spec_vocabulary_identities
+                ),
+            )
             self._register(
                 identity, hashlib.sha256(raw).hexdigest(), effective, label
             )
@@ -367,7 +463,14 @@ class V2AuthenticationReadSession:
             raise ValueError("non-filesystem authentication identities must use git:")
         effective = _forced_grammar(identity, grammar)
         with self._lock:
-            _parse_strict(raw, effective, label)
+            _parse_strict(
+                raw,
+                effective,
+                label,
+                allow_governed_spec_vocabulary=(
+                    identity in self._governed_spec_vocabulary_identities
+                ),
+            )
             self._register(
                 identity, hashlib.sha256(raw).hexdigest(), effective, label
             )

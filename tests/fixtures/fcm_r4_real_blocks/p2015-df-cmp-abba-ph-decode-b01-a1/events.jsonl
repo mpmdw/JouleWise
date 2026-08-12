@@ -1,0 +1,3 @@
+{"timestamp_s": 1784801456.3224251, "event_type": "phase_start", "phase": "decode", "message": "mlx decode started", "metadata": {"phase_boundary_method": "first_token", "max_tokens": 512, "eos_suppressed": true, "original_eos_token_ids": [151645]}}
+{"timestamp_s": 1784801458.2550468, "event_type": "phase_end", "phase": "decode", "message": "mlx decode completed", "metadata": {"phase_boundary_method": "first_token", "emitted_tokens": 512, "requested_output_tokens": 512}}
+
