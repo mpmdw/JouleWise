@@ -208,6 +208,94 @@ Before quiet time:
   casually.
 - [ ] Record `git rev-parse HEAD`.
 
+### D-134 readiness freeze, committed-pack digest, and rehearsal
+
+For an ALPHA, BETA, or GAMMA night, `PACK_ROOT` means the exact per-plan
+campaign-pack directory, and `PACK_ID` means that directory's final path
+component, which the readiness implementation records as the pack ID. The
+sole authority for which readiness rows belong to those plans is
+`configs/arm_readiness/d117_row_registry_v1.json`. Record that registry's
+path, SHA-256, registry ID, and plan profile in the plan tree; the Markdown
+readiness pages are checked human views, not row authority.
+
+Freeze readiness only with the implemented command:
+
+```sh
+python3 scripts/generate_arm_readiness.py freeze \
+  --pack-root "$PACK_ROOT"
+```
+
+The command writes the pack's no-clobber freeze receipt (initially
+`freeze-0001.json`) and GNU-style SHA-256 sidecar under the governed
+`PACK_ROOT/arm_readiness.freeze.receipts/freeze-NNNN.json` namespace. A freeze receipt
+contains only freeze-evaluable rows and always has
+`arm_disposition: NOT_APPLICABLE`; even a `PASS` freeze receipt cannot license
+a night. `plan_tree.json` pins that receipt's relative path and digest and
+declares the future arm-receipt schema, governed namespace, and pack-digest
+algorithm through the required D-134 attachment. It deliberately does **not**
+name or hash a future arm receipt.
+
+The freeze update to `plan_tree.json` uses the pack generators' established
+two-space, insertion-order JSON rendering. This is an intentional,
+load-bearing byte contract, not an oversight: changing it to sorted-key
+rendering would make the matching pack generator's post-freeze
+`generate_configs.py --check` disagree with the frozen bytes. Do not “tidy”
+that serialization.
+
+After the freeze changes and every other pack byte are reviewed and
+committed, the final pack digest is
+`joulewise.committed_pack_tree_sha256.v1`. It is the SHA-256 of this exact
+framing:
+
+```text
+b"joulewise.committed_pack_tree_sha256.v1\n" +
+for each committed file, sorted by raw UTF-8 path bytes:
+  relative_path + NUL + git_mode + NUL + byte_length + NUL +
+  lowercase_sha256_of_file_bytes + LF
+```
+
+The digest includes every committed file below `PACK_ROOT`, including
+`plan_tree.json`, its sidecar, the U11 identity-projection receipt, the freeze
+receipt, readiness evidence, and their sidecars. Only ordinary Git blobs with
+mode `100644` or `100755` are admitted. Missing, untracked, changed,
+non-UTF-8, symlink, submodule, or other special entries refuse. No pack file
+stores this digest: the external arm receipt computes and binds it after the
+pack is final, which prevents an arm-receipt hash cycle.
+
+Readiness evidence has exactly two governed namespaces. `PACK` means
+`PACK_ROOT/arm_readiness.evidence/`; `WINDOW_CUSTODY` means
+`CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`. Evidence paths in receipts are
+relative to one of those roots and may not escape it. Every JSON receipt has
+its matching `.sha256` sidecar; a missing, extra, malformed, stale, or
+unpaired entry refuses rather than being skipped.
+
+After the final pack is committed at the reviewed HEAD, the lead creates the
+non-authorizing readiness rehearsal receipt with:
+
+```sh
+python3 scripts/generate_arm_readiness.py dry-run \
+  --pack-root "$PACK_ROOT" \
+  --window-custody-root "$CUSTODY_ROOT" \
+  --rehearsal-id "$REHEARSAL_ID" \
+  --synthetic-root "$SYNTHETIC_ROOT"
+```
+
+This D-134 dry run is distinct from the campaign-stage `--dry-run` commands
+below. It executes the **real** calibration reservation CLI with `--execute`
+and the production ledger-writer lifecycle through both reserved calibration
+slots, under the real lease implementation. It stops before live MLX or
+`powermetrics` capture because entering capture would breach the quiet-machine
+fence while an agent or desk session is active. Thus the rehearsal is neither
+mock-only nor a live measurement. It writes
+`CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json`, has
+`arm_disposition: NOT_APPLICABLE`, may bypass no freeze refusal, and can never
+serve as an arm receipt. Require its `PASS` receipt to bind the exact final
+reviewed HEAD and final pack digest; any later HEAD or pack-byte change makes
+it stale. Synthetic substitution is closed to `LIVE_PRIVILEGE`, `LIVE_CLOCK`,
+`LIVE_MACHINE`, `LIVE_POWER`, `PRODUCTION_ROOTS`, `PRODUCTION_BACKUPS`,
+`PRODUCTION_LEDGER`, and `LAUNCH_CONSUMPTION`; the receipt must enumerate each
+substitution in `omitted_live_domains`.
+
 Useful checks:
 
 ```sh
@@ -385,12 +473,31 @@ nor verify this step. Ed performs it by hand.
   sudo systemsetup -setusingnetworktime off
   ```
 
+- [ ] Preserve the independent-clock comparison and the captured prior
+  `systemsetup` output as source evidence. Require an authenticated exact-key
+  `CLOCK_ATTESTATION` receipt in
+  `CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`; its irreducible observation
+  is an `OPERATOR_ATTESTATION`, not a hand-entered readiness verdict.
+- [ ] After disabling network time, require a fresh system probe and an
+  authenticated exact-key `CLOCK_PROBE` receipt in the same namespace. The
+  probe, not an operator-entered row value, establishes whether automatic
+  network time is off. For both receipt kinds, “exact-key” means the top-level
+  object contains exactly `schema_version`, `evidence_id`, `kind`, `status`,
+  `issued_at_utc`, `valid_until_monotonic_ns`, `pack_sha256`, `head_commit`,
+  `facts`, `checks`, `reason_codes`, and `assurance`; unknown or missing keys
+  refuse.
+
 - [ ] Do **not** hand-count a settle here. §5C removed the separate pre-launch
   settle step: the final 180-second settle is **chain-owned** (the `settle` at
   the top of `window-chain.zsh`, §6), and §5's ≥10-minute untouched idle
   covers this administrator action along with every other operator action
   before the §5C step-2 ledger pair. Your last action is the launch itself;
   step away immediately after it.
+
+  The readiness row `clock.network_time_off` asks only for that fresh probe.
+  It does not introduce another hand-counted settle. The required quiet waits
+  remain §5's completed ≥10-minute untouched idle and the chain-owned
+  180-second settle after the operator's launch.
 - [ ] After the window closes, meaning after `measurement_complete`, the
   whole-window verdict, and the backup, re-enable it:
 
@@ -532,37 +639,73 @@ lead has completed the rule-1 desk verification below, and Ed performs the
 physical steps himself.
 
 **Entry gate (desk, before the night).**
-Confirm `git status --short --branch` shows a clean measurement checkout
-and `git rev-parse HEAD` equals the exact reviewed, merged `main` commit
-named in the plan-specific GO record. Require the plan-specific
-arm-readiness record at the exact path and SHA-256 named by the frozen
-plan. A missing record, placeholder text, any applicable row other than
-GO, a stale recorded commit, or a hash mismatch is NO-GO. The pre-freeze
-three-night packet is background context and may not substitute for the
-plan-specific record. (BETA and GAMMA plans name their own records; none
-inherits ALPHA's filename.)
+Confirm `git status --short --branch` shows a clean measurement checkout and
+`git rev-parse HEAD` equals the exact reviewed, merged `main` commit. Then
+authenticate the two-stage lifecycle:
 
-The plan-specific record is a **generated per-plan artifact** created at pack
-freeze and SHA-pinned by that plan. The standing readiness matrix
-(`docs/phase_2/alpha_arm_readiness.md` and its BETA/GAMMA siblings) supplies
-the row set and is background context in the same sense as the packet; the
-living matrix is not itself the record and is never SHA-pinned as one.
+1. The frozen plan must pin the exact
+   `PACK_ROOT/arm_readiness.freeze.receipts/freeze-NNNN.json` path and digest.
+   This pack-contained receipt is non-authorizing and cannot carry `GO`.
+2. The frozen plan must declare, without populating, the deterministic
+   external arm slot
+   `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-<4+ digits>.json` and the
+   committed-pack digest algorithm. It must not contain a future arm path or
+   digest.
+3. Only after the live steps below pass may the generator create the next
+   external arm receipt. Only the exact, authenticated, unexpired,
+   unsuperseded receipt with `receipt_kind: arm`, `status: PASS`, and
+   `arm_disposition: GO` can satisfy the machine gate. A missing receipt,
+   placeholder, stale HEAD or pack digest, bad sidecar, incomplete row set,
+   refusal, predecessor with a semantic successor, or already-consumed
+   capability is NO-GO.
+
+The row authority is the JSON registry named in §4. The ALPHA, BETA, and
+GAMMA Markdown matrices are checked human views and never substitute for a
+receipt. A `PASS`, `GO`, `READY`, `clean`, or `ready` value is evidence toward
+Ed's decision; no automated word performs or authorizes the physical launch.
+
+**Reboot fence.** Version 1 binds both receipt schemas that carry
+`valid_until_monotonic_ns`—the external arm receipt and the generic domain
+evidence receipt—to the current Darwin boot. Here, `boot_session_id` means the
+exact canonical UUID that the readiness commands derive from
+`kern.bootsessionuuid` with `/usr/sbin/sysctl -n`; no API argument or
+command-line option accepts it. If that value cannot be derived, the operation
+fails closed with `readiness_io_error`.
+
+At all three refusal points—the evidence item, the evidence receipt, and the
+arm receipt—the machine checks the boot session during verification and
+consumption. A mismatch refuses with `readiness_record_expired`, an existing
+member of the closed 46-code vocabulary; no new refusal code was added. If the
+Mac reboots between freeze and arm, the readiness commands automatically
+refuse receipts from the earlier boot session with
+`readiness_record_expired`. The operator will see that refusal and must
+generate new receipts before readiness can proceed. This is expected, correct
+machine behavior: the refusal is evidence that the reboot fence worked, not a
+fault to work around. The lead confirmed both the raw `sysctl` read and the
+shipped derivation outside a sandbox on the same boot.
 
 **Lead live verification — desk evidence, not live-night authority
 (rule 1, non-delegable).**
 On the exact reviewed commit, the lead personally runs the frozen plan's
 literal readiness-validator command and its complete under-lease synthetic
 rehearsal. The rehearsal must execute the real reservation CLI with
-`--execute` and the real writer CLI through both reserved calibration
-slots against a synthetic root. Record the complete commands, commit
-hash, frozen-plan SHA-256, exit codes, stdout, and stderr in the §12
-close-out record. Require `calibration_pre_reserve_authorized`,
+`--execute` and the production ledger-writer lifecycle through both reserved calibration
+slots against a synthetic root. Require the resulting D-134 dry-run receipt
+at
+`CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json` to
+have `status: PASS`, `arm_disposition: NOT_APPLICABLE`, and the same reviewed
+HEAD and final committed-pack digest that the arm evaluation will bind.
+Record the receipt path and SHA-256 as well as the complete commands, commit
+hash, frozen-plan SHA-256, exit codes, stdout, and stderr in §12. Require
+`calibration_pre_reserve_authorized`,
 `status: reserved`, and the phase-correct
 `calibration_writer_arm_authorized` events. Missing commands, a skipped
-phase, or any identity mismatch is NO-GO. A lead who has not personally
-seen these pass on this checkout has not verified; a subagent's or a
-prior session's pass does not transfer. These desk results are evidence
-toward arming; they do not authorize the live night.
+phase, a stale dry-run receipt, or any identity mismatch is NO-GO. A lead who
+has not personally seen these pass on this checkout and pack has not
+verified; a subagent's or a prior session's pass does not transfer. The dry
+run exercises the production reservation/writer lifecycle but never enters
+live MLX or `powermetrics` capture. These desk results are evidence toward
+arming; they do not authorize the live night.
 
 **Order of operations at the machine (each step gates the next):**
 
@@ -582,10 +725,50 @@ toward arming; they do not authorize the live night.
    `ready_to_arm` field — the enforcing checks are internal to the
    reservation CLI and the writer, and no diagnostic word (`clean`,
    `ready`) licenses anything. `needs_pin_commit: true` is desk work and
-   ends the attempt; no override exists at night.
-3. ARM: Ed launches the frozen foreground chain exactly once, from an
-   ordinary foreground shell, with the absolute frozen plan root. The
-   chain begins with the frozen 180-second settle; Ed steps away
+   ends the attempt; no override exists at night. Only after both the machine
+   command and live ledger reservation pass, generate the final external arm
+   receipt:
+
+   ```sh
+   python3 scripts/generate_arm_readiness.py arm \
+     --pack-root "$PACK_ROOT" \
+     --arm-context "$ARM_CONTEXT_JSON" \
+     --window-custody-root "$CUSTODY_ROOT"
+   ```
+
+   `ARM_CONTEXT_JSON` is the exact JSON object itself, not a path. Its keys are
+   exactly `bracket_session_id`, `pre_attempt_id`, `post_attempt_id`,
+   `clock_route`, `claim_runs_root`, `bound_runs_root`, `custody_root`,
+   `quarantine_root`, `claim_backup_destination`,
+   `bound_backup_destination`, and `waiver_path`; the generator derives row
+   verdicts, applicability, identities, and digests. Require the
+   derived `arm-NNNN.json` plus sidecar to pass the implemented verifier:
+
+   ```sh
+   python3 scripts/generate_arm_readiness.py verify \
+     --pack-root "$PACK_ROOT" \
+     --arm-receipt "$ARM_RECEIPT"
+   ```
+
+   Require the exact unexpired, unsuperseded `PASS`/`GO` result. That result
+   remains necessary evidence, never launch authority.
+3. ARM: first atomically consume that exact arm receipt:
+
+   ```sh
+   python3 scripts/generate_arm_readiness.py consume \
+     --pack-root "$PACK_ROOT" \
+     --arm-receipt "$ARM_RECEIPT" \
+     --window-custody-root "$CUSTODY_ROOT"
+   ```
+
+   Consumption re-authenticates the unsuperseded `GO` receipt, current
+   pack/HEAD, roots, backup destinations, and campaign locks, then atomically
+   creates a no-clobber receipt below
+   `CUSTODY_ROOT/PACK_ID/arm_readiness.consumptions/`. **The capability
+   licenses exactly one launch; it never performs one.** After successful
+   consumption, Ed—not the command—performs the physical foreground launch
+   from an ordinary shell using the frozen launch recipe and absolute plan
+   root. The chain begins with the frozen 180-second settle; Ed steps away
    immediately after launch and does not touch or monitor the machine.
    This supersedes the pre-D-117 §5A instruction to settle 180 seconds by
    hand before launching: the settle is inside the chain.
@@ -593,7 +776,8 @@ toward arming; they do not authorize the live night.
    calibration slot, and the automatic §5B screen gates member 1.
    "Exactly once" means once per frozen bracket-session attempt; a
    prospectively licensed new attempt (below) is a new frozen session,
-   never a relaunch of the same one.
+   never a relaunch of the same one. If consumption succeeds but the physical
+   launch does not start, do not reuse the consumed capability.
 4. **If anything refuses:** any refusal stops forward progress
    immediately. Preserve the exact stdout, stderr, and durable evidence.
    For a registered ledger refusal, follow only its §10 row; continue
@@ -1047,6 +1231,23 @@ as a zero-width floor.
 
 ### Slot quarantine and supersession
 
+Readiness and session supersession are append-only and semantic. A later
+filename alone does not supersede anything: each successor arm receipt must
+bind the immediately prior receipt's ID, relative path, receipt SHA-256, pack
+ID, and pack SHA-256. Once that valid successor exists, the predecessor
+refuses. Never overwrite, edit, delete, or silently skip a receipt or its
+sidecar.
+
+A used bracket-session ID, pre- or post-attempt ID, or launch capability is
+never reused. A consumed capability stays consumed even if the foreground
+launch fails to start. A changed pack, row registry, acceptance artifact,
+freeze evidence, or identity projection requires a new pack ID and new pack
+and custody roots. A refusal caused only by live pre-launch state may reuse
+unchanged committed pack bytes only through a new bracket session and a new
+external arm receipt that semantically supersedes its predecessor, and only
+when the frozen attempt policy permits that successor. Preserve every prior
+receipt as evidence.
+
 Inspect the occupied bundle:
 
 ```sh
@@ -1173,6 +1374,16 @@ replace instrument uncertainty, and it is never silently omitted.
 Record:
 
 - the exact Git commit and policy hash;
+- the freeze-receipt path and SHA-256;
+- the reviewed-head dry-run receipt path and SHA-256;
+- the final arm-receipt path and SHA-256;
+- the launch-consumption receipt path and SHA-256;
+- the root-preflight receipt path and SHA-256;
+- the waiver receipt path and SHA-256;
+- the backup-preflight receipt path and SHA-256;
+- each successful postcollection backup receipt path and SHA-256, recorded
+  separately from backup preflight and separately for the claim and bound
+  roots;
 - the §5C lead live-verification record: the literal commands, commit hash,
   frozen-plan SHA-256, exit codes, and the observed
   `calibration_pre_reserve_authorized` / `status: reserved` /
