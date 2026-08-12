@@ -1,16 +1,19 @@
 # Window ALPHA arm readiness — GO / NO-GO
 
-**Checkpoint:** T4, 2026-08-11 (supersedes the T3 and T1 lines. Recovery
-merged — PR #118, 2026-08-09. Mint trust merged — PR #122, 2026-08-11.)
+**Checkpoint:** T4-late, 2026-08-11 (supersedes the earlier T4, T3 and T1
+lines. Recovery merged — PR #118, 2026-08-09. Mint trust merged — PR #122,
+2026-08-11. D-133 cold-gate disposition — 2026-08-11.)
 
 **Current verdict: NO-GO. Do not arm Window ALPHA.** Both merge-event
-blockers have cleared, but FLOOR-COMMONMODE-01 is in Ed-relicensed round 5
-under the D-124 relicense and its binding pre-committed stopping rule has not
-yet produced the estimator disposition, so pack-freeze plan ruling Q7 still
-bars any pack from freezing; the U11 arm-time identity-pin projection tool
-does not exist; the Ed-funded Q8 p256 prefill floor cells are unbuilt; and
-neither the packs nor the generated plan-specific arm-readiness records
-required by run-book §5C are frozen.
+blockers have cleared, and D-133 resolved the estimator question for this
+cycle: this fallback branch re-specs all packs to the worst-case default
+estimator and pack freezing is NO LONGER barred by the estimator (freeze-plan
+Q7 resolved by reversal; FCM-01 continues only as a non-freeze-gating desk
+thread per D-133). Remaining NO-GO grounds: the U11 identity-pin projection
+tool is implemented but not yet merged (PR #131 in gates); the Ed-funded Q8
+p256 prefill floor cells are unbuilt; and neither the packs nor the
+generated plan-specific arm-readiness records required by run-book §5C are
+frozen.
 
 Window **ALPHA** is the first prospective D-117 night: the 1.5B decode floor
 with prefill floor cells. **Lead** means the project lead. **Merge event**
@@ -40,7 +43,7 @@ supplies the binding stamps.
 | Multi-cell mint and pin vocabulary | **GO at T1 for the merged base, but must survive the final integration head.** The D-117 U3 unit was already merged. | Re-run its focused and integration checks at the final reviewed head; do not arm if the vocabulary or pins drift. | Lead | `RUN_STATE.md`, “STATE IN ONE BREATH” (U1/U3/U4 merged); D-117 clause 7. |
 | Common-mode contrast estimator identity | **NO-GO for pack freeze — Ed-relicensed round 5 is in flight under the D-124 relicense.** Ed licensed one structural zero-threading repair round with a binding pre-committed stopping rule: any exact-arithmetic understatement at an admitted input in the delta re-audit drops the unit to the worst-case default estimator, reverses freeze-plan Q7, and permits no further round. Until that ruled outcome is recorded, every pack remains blocked from freezing. | Complete round 5 and its delta re-audit, then apply the decision log's pre-committed disposition without reopening deliberation. | Lead; Ed's ruling already binds | `docs/decision_log.md`, “D-124 relicense — 2026-08-11” (`ea3f325`); D-124; D-125 clause 1; freeze-plan Q7. |
 | Arm-time identity-pin projection | **NO-GO.** The projection tool was queued after trust. | Merge the projection tool and freeze its receipts into the ALPHA pack. | Lead, then merge event | `RUN_STATE.md` T1 continuation notes; 40-hour plan A5 and Phase B B2. |
-| Receipt-oracle freshness | **GO, conditionally.** PR #125 merged 2026-08-10: `joulewise/receipt_oracle.py` plus replay-derived oracles in all three packs (10 physical receipts / 5 logical operations per finalized bracket session), derived from the authenticated merged head rather than hand-authored literals. | Re-derive if any later merge changes the ledger read or write surface; otherwise preserve the merged oracle in the frozen packs. | Lead | PR #125; `joulewise/receipt_oracle.py`; 40-hour plan B1. |
+| Receipt-oracle freshness | **GO, conditionally.** PR #125 merged 2026-08-10: `joulewise/receipt_oracle.py` plus replay-derived oracles in all three packs (10 physical receipts / 5 logical operations per finalized bracket session), derived from the authenticated merged head rather than hand-authored literals. **2026-08-11 determination: the conditional FIRED (PR #122 added custody-projection read surface to `joulewise/calibration_ledger.py` after derivation) and was evaluated — NO-REDERIVATION-NEEDED at `c61f840`: main-head replay produced 3,172 canonical bytes, SHA-256 `088bab77a7843d82e6485df2840d304f2fdf8ecf372006049c60e37367f491c0`, byte-identical to the `524a0ed` oracle and all three committed pack oracles; the new read projection does not alter the oracle's selected derivation path (Sol xhigh executed evaluation, T4-late).** | Re-derive if any later merge changes the ledger read or write surface; otherwise preserve the merged oracle in the frozen packs. | Lead | PR #125; `joulewise/receipt_oracle.py`; 40-hour plan B1. |
 | Three-window regression | **NO-GO / UNVERIFIED for the final cadence.** The U4 unit merged (PR #113), and `tests/test_calibration_live_three_window.py` was subsequently touched by the recovery series itself (`4495609`). No separate 40h-B3 amendment commit exists for dispositions 1–6 against the landed cadence, and none has been verified. | Run the amended synthetic ALPHA/BETA/GAMMA ledger regression against merged recovery behavior. | Lead | PR #113; `4495609`; 40-hour plan B3. |
 | Successor-engine cold gate | **NOT AN ALPHA ARM BLOCKER under the newer authority.** It remains frozen at count 3 for a post-window cold gate; the issued D-079 artifact governs these windows. | Keep the frozen work out of the night path; resolve it post-window without changing the issued artifact used by ALPHA. | Lead | `RUN_STATE.md` T1 item 3; D-126; 40-hour plan A6. The packet’s older “U2 before night 1” line is superseded here. |
 | Reason-code plumbing | **GO for the three-night code path.** The code lane is on `main`; the separate specification-governance lane remains open. | Confirm the emitted refusal field is present in the final pack rehearsal. Do not treat the open specification lane as permission to change refusal meanings at night. | Lead | `RUN_STATE.md`, D-121-era reason-code block (PR #116 merged). |

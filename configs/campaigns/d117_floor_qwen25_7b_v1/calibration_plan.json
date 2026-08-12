@@ -7,8 +7,7 @@
   "authorities": [
     "D-116",
     "D-117",
-    "D-123",
-    "D-124"
+    "D-123"
   ],
   "stack_scope": {
     "hardware_target": "macbook_m3_max",
@@ -412,8 +411,7 @@
             }
           ]
         }
-      ],
-      "estimator": "d124_two_shared_edge_common_mode.v1"
+      ]
     },
     {
       "cell_id": "d117-df-ph-prefill-p128-qwen25-7b-absolute",
@@ -790,8 +788,7 @@
             }
           ]
         }
-      ],
-      "estimator": "d124_two_shared_edge_common_mode.v1"
+      ]
     }
   ],
   "reported_energy_cells": [
