@@ -27,10 +27,12 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)
-        # test_calibration_exits is intentionally absent here. Historical
-        # 648-2036 s evidence makes fallback-weight shard placement unsound;
-        # it runs once in each exclusive job below, while the remaining four
-        # shards retain deterministic LPT balance from the ordinary timing map.
+        # test_calibration_exits AND test_calibration_writer_crash_matrix
+        # are intentionally absent here (both carry exclusive_modules
+        # declarations): their evidence makes fallback-weight shard
+        # placement unsound; each runs once in its exclusive job below,
+        # while the remaining four shards retain deterministic LPT balance
+        # from the ordinary timing map.
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
@@ -111,17 +113,20 @@ jobs:
         run: python -m unittest -v tests.test_calibration_exits
 
   calibration-writer-crash-matrix-exclusive:
-    # Exclusive for the same reason as calibration-exits: the subprocess
-    # crash matrix runs sequentially internally and is severely
-    # contention-amplified when colocated with an ordinary shard — the
-    # 2026-08-11 hosted shard observation was 5317.216 s (run 31536564643)
-    # against a 145.911 s bench standalone, and the module is absent from
-    # the ordinary timing map, so fallback-weight placement is unsound.
-    # The 60-minute ceiling holds ~11x headroom over the expected
-    # uncontended hosted runtime (~3x bench scale) while staying far below
-    # the shard-colocated pathology.
+    # Exclusive because fallback-weight shard placement is unsound for this
+    # module: it is absent from the ordinary timing map and its hosted
+    # runtime is dominated by its own subprocess-heavy cases (2026-08-11
+    # hosted shard observation 5317.216 s, run 31536564643; a standalone
+    # hosted attempt exceeded a 60-min ceiling; bench standalone is
+    # 145.911 s — the slowness is hosted-runner-specific, the same
+    # CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY fixed for
+    # test_calibration_exits, registered as WO-CRASHMATRIX-RELIABILITY).
+    # Exclusivity buys FAST ordinary-shard signal (~175 s estimated per
+    # shard); it does not shorten this module's own job — the 120-minute
+    # ceiling covers the observed ~89-minute hosted runtime with ~1.35x
+    # headroom until the reliability rework lands.
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       matrix:
         python-version: ["3.11", "3.14"]
