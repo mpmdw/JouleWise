@@ -89,6 +89,17 @@ projections → materialize the first arm against the authenticated ledger head.
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
 
+## AMENDMENT 2026-08-12 (T6): D-133 clause 4 FIRED — tighter floor live
+
+Every reference below to "packs use the worst-case default" describes the
+D-133/#132 state and is SUPERSEDED for this cycle: ALT-D120 (#134), the
+terminal delta, and WO-MINT-ESTIMATOR-VOCAB (#140) all landed pre-freeze-wave,
+Ed ratified EXECUTE (decision log, T6 entry), and PR #144 (`dc162bc`)
+re-specced all six shared-edge comparative cells plus the contrast pack's
+consuming cells to `d124_two_shared_edge_common_mode.v1` — the A5 replay
+derives 1.8695016260131627 J (vs 8.611855 J default). Historical Q7/default
+prose below is retained as the dated record.
+
 ## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — DISPOSITION SPLIT 2026-08-11 (D-133/Q7 reversal)
 
 **Item-level disposition (the earlier blanket SUPERSEDED marker was wrong —
