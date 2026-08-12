@@ -164,9 +164,25 @@ from the frozen timing ledger rather than copied from the header estimates.
   value derived from the calibration-acceptance artifact named in the pack.
   The chain threshold remains a frozen literal; do not replace it with a
   quiet-window runtime artifact read.
+- [ ] **D-133 item (1), comparative-cell duration-margin receipt:** confirm
+  that `scripts/record_window_duration_margins.py` and the closed
+  `joulewise.window_duration_margins_receipt.v1` schema are present, that the
+  frozen pack's pinned extraction/analysis manifests supply the registered
+  cell inventory (including any GAMMA p256 cell), and that output is confined
+  to the deterministic `window_duration_margins/v1/<pack>/<basis>.json`
+  namespace. This implements the
+  [freeze-plan addendum's item-level disposition][freeze-item-1]
+  for item (1): pack freeze gates on the mechanism, schema, inventory
+  derivation, and namespace, not on a pre-collection receipt. After
+  collection, generate the receipt immediately after the finalized
+  post-calibration slot and before backup or extraction; record its path and
+  SHA-256 at close-out. A `PASS` authenticates complete derivation and is not
+  a positive-margin acceptance threshold.
 - [ ] **L-05 writer-lease TTL:** during the §5C lead live verification,
   verify and record the writer-lease TTL/expiry semantics across the frozen
   reservation-to-writer sequence. Any expiry shorter than that sequence is
   NO-GO and must be repaired before pack freeze; absence of an expiry must be
   demonstrated from the writer's lease semantics, not inferred from the
   reservation CLI.
+
+[freeze-item-1]: ../strategy/2026-08-09-pack-freeze-plan.md#addendum-2026-08-10-t4-from-the-fcm-01-cold-gate-refuter--disposition-split-2026-08-11-d-133q7-reversal
