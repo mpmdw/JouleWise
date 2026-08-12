@@ -10,9 +10,74 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-12 — **T4-LATE FINAL CHECKPOINT below; A NEW SESSION STARTS THERE.**
-(D-125); T0 SESSION RUNNING — three Phase A Sol streams IN FLIGHT (see
-T0 block below). A NEW SESSION STARTS HERE:**
+Last updated: 2026-08-12 (~05:15Z) — **T5 SESSION RUNNING; MID-SESSION STATE below; a fresh session starts THERE, then falls back to the T4-LATE checkpoint for anything it doesn't cover.**
+
+## ▶▶ T5 MID-SESSION STATE (2026-08-12, Fable magistrate; 12h window, LIVE)
+
+**Merge queue executed so far: #132 MERGED (03:41Z), #133 MERGED (04:04Z),
+#131 MERGED (04:38Z, D-131 RATIFIED→ADOPTED on main), #127 MERGED (~05:00Z).
+Remaining: #134 (one CI check pending at head 0bc4435 — the first fix-round
+push silently LOST its guard hunk in a swap-file verification sequence,
+restored + byte-verified; integration delta re-audit ACCEPT zero findings),
+then #129 (pre-reviewed, merges last).** New PRs this session: **#135**
+(crash-matrix exclusive CI job — cuts CI wall from ~1h35m to ~30min; stacked
+on #127, evidence: 5317s hosted shard vs 146s bench standalone; calexits-3.11
+flake rerun queued) and **#136** (D-135 advisory site budgets; refuter
+REJECT round 1 on a raw-source-proxy failure gate — fixed 0bf0a8a, delta
+re-audit in flight; WATCH: conservative estimator projects 1.9MB vs the 1MiB
+physical cap — the PR's site chain gives the real number; if the REAL
+artifact exceeds the cap, archival is the D-135-anticipated remedy).
+
+**Streams in flight:** §5C readiness-record generator (D-134; xhigh Sol run
+~1h+, director split it into run 1 = registry/CLI/schemas/pack slots +
+Markdown views, run 2 = clause-9 doctrine prose — ratified); Q8 p256 floor
+cells (round 2 after a correct impossible-proof early return; NOTE: p256
+cells are REAL new bundles — 50→100 members/pack, new quiet-window budget
+for Ed to ratify — not a rider like p128); WO-MINT-ESTIMATOR-VOCAB (Sol
+resumed under scope grant; **COLD GATE COMPLETE** — packet + 3 rulings
+custodied at docs/process_traces/2026-08-12-mintvocab-coldgate/: option A
+authorized under self-contained conditions F1–F12; the paired refuter caught
+a REAL binding-seam fail-open both prior condition sets would have certified
+AND proved the first remedy inert — fix round under F1–F12 required before
+merge); p2038 clock-phase flake root-fix (Sol implementing; kills the ~1.6%/
+run CI flake that hit #127/#121).
+
+**Freeze-lane ORDER CORRECTION (freeze-prep director, verified):** the
+T4-late checkpoint's lane ("freeze → U11 projections → arm packet") is
+inverted — D-134's §5C registry + receipts and the Q8 cells are pack
+CONTENT, so the true order is **#134+mintvocab (if in time) → §5C run 1+2 →
+Q8 cells → regenerate → FREEZE → U11 freeze projections → arm packet**.
+Both control docs re-cut accordingly (readiness rows b32220e; freeze-plan
+WOs 1–4 all CLOSED). Arm-packet skeleton rescued to
+~/JouleWise-window-custody/t4-session-20260810/ and its D-4/D-5/D-11
+corrections applied (census literal, idle-before-ledger, two-tap morning).
+
+**ED-OWED (updated):**
+- **Gamma-arm premise SHIFTED (flagged, not decided):** D-133's default
+  (freeze doesn't wait; tighter floor banks for ICPE) was priced on freeze
+  imminence. The freeze actually waits on §5C+Q8 regardless — days, not
+  hours — while FCM (#134) is one CI check from merge and mintvocab is
+  implemented pending its cold-gate fix round. If both land pre-freeze-wave,
+  D-133 cl.4's re-spec-back fires ON ITS OWN RULED TERMS: packs freeze at
+  1.869502 J instead of 8.611855 J and the funded p256 arm likely publishes
+  instead of not-resolvable. No reinterpretation is being made — the session
+  is simply executing fast enough that the ruled conditional may fire. If Ed
+  wants the freeze to WAIT for it explicitly (reversal condition 5), that is
+  Ed's call; PR #133's merged conditional-insert block makes the paper swap
+  mechanical either way.
+- Q8 quiet-window budget ratification (p256 = 50 NEW bundles/pack, hours
+  recomputed by the stream — RATIFICATION-REQUIRED row in its report).
+- Live sudo/powermetrics checklist before relying on #127's production
+  sampler commit at arm time. §5A taps on the quiet night. Extension-axes
+  roadmap review (standing).
+
+**Session records so far:** T4-late addendum landed (b670c8f, 6 record
+anomalies incl. D-131-was-branch-only and the C-056 span boundary);
+control-doc batch b32220e; D-131 ADOPTED flip 14879e4; mintvocab cold-gate
+custody 82b048e/529188a. Scratchpad:
+/private/tmp/claude-501/-Users-edr-code-JouleWise/7c344e29-f3e2-455c-9384-1902c950c106/scratchpad
+(worktrees wt131/wt134=diag134/wtA/wtB-d135/wtB-review/wtC-p2038flake/
+wtD-5c/wtE-mintvocab/wtF-crashmx/wtG-q8; all branches pushed).
 
 **SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
 
