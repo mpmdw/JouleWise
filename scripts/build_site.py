@@ -467,24 +467,26 @@ def split_decision_log_markdown(
     )
     entry_payload_ceiling = page_ceiling - entry_prefix_bytes
     if entry_payload_ceiling < 1:
-        if page_ceiling == LAKEBED_PLATFORM_CAP_BYTES:
-            fail(
-                "decision log pagination",
-                DECISION_LOG_SOURCE,
-                f"generated page heading below the {LAKEBED_PLATFORM_CAP_BYTES}-byte physical cap",
-            )
+        # D-135: even at the platform-cap ceiling this is a raw-source proxy
+        # observation (the encoded shard is what the real validator measures),
+        # so it warns; only the CI-side physical validation may fail.
         warn_advisory_budget(
-            f"decision-log page heading exceeds {max_part_markdown_bytes}-byte pagination target"
+            f"decision-log page heading exceeds the {page_ceiling}-byte page "
+            "ceiling (raw-source proxy); pagination degrades to one entry "
+            "per page and the real validator's artifact measurement decides"
         )
         entry_payload_ceiling = 1
 
     def check_indivisible(value: str, label: str, prefix: str = "") -> None:
+        # D-135: raw source bytes are a proxy, not the validator's artifact
+        # measurement (shards compress; an over-cap source entry can encode
+        # to kilobytes). Only the real Lakebed validator may fail on size.
         physical_bytes = len((prefix + value).encode("utf-8"))
         if physical_bytes > LAKEBED_PLATFORM_CAP_BYTES:
-            fail(
-                "decision log pagination",
-                DECISION_LOG_SOURCE,
-                f"indivisible {label} at or below the {LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed physical cap",
+            warn_advisory_budget(
+                f"indivisible {label} raw source is {physical_bytes} bytes, over the "
+                f"{LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed cap as a RAW-SOURCE PROXY; "
+                "the real validator's artifact measurement decides"
             )
 
     def warn_if_over_target(value: str, label: str) -> None:
@@ -641,10 +643,11 @@ def split_decision_log_markdown(
             markdown = payload
         size = len(markdown.encode("utf-8"))
         if size > LAKEBED_PLATFORM_CAP_BYTES:
-            fail(
-                "decision log pagination",
-                DECISION_LOG_SOURCE,
-                f"indivisible page unit at or below the {LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed physical cap",
+            # D-135: same raw-source-proxy rule as check_indivisible above.
+            warn_advisory_budget(
+                f"page unit raw source is {size} bytes, over the "
+                f"{LAKEBED_PLATFORM_CAP_BYTES}-byte Lakebed cap as a RAW-SOURCE PROXY; "
+                "the real validator's artifact measurement decides"
             )
         warn_if_over_target(markdown, f"{out_name} page")
         parts.append(

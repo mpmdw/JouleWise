@@ -510,7 +510,7 @@ Text.
             self.assertEqual(combined.count(f'id="d-{number:03d}"'), 1)
             self.assertEqual(combined.count(f"entry-body-marker-{number}"), 1)
 
-    def test_indivisible_decision_unit_warns_until_physical_cap(self):
+    def test_indivisible_decision_unit_raw_source_only_warns(self):
         markdown = (
             "# Decision Log\n\n"
             "## Index\n\n"
@@ -533,14 +533,21 @@ Text.
         self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
         self.assertIn("indivisible D-001 entry page", stderr.getvalue())
 
+        # D-135: raw source bytes over the cap are a PROXY observation only —
+        # they warn; the real validator's artifact measurement (pack_capsule)
+        # is the sole size failure. Content still reaches the output.
+        proxy_stderr = io.StringIO()
         with (
             mock.patch.object(build_site, "LAKEBED_PLATFORM_CAP_BYTES", 500),
-            self.assertRaisesRegex(build_site.SiteBuildError, "Lakebed physical cap"),
+            contextlib.redirect_stderr(proxy_stderr),
         ):
-            build_site.split_decision_log_markdown(
+            proxy_parts = build_site.split_decision_log_markdown(
                 markdown,
                 max_part_markdown_bytes=300,
             )
+        self.assertIn("indivisible-body", "".join(part.markdown for part in proxy_parts))
+        self.assertIn("RAW-SOURCE PROXY", proxy_stderr.getvalue())
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", proxy_stderr.getvalue())
 
     def test_oversized_decision_entry_splits_at_subsections_with_one_anchor(self):
         generator = random.Random(20260811)
