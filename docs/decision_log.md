@@ -8674,3 +8674,28 @@ Extends D-135 and D-101 addendum II. Clauses:
 4. Open SITE-* queue items and the D-135 advisory-budget machinery stay
    as they are (merged or in-flight work is not reverted), but no new
    site work is minted.
+
+### D-133 cl.4 execution ratification + Q8 budget ratification — 2026-08-12 (Ed, T6 session start)
+
+Three Ed rulings taken at the T6 session's first interactive exchange
+(recorded verbatim from the AskUserQuestion round; the T5 checkpoint had
+flagged all three as ED-OWED):
+
+1. **D-133 clause 4 conditional: EXECUTE.** PR #140 (WO-MINT-ESTIMATOR-VOCAB)
+   merged at `e11b1ad` with all F1–F12 met, mechanically satisfying the
+   clause-4 conditions (ALT-D120 + terminal delta + mintvocab, all
+   pre-freeze-wave). Ed ratified executing the re-spec on its own ruled
+   terms: both floor packs re-spec to the tighter **1.869502 J** floor
+   (vs the 8.611855 J default) via a separate generator run + gate before
+   FREEZE. The paper swap is mechanical via PR #133's merged
+   conditional-insert block. Reversal condition 5 (hold the freeze for an
+   explicit go) was offered and declined — the ruled default proceeds.
+2. **Q8 quiet-window budgets: RATIFIED as computed.** The p256 cells are
+   REAL new bundles (50→100 members/pack, PR #138): **~6.28 h per 1.5B
+   pack / ~6.48 h per 7B pack, 20% margin included** — now the planning
+   numbers for window arming.
+3. **Window night: TONIGHT (2026-08-12).** Ed does the live
+   sudo/powermetrics checklist (gates reliance on #127's production
+   sampler) and the §5A taps tonight; the freeze lane drives to ARMED
+   today. R2 perishable-resource discipline applies for the rest of the
+   session.
