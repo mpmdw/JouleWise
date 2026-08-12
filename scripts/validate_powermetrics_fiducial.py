@@ -43,7 +43,7 @@ import sys
 import time
 import uuid
 from dataclasses import asdict, replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
@@ -60,6 +60,11 @@ from joulewise.adapters.powermetrics import (  # noqa: E402
     samples_from_records,
 )
 from joulewise.clock import ClockStamp, SystemClock  # noqa: E402
+from joulewise.calibration_bracketing import (  # noqa: E402
+    DEFAULT_ACCEPTANCE_BOUND_PATH,
+    _current_estimator_code_sha256,
+    load_calibration_acceptance_bound,
+)
 from joulewise.calibration_ledger import (  # noqa: E402
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -101,6 +106,7 @@ from joulewise.powermetrics_fiducial import (  # noqa: E402
     detect_pulses,
     instrument_evidence,
     protocol_definition_matches,
+    protocol_sha256,
     pulse_schedule,
     run_matmul_pulse,
     trim_trace_after_pulses,
@@ -118,7 +124,6 @@ PROTOCOL_V2_PATH = (
     REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial" / "protocol_v2.json"
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
-PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
 SAMPLER_TERMINATE_TIMEOUT_S = 10.0
 SAMPLER_CENSUS_DIAGNOSTIC = "powermetrics_post_teardown_census"
 TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
@@ -171,6 +176,97 @@ class _AcceleratedSystemClock:
                 self._origin.monotonic_resolution_s / self._scale
             ),
         )
+
+
+class _AcceptancePreflightError(ValueError):
+    """Named fail-closed reason for acceptance-artifact preflight."""
+
+    def __init__(self, reason: str, **context: Any) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.context = context
+
+
+def _derive_preflight_systematic_screen_s(
+    identity_epoch: Mapping[str, Any] | None = None,
+    *,
+    acceptance_path: Path | None = None,
+) -> Decimal:
+    """Authenticate the active acceptance and derive its level comparator."""
+
+    path = (
+        DEFAULT_ACCEPTANCE_BOUND_PATH
+        if acceptance_path is None
+        else Path(acceptance_path)
+    )
+    if not path.exists():
+        raise _AcceptancePreflightError("acceptance_artifact_missing")
+    artifact = load_calibration_acceptance_bound(path)
+    if artifact is None:
+        raise _AcceptancePreflightError("acceptance_artifact_unauthenticated")
+    if artifact.get("artifact_role") != "issued":
+        raise _AcceptancePreflightError("acceptance_artifact_not_issued")
+
+    prospective = artifact.get("prospective_rederivation")
+    if not isinstance(prospective, Mapping):
+        raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
+    if (
+        protocol_sha256(PROTOCOL_ID) != prospective.get("protocol_sha256")
+        or _current_estimator_code_sha256()
+        != prospective.get("estimator_code_sha256")
+    ):
+        raise _AcceptancePreflightError("acceptance_artifact_stale")
+
+    expected_epoch = artifact.get("identity_epoch")
+    if not isinstance(expected_epoch, Mapping):
+        raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
+    if identity_epoch is not None:
+        stale_fields = sorted(
+            field
+            for field, expected in expected_epoch.items()
+            if identity_epoch.get(field) != expected
+        )
+        if stale_fields:
+            raise _AcceptancePreflightError(
+                "acceptance_artifact_epoch_mismatch",
+                stale_fields=stale_fields,
+            )
+
+    try:
+        derivation = artifact["decimal_derivation"]
+        source_statistics = derivation["source_statistics"]
+        rounding = derivation["rounding"]["preflight_level_screen"]
+        if (
+            rounding["source"]
+            != "decimal_derivation.source_statistics.maximum_s"
+            or derivation["rounding"]["mode"] != "ROUND_HALF_EVEN"
+            or rounding["numeric_role"] != "operative_comparator"
+        ):
+            raise KeyError("unrecognized preflight derivation rule")
+        comparator = Decimal(source_statistics["maximum_s"]).quantize(
+            Decimal(rounding["quantum_s"]),
+            rounding=ROUND_HALF_EVEN,
+        )
+        recorded = Decimal(rounding["value_s"])
+        ratified = Decimal(
+            derivation["ratified_operatives"]["preflight_level_screen_s"]
+        )
+    except (InvalidOperation, KeyError, TypeError, ValueError):
+        raise _AcceptancePreflightError(
+            "acceptance_artifact_derivation_invalid"
+        ) from None
+    if not comparator.is_finite() or comparator != recorded or comparator != ratified:
+        raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
+    return comparator
+
+
+# Recovery's resume-finalize path imports this historical public symbol.  It
+# remains available as an authenticated derivation, never as a copied scalar;
+# the live writer below independently derives and epoch-checks its local value.
+try:
+    PREFLIGHT_SYSTEMATIC_SCREEN_S = _derive_preflight_systematic_screen_s()
+except _AcceptancePreflightError:
+    PREFLIGHT_SYSTEMATIC_SCREEN_S = None
 
 
 class WriterStage(str, Enum):
@@ -1076,27 +1172,6 @@ def main(argv: list[str] | None = None) -> int:
             stream=sys.stderr,
         )
 
-    import mlx.core as mx  # noqa: PLC0415
-
-    clock = (
-        SystemClock()
-        if args.time_scale_for_test == 1
-        else _AcceleratedSystemClock(
-            args.time_scale_for_test,
-            epoch_origin_s=(
-                float(os.environ["JW_FAKE_TIME_ORIGIN"])
-                if "JW_FAKE_TIME_ORIGIN" in os.environ
-                else None
-            ),
-        )
-    )
-    validation_id = (
-        args.attempt_id
-        if bracket_mode
-        else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    )
-    out_dir = args.output_root / validation_id
-    custody_locator = normalize_calibration_custody_path(out_dir)
     identity_fixture: Mapping[str, Any] = {}
     if args.identity_epoch_json_for_test is not None:
         try:
@@ -1118,6 +1193,38 @@ def main(argv: list[str] | None = None) -> int:
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "pulse_protocol_id": PROTOCOL_ID,
     }
+    try:
+        preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
+            planned_epoch
+        )
+    except _AcceptancePreflightError as exc:
+        return emit_refusal(
+            RefusalCode.FROZEN_PROTOCOL_INVALID,
+            context={"reason": exc.reason, **exc.context},
+            stream=sys.stderr,
+        )
+
+    import mlx.core as mx  # noqa: PLC0415
+
+    clock = (
+        SystemClock()
+        if args.time_scale_for_test == 1
+        else _AcceleratedSystemClock(
+            args.time_scale_for_test,
+            epoch_origin_s=(
+                float(os.environ["JW_FAKE_TIME_ORIGIN"])
+                if "JW_FAKE_TIME_ORIGIN" in os.environ
+                else None
+            ),
+        )
+    )
+    validation_id = (
+        args.attempt_id
+        if bracket_mode
+        else time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    )
+    out_dir = args.output_root / validation_id
+    custody_locator = normalize_calibration_custody_path(out_dir)
     planned_t1 = {
         **planned_epoch,
         "powermetrics_sha256": sha256_path(args.sampler_binary),
@@ -1494,7 +1601,7 @@ def main(argv: list[str] | None = None) -> int:
         disposition = (
             "systematic-invalid"
             if isinstance(bound_lexeme, str)
-            and Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S
+            and Decimal(bound_lexeme) > preflight_systematic_screen_s
             else "valid"
         )
     try:

@@ -2213,6 +2213,16 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 / protocol_name,
                 protocol.with_name(protocol_name),
             )
+        shutil.copy2(
+            REPO_ROOT
+            / "configs"
+            / "calibration"
+            / "calibration_acceptance_d079_v2.json",
+            self.repo
+            / "configs"
+            / "calibration"
+            / "calibration_acceptance_d079_v2.json",
+        )
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"
         self.pin.parent.mkdir(parents=True, exist_ok=True)
         self.pin.write_text(
@@ -4475,6 +4485,53 @@ def run_hung_stage_watchdog_proof() -> None:
         "SURVIVORS=0 REGISTRY_EMPTY=1",
         flush=True,
     )
+
+
+class ResumeFinalizeAcceptanceUnderivableTests(unittest.TestCase):
+    """CH-1 hardening: a None acceptance comparator refuses by name.
+
+    When the authenticated acceptance artifact is missing or unauthenticatable
+    at import time, ``PREFLIGHT_SYSTEMATIC_SCREEN_S`` is ``None``; the
+    resume-finalize command must refuse with a named reason before touching
+    any ledger path, never reach the comparison site and crash with a
+    ``TypeError``.
+    """
+
+    def test_resume_finalize_refuses_when_comparator_underivable(self):
+        import contextlib
+
+        import scripts.recover_calibration_ledger as recover_mod
+        import scripts.validate_powermetrics_fiducial as writer_mod
+
+        stdout = io.StringIO()
+        with mock.patch.object(
+            writer_mod, "PREFLIGHT_SYSTEMATIC_SCREEN_S", None
+        ):
+            with contextlib.redirect_stdout(stdout):
+                rc = recover_mod.main(
+                    [
+                        "--ledger",
+                        "/nonexistent/joulewise-test/ledger.jsonl",
+                        "--head-pin",
+                        "/nonexistent/joulewise-test/head-pin.json",
+                        "resume-finalize",
+                        "--session-id",
+                        "never-used",
+                        "--slot",
+                        "post",
+                        "--plan",
+                        "/nonexistent/joulewise-test/plan.json",
+                    ]
+                )
+        self.assertNotEqual(rc, 0)
+        payload = json.loads(stdout.getvalue().strip().splitlines()[-1])
+        self.assertEqual(payload["status"], "refused")
+        self.assertEqual(
+            payload["code"], "calibration_frozen_protocol_invalid"
+        )
+        self.assertEqual(
+            payload["context"]["reason"], "acceptance_artifact_underivable"
+        )
 
 
 if __name__ == "__main__":

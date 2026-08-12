@@ -98,6 +98,10 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             REPO_ROOT / "configs" / "calibration" / "powermetrics_fiducial",
             cls.repo / "configs" / "calibration" / "powermetrics_fiducial",
         )
+        shutil.copy2(
+            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2.json",
+            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2.json",
+        )
         cls.fake_sampler = _install_fake_writer_dependencies(cls.repo)
         subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
         subprocess.run(

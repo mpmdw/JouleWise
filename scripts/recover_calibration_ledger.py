@@ -435,6 +435,13 @@ def main(argv: list[str] | None = None) -> int:
                 PREFLIGHT_SYSTEMATIC_SCREEN_S,
             )
 
+            if PREFLIGHT_SYSTEMATIC_SCREEN_S is None:
+                return emit_refusal(
+                    RefusalCode.FROZEN_PROTOCOL_INVALID,
+                    context={"reason": "acceptance_artifact_underivable"},
+                    stream=sys.stdout,
+                )
+
             output = resume_finalize_bracket_session(
                 args.ledger,
                 args.head_pin,

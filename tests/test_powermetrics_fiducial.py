@@ -7,6 +7,9 @@ bounds against them.
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
+from decimal import Decimal, ROUND_HALF_EVEN
+import io
 import math
 import json
 import hashlib
@@ -750,6 +753,146 @@ class EvidenceTests(unittest.TestCase):
 
 
 class FrozenProtocolTests(unittest.TestCase):
+    def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
+        path = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+        raw = path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(),
+            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+        )
+        artifact = json.loads(raw)
+        derivation = artifact["decimal_derivation"]
+        rounding = derivation["rounding"]["preflight_level_screen"]
+        expected = Decimal(
+            derivation["source_statistics"]["maximum_s"]
+        ).quantize(Decimal(rounding["quantum_s"]), rounding=ROUND_HALF_EVEN)
+        observed = validation_script._derive_preflight_systematic_screen_s(
+            artifact["identity_epoch"], acceptance_path=path
+        )
+        self.assertIsInstance(observed, Decimal)
+        self.assertEqual(observed.as_tuple(), expected.as_tuple())
+        self.assertEqual(
+            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S.as_tuple(),
+            expected.as_tuple(),
+        )
+
+    def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
+        source = Path(validation_script.__file__).read_text(encoding="utf-8")
+        self.assertNotIn(
+            'PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")',
+            source,
+        )
+        comparison = "Decimal(bound_lexeme) > preflight_systematic_screen_s"
+        self.assertEqual(source.count(comparison), 1)
+        self.assertNotIn(
+            "Decimal(bound_lexeme) > PREFLIGHT_SYSTEMATIC_SCREEN_S",
+            source,
+        )
+
+    def test_acceptance_artifact_refusals_are_distinct_and_emit_no_output(self) -> None:
+        real_path = Path(
+            "configs/calibration/calibration_acceptance_d079_v2.json"
+        )
+        real_raw = real_path.read_bytes()
+        real_artifact = json.loads(real_raw)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            missing = root / "missing.json"
+            tampered = root / "tampered.json"
+            tampered.write_bytes(real_raw + b" ")
+            exact = root / "exact.json"
+            exact.write_bytes(real_raw)
+            cases = (
+                ("missing", missing, real_artifact["identity_epoch"], "acceptance_artifact_missing"),
+                ("tampered", tampered, real_artifact["identity_epoch"], "acceptance_artifact_unauthenticated"),
+                (
+                    "wrong_epoch",
+                    exact,
+                    {**real_artifact["identity_epoch"], "os_build": "25F85"},
+                    "acceptance_artifact_epoch_mismatch",
+                ),
+            )
+            observed_reasons = []
+            for name, acceptance_path, epoch, expected_reason in cases:
+                with self.subTest(case=name):
+                    identity_path = root / f"{name}-identity.json"
+                    identity_path.write_text(json.dumps(epoch), encoding="utf-8")
+                    output_root = root / f"{name}-output"
+                    stdout = io.StringIO()
+                    stderr = io.StringIO()
+                    with (
+                        patch.object(
+                            validation_script,
+                            "DEFAULT_ACCEPTANCE_BOUND_PATH",
+                            acceptance_path,
+                        ),
+                        redirect_stdout(stdout),
+                        redirect_stderr(stderr),
+                    ):
+                        return_code = validation_script.main(
+                            [
+                                "--allow-live",
+                                "--power-policy",
+                                "ac_high_power",
+                                "--identity-epoch-json-for-test",
+                                str(identity_path),
+                                "--output-root",
+                                str(output_root),
+                            ]
+                        )
+                    self.assertEqual(return_code, 2)
+                    self.assertEqual(stdout.getvalue(), "")
+                    self.assertFalse(output_root.exists())
+                    refusal = json.loads(stderr.getvalue())
+                    self.assertEqual(
+                        refusal["context"]["reason"], expected_reason
+                    )
+                    observed_reasons.append(refusal["context"]["reason"])
+            self.assertEqual(len(set(observed_reasons)), len(cases))
+
+    def test_estimator_byte_drift_refuses_acceptance_as_stale(self) -> None:
+        artifact = json.loads(
+            Path(
+                "configs/calibration/calibration_acceptance_d079_v2.json"
+            ).read_bytes()
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            identity_path = root / "identity.json"
+            identity_path.write_text(
+                json.dumps(artifact["identity_epoch"]), encoding="utf-8"
+            )
+            output_root = root / "output"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                patch.object(
+                    validation_script,
+                    "_current_estimator_code_sha256",
+                    return_value={"unexpected": "0" * 64},
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                return_code = validation_script.main(
+                    [
+                        "--allow-live",
+                        "--power-policy",
+                        "ac_high_power",
+                        "--identity-epoch-json-for-test",
+                        str(identity_path),
+                        "--output-root",
+                        str(output_root),
+                    ]
+                )
+            self.assertEqual(return_code, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertFalse(output_root.exists())
+            refusal = json.loads(stderr.getvalue())
+            self.assertEqual(
+                refusal["context"]["reason"], "acceptance_artifact_stale"
+            )
+
     def test_shared_controller_verifier_rejects_forged_zero_residual_rows(self) -> None:
         from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
         from tests.test_reduce import self_consistent_calibration
