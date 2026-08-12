@@ -610,10 +610,19 @@ New calexits hosted-flake signature distinct from the #139-killed class:
 `test_parameterized_durable_public_cli_witnesses` FAILED on 3.11 only
 (`AssertionError: 1 != 0 : correction=calibration_output_requires_rederive`,
 run 31622634705 on PR #143 — a PR that does not touch the module) while the
-same exclusive leg passed on #135/#141/#142 the same day. One rerun
-dispatched as the discriminator; a second same-signature failure escalates
-per the standing trigger. Fold into WO-CALEXITS follow-up triage if it
-recurs.
+same exclusive leg passed on #135/#141/#142 the same day. ESCALATED same day (second same-signature failure: PR #144, case
+calibration_quiet_mac_auth_required, 18:31Z) -> Sol xhigh root-cause per the
+standing trigger: REPRODUCED — the corrected public-writer witness runs a
+40x accelerated test clock over a still REAL-TIME, scheduler-sensitive pulse
+producer; a 120 ms writer suspension reproduces the exact hosted failure
+shape (status=invalid, b_fiducial_s=null) on the valid-writer step. Harness
+false negative; both failing runs certified safe-to-rerun (each failed case
+passed on its automatic later in-job execution; neither PR touches the
+writer). Fix shape registered (NOT applied): make the pulse producer honor
+the test clock (event-driven, WO-CALEXITS-RELIABILITY lineage) and keep the
+detector reason in the assertion so a real regression is distinguishable
+from this flake. Diagnosis: T6 scratchpad calexits-flake-diag.md (custody
+with T6 session record).
 
 ## WO-COLLECTION-MARGIN-01 (registered 2026-08-12, T6; consult-adopted design; freeze-gates on the MECHANISM, collection close-out gates on the RECEIPT)
 
