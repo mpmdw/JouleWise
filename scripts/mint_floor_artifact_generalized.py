@@ -52,6 +52,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_admitted_report_vocabulary,
     validate_d117_mint_consumption_report,
 )
+from joulewise import floor_mint_estimator as mint_estimator  # noqa: E402
 
 
 PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
@@ -270,6 +271,17 @@ class V2VerdictBracket:
     endpoint_attempt_ids: tuple[str, str]
     endpoint_receipt_sha256s: tuple[str, str]
     endpoint_content_sha256s: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class V2CellRecomputation:
+    """One gated comparative result shared with artifact construction."""
+
+    estimator_path: str
+    comparative_blocks: tuple[Mapping[str, Any], ...]
+    comparative_estimate: Any
+    comparative_widths_j: tuple[float, ...]
+    comparative_record: Mapping[str, Any]
 
 
 def _object(
@@ -2270,7 +2282,7 @@ def _v2_gate_postcollection(
     cell_inputs: V2CellComponents,
     producer_inputs: V2ProducerInputs,
     ledger_snapshot: Any,
-) -> None:
+) -> V2CellRecomputation:
     post = cell_pins["postcollection"]
     if (
         producer_inputs.authenticated_pre_observation is not None
@@ -2355,19 +2367,53 @@ def _v2_gate_postcollection(
             cell_inputs.absolute.whole_window_drift_allowance
         ),
     )
-    comparative_blocks, deltas = core._comparative_blocks(cell_inputs.comparative)
-    comparative_estimate = core.comparative_false_effect_floor(
-        deltas,
-        admissible_half_widths_j=cell_inputs.comparative.widths_j,
+    try:
+        recomputed = mint_estimator.recompute_comparative_estimate(
+            core=core,
+            comparative_component=cell_inputs.comparative,
+            runs_root=producer_inputs.evidence_root,
+            calibration_acceptance=producer_inputs.calibration_acceptance,
+            calibration_acceptance_sha256=(
+                producer_inputs.calibration_acceptance_sha256
+            ),
+            calibration_allowance_projection=allowance_projection,
+            declared_calibration_scope=producer["plan"][
+                "declared_calibration_scope"
+            ],
+            calibration_ledger_snapshot=ledger_snapshot,
+            calibration_bracket_binding=producer_inputs.bracket_binding,
+        )
+    except ValueError as exc:
+        raise MintError(
+            "postcollection_evidence_mismatch: comparative estimator "
+            f"recomputation refused: {exc}"
+        ) from exc
+    report_widths = cell_inputs.comparative.cell.get("floor", {}).get(
+        "admissible_half_widths_j"
     )
-    comparative_record = core.build_comparative_record(
-        comparative_estimate,
-        comparative_blocks,
-        consumption_semantics_id=cell_inputs.comparative.consumption_semantics_id,
-        whole_window_drift_allowance=(
-            cell_inputs.comparative.whole_window_drift_allowance
-        ),
-    )
+    try:
+        widths_match = (
+            isinstance(report_widths, list)
+            and len(report_widths) == len(recomputed.exact_widths_j)
+            and all(
+                not isinstance(observed, bool)
+                and isinstance(observed, int | float)
+                and Decimal(str(observed)) == Decimal(str(expected))
+                for observed, expected in zip(
+                    report_widths,
+                    recomputed.exact_widths_j,
+                    strict=True,
+                )
+            )
+        )
+    except InvalidOperation:
+        widths_match = False
+    if not widths_match:
+        raise MintError(
+            "postcollection_evidence_mismatch: extraction-report comparative "
+            "widths differ exactly from the authenticated spec-selected estimator"
+        )
+    comparative_record = recomputed.comparative_record
     absolute_value = absolute_record.get("drift_widened_guarded_floor_j")
     comparative_value = comparative_record.get("drift_widened_guarded_floor_j")
     if any(
@@ -2492,6 +2538,13 @@ def _v2_gate_postcollection(
             evidenced,
             source="domain-owned verification projection",
         )
+    return V2CellRecomputation(
+        estimator_path=recomputed.estimator_path,
+        comparative_blocks=tuple(recomputed.comparative_blocks),
+        comparative_estimate=recomputed.estimate,
+        comparative_widths_j=tuple(recomputed.exact_widths_j),
+        comparative_record=copy.deepcopy(dict(recomputed.comparative_record)),
+    )
 
 
 def _v2_allowed_families(
@@ -2603,6 +2656,7 @@ def _mint_v2_cell_artifact(
     head_pin_commit_contained_in_origin_main: bool | None,
     absolute: Any,
     comparative: Any,
+    recomputation: V2CellRecomputation,
     calibration_ledger_snapshot: Any,
 ) -> Mapping[str, Any]:
     """Construct one v2 cell without invoking either v1 literal derivation."""
@@ -2629,17 +2683,11 @@ def _mint_v2_cell_artifact(
         consumption_semantics_id=absolute.consumption_semantics_id,
         whole_window_drift_allowance=absolute.whole_window_drift_allowance,
     )
-    comparative_blocks, deltas = core._comparative_blocks(comparative)
-    comparative_estimate = core.comparative_false_effect_floor(
-        deltas,
-        admissible_half_widths_j=comparative.widths_j,
-    )
-    comparative_record = core.build_comparative_record(
-        comparative_estimate,
-        comparative_blocks,
-        consumption_semantics_id=comparative.consumption_semantics_id,
-        whole_window_drift_allowance=comparative.whole_window_drift_allowance,
-    )
+    comparative_record = copy.deepcopy(dict(recomputation.comparative_record))
+    if tuple(comparative_record.get("admissible_half_widths_j", ())) != (
+        recomputation.comparative_widths_j
+    ):
+        raise MintError("frozen v2 comparative recomputation changed before construction")
     definition = binding["condition_family_definition"]
     if core.canonical_domain_sha256(
         core.CONDITION_FAMILY_DOMAIN, definition
@@ -2777,17 +2825,12 @@ def _build_v2_artifacts(
             raise MintError(f"producer {plan_id!r}: calibration plan identity mismatch")
         producer_cells: list[Mapping[str, Any]] = []
         producer_groups: list[Mapping[str, Any]] = []
-        # Finish steps 8-10 for every cell before any artifact construction.
+        recomputations: dict[str, V2CellRecomputation] = {}
+        # Authenticate every spec, member, config, order, and producer pin
+        # before the first per-cell estimator selection can execute.
         for cell_index, cell_pins in enumerate(producer["cells"]):
             role = cell_pins["role"]
             cell_inputs = inputs.cells[role]
-            _v2_gate_postcollection(
-                producer=producer,
-                cell_pins=cell_pins,
-                cell_inputs=cell_inputs,
-                producer_inputs=inputs,
-                ledger_snapshot=calibration_ledger_snapshot,
-            )
             _v2_gate_component(
                 cell_inputs.absolute,
                 cell_pins["absolute"],
@@ -2803,6 +2846,17 @@ def _build_v2_artifacts(
                 window_class=cell_pins["window_class"],
             )
         _v2_gate_producer_inventory(producer, inputs)
+
+        # Finish steps 8-10 for every cell before any artifact construction.
+        for cell_pins in producer["cells"]:
+            role = cell_pins["role"]
+            recomputations[role] = _v2_gate_postcollection(
+                producer=producer,
+                cell_pins=cell_pins,
+                cell_inputs=inputs.cells[role],
+                producer_inputs=inputs,
+                ledger_snapshot=calibration_ledger_snapshot,
+            )
 
         # Step 11 begins only after the complete producer projection matches.
         for cell_index, cell_pins in enumerate(producer["cells"]):
@@ -2822,6 +2876,7 @@ def _build_v2_artifacts(
                     plan=inputs.plan,
                     absolute=cell_inputs.absolute,
                     comparative=cell_inputs.comparative,
+                    recomputation=recomputations[role],
                     calibration_ledger_snapshot=(
                         calibration_ledger_snapshot
                     ),
@@ -3244,6 +3299,51 @@ def _load_v2_ledger_snapshot(
     )
 
 
+def _authenticate_v2_component(
+    core: ModuleType,
+    paths: Any,
+    **kwargs: Any,
+) -> Any:
+    """Run pinned authentication while deferring one comparative equality.
+
+    The pinned core reconstructs comparative floor widths with the default
+    estimator before the generalized v2 producer/spec pins can be gated.  The
+    lead-authorized v2 seam defers only that elementwise equality.  Shape and
+    finite/nonnegative validation remain here; an unconditional exact
+    spec-selected equality replaces the deferred check in postcollection after
+    every component and producer pin has passed.
+    """
+
+    pinned_width_verifier = core._verify_report_widths
+
+    def defer_comparative_width_equality(
+        cell: Mapping[str, Any], widths: Sequence[float]
+    ) -> None:
+        if cell.get("kind") != "comparative":
+            pinned_width_verifier(cell, widths)
+            return
+        floor = cell.get("floor")
+        report_widths = (
+            floor.get("admissible_half_widths_j")
+            if isinstance(floor, Mapping)
+            else None
+        )
+        if not isinstance(report_widths, list) or len(report_widths) != len(
+            widths
+        ):
+            raise core.MintError(
+                "extraction-report widths differ element-for-element from member evidence"
+            )
+        for value in report_widths:
+            core._finite(value, "reported admissible width", nonnegative=True)
+
+    core._verify_report_widths = defer_comparative_width_equality
+    try:
+        return core._authenticate_component(paths, **kwargs)
+    finally:
+        core._verify_report_widths = pinned_width_verifier
+
+
 def _authenticate_v2_inputs(
     *,
     pinset: V2Pinset,
@@ -3526,7 +3626,8 @@ def _authenticate_v2_inputs(
                 )
                 _allow_governed_extraction_spec(paths.spec_path)
                 try:
-                    component = core._authenticate_component(
+                    component = _authenticate_v2_component(
+                        core,
                         core.ComponentPaths(
                             evidence_root_id=root_id,
                             evidence_root=paths.evidence_root,
@@ -3746,18 +3847,35 @@ def _mint_multi_cell_floor_artifact_active(
                     groups_by_id[cell_pins["transport_group_id"]]
                 )
             ]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            cell_input = producer_input.cells[cell_pins["role"]]
             try:
-                core.bind_floor_artifact_evidence(
-                    single_cell_component,
-                    floor_path,
-                    evidence_roots,
+                mint_estimator.bind_v2_floor_artifact_evidence(
+                    core=core,
+                    artifact=single_cell_component,
+                    floor_path=floor_path,
+                    evidence_roots=evidence_roots,
                     strict_validator=strict_validator,
+                    comparative_component=cell_input.comparative,
+                    runs_root=producer_input.evidence_root,
+                    calibration_acceptance=(
+                        producer_input.calibration_acceptance
+                    ),
+                    calibration_acceptance_sha256=(
+                        producer_input.calibration_acceptance_sha256
+                    ),
+                    calibration_allowance_projection=(
+                        producer_input.calibration_allowance_projection or {}
+                    ),
+                    declared_calibration_scope=producer["plan"][
+                        "declared_calibration_scope"
+                    ],
                     calibration_ledger_snapshot=ledger_snapshot,
                     calibration_bracket_binding=(
-                        inputs[producer["plan"]["plan_id"]].bracket_binding
+                        producer_input.bracket_binding
                     ),
                 )
-            except core.MintError as exc:
+            except (core.MintError, ValueError) as exc:
                 raise MintError(str(exc)) from exc
     errors = validate_floor_artifact(
         artifact=artifact,

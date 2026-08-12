@@ -1062,7 +1062,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         )
         self.assertNotIn("estimator_registration", record)
 
-    def test_registered_arithmetic_is_extraction_only_in_production_inventory(self):
+    def test_registered_arithmetic_has_only_governed_production_callers(self):
         repository_root = Path(__file__).resolve().parents[1]
         calls = {
             "two_shared_edge_common_mode_floor": [],
@@ -1103,7 +1103,13 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         self.assertEqual(calls["two_shared_edge_common_mode_floor"], [])
         self.assertEqual(
             calls["_common_mode_floor_from_block_inputs"],
-            [("joulewise/floor_extraction.py", "extract_comparative_cell")],
+            [
+                (
+                    "joulewise/floor_mint_estimator.py",
+                    "recompute_comparative_estimate",
+                ),
+                ("joulewise/floor_extraction.py", "extract_comparative_cell"),
+            ],
         )
         self.assertEqual(
             calls["_common_mode_floor_from_extracted_inputs"],

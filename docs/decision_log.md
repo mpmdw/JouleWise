@@ -8434,6 +8434,20 @@ deferred. The same-signature escalation trigger is satisfied by
 resolution through this consult with a structurally different remedy
 (deletion, not a third validator).
 
+### D-124/D-133 implementation note — 2026-08-11: spec-authoritative mint dispatch
+
+WO-MINT-ESTIMATOR-VOCAB added per-cell v2 mint dispatch at postcollection
+equality, frozen artifact construction, and final evidence binding. The sole
+authority is the authenticated comparative extraction-spec cell; estimator
+and registration identity remain absent from reports, artifacts, pinsets, and
+provenance. Regressions cover spec swaps, report-vocabulary and opposite-width
+mismatches, a negative control at each dispatch site, equality/U10 repair,
+one-ULP common-mode understatement, mixed-selector ordering, default-byte
+preservation, registered refusal without fallback, and no-output refusal. The
+focused matrices passed 334 tests on both `python3` and `python3.11` (one
+skip); the canonical suites passed 3,067 tests on both interpreters (96
+skips).
+
 ## D-134: §5C arm-readiness record contract — two-stage append-only receipts (adopt-as-proposed)
 
 **Adopted 2026-08-11 (T4-late)** from the binding design consult (Sol
