@@ -184,6 +184,8 @@ def execute_smoke(snapshot: Path, scratch: Path) -> None:
         cwd=snapshot,
     )
     run([python, "scripts/build_site.py"], cwd=snapshot)
+    # D-135: packer advisory-budget warnings inherit stderr with exit zero;
+    # only its measured physical Lakebed-cap overrun may fail this smoke.
     run([python, "scripts/pack_capsule.py"], cwd=snapshot)
 
     required = [
