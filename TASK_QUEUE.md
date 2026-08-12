@@ -226,7 +226,7 @@ production LOC + 550-850 test LOC; three audit waves + D-121. Full
 consult: session scratchpad mintvocab-consult-out.md (T4-late).
 Implementation stacks on impl/floor-commonmode-01 after round 9 lands.
 
-## SITE-CAPSULE-BUDGET-01 (recorded 2026-08-11, T4-late)
+## SITE-CAPSULE-BUDGET-01 (recorded 2026-08-11, T4-late) — SUPERSEDED BY D-135 (Ed: budgets are ADVISORY; only the physical 1,048,576-byte Lakebed cap may fail anything; implementation of warn-only behavior is OWED, see D-135)
 
 The decision log is the dominant site-capsule page and its growth pushes the
 measured Lakebed validator artifact toward the conservative 1,000,000-byte
