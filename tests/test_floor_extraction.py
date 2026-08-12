@@ -3289,8 +3289,10 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
         expected_absent = {
             "d117-df-cmp-abba-ph-decode-qwen25-1p5b",
             "d117-df-cmp-abba-ph-prefill-p128-qwen25-1p5b",
+            "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b",
             "d117-df-cmp-abba-ph-decode-qwen25-7b",
             "d117-df-cmp-abba-ph-prefill-p128-qwen25-7b",
+            "d117-df-cmp-abba-ph-prefill-p256-qwen25-7b",
             "ctr-d117-decode-qwen25-1p5b-vs-7b",
             "ctr-d117-prefill-p256-qwen25-1p5b-vs-7b",
             "Q8 p256 dedicated floor cells",
