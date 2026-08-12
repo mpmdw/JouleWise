@@ -394,6 +394,17 @@ def _pack_inventory(
         registry, registry_raw = _json_object(
             registry_path, label="pack-pinned extraction spec"
         )
+        raw_cells = registry.get("cells")
+        registered_cell_count = (
+            sum(
+                1
+                for raw_cell in raw_cells
+                if isinstance(raw_cell, Mapping)
+                and raw_cell.get("kind") == "comparative"
+            )
+            if isinstance(raw_cells, list)
+            else 0
+        )
         cells = _floor_cells(registry)
     elif analysis_path is not None and extraction is None:
         registry_path = _safe_relative_path(
@@ -407,6 +418,10 @@ def _pack_inventory(
         )
         registry, registry_raw = _json_object(
             registry_path, label="pack-pinned GAMMA analysis manifest"
+        )
+        raw_contrasts = registry.get("contrasts")
+        registered_cell_count = (
+            len(raw_contrasts) if isinstance(raw_contrasts, list) else 0
         )
         cells = _gamma_cells(registry)
         manifest_plan = registry.get("plan")
@@ -427,8 +442,11 @@ def _pack_inventory(
     registry_sha = _sha256(registry_raw)
     if registry_sha != expected_sha:
         _refuse("pack_pin_invalid", "registered-cell source sha256 mismatches plan tree")
-    if not cells:
-        _refuse("registered_cell_inventory_invalid", "pack registers no comparative cells")
+    if not cells or len(cells) != registered_cell_count:
+        _refuse(
+            "registered_cell_inventory_invalid",
+            "derived comparative-cell census does not match the authenticated registry",
+        )
     cell_ids = [cell.cell_id for cell in cells]
     if len(set(cell_ids)) != len(cell_ids):
         _refuse("registered_cell_inventory_invalid", "comparative cell_id is duplicated")
@@ -1131,21 +1149,15 @@ def deterministic_window_duration_margins_path(
     )
 
 
-def _exclusive_idempotent_write(path: Path, payload: bytes) -> None:
+def _exclusive_append_write(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
-        try:
-            existing = path.read_bytes()
-        except OSError as exc:
-            _refuse("receipt_namespace_conflict", f"existing receipt is unreadable: {exc}")
-        if existing != payload:
-            _refuse(
-                "receipt_namespace_conflict",
-                "deterministic receipt path contains different bytes",
-            )
-        return
+        _refuse(
+            "receipt_namespace_conflict",
+            "deterministic append-only receipt path already exists",
+        )
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(payload)
@@ -1186,7 +1198,7 @@ def record_window_duration_margins(
         pack_identity=pack_identity,
         evaluation_basis_sha256=receipt["evaluation_basis_sha256"],
     )
-    _exclusive_idempotent_write(path, payload)
+    _exclusive_append_write(path, payload)
     return RecordedWindowDurationMargins(
         path=path,
         sha256=_sha256(payload),
