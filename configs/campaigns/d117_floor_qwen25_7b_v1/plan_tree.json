@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py",
-    "sha256": "37dcce5dd30326e4a0c5349c1daa84d3c4630f8cfe456ed5f4d9534d2f62b800"
+    "sha256": "f19d58dda779f6680bf91422a572108ee6d6d91855693a2e135586f646c73d23"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
@@ -2977,6 +2977,19 @@
     "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
   },
   "arm_attachments": {
+    "arm_readiness": {
+      "contract_id": "D-134",
+      "required_before_arm": true,
+      "row_registry": {
+        "registry_id": "d117-row-registry-v1",
+        "path": "configs/arm_readiness/d117_row_registry_v1.json",
+        "sha256": "d248fdc521cb904b7ad8f1c4ecb834f7810a1d8f39697b462591f2feac39a2e5",
+        "plan_profile": "BETA"
+      },
+      "freeze_receipt": null,
+      "arm_receipt_namespace": "arm_readiness.receipts/arm-<4+ digits>.json",
+      "pack_digest_algorithm": "joulewise.committed_pack_tree_sha256.v1"
+    },
     "launch": {
       "schema_version": "joulewise.stage_launch_bindings.v1",
       "bindings": [

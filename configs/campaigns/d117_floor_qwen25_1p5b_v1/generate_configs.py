@@ -32,6 +32,9 @@ from joulewise.identity_pins import (  # noqa: E402
     IDENTITY_PIN_PROJECTION_WORK_ORDER,
     validate_identity_pin_projection,
 )
+from joulewise.arm_readiness import (  # noqa: E402
+    plan_arm_readiness_attachment,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -1831,6 +1834,11 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "arm_attachments": {
+            "arm_readiness": plan_arm_readiness_attachment(
+                REPO_ROOT / PACK_REL,
+                "ALPHA",
+                REPO_ROOT,
+            ),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "bindings": [
@@ -1975,7 +1983,20 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
     with tempfile.TemporaryDirectory(prefix="d117-u5-check-") as tmp:
         temp_root = Path(tmp)
         count, plan_sha256, tree_sha256 = generate(temp_root)
-        expected_paths = set(expected_pack_paths())
+        generated_paths = set(expected_pack_paths())
+        generated_tree = json.loads(
+            (temp_root / PACK_REL / "plan_tree.json").read_text(encoding="utf-8")
+        )
+        freeze_reference = generated_tree["arm_attachments"]["arm_readiness"][
+            "freeze_receipt"
+        ]
+        expected_paths = set(generated_paths)
+        if freeze_reference is not None:
+            freeze_path = Path(freeze_reference["path"])
+            expected_paths |= {
+                freeze_path,
+                freeze_path.with_name(f"{freeze_path.name}.sha256"),
+            }
         observed_paths = actual_pack_paths(check_root / PACK_REL)
         missing = sorted(expected_paths - observed_paths)
         extras = sorted(observed_paths - expected_paths)
@@ -1990,7 +2011,7 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                     "extras=" + ",".join(path.as_posix() for path in extras)
                 )
             raise ValueError("pack inventory differs: " + "; ".join(detail))
-        for relative in expected_paths:
+        for relative in generated_paths:
             expected = (temp_root / PACK_REL / relative).read_bytes()
             actual_path = check_root / PACK_REL / relative
             if actual_path.read_bytes() != expected:

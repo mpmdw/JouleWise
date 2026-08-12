@@ -61,7 +61,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "37dcce5dd30326e4a0c5349c1daa84d3c4630f8cfe456ed5f4d9534d2f62b800"
+        "f19d58dda779f6680bf91422a572108ee6d6d91855693a2e135586f646c73d23"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "7ec01725aab7ddbf82d9da743f57bda155278766a61bc5c1ebe66f468552637c"
@@ -85,10 +85,10 @@ EXPECTED_SHA256 = {
         "03f10c10efa03c3d7fe3463da4da7893622bf15e914956af35d67d744c81a4ea"
     ),
     "plan_tree.json": (
-        "b4a76ec7ee0c44c0131e29357c254ed42467b5dc241c492c6a05cda67d7499df"
+        "00e3a89dc0bfa9e3ce512001a0040f9e25aa96b481e79da30d05def91e770fa4"
     ),
     "plan_tree.sha256": (
-        "0f96b62e1dee8c55cff67a09bc1cc180d697cb2ba2fe37efc5d6b73bcafe0c6d"
+        "22a3a55ee61085765a2ddf03d5690e68dd3eef1f14e902362542c69c82526cda"
     ),
     "producer_contract.json": (
         "5829349c5a0fd64a7c7b50861243e6fc2e9e6ccfe8424ca93df99cc3ece5cb63"
